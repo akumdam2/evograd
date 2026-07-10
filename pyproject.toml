@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evograd"
+version = "0.1.0"
+description = "Evolved backward kernels: generate autograd-pair seeds from a forward reference via multiple pipelines, then optimize them with OpenEvolve."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pyyaml",
+    "torch",
+    "openevolve",
+]
+
+[project.optional-dependencies]
+gpu = ["triton"]
+dev = ["black"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
