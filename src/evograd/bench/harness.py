@@ -14,8 +14,8 @@ from typing import Any, Callable
 
 import torch
 
-from evograd.opdecl.activity import Duplicated, OpDecl, Workload
-from evograd.opdecl.bind import backward_const_kwargs, bind, lookup_pair
+from evograd.opdecl.activity import Active, OpDecl, Workload
+from evograd.opdecl.bind import backward_inactive_kwargs, bind, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle, resolve_forward
 from evograd.evolve.scoring import geomean, weighted_geomean
@@ -120,7 +120,7 @@ def benchmark_case(
     inputs = make_case_inputs(op, workload, device=device)
     dout = inputs[op.upstream_grad_name]
     positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
-    bwd_kwargs = backward_const_kwargs(op, bwd, inputs)
+    bwd_kwargs = backward_inactive_kwargs(op, bwd, inputs)
     forward_ref = resolve_forward(op)
 
     def forward_only():
@@ -138,12 +138,12 @@ def benchmark_case(
         return bwd(dout, normalize_saved(saved), **bwd_kwargs)
 
     bound = bind(op, module)
-    dup_positions = [i for i, a in enumerate(op.args) if isinstance(a, Duplicated)]
+    active_positions = [i for i, a in enumerate(op.args) if isinstance(a, Active)]
 
     def candidate_autograd_full_step():
         args = list(positional)
         leaves = []
-        for i in dup_positions:
+        for i in active_positions:
             leaf = args[i].detach().clone().requires_grad_(True)
             args[i] = leaf
             leaves.append(leaf)
@@ -157,7 +157,7 @@ def benchmark_case(
     def baseline_full_step():
         args = list(positional)
         leaves = []
-        for i in dup_positions:
+        for i in active_positions:
             leaf = args[i].detach().clone().requires_grad_(True)
             args[i] = leaf
             leaves.append(leaf)

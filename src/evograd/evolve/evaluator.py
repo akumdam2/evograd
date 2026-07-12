@@ -25,7 +25,7 @@ from typing import Any
 import torch
 
 from evograd.opdecl.activity import OpDecl
-from evograd.opdecl.bind import backward_const_kwargs, lookup_pair
+from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle
 from evograd.bench.harness import (
@@ -169,7 +169,7 @@ def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]
             y_ref, expected = oracle(op, inputs)
             positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
             y, saved = fwd(*positional)
-            kwargs = backward_const_kwargs(op, bwd, inputs)
+            kwargs = backward_inactive_kwargs(op, bwd, inputs)
             actual = bwd(inputs[op.upstream_grad_name], saved, **kwargs)
             actual = (actual,) if torch.is_tensor(actual) else tuple(actual)
             torch.cuda.synchronize()

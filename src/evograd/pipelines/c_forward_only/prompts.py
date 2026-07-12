@@ -40,7 +40,7 @@ Triton pitfalls:
 
 def render_pair_rules(op: OpDecl) -> str:
     no_grad = ""
-    no_grad_inputs = tuple(c.name for c in op.tensor_const_args())
+    no_grad_inputs = tuple(c.name for c in op.tensor_inactive_args())
     if no_grad_inputs:
         names = ", ".join(f"`{n}`" for n in no_grad_inputs)
         no_grad = (
@@ -70,7 +70,7 @@ Hard constraints:
 - {op.forward_semantics}
 - {op.backward_semantics}
 - Backward must consume only the upstream gradient, `saved_tensors`, and the
-  declared scalar Const arguments (when the forward takes them).
+  declared scalar Inactive arguments (when the forward takes them).
 - `saved_tensors` may be a tensor or tuple/list mixing tensors with immutable
   Python scalar metadata. Only tensors count toward saved-memory usage.
 {no_grad}

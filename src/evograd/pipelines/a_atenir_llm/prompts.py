@@ -41,7 +41,7 @@ Triton pitfalls:
 
 def render_pair_rules(op: OpDecl) -> str:
     no_grad_lines = ""
-    no_grad_inputs = tuple(c.name for c in op.tensor_const_args())
+    no_grad_inputs = tuple(c.name for c in op.tensor_inactive_args())
     if no_grad_inputs:
         names = ", ".join(f"`{n}`" for n in no_grad_inputs)
         no_grad_lines = (

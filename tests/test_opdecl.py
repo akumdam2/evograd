@@ -2,7 +2,7 @@
 
 import unittest
 
-from evograd.opdecl import Const, Duplicated, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 from evograd.ops import OPS, get_op
 
 
@@ -42,9 +42,9 @@ class TestDerivedNaming(unittest.TestCase):
         self.assertEqual(op.grad_names(), ("dx", "dlinear_weight", "dweight", "dbias"))
         self.assertEqual(op.upstream_grad_name, "dout")
 
-    def test_const_tensor_is_no_grad_input(self):
+    def test_inactive_tensor_is_no_grad_input(self):
         op = get_op("evoattention")
-        self.assertEqual([c.name for c in op.tensor_const_args()], ["res_mask"])
+        self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
 
     def test_registry_covers_all_six(self):
         self.assertEqual(
@@ -79,8 +79,8 @@ def _minimal(**overrides):
         name="toy",
         forward="toy.forward_ref:toy_forward_ref",
         dims=("M", "N"),
-        args=(Duplicated("x", "[M, N]"), Const("eps", default=1e-5)),
-        output=Duplicated("y", "[M, N]"),
+        args=(Active("x", "[M, N]"), Inactive("eps", default=1e-5)),
+        output=Active("y", "[M, N]"),
         forward_semantics="f",
         backward_semantics="b",
     )
@@ -91,11 +91,11 @@ def _minimal(**overrides):
 class TestValidation(unittest.TestCase):
     def test_duplicate_arg_names_rejected(self):
         with self.assertRaisesRegex(ValueError, "duplicate argument names"):
-            _minimal(args=(Duplicated("x", "[M, N]"), Duplicated("x", "[M, N]")))
+            _minimal(args=(Active("x", "[M, N]"), Active("x", "[M, N]")))
 
     def test_unknown_shape_dim_rejected(self):
         with self.assertRaisesRegex(ValueError, "neither a declared dim"):
-            _minimal(args=(Duplicated("x", "[M, Q]"),))
+            _minimal(args=(Active("x", "[M, Q]"),))
 
     def test_bad_grad_order_rejected(self):
         with self.assertRaisesRegex(ValueError, "not a\\s+permutation"):
@@ -106,8 +106,8 @@ class TestValidation(unittest.TestCase):
             _minimal(forward="no_colon_here")
 
     def test_integer_literal_shape_dims_allowed(self):
-        op = _minimal(args=(Duplicated("x", "[M, 1, N]"), Const("eps", default=1e-5)))
-        self.assertEqual(op.duplicated_args()[0].shape, "[M, 1, N]")
+        op = _minimal(args=(Active("x", "[M, 1, N]"), Inactive("eps", default=1e-5)))
+        self.assertEqual(op.active_args()[0].shape, "[M, 1, N]")
 
     def test_unknown_tolerance_gradient_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown gradients"):

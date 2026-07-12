@@ -2,14 +2,14 @@
 
 Replaces the per-bench hand-written ``autograd_wrapper.py``: the declaration
 drives argument routing, so the error-prone parts — placing ``None`` in the
-grad slots of ``Const`` args and ordering the returned gradients — are
+grad slots of ``Inactive`` args and ordering the returned gradients — are
 mechanical and cannot be misaligned.
 
 A seed module must expose (either generic or op-prefixed names):
 
     forward_with_saved(*declared args)      -> (y, saved_tensors)
-    backward_from_saved(dout, saved_tensors, **scalar consts it accepts)
-                                            -> grads per op.grad_names() order
+    backward_from_saved(dout, saved_tensors, **scalar inactive args it accepts)
+                                                -> grads per op.grad_names() order
 
 ``saved_tensors`` may be any tuple mixing tensors and plain values — the
 saved-tensor contract stays inside the EVOLVE-BLOCK, free for OpenEvolve to
@@ -22,7 +22,7 @@ import inspect
 
 import torch
 
-from evograd.opdecl.activity import Duplicated, OpDecl
+from evograd.opdecl.activity import Active, OpDecl
 
 
 def lookup_pair(op: OpDecl, module):
@@ -47,14 +47,14 @@ def lookup_pair(op: OpDecl, module):
     )
 
 
-def backward_const_kwargs(op: OpDecl, bwd, values: dict) -> dict:
-    """Scalar Const args are re-passed to the backward — but only those its
+def backward_inactive_kwargs(op: OpDecl, bwd, values: dict) -> dict:
+    """Scalar Inactive args are re-passed to the backward — but only those its
     signature accepts (legacy seeds take eps, evoattention seeds take none)."""
     params = inspect.signature(bwd).parameters
     accepts_kwargs = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
     return {
         c.name: values.get(c.name, c.default)
-        for c in op.scalar_const_args()
+        for c in op.scalar_inactive_args()
         if c.name in params or accepts_kwargs
     }
 
@@ -64,7 +64,7 @@ def bind(op: OpDecl, module):
     fwd, bwd = lookup_pair(op, module)
     arg_names = [a.name for a in op.args]
     slot_by_grad = {
-        a.grad_name: i for i, a in enumerate(op.args) if isinstance(a, Duplicated)
+        a.grad_name: i for i, a in enumerate(op.args) if isinstance(a, Active)
     }
     return_names = op.grad_names()
 
@@ -85,9 +85,9 @@ def bind(op: OpDecl, module):
             ctx.save_for_backward(*tensors)
             ctx.saved_layout = layout
             # Do not retain tensor inputs outside the candidate's explicit saved
-            # state. Only scalar Const values are needed again by backward.
-            ctx.const_values = {
-                c.name: args[arg_names.index(c.name)] for c in op.scalar_const_args()
+            # state. Only scalar Inactive values are needed again by backward.
+            ctx.inactive_values = {
+                c.name: args[arg_names.index(c.name)] for c in op.scalar_inactive_args()
             }
             return y
 
@@ -97,7 +97,7 @@ def bind(op: OpDecl, module):
                 ctx.saved_tensors[payload] if kind == "tensor" else payload
                 for kind, payload in ctx.saved_layout
             )
-            kwargs = backward_const_kwargs(op, bwd, ctx.const_values)
+            kwargs = backward_inactive_kwargs(op, bwd, ctx.inactive_values)
             grads = bwd(dout, saved, **kwargs)
             grads = (grads,) if torch.is_tensor(grads) else tuple(grads)
             if len(grads) != len(return_names):
@@ -127,7 +127,7 @@ def bind(op: OpDecl, module):
         for arg in op.args:
             if arg.name in named:
                 full.append(named[arg.name])
-            elif isinstance(arg, Duplicated) or getattr(arg, "is_tensor", False):
+            elif isinstance(arg, Active) or getattr(arg, "is_tensor", False):
                 raise TypeError(f"{op.name}: missing required argument {arg.name!r}")
             elif arg.default is not None:
                 full.append(arg.default)

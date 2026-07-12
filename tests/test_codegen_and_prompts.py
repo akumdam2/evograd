@@ -27,7 +27,7 @@ class TestWrapperCodegen(unittest.TestCase):
         self.assertIn("return run_graph_program(", wrapper)
         self.assertNotIn("_grads[", wrapper)  # identity: no index selection needed
 
-    def test_evoattention_drops_const_gradient(self):
+    def test_evoattention_drops_inactive_gradient(self):
         op = get_op("evoattention")
         # res_mask is tensor arg index 3; its graph gradient is skipped.
         self.assertEqual(grad_indices(op), [0, 1, 2, 4])
@@ -65,7 +65,7 @@ class TestExampleInputSpec(unittest.TestCase):
             "[(8,64) f32, (64) f32]",
         )
 
-    def test_evoattention_includes_const_mask_with_fixed_dtype(self):
+    def test_evoattention_includes_inactive_mask_with_fixed_dtype(self):
         # First correctness workload: B=1 S=1 H=4 N=23 D=8, float16.
         self.assertEqual(
             example_input_spec(get_op("evoattention")),

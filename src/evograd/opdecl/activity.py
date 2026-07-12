@@ -1,9 +1,9 @@
 """Typed operator declarations for backward-kernel synthesis.
 
 An :class:`OpDecl` is the single source of truth for one operator: which
-arguments are active (``Duplicated``) vs inactive (``Const``), their symbolic
-shapes, the workloads and tolerances used for correctness/benchmarking, and
-the prose semantics shown to LLM pipelines.
+arguments are differentiable (``Active``) vs non-differentiable
+(``Inactive``), their symbolic shapes, the workloads and tolerances used for
+correctness/benchmarking, and the prose semantics shown to LLM pipelines.
 
 Everything downstream derives from it: seed-generation prompts (pipelines
 A/C), deterministic wrapper codegen (pipeline B), the autograd oracle, the
@@ -11,11 +11,11 @@ correctness verifier, and the OpenEvolve evaluator.
 
 Naming rules made explicit (previously string conventions):
 
-* An input's gradient is named ``"d" + name`` unless ``Duplicated.grad``
+* An input's gradient is named ``"d" + name`` unless ``Active.grad``
   overrides it (e.g. ``pair_bias`` -> ``d_pair_bias``).
 * The upstream gradient is the output's gradient name (``y`` -> ``dy``,
   ``c`` -> ``dc``, ``out`` -> ``dout``, ``o`` -> ``do``).
-* Backward returns gradients of the ``Duplicated`` args in declaration order
+* Backward returns gradients of the ``Active`` args in declaration order
   unless ``grad_order`` overrides it (e.g. layernorm_linear returns
   ``dlinear_weight`` before ``dweight``/``dbias``).
 """
@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class Duplicated:
-    """Active tensor argument: primal plus gradient ("duplicated" = primal + shadow).
+class Active:
+    """Differentiable tensor argument whose gradient is required.
 
-    The backward contract must produce a gradient for every ``Duplicated``
+    The backward contract must produce a gradient for every ``Active``
     input; the harness routes it to the matching position of the
     ``torch.autograd.Function`` it builds.
     """
@@ -46,8 +46,8 @@ class Duplicated:
 
 
 @dataclass(frozen=True)
-class Const:
-    """Inactive argument: carries no gradient (harness emits ``None`` for it).
+class Inactive:
+    """Non-differentiable argument (the autograd binding emits ``None`` for it).
 
     A tensor if ``shape`` is given (e.g. an additive attention mask), a scalar
     otherwise (e.g. ``eps``). Scalar defaults are re-passed to the backward as
@@ -65,7 +65,7 @@ class Const:
         return self.shape is not None
 
 
-Arg = Duplicated | Const
+Arg = Active | Inactive
 
 
 def format_default(value: float | int) -> str:
@@ -120,7 +120,7 @@ class OpDecl:
     forward: str  # forward reference as "module.path:callable"
     dims: tuple[str, ...]
     args: tuple[Arg, ...]
-    output: Duplicated
+    output: Active
     forward_semantics: str
     backward_semantics: str
     extra_constraints: str = ""
@@ -143,35 +143,35 @@ class OpDecl:
     # Optional override for input construction, signature
     # (torch, op, workload, device) -> dict of {arg name: tensor/scalar, upstream grad name: tensor}.
     # Takes the torch module as a parameter so op declarations stay importable
-    # without torch (dev boxes have no CUDA). Default: randn per Duplicated,
-    # zeros per Const tensor — override when a Const has semantics (e.g.
+    # without torch (dev boxes have no CUDA). Default: randn per Active input,
+    # zeros per Inactive tensor — override when an Inactive input has semantics (e.g.
     # evoattention's additive keep/drop mask).
     make_inputs: object | None = None
 
     # ── derived views ─────────────────────────────────────────────────────
 
-    def duplicated_args(self) -> tuple[Duplicated, ...]:
-        return tuple(a for a in self.args if isinstance(a, Duplicated))
+    def active_args(self) -> tuple[Active, ...]:
+        return tuple(a for a in self.args if isinstance(a, Active))
 
-    def const_args(self) -> tuple[Const, ...]:
-        return tuple(a for a in self.args if isinstance(a, Const))
+    def inactive_args(self) -> tuple[Inactive, ...]:
+        return tuple(a for a in self.args if isinstance(a, Inactive))
 
-    def tensor_const_args(self) -> tuple[Const, ...]:
-        return tuple(a for a in self.const_args() if a.is_tensor)
+    def tensor_inactive_args(self) -> tuple[Inactive, ...]:
+        return tuple(a for a in self.inactive_args() if a.is_tensor)
 
-    def scalar_const_args(self) -> tuple[Const, ...]:
-        return tuple(a for a in self.const_args() if not a.is_tensor)
+    def scalar_inactive_args(self) -> tuple[Inactive, ...]:
+        return tuple(a for a in self.inactive_args() if not a.is_tensor)
 
     def grad_names(self) -> tuple[str, ...]:
         """Backward return names, in the order the contract requires."""
-        default = tuple(a.grad_name for a in self.duplicated_args())
+        default = tuple(a.grad_name for a in self.active_args())
         return self.grad_order if self.grad_order is not None else default
 
     def forward_parameters(self) -> str:
         """Candidate-facing forward parameter list, derived from typed args."""
         parts = []
         for arg in self.args:
-            if isinstance(arg, Const) and not arg.is_tensor and arg.default is not None:
+            if isinstance(arg, Inactive) and not arg.is_tensor and arg.default is not None:
                 parts.append(f"{arg.name}={format_default(arg.default)}")
             else:
                 parts.append(arg.name)
@@ -180,7 +180,7 @@ class OpDecl:
     def backward_parameters(self) -> str:
         """Candidate-facing backward parameter list."""
         parts = [self.upstream_grad_name, "saved_tensors"]
-        for arg in self.scalar_const_args():
+        for arg in self.scalar_inactive_args():
             suffix = f"={format_default(arg.default)}" if arg.default is not None else ""
             parts.append(f"{arg.name}{suffix}")
         return ", ".join(parts)
@@ -221,15 +221,15 @@ class OpDecl:
 
         saw_default = False
         for arg in self.args:
-            has_default = isinstance(arg, Const) and not arg.is_tensor and arg.default is not None
+            has_default = isinstance(arg, Inactive) and not arg.is_tensor and arg.default is not None
             if saw_default and not has_default:
                 raise ValueError(
-                    f"{self.name}: required argument {arg.name!r} cannot follow a defaulted scalar Const"
+                    f"{self.name}: required argument {arg.name!r} cannot follow a defaulted scalar Inactive"
                 )
             saw_default = saw_default or has_default
 
-        if not isinstance(self.output, Duplicated):
-            raise ValueError(f"{self.name}: output must be Duplicated (it has a gradient)")
+        if not isinstance(self.output, Active):
+            raise ValueError(f"{self.name}: output must be Active (it receives an upstream gradient)")
 
         for arg in (*self.args, self.output):
             shape = getattr(arg, "shape", None)
@@ -238,11 +238,11 @@ class OpDecl:
             self._validate_shape(arg.name, shape)
 
         if self.grad_order is not None:
-            default = tuple(a.grad_name for a in self.duplicated_args())
+            default = tuple(a.grad_name for a in self.active_args())
             if sorted(self.grad_order) != sorted(default):
                 raise ValueError(
                     f"{self.name}: grad_order {self.grad_order} is not a "
-                    f"permutation of the Duplicated gradients {default}"
+                    f"permutation of the Active gradients {default}"
                 )
 
         grad_names = self.grad_names()
@@ -365,7 +365,7 @@ def example_input_spec(op: OpDecl, workload: Workload | None = None) -> str:
     entries = []
     for arg in op.args:
         shape = getattr(arg, "shape", None)
-        if shape is None:  # scalar Const (e.g. eps): not a placeholder
+        if shape is None:  # scalar Inactive (e.g. eps): not a placeholder
             continue
         dims = ",".join(str(d) for d in bind_shape(shape, workload.dims))
         dtype_name = arg.dtype if arg.dtype and "|" not in arg.dtype else workload.dtype
@@ -379,7 +379,7 @@ def declare_op(
     forward: str,
     dims: tuple[str, ...],
     args: tuple[Arg, ...],
-    output: Duplicated,
+    output: Active,
     forward_semantics: str,
     backward_semantics: str,
     extra_constraints: str = "",

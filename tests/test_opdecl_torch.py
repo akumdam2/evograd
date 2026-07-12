@@ -15,7 +15,7 @@ try:
 except ImportError:
     HAVE_TORCH = False
 
-from evograd.opdecl import Const, Duplicated, Workload, declare_op
+from evograd.opdecl import Active, Inactive, Workload, declare_op
 
 
 def toy_op():
@@ -25,12 +25,12 @@ def toy_op():
         forward="tests.test_opdecl_torch:toy_forward_ref",
         dims=("M", "N"),
         args=(
-            Duplicated("x", "[M, N]"),
-            Duplicated("w", "[N, N]"),
-            Const("mask", "[M, N]"),
-            Const("eps", default=1e-5),
+            Active("x", "[M, N]"),
+            Active("w", "[N, N]"),
+            Inactive("mask", "[M, N]"),
+            Inactive("eps", default=1e-5),
         ),
-        output=Duplicated("y", "[M, N]"),
+        output=Active("y", "[M, N]"),
         forward_semantics="toy",
         backward_semantics="toy",
         correctness=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
@@ -75,11 +75,11 @@ class TestOracle(unittest.TestCase):
 
         x, w, mask, dy = inputs["x"], inputs["w"], inputs["mask"], inputs["dy"]
         torch.testing.assert_close(y, (x + mask) @ w + 1e-5)
-        self.assertEqual(list(grads), ["dx", "dw"])  # Duplicated only, mask excluded
+        self.assertEqual(list(grads), ["dx", "dw"])  # Active only, mask excluded
         torch.testing.assert_close(grads["dx"], dy @ w.T)
         torch.testing.assert_close(grads["dw"], (x + mask).T @ dy)
 
-    def test_oracle_never_grads_const(self):
+    def test_oracle_never_grads_inactive(self):
         from evograd.opdecl import make_case_inputs, oracle
 
         op = toy_op()
@@ -109,7 +109,7 @@ class TestBind(unittest.TestCase):
         torch.testing.assert_close(x.grad, x2.grad)
         torch.testing.assert_close(w.grad, w2.grad)
 
-    def test_const_slot_gets_none(self):
+    def test_inactive_slot_gets_none(self):
         from evograd.opdecl import bind, make_case_inputs
 
         op = toy_op()
@@ -119,7 +119,7 @@ class TestBind(unittest.TestCase):
         mask = inputs["mask"].detach().clone().requires_grad_(True)
         y = fn(inputs["x"], inputs["w"], mask)
         y.backward(inputs["dy"])
-        self.assertIsNone(mask.grad)  # Const: harness emitted None for its slot
+        self.assertIsNone(mask.grad)  # Inactive: harness emitted None for its slot
 
     def test_plain_scalar_saved_state_round_trips(self):
         from evograd.opdecl import bind, make_case_inputs

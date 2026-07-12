@@ -40,7 +40,7 @@ prompt:
     Operator semantics:
     - __FORWARD_SEMANTICS__
     - __BACKWARD_SEMANTICS__
-    - Activity: __ACTIVITY_CONTRACT__ (Const inputs never receive gradients).
+    - Activity: __ACTIVITY_CONTRACT__ (Inactive inputs never receive gradients).
     - Additional constraints: __EXTRA_CONSTRAINTS__
 
     The evaluator is memory-aware:

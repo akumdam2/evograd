@@ -5,10 +5,10 @@ conventions (``"d"+name`` gradient matching, the ``eps``-only-kwarg rule,
 ``grad_reorder()``). Here everything is read off the :class:`OpDecl`:
 
 * placeholder order   = tensor args in declaration order
-* gradient selection  = positions of the ``Duplicated`` args (``Const``
+* gradient selection  = positions of the ``Active`` args (``Inactive``
   tensor gradients such as ``d_res_mask`` are dropped by construction)
 * return order        = ``op.grad_names()`` (honors ``grad_order`` overrides)
-* scalar consts       = re-passed as keyword args with their declared defaults
+* scalar inactive args = re-passed as keyword args with their declared defaults
 
 Pure string construction (no torch/triton), so it is unit-testable without
 a GPU.
@@ -16,7 +16,7 @@ a GPU.
 
 from __future__ import annotations
 
-from evograd.opdecl.activity import Const, Duplicated, OpDecl, format_default
+from evograd.opdecl.activity import Active, Inactive, OpDecl, format_default
 
 
 def _tensor_args(op: OpDecl) -> list[str]:
@@ -24,8 +24,8 @@ def _tensor_args(op: OpDecl) -> list[str]:
     return [a.name for a in op.args if getattr(a, "shape", None) is not None]
 
 
-def _scalar_consts(op: OpDecl) -> list[Const]:
-    return list(op.scalar_const_args())
+def _scalar_inactive(op: OpDecl) -> list[Inactive]:
+    return list(op.scalar_inactive_args())
 
 
 def grad_indices(op: OpDecl) -> list[int]:
@@ -33,27 +33,27 @@ def grad_indices(op: OpDecl) -> list[int]:
 
     ``run_graph_program`` (emitted by the dispatch codegen) returns one
     gradient per forward tensor input, in input order. The wrapper picks the
-    ``Duplicated`` ones and emits them in contract order — no name matching.
+    ``Active`` ones and emits them in contract order — no name matching.
     """
     tensor_names = _tensor_args(op)
-    by_grad = {a.grad_name: a.name for a in op.duplicated_args()}
+    by_grad = {a.grad_name: a.name for a in op.active_args()}
     return [tensor_names.index(by_grad[g]) for g in op.grad_names()]
 
 
 def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     tensor_names = _tensor_args(op)
-    scalar_consts = _scalar_consts(op)
+    scalar_inactive = _scalar_inactive(op)
     indices = grad_indices(op)
 
     scalar_sig = "".join(
         f", {c.name}" + (f"={format_default(c.default)}" if c.default is not None else "")
-        for c in scalar_consts
+        for c in scalar_inactive
     )
     forward_sig = ", ".join(tensor_names) + scalar_sig
-    fwd_call = ", ".join(tensor_names + [c.name for c in scalar_consts])
+    fwd_call = ", ".join(tensor_names + [c.name for c in scalar_inactive])
     backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"
     backward_call = ", ".join(
-        [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalar_consts]
+        [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalar_inactive]
     )
 
     saved = ", ".join(f"{n}.contiguous()" for n in tensor_names)
@@ -62,10 +62,10 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     run_args = ",\n        ".join(
         [f"{op.upstream_grad_name}.contiguous()"] + [f"{n}.contiguous()" for n in tensor_names]
     )
-    unused_scalars = "".join(f"    _ = {c.name}\n" for c in scalar_consts)
+    unused_scalars = "".join(f"    _ = {c.name}\n" for c in scalar_inactive)
 
-    # A Duplicated-only op with declaration-order grads can return the graph
-    # outputs directly; anything else (Const tensors to drop, grad_order
+    # An Active-only op with declaration-order grads can return the graph
+    # outputs directly; anything else (Inactive tensors to drop, grad_order
     # overrides) selects by index.
     if indices == list(range(len(tensor_names))):
         backward_body = (

@@ -1,6 +1,6 @@
 """Operator declaration: matmul."""
 
-from evograd.opdecl import declare_op, Duplicated, Const, Workload
+from evograd.opdecl import Active, Workload, declare_op
 
 
 def make_matmul_inputs(torch, op, workload, device="cuda"):
@@ -17,10 +17,10 @@ op = declare_op(
     forward="evograd.ops.matmul.forward_ref:matmul_forward_ref",
     dims=('M', 'K', 'N'),
     args=(
-        Duplicated("a", "[M, K]"),
-        Duplicated("b", "[K, N]"),
+        Active("a", "[M, K]"),
+        Active("b", "[K, N]"),
     ),
-    output=Duplicated("c", "[M, N]"),
+    output=Active("c", "[M, N]"),
     forward_semantics='Forward computes a plain GEMM c = a @ b, where a is [M, K], b is [K, N], and c is [M, N], all contiguous 2D CUDA tensors. There is no eps and no bias. Accumulate in float32 and cast c back to the input dtype. Do not call torch.matmul, the @ operator, or autograd in the generated math; use a Triton tiled matmul (tl.dot).',
     backward_semantics="Backward must return (da, db). da = dc @ b.T with shape [M, K] and a's dtype. db = a.T @ dc with shape [K, N] and b's dtype. Accumulate both matmuls in float32. The forward output c is NOT needed by backward and should not be saved.",
     extra_constraints='Tensor layout notes:\n- a: [M, K], b: [K, N], dc: [M, N], contiguous CUDA, float32 or float16\n- da: [M, K] (a.dtype), db: [K, N] (b.dtype)\n- These shapes are compute-bound; prefer tensor-core tiled matmul with fp32 accumulation, reasonable BLOCK_M/BLOCK_N/BLOCK_K, and handle non-tile-aligned M/N/K with boundary masking.',

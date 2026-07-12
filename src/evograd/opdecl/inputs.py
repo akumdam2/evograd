@@ -1,7 +1,7 @@
 """Concrete input construction for a declared workload.
 
 Builds every primal plus the upstream gradient from the declaration alone,
-deterministically seeded by the workload. Ops whose ``Const`` tensors have
+deterministically seeded by the workload. Ops whose ``Inactive`` tensors have
 semantics (e.g. evoattention's additive keep/drop mask) supply a
 ``make_inputs`` hook on their declaration instead.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import torch
 
-from evograd.opdecl.activity import Duplicated, OpDecl, Workload, bind_shape
+from evograd.opdecl.activity import Active, OpDecl, Workload, bind_shape
 
 _DTYPES = {
     "float32": torch.float32,
@@ -54,7 +54,7 @@ def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> di
     torch.manual_seed(case_seed(workload))
     values: dict = {}
     for arg in op.args:
-        if isinstance(arg, Duplicated):
+        if isinstance(arg, Active):
             shape = bind_shape(arg.shape, workload.dims)
             dtype = resolve_dtype(arg_dtype_name(arg, workload))
             # std=0.5 keeps fp16/bf16 magnitudes in a sane range.

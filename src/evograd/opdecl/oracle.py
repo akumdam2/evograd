@@ -1,7 +1,7 @@
 """Ground-truth backward, derived from the declaration.
 
 This is the activity annotations doing real work: ``requires_grad`` is set on
-exactly the ``Duplicated`` args, the declared forward reference runs under
+exactly the ``Active`` args, the declared forward reference runs under
 autograd, and ``torch.autograd.grad`` with the output shadow as
 ``grad_outputs`` yields the reference gradients. No per-operator
 ``backward_ref.py`` is ever written.
@@ -13,7 +13,7 @@ import importlib
 
 import torch
 
-from evograd.opdecl.activity import Duplicated, OpDecl
+from evograd.opdecl.activity import Active, OpDecl
 
 
 def resolve_forward(op: OpDecl):
@@ -24,7 +24,7 @@ def resolve_forward(op: OpDecl):
 def oracle(op: OpDecl, inputs: dict, dout: torch.Tensor | None = None):
     """Run the forward reference under autograd and return ``(y, grads)``.
 
-    ``inputs`` maps declared arg names to values (scalar ``Const`` args may be
+    ``inputs`` maps declared arg names to values (scalar ``Inactive`` args may be
     omitted; their declared default is used). ``grads`` maps gradient names to
     tensors, ordered per ``op.grad_names()``. ``dout`` defaults to
     ``inputs[op.upstream_grad_name]``.
@@ -37,7 +37,7 @@ def oracle(op: OpDecl, inputs: dict, dout: torch.Tensor | None = None):
         value = inputs.get(arg.name, getattr(arg, "default", None))
         if value is None:
             raise ValueError(f"{op.name}: missing input {arg.name!r} and no default")
-        if isinstance(arg, Duplicated):
+        if isinstance(arg, Active):
             value = value.detach().clone().requires_grad_(True)
             leaves.append((arg.grad_name, value))
         positional.append(value)

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import torch
 
 from evograd.opdecl.activity import OpDecl, Workload
-from evograd.opdecl.bind import backward_const_kwargs, lookup_pair
+from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle
 
@@ -124,7 +124,7 @@ def _run_case(op: OpDecl, module, workload: Workload, device: str) -> CaseResult
         fwd, bwd = lookup_pair(op, module)
         positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
         y, saved = fwd(*positional)
-        kwargs = backward_const_kwargs(op, bwd, inputs)
+        kwargs = backward_inactive_kwargs(op, bwd, inputs)
         grads = bwd(inputs[op.upstream_grad_name], saved, **kwargs)
         grads = (grads,) if torch.is_tensor(grads) else tuple(grads)
 

@@ -9,8 +9,8 @@ import importlib
 
 from evograd.opdecl.activity import (
     Arg,
-    Const,
-    Duplicated,
+    Active,
+    Inactive,
     OpDecl,
     Workload,
     bind_shape,
@@ -36,8 +36,8 @@ def __getattr__(name: str):
 
 __all__ = [
     "Arg",
-    "Const",
-    "Duplicated",
+    "Active",
+    "Inactive",
     "OpDecl",
     "VerifyReport",
     "Workload",
