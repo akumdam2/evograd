@@ -218,6 +218,31 @@ class OpDecl:
         return self.tolerances[workload.dtype]
 
 
+_DTYPE_SHORT = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}
+
+
+def example_input_spec(op: OpDecl, workload: Workload | None = None) -> str:
+    """The atenir.extract ``--example-input`` string, derived from the declaration.
+
+    One entry per tensor argument in declared order, e.g.
+    ``"[(8,64) f32, (64) f32, (64) f32]"`` for layernorm. Replaces the
+    hand-typed strings in the old repo's README commands.
+    """
+    if workload is None:
+        if not op.correctness:
+            raise ValueError(f"{op.name}: no correctness workloads to derive an example input from")
+        workload = op.correctness[0]
+    entries = []
+    for arg in op.args:
+        shape = getattr(arg, "shape", None)
+        if shape is None:  # scalar Const (e.g. eps): not a placeholder
+            continue
+        dims = ",".join(str(d) for d in bind_shape(shape, workload.dims))
+        dtype_name = arg.dtype if arg.dtype and "|" not in arg.dtype else workload.dtype
+        entries.append(f"({dims}) {_DTYPE_SHORT[dtype_name]}")
+    return "[" + ", ".join(entries) + "]"
+
+
 def declare_op(
     *,
     name: str,
