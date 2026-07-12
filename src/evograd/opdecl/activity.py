@@ -68,6 +68,23 @@ class Const:
 Arg = Duplicated | Const
 
 
+def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
+    """Resolve a symbolic shape string against concrete dims: "[B, 1, N]" -> (2, 1, 128)."""
+    text = shape.strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        raise ValueError(f"shape must look like '[A, B]', got {shape!r}")
+    resolved = []
+    for token in text[1:-1].split(","):
+        token = token.strip()
+        if token in dims:
+            resolved.append(dims[token])
+        elif token.isdigit():
+            resolved.append(int(token))
+        else:
+            raise ValueError(f"shape dim {token!r} not bound by {sorted(dims)}")
+    return tuple(resolved)
+
+
 @dataclass(frozen=True)
 class Workload:
     """One concrete binding of the operator's symbolic dims, plus dtype.
@@ -98,6 +115,13 @@ class OpDecl:
     correctness: tuple[Workload, ...] = ()
     benchmark: tuple[Workload, ...] = ()
     tolerances: dict[str, tuple[float, float]] = field(default_factory=dict)
+    # Optional override for input construction, signature
+    # (torch, op, workload, device) -> dict of {arg name: tensor/scalar, upstream grad name: tensor}.
+    # Takes the torch module as a parameter so op declarations stay importable
+    # without torch (dev boxes have no CUDA). Default: randn per Duplicated,
+    # zeros per Const tensor — override when a Const has semantics (e.g.
+    # evoattention's additive keep/drop mask).
+    make_inputs: object | None = None
 
     # ── derived views ─────────────────────────────────────────────────────
 
@@ -208,6 +232,7 @@ def declare_op(
     correctness: tuple[Workload, ...] = (),
     benchmark: tuple[Workload, ...] = (),
     tolerances: dict[str, tuple[float, float]] | None = None,
+    make_inputs: object | None = None,
 ) -> OpDecl:
     """Build and validate an :class:`OpDecl`. The only way ops should be made."""
     op = OpDecl(
@@ -223,6 +248,7 @@ def declare_op(
         correctness=tuple(correctness),
         benchmark=tuple(benchmark),
         tolerances=dict(tolerances) if tolerances is not None else {},
+        make_inputs=make_inputs,
     )
     op.validate()
     return op

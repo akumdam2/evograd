@@ -1,7 +1,38 @@
-"""Typed operator declarations: the contract every evograd component derives from."""
+"""Typed operator declarations: the contract every evograd component derives from.
 
-from evograd.opdecl.activity import Arg, Const, Duplicated, OpDecl, Workload, declare_op
+Torch-facing derivations (oracle, bind, verify, make_case_inputs) are exported
+lazily so declarations and the compat bridge stay importable on machines
+without torch (dev boxes have no CUDA; only GPU nodes run the real stack).
+"""
+
+import importlib
+
+from evograd.opdecl.activity import (
+    Arg,
+    Const,
+    Duplicated,
+    OpDecl,
+    Workload,
+    bind_shape,
+    declare_op,
+)
 from evograd.opdecl.compat import OperatorSpec, to_operator_spec, to_spec_dict
+
+_LAZY = {
+    "oracle": "evograd.opdecl.oracle",
+    "resolve_forward": "evograd.opdecl.oracle",
+    "bind": "evograd.opdecl.bind",
+    "verify": "evograd.opdecl.verify",
+    "VerifyReport": "evograd.opdecl.verify",
+    "make_case_inputs": "evograd.opdecl.inputs",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY:
+        return getattr(importlib.import_module(_LAZY[name]), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Arg",
@@ -9,8 +40,15 @@ __all__ = [
     "Duplicated",
     "OpDecl",
     "OperatorSpec",
+    "VerifyReport",
     "Workload",
+    "bind",
+    "bind_shape",
     "declare_op",
+    "make_case_inputs",
+    "oracle",
+    "resolve_forward",
     "to_operator_spec",
     "to_spec_dict",
+    "verify",
 ]

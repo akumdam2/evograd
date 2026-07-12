@@ -48,9 +48,9 @@ declaration is the single source of truth — everything else derives from it:
 ```text
 src/evograd/
 ├── opdecl/        # declare_op, Duplicated, Const  [done]
-│                  # oracle, bind (autograd.Function builder), verify  [next]
-├── ops/           # one declaration per operator  [6 ops ported]
-├── atenir/        # graph extraction + primitive Triton dispatch  [to port]
+│                  # oracle, bind (autograd.Function builder), verify, inputs  [done]
+├── ops/           # one declaration + forward ref per operator  [6 ops ported]
+├── atenir/        # graph extraction + primitive Triton dispatch  [ported byte-identical]
 ├── pipelines/     # a_atenir_llm / b_dispatch / c_forward_only  [to port]
 ├── evolve/        # generic evaluator, scoring policies, openevolve-run wrapper  [to port]
 └── bench/         # latency / memory / ncu harness, strong baselines  [to port]
@@ -63,7 +63,13 @@ Target CLI: `evograd seed | verify | evolve | bench --op <name> ...`
 - [x] Phase 1: `opdecl` core + 6 operator declarations + legacy `OperatorSpec`
       bridge (`to_operator_spec`), diff-tested against snapshots of the old
       repo's `<op>_spec.json` files (`tests/fixtures/`).
-- [ ] Phase 2: port `atenir/` unchanged; `op.oracle()` + `op.bind()`.
+- [x] Phase 2: `atenir/` ported byte-identical; forward refs for all 6 ops;
+      `oracle()` (autograd ground truth from activity annotations), `bind()`
+      (autograd.Function builder), `verify()` (correctness gate), and
+      declaration-driven input construction. CPU-runnable torch tests
+      (self-skip without torch) + `scripts/gpu_smoke.py` for CUDA nodes.
+      **Not yet GPU-validated** — run
+      `PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only` on a GPU node.
 - [ ] Phase 3: port pipelines A/B/C (first via the bridge, then native).
 - [ ] Phase 4: generic evaluator + scoring policies; run wrapper
       (re-implements the fork's `--save-best-to`; PR the LLM param fallbacks

@@ -2,6 +2,36 @@
 
 from evograd.opdecl import declare_op, Duplicated, Const, Workload
 
+
+def make_evoattention_inputs(torch, op, workload, device="cuda"):
+    """Semantic input construction (ported from the bench task_spec):
+    res_mask is a real keep/drop mask with key 0 always kept (an all-dropped
+    query row would NaN the softmax), and pair_bias stays float32 regardless
+    of the case dtype, as in MegaFold."""
+    d = workload.dims
+    b, s, h, n, dim = d["B"], d["S"], d["H"], d["N"], d["D"]
+    dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16}[workload.dtype]
+
+    torch.manual_seed((((b * 131 + s) * 131 + h) * 131 + n) * 131 + dim)
+
+    # std=0.5 keeps fp16/bf16 magnitudes in a sane range (matches MegaFold tests).
+    q = torch.randn((b, s, n, h, dim), device=device, dtype=dtype) * 0.5
+    k = torch.randn((b, s, n, h, dim), device=device, dtype=dtype) * 0.5
+    v = torch.randn((b, s, n, h, dim), device=device, dtype=dtype) * 0.5
+    do = torch.randn((b, s, n, h, dim), device=device, dtype=dtype) * 0.5
+
+    keep = torch.rand((b, s, 1, 1, n), device=device) > 0.5
+    keep[..., 0] = True
+    res_mask = torch.where(
+        keep,
+        torch.zeros((), device=device, dtype=torch.float32),
+        torch.full((), -1e9, device=device, dtype=torch.float32),
+    )
+
+    pair_bias = torch.randn((b, 1, h, n, n), device=device, dtype=torch.float32) * 0.5
+    return {"q": q, "k": k, "v": v, "res_mask": res_mask, "pair_bias": pair_bias, "do": do}
+
+
 op = declare_op(
     name="evoattention",
     forward="evograd.ops.evoattention_forward_ref:evoattention_forward_ref",
@@ -48,4 +78,5 @@ op = declare_op(
         for dtype in ("float16", "bfloat16")
     ),
     tolerances={"float16": (2e-2, 2e-2), "bfloat16": (4e-2, 4e-2)},
+    make_inputs=make_evoattention_inputs,
 )
