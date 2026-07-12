@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
-from evograd.opdecl.compat import to_operator_spec
 from evograd.pipelines.shared.runner import evograd_env
 
 _TEMPLATE = Path(__file__).with_name("config_template.yaml")
@@ -33,20 +32,23 @@ def render_config(
     secondary_model: str = "gpt-4o",
     api_base: str = "https://api.openai.com/v1",
 ) -> str:
-    spec = to_operator_spec(op)
     text = _TEMPLATE.read_text(encoding="utf-8")
     replacements = {
         "__MAX_ITERATIONS__": str(iterations),
         "__PRIMARY_MODEL__": primary_model,
         "__SECONDARY_MODEL__": secondary_model,
         "__API_BASE__": api_base,
-        "__FORWARD_FN__": spec.forward_fn_name,
-        "__FORWARD_ARGS__": spec.forward_args,
-        "__BACKWARD_FN__": spec.backward_fn_name,
-        "__BACKWARD_ARGS__": spec.backward_args,
-        "__BACKWARD_RETURNS__": spec.backward_returns,
-        "__FORWARD_SEMANTICS__": spec.forward_semantics.replace("\n", " "),
-        "__BACKWARD_SEMANTICS__": spec.backward_semantics.replace("\n", " "),
+        "__FORWARD_FN__": op.forward_fn_name,
+        "__FORWARD_ARGS__": op.forward_parameters(),
+        "__BACKWARD_FN__": op.backward_fn_name,
+        "__BACKWARD_ARGS__": op.backward_parameters(),
+        "__BACKWARD_RETURNS__": op.backward_returns(),
+        "__FORWARD_SEMANTICS__": op.forward_semantics.replace("\n", " "),
+        "__BACKWARD_SEMANTICS__": op.backward_semantics.replace("\n", " "),
+        "__EXTRA_CONSTRAINTS__": (op.extra_constraints or "none").replace("\n", " "),
+        "__ACTIVITY_CONTRACT__": ", ".join(
+            f"{arg.name}: {type(arg).__name__}" for arg in op.args
+        ),
     }
     for key, value in replacements.items():
         text = text.replace(key, value)
@@ -72,8 +74,20 @@ def run_evolve(
     primary_model: str = "gpt-4o-mini",
     secondary_model: str = "gpt-4o",
     api_base: str = "https://api.openai.com/v1",
+    benchmark_suite: str | None = None,
+    benchmark_dtypes: tuple[str, ...] | None = None,
+    performance_baseline: str = "pytorch_autograd",
     extra_env: dict[str, str] | None = None,
 ) -> int:
+    from evograd.evolve.scoring import get_policy
+
+    get_policy(scoring)
+    if iterations < 1:
+        raise ValueError(f"iterations must be >= 1, got {iterations}")
+    if not seed_path.is_file():
+        raise FileNotFoundError(f"seed program not found: {seed_path}")
+    if config_path is not None and not config_path.is_file():
+        raise FileNotFoundError(f"OpenEvolve config not found: {config_path}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if config_path is None:
@@ -92,6 +106,22 @@ def run_evolve(
     env = evograd_env()
     env["EVOGRAD_OP"] = op.name
     env["EVOGRAD_SCORING"] = scoring
+    if benchmark_suite:
+        # Validate before paying the startup cost of an OpenEvolve subprocess.
+        op.benchmark_workloads(suite=benchmark_suite, dtypes=benchmark_dtypes)
+        env["EVOGRAD_BENCHMARK_SUITE"] = benchmark_suite
+    elif benchmark_dtypes:
+        op.benchmark_workloads(dtypes=benchmark_dtypes)
+    if benchmark_dtypes:
+        env["EVOGRAD_BENCHMARK_DTYPES"] = ",".join(benchmark_dtypes)
+    if performance_baseline != "pytorch_autograd":
+        if performance_baseline not in op.performance_baselines:
+            available = ["pytorch_autograd", *sorted(op.performance_baselines)]
+            raise KeyError(
+                f"{op.name}: unknown performance baseline {performance_baseline!r}; "
+                f"available: {available}"
+            )
+        env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
     if extra_env:
         env.update(extra_env)
 
@@ -113,11 +143,12 @@ def run_evolve(
     # Re-implementation of the old fork's --save-best-to convenience.
     best = _find_best_program(output_dir)
     if best is None:
-        print(f"Warning: no best program found under {output_dir}")
-        return 0
+        print(f"ERROR: OpenEvolve succeeded but no best program was found under {output_dir}")
+        return 1
     target = save_best_to or (output_dir / "evolved_best_program.py")
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(best, target)
+    if best.resolve() != target.resolve():
+        shutil.copyfile(best, target)
     print(f"Copied final best program to: {target}")
     return 0
 

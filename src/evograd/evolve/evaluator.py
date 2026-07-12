@@ -31,6 +31,7 @@ from evograd.opdecl.oracle import oracle
 from evograd.bench.harness import (
     DEFAULT_REPS,
     DEFAULT_WARMUP,
+    describe_saved,
     normalize_saved,
     run_benchmarks,
     saved_bytes,
@@ -47,12 +48,20 @@ except ImportError:  # standalone use without openevolve installed
             self.artifacts = artifacts
 
 
-CAPTURE_NATIVE_OUTPUT = os.environ.get("EVOGRAD_CAPTURE_NATIVE_OUTPUT", "1").lower() not in (
+CAPTURE_NATIVE_OUTPUT = os.environ.get(
+    "EVOGRAD_CAPTURE_NATIVE_OUTPUT",
+    os.environ.get("AUTOGRAD_PAIR_CAPTURE_NATIVE_OUTPUT", "1"),
+).lower() not in (
     "0",
     "false",
     "no",
 )
-NATIVE_OUTPUT_TAIL_BYTES = int(os.environ.get("EVOGRAD_NATIVE_OUTPUT_TAIL_BYTES", "65536"))
+NATIVE_OUTPUT_TAIL_BYTES = int(
+    os.environ.get(
+        "EVOGRAD_NATIVE_OUTPUT_TAIL_BYTES",
+        os.environ.get("AUTOGRAD_PAIR_NATIVE_OUTPUT_TAIL_BYTES", "65536"),
+    )
+)
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -132,18 +141,32 @@ def _max_errors(candidate: torch.Tensor, reference: torch.Tensor) -> tuple[float
     return max_abs, max_rel
 
 
+def _compare_tensor(candidate, reference, atol: float, rtol: float) -> tuple[bool, float, float]:
+    """Check values and the public tensor contract (shape and dtype)."""
+    if not torch.is_tensor(candidate):
+        return False, float("inf"), float("inf")
+    if candidate.shape != reference.shape or candidate.dtype != reference.dtype:
+        return False, float("inf"), float("inf")
+    max_abs, max_rel = _max_errors(candidate, reference)
+    ok = bool(
+        torch.allclose(candidate.float(), reference.float(), atol=atol, rtol=rtol)
+    )
+    return ok, max_abs, max_rel
+
+
 def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]:
     fwd, bwd = lookup_pair(op, module)
     grad_names = op.grad_names()
     reports = []
     passed = 0
     passed_by_output = {name: 0 for name in grad_names}
+    forward_passed = 0
 
     for workload in op.correctness:
         report: dict[str, Any] = {"dims": dict(workload.dims), "dtype": workload.dtype}
         try:
             inputs = make_case_inputs(op, workload, device=device)
-            _y_ref, expected = oracle(op, inputs)
+            y_ref, expected = oracle(op, inputs)
             positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
             y, saved = fwd(*positional)
             kwargs = backward_const_kwargs(op, bwd, inputs)
@@ -155,30 +178,24 @@ def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]
                 _y2, saved2 = fwd(*positional)
                 saved_tensors = normalize_saved(saved2)
             report["forward_shape"] = list(y.shape)
-            report["saved_tensors"] = [
-                {
-                    "shape": list(t.shape),
-                    "dtype": str(t.dtype),
-                    "bytes": t.numel() * t.element_size(),
-                }
-                for t in saved_tensors
-            ]
+            report["saved_tensors"] = describe_saved(saved_tensors)
             report["saved_bytes"] = saved_bytes(saved_tensors)
 
             atol, rtol = op.tolerance_for(workload)
-            correct = len(actual) == len(grad_names)
-            if not correct:
+            forward_ok, forward_abs, forward_rel = _compare_tensor(y, y_ref, atol, rtol)
+            report["forward_correct"] = forward_ok
+            report["forward_max_abs_error"] = forward_abs
+            report["forward_max_rel_error"] = forward_rel
+            forward_passed += int(forward_ok)
+            correct = forward_ok and len(actual) == len(grad_names)
+            if len(actual) != len(grad_names):
                 report["error_message"] = (
                     f"backward returned {len(actual)} gradients, expected {len(grad_names)}"
                 )
             for name, got in zip(grad_names, actual):
                 ref = expected[name]
-                if got is None:
-                    ok = False
-                    max_abs = max_rel = float("inf")
-                else:
-                    max_abs, max_rel = _max_errors(got, ref)
-                    ok = bool(torch.allclose(got.float(), ref.float(), atol=atol, rtol=rtol))
+                grad_atol, grad_rtol = op.tolerance_for(workload, name)
+                ok, max_abs, max_rel = _compare_tensor(got, ref, grad_atol, grad_rtol)
                 report[f"{name}_correct"] = ok
                 report[f"{name}_max_abs_error"] = max_abs
                 report[f"{name}_max_rel_error"] = max_rel
@@ -202,12 +219,21 @@ def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]
         "passed": passed,
         "total": len(op.correctness),
         "partial_correctness": passed / total,
+        "forward_correctness": forward_passed / total,
         **{f"{name}_correctness": passed_by_output[name] / total for name in grad_names},
         "reports": reports,
     }
 
 
-def build_evaluate(op: OpDecl, policy: ScoringPolicy, *, warmup: int | None = None, reps: int | None = None):
+def build_evaluate(
+    op: OpDecl,
+    policy: ScoringPolicy,
+    *,
+    warmup: int | None = None,
+    reps: int | None = None,
+    benchmark_workloads=None,
+    performance_baseline: str = "pytorch_autograd",
+):
     """Return the ``evaluate(program_path)`` callable OpenEvolve loads."""
     warmup = DEFAULT_WARMUP if warmup is None else warmup
     reps = DEFAULT_REPS if reps is None else reps
@@ -252,6 +278,8 @@ def build_evaluate(op: OpDecl, policy: ScoringPolicy, *, warmup: int | None = No
                         warmup=warmup,
                         reps=reps,
                         geomean_weights=policy.geomean_weights,
+                        workloads=benchmark_workloads,
+                        performance_baseline=performance_baseline,
                     )
         except Exception as exc:
             native_output = _native_output_tail(native_output_path)
@@ -275,6 +303,7 @@ def build_evaluate(op: OpDecl, policy: ScoringPolicy, *, warmup: int | None = No
                 "combined_score": -1e6 + float(correctness["partial_correctness"]),
                 "correct": 0.0,
                 "partial_correctness": float(correctness["partial_correctness"]),
+                "forward_correct": float(correctness["forward_correctness"]),
             }
             metrics.update(
                 {
@@ -293,16 +322,21 @@ def build_evaluate(op: OpDecl, policy: ScoringPolicy, *, warmup: int | None = No
             "combined_score": float(combined_score),
             "correct": 1.0,
             "partial_correctness": 1.0,
+            "forward_correct": 1.0,
             "speedup": float(aggregate["speedup_vs_pytorch_autograd_backward"]),
             "full_step_speedup": float(aggregate["speedup_vs_pytorch_autograd_full_step"]),
             "forward_ms": float(aggregate["forward_ms"]),
             "backward_from_saved_ms": float(aggregate["backward_from_saved_ms"]),
             "forward_backward_full_step_ms": float(aggregate["forward_backward_full_step_ms"]),
+            "raw_forward_backward_full_step_ms": float(
+                aggregate["raw_forward_backward_full_step_ms"]
+            ),
             "autograd_forward_backward_full_step_ms": float(
                 aggregate["autograd_forward_backward_full_step_ms"]
             ),
             "baseline_latency_ms": float(aggregate["pytorch_autograd_backward_ms"]),
             "baseline_full_step_ms": float(aggregate["pytorch_autograd_full_step_ms"]),
+            "baseline_raw_full_step_ms": float(aggregate["baseline_raw_full_step_ms"]),
             "saved_bytes": float(aggregate["saved_bytes"]),
             "input_bytes": float(aggregate["input_bytes"]),
         }
@@ -310,6 +344,7 @@ def build_evaluate(op: OpDecl, policy: ScoringPolicy, *, warmup: int | None = No
         metrics.update({f"{name}_correct": 1.0 for name in grad_names})
         benchmark["score_mode"] = policy.mode
         benchmark["scoring_policy"] = policy.name
+        benchmark["performance_baseline"] = performance_baseline
         benchmark["full_step_weight"] = policy.full_step_weight
         benchmark["memory_penalty_weight"] = policy.memory_penalty_weight
         benchmark["worst_case_guard"] = policy.worst_case_guard

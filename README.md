@@ -17,7 +17,7 @@ Every operator is declared once, with Enzyme-style activity annotations:
 ```python
 op = declare_op(
     name="evoattention",
-    forward="evograd.ops.evoattention_forward_ref:evoattention_forward_ref",
+    forward="evograd.ops.evoattention.forward_ref:evoattention_forward_ref",
     dims=("B", "S", "H", "N", "D"),
     args=(
         Duplicated("q",         "[B, S, N, H, D]"),   # active: gets a gradient
@@ -67,18 +67,32 @@ evograd evolve --op rmsnorm --seed /tmp/B_rmsnorm/initial_program_autograd_pair.
 
 # Benchmark a candidate against the PyTorch-autograd baseline
 evograd bench --op rmsnorm --candidate /tmp/evolve_rmsnorm/evolved_best_program.py
+
+# LayerNorm includes every legacy/TritonBench suite and the optional Liger baseline
+evograd bench --op layernorm --candidate best.py --suite tb_mixed --dtype float16
+pip install -e ".[baselines]"
+evograd bench --op layernorm --candidate best.py --baseline liger
 ```
 
-Adding operator #7 = one `forward_ref.py` + one `op_decl` module in
-`src/evograd/ops/` — prompts, codegen, oracle, verifier, evaluator, and bench
-all follow.
+Adding operator #7 = one `src/evograd/ops/<name>/` package containing an
+`__init__.py` declaration and `forward_ref.py`. Related input builders,
+baselines, or operator-specific helpers stay in that package. The registry
+discovers operator packages automatically; prompts, codegen, oracle, verifier,
+evaluator, and bench all follow without editing a central list.
 
 ## Layout
 
 ```text
 src/evograd/
 ├── opdecl/        # declare_op/Duplicated/Const; oracle, bind, verify, inputs, verify_cli
-├── ops/           # one declaration + forward ref per operator (6 ops)
+├── ops/           # one self-contained package per operator
+│   ├── layernorm/
+│   │   ├── __init__.py       # declaration, workloads, input builder, baselines
+│   │   └── forward_ref.py
+│   ├── evoattention/
+│   │   ├── __init__.py
+│   │   └── forward_ref.py
+│   └── ...
 ├── atenir/        # AtenIR graph extraction + primitive Triton dispatch (ported byte-identical)
 ├── pipelines/
 │   ├── a_atenir_llm/     # AtenIR summary + LLM plan/codegen/repair loop
@@ -92,8 +106,9 @@ src/evograd/
 
 ## Migration status
 
-- [x] Phase 1: `opdecl` core + 6 operator declarations + legacy `OperatorSpec`
-      bridge, diff-tested byte-exact against the old `<op>_spec.json` files.
+- [x] Phase 1: `opdecl` core + 6 operator declarations. The transitional
+      `OperatorSpec` bridge and JSON fixtures have now been removed; A/C prompts,
+      Pipeline B, and OpenEvolve config rendering consume `OpDecl` directly.
 - [x] Phase 2: `atenir/` ported byte-identical; forward refs; `oracle()`,
       `bind()`, `verify()`, declaration-driven inputs.
 - [x] Phase 3: pipelines A/B/C ported and declaration-native — `--op <name>`
@@ -104,11 +119,15 @@ src/evograd/
       names preserved for cross-repo comparability), config template, run
       wrapper that re-implements the fork's `--save-best-to`.
 - [x] Phase 5: `bench/` harness + unified CLI + `scripts/gpu_parity.py`.
+- [x] Completeness audit: automatic operator discovery; output-specific legacy
+      tolerances; legacy-exact input distributions/seeds; forward and gradient
+      dtype/shape correctness gates; flexible saved state; all LayerNorm shape
+      suites; optional Liger baseline; OpenEvolve 0.2.27 model-list config API.
 - [ ] **GPU validation** (blocking before first real use — dev boxes have no
       CUDA; all torch-facing code is validated by CPU-runnable unit tests and
       compile checks only):
       1. `PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only`
-      2. `PYTHONPATH=src python -m unittest discover tests` (runs the 6
+      2. `PYTHONPATH=src python -m unittest discover tests` (runs the 8
          torch tests that skip on CPU-less boxes)
       3. `PYTHONPATH=src python scripts/gpu_parity.py --op layernorm
          --old-repo <fork> --candidate <old seed>` (repeat for evoattention)
@@ -121,5 +140,5 @@ src/evograd/
 PYTHONPATH=src python -m unittest discover tests
 ```
 
-41 tests; the 6 torch-dependent ones self-skip on machines without torch and
+49 tests; the 8 torch-dependent ones self-skip on machines without torch and
 run on any torch install (CPU is enough — they use a pure-torch toy op).

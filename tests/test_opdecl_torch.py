@@ -42,15 +42,16 @@ def toy_forward_ref(x, w, mask, eps=1e-5):
     return (x + mask) @ w + eps
 
 
-def _toy_seed_module(correct=True):
+def _toy_seed_module(correct=True, forward_offset=0.0, save_scalar=False):
     """A pure-torch seed implementing the autograd-pair contract by hand."""
 
     def forward_with_saved(x, w, mask, eps=1e-5):
-        y = (x + mask) @ w + eps
-        return y, (x, w, mask)
+        y = (x + mask) @ w + eps + forward_offset
+        saved = (x, w, mask, x.shape[0]) if save_scalar else (x, w, mask)
+        return y, saved
 
     def backward_from_saved(dy, saved_tensors, eps=1e-5):
-        x, w, mask = saved_tensors
+        x, w, mask = saved_tensors[:3]
         dx = dy @ w.T
         dw = (x + mask).T @ dy
         if not correct:
@@ -120,6 +121,18 @@ class TestBind(unittest.TestCase):
         y.backward(inputs["dy"])
         self.assertIsNone(mask.grad)  # Const: harness emitted None for its slot
 
+    def test_plain_scalar_saved_state_round_trips(self):
+        from evograd.opdecl import bind, make_case_inputs
+
+        op = toy_op()
+        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        fn = bind(op, _toy_seed_module(save_scalar=True))
+        x = inputs["x"].detach().clone().requires_grad_(True)
+        w = inputs["w"].detach().clone().requires_grad_(True)
+        fn(x, w, inputs["mask"]).backward(inputs["dy"])
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(w.grad)
+
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestVerify(unittest.TestCase):
@@ -136,6 +149,14 @@ class TestVerify(unittest.TestCase):
         self.assertFalse(report.ok)
         failing = [c.name for case in report.cases for c in case.checks if not c.ok]
         self.assertEqual(failing, ["dw"])  # exactly the sabotaged gradient
+
+    def test_wrong_forward_fails_even_with_correct_backward(self):
+        from evograd.opdecl import verify
+
+        report = verify(toy_op(), _toy_seed_module(forward_offset=1.0), device="cpu")
+        self.assertFalse(report.ok)
+        failing = [c.name for case in report.cases for c in case.checks if not c.ok]
+        self.assertEqual(failing, ["y"])
 
 
 if __name__ == "__main__":

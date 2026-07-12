@@ -25,12 +25,8 @@ op-agnostic.
 | `_diff.py` | structural diff for two AtenIR JSON files (name-agnostic) |
 | `__init__.py` | makes `atenir` a package |
 
-This package lives at the repo root (`openevolve/atenir/`) so any bench can
-import it as `from atenir.compose import run_graph` once `openevolve` is on
-the import path.  LayerNorm-specific glue (the worked-example adapter) lives
-at the bench root as
-`benchmark/triton_layernorm_backward_bench/backward_atenir.py`, alongside the
-existing `backward_naive_triton.py`.
+This package lives inside evograd (`src/evograd/atenir/`) and is imported as
+`evograd.atenir` in both editable checkouts and installed packages.
 
 ## Extract
 
@@ -83,7 +79,7 @@ predecessor tensors followed by the scalar args, and stores the result in
 those tensors in order.
 
 ```python
-from atenir.compose import run_graph
+from evograd.atenir.compose import run_graph
 
 dx, dw, db = run_graph(
     "path/to/graph.json",
@@ -108,13 +104,9 @@ original dtypes.
 A new bench / op gets its own adapter file alongside `backward_atenir.py`;
 `compose.py` and `extract.py` do not change.
 
-## Known limitation — shape-specialised constants
+## Symbolic shapes
 
-`make_fx` traces at a concrete shape and bakes integer dims into
-`scalar_args` (e.g. `mul_2: scalar_args=[256]` for a graph captured at
-`cols=256`).  The composer currently exposes `scalar_overrides` so an
-adapter can swap those constants for the runtime value.  The proper fix
-is **symbolic-mode extraction** (`make_fx(..., tracing_mode="symbolic")`)
-so the graph carries SymInt nodes that the runtime computes from input
-shapes — that work is TODO and would remove the need for adapter-side
-overrides entirely.
+Pipeline B extracts with symbolic shapes by default (`extract --dynamic`).
+Shape reads and scalar arithmetic remain in the graph as runtime SymInt nodes,
+so emitted seeds are not specialized to the example-input dimensions. Static
+extraction and `scalar_overrides` remain available for legacy graphs.

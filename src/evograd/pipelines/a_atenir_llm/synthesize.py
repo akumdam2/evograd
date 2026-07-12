@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
-from evograd.opdecl.compat import to_operator_spec
 from evograd.pipelines.a_atenir_llm.prompts import (
     SYSTEM_MESSAGE,
     render_codegen_prompt,
@@ -61,13 +60,12 @@ def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
         op_name=config.op.name,
         program_path=program_path,
         log_dir=program_path.parent,
+        forward=config.forward,
     )
 
 
 def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
-    spec = to_operator_spec(config.op)
-
     print("Extract: AtenIR reference backward graph")
     graph_path = extract_graph(
         python=config.python,
@@ -87,7 +85,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         forward=config.forward,
         graph_summary=graph_summary,
         lowering_context=lowering_context,
-        spec=spec,
+        op=config.op,
     )
     (config.output_dir / "autograd_pair_plan_prompt.md").write_text(plan_prompt, encoding="utf-8")
 
@@ -99,7 +97,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
                 graph_summary=graph_summary,
                 pair_plan="{AUTOGRAD_PAIR_PLAN_FROM_LLM}",
                 lowering_context=lowering_context,
-                spec=spec,
+                op=config.op,
             ),
             encoding="utf-8",
         )
@@ -123,7 +121,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         graph_summary=graph_summary,
         pair_plan=pair_plan,
         lowering_context=lowering_context,
-        spec=spec,
+        op=config.op,
     )
     previous_code = ""
     for attempt in range(1, config.max_attempts + 1):
@@ -172,7 +170,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
             previous_code=code or previous_code,
             verifier_report=json.dumps(report, indent=2, sort_keys=True),
             lowering_context=lowering_context,
-            spec=spec,
+            op=config.op,
         )
         (attempt_dir / "repair_prompt.md").write_text(repair_prompt, encoding="utf-8")
         prompt = repair_prompt

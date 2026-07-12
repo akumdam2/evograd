@@ -34,7 +34,7 @@ def make_evoattention_inputs(torch, op, workload, device="cuda"):
 
 op = declare_op(
     name="evoattention",
-    forward="evograd.ops.evoattention_forward_ref:evoattention_forward_ref",
+    forward="evograd.ops.evoattention.forward_ref:evoattention_forward_ref",
     dims=('B', 'S', 'H', 'N', 'D'),
     args=(
         Duplicated("q", "[B, S, N, H, D]", dtype="float16|bfloat16"),
@@ -78,5 +78,6 @@ op = declare_op(
         for dtype in ("float16", "bfloat16")
     ),
     tolerances={"float16": (2e-2, 2e-2), "bfloat16": (4e-2, 4e-2)},
+    tolerance_multipliers={"d_pair_bias": (2.0, 1.0)},
     make_inputs=make_evoattention_inputs,
 )

@@ -1,15 +1,13 @@
 """Prompt templates for Pipeline A (AtenIR-grounded autograd-pair synthesis).
 
 Ported from the old repo's ``pipeline/autograd_pair_fusion_agent/prompts.py``.
-The prompts consume the legacy :class:`OperatorSpec` *view*, but the view is
-always derived from an :class:`~evograd.opdecl.activity.OpDecl` via
-``to_operator_spec`` — there are no JSON spec files, no ``LAYERNORM_SPEC``
-default, and none of the ``"d"+name`` / ``grad_reorder`` string conventions.
+The prompts consume :class:`OpDecl` directly; there are no JSON spec files or
+transitional stringly-typed contracts.
 """
 
 from __future__ import annotations
 
-from evograd.opdecl.compat import OperatorSpec
+from evograd.opdecl.activity import OpDecl
 
 SYSTEM_MESSAGE = """You are a Triton compiler engineer.
 You synthesize a forward/backward autograd pair.  The forward may save tensors
@@ -41,37 +39,38 @@ Triton pitfalls:
 - Avoid global atomic contention when a partial-buffer reduction is better."""
 
 
-def render_pair_rules(spec: OperatorSpec) -> str:
+def render_pair_rules(op: OpDecl) -> str:
     no_grad_lines = ""
-    if spec.no_grad_inputs:
-        names = ", ".join(f"`{n}`" for n in spec.no_grad_inputs)
+    no_grad_inputs = tuple(c.name for c in op.tensor_const_args())
+    if no_grad_inputs:
+        names = ", ".join(f"`{n}`" for n in no_grad_inputs)
         no_grad_lines = (
             f"- The following inputs carry NO gradient and must not appear in the "
             f"backward output: {names}. "
             f"The AtenIR graph may include their gradients as outputs — discard them.\n"
         )
-    extra = f"\n{spec.extra_constraints}" if spec.extra_constraints else ""
+    extra = f"\n{op.extra_constraints}" if op.extra_constraints else ""
     return f"""\
 ## Autograd-pair rules
 
 Public API to implement:
 
 ```python
-def {spec.forward_fn_name}({spec.forward_args}):
+def {op.forward_fn_name}({op.forward_parameters()}):
     return y, saved_tensors
 
-def {spec.backward_fn_name}({spec.backward_args}):
-    return {spec.backward_returns}
+def {op.backward_fn_name}({op.backward_parameters()}):
+    return {op.backward_returns()}
 ```
 
 Hard constraints:
 - Return only Python source, no Markdown.
 - Include imports for `torch`, `triton`, and `triton.language as tl`.
 - Include an `EVOLVE-BLOCK` around generated Triton kernels and launch helpers.
-- `saved_tensors` must be a tensor or tuple/list of tensors, because the evaluator
-  stores them via `ctx.save_for_backward`.
-- {spec.forward_semantics}
-- {spec.backward_semantics}
+- `saved_tensors` may be a tensor or tuple/list mixing tensors with immutable
+  Python scalar metadata. Only tensors count toward saved-memory usage.
+- {op.forward_semantics}
+- {op.backward_semantics}
 {no_grad_lines}
 {_SAVED_TENSOR_GUIDANCE}
 
@@ -84,7 +83,7 @@ def render_plan_prompt(
     forward: str,
     graph_summary: str,
     lowering_context: str = "",
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -98,6 +97,20 @@ Forward reference:
 ```text
 {forward}
 ```
+
+Declared public contract:
+
+```python
+def {op.forward_fn_name}({op.forward_parameters()}):
+    return output, saved_tensors
+
+def {op.backward_fn_name}({op.backward_parameters()}):
+    return {op.backward_returns()}
+```
+
+Forward semantics: {op.forward_semantics}
+
+Backward semantics: {op.backward_semantics}
 
 The AtenIR backward graph below describes the reference backward semantics, but
 the generated implementation is allowed to change the forward/backward contract
@@ -120,7 +133,7 @@ def render_codegen_prompt(
     graph_summary: str,
     pair_plan: str,
     lowering_context: str = "",
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -131,7 +144,7 @@ def render_codegen_prompt(
 
 Generate a complete Python module for an autograd pair for the provided forward reference.
 
-{render_pair_rules(spec)}
+{render_pair_rules(op)}
 
 ## Plan
 
@@ -152,7 +165,7 @@ def render_repair_prompt(
     previous_code: str,
     verifier_report: str,
     lowering_context: str = "",
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -169,7 +182,7 @@ Verifier report:
 {verifier_report}
 ```
 
-{render_pair_rules(spec)}
+{render_pair_rules(op)}
 
 ## Plan
 

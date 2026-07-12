@@ -24,20 +24,43 @@ DEFAULT_WARMUP = 10
 DEFAULT_REPS = 50
 
 
-def normalize_saved(saved: Any) -> tuple[torch.Tensor, ...]:
-    if isinstance(saved, torch.Tensor):
-        saved_tuple = (saved,)
-    elif isinstance(saved, (tuple, list)):
+def normalize_saved(saved: Any) -> tuple[Any, ...]:
+    """Normalize candidate saved state while preserving plain scalar metadata.
+
+    ``bind`` knows how to route tensors through ``save_for_backward`` and keep
+    immutable Python values in a side layout. The benchmark must accept the same
+    contract; only tensors contribute to saved-memory accounting.
+    """
+    if isinstance(saved, (tuple, list)):
         saved_tuple = tuple(saved)
     else:
-        raise TypeError("saved_tensors must be a Tensor or a tuple/list of Tensors")
-    if not all(isinstance(t, torch.Tensor) for t in saved_tuple):
-        raise TypeError("all saved_tensors entries must be torch.Tensor instances")
+        saved_tuple = (saved,)
     return saved_tuple
 
 
-def saved_bytes(saved: tuple[torch.Tensor, ...]) -> int:
-    return int(sum(t.numel() * t.element_size() for t in saved))
+def saved_bytes(saved: tuple[Any, ...]) -> int:
+    return int(
+        sum(t.numel() * t.element_size() for t in saved if isinstance(t, torch.Tensor))
+    )
+
+
+def describe_saved(saved: tuple[Any, ...]) -> list[dict[str, Any]]:
+    descriptions = []
+    for value in saved:
+        if isinstance(value, torch.Tensor):
+            descriptions.append(
+                {
+                    "kind": "tensor",
+                    "shape": list(value.shape),
+                    "dtype": str(value.dtype),
+                    "bytes": value.numel() * value.element_size(),
+                }
+            )
+        else:
+            descriptions.append(
+                {"kind": "value", "type": type(value).__name__, "repr": repr(value)[:200]}
+            )
+    return descriptions
 
 
 def median_ms(
@@ -91,6 +114,7 @@ def benchmark_case(
     warmup: int = DEFAULT_WARMUP,
     reps: int = DEFAULT_REPS,
     device: str = "cuda",
+    performance_baseline: str = "pytorch_autograd",
 ) -> dict[str, Any]:
     fwd, bwd = lookup_pair(op, module)
     inputs = make_case_inputs(op, workload, device=device)
@@ -149,8 +173,27 @@ def benchmark_case(
     backward_ms = median_ms_timed_region(setup_saved, backward_from_saved, warmup, reps)
     raw_full_ms = median_ms(candidate_raw_full_step, warmup, reps)
     autograd_full_ms = median_ms(candidate_autograd_full_step, warmup, reps)
-    baseline_ms = median_ms(baseline_backward, warmup, reps)
-    baseline_full_ms = median_ms(baseline_full_step, warmup, reps)
+    if performance_baseline == "pytorch_autograd":
+        baseline_ms = median_ms(baseline_backward, warmup, reps)
+        baseline_full_ms = median_ms(baseline_full_step, warmup, reps)
+    else:
+        try:
+            baseline_hook = op.performance_baselines[performance_baseline]
+        except KeyError:
+            available = ["pytorch_autograd", *sorted(op.performance_baselines)]
+            raise KeyError(
+                f"{op.name}: unknown performance baseline {performance_baseline!r}; "
+                f"available: {available}"
+            ) from None
+        baseline_ms, baseline_full_ms = baseline_hook(
+            torch,
+            inputs,
+            dout,
+            warmup,
+            reps,
+            median_ms,
+            median_ms_timed_region,
+        )
 
     saved_byte_count = saved_bytes(saved_tensors)
     input_byte_count = int(
@@ -163,6 +206,7 @@ def benchmark_case(
     return {
         "dims": dict(workload.dims),
         "dtype": workload.dtype,
+        "performance_baseline": performance_baseline,
         "forward_ms": forward_ms,
         "backward_from_saved_ms": backward_ms,
         "forward_backward_full_step_ms": raw_full_ms,
@@ -182,10 +226,7 @@ def benchmark_case(
         "saved_bytes": saved_byte_count,
         "input_bytes": input_byte_count,
         "saved_memory_ratio": saved_byte_count / max(input_byte_count, 1),
-        "saved_tensors": [
-            {"shape": list(t.shape), "dtype": str(t.dtype), "bytes": t.numel() * t.element_size()}
-            for t in saved_tensors
-        ],
+        "saved_tensors": describe_saved(saved_tensors),
     }
 
 
@@ -197,6 +238,8 @@ def run_benchmarks(
     reps: int = DEFAULT_REPS,
     device: str = "cuda",
     geomean_weights: tuple[float, ...] | None = None,
+    workloads: tuple[Workload, ...] | None = None,
+    performance_baseline: str = "pytorch_autograd",
 ) -> dict[str, Any]:
     cases = []
     totals = {
@@ -211,8 +254,19 @@ def run_benchmarks(
         "saved_bytes": 0.0,
         "input_bytes": 0.0,
     }
-    for workload in op.benchmark:
-        report = benchmark_case(op, module, workload, warmup=warmup, reps=reps, device=device)
+    selected = op.benchmark if workloads is None else workloads
+    if not selected:
+        raise ValueError(f"{op.name}: no benchmark workloads selected")
+    for workload in selected:
+        report = benchmark_case(
+            op,
+            module,
+            workload,
+            warmup=warmup,
+            reps=reps,
+            device=device,
+            performance_baseline=performance_baseline,
+        )
         cases.append(report)
         for key in totals:
             totals[key] += float(report[key])
@@ -251,10 +305,30 @@ def run_benchmarks(
         and float(c["speedup_vs_baseline_raw_full_step"]) > 0.0
     ]
     weights = list(geomean_weights) if geomean_weights else None
-    if weights is not None and len(weights) != len(cases):
-        raise ValueError(
-            f"geomean_weights length {len(weights)} must match number of benchmark cases {len(cases)}"
-        )
+    if weights is not None:
+        if any(weight <= 0 for weight in weights):
+            raise ValueError("geomean weights must contain only positive values")
+        if len(weights) != len(cases):
+            unique_dims: list[tuple[tuple[str, int], ...]] = []
+            for case in cases:
+                dims_key = tuple(sorted((name, int(value)) for name, value in case["dims"].items()))
+                if dims_key not in unique_dims:
+                    unique_dims.append(dims_key)
+            if len(weights) == len(unique_dims):
+                by_dims = dict(zip(unique_dims, weights))
+                weights = [
+                    by_dims[
+                        tuple(
+                            sorted((name, int(value)) for name, value in case["dims"].items())
+                        )
+                    ]
+                    for case in cases
+                ]
+            else:
+                raise ValueError(
+                    "geomean_weights length must match benchmark cases "
+                    f"({len(cases)}) or unique shapes ({len(unique_dims)}), got {len(weights)}"
+                )
     totals["geomean_speedup_vs_baseline_backward"] = geomean(backward_speedups)
     totals["geomean_speedup_vs_baseline_full_step"] = geomean(full_step_speedups)
     totals["geomean_min_speedup_per_case"] = geomean(min_speedups)
@@ -273,4 +347,9 @@ def run_benchmarks(
     )
     totals["worst_case_min_speedup"] = min(min_speedups) if min_speedups else 0.0
     totals["saved_memory_ratio"] = totals["saved_bytes"] / max(totals["input_bytes"], 1e-9)
-    return {"aggregate": totals, "cases": cases, "geomean_weights": weights or []}
+    return {
+        "aggregate": totals,
+        "cases": cases,
+        "geomean_weights": weights or [],
+        "performance_baseline": performance_baseline,
+    }

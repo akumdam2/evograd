@@ -2,9 +2,19 @@
 
 from evograd.opdecl import declare_op, Duplicated, Const, Workload
 
+
+def make_rmsnorm_inputs(torch, op, workload, device="cuda"):
+    rows, hidden = workload.dims["rows"], workload.dims["hidden"]
+    dtype = getattr(torch, workload.dtype)
+    torch.manual_seed(rows * 100000 + hidden)
+    x = torch.randn((rows, hidden), device=device, dtype=dtype)
+    weight = torch.randn((hidden,), device=device, dtype=dtype)
+    dy = torch.randn((rows, hidden), device=device, dtype=dtype)
+    return {"x": x, "weight": weight, "eps": 1e-5, "dy": dy}
+
 op = declare_op(
     name="rmsnorm",
-    forward="evograd.ops.rmsnorm_forward_ref:rmsnorm_forward_ref",
+    forward="evograd.ops.rmsnorm.forward_ref:rmsnorm_forward_ref",
     dims=('rows', 'hidden'),
     args=(
         Duplicated("x", "[rows, hidden]"),
@@ -31,4 +41,5 @@ op = declare_op(
         for dtype in ("float32", "float16")
     ),
     tolerances={"float32": (2e-5, 2e-5), "float16": (5e-2, 5e-2)},
+    make_inputs=make_rmsnorm_inputs,
 )

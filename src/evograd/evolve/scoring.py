@@ -123,4 +123,12 @@ def score_from_aggregate(
         "worst_case_guard_factor": worst_case_guard_factor,
         "saved_memory_ratio": saved_memory_ratio,
         "memory_penalty_factor": memory_penalty_factor,
+        "score_mode_speed_memory": 1.0 if policy.mode == "speed_memory" else 0.0,
+        "score_mode_speed_memory_min": 1.0 if policy.mode == "speed_memory_min" else 0.0,
+        "score_mode_speed_memory_min_geomean": (
+            1.0 if policy.mode == "speed_memory_min_geomean" else 0.0
+        ),
+        "score_mode_speed_memory_min_weighted_geomean": (
+            1.0 if policy.mode == "speed_memory_min_weighted_geomean" else 0.0
+        ),
     }

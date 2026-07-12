@@ -16,8 +16,7 @@ a GPU.
 
 from __future__ import annotations
 
-from evograd.opdecl.activity import Const, Duplicated, OpDecl
-from evograd.opdecl.compat import _fmt_default
+from evograd.opdecl.activity import Const, Duplicated, OpDecl, format_default
 
 
 def _tensor_args(op: OpDecl) -> list[str]:
@@ -26,7 +25,7 @@ def _tensor_args(op: OpDecl) -> list[str]:
 
 
 def _scalar_consts(op: OpDecl) -> list[Const]:
-    return [c for c in op.scalar_const_args() if c.default is not None]
+    return list(op.scalar_const_args())
 
 
 def grad_indices(op: OpDecl) -> list[int]:
@@ -46,7 +45,10 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     scalar_consts = _scalar_consts(op)
     indices = grad_indices(op)
 
-    scalar_sig = "".join(f", {c.name}={_fmt_default(c.default)}" for c in scalar_consts)
+    scalar_sig = "".join(
+        f", {c.name}" + (f"={format_default(c.default)}" if c.default is not None else "")
+        for c in scalar_consts
+    )
     forward_sig = ", ".join(tensor_names) + scalar_sig
     fwd_call = ", ".join(tensor_names + [c.name for c in scalar_consts])
     backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"

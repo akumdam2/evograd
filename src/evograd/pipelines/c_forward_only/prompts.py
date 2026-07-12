@@ -1,12 +1,12 @@
 """Prompt templates for Pipeline C (forward-source-only ablation).
 
-Ported from ``pipeline/no_atenir_fusion_agent/prompts.py``. The spec is always
-derived from an :class:`OpDecl`; the LayerNorm-verbatim fallback block is gone.
+Ported from ``pipeline/no_atenir_fusion_agent/prompts.py``. It consumes the
+:class:`OpDecl` directly; the LayerNorm-verbatim fallback block is gone.
 """
 
 from __future__ import annotations
 
-from evograd.opdecl.compat import OperatorSpec
+from evograd.opdecl.activity import OpDecl
 
 SYSTEM_MESSAGE = """You are a Triton compiler engineer.
 You synthesize a forward/backward autograd pair directly from a PyTorch forward
@@ -38,25 +38,26 @@ Triton pitfalls:
 """
 
 
-def render_pair_rules(spec: OperatorSpec) -> str:
+def render_pair_rules(op: OpDecl) -> str:
     no_grad = ""
-    if spec.no_grad_inputs:
-        names = ", ".join(f"`{n}`" for n in spec.no_grad_inputs)
+    no_grad_inputs = tuple(c.name for c in op.tensor_const_args())
+    if no_grad_inputs:
+        names = ", ".join(f"`{n}`" for n in no_grad_inputs)
         no_grad = (
             f"- The following inputs are not trainable; do not return gradients for "
             f"them: {names}. The evaluator wrapper inserts None in their positions.\n"
         )
-    extra = f"\n{spec.extra_constraints}\n" if spec.extra_constraints else ""
+    extra = f"\n{op.extra_constraints}\n" if op.extra_constraints else ""
     return f"""## Autograd-pair rules
 
 Public API to implement:
 
 ```python
-def {spec.forward_fn_name}({spec.forward_args}):
+def {op.forward_fn_name}({op.forward_parameters()}):
     return y, saved_tensors
 
-def {spec.backward_fn_name}({spec.backward_args}):
-    return {spec.backward_returns}
+def {op.backward_fn_name}({op.backward_parameters()}):
+    return {op.backward_returns()}
 ```
 
 Hard constraints:
@@ -66,12 +67,12 @@ Hard constraints:
 - Include an `EVOLVE-BLOCK` around generated Triton kernels and launch helpers.
 - Do not call PyTorch autograd or a high-level PyTorch reference of this operator
   in the generated math.
-- {spec.forward_semantics}
-- {spec.backward_semantics}
-- Backward must consume only the upstream gradient, `saved_tensors`, and `eps`
-  (when the forward takes one).
-- `saved_tensors` must be a tensor or tuple/list of tensors, because the
-  evaluator stores them via `ctx.save_for_backward`.
+- {op.forward_semantics}
+- {op.backward_semantics}
+- Backward must consume only the upstream gradient, `saved_tensors`, and the
+  declared scalar Const arguments (when the forward takes them).
+- `saved_tensors` may be a tensor or tuple/list mixing tensors with immutable
+  Python scalar metadata. Only tensors count toward saved-memory usage.
 {no_grad}
 {_GENERIC_GUIDANCE_AND_PITFALLS}{extra}"""
 
@@ -80,7 +81,7 @@ def render_plan_prompt(
     *,
     forward: str,
     forward_source: str,
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     return f"""# No-AtenIR Autograd-Pair Planning
 
@@ -103,7 +104,7 @@ Forward reference source:
 Task:
 
 1. Derive the mathematical backward formula from the forward source.
-2. Propose a saved tensor contract for `{spec.forward_fn_name}`.
+2. Propose a saved tensor contract for `{op.forward_fn_name}`.
 3. Propose Triton kernels for forward and backward.
 4. Identify reductions, reduction axes, accumulation dtypes, and output dtypes.
 5. Explain the memory/speed tradeoff of the saved tensors.
@@ -117,7 +118,7 @@ def render_codegen_prompt(
     forward: str,
     forward_source: str,
     plan: str,
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     return f"""# No-AtenIR Autograd-Pair Codegen
 
@@ -127,7 +128,7 @@ and the plan only. No AtenIR backward graph is provided.
 
 Requirements:
 
-{render_pair_rules(spec)}
+{render_pair_rules(op)}
 
 Forward reference spec:
 
@@ -156,7 +157,7 @@ def render_repair_prompt(
     plan: str,
     previous_code: str,
     verifier_report: str,
-    spec: OperatorSpec,
+    op: OpDecl,
 ) -> str:
     return f"""# No-AtenIR Autograd-Pair Repair
 
@@ -194,7 +195,7 @@ Previous code:
 {previous_code}
 ```
 
-{render_pair_rules(spec)}
+{render_pair_rules(op)}
 
 Before writing the repaired code, internally classify the failure as a formula
 error, saved-tensor contract error, reduction-axis error, shape/tiling error,

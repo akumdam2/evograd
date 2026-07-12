@@ -35,7 +35,11 @@ def arg_dtype_name(arg, workload: Workload) -> str:
 
 
 def case_seed(workload: Workload) -> int:
-    """Deterministic per-case seed (same recipe as the legacy task_spec files)."""
+    """Deterministic generic per-case seed for newly declared operators.
+
+    Migrated operators with historical comparison requirements provide a
+    declaration-local ``make_inputs`` hook that preserves their legacy recipe.
+    """
     seed = 0
     for name in sorted(workload.dims):
         seed = seed * 131 + workload.dims[name]

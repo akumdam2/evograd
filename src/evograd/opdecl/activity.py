@@ -68,6 +68,19 @@ class Const:
 Arg = Duplicated | Const
 
 
+def format_default(value: float | int) -> str:
+    """Render scalar defaults in stable Python syntax (``1e-5``, not ``1e-05``)."""
+    if isinstance(value, float):
+        text = f"{value:g}"
+        if "e" in text:
+            mantissa, exponent = text.split("e")
+            sign = "-" if exponent.startswith("-") else "+" if exponent.startswith("+") else ""
+            digits = exponent.lstrip("+-").lstrip("0") or "0"
+            text = f"{mantissa}e{sign}{digits}"
+        return text
+    return str(value)
+
+
 def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
     """Resolve a symbolic shape string against concrete dims: "[B, 1, N]" -> (2, 1, 128)."""
     text = shape.strip()
@@ -115,6 +128,18 @@ class OpDecl:
     correctness: tuple[Workload, ...] = ()
     benchmark: tuple[Workload, ...] = ()
     tolerances: dict[str, tuple[float, float]] = field(default_factory=dict)
+    # Per-result multipliers applied to the workload/dtype tolerance. This
+    # preserves cases where one reduction is intrinsically noisier than the
+    # other outputs (e.g. evoattention d_pair_bias reduces over N_seq).
+    tolerance_multipliers: dict[str, tuple[float, float]] = field(default_factory=dict)
+    # Optional named benchmark suites. ``benchmark`` remains the default suite;
+    # named suites let one declaration expose legacy/TritonBench profiles
+    # without environment-dependent module import side effects.
+    benchmark_suites: dict[str, tuple[Workload, ...]] = field(default_factory=dict)
+    # Optional post-optimization performance baselines. A hook receives the
+    # concrete inputs and timing helpers and returns ``(backward_ms, full_ms)``.
+    # PyTorch autograd is always available as the built-in default.
+    performance_baselines: dict[str, object] = field(default_factory=dict)
     # Optional override for input construction, signature
     # (torch, op, workload, device) -> dict of {arg name: tensor/scalar, upstream grad name: tensor}.
     # Takes the torch module as a parameter so op declarations stay importable
@@ -142,6 +167,27 @@ class OpDecl:
         default = tuple(a.grad_name for a in self.duplicated_args())
         return self.grad_order if self.grad_order is not None else default
 
+    def forward_parameters(self) -> str:
+        """Candidate-facing forward parameter list, derived from typed args."""
+        parts = []
+        for arg in self.args:
+            if isinstance(arg, Const) and not arg.is_tensor and arg.default is not None:
+                parts.append(f"{arg.name}={format_default(arg.default)}")
+            else:
+                parts.append(arg.name)
+        return ", ".join(parts)
+
+    def backward_parameters(self) -> str:
+        """Candidate-facing backward parameter list."""
+        parts = [self.upstream_grad_name, "saved_tensors"]
+        for arg in self.scalar_const_args():
+            suffix = f"={format_default(arg.default)}" if arg.default is not None else ""
+            parts.append(f"{arg.name}{suffix}")
+        return ", ".join(parts)
+
+    def backward_returns(self) -> str:
+        return ", ".join(self.grad_names())
+
     @property
     def upstream_grad_name(self) -> str:
         return self.output.grad_name
@@ -157,6 +203,8 @@ class OpDecl:
     # ── validation ────────────────────────────────────────────────────────
 
     def validate(self) -> None:
+        if not self.name.isidentifier():
+            raise ValueError(f"operator name must be a Python identifier, got {self.name!r}")
         if ":" not in self.forward:
             raise ValueError(
                 f"{self.name}: forward must be 'module.path:callable', got {self.forward!r}"
@@ -165,6 +213,20 @@ class OpDecl:
         names = [a.name for a in self.args]
         if len(names) != len(set(names)):
             raise ValueError(f"{self.name}: duplicate argument names in {names}")
+        invalid_names = [name for name in (*names, self.output.name) if not name.isidentifier()]
+        if invalid_names:
+            raise ValueError(f"{self.name}: argument/output names must be identifiers: {invalid_names}")
+        if len(self.dims) != len(set(self.dims)) or any(not dim.isidentifier() for dim in self.dims):
+            raise ValueError(f"{self.name}: dims must be unique Python identifiers: {self.dims}")
+
+        saw_default = False
+        for arg in self.args:
+            has_default = isinstance(arg, Const) and not arg.is_tensor and arg.default is not None
+            if saw_default and not has_default:
+                raise ValueError(
+                    f"{self.name}: required argument {arg.name!r} cannot follow a defaulted scalar Const"
+                )
+            saw_default = saw_default or has_default
 
         if not isinstance(self.output, Duplicated):
             raise ValueError(f"{self.name}: output must be Duplicated (it has a gradient)")
@@ -183,7 +245,36 @@ class OpDecl:
                     f"permutation of the Duplicated gradients {default}"
                 )
 
-        for workload in (*self.correctness, *self.benchmark):
+        grad_names = self.grad_names()
+        if len(grad_names) != len(set(grad_names)) or any(
+            not name.isidentifier() for name in grad_names
+        ):
+            raise ValueError(f"{self.name}: gradient names must be unique identifiers: {grad_names}")
+
+        unknown_tolerances = set(self.tolerance_multipliers) - set(self.grad_names())
+        if unknown_tolerances:
+            raise ValueError(
+                f"{self.name}: tolerance multipliers name unknown gradients "
+                f"{sorted(unknown_tolerances)}"
+            )
+
+        for name, multipliers in self.tolerance_multipliers.items():
+            if len(multipliers) != 2 or any(value <= 0 for value in multipliers):
+                raise ValueError(
+                    f"{self.name}: tolerance multiplier for {name} must be two positive values"
+                )
+        invalid_baselines = [
+            name
+            for name, hook in self.performance_baselines.items()
+            if not name.isidentifier() or not callable(hook)
+        ]
+        if invalid_baselines:
+            raise ValueError(
+                f"{self.name}: performance baseline names/hooks are invalid: {invalid_baselines}"
+            )
+
+        suites = [self.benchmark, *self.benchmark_suites.values()]
+        for workload in (*self.correctness, *(w for suite in suites for w in suite)):
             missing = set(self.dims) - set(workload.dims)
             extra = set(workload.dims) - set(self.dims)
             if missing or extra:
@@ -191,6 +282,10 @@ class OpDecl:
                     f"{self.name}: workload dims {sorted(workload.dims)} do not "
                     f"match declared dims {self.dims} "
                     f"(missing={sorted(missing)}, extra={sorted(extra)})"
+                )
+            if (workload.atol is None) != (workload.rtol is None):
+                raise ValueError(
+                    f"{self.name}: workload atol and rtol must be specified together"
                 )
             has_case_tol = workload.atol is not None and workload.rtol is not None
             if not has_case_tol and workload.dtype not in self.tolerances:
@@ -212,10 +307,45 @@ class OpDecl:
                 f"declared dim {self.dims} nor an integer literal"
             )
 
-    def tolerance_for(self, workload: Workload) -> tuple[float, float]:
+    def tolerance_for(
+        self, workload: Workload, result_name: str | None = None
+    ) -> tuple[float, float]:
         if workload.atol is not None and workload.rtol is not None:
-            return (workload.atol, workload.rtol)
-        return self.tolerances[workload.dtype]
+            base = (workload.atol, workload.rtol)
+        else:
+            base = self.tolerances[workload.dtype]
+        scale = self.tolerance_multipliers.get(result_name or "", (1.0, 1.0))
+        return base[0] * scale[0], base[1] * scale[1]
+
+    def benchmark_workloads(
+        self,
+        suite: str | None = None,
+        dtypes: tuple[str, ...] | None = None,
+    ) -> tuple[Workload, ...]:
+        """Select a declared benchmark suite and optional dtype subset."""
+        if suite in (None, "default"):
+            workloads = self.benchmark
+        else:
+            try:
+                workloads = self.benchmark_suites[suite]
+            except KeyError:
+                available = ["default", *sorted(self.benchmark_suites)]
+                raise KeyError(
+                    f"{self.name}: unknown benchmark suite {suite!r}; available: {available}"
+                ) from None
+        if dtypes is not None:
+            wanted = set(dtypes)
+            unknown = wanted - {w.dtype for w in workloads}
+            if unknown:
+                raise ValueError(
+                    f"{self.name}: benchmark suite has no cases for dtypes {sorted(unknown)}"
+                )
+            workloads = tuple(w for w in workloads if w.dtype in wanted)
+            if not workloads:
+                raise ValueError(
+                    f"{self.name}: benchmark selection has no cases for dtypes {sorted(wanted)}"
+                )
+        return workloads
 
 
 _DTYPE_SHORT = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}
@@ -257,6 +387,9 @@ def declare_op(
     correctness: tuple[Workload, ...] = (),
     benchmark: tuple[Workload, ...] = (),
     tolerances: dict[str, tuple[float, float]] | None = None,
+    tolerance_multipliers: dict[str, tuple[float, float]] | None = None,
+    benchmark_suites: dict[str, tuple[Workload, ...]] | None = None,
+    performance_baselines: dict[str, object] | None = None,
     make_inputs: object | None = None,
 ) -> OpDecl:
     """Build and validate an :class:`OpDecl`. The only way ops should be made."""
@@ -273,6 +406,17 @@ def declare_op(
         correctness=tuple(correctness),
         benchmark=tuple(benchmark),
         tolerances=dict(tolerances) if tolerances is not None else {},
+        tolerance_multipliers=(
+            dict(tolerance_multipliers) if tolerance_multipliers is not None else {}
+        ),
+        benchmark_suites=(
+            {name: tuple(cases) for name, cases in benchmark_suites.items()}
+            if benchmark_suites is not None
+            else {}
+        ),
+        performance_baselines=(
+            dict(performance_baselines) if performance_baselines is not None else {}
+        ),
         make_inputs=make_inputs,
     )
     op.validate()

@@ -5,9 +5,11 @@ wrapper codegen (grad_reorder / "d"+name matching), example-input derivation
 (hand-typed README strings), prompt rendering, and config templating."""
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
 
 from evograd.opdecl.activity import example_input_spec
-from evograd.opdecl.compat import to_operator_spec
 from evograd.ops import get_op
 from evograd.pipelines.b_dispatch.wrapper_codegen import (
     grad_indices,
@@ -76,7 +78,7 @@ class TestPromptRendering(unittest.TestCase):
     def test_pipeline_a_rules_include_contract_and_no_grad(self):
         from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
 
-        rules = render_pair_rules(to_operator_spec(get_op("evoattention")))
+        rules = render_pair_rules(get_op("evoattention"))
         self.assertIn("def evoattention_forward_with_saved(q, k, v, res_mask, pair_bias):", rules)
         self.assertIn("return dq, dk, dv, d_pair_bias", rules)
         self.assertIn("`res_mask`", rules)  # no-grad warning present
@@ -84,7 +86,7 @@ class TestPromptRendering(unittest.TestCase):
     def test_pipeline_c_rules_include_contract(self):
         from evograd.pipelines.c_forward_only.prompts import render_pair_rules
 
-        rules = render_pair_rules(to_operator_spec(get_op("layernorm_linear")))
+        rules = render_pair_rules(get_op("layernorm_linear"))
         self.assertIn("return dx, dlinear_weight, dweight, dbias", rules)
 
 
@@ -97,8 +99,36 @@ class TestEvolveConfigRendering(unittest.TestCase):
                 config = render_config(get_op(name), iterations=7)
                 self.assertNotIn("__", config)
                 self.assertIn("max_iterations: 7", config)
-                spec = to_operator_spec(get_op(name))
-                self.assertIn(spec.forward_fn_name, config)
+                self.assertIn(get_op(name).forward_fn_name, config)
+                self.assertIn("models:", config)
+                self.assertNotIn("primary_model:", config)
+
+    def test_run_wrapper_propagates_declaration_native_benchmark_selection(self):
+        from evograd.evolve.run import run_evolve
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            seed = root / "seed.py"
+            seed.write_text("# EVOLVE-BLOCK-START\npass\n# EVOLVE-BLOCK-END\n")
+            completed = mock.Mock(returncode=0)
+            with (
+                mock.patch("evograd.evolve.run._openevolve_cmd", return_value=["oe"]),
+                mock.patch("evograd.evolve.run.subprocess.run", return_value=completed) as run,
+                mock.patch("evograd.evolve.run._find_best_program", return_value=None),
+            ):
+                code = run_evolve(
+                    get_op("layernorm"),
+                    seed_path=seed,
+                    output_dir=root / "out",
+                    benchmark_suite="tb_i12",
+                    benchmark_dtypes=("float16",),
+                    performance_baseline="liger",
+                )
+            self.assertEqual(code, 1)  # successful CLI without a best artifact is an integration error
+            env = run.call_args.kwargs["env"]
+            self.assertEqual(env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
+            self.assertEqual(env["EVOGRAD_BENCHMARK_DTYPES"], "float16")
+            self.assertEqual(env["EVOGRAD_PERFORMANCE_BASELINE"], "liger")
 
 
 if __name__ == "__main__":

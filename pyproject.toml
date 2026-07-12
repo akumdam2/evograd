@@ -12,13 +12,14 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "pyyaml",
     "torch",
-    "openevolve",
+    "openevolve>=0.2.27,<0.3",
 ]
 
 [project.optional-dependencies]
 gpu = ["triton"]
 llm = ["openai"]
 dev = ["black"]
+baselines = ["liger-kernel"]
 
 [project.scripts]
 evograd = "evograd.cli:main"

@@ -1,7 +1,7 @@
 """Typed operator declarations: the contract every evograd component derives from.
 
 Torch-facing derivations (oracle, bind, verify, make_case_inputs) are exported
-lazily so declarations and the compat bridge stay importable on machines
+lazily so declarations stay importable on machines
 without torch (dev boxes have no CUDA; only GPU nodes run the real stack).
 """
 
@@ -15,8 +15,8 @@ from evograd.opdecl.activity import (
     Workload,
     bind_shape,
     declare_op,
+    format_default,
 )
-from evograd.opdecl.compat import OperatorSpec, to_operator_spec, to_spec_dict
 
 _LAZY = {
     "oracle": "evograd.opdecl.oracle",
@@ -39,16 +39,14 @@ __all__ = [
     "Const",
     "Duplicated",
     "OpDecl",
-    "OperatorSpec",
     "VerifyReport",
     "Workload",
     "bind",
     "bind_shape",
     "declare_op",
+    "format_default",
     "make_case_inputs",
     "oracle",
     "resolve_forward",
-    "to_operator_spec",
-    "to_spec_dict",
     "verify",
 ]

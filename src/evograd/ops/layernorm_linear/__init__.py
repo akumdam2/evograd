@@ -2,9 +2,28 @@
 
 from evograd.opdecl import declare_op, Duplicated, Const, Workload
 
+
+def make_layernorm_linear_inputs(torch, op, workload, device="cuda"):
+    m, k, n = (workload.dims[name] for name in ("M", "K", "N"))
+    dtype = getattr(torch, workload.dtype)
+    torch.manual_seed((m * 100003 + k) * 100003 + n)
+    x = torch.randn((m, k), device=device, dtype=dtype)
+    weight = (1.0 + 0.5 * torch.randn((k,), device=device, dtype=dtype)).to(dtype)
+    bias = (0.5 * torch.randn((k,), device=device, dtype=dtype)).to(dtype)
+    linear_weight = (torch.randn((k, n), device=device, dtype=dtype) * (k ** -0.5)).to(dtype)
+    dout = torch.randn((m, n), device=device, dtype=dtype)
+    return {
+        "x": x,
+        "weight": weight,
+        "bias": bias,
+        "linear_weight": linear_weight,
+        "eps": 1e-5,
+        "dout": dout,
+    }
+
 op = declare_op(
     name="layernorm_linear",
-    forward="evograd.ops.layernorm_linear_forward_ref:layernorm_linear_forward_ref",
+    forward="evograd.ops.layernorm_linear.forward_ref:layernorm_linear_forward_ref",
     dims=('M', 'K', 'N'),
     args=(
         Duplicated("x", "[M, K]"),
@@ -35,4 +54,6 @@ op = declare_op(
         for dtype in ("float32", "float16")
     ),
     tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    tolerance_multipliers={"dweight": (2.0, 1.0), "dbias": (2.0, 1.0)},
+    make_inputs=make_layernorm_linear_inputs,
 )

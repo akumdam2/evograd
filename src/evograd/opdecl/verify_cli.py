@@ -15,6 +15,7 @@ import importlib.util
 import json
 import sys
 import traceback
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -30,7 +31,18 @@ def load_candidate(path: Path):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--op", required=True)
+    parser.add_argument(
+        "--forward",
+        default=None,
+        help="override the declaration's forward reference for the oracle",
+    )
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--dtype",
+        action="append",
+        choices=("float32", "float16", "bfloat16"),
+        help="verify only this declared dtype (repeatable)",
+    )
     parser.add_argument("candidate", type=Path)
     args = parser.parse_args(argv)
 
@@ -38,7 +50,22 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.ops import get_op
 
     try:
-        report = verify(get_op(args.op), load_candidate(args.candidate), device=args.device)
+        op = get_op(args.op)
+        if args.forward:
+            op = replace(op, forward=args.forward)
+            op.validate()
+        workloads = op.correctness
+        if args.dtype:
+            selected = set(args.dtype)
+            workloads = tuple(w for w in workloads if w.dtype in selected)
+            if not workloads:
+                raise ValueError(f"{op.name}: no correctness workloads for {sorted(selected)}")
+        report = verify(
+            op,
+            load_candidate(args.candidate),
+            device=args.device,
+            workloads=workloads,
+        )
         payload = {
             "metrics": {"correct": 1.0 if report.ok else 0.0},
             "verify": report.to_dict(),

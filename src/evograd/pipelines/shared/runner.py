@@ -84,6 +84,8 @@ def verify_candidate(
     op_name: str,
     program_path: Path,
     log_dir: Path | None = None,
+    dtypes: tuple[str, ...] | None = None,
+    forward: str | None = None,
 ) -> dict:
     """Verify a candidate against the op's autograd oracle in a subprocess."""
     cmd = [
@@ -92,8 +94,12 @@ def verify_candidate(
         "evograd.opdecl.verify_cli",
         "--op",
         op_name,
-        str(program_path),
     ]
+    if forward:
+        cmd.extend(["--forward", forward])
+    for dtype in dtypes or ():
+        cmd.extend(["--dtype", dtype])
+    cmd.append(str(program_path))
     completed = _run(cmd, log_dir, "verify")
     try:
         report = json.loads(completed.stdout)

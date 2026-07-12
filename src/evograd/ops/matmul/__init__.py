@@ -2,9 +2,19 @@
 
 from evograd.opdecl import declare_op, Duplicated, Const, Workload
 
+
+def make_matmul_inputs(torch, op, workload, device="cuda"):
+    m, k, n = (workload.dims[name] for name in ("M", "K", "N"))
+    dtype = getattr(torch, workload.dtype)
+    torch.manual_seed((m * 100003 + n) * 100003 + k)
+    a = torch.randn((m, k), device=device, dtype=dtype)
+    b = torch.randn((k, n), device=device, dtype=dtype)
+    dc = torch.randn((m, n), device=device, dtype=dtype)
+    return {"a": a, "b": b, "dc": dc}
+
 op = declare_op(
     name="matmul",
-    forward="evograd.ops.matmul_forward_ref:matmul_forward_ref",
+    forward="evograd.ops.matmul.forward_ref:matmul_forward_ref",
     dims=('M', 'K', 'N'),
     args=(
         Duplicated("a", "[M, K]"),
@@ -31,4 +41,5 @@ op = declare_op(
         for dtype in ("float32", "float16")
     ),
     tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    make_inputs=make_matmul_inputs,
 )

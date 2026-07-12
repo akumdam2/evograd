@@ -19,6 +19,14 @@ class TestSourcesCompile(unittest.TestCase):
             compileall.compile_dir(str(REPO_ROOT / "scripts"), quiet=2, force=True)
         )
 
+    def test_pipeline_b_uses_installed_evograd_namespace(self):
+        source = (
+            REPO_ROOT / "src/evograd/pipelines/b_dispatch/program_codegen.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("evograd.atenir.primitive_triton", source)
+        self.assertNotIn('import_module("atenir.', source)
+        self.assertNotIn("from atenir.", source)
+
 
 if __name__ == "__main__":
     unittest.main()

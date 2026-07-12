@@ -24,7 +24,7 @@ from typing import Any
 import torch
 
 from evograd.opdecl.activity import OpDecl
-from evograd.pipelines.shared.runner import extract_graph
+from evograd.pipelines.shared.runner import extract_graph, report_passed, verify_candidate
 
 _DTYPES = {
     "float32": torch.float32,
@@ -307,6 +307,7 @@ def _run_dtype(
 
 def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
+    pair_path = None
 
     print(f"[B] Extract: {config.forward}")
     graph_path = extract_graph(
@@ -348,40 +349,67 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
             pair_path.write_text(pair_program, encoding="utf-8")
             print(f"  → {pair_path} ({len(pair_program)} chars)")
     except Exception as exc:
-        print(f"  Warning: dispatch program generation failed: {exc}")
-
-    reports = []
-    for dtype_name in config.dtypes:
-        is_fp16 = dtype_name in {"float16", "fp16", "bfloat16", "bf16"}
-        atol = config.fp16_atol if is_fp16 else config.atol
-        rtol = config.fp16_rtol if is_fp16 else config.rtol
-        print(f"[B] Verify {dtype_name} ...")
-        report = _run_dtype(
-            forward=config.forward,
-            graph_path=graph_path,
-            dtype_name=dtype_name,
-            atol=atol,
-            rtol=rtol,
+        print(f"  ERROR: dispatch program generation failed: {exc}")
+        (config.output_dir / "generation_error.txt").write_text(
+            traceback.format_exc(), encoding="utf-8"
         )
-        status = "PASS" if report.get("passed") else "FAIL"
-        n = f"{report.get('passed_cases', 0)}/{report.get('total_cases', 0)}"
-        print(f"  {dtype_name}: {status} ({n} gradients)")
-        reports.append(report)
+        return 1
 
-    passed = all(r.get("passed") for r in reports)
-    passed_cases = sum(r.get("passed_cases", 0) for r in reports)
-    total_cases = sum(r.get("total_cases", 0) for r in reports)
-
-    result = {
-        "passed": passed,
-        "passed_cases": passed_cases,
-        "failed_cases": total_cases - passed_cases,
-        "total_cases": total_cases,
-        "dtypes": list(config.dtypes),
-        "reports": reports,
-    }
+    if pair_path is not None:
+        normalized_dtypes = tuple(
+            {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}.get(d, d)
+            for d in config.dtypes
+        )
+        print(f"[B] Verify emitted autograd pair on declared workloads: {normalized_dtypes}")
+        result = verify_candidate(
+            python=config.python,
+            op_name=config.op.name,
+            program_path=pair_path,
+            log_dir=config.output_dir,
+            dtypes=normalized_dtypes,
+            forward=config.forward,
+        )
+        passed = report_passed(result)
+        verify_report = result.get("verify", {})
+        cases = verify_report.get("cases", [])
+        passed_cases = sum(int(case.get("ok", False)) for case in cases)
+        total_cases = len(cases)
+        result.update(
+            {
+                "passed": passed,
+                "passed_cases": passed_cases,
+                "failed_cases": total_cases - passed_cases,
+                "total_cases": total_cases,
+                "dtypes": list(normalized_dtypes),
+            }
+        )
+    else:
+        # Legacy dispatch-program-only mode has no candidate pair API. Retain
+        # its extraction-shape graph check for users who explicitly request it.
+        reports = []
+        for dtype_name in config.dtypes:
+            is_fp16 = dtype_name in {"float16", "fp16", "bfloat16", "bf16"}
+            report = _run_dtype(
+                forward=config.forward,
+                graph_path=graph_path,
+                dtype_name=dtype_name,
+                atol=config.fp16_atol if is_fp16 else config.atol,
+                rtol=config.fp16_rtol if is_fp16 else config.rtol,
+            )
+            reports.append(report)
+        passed = all(r.get("passed") for r in reports)
+        passed_cases = sum(r.get("passed_cases", 0) for r in reports)
+        total_cases = sum(r.get("total_cases", 0) for r in reports)
+        result = {
+            "passed": passed,
+            "passed_cases": passed_cases,
+            "failed_cases": total_cases - passed_cases,
+            "total_cases": total_cases,
+            "dtypes": list(config.dtypes),
+            "reports": reports,
+        }
     report_path = config.output_dir / "verification_report.json"
     report_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"\n[B] {'PASS' if passed else 'FAIL'}  ({passed_cases}/{total_cases} gradients)")
+    print(f"\n[B] {'PASS' if passed else 'FAIL'}  ({passed_cases}/{total_cases} cases)")
     print(f"    report: {report_path}")
     return 0 if passed else 1

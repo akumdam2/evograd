@@ -37,6 +37,8 @@ def lookup_pair(op: OpDecl, module):
                 f"seed module {getattr(module, '__name__', module)!r} defines neither "
                 f"{generic!r} nor {prefixed!r}"
             )
+        if not callable(fn):
+            raise TypeError(f"seed attribute {generic!r}/{prefixed!r} is not callable")
         return fn
 
     return (
@@ -49,10 +51,11 @@ def backward_const_kwargs(op: OpDecl, bwd, values: dict) -> dict:
     """Scalar Const args are re-passed to the backward — but only those its
     signature accepts (legacy seeds take eps, evoattention seeds take none)."""
     params = inspect.signature(bwd).parameters
+    accepts_kwargs = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
     return {
         c.name: values.get(c.name, c.default)
         for c in op.scalar_const_args()
-        if c.name in params
+        if c.name in params or accepts_kwargs
     }
 
 
@@ -81,9 +84,11 @@ def bind(op: OpDecl, module):
                     layout.append(("value", item))
             ctx.save_for_backward(*tensors)
             ctx.saved_layout = layout
-            ctx.const_values = dict(
-                zip(arg_names, args)
-            )  # only consts are read back; grads flow via saved tensors
+            # Do not retain tensor inputs outside the candidate's explicit saved
+            # state. Only scalar Const values are needed again by backward.
+            ctx.const_values = {
+                c.name: args[arg_names.index(c.name)] for c in op.scalar_const_args()
+            }
             return y
 
         @staticmethod
@@ -106,9 +111,28 @@ def bind(op: OpDecl, module):
             return tuple(slots)
 
     def call(*args, **kwargs):
+        if len(args) > len(arg_names):
+            raise TypeError(
+                f"{op.name}: expected at most {len(arg_names)} positional args, got {len(args)}"
+            )
         named = dict(zip(arg_names, args))
+        unknown = set(kwargs) - set(arg_names)
+        if unknown:
+            raise TypeError(f"{op.name}: unexpected keyword arguments {sorted(unknown)}")
+        duplicates = set(kwargs) & set(arg_names[: len(args)])
+        if duplicates:
+            raise TypeError(f"{op.name}: multiple values for arguments {sorted(duplicates)}")
         named.update(kwargs)
-        full = [named.get(a.name, getattr(a, "default", None)) for a in op.args]
+        full = []
+        for arg in op.args:
+            if arg.name in named:
+                full.append(named[arg.name])
+            elif isinstance(arg, Duplicated) or getattr(arg, "is_tensor", False):
+                raise TypeError(f"{op.name}: missing required argument {arg.name!r}")
+            elif arg.default is not None:
+                full.append(arg.default)
+            else:
+                raise TypeError(f"{op.name}: missing required argument {arg.name!r}")
         return _Bound.apply(*full)
 
     call.__name__ = f"{op.name}_autograd"

@@ -28,8 +28,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warmup", type=int, default=None)
     parser.add_argument("--reps", type=int, default=None)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--suite", default=None, help="named benchmark suite from the declaration")
+    parser.add_argument(
+        "--baseline",
+        default="pytorch_autograd",
+        help="performance baseline (pytorch_autograd; layernorm also supports liger)",
+    )
+    parser.add_argument(
+        "--dtype",
+        action="append",
+        dest="dtypes",
+        choices=("float32", "float16", "bfloat16"),
+        help="benchmark dtype subset (repeatable)",
+    )
     parser.add_argument("--out", type=Path, default=None, help="write full JSON report here")
     args = parser.parse_args(argv)
+    if args.warmup is not None and args.warmup < 0:
+        parser.error("--warmup must be >= 0")
+    if args.reps is not None and args.reps < 1:
+        parser.error("--reps must be >= 1")
 
     from evograd.bench.harness import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
     from evograd.ops import get_op
@@ -41,6 +58,10 @@ def main(argv: list[str] | None = None) -> int:
         warmup=args.warmup if args.warmup is not None else DEFAULT_WARMUP,
         reps=args.reps if args.reps is not None else DEFAULT_REPS,
         device=args.device,
+        workloads=op.benchmark_workloads(
+            suite=args.suite, dtypes=tuple(args.dtypes) if args.dtypes else None
+        ),
+        performance_baseline=args.baseline,
     )
     aggregate = report["aggregate"]
     summary = {

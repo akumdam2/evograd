@@ -25,6 +25,10 @@ class TensorCheck:
     max_abs_err: float
     atol: float
     rtol: float
+    actual_shape: tuple[int, ...] = ()
+    expected_shape: tuple[int, ...] = ()
+    actual_dtype: str = ""
+    expected_dtype: str = ""
 
 
 @dataclass(frozen=True)
@@ -65,6 +69,10 @@ class VerifyReport:
                             "max_abs_err": t.max_abs_err,
                             "atol": t.atol,
                             "rtol": t.rtol,
+                            "actual_shape": list(t.actual_shape),
+                            "expected_shape": list(t.expected_shape),
+                            "actual_dtype": t.actual_dtype,
+                            "expected_dtype": t.expected_dtype,
                         }
                         for t in c.checks
                     ],
@@ -75,9 +83,36 @@ class VerifyReport:
 
 
 def _check(name: str, actual, expected, atol: float, rtol: float) -> TensorCheck:
-    ok = torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
-    max_abs_err = (actual.float() - expected.float()).abs().max().item()
-    return TensorCheck(name=name, ok=ok, max_abs_err=max_abs_err, atol=atol, rtol=rtol)
+    if not torch.is_tensor(actual):
+        return TensorCheck(
+            name=name,
+            ok=False,
+            max_abs_err=float("inf"),
+            atol=atol,
+            rtol=rtol,
+            expected_shape=tuple(expected.shape),
+            actual_dtype=type(actual).__name__,
+            expected_dtype=str(expected.dtype),
+        )
+    same_shape = tuple(actual.shape) == tuple(expected.shape)
+    same_dtype = actual.dtype == expected.dtype
+    if same_shape:
+        max_abs_err = (actual.float() - expected.float()).abs().max().item()
+        values_ok = torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
+    else:
+        max_abs_err = float("inf")
+        values_ok = False
+    return TensorCheck(
+        name=name,
+        ok=bool(same_shape and same_dtype and values_ok),
+        max_abs_err=max_abs_err,
+        atol=atol,
+        rtol=rtol,
+        actual_shape=tuple(actual.shape),
+        expected_shape=tuple(expected.shape),
+        actual_dtype=str(actual.dtype),
+        expected_dtype=str(expected.dtype),
+    )
 
 
 def _run_case(op: OpDecl, module, workload: Workload, device: str) -> CaseResult:
@@ -94,13 +129,14 @@ def _run_case(op: OpDecl, module, workload: Workload, device: str) -> CaseResult
         grads = (grads,) if torch.is_tensor(grads) else tuple(grads)
 
         atol, rtol = op.tolerance_for(workload)
-        checks = [_check("y", y, y_ref, atol, rtol)]
+        checks = [_check(op.output.name, y, y_ref, atol, rtol)]
         if len(grads) != len(op.grad_names()):
             raise ValueError(
                 f"backward returned {len(grads)} gradients, "
                 f"contract requires {len(op.grad_names())}: {op.grad_names()}"
             )
         for name, grad in zip(op.grad_names(), grads):
+            atol, rtol = op.tolerance_for(workload, name)
             checks.append(_check(name, grad, ref_grads[name], atol, rtol))
         return CaseResult(dims=dims, dtype=dtype, checks=tuple(checks))
     except Exception:

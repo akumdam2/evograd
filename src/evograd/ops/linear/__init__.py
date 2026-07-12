@@ -2,9 +2,21 @@
 
 from evograd.opdecl import declare_op, Duplicated, Const, Workload
 
+
+def make_linear_inputs(torch, op, workload, device="cuda"):
+    m, k, n = (workload.dims[name] for name in ("M", "K", "N"))
+    dtype = getattr(torch, workload.dtype)
+    torch.manual_seed((m * 100003 + n) * 100003 + k)
+    # Preserve the legacy task_spec draw order and initialization scale.
+    x = torch.randn((m, k), device=device, dtype=dtype)
+    weight = (torch.randn((n, k), device=device, dtype=dtype) * (k ** -0.5)).to(dtype)
+    dy = torch.randn((m, n), device=device, dtype=dtype)
+    bias = torch.zeros((n,), device=device, dtype=dtype)
+    return {"x": x, "weight": weight, "bias": bias, "dy": dy}
+
 op = declare_op(
     name="linear",
-    forward="evograd.ops.linear_forward_ref:linear_forward_ref",
+    forward="evograd.ops.linear.forward_ref:linear_forward_ref",
     dims=('M', 'K', 'N'),
     args=(
         Duplicated("x", "[M, K]"),
@@ -32,4 +44,5 @@ op = declare_op(
         for dtype in ("float32", "float16")
     ),
     tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    make_inputs=make_linear_inputs,
 )

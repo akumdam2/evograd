@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from evograd.opdecl.activity import OpDecl
-from evograd.opdecl.compat import to_operator_spec
 from evograd.pipelines.c_forward_only.prompts import (
     SYSTEM_MESSAGE,
     render_codegen_prompt,
@@ -69,6 +68,7 @@ def _verify(config: ForwardOnlyConfig, program_path: Path) -> dict:
         op_name=config.op.name,
         program_path=program_path,
         log_dir=program_path.parent,
+        forward=config.forward,
     )
 
 
@@ -129,7 +129,6 @@ def _call_llm(
 
 def synthesize_forward_only(config: ForwardOnlyConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
-    spec = to_operator_spec(config.op)
     forward_source = _forward_source(config.forward)
     (config.output_dir / "forward_source.py").write_text(forward_source + "\n", encoding="utf-8")
 
@@ -137,7 +136,7 @@ def synthesize_forward_only(config: ForwardOnlyConfig) -> int:
     plan_prompt = render_plan_prompt(
         forward=config.forward,
         forward_source=forward_source,
-        spec=spec,
+        op=config.op,
     )
     (config.output_dir / "plan_prompt.md").write_text(plan_prompt, encoding="utf-8")
 
@@ -146,7 +145,7 @@ def synthesize_forward_only(config: ForwardOnlyConfig) -> int:
             forward=config.forward,
             forward_source=forward_source,
             plan="{PLAN_FROM_LLM}",
-            spec=spec,
+            op=config.op,
         )
         dry_dir = config.output_dir / "attempt_001"
         dry_dir.mkdir(parents=True, exist_ok=True)
@@ -164,7 +163,7 @@ def synthesize_forward_only(config: ForwardOnlyConfig) -> int:
         forward=config.forward,
         forward_source=forward_source,
         plan=plan,
-        spec=spec,
+        op=config.op,
     )
     previous_code = ""
 
@@ -211,7 +210,7 @@ def synthesize_forward_only(config: ForwardOnlyConfig) -> int:
             plan=plan,
             previous_code=code or previous_code,
             verifier_report=json.dumps(report, indent=2, sort_keys=True),
-            spec=spec,
+            op=config.op,
         )
         (attempt_dir / "repair_prompt.md").write_text(repair_prompt, encoding="utf-8")
         prompt = repair_prompt

@@ -49,6 +49,13 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--primary-model", default="gpt-4o-mini")
     parser.add_argument("--secondary-model", default="gpt-4o")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
+    parser.add_argument("--benchmark-suite", default=None)
+    parser.add_argument("--baseline", default="pytorch_autograd")
+    parser.add_argument(
+        "--benchmark-dtype",
+        action="append",
+        choices=("float32", "float16", "bfloat16"),
+    )
     args = parser.parse_args(argv)
 
     from evograd.evolve.run import run_evolve
@@ -65,6 +72,9 @@ def _evolve(argv: list[str]) -> int:
         primary_model=args.primary_model,
         secondary_model=args.secondary_model,
         api_base=args.api_base,
+        benchmark_suite=args.benchmark_suite,
+        benchmark_dtypes=tuple(args.benchmark_dtype) if args.benchmark_dtype else None,
+        performance_baseline=args.baseline,
     )
 
 

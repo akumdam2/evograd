@@ -30,7 +30,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="append",
         default=None,
         choices=["float32", "fp32", "float16", "fp16", "bfloat16", "bf16"],
-        help="Data type(s) to verify (repeatable; default: float32)",
+        help="Data type(s) to verify (repeatable; default: every declared correctness dtype)",
     )
     parser.add_argument("--atol", type=float, default=2e-5)
     parser.add_argument("--rtol", type=float, default=2e-5)
@@ -63,7 +63,10 @@ def main(argv: list[str] | None = None) -> int:
             forward=forward,
             example_input=example_input,
             output_dir=Path(args.output_dir).resolve(),
-            dtypes=tuple(args.dtype or ["float32"]),
+            dtypes=tuple(
+                args.dtype
+                or dict.fromkeys(workload.dtype for workload in op.correctness)
+            ),
             atol=args.atol,
             rtol=args.rtol,
             fp16_atol=args.fp16_atol,
