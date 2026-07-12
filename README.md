@@ -4,7 +4,7 @@
 evograd generates a training-ready autograd-pair seed (forward + backward
 Triton kernels) through one of several pipelines, optimizes it with
 [OpenEvolve](https://github.com/codelion/openevolve), and benchmarks the
-result against strong baselines.
+result against the PyTorch-autograd baseline.
 
 Successor to the backward-benchmark work in the `openevolve` fork
 (`atenir/`, `pipeline/`, `benchmark/`); OpenEvolve itself is consumed as a
@@ -27,55 +27,93 @@ op = declare_op(
         Duplicated("pair_bias", "[B, 1, H, N, N]", grad="d_pair_bias"),
     ),
     output=Duplicated("o", "[B, S, N, H, D]"),        # its shadow is the upstream grad
-    ...
+    correctness=(...), benchmark=(...), tolerances={...},
 )
 ```
 
 `Duplicated` marks an active tensor (primal + gradient "shadow"); `Const`
-marks an inactive one (the harness emits `None` for its grad slot). The
-declaration is the single source of truth — everything else derives from it:
+marks an inactive one. The declaration is the single source of truth —
+everything else derives from it:
 
-| Consumer | Derivation |
-|---|---|
-| Pipeline A/C prompts | rendered from typed args, shapes, semantics |
-| Pipeline B wrapper codegen | grads = `Duplicated` args in declared order; `Const` → `None` |
-| Ground-truth oracle | `torch.autograd.grad` over `forward` with `requires_grad` on exactly the `Duplicated` args |
-| Correctness verifier | per-`Duplicated` comparison at declared workloads/tolerances |
-| OpenEvolve evaluator | one generic evaluator × pluggable scoring policy |
+| Consumer | Derivation | Replaced |
+|---|---|---|
+| Pipeline A/C prompts | rendered from the typed contract | `<op>_spec.json` files |
+| Pipeline B wrapper codegen | `Duplicated` positions → grad selection | `grad_reorder()`, `"d"+name` matching |
+| Ground-truth oracle | `torch.autograd.grad`, `requires_grad` on exactly the `Duplicated` args | `backward_ref.py` × 6 |
+| Training wrapper | `opdecl.bind` builds the `autograd.Function`; `Const` → `None` slots | `autograd_wrapper.py` × 6 |
+| Verifier | per-`Duplicated` comparison at declared workloads/tolerances | `test_correctness.py`, evaluator correctness halves |
+| OpenEvolve evaluator | one generic evaluator × scoring policy | per-bench evaluator families (7 files for layernorm) |
+| Extraction inputs | `example_input_spec(op)` | hand-typed `--example-input` strings |
 
-## Planned layout
+## Usage
+
+```bash
+pip install -e ".[gpu,llm]"
+
+evograd ops                                              # list the 6 declared operators
+
+# Seed generation (GPU node; a/c need an LLM API, b is LLM-free)
+evograd seed b --op rmsnorm --output-dir /tmp/B_rmsnorm --dtype float32 --dtype float16
+evograd seed a --op rmsnorm --output-dir /tmp/A_rmsnorm --model gpt-5.5
+evograd seed c --op rmsnorm --output-dir /tmp/C_rmsnorm --model gpt-5.5
+
+# Verify any candidate against the autograd oracle
+evograd verify --op rmsnorm /tmp/B_rmsnorm/initial_program_autograd_pair.py
+
+# Optimize with OpenEvolve (scoring: speed | speed_memory | speed_memory_min
+#                                    | speed_memory_min_geomean | ..._weighted_geomean)
+evograd evolve --op rmsnorm --seed /tmp/B_rmsnorm/initial_program_autograd_pair.py \
+    --scoring speed_memory --iterations 10 --output-dir /tmp/evolve_rmsnorm
+
+# Benchmark a candidate against the PyTorch-autograd baseline
+evograd bench --op rmsnorm --candidate /tmp/evolve_rmsnorm/evolved_best_program.py
+```
+
+Adding operator #7 = one `forward_ref.py` + one `op_decl` module in
+`src/evograd/ops/` — prompts, codegen, oracle, verifier, evaluator, and bench
+all follow.
+
+## Layout
 
 ```text
 src/evograd/
-├── opdecl/        # declare_op, Duplicated, Const  [done]
-│                  # oracle, bind (autograd.Function builder), verify, inputs  [done]
-├── ops/           # one declaration + forward ref per operator  [6 ops ported]
-├── atenir/        # graph extraction + primitive Triton dispatch  [ported byte-identical]
-├── pipelines/     # a_atenir_llm / b_dispatch / c_forward_only  [to port]
-├── evolve/        # generic evaluator, scoring policies, openevolve-run wrapper  [to port]
-└── bench/         # latency / memory / ncu harness, strong baselines  [to port]
+├── opdecl/        # declare_op/Duplicated/Const; oracle, bind, verify, inputs, verify_cli
+├── ops/           # one declaration + forward ref per operator (6 ops)
+├── atenir/        # AtenIR graph extraction + primitive Triton dispatch (ported byte-identical)
+├── pipelines/
+│   ├── a_atenir_llm/     # AtenIR summary + LLM plan/codegen/repair loop
+│   ├── b_dispatch/       # LLM-free: dispatch-free Triton program + native wrapper codegen
+│   ├── c_forward_only/   # forward-source-only ablation (tracks LLM cost)
+│   └── shared/           # llm client, graph summaries, subprocess runner, CLI args
+├── evolve/        # generic evaluator, scoring policies, config template, openevolve-run wrapper
+├── bench/         # latency/memory harness + bench CLI
+└── cli.py         # evograd ops|seed|verify|evolve|bench
 ```
-
-Target CLI: `evograd seed | verify | evolve | bench --op <name> ...`
 
 ## Migration status
 
 - [x] Phase 1: `opdecl` core + 6 operator declarations + legacy `OperatorSpec`
-      bridge (`to_operator_spec`), diff-tested against snapshots of the old
-      repo's `<op>_spec.json` files (`tests/fixtures/`).
-- [x] Phase 2: `atenir/` ported byte-identical; forward refs for all 6 ops;
-      `oracle()` (autograd ground truth from activity annotations), `bind()`
-      (autograd.Function builder), `verify()` (correctness gate), and
-      declaration-driven input construction. CPU-runnable torch tests
-      (self-skip without torch) + `scripts/gpu_smoke.py` for CUDA nodes.
-      **Not yet GPU-validated** — run
-      `PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only` on a GPU node.
-- [ ] Phase 3: port pipelines A/B/C (first via the bridge, then native).
-- [ ] Phase 4: generic evaluator + scoring policies; run wrapper
-      (re-implements the fork's `--save-best-to`; PR the LLM param fallbacks
-      upstream).
-- [ ] Phase 5: bench harness; GPU parity gate vs the old repo on layernorm +
-      evoattention.
+      bridge, diff-tested byte-exact against the old `<op>_spec.json` files.
+- [x] Phase 2: `atenir/` ported byte-identical; forward refs; `oracle()`,
+      `bind()`, `verify()`, declaration-driven inputs.
+- [x] Phase 3: pipelines A/B/C ported and declaration-native — `--op <name>`
+      replaces `--op-spec <json>`; `grad_reorder()`, the `eps` special-case,
+      and `"d"+name` matching are gone; verification runs against the oracle
+      via `verify_cli` (no per-bench evaluator paths).
+- [x] Phase 4: `evolve/` — one generic evaluator × 5 scoring policies (metric
+      names preserved for cross-repo comparability), config template, run
+      wrapper that re-implements the fork's `--save-best-to`.
+- [x] Phase 5: `bench/` harness + unified CLI + `scripts/gpu_parity.py`.
+- [ ] **GPU validation** (blocking before first real use — dev boxes have no
+      CUDA; all torch-facing code is validated by CPU-runnable unit tests and
+      compile checks only):
+      1. `PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only`
+      2. `PYTHONPATH=src python -m unittest discover tests` (runs the 6
+         torch tests that skip on CPU-less boxes)
+      3. `PYTHONPATH=src python scripts/gpu_parity.py --op layernorm
+         --old-repo <fork> --candidate <old seed>` (repeat for evoattention)
+      4. One end-to-end `evograd seed b` + `evograd evolve` on layernorm.
+- [ ] PR the LLM parameter fallbacks from the fork upstream to openevolve.
 
 ## Tests
 
@@ -83,5 +121,5 @@ Target CLI: `evograd seed | verify | evolve | bench --op <name> ...`
 PYTHONPATH=src python -m unittest discover tests
 ```
 
-No GPU or torch needed for the phase-1 tests. Anything touching kernels or
-the oracle must be smoke-tested on a GPU node (dev boxes have no CUDA).
+41 tests; the 6 torch-dependent ones self-skip on machines without torch and
+run on any torch install (CPU is enough — they use a pure-torch toy op).

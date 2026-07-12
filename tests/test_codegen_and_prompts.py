@@ -1,0 +1,105 @@
+"""Pipeline codegen/prompt derivations — all pure string work, no torch.
+
+Covers the pieces that replaced the old string conventions:
+wrapper codegen (grad_reorder / "d"+name matching), example-input derivation
+(hand-typed README strings), prompt rendering, and config templating."""
+
+import unittest
+
+from evograd.opdecl.activity import example_input_spec
+from evograd.opdecl.compat import to_operator_spec
+from evograd.ops import get_op
+from evograd.pipelines.b_dispatch.wrapper_codegen import (
+    grad_indices,
+    render_autograd_pair_wrapper,
+)
+
+
+class TestWrapperCodegen(unittest.TestCase):
+    def test_layernorm_identity_order_returns_directly(self):
+        op = get_op("layernorm")
+        self.assertEqual(grad_indices(op), [0, 1, 2])
+        wrapper = render_autograd_pair_wrapper("m:f", op)
+        self.assertIn("def layernorm_forward_with_saved(x, weight, bias, eps=1e-5):", wrapper)
+        self.assertIn("def layernorm_backward_from_saved(dy, saved_tensors, eps=1e-5):", wrapper)
+        self.assertIn("return run_graph_program(", wrapper)
+        self.assertNotIn("_grads[", wrapper)  # identity: no index selection needed
+
+    def test_evoattention_drops_const_gradient(self):
+        op = get_op("evoattention")
+        # res_mask is tensor arg index 3; its graph gradient is skipped.
+        self.assertEqual(grad_indices(op), [0, 1, 2, 4])
+        wrapper = render_autograd_pair_wrapper("m:f", op)
+        self.assertIn("return (_grads[0], _grads[1], _grads[2], _grads[4])", wrapper)
+        self.assertIn("def evoattention_backward_from_saved(do, saved_tensors):", wrapper)
+        self.assertNotIn("eps", wrapper)  # no scalar consts on this op
+
+    def test_layernorm_linear_honors_grad_order(self):
+        op = get_op("layernorm_linear")
+        # contract order: dx, dlinear_weight, dweight, dbias
+        self.assertEqual(grad_indices(op), [0, 3, 1, 2])
+        wrapper = render_autograd_pair_wrapper("m:f", op)
+        self.assertIn("return (_grads[0], _grads[3], _grads[1], _grads[2])", wrapper)
+
+    def test_wrapper_compiles_for_every_op(self):
+        from evograd.ops import OPS
+
+        for name, op in OPS.items():
+            with self.subTest(op=name):
+                wrapper = render_autograd_pair_wrapper("m:f", op)
+                compile("def run_graph_program(*a): pass\n" + wrapper, f"<{name}>", "exec")
+
+
+class TestExampleInputSpec(unittest.TestCase):
+    def test_layernorm_matches_legacy_readme_string(self):
+        self.assertEqual(
+            example_input_spec(get_op("layernorm")),
+            "[(8,64) f32, (64) f32, (64) f32]",
+        )
+
+    def test_rmsnorm_matches_legacy_readme_string(self):
+        self.assertEqual(
+            example_input_spec(get_op("rmsnorm")),
+            "[(8,64) f32, (64) f32]",
+        )
+
+    def test_evoattention_includes_const_mask_with_fixed_dtype(self):
+        # First correctness workload: B=1 S=1 H=4 N=23 D=8, float16.
+        self.assertEqual(
+            example_input_spec(get_op("evoattention")),
+            "[(1,1,23,4,8) f16, (1,1,23,4,8) f16, (1,1,23,4,8) f16, "
+            "(1,1,1,1,23) f32, (1,1,4,23,23) f32]",
+        )
+
+
+class TestPromptRendering(unittest.TestCase):
+    def test_pipeline_a_rules_include_contract_and_no_grad(self):
+        from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
+
+        rules = render_pair_rules(to_operator_spec(get_op("evoattention")))
+        self.assertIn("def evoattention_forward_with_saved(q, k, v, res_mask, pair_bias):", rules)
+        self.assertIn("return dq, dk, dv, d_pair_bias", rules)
+        self.assertIn("`res_mask`", rules)  # no-grad warning present
+
+    def test_pipeline_c_rules_include_contract(self):
+        from evograd.pipelines.c_forward_only.prompts import render_pair_rules
+
+        rules = render_pair_rules(to_operator_spec(get_op("layernorm_linear")))
+        self.assertIn("return dx, dlinear_weight, dweight, dbias", rules)
+
+
+class TestEvolveConfigRendering(unittest.TestCase):
+    def test_all_placeholders_replaced(self):
+        from evograd.evolve.run import render_config
+
+        for name in ("layernorm", "evoattention"):
+            with self.subTest(op=name):
+                config = render_config(get_op(name), iterations=7)
+                self.assertNotIn("__", config)
+                self.assertIn("max_iterations: 7", config)
+                spec = to_operator_spec(get_op(name))
+                self.assertIn(spec.forward_fn_name, config)
+
+
+if __name__ == "__main__":
+    unittest.main()

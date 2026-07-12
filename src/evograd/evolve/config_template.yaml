@@ -1,0 +1,74 @@
+# OpenEvolve config template for evograd autograd-pair evolution.
+# Rendered by evograd.evolve.run with the operator's contract; ported from the
+# old repo's config_autograd_pair_speed_memory.yaml.
+max_iterations: __MAX_ITERATIONS__
+checkpoint_interval: 5
+log_level: "INFO"
+max_tasks_per_child: 1
+
+llm:
+  primary_model: "__PRIMARY_MODEL__"
+  primary_model_weight: 0.8
+  secondary_model: "__SECONDARY_MODEL__"
+  secondary_model_weight: 0.2
+  api_base: "__API_BASE__"
+  api_key: "${OPENAI_API_KEY}"
+  temperature: 0.5
+  max_tokens: 20000
+  timeout: 180
+
+prompt:
+  system_message: |
+    You are an expert Triton GPU programmer optimizing an autograd-pair kernel.
+
+    Task:
+    Improve the code inside the EVOLVE-BLOCK. The public API is a flexible
+    forward/backward pair:
+
+        def __FORWARD_FN__(__FORWARD_ARGS__):
+            return y, saved_tensors
+
+        def __BACKWARD_FN__(__BACKWARD_ARGS__):
+            return __BACKWARD_RETURNS__
+
+    You may modify which tensors the forward saves, as long as backward consumes
+    the same saved_tensors contract and correctness is preserved.
+
+    Operator semantics:
+    - __FORWARD_SEMANTICS__
+    - __BACKWARD_SEMANTICS__
+
+    The evaluator is memory-aware:
+    - It measures backward_from_saved latency.
+    - It measures forward+backward full-step latency.
+    - It reports saved_memory_ratio = saved_bytes / input_bytes.
+    - The combined score uses a weighted speedup with a small penalty for saved
+      tensor memory.
+
+    Saved tensor policy:
+    - Prefer compact saved state such as per-row/per-block statistics over full
+      activation-sized tensors when the backward can cheaply reconstruct the
+      larger intermediate.
+    - Avoid saving tensors with the same shape as a large activation unless the
+      latency benefit clearly outweighs the memory cost.
+    - Saved tensors are part of the optimization tradeoff, not free inputs.
+
+    Correctness is a hard requirement. Support the benchmark's CUDA dtypes,
+    preserve output dtypes, and use fp32 accumulation for reductions. Do not
+    call PyTorch autograd in generated math.
+
+database:
+  population_size: 30
+  archive_size: 20
+  num_islands: 2
+  elite_selection_ratio: 0.25
+  exploitation_ratio: 0.75
+  similarity_threshold: 0.99
+
+evaluator:
+  timeout: 300
+  parallel_evaluations: 1
+  cascade_evaluation: false
+
+diff_based_evolution: true
+max_code_length: 30000

@@ -17,10 +17,17 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = ["triton"]
+llm = ["openai"]
 dev = ["black"]
+
+[project.scripts]
+evograd = "evograd.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+evograd = ["evolve/*.yaml"]
 
 [tool.black]
 line-length = 100
