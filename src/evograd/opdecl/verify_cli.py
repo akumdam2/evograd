@@ -32,6 +32,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--op", required=True)
     parser.add_argument(
+        "--declaration",
+        default=None,
+        help="external declaration as path.py:op",
+    )
+    parser.add_argument(
         "--forward",
         default=None,
         help="override the declaration's forward reference for the oracle",
@@ -47,10 +52,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from evograd.opdecl.verify import verify
-    from evograd.ops import get_op
+    from evograd.evolve.evaluator import (
+        _capture_native_output,
+        _native_output_tail,
+    )
+    from evograd.ops import get_op, load_op
 
     try:
-        op = get_op(args.op)
+        op = load_op(args.declaration) if args.declaration else get_op(args.op)
+        if op.name != args.op:
+            raise ValueError(
+                f"declaration name {op.name!r} does not match --op {args.op!r}"
+            )
         if args.forward:
             op = replace(op, forward=args.forward)
             op.validate()
@@ -60,16 +73,25 @@ def main(argv: list[str] | None = None) -> int:
             workloads = tuple(w for w in workloads if w.dtype in selected)
             if not workloads:
                 raise ValueError(f"{op.name}: no correctness workloads for {sorted(selected)}")
-        report = verify(
-            op,
-            load_candidate(args.candidate),
-            device=args.device,
-            workloads=workloads,
-        )
+        native_path = None
+        native = None
+        try:
+            with _capture_native_output() as captured:
+                native_path = captured
+                report = verify(
+                    op,
+                    load_candidate(args.candidate),
+                    device=args.device,
+                    workloads=workloads,
+                )
+        finally:
+            native = _native_output_tail(native_path)
         payload = {
             "metrics": {"correct": 1.0 if report.ok else 0.0},
             "verify": report.to_dict(),
         }
+        if native and native.get("bytes", 0) > 0:
+            payload["native_output"] = native
     except Exception:
         payload = {
             "metrics": {"correct": 0.0},

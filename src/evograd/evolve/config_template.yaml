@@ -71,7 +71,9 @@ database:
   similarity_threshold: 0.99
 
 evaluator:
-  timeout: 300
+  # The killable evograd child times out at 850s. Keep OpenEvolve's outer
+  # timeout above it so the inner process can destroy a deadlocked CUDA context.
+  timeout: 900
   parallel_evaluations: 1
   cascade_evaluation: false
 

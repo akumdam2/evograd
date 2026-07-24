@@ -5,4 +5,7 @@ build/
 dist/
 .venv/
 openevolve_output/
+evograd_output/
 artifacts/
+*.ncu-rep
+.baseline_timing_cache.json

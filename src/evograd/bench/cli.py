@@ -9,6 +9,7 @@ import argparse
 import importlib.util
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -24,6 +25,8 @@ def _load_module(path: Path):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--op", required=True)
+    parser.add_argument("--declaration", default=None, help="external path.py:op declaration")
+    parser.add_argument("--forward", default=None, help="override the declaration forward")
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--warmup", type=int, default=None)
     parser.add_argument("--reps", type=int, default=None)
@@ -31,8 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suite", default=None, help="named benchmark suite from the declaration")
     parser.add_argument(
         "--baseline",
-        default="pytorch_autograd",
-        help="performance baseline (pytorch_autograd; layernorm also supports liger)",
+        default="auto",
+        help="auto, pytorch_autograd, or a declaration-provided baseline such as liger",
     )
     parser.add_argument(
         "--dtype",
@@ -49,9 +52,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--reps must be >= 1")
 
     from evograd.bench.harness import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
-    from evograd.ops import get_op
+    from evograd.ops import get_op, load_op
 
-    op = get_op(args.op)
+    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    if op.name != args.op:
+        parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
+    if args.forward:
+        op = replace(op, forward=args.forward)
+        op.validate()
     report = run_benchmarks(
         op,
         _load_module(args.candidate),

@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             temperature=args.temperature,
             timeout=args.timeout,
             python=args.python,
+            eval_timeout=args.eval_timeout,
             lowering_context=lowering_context,
             dry_run=args.dry_run,
             skip_verify=args.skip_verify,

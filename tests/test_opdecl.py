@@ -46,10 +46,29 @@ class TestDerivedNaming(unittest.TestCase):
         op = get_op("evoattention")
         self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
 
-    def test_registry_covers_all_six(self):
+    def test_registry_covers_all_eighteen(self):
         self.assertEqual(
             sorted(OPS),
-            ["evoattention", "layernorm", "layernorm_linear", "linear", "matmul", "rmsnorm"],
+            [
+                "cross_entropy",
+                "dyt",
+                "evoattention",
+                "fused_add_rms_norm",
+                "geglu",
+                "jsd",
+                "kl_div",
+                "layernorm",
+                "layernorm_linear",
+                "linear",
+                "matmul",
+                "poly_norm",
+                "relu_squared",
+                "rmsnorm",
+                "softmax",
+                "sparsemax",
+                "swiglu",
+                "tvd",
+            ],
         )
 
     def test_registry_is_discovery_based(self):
@@ -109,9 +128,90 @@ class TestValidation(unittest.TestCase):
         op = _minimal(args=(Active("x", "[M, 1, N]"), Inactive("eps", default=1e-5)))
         self.assertEqual(op.active_args()[0].shape, "[M, 1, N]")
 
+    def test_scalar_tensor_shape_is_allowed(self):
+        op = _minimal(args=(Active("alpha", "[]"),))
+        self.assertEqual(op.active_args()[0].shape, "[]")
+
+    def test_memory_inputs_must_name_tensor_inputs(self):
+        with self.assertRaisesRegex(ValueError, "memory_inputs"):
+            _minimal(memory_inputs=("eps",))
+
     def test_unknown_tolerance_gradient_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown gradients"):
             _minimal(tolerance_multipliers={"dmissing": (2.0, 1.0)})
+
+
+class TestLigerSuiteMigration(unittest.TestCase):
+    def test_final_fork_workload_counts(self):
+        expected = {
+            "cross_entropy": (6, 42),
+            "dyt": (6, 15),
+            "fused_add_rms_norm": (6, 16),
+            "geglu": (6, 42),
+            "jsd": (6, 14),
+            "kl_div": (6, 39),
+            "poly_norm": (6, 14),
+            "relu_squared": (6, 14),
+            "softmax": (6, 36),
+            "sparsemax": (4, 15),
+            "swiglu": (6, 42),
+            "tvd": (6, 14),
+        }
+        for name, counts in expected.items():
+            with self.subTest(op=name):
+                op = get_op(name)
+                self.assertEqual((len(op.correctness), len(op.benchmark)), counts)
+
+    def test_shape_regime_suites_partition_full_suite(self):
+        for name in (
+            "cross_entropy",
+            "dyt",
+            "fused_add_rms_norm",
+            "geglu",
+            "jsd",
+            "kl_div",
+            "poly_norm",
+            "relu_squared",
+            "softmax",
+            "sparsemax",
+            "swiglu",
+            "tvd",
+        ):
+            with self.subTest(op=name):
+                op = get_op(name)
+                full = op.benchmark_workloads("full")
+                small = op.benchmark_workloads("small")
+                large = op.benchmark_workloads("large")
+                self.assertEqual(len(full), len(small) + len(large))
+                self.assertTrue(small)
+                self.assertTrue(large)
+
+    def test_inactive_targets_do_not_count_toward_memory_budget(self):
+        self.assertEqual(get_op("cross_entropy").memory_input_names(), ("logits",))
+        self.assertEqual(get_op("kl_div").memory_input_names(), ("y_pred",))
+        self.assertEqual(get_op("jsd").memory_input_names(), ("log_q",))
+
+    def test_liger_hooks_keep_the_reviewed_pair_for_the_runtime_gate(self):
+        names = (
+            "cross_entropy",
+            "dyt",
+            "fused_add_rms_norm",
+            "geglu",
+            "jsd",
+            "kl_div",
+            "layernorm",
+            "poly_norm",
+            "relu_squared",
+            "softmax",
+            "sparsemax",
+            "swiglu",
+            "tvd",
+        )
+        for name in names:
+            with self.subTest(op=name):
+                hook = get_op(name).performance_baselines["liger"]
+                self.assertTrue(callable(getattr(hook, "pair_factory", None)))
+                self.assertIsInstance(hook.forward_args, tuple)
 
 
 if __name__ == "__main__":

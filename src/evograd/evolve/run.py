@@ -1,20 +1,15 @@
 """Drive an OpenEvolve run for one operator + seed + scoring policy.
 
-Wraps the ``openevolve-run`` CLI from the pip ``openevolve`` package:
-
 * renders the config template with the op's contract,
-* points OpenEvolve at the shared ``evaluator_entry.py`` with ``EVOGRAD_OP`` /
-  ``EVOGRAD_SCORING`` in the environment,
-* copies the final best program out afterwards (re-implements the old fork's
-  ``--save-best-to`` patch, which upstream openevolve does not have).
+* calls OpenEvolve's supported ``run_evolution`` library API,
+* points it at the shared evaluator with declaration selection in the environment,
+* writes the returned best code directly to the requested destination.
 """
 
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
-import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
@@ -55,11 +50,18 @@ def render_config(
     return text
 
 
-def _openevolve_cmd() -> list[str]:
-    exe = shutil.which("openevolve-run")
-    if exe:
-        return [exe]
-    return [sys.executable, "-m", "openevolve.cli"]
+@contextmanager
+def _temporary_environ(values: dict[str, str]):
+    previous = {name: os.environ.get(name) for name in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def run_evolve(
@@ -76,12 +78,20 @@ def run_evolve(
     api_base: str = "https://api.openai.com/v1",
     benchmark_suite: str | None = None,
     benchmark_dtypes: tuple[str, ...] | None = None,
-    performance_baseline: str = "pytorch_autograd",
+    performance_baseline: str = "auto",
     extra_env: dict[str, str] | None = None,
+    ncu: bool = False,
+    ncu_model: str | None = None,
+    ncu_api_key: str | None = None,
+    ncu_timeout: int = 120,
+    ncu_optimizer_timeout: int = 360,
+    ncu_skip_at_roofline_pct: float = 95.0,
 ) -> int:
+    from evograd.opdecl.baselines import resolve_performance_baseline
     from evograd.evolve.scoring import get_policy
 
     get_policy(scoring)
+    performance_baseline = resolve_performance_baseline(op, performance_baseline)
     if iterations < 1:
         raise ValueError(f"iterations must be >= 1, got {iterations}")
     if not seed_path.is_file():
@@ -106,6 +116,13 @@ def run_evolve(
     env = evograd_env()
     env["EVOGRAD_OP"] = op.name
     env["EVOGRAD_SCORING"] = scoring
+    env["EVOGRAD_FORWARD_OVERRIDE"] = op.forward
+    if op.declaration:
+        env["EVOGRAD_DECLARATION"] = op.declaration
+    env.setdefault(
+        "EVOGRAD_BASELINE_TIMING_CACHE_PATH",
+        str(output_dir / ".baseline_timing_cache.json"),
+    )
     if benchmark_suite:
         # Validate before paying the startup cost of an OpenEvolve subprocess.
         op.benchmark_workloads(suite=benchmark_suite, dtypes=benchmark_dtypes)
@@ -115,44 +132,47 @@ def run_evolve(
     if benchmark_dtypes:
         env["EVOGRAD_BENCHMARK_DTYPES"] = ",".join(benchmark_dtypes)
     if performance_baseline != "pytorch_autograd":
-        if performance_baseline not in op.performance_baselines:
-            available = ["pytorch_autograd", *sorted(op.performance_baselines)]
-            raise KeyError(
-                f"{op.name}: unknown performance baseline {performance_baseline!r}; "
-                f"available: {available}"
-            )
         env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
     if extra_env:
         env.update(extra_env)
 
-    cmd = _openevolve_cmd() + [
-        str(seed_path),
-        str(_EVALUATOR_ENTRY),
-        "--config",
-        str(config_path),
-        "--iterations",
-        str(iterations),
-        "--output",
-        str(output_dir),
-    ]
-    print("+ " + " ".join(cmd))
-    completed = subprocess.run(cmd, env=env, check=False)
-    if completed.returncode != 0:
-        return completed.returncode
+    from openevolve import run_evolution
 
-    # Re-implementation of the old fork's --save-best-to convenience.
-    best = _find_best_program(output_dir)
-    if best is None:
-        print(f"ERROR: OpenEvolve succeeded but no best program was found under {output_dir}")
+    print(
+        f"+ OpenEvolve.run_evolution(seed={seed_path}, iterations={iterations}, "
+        f"output={output_dir})"
+    )
+    with _temporary_environ(env):
+        result = run_evolution(
+            initial_program=seed_path,
+            evaluator=_EVALUATOR_ENTRY,
+            config=config_path,
+            iterations=iterations,
+            output_dir=str(output_dir),
+            cleanup=False,
+        )
+
+    if not result.best_code:
+        print("ERROR: OpenEvolve completed without returning a best program")
         return 1
     target = save_best_to or (output_dir / "evolved_best_program.py")
     target.parent.mkdir(parents=True, exist_ok=True)
-    if best.resolve() != target.resolve():
-        shutil.copyfile(best, target)
-    print(f"Copied final best program to: {target}")
+    target.write_text(result.best_code, encoding="utf-8")
+    if ncu:
+        from evograd.ncu.refine import refine_candidate
+
+        record = refine_candidate(
+            op,
+            target,
+            output_dir=output_dir / "ncu_passes" / "final",
+            baseline=performance_baseline,
+            model=ncu_model or primary_model,
+            api_base=api_base,
+            api_key=ncu_api_key,
+            ncu_timeout=ncu_timeout,
+            optimizer_timeout=ncu_optimizer_timeout,
+            skip_at_roofline_pct=ncu_skip_at_roofline_pct,
+        )
+        print(f"NCU refinement: {record['outcome']}")
+    print(f"Wrote final best program to: {target}")
     return 0
-
-
-def _find_best_program(output_dir: Path) -> Path | None:
-    candidates = sorted(output_dir.glob("**/best/best_program*.py"), key=os.path.getmtime)
-    return candidates[-1] if candidates else None

@@ -33,15 +33,39 @@ def evograd_env() -> dict[str, str]:
     return env
 
 
-def _run(cmd: list[str], log_dir: Path | None, log_stem: str) -> subprocess.CompletedProcess:
-    completed = subprocess.run(
-        cmd,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-        env=evograd_env(),
-    )
+def _run(
+    cmd: list[str],
+    log_dir: Path | None,
+    log_stem: str,
+    extra_env: dict[str, str] | None = None,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess:
+    env = evograd_env()
+    if extra_env:
+        env.update(extra_env)
+    try:
+        completed = subprocess.run(
+            cmd,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            env=env,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        completed = subprocess.CompletedProcess(
+            cmd,
+            -9,
+            stdout=stdout,
+            stderr=(
+                f"[eval_timeout] candidate killed after {timeout}s; likely a "
+                "hanging/deadlocked kernel. Last progress:\n"
+                + stderr[-2000:]
+            ),
+        )
     if log_dir is not None:
         log_dir.mkdir(parents=True, exist_ok=True)
         (log_dir / f"{log_stem}_stdout.txt").write_text(completed.stdout, encoding="utf-8")
@@ -86,6 +110,8 @@ def verify_candidate(
     log_dir: Path | None = None,
     dtypes: tuple[str, ...] | None = None,
     forward: str | None = None,
+    declaration: str | None = None,
+    timeout: int = 120,
 ) -> dict:
     """Verify a candidate against the op's autograd oracle in a subprocess."""
     cmd = [
@@ -97,10 +123,18 @@ def verify_candidate(
     ]
     if forward:
         cmd.extend(["--forward", forward])
+    if declaration:
+        cmd.extend(["--declaration", declaration])
     for dtype in dtypes or ():
         cmd.extend(["--dtype", dtype])
     cmd.append(str(program_path))
-    completed = _run(cmd, log_dir, "verify")
+    completed = _run(
+        cmd,
+        log_dir,
+        "verify",
+        {"EVOGRAD_DECLARATION": declaration} if declaration else None,
+        timeout,
+    )
     try:
         report = json.loads(completed.stdout)
     except json.JSONDecodeError:

@@ -9,12 +9,19 @@ command.
 
 from __future__ import annotations
 
+import json
+import os
 import statistics
+import tempfile
 from typing import Any, Callable
 
 import torch
 
 from evograd.opdecl.activity import Active, OpDecl, Workload
+from evograd.opdecl.baselines import (
+    resolve_performance_baseline,
+    verify_performance_baseline,
+)
 from evograd.opdecl.bind import backward_inactive_kwargs, bind, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle, resolve_forward
@@ -22,6 +29,83 @@ from evograd.evolve.scoring import geomean, weighted_geomean
 
 DEFAULT_WARMUP = 10
 DEFAULT_REPS = 50
+
+_BASELINE_CACHE_MEMO: dict[str, dict[str, list[float]]] = {}
+
+
+def _cache_enabled() -> bool:
+    return os.environ.get("EVOGRAD_BASELINE_TIMING_CACHE", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
+def _baseline_cache_path() -> str | None:
+    if not _cache_enabled():
+        return None
+    return os.environ.get("EVOGRAD_BASELINE_TIMING_CACHE_PATH")
+
+
+def _baseline_cache_key(
+    op: OpDecl,
+    workload: Workload,
+    baseline: str,
+    warmup: int,
+    reps: int,
+) -> str:
+    gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
+    return json.dumps(
+        {
+            "op": op.name,
+            "baseline": baseline,
+            "gpu": gpu,
+            "warmup": warmup,
+            "reps": reps,
+            "dims": workload.dims,
+            "dtype": workload.dtype,
+        },
+        sort_keys=True,
+    )
+
+
+def _baseline_cache_get(path: str | None, key: str) -> tuple[float, float] | None:
+    if path is None:
+        return None
+    if path not in _BASELINE_CACHE_MEMO:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                _BASELINE_CACHE_MEMO[path] = json.load(handle)
+        except Exception:
+            _BASELINE_CACHE_MEMO[path] = {}
+    value = _BASELINE_CACHE_MEMO[path].get(key)
+    return (float(value[0]), float(value[1])) if value else None
+
+
+def _baseline_cache_put(
+    path: str | None, key: str, backward_ms: float, full_ms: float
+) -> None:
+    if path is None:
+        return
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except Exception:
+        data = {}
+    data[key] = [float(backward_ms), float(full_ms)]
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".evograd_baseline_", suffix=".tmp", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+        os.replace(temporary, path)
+        _BASELINE_CACHE_MEMO[path] = data
+    except OSError:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
 
 
 def normalize_saved(saved: Any) -> tuple[Any, ...]:
@@ -116,6 +200,7 @@ def benchmark_case(
     device: str = "cuda",
     performance_baseline: str = "pytorch_autograd",
 ) -> dict[str, Any]:
+    performance_baseline = resolve_performance_baseline(op, performance_baseline)
     fwd, bwd = lookup_pair(op, module)
     inputs = make_case_inputs(op, workload, device=device)
     dout = inputs[op.upstream_grad_name]
@@ -173,34 +258,44 @@ def benchmark_case(
     backward_ms = median_ms_timed_region(setup_saved, backward_from_saved, warmup, reps)
     raw_full_ms = median_ms(candidate_raw_full_step, warmup, reps)
     autograd_full_ms = median_ms(candidate_autograd_full_step, warmup, reps)
-    if performance_baseline == "pytorch_autograd":
-        baseline_ms = median_ms(baseline_backward, warmup, reps)
-        baseline_full_ms = median_ms(baseline_full_step, warmup, reps)
+    cache_path = _baseline_cache_path()
+    cache_key = _baseline_cache_key(
+        op, workload, performance_baseline, warmup, reps
+    )
+    cached = _baseline_cache_get(cache_path, cache_key)
+    if cached is not None:
+        baseline_ms, baseline_full_ms = cached
     else:
-        try:
-            baseline_hook = op.performance_baselines[performance_baseline]
-        except KeyError:
-            available = ["pytorch_autograd", *sorted(op.performance_baselines)]
-            raise KeyError(
-                f"{op.name}: unknown performance baseline {performance_baseline!r}; "
-                f"available: {available}"
-            ) from None
-        baseline_ms, baseline_full_ms = baseline_hook(
-            torch,
-            inputs,
-            dout,
-            warmup,
-            reps,
-            median_ms,
-            median_ms_timed_region,
+        if performance_baseline == "pytorch_autograd":
+            baseline_ms = median_ms(baseline_backward, warmup, reps)
+            baseline_full_ms = median_ms(baseline_full_step, warmup, reps)
+        else:
+            try:
+                baseline_hook = op.performance_baselines[performance_baseline]
+            except KeyError:
+                available = ["pytorch_autograd", *sorted(op.performance_baselines)]
+                raise KeyError(
+                    f"{op.name}: unknown performance baseline {performance_baseline!r}; "
+                    f"available: {available}"
+                ) from None
+            baseline_ms, baseline_full_ms = baseline_hook(
+                torch,
+                inputs,
+                dout,
+                warmup,
+                reps,
+                median_ms,
+                median_ms_timed_region,
+            )
+        _baseline_cache_put(
+            cache_path, cache_key, baseline_ms, baseline_full_ms
         )
 
     saved_byte_count = saved_bytes(saved_tensors)
     input_byte_count = int(
         sum(
-            inputs[a.name].numel() * inputs[a.name].element_size()
-            for a in op.args
-            if getattr(a, "shape", None) is not None
+            inputs[name].numel() * inputs[name].element_size()
+            for name in op.memory_input_names()
         )
     )
     return {
@@ -241,6 +336,10 @@ def run_benchmarks(
     workloads: tuple[Workload, ...] | None = None,
     performance_baseline: str = "pytorch_autograd",
 ) -> dict[str, Any]:
+    performance_baseline = resolve_performance_baseline(op, performance_baseline)
+    verify_performance_baseline(
+        op, performance_baseline, device=device
+    )
     cases = []
     totals = {
         "forward_ms": 0.0,

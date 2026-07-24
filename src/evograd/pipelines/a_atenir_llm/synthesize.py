@@ -45,6 +45,7 @@ class AutogradPairConfig:
     temperature: float | None
     timeout: int
     python: str
+    eval_timeout: int = 120
     lowering_context: str | None = None
     dry_run: bool = False
     # Skip oracle verification (accept the first attempt). Only useful on
@@ -61,6 +62,8 @@ def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
         program_path=program_path,
         log_dir=program_path.parent,
         forward=config.forward,
+        declaration=config.op.declaration,
+        timeout=config.eval_timeout,
     )
 
 

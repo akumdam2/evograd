@@ -1,9 +1,11 @@
 """evograd — evolved backward kernels.
 
     evograd ops                                  # list declared operators
+    evograd scaffold --op new_op --forward op.py --output-dir ...
     evograd seed a --op rmsnorm --output-dir ... # generate a seed (pipeline a|b|c)
     evograd verify --op rmsnorm seed.py          # check a candidate vs the oracle
     evograd evolve --op rmsnorm --seed seed.py --output-dir ...
+    evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
     evograd bench --op rmsnorm --candidate best.py
 """
 
@@ -40,6 +42,8 @@ def _verify(argv: list[str]) -> int:
 def _evolve(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="evograd evolve")
     parser.add_argument("--op", required=True)
+    parser.add_argument("--declaration", default=None, help="external path.py:op declaration")
+    parser.add_argument("--forward", default=None, help="override the declaration forward")
     parser.add_argument("--seed", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--scoring", default="speed_memory")
@@ -50,7 +54,16 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--secondary-model", default="gpt-4o")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
     parser.add_argument("--benchmark-suite", default=None)
-    parser.add_argument("--baseline", default="pytorch_autograd")
+    parser.add_argument("--baseline", default="auto")
+    parser.add_argument(
+        "--ncu",
+        action="store_true",
+        help="profile and attempt one accepted-only NCU-guided refinement of the final best",
+    )
+    parser.add_argument("--ncu-model", default=None)
+    parser.add_argument("--ncu-timeout", type=int, default=120)
+    parser.add_argument("--ncu-optimizer-timeout", type=int, default=360)
+    parser.add_argument("--ncu-skip-at-roofline-pct", type=float, default=95.0)
     parser.add_argument(
         "--benchmark-dtype",
         action="append",
@@ -59,10 +72,17 @@ def _evolve(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     from evograd.evolve.run import run_evolve
-    from evograd.ops import get_op
+    from dataclasses import replace
+    from evograd.ops import get_op, load_op
 
+    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    if op.name != args.op:
+        parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
+    if args.forward:
+        op = replace(op, forward=args.forward)
+        op.validate()
     return run_evolve(
-        get_op(args.op),
+        op,
         seed_path=args.seed,
         output_dir=args.output_dir,
         scoring=args.scoring,
@@ -75,11 +95,83 @@ def _evolve(argv: list[str]) -> int:
         benchmark_suite=args.benchmark_suite,
         benchmark_dtypes=tuple(args.benchmark_dtype) if args.benchmark_dtype else None,
         performance_baseline=args.baseline,
+        ncu=args.ncu,
+        ncu_model=args.ncu_model,
+        ncu_timeout=args.ncu_timeout,
+        ncu_optimizer_timeout=args.ncu_optimizer_timeout,
+        ncu_skip_at_roofline_pct=args.ncu_skip_at_roofline_pct,
     )
 
 
 def _bench(argv: list[str]) -> int:
     from evograd.bench.cli import main
+
+    return main(argv)
+
+
+def _run(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="evograd run")
+    parser.add_argument("--op", required=True)
+    parser.add_argument(
+        "--forward",
+        default=None,
+        help="optional path.py[:function] or importable module:function override",
+    )
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--pipeline", choices=("a", "b", "c"), default="a")
+    parser.add_argument("--iterations", type=int, default=10)
+    parser.add_argument("--gpus", type=int, choices=(1, 3), default=1)
+    parser.add_argument("--baseline", default="auto")
+    parser.add_argument("--model", default="gpt-5.5")
+    parser.add_argument("--api-base", default="https://api.openai.com/v1")
+    parser.add_argument("--api-key", default=None)
+    parser.add_argument("--max-attempts", type=int, default=5)
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--ncu",
+        action="store_true",
+        help="attempt an accepted-only NCU refinement after each evolve group",
+    )
+    args = parser.parse_args(argv)
+
+    from evograd.api import evograd
+
+    result = evograd(
+        args.forward,
+        op=args.op,
+        output_dir=args.output_dir,
+        pipeline=args.pipeline,
+        iterations=args.iterations,
+        gpus=args.gpus,
+        baseline=args.baseline,
+        model=args.model,
+        api_base=args.api_base,
+        api_key=args.api_key,
+        max_attempts=args.max_attempts,
+        force=args.force,
+        ncu=args.ncu,
+    )
+    print(f"program : {result.program}")
+    print(f"report  : {result.report}")
+    print(f"metrics : {result.metrics}")
+    print(f"baseline: {result.baseline}")
+    return 0
+
+
+def _dispatch(argv: list[str]) -> int:
+    from evograd.dispatch import main
+
+    return main(argv)
+
+
+def _ncu(argv: list[str]) -> int:
+    from evograd.ncu.refine import main
+
+    return main(argv)
+
+
+def _scaffold(argv: list[str]) -> int:
+    from evograd.scaffold import main
 
     return main(argv)
 
@@ -95,10 +187,14 @@ def _ops(argv: list[str]) -> int:
 
 _COMMANDS = {
     "ops": _ops,
+    "scaffold": _scaffold,
     "seed": _seed,
     "verify": _verify,
     "evolve": _evolve,
+    "run": _run,
     "bench": _bench,
+    "dispatch": _dispatch,
+    "ncu": _ncu,
 }
 
 

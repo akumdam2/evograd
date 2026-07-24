@@ -1,6 +1,7 @@
 """Operator declaration: layernorm."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.ops._common import make_pair_baseline
 
 
 def make_layernorm_inputs(torch, op, workload, device="cuda"):
@@ -51,33 +52,26 @@ def _workloads(shapes):
     )
 
 
-def measure_liger_baseline(
-    torch, inputs, dout, warmup, reps, median_ms, median_ms_timed_region
-):
-    """Optional Liger backward/full-step baseline, matching the legacy evaluator."""
-    try:
-        from liger_kernel.ops.layer_norm import layer_norm_backward, layer_norm_forward
-    except ImportError as exc:
-        raise RuntimeError(
-            "Liger baseline requested but liger-kernel is not installed"
-        ) from exc
+def _liger_factory():
+    from liger_kernel.ops.layer_norm import layer_norm_backward, layer_norm_forward
 
-    x, weight, bias, eps = (
-        inputs["x"], inputs["weight"], inputs["bias"], inputs["eps"]
-    )
-
-    def setup():
-        _, x_2d, mean, rstd, _block_size, _num_warps = layer_norm_forward(
+    def forward(x, weight, bias, eps):
+        y, x_2d, mean, rstd, _block_size, _num_warps = layer_norm_forward(
             x, weight, bias, eps
         )
-        return dout.view(-1, dout.shape[-1]).contiguous(), x_2d, weight, bias, mean, rstd
+        return y, (x_2d, weight, bias, mean, rstd)
 
-    def backward(state):
-        return layer_norm_backward(*state)
+    def backward(dy, saved):
+        x_2d, weight, bias, mean, rstd = saved
+        dy_2d = dy.view(-1, dy.shape[-1]).contiguous()
+        return layer_norm_backward(dy_2d, x_2d, weight, bias, mean, rstd)
 
-    backward_ms = median_ms_timed_region(setup, backward, warmup, reps)
-    full_ms = median_ms(lambda: backward(setup()), warmup, reps)
-    return backward_ms, full_ms
+    return forward, backward
+
+
+measure_liger_baseline = make_pair_baseline(
+    _liger_factory, ("x", "weight", "bias", "eps")
+)
 
 op = declare_op(
     name="layernorm",

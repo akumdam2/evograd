@@ -88,13 +88,9 @@ _FORWARD_SPEC = {forward!r}
 
 
 def _load_forward_callable():
-    module_name, fn_name = (
-        _FORWARD_SPEC.split(":", 1)
-        if ":" in _FORWARD_SPEC
-        else _FORWARD_SPEC.rsplit(".", 1)
-    )
-    module = __import__(module_name, fromlist=[fn_name])
-    return getattr(module, fn_name)
+    from evograd.opdecl.importing import resolve_callable
+
+    return resolve_callable(_FORWARD_SPEC)
 
 
 def _forward_with_saved_impl({forward_sig}):

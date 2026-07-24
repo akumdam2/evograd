@@ -38,6 +38,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--fp16-rtol", type=float, default=5e-2)
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument(
+        "--eval-timeout",
+        type=int,
+        default=120,
+        help="kill a seed verification subprocess after this many seconds",
+    )
+    parser.add_argument(
         "--no-autograd-pair-seed",
         action="store_true",
         help="Emit only dispatch_program.py, skip the autograd-pair wrapper.",
@@ -72,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
             fp16_atol=args.fp16_atol,
             fp16_rtol=args.fp16_rtol,
             python=args.python,
+            eval_timeout=args.eval_timeout,
             emit_autograd_pair_seed=not args.no_autograd_pair_seed,
             dynamic_shapes=not args.static_shapes,
         )

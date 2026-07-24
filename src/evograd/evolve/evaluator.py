@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -62,6 +63,25 @@ NATIVE_OUTPUT_TAIL_BYTES = int(
         os.environ.get("AUTOGRAD_PAIR_NATIVE_OUTPUT_TAIL_BYTES", "65536"),
     )
 )
+EVAL_ISOLATION_TIMEOUT = int(os.environ.get("EVOGRAD_EVAL_ISOLATION_TIMEOUT", "850"))
+
+try:
+    _PRISTINE_STDOUT_FD = os.dup(1)
+    _PRISTINE_STDERR_FD = os.dup(2)
+except OSError:
+    _PRISTINE_STDOUT_FD = _PRISTINE_STDERR_FD = -1
+
+
+def _restore_std_fds() -> None:
+    if _PRISTINE_STDOUT_FD < 0:
+        return
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os.dup2(_PRISTINE_STDOUT_FD, 1)
+    os.dup2(_PRISTINE_STDERR_FD, 2)
 
 
 def _json(data: dict[str, Any]) -> str:
@@ -225,6 +245,51 @@ def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]
     }
 
 
+def _smoke_benchmark_shapes(
+    op: OpDecl,
+    module,
+    workloads,
+    device: str = "cuda",
+) -> dict[str, Any] | None:
+    """Run one untimed pair invocation per benchmark shape.
+
+    The caller's subprocess timeout turns shape-dependent Triton deadlocks into
+    a rejected candidate by destroying the child CUDA context.
+    """
+    fwd, bwd = lookup_pair(op, module)
+    selected = tuple(workloads if workloads is not None else op.benchmark)
+    print(
+        f"[smoke] correctness passed; checking {len(selected)} benchmark shapes",
+        file=sys.stderr,
+        flush=True,
+    )
+    for workload in selected:
+        label = {"dims": workload.dims, "dtype": workload.dtype}
+        print(f"[smoke] {label}", file=sys.stderr, flush=True)
+        try:
+            inputs = make_case_inputs(op, workload, device=device)
+            positional = [
+                inputs.get(arg.name, getattr(arg, "default", None)) for arg in op.args
+            ]
+            kwargs = backward_inactive_kwargs(op, bwd, inputs)
+            with torch.no_grad():
+                _y, saved = fwd(*positional)
+                bwd(
+                    inputs[op.upstream_grad_name],
+                    normalize_saved(saved),
+                    **kwargs,
+                )
+            torch.cuda.synchronize()
+        except Exception as exc:
+            return {
+                "error_type": "BenchmarkShapeSmokeError",
+                "error_message": f"{type(exc).__name__}: {exc}",
+                "case": label,
+                "traceback": traceback.format_exc(limit=8),
+            }
+    return None
+
+
 def build_evaluate(
     op: OpDecl,
     policy: ScoringPolicy,
@@ -239,6 +304,7 @@ def build_evaluate(
     reps = DEFAULT_REPS if reps is None else reps
 
     def evaluate(program_path: str) -> EvaluationResult:
+        _restore_std_fds()
         if not torch.cuda.is_available():
             return _result(
                 {"combined_score": -1e9, "correct": 0.0},
@@ -272,15 +338,35 @@ def build_evaluate(
                 native_output_path = captured_path
                 correctness = _run_correctness(op, module)
                 if correctness["passed"] == correctness["total"]:
-                    benchmark = run_benchmarks(
-                        op,
-                        module,
-                        warmup=warmup,
-                        reps=reps,
-                        geomean_weights=policy.geomean_weights,
-                        workloads=benchmark_workloads,
-                        performance_baseline=performance_baseline,
+                    smoke_failure = _smoke_benchmark_shapes(
+                        op, module, benchmark_workloads
                     )
+                    if smoke_failure is None:
+                        benchmark = run_benchmarks(
+                            op,
+                            module,
+                            warmup=warmup,
+                            reps=reps,
+                            geomean_weights=policy.geomean_weights,
+                            workloads=benchmark_workloads,
+                            performance_baseline=performance_baseline,
+                        )
+                    else:
+                        native_output = _native_output_tail(native_output_path)
+                        artifacts = {
+                            "correctness": correctness,
+                            "failure": smoke_failure,
+                        }
+                        if native_output and native_output.get("bytes", 0) > 0:
+                            artifacts["native_output"] = native_output
+                        return _result(
+                            {
+                                "combined_score": -1e6,
+                                "correct": 0.0,
+                                "partial_correctness": 1.0,
+                            },
+                            artifacts,
+                        )
         except Exception as exc:
             native_output = _native_output_tail(native_output_path)
             artifacts: dict[str, Any] = {
@@ -353,6 +439,72 @@ def build_evaluate(
         return _result(metrics, {"correctness": correctness, "benchmark": benchmark})
 
     return evaluate
+
+
+def evaluate_isolated(
+    evaluator_file: str,
+    program_path: str,
+    *,
+    timeout: int | None = None,
+) -> EvaluationResult:
+    """Evaluate in a killable subprocess so a deadlocked GPU kernel cannot survive."""
+    timeout = timeout or EVAL_ISOLATION_TIMEOUT
+    fd, result_path = tempfile.mkstemp(prefix="evograd_result_", suffix=".json")
+    os.close(fd)
+    env = {
+        **os.environ,
+        "EVOGRAD_EVAL_CHILD": "1",
+        "EVOGRAD_RESULT_JSON": result_path,
+    }
+    try:
+        try:
+            process = subprocess.run(
+                [sys.executable, evaluator_file, program_path],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            return _result(
+                {"combined_score": -1e6, "correct": 0.0},
+                {
+                    "failure": {
+                        "error_type": "EvaluationTimeoutKilled",
+                        "error_message": (
+                            f"evaluation exceeded {timeout}s and was killed"
+                        ),
+                        "stderr_tail": stderr[-4000:],
+                    }
+                },
+            )
+        try:
+            with open(result_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            return _result(
+                {"combined_score": -1e9, "correct": 0.0},
+                {
+                    "failure": {
+                        "error_type": "IsolatedEvalCrashed",
+                        "error_message": (
+                            f"evaluator subprocess exited rc={process.returncode} "
+                            "without a result"
+                        ),
+                        "stdout_tail": process.stdout[-4000:],
+                        "stderr_tail": process.stderr[-4000:],
+                    }
+                },
+            )
+        return EvaluationResult(
+            metrics=payload["metrics"], artifacts=payload.get("artifacts", {})
+        )
+    finally:
+        try:
+            os.unlink(result_path)
+        except OSError:
+            pass
 
 
 def main(argv: list[str]) -> int:

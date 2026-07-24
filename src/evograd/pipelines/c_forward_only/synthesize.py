@@ -6,7 +6,6 @@ forward reference source. Tracks per-call token usage into cost_summary.json.
 
 from __future__ import annotations
 
-import importlib
 import inspect
 import json
 import time
@@ -15,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from evograd.opdecl.activity import OpDecl
+from evograd.opdecl.importing import resolve_callable
 from evograd.pipelines.c_forward_only.prompts import (
     SYSTEM_MESSAGE,
     render_codegen_prompt,
@@ -44,13 +44,13 @@ class ForwardOnlyConfig:
     temperature: float | None
     timeout: int
     python: str
+    eval_timeout: int = 120
     dry_run: bool = False
     skip_verify: bool = False
 
 
 def _load_callable(spec: str):
-    module_name, fn_name = spec.split(":", 1) if ":" in spec else spec.rsplit(".", 1)
-    return getattr(importlib.import_module(module_name), fn_name)
+    return resolve_callable(spec)
 
 
 def _forward_source(forward: str) -> str:
@@ -69,6 +69,8 @@ def _verify(config: ForwardOnlyConfig, program_path: Path) -> dict:
         program_path=program_path,
         log_dir=program_path.parent,
         forward=config.forward,
+        declaration=config.op.declaration,
+        timeout=config.eval_timeout,
     )
 
 

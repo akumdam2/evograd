@@ -9,16 +9,14 @@ autograd, and ``torch.autograd.grad`` with the output shadow as
 
 from __future__ import annotations
 
-import importlib
-
 import torch
 
 from evograd.opdecl.activity import Active, OpDecl
+from evograd.opdecl.importing import resolve_callable
 
 
 def resolve_forward(op: OpDecl):
-    module_name, _, fn_name = op.forward.partition(":")
-    return getattr(importlib.import_module(module_name), fn_name)
+    return resolve_callable(op.forward)
 
 
 def oracle(op: OpDecl, inputs: dict, dout: torch.Tensor | None = None):

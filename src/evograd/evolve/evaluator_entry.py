@@ -19,8 +19,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import replace
 
-from evograd.evolve.evaluator import build_evaluate
+from evograd.evolve.evaluator import build_evaluate, evaluate_isolated
 from evograd.evolve.scoring import get_policy
 from evograd.ops import get_op
 
@@ -89,8 +90,11 @@ def _benchmark_selection(op):
 
 
 _OP = get_op(os.environ["EVOGRAD_OP"])
+if os.environ.get("EVOGRAD_FORWARD_OVERRIDE"):
+    _OP = replace(_OP, forward=os.environ["EVOGRAD_FORWARD_OVERRIDE"])
+    _OP.validate()
 
-evaluate = build_evaluate(
+_evaluate_direct = build_evaluate(
     _OP,
     _policy_from_env(),
     warmup=_int_env(
@@ -104,13 +108,23 @@ evaluate = build_evaluate(
     ),
 )
 
+if os.environ.get("EVOGRAD_EVAL_CHILD") == "1":
+    evaluate = _evaluate_direct
+else:
+    evaluate = lambda program_path: evaluate_isolated(__file__, program_path)
+
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"Usage: EVOGRAD_OP=<op> {argv[0]} PROGRAM_PATH")
         return 2
     result = evaluate(argv[1])
-    print(json.dumps({"metrics": result.metrics, "artifacts": result.artifacts}, indent=2))
+    payload = {"metrics": result.metrics, "artifacts": result.artifacts}
+    result_path = os.environ.get("EVOGRAD_RESULT_JSON")
+    if result_path:
+        with open(result_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+    print(json.dumps(payload, indent=2))
     return 0 if result.metrics.get("correct", 0.0) == 1.0 else 1
 
 

@@ -36,7 +36,11 @@ Triton pitfalls:
 - Do not read Python globals inside `@triton.jit`; pass dimensions, strides, and
   scalar constants as arguments or meta-parameters.
 - Use fp32 accumulation for reductions.
-- Avoid global atomic contention when a partial-buffer reduction is better."""
+- Avoid global atomic contention when a partial-buffer reduction is better.
+- Never spin-wait for another program/block or attempt a grid-wide barrier.
+  CUDA does not guarantee block co-residency; use separate kernel launches for
+  multi-pass reductions. Every benchmark shape is smoke-run and hangs are
+  killed and rejected."""
 
 
 def render_pair_rules(op: OpDecl) -> str:

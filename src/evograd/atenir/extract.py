@@ -219,12 +219,9 @@ def _resolve_aten(op_name: str):
 
 
 def _import_callable(spec: str):
-    mod_name, fn_name = spec.split(":", 1) if ":" in spec else spec.rsplit(".", 1)
-    mod = importlib.import_module(mod_name)
-    fn = getattr(mod, fn_name)
-    if not callable(fn):
-        raise TypeError(f"{spec!r} is not callable")
-    return fn
+    from evograd.opdecl.importing import resolve_callable
+
+    return resolve_callable(spec)
 
 
 # ── Serialization (mirrors layernorm_bwd_graph.json schema) ──────────────────
@@ -454,11 +451,17 @@ def extract_autograd(
     grad_out = torch.randn_like(sample_out)
 
     def bwd(grad_out, *fwd_inputs):
-        ins = [t.detach().requires_grad_(True) for t in fwd_inputs]
+        # Integer/bool inputs such as class labels participate in the forward
+        # but cannot require gradients and must not be passed to autograd.grad.
+        ins = [
+            t.detach().requires_grad_(True) if t.is_floating_point() else t.detach()
+            for t in fwd_inputs
+        ]
+        diff_ins = [t for t in ins if t.requires_grad]
         out = forward_fn(*ins)
         if isinstance(out, (tuple, list)):
             out = out[0]
-        return torch.autograd.grad(out, ins, grad_outputs=grad_out)
+        return torch.autograd.grad(out, diff_ins, grad_outputs=grad_out)
 
     # tracing_mode="symbolic" keeps input dims as SymInts, so shape-derived
     # values appear as sym_size nodes / node refs in the graph instead of baked

@@ -86,6 +86,8 @@ def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
     text = shape.strip()
     if not (text.startswith("[") and text.endswith("]")):
         raise ValueError(f"shape must look like '[A, B]', got {shape!r}")
+    if not text[1:-1].strip():
+        return ()
     resolved = []
     for token in text[1:-1].split(","):
         token = token.strip()
@@ -118,6 +120,9 @@ class OpDecl:
 
     name: str
     forward: str  # forward reference as "module.path:callable"
+    # Optional ``path.py:op`` reference for externally generated declarations.
+    # Built-in declarations are discovered by package name and leave this None.
+    declaration: str | None
     dims: tuple[str, ...]
     args: tuple[Arg, ...]
     output: Active
@@ -140,6 +145,19 @@ class OpDecl:
     # concrete inputs and timing helpers and returns ``(backward_ms, full_ms)``.
     # PyTorch autograd is always available as the built-in default.
     performance_baselines: dict[str, object] = field(default_factory=dict)
+    # Only these tensor inputs define the saved-memory budget. Defaults to all
+    # tensor inputs. This excludes non-model state such as integer labels from
+    # ratios while still allowing the candidate to save them.
+    memory_inputs: tuple[str, ...] | None = None
+    # Shape-aware specialization metadata. ``regime_feature`` maps a workload
+    # to the scalar used to split the declared "small" and "large" suites;
+    # ``case_weight`` optionally weights specialist geomeans.
+    regime_feature: object | None = None
+    regime_split: float | None = None
+    case_weight: object | None = None
+    # Optional workload-aware tolerance hook:
+    # (workload, result_name, base_atol, base_rtol) -> (atol, rtol).
+    tolerance_hook: object | None = None
     # Optional override for input construction, signature
     # (torch, op, workload, device) -> dict of {arg name: tensor/scalar, upstream grad name: tensor}.
     # Takes the torch module as a parameter so op declarations stay importable
@@ -209,6 +227,11 @@ class OpDecl:
             raise ValueError(
                 f"{self.name}: forward must be 'module.path:callable', got {self.forward!r}"
             )
+        if self.declaration is not None and ":" not in self.declaration:
+            raise ValueError(
+                f"{self.name}: declaration must be 'path.py:attribute', "
+                f"got {self.declaration!r}"
+            )
 
         names = [a.name for a in self.args]
         if len(names) != len(set(names)):
@@ -272,6 +295,29 @@ class OpDecl:
             raise ValueError(
                 f"{self.name}: performance baseline names/hooks are invalid: {invalid_baselines}"
             )
+        tensor_names = {
+            arg.name for arg in self.args if getattr(arg, "shape", None) is not None
+        }
+        if self.memory_inputs is not None:
+            unknown_memory_inputs = set(self.memory_inputs) - tensor_names
+            if unknown_memory_inputs:
+                raise ValueError(
+                    f"{self.name}: memory_inputs names non-tensor/unknown inputs "
+                    f"{sorted(unknown_memory_inputs)}"
+                )
+        regime_values = (self.regime_feature, self.regime_split, self.case_weight)
+        if any(value is not None for value in regime_values):
+            if not callable(self.regime_feature) or self.regime_split is None:
+                raise ValueError(
+                    f"{self.name}: shape regimes require callable regime_feature "
+                    "and numeric regime_split"
+                )
+            if self.regime_split <= 0:
+                raise ValueError(f"{self.name}: regime_split must be positive")
+            if self.case_weight is not None and not callable(self.case_weight):
+                raise ValueError(f"{self.name}: case_weight must be callable")
+        if self.tolerance_hook is not None and not callable(self.tolerance_hook):
+            raise ValueError(f"{self.name}: tolerance_hook must be callable")
 
         suites = [self.benchmark, *self.benchmark_suites.values()]
         for workload in (*self.correctness, *(w for suite in suites for w in suite)):
@@ -298,6 +344,8 @@ class OpDecl:
         text = shape.strip()
         if not (text.startswith("[") and text.endswith("]")):
             raise ValueError(f"{self.name}.{arg_name}: shape must look like '[A, B]', got {shape!r}")
+        if not text[1:-1].strip():
+            return
         for token in text[1:-1].split(","):
             token = token.strip()
             if token in self.dims or token.isdigit():
@@ -315,7 +363,22 @@ class OpDecl:
         else:
             base = self.tolerances[workload.dtype]
         scale = self.tolerance_multipliers.get(result_name or "", (1.0, 1.0))
-        return base[0] * scale[0], base[1] * scale[1]
+        atol, rtol = base[0] * scale[0], base[1] * scale[1]
+        if self.tolerance_hook is not None:
+            atol, rtol = self.tolerance_hook(workload, result_name, atol, rtol)
+        return float(atol), float(rtol)
+
+    def memory_input_names(self) -> tuple[str, ...]:
+        if self.memory_inputs is not None:
+            return self.memory_inputs
+        return tuple(
+            arg.name for arg in self.args if getattr(arg, "shape", None) is not None
+        )
+
+    def workload_weight(self, workload: Workload) -> float:
+        if self.case_weight is None:
+            return 1.0
+        return float(self.case_weight(workload))
 
     def benchmark_workloads(
         self,
@@ -348,7 +411,14 @@ class OpDecl:
         return workloads
 
 
-_DTYPE_SHORT = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}
+_DTYPE_SHORT = {
+    "float32": "f32",
+    "float16": "f16",
+    "bfloat16": "bf16",
+    "int64": "i64",
+    "int32": "i32",
+    "bool": "bool",
+}
 
 
 def example_input_spec(op: OpDecl, workload: Workload | None = None) -> str:
@@ -377,6 +447,7 @@ def declare_op(
     *,
     name: str,
     forward: str,
+    declaration: str | None = None,
     dims: tuple[str, ...],
     args: tuple[Arg, ...],
     output: Active,
@@ -390,12 +461,18 @@ def declare_op(
     tolerance_multipliers: dict[str, tuple[float, float]] | None = None,
     benchmark_suites: dict[str, tuple[Workload, ...]] | None = None,
     performance_baselines: dict[str, object] | None = None,
+    memory_inputs: tuple[str, ...] | None = None,
+    regime_feature: object | None = None,
+    regime_split: float | None = None,
+    case_weight: object | None = None,
+    tolerance_hook: object | None = None,
     make_inputs: object | None = None,
 ) -> OpDecl:
     """Build and validate an :class:`OpDecl`. The only way ops should be made."""
     op = OpDecl(
         name=name,
         forward=forward,
+        declaration=declaration,
         dims=tuple(dims),
         args=tuple(args),
         output=output,
@@ -417,6 +494,11 @@ def declare_op(
         performance_baselines=(
             dict(performance_baselines) if performance_baselines is not None else {}
         ),
+        memory_inputs=tuple(memory_inputs) if memory_inputs is not None else None,
+        regime_feature=regime_feature,
+        regime_split=regime_split,
+        case_weight=case_weight,
+        tolerance_hook=tolerance_hook,
         make_inputs=make_inputs,
     )
     op.validate()

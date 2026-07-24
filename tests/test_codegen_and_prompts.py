@@ -5,6 +5,7 @@ wrapper codegen (grad_reorder / "d"+name matching), example-input derivation
 (hand-typed README strings), prompt rendering, and config templating."""
 
 import unittest
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
@@ -73,6 +74,12 @@ class TestExampleInputSpec(unittest.TestCase):
             "(1,1,1,1,23) f32, (1,1,4,23,23) f32]",
         )
 
+    def test_cross_entropy_includes_integer_labels_and_scalar_output(self):
+        self.assertEqual(
+            example_input_spec(get_op("cross_entropy")),
+            "[(8,512) f32, (8) i64]",
+        )
+
 
 class TestPromptRendering(unittest.TestCase):
     def test_pipeline_a_rules_include_contract_and_no_grad(self):
@@ -110,11 +117,18 @@ class TestEvolveConfigRendering(unittest.TestCase):
             root = Path(td)
             seed = root / "seed.py"
             seed.write_text("# EVOLVE-BLOCK-START\npass\n# EVOLVE-BLOCK-END\n")
-            completed = mock.Mock(returncode=0)
+            observed_env = {}
+
+            def fake_run_evolution(**kwargs):
+                observed_env.update(os.environ)
+                return mock.Mock(best_code="")
+
             with (
-                mock.patch("evograd.evolve.run._openevolve_cmd", return_value=["oe"]),
-                mock.patch("evograd.evolve.run.subprocess.run", return_value=completed) as run,
-                mock.patch("evograd.evolve.run._find_best_program", return_value=None),
+                mock.patch("openevolve.run_evolution", side_effect=fake_run_evolution),
+                mock.patch(
+                    "evograd.opdecl.baselines.resolve_performance_baseline",
+                    return_value="liger",
+                ),
             ):
                 code = run_evolve(
                     get_op("layernorm"),
@@ -124,11 +138,10 @@ class TestEvolveConfigRendering(unittest.TestCase):
                     benchmark_dtypes=("float16",),
                     performance_baseline="liger",
                 )
-            self.assertEqual(code, 1)  # successful CLI without a best artifact is an integration error
-            env = run.call_args.kwargs["env"]
-            self.assertEqual(env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
-            self.assertEqual(env["EVOGRAD_BENCHMARK_DTYPES"], "float16")
-            self.assertEqual(env["EVOGRAD_PERFORMANCE_BASELINE"], "liger")
+            self.assertEqual(code, 1)
+            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
+            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_DTYPES"], "float16")
+            self.assertEqual(observed_env["EVOGRAD_PERFORMANCE_BASELINE"], "liger")
 
 
 if __name__ == "__main__":

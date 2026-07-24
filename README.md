@@ -47,6 +47,9 @@ otherwise tend to be duplicated per operator:
   gradient, including shape and dtype checks.
 - A generic OpenEvolve evaluator with speed and memory-aware scoring policies.
 - A benchmark harness for backward latency, full-step latency, and saved state.
+- A one-call file/callable interface that trains a generalist and optional
+  shape-regime specialists, then emits a measured deployment dispatcher.
+- Optional Nsight Compute-guided refinement with a strict keep-only-if-faster gate.
 - Automatic operator discovery: adding an operator does not require editing a
   central registry, evaluator, wrapper, or pipeline.
 
@@ -73,6 +76,21 @@ List the available operators:
 ```bash
 evograd ops
 ```
+
+Run the complete path for a declared op:
+
+```bash
+evograd run \
+    --op softmax \
+    --iterations 10 \
+    --gpus 1 \
+    --output-dir /tmp/evograd_softmax
+```
+
+This generates and verifies a seed, evolves full/small/large programs when the
+declaration defines shape regimes, measures them on the full grid, and writes a
+deployed pair plus JSON and Markdown reports. `--gpus 3` runs the three
+evolution groups concurrently on three visible GPUs.
 
 Generate an LLM-free LayerNorm seed with Pipeline B:
 
@@ -108,6 +126,39 @@ evograd bench \
     --op layernorm \
     --candidate /tmp/evolve_layernorm/evolved_best_program.py
 ```
+
+## One-call Python API
+
+Known operators need only their name; the reviewed declaration supplies the
+default forward and contract:
+
+```python
+from evograd import evograd
+
+result = evograd(op="softmax", output_dir="/tmp/softmax", iterations=10)
+print(result.program)
+print(result.report)
+```
+
+A forward may instead be `path.py:function` or a named, self-contained Python
+callable. For a known op it replaces only the forward reference and keeps the
+reviewed argument/activity/workload contract. For an unknown name, evograd
+first synthesizes a declaration-native contract, imports and validates it, and
+records it under `<output_dir>/scaffold/` before seed generation:
+
+```python
+import torch
+from evograd import evograd
+
+def squared_relu(x):
+    return torch.relu(x).square()
+
+result = evograd(squared_relu, op="my_squared_relu", output_dir="/tmp/my_op")
+```
+
+Callable snapshots reject lambdas, closures, and globals other than
+`math`, `torch`, and `torch.nn.functional as F`; the durable file boundary
+makes every later subprocess reproducible.
 
 ## Seed-generation pipelines
 
@@ -250,7 +301,13 @@ For every declared correctness workload, evograd:
 Only candidates that pass every correctness case are benchmarked. The harness
 reports candidate forward latency, backward-from-saved latency, forward plus
 backward latency, autograd-bound full-step latency, baseline latency, and saved
-tensor bytes.
+tensor bytes. After correctness it also makes one untimed call at every selected
+benchmark shape, so a shape-dependent deadlock is rejected before timing.
+
+Every evaluation runs in a killable child process. A candidate that hangs or
+corrupts its CUDA context is terminated without poisoning the OpenEvolve
+worker. Baseline timings are cached persistently by operator, baseline, GPU,
+timing settings, dtype, and dimensions; the candidate is always re-timed.
 
 Available scoring policies are:
 
@@ -262,26 +319,67 @@ Available scoring policies are:
 | `speed_memory_min_geomean` | Geometric-mean minimum speedup, memory-penalized |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. LayerNorm also supports an optional Liger
-baseline:
+The default is `speed_memory`. Thirteen declarations expose reviewed optional
+Liger baselines. `--baseline auto` selects Liger when its adapter and
+`liger-kernel` are available, otherwise PyTorch autograd; an explicit
+`--baseline liger` hard-fails rather than silently changing the comparison:
 
 ```bash
 pip install -e ".[baselines]"
 evograd bench --op layernorm --candidate best.py --baseline liger
 ```
 
+### NCU-guided refinement
+
+The final fork’s Nsight Compute agent is now owned by evograd instead of
+patching OpenEvolve internals:
+
+```bash
+evograd evolve \
+    --op softmax \
+    --seed seed.py \
+    --output-dir /tmp/evolve_softmax \
+    --ncu
+```
+
+The pass warms the candidate outside NCU, profiles one representative declared
+workload, performs deterministic roofline triage, asks the LLM for a
+metric-grounded diagnosis and rewrite, and runs the same correctness/performance
+evaluator again. It replaces the best program only when the rewrite is correct
+and has a strictly higher combined score. The original/proposed programs,
+`.ncu-rep`, metrics, diagnosis, and outcome are stored under `ncu_passes/`.
+
+`evograd ncu` applies the same accepted-only pass to an existing candidate.
+OpenEvolve 0.3.2 has no public per-candidate hook, so evograd refines each
+evolution group’s returned best at the supported library boundary rather than
+retaining the fork’s private every-N worker patch.
+
 ## Supported operators
 
-| Operator | Forward | Requested gradients | Benchmark dtypes |
+| Operator | Forward | Requested gradients | Liger baseline |
 |---|---|---|---|
-| `layernorm` | LayerNorm | `dx`, `dweight`, `dbias` | fp32, fp16, bf16 |
-| `rmsnorm` | RMSNorm | `dx`, `dweight` | fp32, fp16 |
-| `matmul` | `a @ b` | `da`, `db` | fp32, fp16 |
-| `linear` | `x @ weight.T + bias` | `dx`, `dweight`, `dbias` | fp32, fp16 |
-| `layernorm_linear` | LayerNorm followed by Linear | `dx`, `dlinear_weight`, `dweight`, `dbias` | fp32, fp16 |
-| `evoattention` | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias` | fp16, bf16 |
+| `cross_entropy` | mean cross-entropy loss | `dlogits` | yes |
+| `dyt` | dynamic tanh | `dx`, `dalpha`, `dgamma`, `dbeta` | yes |
+| `evoattention` | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias` | no |
+| `fused_add_rms_norm` | residual add plus RMSNorm | `dx`, `dr`, `dweight` | yes |
+| `geglu` | GeGLU activation | `da`, `db` | yes |
+| `jsd` | Jensen-Shannon divergence | `dlog_q` | yes |
+| `kl_div` | KL divergence | `d_input` | yes |
+| `layernorm` | LayerNorm | `dx`, `dweight`, `dbias` | yes |
+| `layernorm_linear` | LayerNorm followed by Linear | `dx`, `dlinear_weight`, `dweight`, `dbias` | no |
+| `linear` | `x @ weight.T + bias` | `dx`, `dweight`, `dbias` | no |
+| `matmul` | `a @ b` | `da`, `db` | no |
+| `poly_norm` | polynomial normalization | `dx`, `dweight`, `dbias` | yes |
+| `relu_squared` | `relu(x)²` | `dx` | yes |
+| `rmsnorm` | RMSNorm | `dx`, `dweight` | no |
+| `softmax` | row-wise softmax | `dx` | yes |
+| `sparsemax` | simplex projection | `dx` | yes |
+| `swiglu` | SwiGLU activation | `da`, `db` | yes |
+| `tvd` | total-variation distance | `dp`, `dq` | yes |
 
-LayerNorm includes the legacy and TritonBench shape suites:
+The twelve Liger-derived additions carry exact final-fork correctness cases,
+bf16 benchmark grids, workload weighting, and full/small/large regime suites.
+LayerNorm also includes the legacy and TritonBench shape suites:
 
 ```bash
 evograd bench \
@@ -307,15 +405,29 @@ the operator is available to `evograd ops`, all three seed pipelines,
 verification, evolution, and benchmarking without additional evaluator or
 wrapper files.
 
+To bootstrap a draft from a forward:
+
+```bash
+evograd scaffold \
+    --op my_op \
+    --forward /path/to/forward.py:my_forward \
+    --output-dir /tmp/my_op_contract
+```
+
+This is the declaration-native replacement for the fork’s generated
+`task_spec.py`: the LLM supplies input semantics, activity, shapes, and regimes;
+code builds the declaration and PyTorch-autograd oracle mechanically. Review
+the generated contract before publishing it as a built-in package.
+
 For operators with semantic masks, scaled weights, integer-like inputs, or
 special initialization, define a declaration-local `make_inputs` hook. If
 Pipeline B encounters an unsupported Aten operation, add its lowering under
 `src/evograd/atenir/primitive_triton/`.
 
-The current declaration model targets deterministic, single-tensor-output,
-dense floating-point operators. Multiple outputs, sparse gradients, integer
-index tensors, and stateful operators require extensions to the declaration and
-input/extraction APIs.
+The current declaration model targets deterministic, single-tensor-output
+operators. Integer/bool tensor inputs are supported as `Inactive` values
+(cross-entropy labels are the worked example). Multiple outputs, sparse
+gradients, and stateful operators require declaration/API extensions.
 
 ## Repository layout
 
@@ -334,6 +446,10 @@ src/evograd/
 │   └── shared/
 ├── evolve/                    # OpenEvolve evaluator, scoring, and run wrapper
 ├── bench/                     # generic latency and memory harness
+├── ncu/                       # NCU profiling, roofline triage, accepted refinement
+├── scaffold.py                # forward -> external declare_op contract
+├── dispatch.py                # measured generalist/specialist deployment
+├── api.py                     # one-call Python workflow
 └── cli.py                     # evograd command-line interface
 ```
 
@@ -342,6 +458,9 @@ Evograd supplies the initial program, evaluator, generated configuration, and
 operator-specific environment; OpenEvolve supplies the evolutionary search,
 program database, LLM orchestration, and checkpointing.
 
+See [the final migration audit](docs/MIGRATION_AUDIT.md) for the commit-by-commit
+comparison with fork `origin/main` at `e7e1e3a`.
+
 ## Project status
 
 Evograd is the declaration-driven successor to the AtenIR, pipeline, and Triton
@@ -349,13 +468,15 @@ backward-benchmark work previously developed in an OpenEvolve fork.
 
 Locally validated:
 
-- 49 unit tests pass.
+- 63 unit tests pass.
 - Eight torch-facing unit tests are present but skip on machines without
   PyTorch.
-- All six declarations match the legacy correctness cases, benchmark cases,
+- All 18 declarations match the final-fork correctness cases, benchmark cases,
   per-output tolerances, input distributions, and seed recipes.
-- The AtenIR implementation is byte-identical to the legacy implementation.
-- The OpenEvolve 0.2.27 model-list configuration loads successfully.
+- AtenIR preserves the migrated implementation and includes final-main support
+  for inactive integer/bool inputs such as class labels.
+- The rendered configuration and `run_evolution` call shape load against
+  upstream OpenEvolve 0.3.2.
 - Source compilation, wheel build, clean wheel installation, automatic operator
   discovery, and package-data checks pass.
 

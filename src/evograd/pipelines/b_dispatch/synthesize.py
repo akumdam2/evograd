@@ -48,6 +48,7 @@ class HandwrittenDispatchConfig:
     fp16_atol: float
     fp16_rtol: float
     python: str
+    eval_timeout: int = 120
     emit_autograd_pair_seed: bool = True
     # Extract the AtenIR graph with symbolic shapes so the generated program is
     # correct at any input shape (no traced dims baked into expand/view/scalars).
@@ -246,8 +247,9 @@ def _run_dtype(
         }
 
     dtype = _DTYPES[dtype_name]
-    mod_name, fn_name = (forward.split(":", 1) if ":" in forward else forward.rsplit(".", 1))
-    forward_fn = getattr(importlib.import_module(mod_name), fn_name)
+    from evograd.opdecl.importing import resolve_callable
+
+    forward_fn = resolve_callable(forward)
     fwd_shapes = [tuple(ph["shape"]) for ph in placeholders[1:]]
 
     torch.manual_seed(seed)
@@ -368,6 +370,8 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
             log_dir=config.output_dir,
             dtypes=normalized_dtypes,
             forward=config.forward,
+            declaration=config.op.declaration,
+            timeout=config.eval_timeout,
         )
         passed = report_passed(result)
         verify_report = result.get("verify", {})

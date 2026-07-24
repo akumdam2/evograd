@@ -12,7 +12,7 @@ license = { text = "Apache-2.0" }
 dependencies = [
     "pyyaml",
     "torch",
-    "openevolve>=0.2.27,<0.3",
+    "openevolve>=0.3.2,<0.4",
 ]
 
 [project.optional-dependencies]
