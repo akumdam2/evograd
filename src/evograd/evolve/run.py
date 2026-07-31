@@ -78,6 +78,7 @@ def run_evolve(
     api_base: str = "https://api.openai.com/v1",
     benchmark_suite: str | None = None,
     benchmark_dtypes: tuple[str, ...] | None = None,
+    dtype: str | None = None,
     performance_baseline: str = "auto",
     extra_env: dict[str, str] | None = None,
     ncu: bool = False,
@@ -131,6 +132,16 @@ def run_evolve(
         op.benchmark_workloads(dtypes=benchmark_dtypes)
     if benchmark_dtypes:
         env["EVOGRAD_BENCHMARK_DTYPES"] = ",".join(benchmark_dtypes)
+    if dtype:
+        # Dtype-specialist run (Pipeline D seeds): gate correctness on this
+        # dtype alone, and measure on it too unless the caller asked otherwise.
+        if not any(w.dtype == dtype for w in op.correctness):
+            raise ValueError(
+                f"{op.name}: no declared correctness workload with dtype {dtype!r}; "
+                f"available: {sorted({w.dtype for w in op.correctness})}"
+            )
+        env["EVOGRAD_CORRECTNESS_DTYPES"] = dtype
+        env.setdefault("EVOGRAD_BENCHMARK_DTYPES", dtype)
     if performance_baseline != "pytorch_autograd":
         env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
     if extra_env:

@@ -6,7 +6,7 @@ PyTorch forward function.**
 Evograd turns an operator definition into a training-ready *autograd pair*: a
 forward function that chooses what to save and a backward function that consumes
 that saved state. It can generate the initial Triton implementation through
-three research pipelines, verify it against PyTorch autograd, optimize it with
+four research pipelines, verify it against PyTorch autograd, optimize it with
 [OpenEvolve](https://github.com/algorithmicsuperintelligence/openevolve), and
 measure its speed and saved-tensor memory.
 
@@ -14,7 +14,7 @@ measure its speed and saved-tensor memory.
 PyTorch forward reference + operator declaration
                          │
                          ▼
-              Pipeline A, B, or C
+            Pipeline A, B, C, or D
                          │
                          ▼
              Triton forward/backward seed
@@ -41,7 +41,7 @@ otherwise tend to be duplicated per operator:
 
 - A typed declaration of inputs, outputs, shapes, differentiation activity,
   workloads, and tolerances.
-- Three ways to generate a Triton autograd-pair seed.
+- Four ways to generate a Triton autograd-pair seed.
 - A PyTorch-autograd oracle derived from the declared forward reference.
 - A hard correctness gate for the candidate forward and every requested
   gradient, including shape and dtype checks.
@@ -162,7 +162,7 @@ makes every later subprocess reproducible.
 
 ## Seed-generation pipelines
 
-All three pipelines target the same candidate API and use the same declaration,
+All four pipelines target the same candidate API and use the same declaration,
 oracle, and verification path.
 
 | Pipeline | Inputs | Generation method | LLM required |
@@ -170,12 +170,98 @@ oracle, and verification path.
 | **A — AtenIR + LLM** | Forward reference and extracted AtenIR backward graph | LLM plans, generates, and repairs fused Triton code | Yes |
 | **B — primitive dispatch** | Forward reference and extracted AtenIR backward graph | Handwritten Aten-to-Triton primitive lowering followed by dispatch-free code generation | No |
 | **C — forward only** | Forward source and declared contract | LLM derives the backward without seeing AtenIR; used as an ablation | Yes |
+| **D — Inductor capture** | Forward reference only | AOTAutograd traces the joint graph, the min-cut partitioner splits it, and Inductor lowers both halves | No |
 
 ```bash
 evograd seed a --op rmsnorm --output-dir /tmp/A_rmsnorm --model gpt-5.5
 evograd seed b --op rmsnorm --output-dir /tmp/B_rmsnorm
 evograd seed c --op rmsnorm --output-dir /tmp/C_rmsnorm --model gpt-5.5
+evograd seed d --op rmsnorm --output-dir /tmp/D_rmsnorm
 ```
+
+### Pipeline D and the saved-tensor contract
+
+Pipelines A–C choose what the forward saves: B's seed keeps only the forward's
+own inputs and recomputes everything, and A and C leave the choice to the LLM.
+Pipeline D takes PyTorch's answer instead. `min_cut_rematerialization_partition`
+solves for the cheapest set of tensors to carry from forward to backward, and
+the seed is built around that save-set, so the two halves start from the same
+contract `torch.compile` would have used.
+
+That makes D both the strongest available seed and a reference point: it is the
+production compiler's answer to the same question the search explores, so a run
+that moves off the captured save-set is a measurable result rather than an
+assumption. The chosen set is recorded in `partitioner_save_set.json`.
+
+A Pipeline D run emits **one seed per dtype**. Inductor specializes on dtype, so
+a single seed handles a single dtype; shapes are generic because the capture uses
+dynamic shapes. Each seed holds exactly one forward and one backward kernel set:
+
+```text
+/tmp/D_rmsnorm/
+├── float32/
+│   ├── inductor_raw/{forward,backward}.py   # unmodified Inductor modules
+│   ├── partitioner_save_set.json            # the min-cut's choice, and its byte cost
+│   ├── initial_program_autograd_pair.py     # 1 forward + 1 backward kernel
+│   └── verification_report.json
+├── float16/
+│   └── ...
+└── seeds.json                               # index over the specialists
+```
+
+With `--dtype float16` the single seed is written directly into `--output-dir`
+instead, so it drops into the existing tooling unchanged.
+
+Evolve a specialist with `--dtype`, which gates correctness on that dtype alone
+and measures on it by default:
+
+```bash
+evograd evolve --op rmsnorm \
+    --seed /tmp/D_rmsnorm/float16/initial_program_autograd_pair.py \
+    --dtype float16 --output-dir /tmp/E_rmsnorm_f16
+```
+
+Three properties of the capture are worth knowing:
+
+- **Dynamic shapes by default**, so the kernels take sizes as runtime arguments
+  and one seed covers the whole workload grid. Dimensions that are *equal* at
+  trace time get unified into one symbol, so the pipeline picks a workload whose
+  dims are pairwise distinct, perturbing one if the declaration has none.
+- **Scalar arguments are baked in** at trace time (`eps`, and similar). The
+  wrapper still accepts them for API compatibility; changing one means
+  re-capturing, or rewriting the kernels to take it as a runtime argument.
+- **The seed refuses the wrong dtype** rather than silently mis-computing.
+
+`--no-autotune` pins each kernel to the launch config autotuning chose during
+capture, swapping `@triton_heuristics.pointwise`/`.reduction` for
+`fixed_config`. The sweep at first call disappears, block sizes become explicit
+constants, and timings stop depending on which workload happened to run first.
+`triton_meta` and `inductor_meta` are carried over untouched -- the first is
+what Triton needs to compile, the second carries `grid_type` and hence the
+launch grid; neither is a tuning input. Pinning the *winner* rather than a
+default keeps the untuned seed as fast as the tuned one, which makes this the
+right mode for isolating what autotuning contributes.
+
+Inductor ships each Triton kernel as source text inside an
+`async_compile.triton(...)` call. That text already carries its own imports and
+`@triton_heuristics.*` / `@triton.jit` decorators, so the pipeline splices it in
+at module level: the same name binds to the same autotuner, the `.run(...)`
+launch sites keep working, and the kernel becomes readable code the search can
+edit instead of a quoted blob. The result matches Pipeline B's shape — plain
+`@triton.jit` kernels plus Python wrappers. Inductor's `call(args)` list
+protocol is rewritten to named parameters at the same time, so `_fwd_call` and
+`_bwd_call` read like hand-written launchers.
+
+A CPU capture emits C++ instead of Triton, which cannot be inlined as Python and
+stays in `async_compile` form — that path exists to check the plumbing without a
+GPU, not to produce a seed anyone evolves.
+
+Pipeline D needs no primitive coverage — anything Inductor can lower, it can
+seed. Where Inductor falls back to a vendor library, the seed contains an
+`extern_kernels` call rather than a kernel, and only the surrounding work is
+open to the search. `matmul` is the extreme case: its seed contains **zero**
+generated kernels, because both the forward and the backward are cuBLAS calls.
+`linear` has one (the `dbias` reduction) and `evoattention` has six.
 
 A successful Pipeline B run writes:
 
@@ -443,6 +529,7 @@ src/evograd/
 │   ├── a_atenir_llm/          # AtenIR-grounded LLM synthesis
 │   ├── b_dispatch/            # LLM-free primitive lowering and code generation
 │   ├── c_forward_only/        # forward-only LLM ablation
+│   ├── d_inductor/           # LLM-free capture of Inductor's own kernels
 │   └── shared/
 ├── evolve/                    # OpenEvolve evaluator, scoring, and run wrapper
 ├── bench/                     # generic latency and memory harness

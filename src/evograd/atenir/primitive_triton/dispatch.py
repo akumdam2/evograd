@@ -690,8 +690,17 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return unsqueeze_kernel
 
     if "aten.squeeze" in target:
-        dim = int(scalar_args[0]) if scalar_args else None
-        if dim is not None:
+        # Three overloads: squeeze.default (no dim), squeeze.dim (an int), and
+        # squeeze.dims (a list). torch.squeeze accepts an int or a tuple.
+        raw = scalar_args[0] if scalar_args else None
+        if isinstance(raw, (list, tuple)):
+            dims = tuple(int(d) for d in raw)
+
+            def squeeze_kernel(a):
+                return a.squeeze(dims)
+
+        elif raw is not None:
+            dim = int(raw)
 
             def squeeze_kernel(a):
                 return a.squeeze(dim)

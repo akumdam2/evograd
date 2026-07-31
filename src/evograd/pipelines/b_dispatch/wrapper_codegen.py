@@ -58,7 +58,11 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
 
     saved = ", ".join(f"{n}.contiguous()" for n in tensor_names)
     saved_tuple = f"({saved},)" if len(tensor_names) == 1 else f"({saved})"
-    unpack = f"{', '.join(tensor_names)} = saved_tensors[:{len(tensor_names)}]"
+    # A single target with a slice on the right is a plain assignment, not
+    # unpacking, so a one-tensor op would bind the whole tuple. The trailing
+    # comma forces unpacking, mirroring the tuple built just above.
+    targets = ", ".join(tensor_names) + ("," if len(tensor_names) == 1 else "")
+    unpack = f"{targets} = saved_tensors[:{len(tensor_names)}]"
     run_args = ",\n        ".join(
         [f"{op.upstream_grad_name}.contiguous()"] + [f"{n}.contiguous()" for n in tensor_names]
     )

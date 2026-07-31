@@ -203,8 +203,28 @@ def _seed(
             )
         )
         path = output_dir / "best" / "initial_program_autograd_pair.py"
+    elif pipeline == "d":
+        from evograd.pipelines.d_inductor.synthesize import (
+            InductorSeedConfig,
+            synthesize_inductor_seed,
+        )
+
+        # Pipeline D seeds are dtype specialists. The one-call flow drives a
+        # single evolution, so it takes the first declared dtype; use the CLI
+        # to build and evolve a specialist per dtype.
+        dtypes = tuple(dict.fromkeys(case.dtype for case in op.correctness))
+        rc = synthesize_inductor_seed(
+            InductorSeedConfig(
+                op=op,
+                forward=op.forward,
+                output_dir=output_dir,
+                dtypes=dtypes[:1],
+                python=os.sys.executable,
+            )
+        )
+        path = output_dir / "initial_program_autograd_pair.py"
     else:
-        raise ValueError("pipeline must be one of: a, b, c")
+        raise ValueError("pipeline must be one of: a, b, c, d")
     if rc != 0 or not path.is_file():
         raise RuntimeError(f"Pipeline {pipeline.upper()} failed for {op.name}")
     return path
