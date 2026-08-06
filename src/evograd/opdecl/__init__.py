@@ -30,7 +30,12 @@ _LAZY = {
 
 def __getattr__(name: str):
     if name in _LAZY:
-        return getattr(importlib.import_module(_LAZY[name]), name)
+        value = getattr(importlib.import_module(_LAZY[name]), name)
+        # Importing e.g. evograd.opdecl.oracle pins the *submodule* onto this
+        # package under the same name, shadowing the lazy export on the next
+        # lookup. Cache the resolved object afterwards so it wins.
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

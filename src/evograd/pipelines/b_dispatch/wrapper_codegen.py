@@ -58,7 +58,10 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
 
     saved = ", ".join(f"{n}.contiguous()" for n in tensor_names)
     saved_tuple = f"({saved},)" if len(tensor_names) == 1 else f"({saved})"
-    unpack = f"{', '.join(tensor_names)} = saved_tensors[:{len(tensor_names)}]"
+    # Trailing comma so a single name still tuple-unpacks (plain `x = t[:1]`
+    # would bind the one-element slice itself, not the tensor).
+    unpack_targets = ", ".join(tensor_names) + ("," if len(tensor_names) == 1 else "")
+    unpack = f"{unpack_targets} = saved_tensors[:{len(tensor_names)}]"
     run_args = ",\n        ".join(
         [f"{op.upstream_grad_name}.contiguous()"] + [f"{n}.contiguous()" for n in tensor_names]
     )

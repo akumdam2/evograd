@@ -31,7 +31,7 @@ def _resolve_aten(target: str):
     return obj
 
 
-def _generic_fallback(target: str) -> Callable:
+def _generic_fallback(target: str, node: dict | None = None) -> Callable:
     try:
         op = _resolve_aten(target)
     except (AttributeError, ValueError):
@@ -43,8 +43,24 @@ def _generic_fallback(target: str) -> Callable:
         fn._dispatch_tag = f"pytorch:unimplemented[{target}]"
         return fn
 
-    def fn(*args):
-        return op(*args)
+    ao = (node or {}).get("args_ordered") or []
+    if any(e.get("kind") == "scalar" for e in ao):
+        # compose.run_graph passes only tensor/sym/shape-list args; literal
+        # scalars (dim ints, descending flags, fill values, …) must be baked
+        # here and re-interleaved at their positional slots, or the aten op
+        # silently runs with its defaults (or fails on missing arguments).
+        plan = [(e.get("kind") == "scalar", e.get("value")) for e in ao]
+
+        def fn(*args):
+            runtime = iter(args)
+            full = [value if is_scalar else next(runtime) for is_scalar, value in plan]
+            full.extend(runtime)
+            return op(*full)
+
+    else:
+
+        def fn(*args):
+            return op(*args)
 
     fn.__name__ = fn.__qualname__ = f"pytorch_fallback[{target}]"
     fn._dispatch_tag = f"pytorch:fallback[{target}]"
@@ -200,6 +216,45 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
                 return elementwise.mul_scalar(a, float(s))
 
             return _mul_sym
+
+    if has_shape_list and "aten.full" in target and "full_like" not in target:
+        # aten.full with a symbolic size list (e.g. poly_norm's constant mask).
+        out_dtype = _parse_dtype(node.get("output_dtype") or "") or torch.float32
+        fill_val = scalar_args[0] if scalar_args else 0.0
+
+        def _full_rt(shape):
+            return torch.full(
+                tuple(int(s) for s in shape), fill_val, dtype=out_dtype, device="cuda"
+            )
+
+        return _full_rt
+
+    if n_sym_nodes and "aten.arange" in target:
+        # aten.arange whose *end* is a runtime size (e.g. sparsemax's
+        # arange(1, N + 1)). Positional numerics before the symbolic end are
+        # the start, after it the step; trailing bools are flattened kwargs
+        # (pin_memory). A symbolic start falls through to the loud failure.
+        sym_pos = next(i for i, e in enumerate(ao) if e.get("kind") == "sym_node")
+        if sym_pos > 0 or target.endswith(".default"):
+            out_dtype = _parse_dtype(node.get("output_dtype") or "") or torch.int64
+
+            def _is_positional_num(entry):
+                value = entry.get("value")
+                return (
+                    entry.get("kind") == "scalar"
+                    and isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                )
+
+            before = [e["value"] for e in ao[:sym_pos] if _is_positional_num(e)]
+            after = [e["value"] for e in ao[sym_pos + 1 :] if _is_positional_num(e)]
+            start = before[0] if before else 0
+            step = after[0] if after else 1
+
+            def _arange_rt(end):
+                return torch.arange(start, end, step, dtype=out_dtype, device="cuda")
+
+            return _arange_rt
 
     if n_sym_nodes or has_shape_list:
         # Fail loudly: falling through to the static branches would bake a stale
@@ -443,7 +498,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
                 return elementwise.softplus(a)
 
             return _softplus
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     if "aten.hardsigmoid" in target:
         return elementwise.hardsigmoid
@@ -492,7 +547,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         lo = float(all_scalars[0]) if len(all_scalars) > 0 and all_scalars[0] is not None else None
         hi = float(all_scalars[1]) if len(all_scalars) > 1 and all_scalars[1] is not None else None
         if n_tensors >= 2:
-            return _generic_fallback(target)
+            return _generic_fallback(target, node)
 
         def _clamp(a):
             return elementwise.clamp_(a, lo, hi)
@@ -690,7 +745,12 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return unsqueeze_kernel
 
     if "aten.squeeze" in target:
-        dim = int(scalar_args[0]) if scalar_args else None
+        # aten.squeeze.dim passes an int; aten.squeeze.dims passes a list.
+        raw = scalar_args[0] if scalar_args else None
+        if isinstance(raw, (list, tuple)):
+            dim = tuple(int(d) for d in raw)
+        else:
+            dim = int(raw) if raw is not None else None
         if dim is not None:
 
             def squeeze_kernel(a):
@@ -745,10 +805,10 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return permute_kernel
 
     if "aten.select" in target or "aten.slice" in target:
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     if "aten.repeat" in target:
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     # ── Category 4: GEMM — Triton kernels (mm/bmm/addmm) ─────────────────────
 
@@ -824,7 +884,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return scatter_add_kernel
 
     if "aten.scatter" in target:
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     if "aten.gather" in target:
         dim = int(scalar_args[0]) if scalar_args else 0
@@ -846,10 +906,10 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return topk_kernel
 
     if "aten._softmax" in target or "aten.log_softmax" in target:
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     if "aten.index" in target:
-        return _generic_fallback(target)
+        return _generic_fallback(target, node)
 
     if "getitem" in target:
         idx = int(scalar_args[0]) if scalar_args else 0
@@ -859,7 +919,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return getitem_kernel
 
-    return _generic_fallback(target)
+    return _generic_fallback(target, node)
 
 
 def _kernel_label(fn: Callable) -> str:

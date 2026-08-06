@@ -22,12 +22,24 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+import math
 import textwrap
 from typing import Any, Callable
 
 import torch
 
 _SUBMODULE_NAMES = ("elementwise", "reduction", "gemm", "scatter_gather")
+
+
+def _scalar_literal(value: Any) -> str:
+    """Literal Python for a baked scalar value.
+
+    ``repr`` except for non-finite floats: ``repr(nan)`` is the bare name
+    ``nan``, which is not valid Python source.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return f"float('{value!r}')"
+    return repr(value)
 
 
 def _unwrap_jit(fn: Callable) -> Callable:
@@ -130,7 +142,7 @@ class _ProgramBuilder:
         """
         target = node.get("target", "")
         if self._is_generic_fallback(kernel):
-            return self._generic_fallback_call(target, arg_exprs)
+            return self._generic_fallback_call(target, arg_exprs, node)
         if self._is_unimplemented(kernel):
             raise NotImplementedError(f"No hand-written kernel for target {target!r}")
         callee = self._resolve(kernel)
@@ -220,6 +232,8 @@ class _ProgramBuilder:
             return self._resolve(value)
         if isinstance(value, torch.dtype):
             return repr(value)  # e.g. "torch.float32" — valid given `import torch`
+        if isinstance(value, float) and not math.isfinite(value):
+            return _scalar_literal(value)  # nan/inf: repr is not valid source
         text = repr(value)
         try:
             ast.literal_eval(text)
@@ -311,7 +325,9 @@ class _ProgramBuilder:
         tag = getattr(kernel, "_dispatch_tag", "")
         return tag.startswith("pytorch:unimplemented[")
 
-    def _generic_fallback_call(self, target: str, arg_exprs: list[str]) -> str:
+    def _generic_fallback_call(
+        self, target: str, arg_exprs: list[str], node: dict | None = None
+    ) -> str:
         """Targets dispatch.py routes to plain `torch.ops.aten.*` (no Triton kernel
         exists for them yet). Resolve via attribute traversal — not string-matching
         dispatch logic, just the aten op the target string already names.
@@ -319,7 +335,21 @@ class _ProgramBuilder:
         self.constants.setdefault(
             "_resolve_aten", inspect.getsource(self.dispatch_mod._resolve_aten)
         )
-        return f"_resolve_aten({target!r})({', '.join(arg_exprs)})"
+        args_ordered = (node or {}).get("args_ordered") or []
+        if any(e.get("kind") == "scalar" for e in args_ordered):
+            # arg_exprs carries only tensor/sym/shape-list expressions (in
+            # args_ordered order); the raw aten op needs every positional arg,
+            # so scalar literals (dim ints, descending flags, fill values, …)
+            # are re-interleaved at their slots.
+            runtime = iter(arg_exprs)
+            exprs = [
+                _scalar_literal(e.get("value")) if e.get("kind") == "scalar" else next(runtime)
+                for e in args_ordered
+            ]
+            exprs.extend(runtime)
+        else:
+            exprs = arg_exprs
+        return f"_resolve_aten({target!r})({', '.join(exprs)})"
 
     def _submodule_short(self, modname: str) -> str | None:
         for short in _SUBMODULE_NAMES:
