@@ -622,10 +622,19 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--op", required=True)
     parser.add_argument("--scoring", default="speed_memory")
+    parser.add_argument(
+        "--baseline",
+        default=os.environ.get("EVOGRAD_PERFORMANCE_BASELINE", "pytorch_autograd"),
+        help="performance baseline (matches evaluator_entry's env default)",
+    )
     parser.add_argument("program")
     args = parser.parse_args(argv)
 
-    evaluate = build_evaluate(get_op(args.op), get_policy(args.scoring))
+    evaluate = build_evaluate(
+        get_op(args.op),
+        get_policy(args.scoring),
+        performance_baseline=args.baseline,
+    )
     result = evaluate(args.program)
     print(json.dumps({"metrics": result.metrics, "artifacts": result.artifacts}, indent=2))
     return 0 if result.metrics.get("correct", 0.0) == 1.0 else 1
