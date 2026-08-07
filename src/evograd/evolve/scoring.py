@@ -46,11 +46,44 @@ CUSTOM_FEATURE_DIMENSION_DEFAULTS: dict[str, float] = {
     # consistent with that contract.
     "small_regime_speedup": 0.0,
     "large_regime_speedup": 0.0,
+    # >1 = large-shape specialist, <1 = small-shape specialist, 1 = generalist.
+    "shape_specialization": 1.0,
 }
 # saved_memory_ratio is the behavioral axis that matters for autograd pairs:
 # it keeps recompute-heavy and cache-heavy backward strategies in separate
 # cells instead of letting the memory penalty collapse the tradeoff.
 DEFAULT_FEATURE_DIMENSIONS = ("complexity", "saved_memory_ratio")
+
+
+def shape_specialization_from_cases(cases: list[dict]) -> float:
+    """Large-shape vs small-shape full-step speedup ratio for MAP-Elites.
+
+    Splits the benchmark cases at the median problem size (product of the
+    case's dims) and returns geomean(large speedups) / geomean(small
+    speedups). Unlike the declared-split regime axes above, this is a single
+    scale-free ratio usable on ops with no declared regime_feature. Keeping it
+    as a feature dimension retains small-shape and large-shape specialists as
+    separate elites instead of the aggregate score collapsing them into one
+    generalist.
+    """
+    sized = []
+    for case in cases:
+        dims = case.get("dims") or {}
+        speedup = case.get("speedup_vs_baseline_full_step")
+        if not dims or not speedup or speedup <= 0.0:
+            continue
+        size = 1
+        for value in dims.values():
+            size *= int(value)
+        sized.append((size, float(speedup)))
+    if len(sized) < 2:
+        return 1.0
+    cutoff = sorted(size for size, _ in sized)[len(sized) // 2]
+    small = [s for size, s in sized if size < cutoff]
+    large = [s for size, s in sized if size >= cutoff]
+    if not small or not large:
+        return 1.0
+    return geomean(large) / geomean(small)
 
 
 def validate_feature_dimensions(dimensions: tuple[str, ...]) -> tuple[str, ...]:

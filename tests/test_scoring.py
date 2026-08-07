@@ -97,5 +97,59 @@ class TestGeomeans(unittest.TestCase):
         self.assertAlmostEqual(weighted_geomean([2.0, 8.0], [1.0, 3.0]), 2 ** 2.5)
 
 
+class TestShapeSpecialization(unittest.TestCase):
+    @staticmethod
+    def _case(rows, hidden, speedup):
+        return {
+            "dims": {"rows": rows, "hidden": hidden},
+            "speedup_vs_baseline_full_step": speedup,
+        }
+
+    def test_large_shape_specialist_scores_above_one(self):
+        from evograd.evolve.scoring import shape_specialization_from_cases
+
+        cases = [
+            self._case(1, 768, 1.0),
+            self._case(8, 1024, 1.0),
+            self._case(256, 4096, 2.0),
+            self._case(4096, 8192, 2.0),
+        ]
+        self.assertAlmostEqual(shape_specialization_from_cases(cases), 2.0)
+
+    def test_small_shape_specialist_scores_below_one(self):
+        from evograd.evolve.scoring import shape_specialization_from_cases
+
+        cases = [
+            self._case(1, 768, 3.0),
+            self._case(8, 1024, 3.0),
+            self._case(256, 4096, 1.5),
+            self._case(4096, 8192, 1.5),
+        ]
+        self.assertAlmostEqual(shape_specialization_from_cases(cases), 0.5)
+
+    def test_degenerate_inputs_are_neutral(self):
+        from evograd.evolve.scoring import shape_specialization_from_cases
+
+        self.assertEqual(shape_specialization_from_cases([]), 1.0)
+        self.assertEqual(
+            shape_specialization_from_cases([self._case(4, 4, 2.0)]), 1.0
+        )
+        # All cases the same size: no small/large split exists.
+        same = [self._case(4, 4, s) for s in (1.0, 2.0, 3.0)]
+        self.assertEqual(shape_specialization_from_cases(same), 1.0)
+        # Missing/invalid speedups are skipped.
+        broken = [{"dims": {"r": 2}}, {"dims": {"r": 4096}, "speedup_vs_baseline_full_step": 0.0}]
+        self.assertEqual(shape_specialization_from_cases(broken), 1.0)
+
+    def test_registered_as_feature_dimension(self):
+        from evograd.evolve.scoring import (
+            CUSTOM_FEATURE_DIMENSION_DEFAULTS,
+            validate_feature_dimensions,
+        )
+
+        self.assertEqual(CUSTOM_FEATURE_DIMENSION_DEFAULTS["shape_specialization"], 1.0)
+        validate_feature_dimensions(("complexity", "shape_specialization"))
+
+
 if __name__ == "__main__":
     unittest.main()

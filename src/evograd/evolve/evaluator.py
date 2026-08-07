@@ -45,6 +45,7 @@ from evograd.evolve.scoring import (
     ScoringPolicy,
     regime_speedup_metrics,
     score_from_aggregate,
+    shape_specialization_from_cases,
 )
 
 try:
@@ -522,6 +523,12 @@ def build_evaluate(
         metrics.update(_baseline_metrics(aggregate))
         metrics.update({k: float(v) for k, v in score_details.items()})
         metrics.update({f"{name}_correct": 1.0 for name in grad_names})
+        try:
+            metrics["shape_specialization"] = float(
+                shape_specialization_from_cases(benchmark.get("cases") or [])
+            )
+        except Exception:
+            pass  # _result fills the neutral default; never fail an eval over this
         benchmark["score_mode"] = policy.mode
         benchmark["scoring_policy"] = policy.name
         benchmark["performance_baseline"] = performance_baseline
