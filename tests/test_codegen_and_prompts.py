@@ -30,8 +30,12 @@ class TestWrapperCodegen(unittest.TestCase):
         wrapper = render_autograd_pair_wrapper("m:f", op)
         self.assertIn("def layernorm_forward_with_saved(x, weight, bias, eps=1e-5):", wrapper)
         self.assertIn("def layernorm_backward_from_saved(dy, saved_tensors, eps=1e-5):", wrapper)
-        self.assertIn("return run_graph_program(", wrapper)
-        self.assertNotIn("_grads[", wrapper)  # identity: no index selection needed
+        # Grads are cast to their source input's dtype (autograd contract).
+        self.assertIn(
+            "return (_grads[0].to(x.dtype), _grads[1].to(weight.dtype), "
+            "_grads[2].to(bias.dtype))",
+            wrapper,
+        )
 
     def test_single_tensor_op_unpacks_rather_than_binding_the_tuple(self):
         # `x = saved_tensors[:1]` is a plain assignment, so a one-tensor op
@@ -65,7 +69,11 @@ class TestWrapperCodegen(unittest.TestCase):
         # res_mask is tensor arg index 3; its graph gradient is skipped.
         self.assertEqual(grad_indices(op), [0, 1, 2, 4])
         wrapper = render_autograd_pair_wrapper("m:f", op)
-        self.assertIn("return (_grads[0], _grads[1], _grads[2], _grads[4])", wrapper)
+        self.assertIn(
+            "return (_grads[0].to(q.dtype), _grads[1].to(k.dtype), "
+            "_grads[2].to(v.dtype), _grads[4].to(pair_bias.dtype))",
+            wrapper,
+        )
         self.assertIn("def evoattention_backward_from_saved(do, saved_tensors):", wrapper)
         self.assertNotIn("eps", wrapper)  # no scalar consts on this op
 
@@ -74,7 +82,11 @@ class TestWrapperCodegen(unittest.TestCase):
         # contract order: dx, dlinear_weight, dweight, dbias
         self.assertEqual(grad_indices(op), [0, 3, 1, 2])
         wrapper = render_autograd_pair_wrapper("m:f", op)
-        self.assertIn("return (_grads[0], _grads[3], _grads[1], _grads[2])", wrapper)
+        self.assertIn(
+            "return (_grads[0].to(x.dtype), _grads[3].to(linear_weight.dtype), "
+            "_grads[1].to(weight.dtype), _grads[2].to(bias.dtype))",
+            wrapper,
+        )
 
     def test_inactive_tensor_does_not_create_graph_gradient_slot(self):
         op = get_op("fused_moe_swiglu")

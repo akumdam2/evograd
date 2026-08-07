@@ -74,23 +74,25 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     )
     unused_scalars = "".join(f"    _ = {c.name}\n" for c in scalar_inactive)
 
-    # An Active-only op with declaration-order grads can return the graph
-    # outputs directly; anything else (Inactive tensors to drop, grad_order
-    # overrides) selects by index.
-    if indices == list(range(len(op.active_args()))):
-        backward_body = (
-            f"{unused_scalars}"
-            f"    {unpack}\n"
-            f"    return run_graph_program(\n        {run_args},\n    )"
-        )
-    else:
-        ret = ", ".join(f"_grads[{i}]" for i in indices)
-        backward_body = (
-            f"{unused_scalars}"
-            f"    {unpack}\n"
-            f"    _grads = run_graph_program(\n        {run_args},\n    )\n"
-            f"    return ({ret})"
-        )
+    # Select grads by index and cast each to its source input's dtype — the
+    # autograd contract. Dtype-generic graph programs bake extraction-time
+    # dtypes into materialized constants (aten.full/scalar_tensor), so a
+    # low-precision run can drift to fp32 internally; the cast is a no-op
+    # when dtypes already match. `indices` live in graph-gradient space
+    # (differentiable placeholders only), so the cast source is looked up by
+    # the grad's own arg name, never by tensor-arg position.
+    by_grad = {a.grad_name: a.name for a in op.active_args()}
+    grad_sources = [by_grad[g] for g in op.grad_names()]
+    ret = ", ".join(
+        f"_grads[{i}].to({src}.dtype)" for i, src in zip(indices, grad_sources)
+    )
+    ret += "," if len(indices) == 1 else ""
+    backward_body = (
+        f"{unused_scalars}"
+        f"    {unpack}\n"
+        f"    _grads = run_graph_program(\n        {run_args},\n    )\n"
+        f"    return ({ret})"
+    )
 
     return f'''
 
