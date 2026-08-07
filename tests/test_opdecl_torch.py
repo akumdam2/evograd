@@ -65,6 +65,23 @@ def _toy_seed_module(correct=True, forward_offset=0.0, save_scalar=False):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
+class TestLazyExports(unittest.TestCase):
+    def test_submodule_import_does_not_shadow_lazy_exports(self):
+        # oracle/bind/verify name both a submodule and its main function; the
+        # import system pins the submodule onto the package after these
+        # imports, which must not shadow the function exports.
+        import evograd.opdecl.bind  # noqa: F401
+        import evograd.opdecl.oracle  # noqa: F401
+        import evograd.opdecl.verify  # noqa: F401
+
+        from evograd.opdecl import bind, oracle, verify
+
+        self.assertTrue(callable(oracle))
+        self.assertTrue(callable(bind))
+        self.assertTrue(callable(verify))
+
+
+@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestOracle(unittest.TestCase):
     def test_oracle_matches_closed_form(self):
         from evograd.opdecl import make_case_inputs, oracle

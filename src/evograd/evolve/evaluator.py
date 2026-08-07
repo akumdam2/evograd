@@ -40,7 +40,12 @@ from evograd.bench.harness import (
     run_benchmarks,
     saved_bytes,
 )
-from evograd.evolve.scoring import ScoringPolicy, regime_speedup_metrics, score_from_aggregate
+from evograd.evolve.scoring import (
+    CUSTOM_FEATURE_DIMENSION_DEFAULTS,
+    ScoringPolicy,
+    regime_speedup_metrics,
+    score_from_aggregate,
+)
 
 try:
     from openevolve.evaluation_result import EvaluationResult
@@ -92,6 +97,11 @@ def _json(data: dict[str, Any]) -> str:
 
 
 def _result(metrics: dict[str, float], artifacts: dict[str, Any]) -> EvaluationResult:
+    # Custom MAP-Elites feature dimensions must exist in every result;
+    # OpenEvolve raises when a configured dimension is missing from a
+    # program's metrics, and failure paths otherwise omit them.
+    for dim, default in CUSTOM_FEATURE_DIMENSION_DEFAULTS.items():
+        metrics.setdefault(dim, default)
     return EvaluationResult(metrics=metrics, artifacts={k: _json(v) for k, v in artifacts.items()})
 
 

@@ -259,6 +259,48 @@ class TestEvolveConfigRendering(unittest.TestCase):
                 self.assertIn("models:", config)
                 self.assertNotIn("primary_model:", config)
 
+    def test_default_map_elites_feature_dimensions(self):
+        from evograd.evolve.run import render_config
+
+        config = render_config(get_op("layernorm"))
+        self.assertIn(
+            'feature_dimensions: ["complexity", "saved_memory_ratio"]', config
+        )
+        self.assertIn("feature_bins: 10", config)
+
+    def test_custom_feature_dimensions_render_and_validate(self):
+        from evograd.evolve.run import render_config
+
+        config = render_config(
+            get_op("layernorm"),
+            feature_dimensions=("diversity", "speedup"),
+            feature_bins=6,
+        )
+        self.assertIn('feature_dimensions: ["diversity", "speedup"]', config)
+        self.assertIn("feature_bins: 6", config)
+        with self.assertRaises(ValueError):
+            render_config(get_op("layernorm"), feature_dimensions=("not_a_metric",))
+        with self.assertRaises(ValueError):
+            render_config(get_op("layernorm"), feature_dimensions=())
+        with self.assertRaises(ValueError):
+            render_config(get_op("layernorm"), feature_bins=0)
+
+    def test_evaluator_failure_results_carry_feature_metrics(self):
+        # OpenEvolve raises if a configured custom feature dimension is missing
+        # from any program's metrics, so failure paths must include them too.
+        try:
+            import torch  # noqa: F401
+        except ImportError:
+            self.skipTest("torch not installed")
+        from evograd.evolve.evaluator import build_evaluate
+        from evograd.evolve.scoring import CUSTOM_FEATURE_DIMENSION_DEFAULTS, get_policy
+
+        evaluate = build_evaluate(get_op("layernorm"), get_policy("speed_memory"))
+        with mock.patch("torch.cuda.is_available", return_value=False):
+            result = evaluate("/nonexistent/candidate.py")
+        for dim, default in CUSTOM_FEATURE_DIMENSION_DEFAULTS.items():
+            self.assertEqual(result.metrics.get(dim), default)
+
     def test_run_wrapper_propagates_declaration_native_benchmark_selection(self):
         from evograd.evolve.run import run_evolve
 

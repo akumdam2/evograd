@@ -61,8 +61,8 @@ def _evolve(argv: list[str]) -> int:
             "index.jsonl of their metrics (default: only the best is kept)"
         ),
     )
-    parser.add_argument("--primary-model", default="gpt-4o-mini")
-    parser.add_argument("--secondary-model", default="gpt-4o")
+    parser.add_argument("--primary-model", default="gpt-5.6-sol")
+    parser.add_argument("--secondary-model", default="gpt-5.6-sol")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
     parser.add_argument("--benchmark-suite", default=None)
     parser.add_argument(
@@ -73,6 +73,13 @@ def _evolve(argv: list[str]) -> int:
             "torch_compile_max_autotune, or a declaration baseline such as liger"
         ),
     )
+    parser.add_argument(
+        "--feature-dim",
+        action="append",
+        help="MAP-Elites feature dimension (repeatable); "
+        "default: complexity + saved_memory_ratio",
+    )
+    parser.add_argument("--feature-bins", type=int, default=10)
     parser.add_argument(
         "--ncu",
         action="store_true",
@@ -124,6 +131,8 @@ def _evolve(argv: list[str]) -> int:
         dtype=args.dtype,
         performance_baseline=args.baseline,
         save_programs=args.save_programs,
+        feature_dimensions=tuple(args.feature_dim) if args.feature_dim else None,
+        feature_bins=args.feature_bins,
         ncu=args.ncu,
         ncu_model=args.ncu_model,
         ncu_timeout=args.ncu_timeout,

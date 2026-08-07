@@ -1,12 +1,13 @@
 """Typed operator declarations: the contract every evograd component derives from.
 
-Declarations stay importable on machines without torch.  When torch is
-available, torch-facing derivations are bound eagerly so their public function
-names cannot be replaced by Python's same-named submodule attributes.
+Torch-facing derivations (oracle, bind, verify, make_case_inputs) are exported
+lazily so declarations stay importable on machines
+without torch (dev boxes have no CUDA; only GPU nodes run the real stack).
 """
 
 import importlib
-import importlib.util
+import sys
+import types
 
 from evograd.opdecl.activity import (
     Arg,
@@ -29,27 +30,33 @@ _LAZY = {
     "make_case_inputs": "evograd.opdecl.inputs",
 }
 
-# ``from evograd.opdecl import oracle`` normally prefers the existing
-# ``evograd.opdecl.oracle`` submodule over ``__getattr__`` and therefore returns
-# a module instead of the public function.  Bind these exports after importing
-# their modules whenever torch is installed.  On torch-free machines, retain
-# lazy lookup so the declaration-only API above remains usable.
-if importlib.util.find_spec("torch") is not None:
-    from evograd.opdecl.bind import bind
-    from evograd.opdecl.inputs import make_case_inputs
-    from evograd.opdecl.oracle import oracle, resolve_forward
-    from evograd.opdecl.verify import VerifyReport, verify
-
 
 def __getattr__(name: str):
     if name in _LAZY:
         value = getattr(importlib.import_module(_LAZY[name]), name)
-        # Importing e.g. evograd.opdecl.oracle pins the *submodule* onto this
-        # package under the same name, shadowing the lazy export on the next
-        # lookup. Cache the resolved object afterwards so it wins.
-        globals()[name] = value
+        globals()[name] = value  # direct dict write, not routed through __setattr__
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class _Module(types.ModuleType):
+    """Keeps the lazy function exports authoritative.
+
+    ``oracle``, ``bind`` and ``verify`` name both a submodule and its main
+    function. After ``import evograd.opdecl.oracle`` the import system pins the
+    *submodule* onto this package via setattr, which would shadow the function
+    on every later ``from evograd.opdecl import oracle`` — in whichever order
+    the two imports happen. Dropping the pin keeps ``__getattr__`` (and its
+    cache) the source of truth; submodule-path imports are unaffected.
+    """
+
+    def __setattr__(self, name: str, value) -> None:
+        if name in _LAZY and isinstance(value, types.ModuleType):
+            return
+        super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _Module
 
 
 __all__ = [

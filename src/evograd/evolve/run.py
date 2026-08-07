@@ -8,11 +8,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
+from evograd.evolve.scoring import (
+    DEFAULT_FEATURE_DIMENSIONS,
+    validate_feature_dimensions,
+)
 from evograd.pipelines.shared.runner import evograd_env
 
 _TEMPLATE = Path(__file__).with_name("config_template.yaml")
@@ -24,17 +29,24 @@ def render_config(
     op: OpDecl,
     *,
     iterations: int = 10,
-    primary_model: str = "gpt-4o-mini",
-    secondary_model: str = "gpt-4o",
+    primary_model: str = "gpt-5.6-sol",
+    secondary_model: str = "gpt-5.6-sol",
     api_base: str = "https://api.openai.com/v1",
     template: Path | None = None,
+    feature_dimensions: tuple[str, ...] = DEFAULT_FEATURE_DIMENSIONS,
+    feature_bins: int = 10,
 ) -> str:
+    feature_dimensions = validate_feature_dimensions(tuple(feature_dimensions))
+    if feature_bins < 1:
+        raise ValueError(f"feature_bins must be >= 1, got {feature_bins}")
     text = (template or _TEMPLATE).read_text(encoding="utf-8")
     replacements = {
         "__MAX_ITERATIONS__": str(iterations),
         "__PRIMARY_MODEL__": primary_model,
         "__SECONDARY_MODEL__": secondary_model,
         "__API_BASE__": api_base,
+        "__FEATURE_DIMENSIONS__": json.dumps(list(feature_dimensions)),
+        "__FEATURE_BINS__": str(feature_bins),
         "__FORWARD_FN__": op.forward_fn_name,
         "__FORWARD_ARGS__": op.forward_parameters(),
         "__BACKWARD_FN__": op.backward_fn_name,
@@ -56,8 +68,8 @@ def render_map_shape_config(
     op: OpDecl,
     *,
     iterations: int = 30,
-    primary_model: str = "gpt-4o-mini",
-    secondary_model: str = "gpt-4o",
+    primary_model: str = "gpt-5.6-sol",
+    secondary_model: str = "gpt-5.6-sol",
     api_base: str = "https://api.openai.com/v1",
 ) -> str:
     """Config with small/large regime speedups as MAP-Elites feature axes."""
@@ -95,14 +107,16 @@ def run_evolve(
     config_path: Path | None = None,
     checkpoint_path: Path | None = None,
     save_best_to: Path | None = None,
-    primary_model: str = "gpt-4o-mini",
-    secondary_model: str = "gpt-4o",
+    primary_model: str = "gpt-5.6-sol",
+    secondary_model: str = "gpt-5.6-sol",
     api_base: str = "https://api.openai.com/v1",
     benchmark_suite: str | None = None,
     benchmark_dtypes: tuple[str, ...] | None = None,
     dtype: str | None = None,
     performance_baseline: str = "auto",
     save_programs: bool = False,
+    feature_dimensions: tuple[str, ...] | None = None,
+    feature_bins: int = 10,
     extra_env: dict[str, str] | None = None,
     ncu: bool = False,
     ncu_model: str | None = None,
@@ -115,6 +129,10 @@ def run_evolve(
     from evograd.evolve.scoring import get_policy
 
     get_policy(scoring)
+    feature_dimensions = (
+        tuple(feature_dimensions) if feature_dimensions else DEFAULT_FEATURE_DIMENSIONS
+    )
+    validate_feature_dimensions(feature_dimensions)
     performance_baseline = resolve_performance_baseline(op, performance_baseline)
     if iterations < 1:
         raise ValueError(f"iterations must be >= 1, got {iterations}")
@@ -135,6 +153,8 @@ def run_evolve(
                 primary_model=primary_model,
                 secondary_model=secondary_model,
                 api_base=api_base,
+                feature_dimensions=feature_dimensions,
+                feature_bins=feature_bins,
             ),
             encoding="utf-8",
         )

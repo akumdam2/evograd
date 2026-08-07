@@ -69,6 +69,11 @@ database:
   elite_selection_ratio: 0.25
   exploitation_ratio: 0.75
   similarity_threshold: 0.99
+  # MAP-Elites grid axes. Built-ins (complexity/diversity/score) are computed
+  # by OpenEvolve; custom names are evaluator metrics guaranteed on every
+  # result path (see evolve.scoring.CUSTOM_FEATURE_DIMENSION_DEFAULTS).
+  feature_dimensions: __FEATURE_DIMENSIONS__
+  feature_bins: __FEATURE_BINS__
 
 evaluator:
   # The killable evograd child times out at 850s. Keep OpenEvolve's outer

@@ -28,6 +28,45 @@ class ScoringPolicy:
     geomean_weights: tuple[float, ...] | None = None
 
 
+# ── MAP-Elites feature dimensions ────────────────────────────────────────────
+# OpenEvolve's program database is a MAP-Elites grid; these name its axes.
+# Built-ins are computed by OpenEvolve itself. Custom names must be metrics the
+# evaluator returns on *every* path (OpenEvolve raises if a configured
+# dimension is missing from a program's metrics), so each custom dimension
+# carries the worst-case default `_result` injects into failure results.
+BUILTIN_FEATURE_DIMENSIONS = ("complexity", "diversity", "score")
+CUSTOM_FEATURE_DIMENSION_DEFAULTS: dict[str, float] = {
+    # Failed candidates bin as if they cached every input (heaviest behavior).
+    "saved_memory_ratio": 1.0,
+    "speedup": 0.0,
+    "full_step_speedup": 0.0,
+    # Regime axes from config_map_shape_template.yaml; the evaluator's emit()
+    # computes them via regime_speedup_metrics and already defaults both to
+    # 0.0 on failure paths — registering them here keeps validate/setdefault
+    # consistent with that contract.
+    "small_regime_speedup": 0.0,
+    "large_regime_speedup": 0.0,
+}
+# saved_memory_ratio is the behavioral axis that matters for autograd pairs:
+# it keeps recompute-heavy and cache-heavy backward strategies in separate
+# cells instead of letting the memory penalty collapse the tradeoff.
+DEFAULT_FEATURE_DIMENSIONS = ("complexity", "saved_memory_ratio")
+
+
+def validate_feature_dimensions(dimensions: tuple[str, ...]) -> tuple[str, ...]:
+    allowed = set(BUILTIN_FEATURE_DIMENSIONS) | set(CUSTOM_FEATURE_DIMENSION_DEFAULTS)
+    unknown = [d for d in dimensions if d not in allowed]
+    if unknown:
+        raise ValueError(
+            f"Unknown MAP-Elites feature dimensions {unknown}; "
+            f"built-ins: {sorted(BUILTIN_FEATURE_DIMENSIONS)}, "
+            f"custom: {sorted(CUSTOM_FEATURE_DIMENSION_DEFAULTS)}"
+        )
+    if not dimensions:
+        raise ValueError("feature_dimensions must not be empty")
+    return dimensions
+
+
 POLICIES: dict[str, ScoringPolicy] = {
     "speed": ScoringPolicy(name="speed", mode="speed_only"),
     "speed_memory": ScoringPolicy(name="speed_memory", mode="speed_memory"),
