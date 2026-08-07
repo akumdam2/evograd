@@ -311,7 +311,9 @@ def _classify_args(node: fx.Node, meta):
             # Raw sym arg (no producing node in this graph); fall back to hint.
             args_ordered.append({"kind": "scalar", "value": _sym_hint(a)})
 
-        elif isinstance(a, (int, float)):
+        elif isinstance(a, (int, float, str)):
+            # str covers enum-like kwargs, e.g. aten.gelu's approximate="tanh";
+            # dropping them silently changes semantics (erf vs tanh is ~1e-3).
             args_ordered.append({"kind": "scalar", "value": a})
 
         elif a is None:

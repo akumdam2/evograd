@@ -82,6 +82,39 @@ class TestLazyExports(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
+class TestAtenIRExtraction(unittest.TestCase):
+    def test_string_kwargs_survive_classification(self):
+        # aten.gelu's approximate="tanh" arrives as a str kwarg; dropping it
+        # silently swapped the tanh formulation for erf (~1e-3 apart).
+        from evograd.atenir.extract import _classify_args
+
+        node = types.SimpleNamespace(
+            target="aten.gelu.default", args=(), kwargs={"approximate": "tanh"}
+        )
+        _, _, _, args_ordered = _classify_args(node, {})
+        self.assertIn({"kind": "scalar", "value": "tanh"}, args_ordered)
+
+    def test_gelu_dispatch_honors_tanh_approximate(self):
+        try:
+            import triton  # noqa: F401
+        except ImportError:
+            self.skipTest("triton not installed")
+        from evograd.atenir.primitive_triton import dispatch, elementwise
+
+        base = {"target": "aten.gelu.default", "name": "gelu"}
+        tanh_node = {
+            **base,
+            "args_ordered": [
+                {"kind": "node", "name": "x"},
+                {"kind": "scalar", "value": "tanh"},
+            ],
+        }
+        erf_node = {**base, "args_ordered": [{"kind": "node", "name": "x"}]}
+        self.assertIs(dispatch.make_kernel(tanh_node), elementwise.gelu_tanh)
+        self.assertIs(dispatch.make_kernel(erf_node), elementwise.gelu)
+
+
+@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestOracle(unittest.TestCase):
     def test_oracle_matches_closed_form(self):
         from evograd.opdecl import make_case_inputs, oracle

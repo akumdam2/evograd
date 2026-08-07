@@ -558,6 +558,10 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return elementwise.relu
 
     if "aten.gelu" in target:
+        # aten.gelu.default carries approximate as a scalar arg; the erf and
+        # tanh formulations differ by ~1e-3 (over fp32 tolerance).
+        if any(s == "tanh" for s in all_scalars if isinstance(s, str)):
+            return elementwise.gelu_tanh
         return elementwise.gelu
 
     if "aten.silu" in target:

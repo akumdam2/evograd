@@ -403,6 +403,22 @@ if HAS_TRITON:
             mask=mask,
         )
 
+    # gelu(approximate='tanh'): 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715 x^3))).
+    # Distinct from the erf kernel above — the two differ by ~1e-3, well over
+    # fp32 verification tolerance.
+    @triton.jit
+    def _gelu_tanh_kernel(a_ptr, out_ptr, N, BLOCK: tl.constexpr):
+        pid = tl.program_id(0)
+        offs = pid * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        a = tl.load(a_ptr + offs, mask=mask, other=0.0).to(tl.float32)
+        inner = 0.7978845608028654 * (a + 0.044715 * a * a * a)
+        tl.store(
+            out_ptr + offs,
+            0.5 * a * (1.0 + libdevice.tanh(inner)),
+            mask=mask,
+        )
+
     # SiLU / Swish: x * sigmoid(x)
     @triton.jit
     def _silu_kernel(a_ptr, out_ptr, N, BLOCK: tl.constexpr):
@@ -1082,6 +1098,10 @@ def tanh_activation(a: torch.Tensor) -> torch.Tensor:
 
 def gelu(a: torch.Tensor) -> torch.Tensor:
     return _unary_f32(_gelu_kernel, a)
+
+
+def gelu_tanh(a: torch.Tensor) -> torch.Tensor:
+    return _unary_f32(_gelu_tanh_kernel, a)
 
 
 def silu(a: torch.Tensor) -> torch.Tensor:
