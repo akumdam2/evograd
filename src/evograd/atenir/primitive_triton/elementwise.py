@@ -1366,10 +1366,15 @@ def bitwise_xor(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 
 def where(condition: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    # aten promotion treats 0-dim operands as weak scalars: where(mask,
+    # scalar_tensor(0.0, fp32), bf16_tensor) is bf16. Resolve the dtype before
+    # broadcasting erases 0-dimness, or a baked fp32 constant from the
+    # extraction-time graph silently promotes low-precision outputs to fp32.
+    out_dtype = torch.result_type(x, y)
     condition, x, y = torch.broadcast_tensors(condition, x, y)
     condition = condition.contiguous()
-    x = x.contiguous()
-    y = y.contiguous()
+    x = x.contiguous().to(out_dtype)
+    y = y.contiguous().to(out_dtype)
     out = torch.empty_like(x)
     N = x.numel()
     _where_kernel[_grid(N)](condition, x, y, out, N, BLOCK=_BLOCK)
