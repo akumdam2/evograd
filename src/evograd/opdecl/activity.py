@@ -431,7 +431,13 @@ def example_input_spec(op: OpDecl, workload: Workload | None = None) -> str:
     if workload is None:
         if not op.correctness:
             raise ValueError(f"{op.name}: no correctness workloads to derive an example input from")
-        workload = op.correctness[0]
+        # Symbolic tracing specializes sizes 0/1 (see atenir.extract), so an
+        # example input with a size-1 symbolic dim bakes that dim into the
+        # extracted graph. Prefer the first workload with every dim >= 2.
+        workload = next(
+            (w for w in op.correctness if all(int(v) >= 2 for v in w.dims.values())),
+            op.correctness[0],
+        )
     entries = []
     for arg in op.args:
         shape = getattr(arg, "shape", None)

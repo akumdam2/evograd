@@ -114,6 +114,12 @@ def expand_copy(a, shape):
         src_dim = i - lead
         src_size = a.shape[src_dim]
         size = src_size if s == -1 else s
+        if size != src_size and src_size != 1:
+            # aten.expand rejects this; silently keeping the source stride
+            # would gather index 0 only (a slice, not an expand).
+            raise ValueError(
+                f"expand_copy: cannot expand dim {src_dim} of size {src_size} to {size}"
+            )
         out_shape.append(size)
         strides.append(0 if (src_size == 1 and size != 1) else a.stride(src_dim))
     return strided_copy(a, out_shape, strides)

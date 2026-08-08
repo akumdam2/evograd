@@ -94,11 +94,12 @@ class TestExampleInputSpec(unittest.TestCase):
         )
 
     def test_evoattention_includes_inactive_mask_with_fixed_dtype(self):
-        # First correctness workload: B=1 S=1 H=4 N=23 D=8, float16.
+        # First correctness workload with every dim >= 2 (so no symbolic dim
+        # specializes to 1 during extraction): B=2 S=2 H=4 N=128 D=64, bfloat16.
         self.assertEqual(
             example_input_spec(get_op("evoattention")),
-            "[(1,1,23,4,8) f16, (1,1,23,4,8) f16, (1,1,23,4,8) f16, "
-            "(1,1,1,1,23) f32, (1,1,4,23,23) f32]",
+            "[(2,2,128,4,64) bf16, (2,2,128,4,64) bf16, (2,2,128,4,64) bf16, "
+            "(2,2,1,1,128) f32, (2,1,4,128,128) f32]",
         )
 
     def test_cross_entropy_includes_integer_labels_and_scalar_output(self):
