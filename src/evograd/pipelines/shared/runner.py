@@ -112,6 +112,7 @@ def verify_candidate(
     forward: str | None = None,
     declaration: str | None = None,
     timeout: int = 120,
+    device: str = "cuda",
 ) -> dict:
     """Verify a candidate against the op's autograd oracle in a subprocess."""
     cmd = [
@@ -120,6 +121,8 @@ def verify_candidate(
         "evograd.opdecl.verify_cli",
         "--op",
         op_name,
+        "--device",
+        device,
     ]
     if forward:
         cmd.extend(["--forward", forward])

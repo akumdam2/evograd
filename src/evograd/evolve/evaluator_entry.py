@@ -6,6 +6,8 @@ scoring policy come from the environment, set by ``evograd.evolve.run``:
 
     EVOGRAD_OP       — operator name (required, see evograd.ops.OPS)
     EVOGRAD_SCORING  — scoring policy name (default: speed_memory)
+    EVOGRAD_PROGRAM_ARCHIVE_DIR — when set, keep every evaluated candidate here
+                                  (evograd evolve --save-programs)
 
 Optional knobs (mirroring the old AUTOGRAD_PAIR_* env vars):
 
@@ -21,7 +23,7 @@ import os
 import sys
 from dataclasses import replace
 
-from evograd.evolve.evaluator import build_evaluate, evaluate_isolated
+from evograd.evolve.evaluator import archive_program, build_evaluate, evaluate_isolated
 from evograd.evolve.scoring import get_policy
 from evograd.ops import get_op
 
@@ -89,10 +91,36 @@ def _benchmark_selection(op):
     return op.benchmark_workloads(suite=suite, dtypes=dtypes)
 
 
+def _restrict_correctness(op):
+    """Gate a dtype-specialist candidate on its own dtype only.
+
+    Pipeline D seeds are dtype specialists -- Inductor specializes on dtype, so
+    one seed handles one -- and would fail the other declared dtypes by design.
+    Mirrors EVOGRAD_BENCHMARK_DTYPES on the correctness side.
+    """
+    raw = os.environ.get("EVOGRAD_CORRECTNESS_DTYPES")
+    if not raw:
+        return op
+    aliases = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
+    wanted = {
+        aliases.get(part.strip().lower(), part.strip().lower())
+        for part in raw.split(",")
+        if part.strip()
+    }
+    selected = tuple(w for w in op.correctness if w.dtype in wanted)
+    if not selected:
+        raise ValueError(
+            f"{op.name}: EVOGRAD_CORRECTNESS_DTYPES={raw!r} matches no declared "
+            f"correctness workload; available: {sorted({w.dtype for w in op.correctness})}"
+        )
+    return replace(op, correctness=selected)
+
+
 _OP = get_op(os.environ["EVOGRAD_OP"])
 if os.environ.get("EVOGRAD_FORWARD_OVERRIDE"):
     _OP = replace(_OP, forward=os.environ["EVOGRAD_FORWARD_OVERRIDE"])
     _OP.validate()
+_OP = _restrict_correctness(_OP)
 
 _evaluate_direct = build_evaluate(
     _OP,
@@ -108,8 +136,18 @@ _evaluate_direct = build_evaluate(
     ),
 )
 
+_ARCHIVE_DIR = os.environ.get("EVOGRAD_PROGRAM_ARCHIVE_DIR")
+
 if os.environ.get("EVOGRAD_EVAL_CHILD") == "1":
+    # The isolation child evaluates the same file the parent already archives.
     evaluate = _evaluate_direct
+elif _ARCHIVE_DIR:
+
+    def evaluate(program_path):
+        result = evaluate_isolated(__file__, program_path)
+        archive_program(program_path, result, _ARCHIVE_DIR)
+        return result
+
 else:
     evaluate = lambda program_path: evaluate_isolated(__file__, program_path)
 

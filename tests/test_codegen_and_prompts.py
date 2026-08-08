@@ -28,6 +28,33 @@ class TestWrapperCodegen(unittest.TestCase):
         self.assertIn("return run_graph_program(", wrapper)
         self.assertNotIn("_grads[", wrapper)  # identity: no index selection needed
 
+    def test_single_tensor_op_unpacks_rather_than_binding_the_tuple(self):
+        # `x = saved_tensors[:1]` is a plain assignment, so a one-tensor op
+        # would bind the whole tuple and fail on the first `.contiguous()`.
+        for name in ("softmax", "relu_squared", "sparsemax"):
+            op = get_op(name)
+            wrapper = render_autograd_pair_wrapper("m:f", op)
+            self.assertIn("x, = saved_tensors[:1]", wrapper, name)
+
+    def test_generated_backward_wrapper_executes(self):
+        import torch
+
+        for name in ("softmax", "layernorm"):
+            op = get_op(name)
+            source = (
+                "def run_graph_program(*a):\n"
+                "    return tuple(torch.zeros_like(t) for t in a[1:])\n"
+                + render_autograd_pair_wrapper("m:f", op)
+            )
+            namespace = {"torch": torch}
+            exec(compile(source, "<generated>", "exec"), namespace)
+            n_tensors = len(
+                [a for a in op.args if getattr(a, "shape", None) is not None]
+            )
+            saved = tuple(torch.zeros(2, 3) for _ in range(n_tensors))
+            grads = namespace[op.backward_fn_name](torch.zeros(2, 3), saved)
+            self.assertEqual(len(grads), len(op.grad_names()), name)
+
     def test_evoattention_drops_inactive_gradient(self):
         op = get_op("evoattention")
         # res_mask is tensor arg index 3; its graph gradient is skipped.

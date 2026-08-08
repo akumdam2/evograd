@@ -62,23 +62,54 @@ def _mark_cached(path: str | None, key: str) -> None:
             pass
 
 
+def baseline_hook(op: OpDecl, name: str):
+    """The timing hook for a resolved baseline name, built-in or declared.
+
+    ``pytorch_autograd`` has no hook — the harness measures the eager oracle
+    directly — so it resolves to None.
+    """
+    if name == "pytorch_autograd":
+        return None
+    from evograd.opdecl.compiled import builtin_baseline
+
+    return builtin_baseline(op, name) or op.performance_baselines[name]
+
+
+def available_baselines(op: OpDecl) -> list[str]:
+    from evograd.opdecl.compiled import BUILTIN_MODES
+
+    return [
+        "auto",
+        "pytorch_autograd",
+        *sorted(BUILTIN_MODES),
+        *sorted(op.performance_baselines),
+    ]
+
+
 def resolve_performance_baseline(op: OpDecl, requested: str) -> str:
     """Resolve ``auto`` without silently downgrading an explicit baseline."""
+    from evograd.opdecl.compiled import BUILTIN_MODES
+
     if requested == "auto":
         hook = op.performance_baselines.get("liger")
         if hook is not None:
             probe = getattr(hook, "available", None)
             if probe is None or probe():
                 return "liger"
+        # torch_compile is never chosen by auto: it costs minutes of compilation
+        # and is a deliberate comparison, not a default.
         return "pytorch_autograd"
-    if requested != "pytorch_autograd" and requested not in op.performance_baselines:
-        available = ["auto", "pytorch_autograd", *sorted(op.performance_baselines)]
+    if (
+        requested != "pytorch_autograd"
+        and requested not in BUILTIN_MODES
+        and requested not in op.performance_baselines
+    ):
         raise KeyError(
             f"{op.name}: unknown performance baseline {requested!r}; "
-            f"available: {available}"
+            f"available: {available_baselines(op)}"
         )
     if requested != "pytorch_autograd":
-        probe = getattr(op.performance_baselines[requested], "available", None)
+        probe = getattr(baseline_hook(op, requested), "available", None)
         if probe is not None and not probe():
             raise RuntimeError(
                 f"{op.name}: {requested} baseline was explicitly requested but "
@@ -90,17 +121,19 @@ def resolve_performance_baseline(op: OpDecl, requested: str) -> str:
 def verify_performance_baseline(
     op: OpDecl, baseline: str, *, device: str = "cuda"
 ) -> None:
-    """Verify a declaration-local pair baseline against the autograd oracle.
+    """Verify a baseline against the autograd oracle before trusting its timings.
 
     Timing hooks produced by ``make_pair_baseline`` carry the underlying pair
-    factory and argument routing as metadata. Custom hooks without that
-    metadata are assumed to have their own review gate.
+    factory and argument routing as metadata; built-in compiled baselines carry
+    a ``reference_run`` instead. Custom hooks with neither are assumed to have
+    their own review gate.
     """
     if baseline == "pytorch_autograd":
         return
-    hook = op.performance_baselines[baseline]
+    hook = baseline_hook(op, baseline)
     factory = getattr(hook, "pair_factory", None)
-    if factory is None:
+    reference = getattr(hook, "reference_run", None)
+    if factory is None and reference is None:
         return
 
     import torch
@@ -116,19 +149,27 @@ def verify_performance_baseline(
     from evograd.opdecl.inputs import make_case_inputs
     from evograd.opdecl.oracle import oracle
 
-    forward, backward = factory()
-    forward_args = tuple(getattr(hook, "forward_args", ()))
-    backward_extras = tuple(getattr(hook, "backward_extras", ()))
+    if factory is not None:
+        forward, backward = factory()
+        forward_args = tuple(getattr(hook, "forward_args", ()))
+        backward_extras = tuple(getattr(hook, "backward_extras", ()))
+
+        def run(values):
+            y, saved = forward(*(values[name] for name in forward_args))
+            saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
+            grads = backward(
+                values[op.upstream_grad_name],
+                saved,
+                *(values[name] for name in backward_extras),
+            )
+            return y, grads
+    else:
+        run = reference
+
     for workload in op.correctness:
         values = make_case_inputs(op, workload, device=device)
         y_ref, expected = oracle(op, values)
-        y, saved = forward(*(values[name] for name in forward_args))
-        saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
-        actual = backward(
-            values[op.upstream_grad_name],
-            saved,
-            *(values[name] for name in backward_extras),
-        )
+        y, actual = run(values)
         actual = (actual,) if torch.is_tensor(actual) else tuple(actual)
         if len(actual) != len(op.grad_names()):
             raise RuntimeError(

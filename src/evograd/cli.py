@@ -2,7 +2,7 @@
 
     evograd ops                                  # list declared operators
     evograd scaffold --op new_op --forward op.py --output-dir ...
-    evograd seed a --op rmsnorm --output-dir ... # generate a seed (pipeline a|b|c)
+    evograd seed a --op rmsnorm --output-dir ... # generate a seed (pipeline a|b|c|d)
     evograd verify --op rmsnorm seed.py          # check a candidate vs the oracle
     evograd evolve --op rmsnorm --seed seed.py --output-dir ...
     evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
@@ -19,13 +19,14 @@ _PIPELINES = {
     "a": ("evograd.pipelines.a_atenir_llm.cli", "Pipeline A — AtenIR + LLM"),
     "b": ("evograd.pipelines.b_dispatch.cli", "Pipeline B — LLM-free handwritten dispatch"),
     "c": ("evograd.pipelines.c_forward_only.cli", "Pipeline C — forward-source-only ablation"),
+    "d": ("evograd.pipelines.d_inductor.cli", "Pipeline D — LLM-free Inductor capture"),
 }
 
 
 def _seed(argv: list[str]) -> int:
     if not argv or argv[0] not in _PIPELINES:
         names = ", ".join(f"{k} ({v[1]})" for k, v in _PIPELINES.items())
-        print(f"usage: evograd seed {{a|b|c}} [pipeline args]\npipelines: {names}")
+        print(f"usage: evograd seed {{a|b|c|d}} [pipeline args]\npipelines: {names}")
         return 2
     import importlib
 
@@ -50,11 +51,26 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--save-best-to", type=Path, default=None)
+    parser.add_argument(
+        "--save-programs",
+        action="store_true",
+        help=(
+            "keep every evaluated candidate under <output-dir>/programs, with an "
+            "index.jsonl of their metrics (default: only the best is kept)"
+        ),
+    )
     parser.add_argument("--primary-model", default="gpt-4o-mini")
     parser.add_argument("--secondary-model", default="gpt-4o")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
     parser.add_argument("--benchmark-suite", default=None)
-    parser.add_argument("--baseline", default="auto")
+    parser.add_argument(
+        "--baseline",
+        default="auto",
+        help=(
+            "auto, pytorch_autograd (eager), torch_compile, "
+            "torch_compile_max_autotune, or a declaration baseline such as liger"
+        ),
+    )
     parser.add_argument(
         "--ncu",
         action="store_true",
@@ -68,6 +84,15 @@ def _evolve(argv: list[str]) -> int:
         "--benchmark-dtype",
         action="append",
         choices=("float32", "float16", "bfloat16"),
+    )
+    parser.add_argument(
+        "--dtype",
+        default=None,
+        choices=("float32", "float16", "bfloat16"),
+        help=(
+            "evolve a dtype specialist: gate correctness on this dtype only, and "
+            "measure on it unless --benchmark-dtype says otherwise (Pipeline D seeds)"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -94,7 +119,9 @@ def _evolve(argv: list[str]) -> int:
         api_base=args.api_base,
         benchmark_suite=args.benchmark_suite,
         benchmark_dtypes=tuple(args.benchmark_dtype) if args.benchmark_dtype else None,
+        dtype=args.dtype,
         performance_baseline=args.baseline,
+        save_programs=args.save_programs,
         ncu=args.ncu,
         ncu_model=args.ncu_model,
         ncu_timeout=args.ncu_timeout,
@@ -118,7 +145,7 @@ def _run(argv: list[str]) -> int:
         help="optional path.py[:function] or importable module:function override",
     )
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--pipeline", choices=("a", "b", "c"), default="a")
+    parser.add_argument("--pipeline", choices=("a", "b", "c", "d"), default="a")
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--gpus", type=int, choices=(1, 3), default=1)
     parser.add_argument("--baseline", default="auto")
@@ -131,6 +158,11 @@ def _run(argv: list[str]) -> int:
         "--ncu",
         action="store_true",
         help="attempt an accepted-only NCU refinement after each evolve group",
+    )
+    parser.add_argument(
+        "--save-programs",
+        action="store_true",
+        help="keep every evaluated candidate under each group's programs/ directory",
     )
     args = parser.parse_args(argv)
 
@@ -150,6 +182,7 @@ def _run(argv: list[str]) -> int:
         max_attempts=args.max_attempts,
         force=args.force,
         ncu=args.ncu,
+        save_programs=args.save_programs,
     )
     print(f"program : {result.program}")
     print(f"report  : {result.report}")
