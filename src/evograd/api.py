@@ -243,6 +243,7 @@ def _evolve_group(
     gpu: int | None,
     ncu: bool,
     declaration: str | None,
+    save_programs: bool = False,
 ) -> tuple[str, str]:
     from evograd.evolve.run import run_evolve
 
@@ -273,6 +274,7 @@ def _evolve_group(
         api_base=api_base,
         benchmark_suite=suite,
         performance_baseline=baseline,
+        save_programs=save_programs,
         extra_env=extra_env,
         ncu=ncu,
         ncu_model=model,
@@ -297,6 +299,7 @@ def evograd(
     max_attempts: int = 5,
     force: bool = False,
     ncu: bool = False,
+    save_programs: bool = False,
 ) -> EvogradResult:
     """Generate, evolve, dispatch, and report for one declared operator.
 
@@ -399,6 +402,7 @@ def evograd(
                         index,
                         ncu,
                         declared.declaration,
+                        save_programs,
                     ): group
                     for index, group, group_dir in pending
                 }
@@ -420,6 +424,7 @@ def evograd(
                     None,
                     ncu,
                     declared.declaration,
+                    save_programs,
                 )
                 programs[tag] = Path(path)
 

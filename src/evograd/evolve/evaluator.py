@@ -12,9 +12,12 @@ new runs are comparable.
 
 from __future__ import annotations
 
+import datetime
+import hashlib
 import importlib.util
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
@@ -90,6 +93,60 @@ def _json(data: dict[str, Any]) -> str:
 
 def _result(metrics: dict[str, float], artifacts: dict[str, Any]) -> EvaluationResult:
     return EvaluationResult(metrics=metrics, artifacts={k: _json(v) for k, v in artifacts.items()})
+
+
+def archive_program(
+    program_path: str, result: EvaluationResult, directory: str | os.PathLike
+) -> str | None:
+    """Keep a copy of one evaluated candidate under ``directory``.
+
+    OpenEvolve only hands back the single best program, and its own checkpoints
+    hold the database rather than browsable sources, so every other candidate
+    the run paid an LLM call and a GPU evaluation for is otherwise gone. Called
+    once per evaluation from the parent process (never the isolation child,
+    which would double-write).
+
+    Filenames are ``<UTC timestamp>_<score>_<sha1>.py`` so a directory listing
+    sorts chronologically, and identical code evaluated twice is stored once.
+    Every evaluation — including the ones that scored below zero — appends a
+    line to ``index.jsonl``, which is the record of what actually happened.
+    Archiving must never take a run down: any failure here is swallowed.
+    """
+    try:
+        directory = pathlib.Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        source = pathlib.Path(program_path).read_bytes()
+        digest = hashlib.sha1(source).hexdigest()[:12]
+
+        metrics = result.metrics or {}
+        score = float(metrics.get("combined_score", 0.0))
+        existing = next(iter(directory.glob(f"*_{digest}.py")), None)
+        if existing is None:
+            stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+            target = directory / f"{stamp}_{score:+011.3f}_{digest}.py"
+            target.write_bytes(source)
+            target.with_suffix(".json").write_text(
+                _json({"metrics": metrics, "artifacts": result.artifacts or {}}),
+                encoding="utf-8",
+            )
+        else:
+            target = existing
+
+        record = {
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "file": target.name,
+            "sha1": digest,
+            "source": os.path.basename(program_path),
+            "duplicate": existing is not None,
+            "metrics": metrics,
+        }
+        # One short line, one write, O_APPEND: concurrent evaluator processes
+        # interleave lines rather than corrupting them.
+        with open(directory / "index.jsonl", "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return str(target)
+    except Exception:  # pragma: no cover - archiving is never worth a failed run
+        return None
 
 
 @contextmanager

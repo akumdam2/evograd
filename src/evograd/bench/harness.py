@@ -13,12 +13,15 @@ import json
 import os
 import statistics
 import tempfile
+import traceback
 from typing import Any, Callable
 
 import torch
 
 from evograd.opdecl.activity import Active, OpDecl, Workload
 from evograd.opdecl.baselines import (
+    available_baselines,
+    baseline_hook,
     resolve_performance_baseline,
     verify_performance_baseline,
 )
@@ -271,14 +274,13 @@ def benchmark_case(
             baseline_full_ms = median_ms(baseline_full_step, warmup, reps)
         else:
             try:
-                baseline_hook = op.performance_baselines[performance_baseline]
+                hook = baseline_hook(op, performance_baseline)
             except KeyError:
-                available = ["pytorch_autograd", *sorted(op.performance_baselines)]
                 raise KeyError(
                     f"{op.name}: unknown performance baseline {performance_baseline!r}; "
-                    f"available: {available}"
+                    f"available: {available_baselines(op)}"
                 ) from None
-            baseline_ms, baseline_full_ms = baseline_hook(
+            baseline_ms, baseline_full_ms = hook(
                 torch,
                 inputs,
                 dout,
@@ -325,6 +327,15 @@ def benchmark_case(
     }
 
 
+def _failure(phase: str, exc: BaseException) -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+
+
 def run_benchmarks(
     op: OpDecl,
     module,
@@ -335,12 +346,83 @@ def run_benchmarks(
     geomean_weights: tuple[float, ...] | None = None,
     workloads: tuple[Workload, ...] | None = None,
     performance_baseline: str = "pytorch_autograd",
+    on_error: str = "raise",
 ) -> dict[str, Any]:
-    performance_baseline = resolve_performance_baseline(op, performance_baseline)
-    verify_performance_baseline(
-        op, performance_baseline, device=device
-    )
-    cases = []
+    """Time a candidate against the performance baseline on every workload.
+
+    ``on_error`` controls what happens when setup or a single workload raises:
+
+      * ``"raise"`` (default) propagates, so callers that treat any failure as a
+        dead candidate — the OpenEvolve evaluator — keep their existing control
+        flow;
+      * ``"record"`` captures the traceback into the report (``["error"]`` for
+        setup failures, ``["cases"][i]["error"]`` for per-workload ones) and
+        aggregates whatever cases did succeed. ``report["ok"]`` is the verdict.
+    """
+    if on_error not in ("raise", "record"):
+        raise ValueError(f"on_error must be 'raise' or 'record', got {on_error!r}")
+    try:
+        performance_baseline = resolve_performance_baseline(op, performance_baseline)
+        verify_performance_baseline(
+            op, performance_baseline, device=device
+        )
+        selected = op.benchmark if workloads is None else workloads
+        if not selected:
+            raise ValueError(f"{op.name}: no benchmark workloads selected")
+    except Exception as exc:
+        if on_error == "raise":
+            raise
+        report = _aggregate_report([], None, performance_baseline)
+        report.update({"op": op.name, "ok": False, "error": _failure("setup", exc)})
+        return report
+
+    cases: list[dict[str, Any]] = []
+    ok_cases: list[dict[str, Any]] = []
+    for workload in selected:
+        try:
+            report = benchmark_case(
+                op,
+                module,
+                workload,
+                warmup=warmup,
+                reps=reps,
+                device=device,
+                performance_baseline=performance_baseline,
+            )
+        except Exception as exc:
+            if on_error == "raise":
+                raise
+            cases.append(
+                {
+                    "dims": dict(workload.dims),
+                    "dtype": workload.dtype,
+                    "ok": False,
+                    "error": _failure("benchmark_case", exc),
+                }
+            )
+            continue
+        report["ok"] = True
+        cases.append(report)
+        ok_cases.append(report)
+
+    result = _aggregate_report(ok_cases, geomean_weights, performance_baseline)
+    result["cases"] = cases
+    result["op"] = op.name
+    result["ok"] = bool(ok_cases) and len(ok_cases) == len(cases)
+    result["error"] = None
+    return result
+
+
+def _aggregate_report(
+    cases: list[dict[str, Any]],
+    geomean_weights: tuple[float, ...] | None,
+    performance_baseline: str,
+) -> dict[str, Any]:
+    """Roll a list of successful case reports up into the aggregate block.
+
+    Called with an empty list when nothing ran, so a failed report still carries
+    a fully-keyed (zeroed) aggregate and consumers can index it unconditionally.
+    """
     totals = {
         "forward_ms": 0.0,
         "backward_from_saved_ms": 0.0,
@@ -353,20 +435,7 @@ def run_benchmarks(
         "saved_bytes": 0.0,
         "input_bytes": 0.0,
     }
-    selected = op.benchmark if workloads is None else workloads
-    if not selected:
-        raise ValueError(f"{op.name}: no benchmark workloads selected")
-    for workload in selected:
-        report = benchmark_case(
-            op,
-            module,
-            workload,
-            warmup=warmup,
-            reps=reps,
-            device=device,
-            performance_baseline=performance_baseline,
-        )
-        cases.append(report)
+    for report in cases:
         for key in totals:
             totals[key] += float(report[key])
 
@@ -428,16 +497,23 @@ def run_benchmarks(
                     "geomean_weights length must match benchmark cases "
                     f"({len(cases)}) or unique shapes ({len(unique_dims)}), got {len(weights)}"
                 )
-    totals["geomean_speedup_vs_baseline_backward"] = geomean(backward_speedups)
-    totals["geomean_speedup_vs_baseline_full_step"] = geomean(full_step_speedups)
-    totals["geomean_min_speedup_per_case"] = geomean(min_speedups)
-    totals["weighted_geomean_speedup_vs_baseline_backward"] = weighted_geomean(
-        backward_speedups, weights
+    # geomean of an empty list is 1.0 (empty product); report 0.0 instead so a
+    # report with no successful case never reads as "parity with the baseline".
+    totals["geomean_speedup_vs_baseline_backward"] = (
+        geomean(backward_speedups) if backward_speedups else 0.0
     )
-    totals["weighted_geomean_speedup_vs_baseline_full_step"] = weighted_geomean(
-        full_step_speedups, weights
+    totals["geomean_speedup_vs_baseline_full_step"] = (
+        geomean(full_step_speedups) if full_step_speedups else 0.0
     )
-    totals["weighted_geomean_min_speedup_per_case"] = weighted_geomean(min_speedups, weights)
+    totals["geomean_min_speedup_per_case"] = geomean(min_speedups) if min_speedups else 0.0
+    # weighted_geomean rejects an all-zero weight total, which is exactly what an
+    # empty speedup list produces — a report with no successful case scores 0.0.
+    def _weighted(values: list[float]) -> float:
+        return weighted_geomean(values, weights) if values else 0.0
+
+    totals["weighted_geomean_speedup_vs_baseline_backward"] = _weighted(backward_speedups)
+    totals["weighted_geomean_speedup_vs_baseline_full_step"] = _weighted(full_step_speedups)
+    totals["weighted_geomean_min_speedup_per_case"] = _weighted(min_speedups)
     totals["worst_case_speedup_vs_baseline_backward"] = (
         min(backward_speedups) if backward_speedups else 0.0
     )

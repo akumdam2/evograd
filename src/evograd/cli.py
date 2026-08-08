@@ -51,11 +51,26 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--save-best-to", type=Path, default=None)
+    parser.add_argument(
+        "--save-programs",
+        action="store_true",
+        help=(
+            "keep every evaluated candidate under <output-dir>/programs, with an "
+            "index.jsonl of their metrics (default: only the best is kept)"
+        ),
+    )
     parser.add_argument("--primary-model", default="gpt-4o-mini")
     parser.add_argument("--secondary-model", default="gpt-4o")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
     parser.add_argument("--benchmark-suite", default=None)
-    parser.add_argument("--baseline", default="auto")
+    parser.add_argument(
+        "--baseline",
+        default="auto",
+        help=(
+            "auto, pytorch_autograd (eager), torch_compile, "
+            "torch_compile_max_autotune, or a declaration baseline such as liger"
+        ),
+    )
     parser.add_argument(
         "--ncu",
         action="store_true",
@@ -106,6 +121,7 @@ def _evolve(argv: list[str]) -> int:
         benchmark_dtypes=tuple(args.benchmark_dtype) if args.benchmark_dtype else None,
         dtype=args.dtype,
         performance_baseline=args.baseline,
+        save_programs=args.save_programs,
         ncu=args.ncu,
         ncu_model=args.ncu_model,
         ncu_timeout=args.ncu_timeout,
@@ -143,6 +159,11 @@ def _run(argv: list[str]) -> int:
         action="store_true",
         help="attempt an accepted-only NCU refinement after each evolve group",
     )
+    parser.add_argument(
+        "--save-programs",
+        action="store_true",
+        help="keep every evaluated candidate under each group's programs/ directory",
+    )
     args = parser.parse_args(argv)
 
     from evograd.api import evograd
@@ -161,6 +182,7 @@ def _run(argv: list[str]) -> int:
         max_attempts=args.max_attempts,
         force=args.force,
         ncu=args.ncu,
+        save_programs=args.save_programs,
     )
     print(f"program : {result.program}")
     print(f"report  : {result.report}")

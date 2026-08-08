@@ -6,6 +6,8 @@ scoring policy come from the environment, set by ``evograd.evolve.run``:
 
     EVOGRAD_OP       — operator name (required, see evograd.ops.OPS)
     EVOGRAD_SCORING  — scoring policy name (default: speed_memory)
+    EVOGRAD_PROGRAM_ARCHIVE_DIR — when set, keep every evaluated candidate here
+                                  (evograd evolve --save-programs)
 
 Optional knobs (mirroring the old AUTOGRAD_PAIR_* env vars):
 
@@ -21,7 +23,7 @@ import os
 import sys
 from dataclasses import replace
 
-from evograd.evolve.evaluator import build_evaluate, evaluate_isolated
+from evograd.evolve.evaluator import archive_program, build_evaluate, evaluate_isolated
 from evograd.evolve.scoring import get_policy
 from evograd.ops import get_op
 
@@ -134,8 +136,18 @@ _evaluate_direct = build_evaluate(
     ),
 )
 
+_ARCHIVE_DIR = os.environ.get("EVOGRAD_PROGRAM_ARCHIVE_DIR")
+
 if os.environ.get("EVOGRAD_EVAL_CHILD") == "1":
+    # The isolation child evaluates the same file the parent already archives.
     evaluate = _evaluate_direct
+elif _ARCHIVE_DIR:
+
+    def evaluate(program_path):
+        result = evaluate_isolated(__file__, program_path)
+        archive_program(program_path, result, _ARCHIVE_DIR)
+        return result
+
 else:
     evaluate = lambda program_path: evaluate_isolated(__file__, program_path)
 

@@ -3,7 +3,7 @@
 **Generate, verify, evolve, and benchmark Triton backward kernels from a trusted
 PyTorch forward function.**
 
-Evograd turns an operator definition into a training-ready *autograd pair*: a
+Evograd turns an operator definition into a training-ready _autograd pair_: a
 forward function that chooses what to save and a backward function that consumes
 that saved state. It can generate the initial Triton implementation through
 four research pipelines, verify it against PyTorch autograd, optimize it with
@@ -119,6 +119,13 @@ evograd evolve \
     --output-dir /tmp/evolve_layernorm
 ```
 
+`--save-programs` keeps every candidate the run evaluates under
+`<output-dir>/programs` — one `.py` per distinct program named
+`<UTC timestamp>_<score>_<sha1>`, a `.json` sidecar with its metrics, and an
+`index.jsonl` line per evaluation (including duplicates and failures). Without
+it, OpenEvolve returns only the best program and the rest of the population is
+unrecoverable.
+
 Benchmark the best candidate:
 
 ```bash
@@ -126,6 +133,13 @@ evograd bench \
     --op layernorm \
     --candidate /tmp/evolve_layernorm/evolved_best_program.py
 ```
+
+`bench` exits non-zero when anything fails and prints the failure to stderr.
+With `--out`, the report is written either way: `report["ok"]` is the verdict,
+`report["error"]` holds a setup failure (unknown op, candidate that raises on
+import, a `--dtype` the declared benchmark suite has no cases for), and
+`report["cases"][i]["error"]` holds a per-workload failure. Cases that did run
+are still aggregated.
 
 ## One-call Python API
 
@@ -165,12 +179,12 @@ makes every later subprocess reproducible.
 All four pipelines target the same candidate API and use the same declaration,
 oracle, and verification path.
 
-| Pipeline | Inputs | Generation method | LLM required |
-|---|---|---|---|
-| **A — AtenIR + LLM** | Forward reference and extracted AtenIR backward graph | LLM plans, generates, and repairs fused Triton code | Yes |
-| **B — primitive dispatch** | Forward reference and extracted AtenIR backward graph | Handwritten Aten-to-Triton primitive lowering followed by dispatch-free code generation | No |
-| **C — forward only** | Forward source and declared contract | LLM derives the backward without seeing AtenIR; used as an ablation | Yes |
-| **D — Inductor capture** | Forward reference only | AOTAutograd traces the joint graph, the min-cut partitioner splits it, and Inductor lowers both halves | No |
+| Pipeline                   | Inputs                                                | Generation method                                                                                      | LLM required |
+| -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------ |
+| **A — AtenIR + LLM**       | Forward reference and extracted AtenIR backward graph | LLM plans, generates, and repairs fused Triton code                                                    | Yes          |
+| **B — primitive dispatch** | Forward reference and extracted AtenIR backward graph | Handwritten Aten-to-Triton primitive lowering followed by dispatch-free code generation                | No           |
+| **C — forward only**       | Forward source and declared contract                  | LLM derives the backward without seeing AtenIR; used as an ablation                                    | Yes          |
+| **D — Inductor capture**   | Forward reference only                                | AOTAutograd traces the joint graph, the min-cut partitioner splits it, and Inductor lowers both halves | No           |
 
 ```bash
 evograd seed a --op rmsnorm --output-dir /tmp/A_rmsnorm --model gpt-5.5
@@ -224,7 +238,7 @@ evograd evolve --op rmsnorm \
 Three properties of the capture are worth knowing:
 
 - **Dynamic shapes by default**, so the kernels take sizes as runtime arguments
-  and one seed covers the whole workload grid. Dimensions that are *equal* at
+  and one seed covers the whole workload grid. Dimensions that are _equal_ at
   trace time get unified into one symbol, so the pipeline picks a workload whose
   dims are pairwise distinct, perturbing one if the declaration has none.
 - **Scalar arguments are baked in** at trace time (`eps`, and similar). The
@@ -238,7 +252,7 @@ capture, swapping `@triton_heuristics.pointwise`/`.reduction` for
 constants, and timings stop depending on which workload happened to run first.
 `triton_meta` and `inductor_meta` are carried over untouched -- the first is
 what Triton needs to compile, the second carries `grid_type` and hence the
-launch grid; neither is a tuning input. Pinning the *winner* rather than a
+launch grid; neither is a tuning input. Pinning the _winner_ rather than a
 default keeps the untuned seed as fast as the tuned one, which makes this the
 right mode for isolating what autotuning contributes.
 
@@ -337,7 +351,7 @@ In plain language:
 ### Why `Active` and `Inactive`? What is Enzyme?
 
 [Enzyme](https://enzyme.mit.edu/) is an automatic-differentiation system for
-LLVM. It differentiates compiled programs and uses *activity analysis* to
+LLVM. It differentiates compiled programs and uses _activity analysis_ to
 determine which values participate in differentiation. The underlying concepts
 are:
 
@@ -397,12 +411,12 @@ timing settings, dtype, and dimensions; the candidate is always re-timed.
 
 Available scoring policies are:
 
-| Policy | Objective |
-|---|---|
-| `speed` | Backward speedup |
-| `speed_memory` | Weighted backward/full-step speedup with a saved-memory penalty |
-| `speed_memory_min` | Minimum of backward and full-step speedup, memory-penalized |
-| `speed_memory_min_geomean` | Geometric-mean minimum speedup, memory-penalized |
+| Policy                              | Objective                                                          |
+| ----------------------------------- | ------------------------------------------------------------------ |
+| `speed`                             | Backward speedup                                                   |
+| `speed_memory`                      | Weighted backward/full-step speedup with a saved-memory penalty    |
+| `speed_memory_min`                  | Minimum of backward and full-step speedup, memory-penalized        |
+| `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
 The default is `speed_memory`. Thirteen declarations expose reviewed optional
@@ -414,6 +428,22 @@ Liger baselines. `--baseline auto` selects Liger when its adapter and
 pip install -e ".[baselines]"
 evograd bench --op layernorm --candidate best.py --baseline liger
 ```
+
+Two built-in `torch.compile` baselines are available for every operator without
+any declaration support — `torch_compile` and `torch_compile_max_autotune`:
+
+```bash
+evograd bench --op layernorm --candidate best.py --baseline torch_compile
+```
+
+They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
+D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
+itself would emit — so beating eager is expected and says little about the
+kernel. Both compiled baselines are checked against the eager oracle before
+their timings are used, and they are never selected by `--baseline auto`: each
+benchmark case compiles a shape specialist, which costs real wall time on the
+first run (it is absorbed by warmup and by the persistent baseline timing
+cache).
 
 ### NCU-guided refinement
 
@@ -442,26 +472,26 @@ retaining the fork’s private every-N worker patch.
 
 ## Supported operators
 
-| Operator | Forward | Requested gradients | Liger baseline |
-|---|---|---|---|
-| `cross_entropy` | mean cross-entropy loss | `dlogits` | yes |
-| `dyt` | dynamic tanh | `dx`, `dalpha`, `dgamma`, `dbeta` | yes |
-| `evoattention` | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias` | no |
-| `fused_add_rms_norm` | residual add plus RMSNorm | `dx`, `dr`, `dweight` | yes |
-| `geglu` | GeGLU activation | `da`, `db` | yes |
-| `jsd` | Jensen-Shannon divergence | `dlog_q` | yes |
-| `kl_div` | KL divergence | `d_input` | yes |
-| `layernorm` | LayerNorm | `dx`, `dweight`, `dbias` | yes |
-| `layernorm_linear` | LayerNorm followed by Linear | `dx`, `dlinear_weight`, `dweight`, `dbias` | no |
-| `linear` | `x @ weight.T + bias` | `dx`, `dweight`, `dbias` | no |
-| `matmul` | `a @ b` | `da`, `db` | no |
-| `poly_norm` | polynomial normalization | `dx`, `dweight`, `dbias` | yes |
-| `relu_squared` | `relu(x)²` | `dx` | yes |
-| `rmsnorm` | RMSNorm | `dx`, `dweight` | no |
-| `softmax` | row-wise softmax | `dx` | yes |
-| `sparsemax` | simplex projection | `dx` | yes |
-| `swiglu` | SwiGLU activation | `da`, `db` | yes |
-| `tvd` | total-variation distance | `dp`, `dq` | yes |
+| Operator             | Forward                                   | Requested gradients                        | Liger baseline |
+| -------------------- | ----------------------------------------- | ------------------------------------------ | -------------- |
+| `cross_entropy`      | mean cross-entropy loss                   | `dlogits`                                  | yes            |
+| `dyt`                | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta`          | yes            |
+| `evoattention`       | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`            | no             |
+| `fused_add_rms_norm` | residual add plus RMSNorm                 | `dx`, `dr`, `dweight`                      | yes            |
+| `geglu`              | GeGLU activation                          | `da`, `db`                                 | yes            |
+| `jsd`                | Jensen-Shannon divergence                 | `dlog_q`                                   | yes            |
+| `kl_div`             | KL divergence                             | `d_input`                                  | yes            |
+| `layernorm`          | LayerNorm                                 | `dx`, `dweight`, `dbias`                   | yes            |
+| `layernorm_linear`   | LayerNorm followed by Linear              | `dx`, `dlinear_weight`, `dweight`, `dbias` | no             |
+| `linear`             | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`                   | no             |
+| `matmul`             | `a @ b`                                   | `da`, `db`                                 | no             |
+| `poly_norm`          | polynomial normalization                  | `dx`, `dweight`, `dbias`                   | yes            |
+| `relu_squared`       | `relu(x)²`                                | `dx`                                       | yes            |
+| `rmsnorm`            | RMSNorm                                   | `dx`, `dweight`                            | no             |
+| `softmax`            | row-wise softmax                          | `dx`                                       | yes            |
+| `sparsemax`          | simplex projection                        | `dx`                                       | yes            |
+| `swiglu`             | SwiGLU activation                         | `da`, `db`                                 | yes            |
+| `tvd`                | total-variation distance                  | `dp`, `dq`                                 | yes            |
 
 The twelve Liger-derived additions carry exact final-fork correctness cases,
 bf16 benchmark grids, workload weighting, and full/small/large regime suites.

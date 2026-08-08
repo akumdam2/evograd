@@ -80,6 +80,7 @@ def run_evolve(
     benchmark_dtypes: tuple[str, ...] | None = None,
     dtype: str | None = None,
     performance_baseline: str = "auto",
+    save_programs: bool = False,
     extra_env: dict[str, str] | None = None,
     ncu: bool = False,
     ncu_model: str | None = None,
@@ -144,6 +145,12 @@ def run_evolve(
         env.setdefault("EVOGRAD_BENCHMARK_DTYPES", dtype)
     if performance_baseline != "pytorch_autograd":
         env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
+    programs_dir = output_dir / "programs"
+    if save_programs:
+        # The evaluator sees every candidate OpenEvolve generates; run_evolution
+        # only hands back the best one. Archiving there is the only place that
+        # sees the whole population.
+        env["EVOGRAD_PROGRAM_ARCHIVE_DIR"] = str(programs_dir)
     if extra_env:
         env.update(extra_env)
 
@@ -186,4 +193,7 @@ def run_evolve(
         )
         print(f"NCU refinement: {record['outcome']}")
     print(f"Wrote final best program to: {target}")
+    if save_programs:
+        archived = len(list(programs_dir.glob("*.py"))) if programs_dir.is_dir() else 0
+        print(f"Archived {archived} evaluated program(s) to: {programs_dir}")
     return 0
