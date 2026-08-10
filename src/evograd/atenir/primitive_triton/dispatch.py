@@ -17,7 +17,7 @@ from typing import Callable
 
 import torch
 
-from . import elementwise, gemm, reduction, scatter_gather
+from . import conv, elementwise, gemm, reduction, scatter_gather
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -200,6 +200,96 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _view_rt
 
+    if has_shape_list and "aten.convolution_backward" in target:
+        lists = [value for value in scalar_args if isinstance(value, (list, tuple))]
+        stride = tuple(lists[0]) if len(lists) > 0 else (1, 1)
+        padding = tuple(lists[1]) if len(lists) > 1 else (0, 0)
+        dilation = tuple(lists[2]) if len(lists) > 2 else (1, 1)
+        output_padding = tuple(lists[3]) if len(lists) > 3 else (0, 0)
+        output_mask = tuple(lists[4]) if len(lists) > 4 else (True, True, True)
+        bools = [value for value in scalar_args if isinstance(value, bool)]
+        ints = [
+            value
+            for value in scalar_args
+            if isinstance(value, int) and not isinstance(value, bool)
+        ]
+        transposed = bools[0] if bools else False
+        groups = ints[-1] if ints else 1
+        if (
+            stride != (1, 1)
+            or padding != (0, 0)
+            or dilation != (1, 1)
+            or transposed
+            or output_padding != (0, 0)
+            or groups != 1
+            or output_mask != (True, True, True)
+        ):
+            raise ValueError("Triton conv2d backward supports only the declared fixed contract")
+
+        def _conv2d_backward(dy, x, weight, bias_sizes):
+            return conv.conv2d_backward(dy, x, weight, bias_sizes)
+
+        return _conv2d_backward
+
+    if has_shape_list and "aten.index_put" in target:
+        accumulate = bool(scalar_args[-1]) if scalar_args else False
+
+        def _index_put(base, indices, values):
+            return scatter_gather.advanced_index_put_dim0(
+                base,
+                indices,
+                values,
+                accumulate=accumulate,
+            )
+
+        return _index_put
+
+    if has_shape_list and "aten.index.Tensor" in target:
+
+        def _index(input, indices):
+            return scatter_gather.advanced_index_dim0(input, indices)
+
+        return _index
+
+    if has_shape_list and "aten.split_with_sizes" in target:
+        dim = int(scalar_args[-1]) if scalar_args else 0
+
+        def _split(a, sizes):
+            return scatter_gather.split_with_sizes(a, sizes, dim)
+
+        return _split
+
+    if has_shape_list and "aten.full" in target and "full_like" not in target:
+        # Two lowerings landed here independently: a Triton fill (MoE routing
+        # buffers) and a torch.full fallback (poly_norm's constant mask). Use
+        # the Triton kernel for floating dtypes, since Pipeline B's generated
+        # math must not call PyTorch, and keep the fallback for integer/bool
+        # fills, whose exact value would not survive the kernel's float cast.
+        dtype = _parse_dtype(node.get("output_dtype") or "") or torch.float32
+        fill_value = scalar_args[0] if scalar_args else 0
+
+        if dtype.is_floating_point:
+
+            def _full(shape):
+                return scatter_gather.full(shape, fill_value, dtype)
+
+        else:
+
+            def _full(shape):
+                return torch.full(
+                    tuple(int(size) for size in shape), fill_value, dtype=dtype, device="cuda"
+                )
+
+        return _full
+
+    if has_shape_list and "aten.cat" in target:
+        dim = int(scalar_args[-1]) if scalar_args else 0
+
+        def _cat(tensors):
+            return scatter_gather.cat2(tensors, dim)
+
+        return _cat
+
     if n_sym_nodes and n_tensors == 1 and ao and ao[0].get("kind") == "node":
         # Pointwise op whose scalar operand is a symbolic size (runtime int).
         # Matches both namespaces: aten.div/aten.mul and prims.div/prims.mul
@@ -216,18 +306,6 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
                 return elementwise.mul_scalar(a, float(s))
 
             return _mul_sym
-
-    if has_shape_list and "aten.full" in target and "full_like" not in target:
-        # aten.full with a symbolic size list (e.g. poly_norm's constant mask).
-        out_dtype = _parse_dtype(node.get("output_dtype") or "") or torch.float32
-        fill_val = scalar_args[0] if scalar_args else 0.0
-
-        def _full_rt(shape):
-            return torch.full(
-                tuple(int(s) for s in shape), fill_val, dtype=out_dtype, device="cuda"
-            )
-
-        return _full_rt
 
     if n_sym_nodes and "aten.arange" in target:
         # aten.arange whose *end* is a runtime size (e.g. sparsemax's
@@ -838,6 +916,35 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _addmm
 
+    if "aten.convolution.default" in target:
+        lists = [value for value in scalar_args if isinstance(value, (list, tuple))]
+        stride = tuple(lists[0]) if len(lists) > 0 else (1, 1)
+        padding = tuple(lists[1]) if len(lists) > 1 else (0, 0)
+        dilation = tuple(lists[2]) if len(lists) > 2 else (1, 1)
+        output_padding = tuple(lists[3]) if len(lists) > 3 else (0, 0)
+        bools = [value for value in scalar_args if isinstance(value, bool)]
+        ints = [
+            value
+            for value in scalar_args
+            if isinstance(value, int) and not isinstance(value, bool)
+        ]
+        transposed = bools[0] if bools else False
+        groups = ints[-1] if ints else 1
+        if (
+            stride != (1, 1)
+            or padding != (0, 0)
+            or dilation != (1, 1)
+            or transposed
+            or output_padding != (0, 0)
+            or groups != 1
+        ):
+            raise ValueError("Triton conv2d forward supports only the declared fixed contract")
+
+        def _conv2d_forward(x, weight, bias):
+            return conv.conv2d_forward(x, weight, bias)
+
+        return _conv2d_forward
+
     # ── init / allocation ops ─────────────────────────────────────────────────
 
     if "zeros_like" in target:
@@ -929,7 +1036,7 @@ def _kernel_label(fn: Callable) -> str:
         return tag
     module = getattr(fn, "__module__", "") or ""
     qname = getattr(fn, "__qualname__", "") or getattr(fn, "__name__", repr(fn))
-    for seg in ("elementwise", "gemm", "reduction", "scatter_gather"):
+    for seg in ("conv", "elementwise", "gemm", "reduction", "scatter_gather"):
         if seg in module:
             short = seg.replace("_gather", "")
             return f"triton/{short}:{qname}"

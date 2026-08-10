@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 import torch
 
-_SUBMODULE_NAMES = ("elementwise", "reduction", "gemm", "scatter_gather")
+_SUBMODULE_NAMES = ("conv", "elementwise", "reduction", "gemm", "scatter_gather")
 
 
 def _scalar_literal(value: Any) -> str:
@@ -145,6 +145,33 @@ class _ProgramBuilder:
             return self._generic_fallback_call(target, arg_exprs, node)
         if self._is_unimplemented(kernel):
             raise NotImplementedError(f"No hand-written kernel for target {target!r}")
+        qualname = getattr(kernel, "__qualname__", "")
+        if "<locals>" in qualname:
+            parameters = inspect.signature(kernel).parameters.values()
+            positional = [
+                parameter
+                for parameter in parameters
+                if parameter.kind
+                in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                )
+            ]
+            if not any(
+                parameter.kind is inspect.Parameter.VAR_POSITIONAL
+                for parameter in parameters
+            ):
+                # Dispatch closures bake serialized scalar constants into free
+                # variables. The AtenIR node still carries those constants, but
+                # passing them again would bind the generated freevar defaults
+                # positionally (e.g. ``_k0(a, 0)`` overwrote ``fn_s``).
+                ordered = node.get("args_ordered") or []
+                runtime_exprs = [
+                    expression
+                    for entry, expression in zip(ordered, arg_exprs)
+                    if entry.get("kind") != "scalar"
+                ]
+                arg_exprs = runtime_exprs[: len(positional)]
         callee = self._resolve(kernel)
         return f"{callee}({', '.join(arg_exprs)})"
 
@@ -388,6 +415,29 @@ def _pyname(node_name: str) -> str:
     return f"t_{node_name}"
 
 
+def _ordered_arg_exprs(args_ordered: list[dict]) -> list[str]:
+    """Render all serialized positional args, including scalar constants."""
+    arg_exprs = []
+    for entry in args_ordered:
+        kind = entry["kind"]
+        if kind in ("node", "sym_node"):
+            arg_exprs.append(_pyname(entry["name"]))
+        elif kind == "shape_list":
+            parts = [
+                _pyname(item["name"])
+                if item["kind"] in ("node", "sym_node")
+                else repr(item["value"])
+                for item in entry["items"]
+            ]
+            trailing = "," if len(parts) == 1 else ""
+            arg_exprs.append(f"({', '.join(parts)}{trailing})")
+        elif kind == "scalar":
+            arg_exprs.append(repr(entry["value"]))
+        else:
+            raise ValueError(f"Unsupported serialized argument kind: {kind!r}")
+    return arg_exprs
+
+
 def generate_dispatch_program(graph: dict) -> str:
     """Build the full dispatch_program.py source text for an AtenIR graph dict."""
     from evograd.atenir.primitive_triton.dispatch import make_kernel
@@ -512,18 +562,7 @@ def generate_dispatch_program(graph: dict) -> str:
                 continue
 
         if args_ordered is not None:
-            arg_exprs = []
-            for e in args_ordered:
-                kind = e["kind"]
-                if kind in ("node", "sym_node"):
-                    arg_exprs.append(_pyname(e["name"]))
-                elif kind == "shape_list":
-                    parts = [
-                        _pyname(it["name"]) if it["kind"] in ("node", "sym_node") else repr(it["value"])
-                        for it in e["items"]
-                    ]
-                    trailing = "," if len(parts) == 1 else ""
-                    arg_exprs.append(f"({', '.join(parts)}{trailing})")
+            arg_exprs = _ordered_arg_exprs(args_ordered)
         else:
             arg_exprs = [_pyname(a) for a in (node.get("predecessor_ids") or [])]
         kernel = make_kernel(node)

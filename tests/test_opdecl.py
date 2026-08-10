@@ -30,6 +30,42 @@ class TestNativeContractRendering(unittest.TestCase):
         for suite in ("mixed", "small", "large", "tb_sweep", "tb_i27"):
             self.assertTrue(op.benchmark_workloads(suite))
 
+    def test_dense_compute_benchmarks_use_explicit_baseline_provenance(self):
+        self.assertEqual(
+            {case.dtype for case in get_op("matmul").benchmark},
+            {"bfloat16"},
+        )
+        large_matmul = get_op("matmul").benchmark_workloads("large_bf16")
+        self.assertEqual(len(large_matmul), 4)
+        self.assertTrue(all(case.dims["K"] == 4096 for case in large_matmul))
+        extreme_matmul = get_op("matmul").benchmark_workloads("extreme_bf16")
+        self.assertEqual(len(extreme_matmul), 1)
+        self.assertEqual(
+            extreme_matmul[0].dims,
+            {"M": 8192, "K": 4096, "N": 14336},
+        )
+        self.assertEqual(
+            set(get_op("matmul").performance_baselines),
+            {"cublas_pair"},
+        )
+        self.assertFalse(get_op("conv2d").performance_baselines)
+        self.assertEqual(
+            set(get_op("gemm_leaky_relu").performance_baselines),
+            {"triton_tutorial"},
+        )
+        self.assertIn(
+            "liger",
+            get_op("fused_moe_swiglu").performance_baselines,
+        )
+
+    def test_conv2d_pipeline_b_contract_is_scalar_specialized(self):
+        op = get_op("conv2d")
+        self.assertEqual(op.forward_parameters(), "x, weight, bias")
+        for case in (*op.correctness, *op.benchmark):
+            dims = case.dims
+            self.assertEqual(dims["OH"], dims["H"] - dims["KH"] + 1)
+            self.assertEqual(dims["OW"], dims["W"] - dims["KW"] + 1)
+
 
 class TestDerivedNaming(unittest.TestCase):
     def test_grad_name_override(self):
@@ -46,15 +82,18 @@ class TestDerivedNaming(unittest.TestCase):
         op = get_op("evoattention")
         self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
 
-    def test_registry_covers_all_eighteen(self):
+    def test_registry_covers_all_twenty_one(self):
         self.assertEqual(
             sorted(OPS),
             [
+                "conv2d",
                 "cross_entropy",
                 "dyt",
                 "evoattention",
                 "fused_add_rms_norm",
+                "fused_moe_swiglu",
                 "geglu",
+                "gemm_leaky_relu",
                 "jsd",
                 "kl_div",
                 "layernorm",
@@ -147,6 +186,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
             "cross_entropy": (6, 42),
             "dyt": (6, 15),
             "fused_add_rms_norm": (6, 16),
+            "fused_moe_swiglu": (2, 6),
             "geglu": (6, 42),
             "jsd": (6, 14),
             "kl_div": (6, 39),
@@ -196,6 +236,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
             "cross_entropy",
             "dyt",
             "fused_add_rms_norm",
+            "fused_moe_swiglu",
             "geglu",
             "jsd",
             "kl_div",

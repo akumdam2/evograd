@@ -472,29 +472,48 @@ retaining the fork’s private every-N worker patch.
 
 ## Supported operators
 
-| Operator             | Forward                                   | Requested gradients                        | Liger baseline |
-| -------------------- | ----------------------------------------- | ------------------------------------------ | -------------- |
-| `cross_entropy`      | mean cross-entropy loss                   | `dlogits`                                  | yes            |
-| `dyt`                | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta`          | yes            |
-| `evoattention`       | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`            | no             |
-| `fused_add_rms_norm` | residual add plus RMSNorm                 | `dx`, `dr`, `dweight`                      | yes            |
-| `geglu`              | GeGLU activation                          | `da`, `db`                                 | yes            |
-| `jsd`                | Jensen-Shannon divergence                 | `dlog_q`                                   | yes            |
-| `kl_div`             | KL divergence                             | `d_input`                                  | yes            |
-| `layernorm`          | LayerNorm                                 | `dx`, `dweight`, `dbias`                   | yes            |
-| `layernorm_linear`   | LayerNorm followed by Linear              | `dx`, `dlinear_weight`, `dweight`, `dbias` | no             |
-| `linear`             | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`                   | no             |
-| `matmul`             | `a @ b`                                   | `da`, `db`                                 | no             |
-| `poly_norm`          | polynomial normalization                  | `dx`, `dweight`, `dbias`                   | yes            |
-| `relu_squared`       | `relu(x)²`                                | `dx`                                       | yes            |
-| `rmsnorm`            | RMSNorm                                   | `dx`, `dweight`                            | no             |
-| `softmax`            | row-wise softmax                          | `dx`                                       | yes            |
-| `sparsemax`          | simplex projection                        | `dx`                                       | yes            |
-| `swiglu`             | SwiGLU activation                         | `da`, `db`                                 | yes            |
-| `tvd`                | total-variation distance                  | `dp`, `dq`                                 | yes            |
+| Operator             | Forward                                        | Requested gradients                                   | Liger baseline                 |
+| -------------------- | ---------------------------------------------- | ----------------------------------------------------- | ------------------------------ |
+| `conv2d`             | dense NCHW convolution                         | `dx`, `dweight`, `dbias`                              | no (cuDNN)                     |
+| `cross_entropy`      | mean cross-entropy loss                        | `dlogits`                                             | yes                            |
+| `dyt`                | dynamic tanh                                   | `dx`, `dalpha`, `dgamma`, `dbeta`                     | yes                            |
+| `evoattention`       | AlphaFold3-style attention with pair bias      | `dq`, `dk`, `dv`, `d_pair_bias`                       | no                             |
+| `fused_add_rms_norm` | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                            |
+| `fused_moe_swiglu`   | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                            |
+| `geglu`              | GeGLU activation                               | `da`, `db`                                            | yes                            |
+| `gemm_leaky_relu`    | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (cuBLAS or Triton tutorial) |
+| `jsd`                | Jensen-Shannon divergence                      | `dlog_q`                                              | yes                            |
+| `kl_div`             | KL divergence                                  | `d_input`                                             | yes                            |
+| `layernorm`          | LayerNorm                                      | `dx`, `dweight`, `dbias`                              | yes                            |
+| `layernorm_linear`   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                             |
+| `linear`             | `x @ weight.T + bias`                          | `dx`, `dweight`, `dbias`                              | no                             |
+| `matmul`             | `a @ b`                                        | `da`, `db`                                            | no                             |
+| `poly_norm`          | polynomial normalization                       | `dx`, `dweight`, `dbias`                              | yes                            |
+| `relu_squared`       | `relu(x)²`                                     | `dx`                                                  | yes                            |
+| `rmsnorm`            | RMSNorm                                        | `dx`, `dweight`                                       | no                             |
+| `softmax`            | row-wise softmax                               | `dx`                                                  | yes                            |
+| `sparsemax`          | simplex projection                             | `dx`                                                  | yes                            |
+| `swiglu`             | SwiGLU activation                              | `da`, `db`                                            | yes                            |
+| `tvd`                | total-variation distance                       | `dp`, `dq`                                            | yes                            |
 
-The twelve Liger-derived additions carry exact final-fork correctness cases,
-bf16 benchmark grids, workload weighting, and full/small/large regime suites.
+The Liger-derived operators carry exact final-fork correctness cases, bf16
+benchmark grids, workload weighting, and full/small/large regime suites. Liger
+does not ship generic dense GEMM or convolution kernels: `matmul` therefore
+compares against PyTorch/cuBLAS, while `conv2d` compares against PyTorch/cuDNN.
+`gemm_leaky_relu` additionally exposes the reviewed `triton_tutorial` pair
+baseline; its forward uses the tutorial's grouped GEMM ordering and fused
+epilogue, while its backward uses the same GEMM kernel plus a pointwise
+activation derivative. `fused_moe_swiglu` is the separate, genuine Liger
+grouped-GEMM+activation benchmark; it must not be interpreted as a generic
+dense GEMM baseline.
+
+Pipeline B provides handwritten Triton lowerings for the fixed `conv2d`
+contract (NCHW/OIHW, stride 1, padding 0, dilation 1, groups 1), including
+forward, dX, dWeight, and dBias. Its MoE seed uses a coverage-safe dense-expert
+BMM decomposition plus Triton routing/scatter primitives; the Liger baseline
+retains sparse grouped-GEMM execution, leaving top-k/grouped fusion as an
+explicit evolution target.
+
 LayerNorm also includes the legacy and TritonBench shape suites:
 
 ```bash

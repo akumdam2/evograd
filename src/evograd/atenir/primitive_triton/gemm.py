@@ -17,9 +17,8 @@ What the templates provided and how they map here:
   GROUP_M = 8                 → kept as constexpr for L2 reordering
   ALLOW_TF32                  → passed as constexpr, default True
 
-Conv templates (triton_conv2d_bwd_input/weight.py.jinja) require per-call
-shape metadata (padding, dilation, stride, groups, H/W) that is not present
-in the AtenIR graph JSON; those remain PyTorch fallbacks in dispatch.py.
+Dense NCHW convolution is implemented separately in ``conv.py`` for the
+shape-specialized stride=1, padding=0, dilation=1, groups=1 contract.
 """
 
 from __future__ import annotations

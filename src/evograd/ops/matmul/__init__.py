@@ -1,6 +1,38 @@
 """Operator declaration: matmul."""
 
 from evograd.opdecl import Active, Workload, declare_op
+from evograd.ops.matmul.cublas import measure_cublas_pair_baseline
+
+
+_LEGACY_SHAPES = (
+    (512, 512, 512),
+    (1024, 1024, 1024),
+    (2048, 1024, 1024),
+    (1024, 1024, 2048),
+    (2048, 1024, 2048),
+    (4096, 1024, 1024),
+)
+_INDUSTRIAL_BF16_SHAPES = (
+    (256, 1024, 1024),
+    (1024, 1024, 1024),
+    (4096, 1024, 1024),
+    (1024, 4096, 4096),
+    (4096, 4096, 1024),
+    (2048, 4096, 4096),
+    (8192, 4096, 14336),
+)
+_LARGE_BF16_SHAPES = tuple(
+    shape for shape in _INDUSTRIAL_BF16_SHAPES if shape[1] >= 4096
+)
+_EXTREME_BF16_SHAPES = ((8192, 4096, 14336),)
+
+
+def _workloads(shapes, dtypes):
+    return tuple(
+        Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
+        for m, k, n in shapes
+        for dtype in dtypes
+    )
 
 
 def make_matmul_inputs(torch, op, workload, device="cuda"):
@@ -31,15 +63,22 @@ op = declare_op(
         Workload(dims=dict(M=129, K=127, N=257), dtype="float32"),
         Workload(dims=dict(M=128, K=128, N=256), dtype="float16"),
         Workload(dims=dict(M=512, K=256, N=512), dtype="float16"),
+        Workload(dims=dict(M=128, K=128, N=256), dtype="bfloat16"),
+        Workload(dims=dict(M=257, K=255, N=129), dtype="bfloat16"),
     ),
-    benchmark=tuple(
-        Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
-        for (m, n, k) in (
-            (512, 512, 512), (1024, 1024, 1024), (2048, 1024, 1024),
-            (1024, 2048, 1024), (2048, 2048, 1024), (4096, 1024, 1024),
-        )
-        for dtype in ("float32", "float16")
-    ),
-    tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    coverage=_workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
+    benchmark=_workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
+    benchmark_suites={
+        "industrial_bf16": _workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
+        "large_bf16": _workloads(_LARGE_BF16_SHAPES, ("bfloat16",)),
+        "extreme_bf16": _workloads(_EXTREME_BF16_SHAPES, ("bfloat16",)),
+        "legacy": _workloads(_LEGACY_SHAPES, ("float32", "float16")),
+    },
+    performance_baselines={"cublas_pair": measure_cublas_pair_baseline},
+    tolerances={
+        "float32": (8e-2, 2e-2),
+        "float16": (1e-1, 2e-2),
+        "bfloat16": (1.5e-1, 3e-2),
+    },
     make_inputs=make_matmul_inputs,
 )

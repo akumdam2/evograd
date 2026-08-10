@@ -131,6 +131,10 @@ class OpDecl:
     extra_constraints: str = ""
     grad_order: tuple[str, ...] | None = None
     correctness: tuple[Workload, ...] = ()
+    # Untimed compile/runtime coverage gate. These workloads need not be part
+    # of the performance objective, but every publishable candidate must run
+    # forward and backward on all of them.
+    coverage: tuple[Workload, ...] = ()
     benchmark: tuple[Workload, ...] = ()
     tolerances: dict[str, tuple[float, float]] = field(default_factory=dict)
     # Per-result multipliers applied to the workload/dtype tolerance. This
@@ -320,7 +324,11 @@ class OpDecl:
             raise ValueError(f"{self.name}: tolerance_hook must be callable")
 
         suites = [self.benchmark, *self.benchmark_suites.values()]
-        for workload in (*self.correctness, *(w for suite in suites for w in suite)):
+        for workload in (
+            *self.correctness,
+            *self.coverage,
+            *(w for suite in suites for w in suite),
+        ):
             missing = set(self.dims) - set(workload.dims)
             extra = set(workload.dims) - set(self.dims)
             if missing or extra:
@@ -462,6 +470,7 @@ def declare_op(
     extra_constraints: str = "",
     grad_order: tuple[str, ...] | None = None,
     correctness: tuple[Workload, ...] = (),
+    coverage: tuple[Workload, ...] = (),
     benchmark: tuple[Workload, ...] = (),
     tolerances: dict[str, tuple[float, float]] | None = None,
     tolerance_multipliers: dict[str, tuple[float, float]] | None = None,
@@ -487,6 +496,7 @@ def declare_op(
         extra_constraints=extra_constraints,
         grad_order=tuple(grad_order) if grad_order is not None else None,
         correctness=tuple(correctness),
+        coverage=tuple(coverage),
         benchmark=tuple(benchmark),
         tolerances=dict(tolerances) if tolerances is not None else {},
         tolerance_multipliers=(

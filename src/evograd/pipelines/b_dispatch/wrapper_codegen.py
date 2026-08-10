@@ -29,15 +29,22 @@ def _scalar_inactive(op: OpDecl) -> list[Inactive]:
 
 
 def grad_indices(op: OpDecl) -> list[int]:
-    """For each backward return, the index of its input among the tensor args.
+    """For each backward return, its index among differentiable graph outputs.
 
-    ``run_graph_program`` (emitted by the dispatch codegen) returns one
-    gradient per forward tensor input, in input order. The wrapper picks the
-    ``Active`` ones and emits them in contract order — no name matching.
+    ``run_graph_program`` returns gradients for floating/complex tensor
+    placeholders in declaration order. A floating Inactive tensor can still
+    appear in the extracted backward graph (e.g. an attention mask), whereas
+    integer/bool metadata never has a gradient slot.
     """
-    tensor_names = _tensor_args(op)
+    non_differentiable_dtypes = {"int64", "int32", "bool"}
+    graph_grad_names = [
+        arg.name
+        for arg in op.args
+        if getattr(arg, "shape", None) is not None
+        and getattr(arg, "dtype", None) not in non_differentiable_dtypes
+    ]
     by_grad = {a.grad_name: a.name for a in op.active_args()}
-    return [tensor_names.index(by_grad[g]) for g in op.grad_names()]
+    return [graph_grad_names.index(by_grad[g]) for g in op.grad_names()]
 
 
 def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
@@ -70,7 +77,7 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     # An Active-only op with declaration-order grads can return the graph
     # outputs directly; anything else (Inactive tensors to drop, grad_order
     # overrides) selects by index.
-    if indices == list(range(len(tensor_names))):
+    if indices == list(range(len(op.active_args()))):
         backward_body = (
             f"{unused_scalars}"
             f"    {unpack}\n"

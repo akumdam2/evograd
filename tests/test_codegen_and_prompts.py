@@ -11,7 +11,12 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from evograd.opdecl.activity import example_input_spec
+from evograd.atenir.primitive_triton.dispatch import make_kernel
 from evograd.ops import get_op
+from evograd.pipelines.b_dispatch.program_codegen import (
+    _ProgramBuilder,
+    _ordered_arg_exprs,
+)
 from evograd.pipelines.b_dispatch.wrapper_codegen import (
     grad_indices,
     render_autograd_pair_wrapper,
@@ -71,6 +76,16 @@ class TestWrapperCodegen(unittest.TestCase):
         wrapper = render_autograd_pair_wrapper("m:f", op)
         self.assertIn("return (_grads[0], _grads[3], _grads[1], _grads[2])", wrapper)
 
+    def test_inactive_tensor_does_not_create_graph_gradient_slot(self):
+        op = get_op("fused_moe_swiglu")
+        self.assertEqual(grad_indices(op), [0, 1, 2, 3])
+        wrapper = render_autograd_pair_wrapper(
+            "evograd.ops.fused_moe_swiglu.forward_ref:"
+            "fused_moe_swiglu_forward_ref",
+            op,
+        )
+        self.assertNotIn("_grads[4]", wrapper)
+
     def test_wrapper_compiles_for_every_op(self):
         from evograd.ops import OPS
 
@@ -78,6 +93,112 @@ class TestWrapperCodegen(unittest.TestCase):
             with self.subTest(op=name):
                 wrapper = render_autograd_pair_wrapper("m:f", op)
                 compile("def run_graph_program(*a): pass\n" + wrapper, f"<{name}>", "exec")
+
+
+class TestDispatchProgramCodegen(unittest.TestCase):
+    def test_ordered_args_preserve_scalar_constants(self):
+        self.assertEqual(
+            _ordered_arg_exprs(
+                [
+                    {"kind": "node", "name": "mean"},
+                    {"kind": "scalar", "value": 1e-5},
+                    {
+                        "kind": "shape_list",
+                        "items": [
+                            {"kind": "sym_node", "name": "rows"},
+                            {"kind": "scalar", "value": 64},
+                        ],
+                    },
+                ]
+            ),
+            ["t_mean", "1e-05", "(t_rows, 64)"],
+        )
+
+    def test_dispatch_closure_drops_already_baked_scalar_argument(self):
+        def factory(scalar):
+            def op(a):
+                return a + scalar
+
+            return op
+
+        builder = _ProgramBuilder()
+        expression = builder.call_expr_for_node(
+            {
+                "target": "aten.add.Scalar",
+                "args_ordered": [
+                    {"kind": "node", "name": "input"},
+                    {"kind": "scalar", "value": 2.0},
+                ],
+            },
+            factory(2.0),
+            ["t_input", "2.0"],
+        )
+        self.assertEqual(expression, "_k0(t_input)")
+
+        scalar_first = builder.call_expr_for_node(
+            {
+                "target": "aten.sub.Tensor",
+                "args_ordered": [
+                    {"kind": "scalar", "value": 1},
+                    {"kind": "node", "name": "input"},
+                ],
+            },
+            factory(1.0),
+            ["1", "t_input"],
+        )
+        self.assertEqual(scalar_first, "_k1(t_input)")
+
+    def test_symbolic_conv_and_moe_nodes_have_handwritten_routes(self):
+        cases = (
+            {
+                "name": "conv_bwd",
+                "target": "aten.convolution_backward.default",
+                "args_ordered": [
+                    {"kind": "node", "name": "dy"},
+                    {"kind": "node", "name": "x"},
+                    {"kind": "node", "name": "weight"},
+                    {
+                        "kind": "shape_list",
+                        "items": [{"kind": "sym_node", "name": "channels"}],
+                    },
+                    {"kind": "scalar", "value": [1, 1]},
+                    {"kind": "scalar", "value": [0, 0]},
+                    {"kind": "scalar", "value": [1, 1]},
+                    {"kind": "scalar", "value": False},
+                    {"kind": "scalar", "value": [0, 0]},
+                    {"kind": "scalar", "value": 1},
+                    {"kind": "scalar", "value": [True, True, True]},
+                ],
+            },
+            {
+                "name": "expert_index",
+                "target": "aten.index.Tensor",
+                "args_ordered": [
+                    {"kind": "node", "name": "experts"},
+                    {
+                        "kind": "shape_list",
+                        "items": [{"kind": "node", "name": "routing"}],
+                    },
+                ],
+            },
+            {
+                "name": "expert_index_put",
+                "target": "aten.index_put.default",
+                "args_ordered": [
+                    {"kind": "node", "name": "base"},
+                    {
+                        "kind": "shape_list",
+                        "items": [{"kind": "node", "name": "routing"}],
+                    },
+                    {"kind": "node", "name": "values"},
+                    {"kind": "scalar", "value": True},
+                ],
+            },
+        )
+        for node in cases:
+            with self.subTest(target=node["target"]):
+                kernel = make_kernel(node)
+                self.assertNotIn("fallback", getattr(kernel, "_dispatch_tag", ""))
 
 
 class TestExampleInputSpec(unittest.TestCase):
