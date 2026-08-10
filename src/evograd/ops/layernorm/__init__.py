@@ -1,7 +1,9 @@
 """Operator declaration: layernorm."""
 
+import math
+
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import make_pair_baseline
+from evograd.ops._common import log_distance_weight, make_pair_baseline, regime_suites
 
 
 def make_layernorm_inputs(torch, op, workload, device="cuda"):
@@ -15,12 +17,14 @@ def make_layernorm_inputs(torch, op, workload, device="cuda"):
     return {"x": x, "weight": weight, "bias": bias, "eps": 1e-5, "dy": dy}
 
 
-_MIXED = ((1, 768), (8, 1024), (32, 1536), (8, 4096), (1, 8192),
-          (17, 127), (17, 513), (17, 1000))
-_SMALL = ((1, 768), (8, 1024), (17, 127), (17, 513), (17, 1000))
-_LARGE = ((1024, 1024), (4096, 1024), (16384, 1024), (65536, 1024), (131072, 1024))
+_LEGACY_MIXED = ((1, 768), (8, 1024), (32, 1536), (8, 4096), (1, 8192),
+                 (17, 127), (17, 513), (17, 1000))
+# Pre-regime hand-picked grids retained for smoke / ablation only.
+_HAND_SMALL = ((1, 768), (8, 1024), (17, 127), (17, 513), (17, 1000))
+_HAND_LARGE = ((1024, 1024), (4096, 1024), (16384, 1024), (65536, 1024), (131072, 1024))
 _LEGACY_SMALL = ((1, 256), (4, 512), (8, 768), (17, 127))
 _LEGACY_LARGE = ((32, 1536), (8, 4096), (1, 8192), (64, 8192))
+_REGIME_SPLIT = 4096.0
 
 
 def _tb(i):
@@ -28,28 +32,56 @@ def _tb(i):
 
 
 _TB_SWEEP = tuple(_tb(i) for i in range(12, 28))
+_TB_MIXED = tuple(_tb(i) for i in (12, 14, 16, 18, 20, 22, 24, 26, 27))
+_LLM_INDUSTRIAL = (
+    (17, 1000),      # non-power-of-two hidden boundary
+    (128, 4096),     # small token batch, common LLM hidden
+    (2048, 4096),    # common training scale
+    (8192, 4096),    # industrial token rows
+    (1024, 8192),    # large-model hidden
+)
+_INDUSTRIAL_MIXED = _TB_MIXED + _LLM_INDUSTRIAL
+_COVERAGE = _TB_SWEEP + _LLM_INDUSTRIAL
 _SHAPE_SUITES = {
-    "mixed": _MIXED,
-    "all": _MIXED,
-    "small": _SMALL,
-    "large": _LARGE,
+    "mixed": _INDUSTRIAL_MIXED,
+    "industrial_mixed": _INDUSTRIAL_MIXED,
+    "all": _INDUSTRIAL_MIXED,
+    "legacy_mixed": _LEGACY_MIXED,
+    "hand_small": _HAND_SMALL,
+    "hand_large": _HAND_LARGE,
     "legacy_small": _LEGACY_SMALL,
     "legacy_large": _LEGACY_LARGE,
     "tb_small": tuple(_tb(i) for i in range(12, 17)),
     "tb_medium": tuple(_tb(i) for i in range(17, 23)),
     "tb_large": tuple(_tb(i) for i in range(23, 28)),
-    "tb_mixed": tuple(_tb(i) for i in (12, 14, 16, 18, 20, 22, 24, 26, 27)),
+    "tb_mixed": _TB_MIXED,
     "tb_sweep": _TB_SWEEP,
     **{f"tb_i{i}": (_tb(i),) for i in range(12, 28)},
 }
 
 
-def _workloads(shapes):
+def _workloads(shapes, dtypes=("bfloat16",)):
     return tuple(
         Workload(dims=dict(rows=rows, hidden=hidden), dtype=dtype)
         for rows, hidden in shapes
-        for dtype in ("float32", "float16", "bfloat16")
+        for dtype in dtypes
     )
+
+
+def _regime_feature(workload: Workload) -> float:
+    return float(workload.dims["rows"])
+
+
+_BENCHMARK = _workloads(_INDUSTRIAL_MIXED)
+_REGIME_SUITES = regime_suites(_BENCHMARK, _regime_feature, _REGIME_SPLIT)
+
+
+def layernorm_tolerance(workload, result_name, atol, rtol):
+    """Account for BF16 error growth in long parameter-gradient reductions."""
+    if workload.dtype == "bfloat16" and result_name in {"dweight", "dbias"}:
+        rows = workload.dims["rows"]
+        atol = max(atol, atol * math.sqrt(max(1.0, rows / 8.0)))
+    return atol, rtol
 
 
 def _liger_factory():
@@ -86,9 +118,8 @@ op = declare_op(
     output=Active("y", "[rows, hidden]"),
     forward_semantics='Do not call PyTorch autograd or PyTorch reference LayerNorm in the generated math. Forward must produce the same `y` as row-wise LayerNorm over the last dimension.',
     backward_semantics='Backward must consume only `dy`, `saved_tensors`, and `eps`. Return `dx` with `x` dtype, `dweight` with `weight` dtype, and `dbias` with `bias` dtype.',
-    # Ported from benchmark/triton_layernorm_backward_bench/task_spec.py
-    # (benchmark suite: "mixed" — the old repo's default; other suites were
-    # env-selected and can come back as declaration variants if needed).
+    # Correctness retains all supported dtypes. Evolution performance follows
+    # Liger's BF16 industrial grid; rows < 4096 are the small regime.
     correctness=(
         Workload(dims=dict(rows=8, hidden=64), dtype="float32"),
         Workload(dims=dict(rows=17, hidden=128), dtype="float32"),
@@ -96,14 +127,25 @@ op = declare_op(
         Workload(dims=dict(rows=64, hidden=512), dtype="float16"),
         Workload(dims=dict(rows=32, hidden=256), dtype="bfloat16"),
         Workload(dims=dict(rows=64, hidden=512), dtype="bfloat16"),
+        Workload(dims=dict(rows=128, hidden=4096), dtype="bfloat16"),
+        Workload(dims=dict(rows=1024, hidden=8192), dtype="bfloat16"),
     ),
-    benchmark=_workloads(_MIXED),
-    benchmark_suites={name: _workloads(shapes) for name, shapes in _SHAPE_SUITES.items()},
+    coverage=_workloads(_COVERAGE),
+    benchmark=_BENCHMARK,
+    benchmark_suites={
+        **{name: _workloads(shapes) for name, shapes in _SHAPE_SUITES.items()},
+        **_REGIME_SUITES,
+        "coverage": _workloads(_COVERAGE),
+    },
     performance_baselines={"liger": measure_liger_baseline},
     tolerances={
         "float32": (2e-5, 2e-5),
         "float16": (5e-2, 5e-2),
         "bfloat16": (8e-2, 8e-2),
     },
+    tolerance_hook=layernorm_tolerance,
+    regime_feature=_regime_feature,
+    regime_split=_REGIME_SPLIT,
+    case_weight=log_distance_weight(_regime_feature, _REGIME_SPLIT),
     make_inputs=make_layernorm_inputs,
 )

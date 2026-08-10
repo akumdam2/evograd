@@ -40,7 +40,7 @@ from evograd.bench.harness import (
     run_benchmarks,
     saved_bytes,
 )
-from evograd.evolve.scoring import ScoringPolicy, score_from_aggregate
+from evograd.evolve.scoring import ScoringPolicy, regime_speedup_metrics, score_from_aggregate
 
 try:
     from openevolve.evaluation_result import EvaluationResult
@@ -147,6 +147,16 @@ def archive_program(
         return str(target)
     except Exception:  # pragma: no cover - archiving is never worth a failed run
         return None
+
+
+def _baseline_metrics(aggregate: dict[str, Any]) -> dict[str, float]:
+    """Expose selected-baseline metrics without claiming it was PyTorch."""
+    return {
+        "speedup": float(aggregate["speedup_vs_baseline_backward"]),
+        "full_step_speedup": float(aggregate["speedup_vs_baseline_full_step"]),
+        "baseline_latency_ms": float(aggregate["baseline_backward_ms"]),
+        "baseline_full_step_ms": float(aggregate["baseline_full_step_ms"]),
+    }
 
 
 @contextmanager
@@ -314,7 +324,11 @@ def _smoke_benchmark_shapes(
     a rejected candidate by destroying the child CUDA context.
     """
     fwd, bwd = lookup_pair(op, module)
-    selected = tuple(workloads if workloads is not None else op.benchmark)
+    selected = tuple(
+        workloads
+        if workloads is not None
+        else (op.coverage if op.coverage else op.benchmark)
+    )
     print(
         f"[smoke] correctness passed; checking {len(selected)} benchmark shapes",
         file=sys.stderr,
@@ -360,10 +374,27 @@ def build_evaluate(
     warmup = DEFAULT_WARMUP if warmup is None else warmup
     reps = DEFAULT_REPS if reps is None else reps
 
+    def emit(
+        metrics: dict[str, float],
+        artifacts: dict[str, Any],
+        cases: list[dict] | None = None,
+    ) -> EvaluationResult:
+        # Always publish regime axes so MAP-Elites configs that select them
+        # never hit a missing-metric ValueError on failed candidates.
+        merged = dict(metrics)
+        merged.update(
+            regime_speedup_metrics(
+                cases,
+                regime_feature=op.regime_feature,
+                regime_split=float(op.regime_split or 0.0),
+            )
+        )
+        return _result(merged, artifacts)
+
     def evaluate(program_path: str) -> EvaluationResult:
         _restore_std_fds()
         if not torch.cuda.is_available():
-            return _result(
+            return emit(
                 {"combined_score": -1e9, "correct": 0.0},
                 {
                     "failure": {
@@ -376,7 +407,7 @@ def build_evaluate(
             module = _load_module(program_path)
             lookup_pair(op, module)  # validate API before running anything
         except Exception as exc:
-            return _result(
+            return emit(
                 {"combined_score": -1e9, "correct": 0.0},
                 {
                     "failure": {
@@ -395,9 +426,8 @@ def build_evaluate(
                 native_output_path = captured_path
                 correctness = _run_correctness(op, module)
                 if correctness["passed"] == correctness["total"]:
-                    smoke_failure = _smoke_benchmark_shapes(
-                        op, module, benchmark_workloads
-                    )
+                    smoke_workloads = op.coverage if op.coverage else benchmark_workloads
+                    smoke_failure = _smoke_benchmark_shapes(op, module, smoke_workloads)
                     if smoke_failure is None:
                         benchmark = run_benchmarks(
                             op,
@@ -416,7 +446,7 @@ def build_evaluate(
                         }
                         if native_output and native_output.get("bytes", 0) > 0:
                             artifacts["native_output"] = native_output
-                        return _result(
+                        return emit(
                             {
                                 "combined_score": -1e6,
                                 "correct": 0.0,
@@ -437,7 +467,7 @@ def build_evaluate(
                 artifacts["correctness"] = correctness
             if native_output and native_output.get("bytes", 0) > 0:
                 artifacts["native_output"] = native_output
-            return _result({"combined_score": -1e9, "correct": 0.0}, artifacts)
+            return emit({"combined_score": -1e9, "correct": 0.0}, artifacts)
 
         native_output = _native_output_tail(native_output_path)
         grad_names = op.grad_names()
@@ -457,7 +487,7 @@ def build_evaluate(
             artifacts = {"correctness": correctness}
             if native_output and native_output.get("bytes", 0) > 0:
                 artifacts["native_output"] = native_output
-            return _result(metrics, artifacts)
+            return emit(metrics, artifacts)
 
         aggregate = benchmark["aggregate"]
         combined_score, score_details = score_from_aggregate(aggregate, policy)
@@ -466,8 +496,6 @@ def build_evaluate(
             "correct": 1.0,
             "partial_correctness": 1.0,
             "forward_correct": 1.0,
-            "speedup": float(aggregate["speedup_vs_pytorch_autograd_backward"]),
-            "full_step_speedup": float(aggregate["speedup_vs_pytorch_autograd_full_step"]),
             "forward_ms": float(aggregate["forward_ms"]),
             "backward_from_saved_ms": float(aggregate["backward_from_saved_ms"]),
             "forward_backward_full_step_ms": float(aggregate["forward_backward_full_step_ms"]),
@@ -477,12 +505,11 @@ def build_evaluate(
             "autograd_forward_backward_full_step_ms": float(
                 aggregate["autograd_forward_backward_full_step_ms"]
             ),
-            "baseline_latency_ms": float(aggregate["pytorch_autograd_backward_ms"]),
-            "baseline_full_step_ms": float(aggregate["pytorch_autograd_full_step_ms"]),
             "baseline_raw_full_step_ms": float(aggregate["baseline_raw_full_step_ms"]),
             "saved_bytes": float(aggregate["saved_bytes"]),
             "input_bytes": float(aggregate["input_bytes"]),
         }
+        metrics.update(_baseline_metrics(aggregate))
         metrics.update({k: float(v) for k, v in score_details.items()})
         metrics.update({f"{name}_correct": 1.0 for name in grad_names})
         benchmark["score_mode"] = policy.mode
@@ -493,7 +520,11 @@ def build_evaluate(
         benchmark["worst_case_guard"] = policy.worst_case_guard
         benchmark["warmup"] = warmup
         benchmark["reps"] = reps
-        return _result(metrics, {"correctness": correctness, "benchmark": benchmark})
+        return emit(
+            metrics,
+            {"correctness": correctness, "benchmark": benchmark},
+            cases=benchmark["cases"],
+        )
 
     return evaluate
 

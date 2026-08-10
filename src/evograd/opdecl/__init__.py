@@ -1,11 +1,12 @@
 """Typed operator declarations: the contract every evograd component derives from.
 
-Torch-facing derivations (oracle, bind, verify, make_case_inputs) are exported
-lazily so declarations stay importable on machines
-without torch (dev boxes have no CUDA; only GPU nodes run the real stack).
+Declarations stay importable on machines without torch.  When torch is
+available, torch-facing derivations are bound eagerly so their public function
+names cannot be replaced by Python's same-named submodule attributes.
 """
 
 import importlib
+import importlib.util
 
 from evograd.opdecl.activity import (
     Arg,
@@ -26,6 +27,17 @@ _LAZY = {
     "VerifyReport": "evograd.opdecl.verify",
     "make_case_inputs": "evograd.opdecl.inputs",
 }
+
+# ``from evograd.opdecl import oracle`` normally prefers the existing
+# ``evograd.opdecl.oracle`` submodule over ``__getattr__`` and therefore returns
+# a module instead of the public function.  Bind these exports after importing
+# their modules whenever torch is installed.  On torch-free machines, retain
+# lazy lookup so the declaration-only API above remains usable.
+if importlib.util.find_spec("torch") is not None:
+    from evograd.opdecl.bind import bind
+    from evograd.opdecl.inputs import make_case_inputs
+    from evograd.opdecl.oracle import oracle, resolve_forward
+    from evograd.opdecl.verify import VerifyReport, verify
 
 
 def __getattr__(name: str):

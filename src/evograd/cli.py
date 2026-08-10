@@ -7,6 +7,7 @@
     evograd evolve --op rmsnorm --seed seed.py --output-dir ...
     evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
     evograd bench --op rmsnorm --candidate best.py
+    evograd fair-bench --op layernorm --candidate best.py
 """
 
 from __future__ import annotations
@@ -136,6 +137,12 @@ def _bench(argv: list[str]) -> int:
     return main(argv)
 
 
+def _fair_bench(argv: list[str]) -> int:
+    from evograd.bench.fair_cli import main
+
+    return main(argv)
+
+
 def _run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="evograd run")
     parser.add_argument("--op", required=True)
@@ -226,6 +233,7 @@ _COMMANDS = {
     "evolve": _evolve,
     "run": _run,
     "bench": _bench,
+    "fair-bench": _fair_bench,
     "dispatch": _dispatch,
     "ncu": _ncu,
 }

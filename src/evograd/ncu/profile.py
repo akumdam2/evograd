@@ -186,6 +186,13 @@ def run_ncu_profile(
     if binary is None:
         return ProfileResult(ok=False, error=f"{ncu_bin!r} was not found on PATH")
     candidate = candidate.resolve()
+    subprocess_env = dict(os.environ)
+    source_root = str(Path(__file__).resolve().parents[2])
+    subprocess_env["PYTHONPATH"] = source_root + (
+        os.pathsep + subprocess_env["PYTHONPATH"]
+        if subprocess_env.get("PYTHONPATH")
+        else ""
+    )
     with tempfile.TemporaryDirectory(prefix="evograd_ncu_") as raw_tmp:
         tmp = Path(raw_tmp)
         inputs = tmp / "inputs.pt"
@@ -200,6 +207,7 @@ def run_ncu_profile(
                 text=True,
                 capture_output=True,
                 timeout=timeout,
+                env=subprocess_env,
             )
         except subprocess.TimeoutExpired:
             return ProfileResult(ok=False, error=f"warmup timed out after {timeout}s")
@@ -219,7 +227,7 @@ def run_ncu_profile(
             binary,
             "--csv",
             "--page",
-            "raw",
+            "details",
             "--metrics",
             ",".join(DEFAULT_METRICS),
             "--target-processes",
@@ -236,6 +244,7 @@ def run_ncu_profile(
                 text=True,
                 capture_output=True,
                 timeout=timeout,
+                env=subprocess_env,
             )
         except subprocess.TimeoutExpired:
             return ProfileResult(ok=False, error=f"ncu timed out after {timeout}s")
@@ -246,6 +255,21 @@ def run_ncu_profile(
             )
         metrics, kernels = _parse_csv(completed.stdout + "\n" + completed.stderr)
         report = report_base.with_suffix(".ncu-rep")
+        parse_output = completed.stdout + "\n" + completed.stderr
+        if not metrics and report.is_file():
+            try:
+                imported = subprocess.run(
+                    [binary, "--import", str(report), "--csv", "--page", "details"],
+                    text=True,
+                    capture_output=True,
+                    timeout=timeout,
+                    env=subprocess_env,
+                )
+            except subprocess.TimeoutExpired:
+                imported = None
+            if imported is not None and imported.returncode == 0:
+                parse_output = imported.stdout + "\n" + imported.stderr
+                metrics, kernels = _parse_csv(parse_output)
         persistent = None
         if report.is_file():
             fd, name = tempfile.mkstemp(prefix="evograd_", suffix=".ncu-rep")
@@ -256,7 +280,10 @@ def run_ncu_profile(
             return ProfileResult(
                 ok=False,
                 report_path=persistent,
-                error="ncu completed but no requested metrics could be parsed",
+                error=(
+                    "ncu completed but no requested metrics could be parsed; "
+                    f"output tail: {parse_output[-8000:]}"
+                ),
             )
         return ProfileResult(
             ok=True,

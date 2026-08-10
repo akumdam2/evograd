@@ -13,6 +13,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, replace
 
+from evograd.opdecl.activity import Workload
+
 
 @dataclass(frozen=True)
 class ScoringPolicy:
@@ -131,4 +133,39 @@ def score_from_aggregate(
         "score_mode_speed_memory_min_weighted_geomean": (
             1.0 if policy.mode == "speed_memory_min_weighted_geomean" else 0.0
         ),
+    }
+
+
+def regime_speedup_metrics(
+    cases: list[dict] | None,
+    *,
+    regime_feature,
+    regime_split: float,
+) -> dict[str, float]:
+    """Geomean full-step speedups on the declared small/large shape regimes.
+
+    Always returns both keys so OpenEvolve MAP-Elites feature axes stay defined
+    even when a candidate fails before benchmarking.
+    """
+    empty = {"small_regime_speedup": 0.0, "large_regime_speedup": 0.0}
+    if not cases or regime_feature is None or regime_split is None:
+        return empty
+    small: list[float] = []
+    large: list[float] = []
+    for case in cases:
+        speedup = float(case.get("speedup_vs_baseline_raw_full_step", 0.0))
+        if speedup <= 0.0:
+            continue
+        feature = float(
+            regime_feature(
+                Workload(dims=dict(case["dims"]), dtype=str(case["dtype"]))
+            )
+        )
+        if feature < float(regime_split):
+            small.append(speedup)
+        else:
+            large.append(speedup)
+    return {
+        "small_regime_speedup": geomean(small) if small else 0.0,
+        "large_regime_speedup": geomean(large) if large else 0.0,
     }

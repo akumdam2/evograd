@@ -16,6 +16,7 @@ from evograd.opdecl.activity import OpDecl
 from evograd.pipelines.shared.runner import evograd_env
 
 _TEMPLATE = Path(__file__).with_name("config_template.yaml")
+_MAP_SHAPE_TEMPLATE = Path(__file__).with_name("config_map_shape_template.yaml")
 _EVALUATOR_ENTRY = Path(__file__).with_name("evaluator_entry.py")
 
 
@@ -26,8 +27,9 @@ def render_config(
     primary_model: str = "gpt-4o-mini",
     secondary_model: str = "gpt-4o",
     api_base: str = "https://api.openai.com/v1",
+    template: Path | None = None,
 ) -> str:
-    text = _TEMPLATE.read_text(encoding="utf-8")
+    text = (template or _TEMPLATE).read_text(encoding="utf-8")
     replacements = {
         "__MAX_ITERATIONS__": str(iterations),
         "__PRIMARY_MODEL__": primary_model,
@@ -48,6 +50,25 @@ def render_config(
     for key, value in replacements.items():
         text = text.replace(key, value)
     return text
+
+
+def render_map_shape_config(
+    op: OpDecl,
+    *,
+    iterations: int = 30,
+    primary_model: str = "gpt-4o-mini",
+    secondary_model: str = "gpt-4o",
+    api_base: str = "https://api.openai.com/v1",
+) -> str:
+    """Config with small/large regime speedups as MAP-Elites feature axes."""
+    return render_config(
+        op,
+        iterations=iterations,
+        primary_model=primary_model,
+        secondary_model=secondary_model,
+        api_base=api_base,
+        template=_MAP_SHAPE_TEMPLATE,
+    )
 
 
 @contextmanager
@@ -72,6 +93,7 @@ def run_evolve(
     scoring: str = "speed_memory",
     iterations: int = 10,
     config_path: Path | None = None,
+    checkpoint_path: Path | None = None,
     save_best_to: Path | None = None,
     primary_model: str = "gpt-4o-mini",
     secondary_model: str = "gpt-4o",
@@ -100,6 +122,8 @@ def run_evolve(
         raise FileNotFoundError(f"seed program not found: {seed_path}")
     if config_path is not None and not config_path.is_file():
         raise FileNotFoundError(f"OpenEvolve config not found: {config_path}")
+    if checkpoint_path is not None and not checkpoint_path.is_dir():
+        raise FileNotFoundError(f"OpenEvolve checkpoint not found: {checkpoint_path}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if config_path is None:
@@ -168,6 +192,7 @@ def run_evolve(
             iterations=iterations,
             output_dir=str(output_dir),
             cleanup=False,
+            checkpoint_path=str(checkpoint_path) if checkpoint_path else None,
         )
 
     if not result.best_code:

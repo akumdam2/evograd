@@ -1,14 +1,13 @@
-# OpenEvolve config template for evograd autograd-pair evolution.
-# Rendered by evograd.evolve.run with the operator's contract; ported from the
-# old repo's config_autograd_pair_speed_memory.yaml.
+# OpenEvolve MAP-Elites config: shape-regime behavior descriptors as feature axes.
+# Placeholders match config_template.yaml and are filled by render_config / the
+# experiment driver. Fitness remains combined_score on the full benchmark suite;
+# small_regime_speedup / large_regime_speedup come from the evograd evaluator.
 max_iterations: __MAX_ITERATIONS__
 checkpoint_interval: 5
 log_level: "INFO"
 max_tasks_per_child: 1
 
 llm:
-  # OpenEvolve >=0.2.27 model-list API. The old primary_model / secondary_model
-  # compatibility fields are intentionally not used.
   models:
     - name: "__PRIMARY_MODEL__"
       weight: 0.8
@@ -43,6 +42,13 @@ prompt:
     - Activity: __ACTIVITY_CONTRACT__ (Inactive inputs never receive gradients).
     - Additional constraints: __EXTRA_CONSTRAINTS__
 
+    Shape-aware search note:
+    - The MAP-Elites archive tracks small-regime and large-regime full-step
+      speedups as behavior descriptors. Improving either regime (or both) can
+      claim a new niche even if aggregate score is not the global best.
+    - Prefer kernels whose tile/launch choices remain strong across regimes
+      when possible; specialization that wins one regime is still valuable.
+
     The evaluator is memory-aware:
     - It measures backward_from_saved latency.
     - It measures forward+backward full-step latency.
@@ -69,16 +75,16 @@ database:
   elite_selection_ratio: 0.25
   exploitation_ratio: 0.75
   similarity_threshold: 0.99
+  # Continuous evaluator metrics — OpenEvolve bins them internally.
+  feature_dimensions:
+    - "small_regime_speedup"
+    - "large_regime_speedup"
+  feature_bins: 10
 
 evaluator:
-  # The killable evograd child times out at 850s. Keep OpenEvolve's outer
-  # timeout above it so the inner process can destroy a deadlocked CUDA context.
   timeout: 900
   parallel_evaluations: 1
   cascade_evaluation: false
 
 diff_based_evolution: true
-# A safety limit on runaway generation, not a style budget. Inductor-captured
-# seeds (Pipeline D) carry generated kernels and already reach ~66k characters
-# on evoattention, and a child that adds its own kernels grows from there.
-max_code_length: 120000
+max_code_length: 60000

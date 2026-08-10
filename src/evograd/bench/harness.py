@@ -150,6 +150,26 @@ def describe_saved(saved: tuple[Any, ...]) -> list[dict[str, Any]]:
     return descriptions
 
 
+def _add_pytorch_autograd_aliases(
+    report: dict[str, Any], performance_baseline: str
+) -> dict[str, Any]:
+    """Add legacy PyTorch-specific names only when PyTorch was measured."""
+    if performance_baseline == "pytorch_autograd":
+        report.update(
+            {
+                "pytorch_autograd_backward_ms": report["baseline_backward_ms"],
+                "pytorch_autograd_full_step_ms": report["baseline_full_step_ms"],
+                "speedup_vs_pytorch_autograd_backward": report[
+                    "speedup_vs_baseline_backward"
+                ],
+                "speedup_vs_pytorch_autograd_full_step": report[
+                    "speedup_vs_baseline_full_step"
+                ],
+            }
+        )
+    return report
+
+
 def median_ms(
     fn: Callable[[], object], warmup: int = DEFAULT_WARMUP, reps: int = DEFAULT_REPS
 ) -> float:
@@ -300,7 +320,7 @@ def benchmark_case(
             for name in op.memory_input_names()
         )
     )
-    return {
+    report = {
         "dims": dict(workload.dims),
         "dtype": workload.dtype,
         "performance_baseline": performance_baseline,
@@ -312,19 +332,16 @@ def benchmark_case(
         "baseline_backward_ms": baseline_ms,
         "baseline_full_step_ms": baseline_full_ms,
         "baseline_raw_full_step_ms": baseline_full_ms,
-        "pytorch_autograd_backward_ms": baseline_ms,
-        "pytorch_autograd_full_step_ms": baseline_full_ms,
         "speedup_vs_baseline_backward": baseline_ms / max(backward_ms, 1e-9),
         "speedup_vs_baseline_full_step": baseline_full_ms / max(raw_full_ms, 1e-9),
         "speedup_vs_baseline_raw_full_step": baseline_full_ms / max(raw_full_ms, 1e-9),
         "speedup_vs_baseline_autograd_full_step": baseline_full_ms / max(autograd_full_ms, 1e-9),
-        "speedup_vs_pytorch_autograd_backward": baseline_ms / max(backward_ms, 1e-9),
-        "speedup_vs_pytorch_autograd_full_step": baseline_full_ms / max(raw_full_ms, 1e-9),
         "saved_bytes": saved_byte_count,
         "input_bytes": input_byte_count,
         "saved_memory_ratio": saved_byte_count / max(input_byte_count, 1),
         "saved_tensors": describe_saved(saved_tensors),
     }
+    return _add_pytorch_autograd_aliases(report, performance_baseline)
 
 
 def _failure(phase: str, exc: BaseException) -> dict[str, Any]:
@@ -448,10 +465,7 @@ def _aggregate_report(
     totals["speedup_vs_baseline_raw_full_step"] = totals["baseline_raw_full_step_ms"] / max(
         totals["raw_forward_backward_full_step_ms"], 1e-9
     )
-    totals["pytorch_autograd_backward_ms"] = totals["baseline_backward_ms"]
-    totals["pytorch_autograd_full_step_ms"] = totals["baseline_full_step_ms"]
-    totals["speedup_vs_pytorch_autograd_backward"] = totals["speedup_vs_baseline_backward"]
-    totals["speedup_vs_pytorch_autograd_full_step"] = totals["speedup_vs_baseline_full_step"]
+    _add_pytorch_autograd_aliases(totals, performance_baseline)
 
     backward_speedups = [
         float(c["speedup_vs_baseline_backward"])

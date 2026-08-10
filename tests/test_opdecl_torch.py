@@ -159,5 +159,130 @@ class TestVerify(unittest.TestCase):
         self.assertEqual(failing, ["y"])
 
 
+@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
+class TestBaselineSchema(unittest.TestCase):
+    def test_liger_does_not_claim_pytorch_metrics(self):
+        from evograd.bench.harness import _add_pytorch_autograd_aliases
+
+        report = {
+            "baseline_backward_ms": 2.0,
+            "baseline_full_step_ms": 3.0,
+            "speedup_vs_baseline_backward": 1.5,
+            "speedup_vs_baseline_full_step": 1.25,
+        }
+        result = _add_pytorch_autograd_aliases(report, "liger")
+        self.assertNotIn("pytorch_autograd_backward_ms", result)
+        self.assertNotIn("speedup_vs_pytorch_autograd_backward", result)
+
+    def test_pytorch_baseline_keeps_legacy_aliases(self):
+        from evograd.bench.harness import _add_pytorch_autograd_aliases
+
+        report = {
+            "baseline_backward_ms": 2.0,
+            "baseline_full_step_ms": 3.0,
+            "speedup_vs_baseline_backward": 1.5,
+            "speedup_vs_baseline_full_step": 1.25,
+        }
+        result = _add_pytorch_autograd_aliases(report, "pytorch_autograd")
+        self.assertEqual(result["pytorch_autograd_backward_ms"], 2.0)
+        self.assertEqual(result["pytorch_autograd_full_step_ms"], 3.0)
+        self.assertEqual(result["speedup_vs_pytorch_autograd_backward"], 1.5)
+        self.assertEqual(result["speedup_vs_pytorch_autograd_full_step"], 1.25)
+
+    def test_evaluator_metrics_use_selected_baseline_fields(self):
+        from evograd.evolve.evaluator import _baseline_metrics
+
+        aggregate = {
+            "baseline_backward_ms": 2.0,
+            "baseline_full_step_ms": 3.0,
+            "speedup_vs_baseline_backward": 1.5,
+            "speedup_vs_baseline_full_step": 1.25,
+            # Deliberately inconsistent legacy values: these must be ignored.
+            "pytorch_autograd_backward_ms": 20.0,
+            "pytorch_autograd_full_step_ms": 30.0,
+            "speedup_vs_pytorch_autograd_backward": 15.0,
+            "speedup_vs_pytorch_autograd_full_step": 12.5,
+        }
+        self.assertEqual(
+            _baseline_metrics(aggregate),
+            {
+                "speedup": 1.5,
+                "full_step_speedup": 1.25,
+                "baseline_latency_ms": 2.0,
+                "baseline_full_step_ms": 3.0,
+            },
+        )
+
+
+@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
+class TestFairBenchmarkPrimitives(unittest.TestCase):
+    def test_final_protocol_has_stable_generic_version(self):
+        from evograd.bench.fair import PROTOCOL_VERSION
+
+        self.assertEqual(PROTOCOL_VERSION, "evograd-final-runtime-v1")
+
+    def test_pytorch_autograd_provider_matches_oracle(self):
+        from evograd.bench.fair import pytorch_autograd_provider
+        from evograd.opdecl.inputs import make_case_inputs
+        from evograd.opdecl.oracle import oracle
+        from evograd.ops import get_op
+
+        op = get_op("matmul")
+        workload = op.correctness[0]
+        values = make_case_inputs(op, workload, device="cpu")
+        expected_output, expected_grads = oracle(
+            op,
+            make_case_inputs(op, workload, device="cpu"),
+        )
+        provider = pytorch_autograd_provider(op)
+        output, saved = provider.forward(values)
+        actual_grads = provider.backward(
+            values[op.upstream_grad_name],
+            saved,
+            values,
+        )
+        self.assertTrue(torch.allclose(output, expected_output))
+        for name, actual in zip(op.grad_names(), actual_grads):
+            self.assertTrue(torch.allclose(actual, expected_grads[name]))
+        self.assertEqual(provider.adapter_kind, "pytorch_eager_autograd")
+
+    def test_mutation_guard_accepts_unchanged_and_rejects_in_place_write(self):
+        from evograd.bench.fair import assert_tensors_unchanged, snapshot_tensors
+
+        values = {"x": torch.arange(4.0), "eps": 1e-5}
+        snapshots = snapshot_tensors(values)
+        assert_tensors_unchanged(values, snapshots, provider="candidate")
+        values["x"].add_(1.0)
+        with self.assertRaisesRegex(RuntimeError, "mutated benchmark input 'x'"):
+            assert_tensors_unchanged(values, snapshots, provider="candidate")
+
+    def test_identity_provider_reuses_exact_callables(self):
+        from evograd.bench.fair import PairProvider, renamed_provider
+
+        def forward(values):
+            return values["x"], (values["x"],)
+
+        def backward(dout, saved, values):
+            return dout
+
+        baseline = PairProvider(
+            "liger", forward, backward, "hash", "stock_liger_pair"
+        )
+        identity = renamed_provider(baseline, "candidate")
+        self.assertIs(identity.forward, baseline.forward)
+        self.assertIs(identity.backward, baseline.backward)
+        self.assertEqual(identity.source_hash, baseline.source_hash)
+        self.assertEqual(identity.adapter_kind, baseline.adapter_kind)
+
+    def test_saved_state_report_distinguishes_alias_and_new_storage(self):
+        from evograd.bench.fair import _saved_state_report
+
+        x = torch.arange(8.0)
+        report = _saved_state_report((x[:4], x.clone()), {"x": x})
+        self.assertEqual(report["logical_saved_bytes"], 12 * x.element_size())
+        self.assertEqual(report["unique_saved_storage_bytes"], 16 * x.element_size())
+        self.assertEqual(report["retained_input_bytes"], 8 * x.element_size())
+
+
 if __name__ == "__main__":
     unittest.main()
