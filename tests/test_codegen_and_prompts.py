@@ -284,12 +284,12 @@ class TestEvolveConfigRendering(unittest.TestCase):
                     seed_path=seed,
                     output_dir=root / "out",
                     benchmark_suite="tb_i12",
-                    benchmark_dtypes=("float16",),
+                    benchmark_dtypes=("bfloat16",),
                     performance_baseline="liger",
                 )
             self.assertEqual(code, 1)
             self.assertEqual(observed_env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
-            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_DTYPES"], "float16")
+            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_DTYPES"], "bfloat16")
             self.assertEqual(observed_env["EVOGRAD_PERFORMANCE_BASELINE"], "liger")
 
 
