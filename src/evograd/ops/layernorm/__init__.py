@@ -3,7 +3,14 @@
 import math
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import log_distance_weight, make_pair_baseline, regime_suites
+from evograd.opdecl.models import LLAMA_3_8B, LLAMA_TOKEN_SWEEP
+from evograd.ops._common import (
+    fixed_shape_suites,
+    log_distance_weight,
+    make_pair_baseline,
+    model_workloads,
+    regime_suites,
+)
 
 
 def make_layernorm_inputs(torch, op, workload, device="cuda"):
@@ -72,7 +79,16 @@ def _regime_feature(workload: Workload) -> float:
     return float(workload.dims["rows"])
 
 
-_BENCHMARK = _workloads(_INDUSTRIAL_MIXED)
+# The timed suite is derived from Llama-3-8B's residual width so every case is
+# traceable to a real layer. The pre-v1 hand-picked and TritonBench grids are
+# retained below as named ablation suites: they remain useful controls, they are
+# just not what the headline number is measured on.
+_BENCHMARK = model_workloads(
+    LLAMA_3_8B,
+    "layernorm",
+    tuple({"tokens": tokens} for tokens in LLAMA_TOKEN_SWEEP),
+    ("bfloat16",),
+)
 _REGIME_SUITES = regime_suites(_BENCHMARK, _regime_feature, _REGIME_SPLIT)
 
 
@@ -108,6 +124,8 @@ measure_liger_baseline = make_pair_baseline(
 op = declare_op(
     name="layernorm",
     forward="evograd.ops.layernorm.forward_ref:layernorm_forward_ref",
+    level=1,
+    family="norm",
     dims=('rows', 'hidden'),
     args=(
         Active("x", "[rows, hidden]"),
@@ -135,6 +153,7 @@ op = declare_op(
     benchmark_suites={
         **{name: _workloads(shapes) for name, shapes in _SHAPE_SUITES.items()},
         **_REGIME_SUITES,
+        **fixed_shape_suites(_BENCHMARK),
         "coverage": _workloads(_COVERAGE),
     },
     performance_baselines={"liger": measure_liger_baseline},

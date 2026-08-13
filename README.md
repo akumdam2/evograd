@@ -134,6 +134,17 @@ evograd bench \
     --candidate /tmp/evolve_layernorm/evolved_best_program.py
 ```
 
+Run the whole benchmark suite and get the cross-operator report:
+
+```bash
+evograd suite --candidates programs/ --out results/
+evograd suite --level 1 --level 2 --out results/   # restrict to a level
+```
+
+This writes `suite_report.json` and `SUITE_RESULTS.md` with per-operator,
+per-level, and overall full-step speedup, coverage, and saved memory. See
+[the benchmark specification](docs/BENCHMARK.md) for what those numbers mean.
+
 `bench` exits non-zero when anything fails and prints the failure to stderr.
 With `--out`, the report is written either way: `report["ok"]` is the verdict,
 `report["error"]` holds a setup failure (unknown op, candidate that raises on
@@ -419,7 +430,7 @@ Available scoring policies are:
 | `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. Thirteen declarations expose reviewed optional
+The default is `speed_memory`. Seventeen declarations expose reviewed optional
 Liger baselines. `--baseline auto` selects Liger when its adapter and
 `liger-kernel` are available, otherwise PyTorch autograd; an explicit
 `--baseline liger` hard-fails rather than silently changing the comparison:
@@ -472,32 +483,65 @@ retaining the fork’s private every-N worker patch.
 
 ## Supported operators
 
-| Operator             | Forward                                        | Requested gradients                                   | Liger baseline                 |
-| -------------------- | ---------------------------------------------- | ----------------------------------------------------- | ------------------------------ |
-| `conv2d`             | dense NCHW convolution                         | `dx`, `dweight`, `dbias`                              | no (cuDNN)                     |
-| `cross_entropy`      | mean cross-entropy loss                        | `dlogits`                                             | yes                            |
-| `dyt`                | dynamic tanh                                   | `dx`, `dalpha`, `dgamma`, `dbeta`                     | yes                            |
-| `evoattention`       | AlphaFold3-style attention with pair bias      | `dq`, `dk`, `dv`, `d_pair_bias`                       | no                             |
-| `fused_add_rms_norm` | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                            |
-| `fused_moe_swiglu`   | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                            |
-| `geglu`              | GeGLU activation                               | `da`, `db`                                            | yes                            |
-| `gemm_leaky_relu`    | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (cuBLAS or Triton tutorial) |
-| `jsd`                | Jensen-Shannon divergence                      | `dlog_q`                                              | yes                            |
-| `kl_div`             | KL divergence                                  | `d_input`                                             | yes                            |
-| `layernorm`          | LayerNorm                                      | `dx`, `dweight`, `dbias`                              | yes                            |
-| `layernorm_linear`   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                             |
-| `linear`             | `x @ weight.T + bias`                          | `dx`, `dweight`, `dbias`                              | no                             |
-| `matmul`             | `a @ b`                                        | `da`, `db`                                            | no                             |
-| `poly_norm`          | polynomial normalization                       | `dx`, `dweight`, `dbias`                              | yes                            |
-| `relu_squared`       | `relu(x)²`                                     | `dx`                                                  | yes                            |
-| `rmsnorm`            | RMSNorm                                        | `dx`, `dweight`                                       | no                             |
-| `softmax`            | row-wise softmax                               | `dx`                                                  | yes                            |
-| `sparsemax`          | simplex projection                             | `dx`                                                  | yes                            |
-| `swiglu`             | SwiGLU activation                              | `da`, `db`                                            | yes                            |
-| `tvd`                | total-variation distance                       | `dp`, `dq`                                            | yes                            |
+Operators are organized into three benchmark levels. See
+[the benchmark specification](docs/BENCHMARK.md) for the metrics, the shape
+provenance rules, and how the levels are aggregated.
 
-The Liger-derived operators carry exact final-fork correctness cases, bf16
-benchmark grids, workload weighting, and full/small/large regime suites. Liger
+### Level 1 — primitive operators
+
+| Operator        | Family     | Forward                                   | Requested gradients               | Liger baseline |
+| --------------- | ---------- | ----------------------------------------- | --------------------------------- | -------------- |
+| `layernorm`     | norm       | LayerNorm                                 | `dx`, `dweight`, `dbias`          | yes            |
+| `rmsnorm`       | norm       | RMSNorm                                   | `dx`, `dweight`                   | yes            |
+| `poly_norm`     | norm       | polynomial normalization                  | `dx`, `dweight`, `dbias`          | yes            |
+| `dyt`           | norm       | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta` | yes            |
+| `softmax`       | reduction  | row-wise softmax                          | `dx`                              | yes            |
+| `sparsemax`     | reduction  | simplex projection                        | `dx`                              | yes            |
+| `swiglu`        | activation | SwiGLU activation                         | `da`, `db`                        | yes            |
+| `geglu`         | activation | GeGLU activation                          | `da`, `db`                        | yes            |
+| `relu_squared`  | activation | `relu(x)²`                                | `dx`                              | yes            |
+| `cross_entropy` | loss       | mean cross-entropy loss                   | `dlogits`                         | yes            |
+| `kl_div`        | loss       | KL divergence                             | `d_input`                         | yes            |
+| `jsd`           | loss       | Jensen-Shannon divergence                 | `dlog_q`                          | yes            |
+| `tvd`           | loss       | total-variation distance                  | `dp`, `dq`                        | yes            |
+| `matmul`        | gemm       | `a @ b`                                   | `da`, `db`                        | no (cuBLAS)    |
+| `linear`        | gemm       | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`          | no             |
+| `conv2d`        | conv       | dense NCHW convolution                    | `dx`, `dweight`, `dbias`          | no (cuDNN)     |
+| `evoattention`  | attention  | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`   | no             |
+| `rope`          | positional | rotary position embedding                 | `dx`                              | yes            |
+
+### Level 2 — fused operators
+
+| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
+| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
+| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                      |
+| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                      |
+| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                       |
+| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
+| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
+
+### Level 3 — architectural blocks
+
+| Operator                | Family        | Forward                                                | Gradients |
+| ----------------------- | ------------- | ------------------------------------------------------ | --------: |
+| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)    | 10        |
+| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias  | 13        |
+
+Both blocks compute their correctness reference in float32 while the candidate
+runs in bfloat16 (`reference_dtype`). Composing ten operators makes a
+same-dtype reference carry as much rounding error as the candidate, at which
+point the tolerance stops bounding the candidate's own error. Their declarations
+also state what they exclude — the Llama block has no KV cache, and the
+AlphaFold3 block is the single-representation update rather than a full
+pairformer block, which would need two outputs.
+
+Timed grids are derived from frozen model configurations in
+`src/evograd/opdecl/models.py` rather than written by hand, and each workload
+records the model and component it came from. `tests/test_provenance.py`
+re-derives them, so a declared shape cannot drift from the model it claims to
+measure. The pre-v1 hand-picked grids survive as `legacy` ablation suites.
+
+Liger
 does not ship generic dense GEMM or convolution kernels: `matmul` therefore
 compares against PyTorch/cuBLAS, while `conv2d` compares against PyTorch/cuDNN.
 `gemm_leaky_relu` additionally exposes the reviewed `triton_tutorial` pair

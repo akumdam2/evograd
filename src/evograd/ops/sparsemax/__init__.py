@@ -1,7 +1,14 @@
 """Operator declaration: sparsemax."""
 
 from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl.models import (
+    LLAMA_3_8B,
+    LLAMA_VOCAB_REGIME_SPLIT,
+    LLAMA_VOCAB_TOKEN_SWEEP_FP32,
+)
 from evograd.ops._common import (
+    fixed_shape_suites,
+    model_workloads,
     dtype_for,
     log_distance_weight,
     make_pair_baseline,
@@ -17,12 +24,22 @@ _SHAPES = (
     (4096, 16384), (4096, 30522), (4096, 32768), (2048, 49152),
     (2048, 65536), (1024, 98304), (1024, 128256),
 )
-_SPLIT = 4096
-_BENCHMARK = workloads_2d(_SHAPES, ("float32",), tolerances=_TOLERANCES)
+_SPLIT = LLAMA_VOCAB_REGIME_SPLIT
+_LEGACY_BENCHMARK = workloads_2d(_SHAPES, ("float32",), tolerances=_TOLERANCES)
+# Timed grid derived from Llama-3-8B, so every case names the layer it
+# came from. The pre-v1 hand-picked grid above is kept as an ablation
+# suite rather than deleted.
+_BENCHMARK = model_workloads(
+    LLAMA_3_8B,
+    'logits',
+    tuple({'tokens': t} for t in LLAMA_VOCAB_TOKEN_SWEEP_FP32),
+    ("float32",),
+    tolerances=_TOLERANCES,
+)
 
 
 def _feature(workload: Workload) -> float:
-    return float(workload.dims["cols"])
+    return float(workload.dims["rows"])
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -43,6 +60,8 @@ def _liger_factory():
 
 op = declare_op(
     name="sparsemax",
+    level=1,
+    family="reduction",
     forward="evograd.ops.sparsemax.forward_ref:sparsemax_forward_ref",
     dims=("rows", "cols"),
     args=(Active("x", "[rows, cols]", dtype="float32"),),
@@ -58,7 +77,11 @@ op = declare_op(
         tolerances=_TOLERANCES,
     ),
     benchmark=_BENCHMARK,
-    benchmark_suites=regime_suites(_BENCHMARK, _feature, _SPLIT),
+    benchmark_suites={
+        **regime_suites(_BENCHMARK, _feature, _SPLIT),
+        **fixed_shape_suites(_BENCHMARK),
+        "legacy": _LEGACY_BENCHMARK,
+    },
     tolerances=_TOLERANCES,
     performance_baselines={"liger": make_pair_baseline(_liger_factory, ("x",))},
     regime_feature=_feature,

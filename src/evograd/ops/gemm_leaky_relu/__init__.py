@@ -1,6 +1,20 @@
 """Operator declaration: GEMM with a fused Leaky-ReLU epilogue."""
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
+
+# This operator comes from Triton's own tutorial, not from a shipped model:
+# no production architecture fuses Leaky-ReLU into a GEMM epilogue. The grid
+# does span Llama-3-8B's widths (K=4096, N=14336) so it stays comparable with
+# `matmul`, but it is a compiler-shaped task and says so.
+_PROVENANCE = Provenance(
+    model="triton_tutorial",
+    component="gemm_leaky_relu",
+    source="handpicked",
+    note=(
+        "Triton tutorial 03 fused-epilogue GEMM; widths chosen to overlap "
+        "Llama-3-8B's projections so results compare with matmul"
+    ),
+)
 from evograd.ops.gemm_leaky_relu.triton_tutorial import (
     measure_triton_tutorial_baseline,
 )
@@ -19,7 +33,9 @@ _BENCHMARK_SHAPES = (
 
 def _workloads(shapes):
     return tuple(
-        Workload(dims=dict(M=m, K=k, N=n), dtype="bfloat16")
+        Workload(
+            dims=dict(M=m, K=k, N=n), dtype="bfloat16", provenance=_PROVENANCE
+        )
         for m, k, n in shapes
     )
 
@@ -36,6 +52,8 @@ def make_gemm_leaky_relu_inputs(torch, op, workload, device="cuda"):
 
 op = declare_op(
     name="gemm_leaky_relu",
+    level=2,
+    family="gemm",
     forward=(
         "evograd.ops.gemm_leaky_relu.forward_ref:"
         "gemm_leaky_relu_forward_ref"

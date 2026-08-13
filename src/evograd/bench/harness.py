@@ -260,7 +260,10 @@ def benchmark_case(
         return [leaf.grad for leaf in leaves]
 
     def baseline_backward():
-        return oracle(op, inputs)
+        # Timing, not correctness: never promote to the declaration's
+        # reference_dtype here or the baseline would be measured at a precision
+        # the candidate is not required to match.
+        return oracle(op, inputs, use_reference_dtype=False)
 
     def baseline_full_step():
         args = list(positional)

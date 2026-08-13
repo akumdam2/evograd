@@ -8,6 +8,7 @@
     evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
     evograd bench --op rmsnorm --candidate best.py
     evograd fair-bench --op layernorm --candidate best.py
+    evograd suite --candidates programs/ --out results/  # cross-operator report
 """
 
 from __future__ import annotations
@@ -198,6 +199,12 @@ def _run(argv: list[str]) -> int:
     return 0
 
 
+def _suite(argv: list[str]) -> int:
+    from evograd.bench.suite_cli import main
+
+    return main(argv)
+
+
 def _dispatch(argv: list[str]) -> int:
     from evograd.dispatch import main
 
@@ -219,9 +226,17 @@ def _scaffold(argv: list[str]) -> int:
 def _ops(argv: list[str]) -> int:
     from evograd.ops import OPS
 
-    for name, op in sorted(OPS.items()):
-        grads = ", ".join(op.grad_names())
-        print(f"{name:20s} grads: {grads:45s} correctness: {len(op.correctness):2d} benchmark: {len(op.benchmark):2d}")
+    # Sort by benchmark level so the task hierarchy is what you see first;
+    # unclassified declarations (scaffolded or user-supplied) sort last.
+    for name, op in sorted(
+        OPS.items(), key=lambda item: (item[1].level or 99, item[1].family or "", item[0])
+    ):
+        level = f"L{op.level}" if op.level else "-"
+        print(
+            f"{name:26s} {level:3s} {op.family or '-':12s} "
+            f"correctness: {len(op.correctness):2d} benchmark: {len(op.benchmark):3d}"
+        )
+        print(f"{'':26s}     grads: {', '.join(op.grad_names())}")
     return 0
 
 
@@ -234,6 +249,7 @@ _COMMANDS = {
     "run": _run,
     "bench": _bench,
     "fair-bench": _fair_bench,
+    "suite": _suite,
     "dispatch": _dispatch,
     "ncu": _ncu,
 }

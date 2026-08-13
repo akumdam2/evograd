@@ -1,7 +1,30 @@
 """Operator declaration: matmul."""
 
 from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl.models import LLAMA_3_8B
+from evograd.ops._common import fixed_shape_suites, model_workloads
 from evograd.ops.matmul.cublas import measure_cublas_pair_baseline
+
+#: The four GEMMs a Llama-3-8B decoder layer actually performs, at two token
+#: counts. Deriving the grid this way is why ``(M=8192, K=4096, N=14336)`` is in
+#: it: that is the MLP up-projection at 8192 tokens, not a round number someone
+#: liked. ``lm_head`` is included because its N=128256 is a genuinely different
+#: aspect ratio from the layer-internal GEMMs.
+_GEMM_COMPONENTS = ("attn_qkv", "mlp_up", "mlp_down", "lm_head")
+_GEMM_TOKENS = (2048, 8192)
+
+
+def _derived_gemm_workloads(dtypes=("bfloat16",)):
+    return tuple(
+        workload
+        for component in _GEMM_COMPONENTS
+        for workload in model_workloads(
+            LLAMA_3_8B,
+            component,
+            tuple({"tokens": tokens} for tokens in _GEMM_TOKENS),
+            dtypes,
+        )
+    )
 
 
 _LEGACY_SHAPES = (
@@ -47,6 +70,8 @@ def make_matmul_inputs(torch, op, workload, device="cuda"):
 op = declare_op(
     name="matmul",
     forward="evograd.ops.matmul.forward_ref:matmul_forward_ref",
+    level=1,
+    family="gemm",
     dims=('M', 'K', 'N'),
     args=(
         Active("a", "[M, K]"),
@@ -67,8 +92,9 @@ op = declare_op(
         Workload(dims=dict(M=257, K=255, N=129), dtype="bfloat16"),
     ),
     coverage=_workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
-    benchmark=_workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
+    benchmark=_derived_gemm_workloads(),
     benchmark_suites={
+        **fixed_shape_suites(_derived_gemm_workloads()),
         "industrial_bf16": _workloads(_INDUSTRIAL_BF16_SHAPES, ("bfloat16",)),
         "large_bf16": _workloads(_LARGE_BF16_SHAPES, ("bfloat16",)),
         "extreme_bf16": _workloads(_EXTREME_BF16_SHAPES, ("bfloat16",)),

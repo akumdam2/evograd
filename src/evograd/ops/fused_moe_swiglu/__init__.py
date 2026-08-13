@@ -1,6 +1,21 @@
 """Operator declaration: Liger fused MoE grouped-GEMM + SwiGLU."""
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
+
+# Liger's own fused-MoE benchmark grid. The expert count and top-k match
+# Mixtral-style routing, but hidden/intermediate are scaled down from
+# Mixtral-8x7B's 4096/14336 so the grid fits one GPU, so this is quoted from
+# a published sweep rather than derived from a model config.
+_PROVENANCE = Provenance(
+    model="mixtral_style",
+    component="moe_grouped_gemm_swiglu",
+    source="paper",
+    scaled=True,
+    note=(
+        "Liger fused_moe benchmark grid; routing matches Mixtral-8x7B (8-16 "
+        "experts, top-2) with hidden/intermediate scaled down to fit one GPU"
+    ),
+)
 from evograd.ops.fused_moe_swiglu.liger import measure_liger_baseline
 
 
@@ -17,7 +32,9 @@ _BENCHMARK_CASES = (
 
 
 def _workload(values):
-    return Workload(dims=dict(zip(_DIMS, values)), dtype="bfloat16")
+    return Workload(
+        dims=dict(zip(_DIMS, values)), dtype="bfloat16", provenance=_PROVENANCE
+    )
 
 
 def _benchmark_workloads():
@@ -73,6 +90,8 @@ def make_fused_moe_inputs(torch, op, workload, device="cuda"):
 
 op = declare_op(
     name="fused_moe_swiglu",
+    level=2,
+    family="moe",
     forward=(
         "evograd.ops.fused_moe_swiglu.forward_ref:"
         "fused_moe_swiglu_forward_ref"

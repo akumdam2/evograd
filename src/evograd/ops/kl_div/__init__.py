@@ -1,7 +1,14 @@
 """Operator declaration: batchmean KL divergence."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl.models import (
+    LLAMA_3_8B,
+    LLAMA_VOCAB_REGIME_SPLIT,
+    LLAMA_VOCAB_TOKEN_SWEEP,
+)
 from evograd.ops._common import (
+    fixed_shape_suites,
+    model_workloads,
     dtype_for,
     log_distance_weight,
     make_pair_baseline,
@@ -20,12 +27,22 @@ _SHAPES = (
     (2048, 32000), (4096, 32000), (4096, 65536), (4096, 128256),
     (777, 50257),
 )
-_SPLIT = 16384
-_BENCHMARK = workloads_2d(_SHAPES, _TOLERANCES, tolerances=_TOLERANCES)
+_SPLIT = LLAMA_VOCAB_REGIME_SPLIT
+_LEGACY_BENCHMARK = workloads_2d(_SHAPES, _TOLERANCES, tolerances=_TOLERANCES)
+# Timed grid derived from Llama-3-8B, so every case names the layer it
+# came from. The pre-v1 hand-picked grid above is kept as an ablation
+# suite rather than deleted.
+_BENCHMARK = model_workloads(
+    LLAMA_3_8B,
+    'logits',
+    tuple({'tokens': t} for t in LLAMA_VOCAB_TOKEN_SWEEP),
+    ("float16", "bfloat16"),
+    tolerances=_TOLERANCES,
+)
 
 
 def _feature(workload: Workload) -> float:
-    return float(workload.dims["cols"])
+    return float(workload.dims["rows"])
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -58,6 +75,8 @@ _CORRECTNESS = (
 
 op = declare_op(
     name="kl_div",
+    level=1,
+    family="loss",
     forward="evograd.ops.kl_div.forward_ref:kl_div_forward_ref",
     dims=("rows", "cols"),
     args=(
@@ -74,7 +93,11 @@ op = declare_op(
     ),
     correctness=_CORRECTNESS,
     benchmark=_BENCHMARK,
-    benchmark_suites=regime_suites(_BENCHMARK, _feature, _SPLIT),
+    benchmark_suites={
+        **regime_suites(_BENCHMARK, _feature, _SPLIT),
+        **fixed_shape_suites(_BENCHMARK),
+        "legacy": _LEGACY_BENCHMARK,
+    },
     tolerances=_TOLERANCES,
     performance_baselines={
         "liger": make_pair_baseline(_liger_factory, ("y_pred", "y_true"))

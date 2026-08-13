@@ -6,7 +6,8 @@ import inspect
 import math
 from collections.abc import Callable, Iterable
 
-from evograd.opdecl import Workload
+from evograd.opdecl import Provenance, Workload
+from evograd.opdecl.models import AlphaFoldConfig, ModelConfig
 
 
 STANDARD_TOLERANCES = {
@@ -60,6 +61,84 @@ def standard_correctness(
         for dtype in dtypes
         for rows, cols in STANDARD_CORRECTNESS_SHAPES[dtype]
     )
+
+
+def model_workloads(
+    config: ModelConfig | AlphaFoldConfig,
+    component: str,
+    free_sweep: Iterable[dict[str, int]],
+    dtypes: Iterable[str],
+    *,
+    tolerances: dict[str, tuple[float, float]] | None = None,
+    scaled: bool = False,
+    note: str = "",
+) -> tuple[Workload, ...]:
+    """Derive timed workloads from a model configuration, with provenance.
+
+    ``component`` names a ``<component>_dims`` method on the config, and each
+    entry of ``free_sweep`` supplies only what the configuration does not fix
+    (token count, batch, crop length). The same pair is stored on the workload,
+    so ``models.rederive_dims`` can reproduce the shape and the provenance test
+    can prove the declaration has not drifted from the model it cites.
+
+    Prefer this over writing shape tuples by hand. A literal ``(8192, 4096,
+    14336)`` is indistinguishable from a guess; ``mlp_down_dims(tokens=8192)``
+    on ``LLAMA_3_8B`` cannot silently stop being Llama-3's MLP.
+    """
+    builder = getattr(config, f"{component}_dims", None)
+    if builder is None:
+        raise AttributeError(
+            f"{config.name}: no component {component!r} "
+            f"(expected a {component}_dims method)"
+        )
+    tolerances = tolerances or {}
+    workloads = []
+    for free in free_sweep:
+        dims = builder(**free)
+        for dtype in dtypes:
+            atol, rtol = tolerances.get(dtype, (None, None))
+            workloads.append(
+                Workload(
+                    dims=dims,
+                    dtype=dtype,
+                    atol=atol,
+                    rtol=rtol,
+                    provenance=Provenance(
+                        model=config.name,
+                        component=component,
+                        free=dict(free),
+                        scaled=scaled,
+                        note=note,
+                    ),
+                )
+            )
+    return tuple(workloads)
+
+
+def fixed_shape_suites(
+    workloads: Iterable[Workload], *, prefix: str = "fixed"
+) -> dict[str, tuple[Workload, ...]]:
+    """One single-case suite per workload, for the fixed-shape evaluation mode.
+
+    Variable-shape evaluation asks for one deployable implementation across a
+    whole grid; fixed-shape evaluation lets a candidate specialize hard for one
+    configuration. The second mode needs a suite containing exactly one case,
+    and ``EVOGRAD_BENCHMARK_SUITE`` already routes any named suite through
+    evolution, so nothing downstream changes.
+
+    This generalizes what ``layernorm`` did by hand with ``tb_i12``..``tb_i27``:
+    those were bespoke names for the same idea, usable by exactly one operator.
+    """
+    suites: dict[str, tuple[Workload, ...]] = {}
+    for workload in workloads:
+        dims = "-".join(f"{name}{value}" for name, value in workload.dims.items())
+        key = f"{prefix}/{dims}-{workload.dtype}"
+        # A grid may legitimately repeat a shape across dtypes; the dtype is
+        # already in the key, so a collision means a duplicated workload.
+        if key in suites:
+            continue
+        suites[key] = (workload,)
+    return suites
 
 
 def regime_suites(

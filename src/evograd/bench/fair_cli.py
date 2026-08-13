@@ -31,8 +31,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--baseline",
-        choices=("auto", "liger", "pytorch_autograd"),
         default="auto",
+        help=(
+            "auto, pytorch_autograd, or any baseline the declaration provides "
+            "(liger, cublas_pair, triton_tutorial, ...). Validated against the "
+            "operator rather than a fixed list, so a new declared baseline "
+            "works here without editing this file."
+        ),
     )
     parser.add_argument("--suite", default=None)
     parser.add_argument(
@@ -56,12 +61,15 @@ def main(argv: list[str] | None = None) -> int:
 
     from evograd.bench.fair import (
         candidate_provider,
-        liger_provider,
+        declared_provider,
         pytorch_autograd_provider,
         renamed_provider,
         run_fair_benchmarks,
     )
-    from evograd.opdecl.baselines import verify_performance_baseline
+    from evograd.opdecl.baselines import (
+        available_baselines,
+        verify_performance_baseline,
+    )
     from evograd.opdecl.verify import verify
     from evograd.ops import get_op
 
@@ -71,11 +79,17 @@ def main(argv: list[str] | None = None) -> int:
         baseline_name = (
             "liger" if "liger" in op.performance_baselines else "pytorch_autograd"
         )
-    if baseline_name == "liger":
-        baseline = liger_provider(op)
-        verify_performance_baseline(op, "liger")
-    else:
+    if baseline_name == "pytorch_autograd":
         baseline = pytorch_autograd_provider(op)
+    elif baseline_name in op.performance_baselines:
+        baseline = declared_provider(op, baseline_name)
+        # Never trust a baseline's timings before its numbers match the oracle.
+        verify_performance_baseline(op, baseline_name)
+    else:
+        parser.error(
+            f"{op.name}: unknown baseline {baseline_name!r}; "
+            f"available: {available_baselines(op)}"
+        )
     if args.identity_control:
         candidate = renamed_provider(baseline, "candidate")
     else:

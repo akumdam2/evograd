@@ -79,36 +79,63 @@ def candidate_provider(op: OpDecl, module) -> PairProvider:
     )
 
 
-def liger_provider(op: OpDecl) -> PairProvider:
+def declared_provider(op: OpDecl, name: str) -> PairProvider:
+    """Wrap any declaration-provided pair baseline in the common boundary.
+
+    Named rather than hard-coded to ``liger``: the level-3 protein block is
+    meant to be compared against MegaFold's kernels, and ``matmul`` already
+    declares a cuBLAS pair, so the final-report protocol has to reach every
+    declared baseline rather than one privileged name.
+    """
     try:
-        hook = op.performance_baselines["liger"]
+        hook = op.performance_baselines[name]
     except KeyError:
-        raise ValueError(f"{op.name}: no Liger pair baseline is declared") from None
+        available = sorted(op.performance_baselines)
+        raise ValueError(
+            f"{op.name}: no {name!r} pair baseline is declared; "
+            f"available: {available or 'none'}"
+        ) from None
     factory = getattr(hook, "pair_factory", None)
     if factory is None:
-        raise ValueError(f"{op.name}: Liger baseline does not expose a pair factory")
+        raise ValueError(
+            f"{op.name}: the {name!r} baseline does not expose a pair factory, "
+            "so it cannot be measured under the symmetric protocol"
+        )
     forward_fn, backward_fn = factory()
     forward_args = tuple(getattr(hook, "forward_args", ()))
     backward_extras = tuple(getattr(hook, "backward_extras", ()))
 
     def forward(values):
-        output, saved = forward_fn(*(values[name] for name in forward_args))
+        output, saved = forward_fn(*(values[name_] for name_ in forward_args))
         return output, normalize_saved(saved)
 
     def backward(dout, saved, values):
         return backward_fn(
             dout,
             saved,
-            *(values[name] for name in backward_extras),
+            *(values[name_] for name_ in backward_extras),
         )
 
+    # layernorm's adapter calls Liger's shipped entry points directly rather
+    # than through a declaration-local wrapper; the report records which, so a
+    # reader can tell how much glue sat between the kernel and the timer.
+    if name == "liger":
+        kind = "stock_liger_pair" if op.name == "layernorm" else "declared_liger_pair"
+    else:
+        kind = f"declared_{name}_pair"
+
     return PairProvider(
-        name="liger",
+        name=name,
         forward=forward,
         backward=backward,
         source_hash=_callable_hash(forward_fn, backward_fn),
-        adapter_kind="stock_liger_pair" if op.name == "layernorm" else "declared_liger_pair",
+        adapter_kind=kind,
     )
+
+
+def liger_provider(op: OpDecl) -> PairProvider:
+    """Backwards-compatible alias for the Liger baseline."""
+    return declared_provider(op, "liger")
 
 
 def pytorch_autograd_provider(op: OpDecl) -> PairProvider:

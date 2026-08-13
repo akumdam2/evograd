@@ -1,6 +1,29 @@
 """Operator declaration: layernorm_linear."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl.models import ALPHAFOLD3
+from evograd.ops._common import fixed_shape_suites, model_workloads
+
+# MegaFold's FusedLayernormLinear, normalizing the c_s single representation and
+# projecting it to the pair-bias attention fan-out. The declaration is 2-D, so
+# the batch / MSA / residue axes flatten into M; the sweep varies that flattened
+# token count while K and N stay at the AlphaFold3 widths.
+_FREE = (
+    {"batch": 1, "n_seq": 1, "residues": 384},
+    {"batch": 1, "n_seq": 64, "residues": 128},
+    {"batch": 1, "n_seq": 64, "residues": 256},
+    {"batch": 1, "n_seq": 128, "residues": 256},
+)
+_DERIVED = model_workloads(
+    ALPHAFOLD3,
+    "layernorm_linear",
+    _FREE,
+    # bfloat16 added in v1: MegaFold trains in bf16, and the pre-v1 grid
+    # measured only fp32/fp16, i.e. never the dtype this kernel actually runs in.
+    ("float32", "float16", "bfloat16"),
+    scaled=True,
+    note="MegaFold runs batch 1 with activation checkpointing; the MSA depth is swept instead",
+)
 
 
 def make_layernorm_linear_inputs(torch, op, workload, device="cuda"):
@@ -24,6 +47,8 @@ def make_layernorm_linear_inputs(torch, op, workload, device="cuda"):
 op = declare_op(
     name="layernorm_linear",
     forward="evograd.ops.layernorm_linear.forward_ref:layernorm_linear_forward_ref",
+    level=2,
+    family="gemm",
     dims=('M', 'K', 'N'),
     args=(
         Active("x", "[M, K]"),
@@ -45,15 +70,23 @@ op = declare_op(
         Workload(dims=dict(M=128, K=128, N=256), dtype="float16"),
         Workload(dims=dict(M=512, K=256, N=512), dtype="float16"),
     ),
-    benchmark=tuple(
-        Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
-        for (m, k, n) in (
-            (4096, 128, 512), (8192, 128, 1024), (16384, 128, 256),
-            (4096, 256, 1024), (2048, 512, 2048), (384, 768, 1536),
-        )
-        for dtype in ("float32", "float16")
-    ),
-    tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    benchmark=_DERIVED,
+    benchmark_suites={
+        **fixed_shape_suites(_DERIVED),
+        "legacy": tuple(
+            Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
+            for (m, k, n) in (
+                (4096, 128, 512), (8192, 128, 1024), (16384, 128, 256),
+                (4096, 256, 1024), (2048, 512, 2048), (384, 768, 1536),
+            )
+            for dtype in ("float32", "float16")
+        ),
+    },
+    tolerances={
+        "float32": (8e-2, 2e-2),
+        "float16": (1e-1, 2e-2),
+        "bfloat16": (1.5e-1, 3e-2),
+    },
     tolerance_multipliers={"dweight": (2.0, 1.0), "dbias": (2.0, 1.0)},
     make_inputs=make_layernorm_linear_inputs,
 )

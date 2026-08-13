@@ -100,18 +100,80 @@ def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
     return tuple(resolved)
 
 
+#: Where a benchmark workload's shape came from. ``source`` is the strength of
+#: the claim, not a free-text note: ``hf_config`` means every dim is derivable
+#: from a frozen :mod:`evograd.opdecl.models` entry (and ``tests/test_provenance``
+#: re-derives it), ``paper`` means it is quoted from a published sweep, and
+#: ``handpicked`` is an honest admission that a human chose the number.
+PROVENANCE_SOURCES = ("hf_config", "paper", "handpicked")
+
+#: Dtypes a reference computation may be promoted to. Only float types: the
+#: point is to make the reference more accurate than the candidate, and the
+#: integer/bool dtypes only ever appear on Inactive inputs (class labels, masks)
+#: which are not promoted at all.
+_REFERENCE_DTYPES = frozenset({"float32", "float64"})
+
+
+@dataclass(frozen=True)
+class Provenance:
+    """The real workload a benchmark shape is traceable to.
+
+    Without this, a benchmark grid is a pile of plausible-looking constants: the
+    pre-v1 declarations carried Llama-3 and GPT-2 dimensions in them, but only
+    as comments, so nothing stopped a later edit from drifting away from any
+    real model. Recording the model and component makes the claim checkable.
+
+    ``scaled`` marks a shape that follows a real configuration in every
+    dimension except a deliberately reduced one (e.g. MegaFold benchmarks
+    EvoAttention at batch 4; a single-GPU grid runs batch 1). Say which dim was
+    scaled and why in ``note``.
+    """
+
+    model: str  # registry key in evograd.opdecl.models, e.g. "llama_3_8b"
+    component: str  # "mlp_down_proj", "decoder_layer", "pair_bias_attention"
+    #: The dims a model configuration does *not* fix — batch, token count, crop
+    #: length. Everything else is derived. This is what makes the claim
+    #: mechanically checkable: ``MODELS[model].<component>_dims(**free)`` must
+    #: reproduce the workload's dims exactly, which ``tests/test_provenance``
+    #: asserts for every benchmark case.
+    free: dict[str, int] = field(default_factory=dict)
+    source: str = "hf_config"
+    scaled: bool = False
+    note: str = ""
+
+    def __post_init__(self) -> None:
+        if self.source not in PROVENANCE_SOURCES:
+            raise ValueError(
+                f"provenance source must be one of {PROVENANCE_SOURCES}, "
+                f"got {self.source!r}"
+            )
+        if not self.model or not self.component:
+            raise ValueError("provenance requires both a model and a component")
+        if self.scaled and not self.note:
+            raise ValueError(
+                f"{self.model}/{self.component}: a scaled provenance must say in "
+                "'note' which dimension was scaled and why"
+            )
+
+
 @dataclass(frozen=True)
 class Workload:
     """One concrete binding of the operator's symbolic dims, plus dtype.
 
     ``atol``/``rtol`` override the op-level per-dtype tolerance for this case
     (e.g. evoattention's Dim=128 register-pressure case is looser).
+
+    ``provenance`` traces the shape back to a real model. It is optional on the
+    type so ablation suites (``legacy_*``, ``tb_*``) and externally scaffolded
+    declarations stay expressible, but every case in a benchmark task's default
+    suite is expected to carry one.
     """
 
     dims: dict[str, int]
     dtype: str
     atol: float | None = None
     rtol: float | None = None
+    provenance: Provenance | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +190,24 @@ class OpDecl:
     output: Active
     forward_semantics: str
     backward_semantics: str
+    # ── benchmark taxonomy ────────────────────────────────────────────────
+    # Task hierarchy level: 1 primitive, 2 fused, 3 architectural block.
+    # ``None`` means "not a benchmark task" — scaffolded and user-supplied
+    # declarations are perfectly usable without claiming a place in the suite.
+    # Every built-in operator sets it; ``tests/test_opdecl`` enforces that.
+    level: int | None = None
+    # Aggregation group for the suite report. Speedups are pooled per family
+    # before families are pooled, so a family with many operators cannot
+    # dominate the headline number by weight of numbers alone.
+    family: str | None = None
+    # Compute the forward reference (and therefore the gradient oracle) in this
+    # dtype instead of the workload's, then compare the candidate against it.
+    # A same-dtype reference carries its own rounding error, so at low precision
+    # the tolerance has to cover both sides and stops meaning "how wrong is the
+    # candidate". Composing ~10 ops in a level-3 block makes that untenable;
+    # a float32 reference restores a tolerance that bounds the candidate's own
+    # error. ``None`` keeps the historical same-dtype behavior.
+    reference_dtype: str | None = None
     extra_constraints: str = ""
     grad_order: tuple[str, ...] | None = None
     correctness: tuple[Workload, ...] = ()
@@ -257,6 +337,43 @@ class OpDecl:
 
         if not isinstance(self.output, Active):
             raise ValueError(f"{self.name}: output must be Active (it receives an upstream gradient)")
+
+        if (self.level is None) != (self.family is None):
+            raise ValueError(
+                f"{self.name}: level and family must be set together "
+                f"(got level={self.level!r}, family={self.family!r})"
+            )
+        if self.level is not None:
+            if self.level not in (1, 2, 3):
+                raise ValueError(
+                    f"{self.name}: level must be 1 (primitive), 2 (fused), or "
+                    f"3 (block), got {self.level!r}"
+                )
+            if not self.family.isidentifier():
+                raise ValueError(
+                    f"{self.name}: family must be a Python identifier, got {self.family!r}"
+                )
+        if self.reference_dtype is not None and self.reference_dtype not in _REFERENCE_DTYPES:
+            raise ValueError(
+                f"{self.name}: reference_dtype must be one of "
+                f"{sorted(_REFERENCE_DTYPES)}, got {self.reference_dtype!r}"
+            )
+        # Provenance is checked here, beside every other declaration invariant,
+        # rather than left to review: an operator that claims a place in the
+        # benchmark must say where its timed shapes come from. Only the default
+        # suite is covered — named ablation suites (legacy_*, tb_*) are historical
+        # controls and would have to invent an origin they do not have.
+        if self.level is not None:
+            unsourced = [
+                workload.dims
+                for workload in self.benchmark
+                if workload.provenance is None
+            ]
+            if unsourced:
+                raise ValueError(
+                    f"{self.name}: level-{self.level} benchmark workloads without "
+                    f"provenance: {unsourced}"
+                )
 
         for arg in (*self.args, self.output):
             shape = getattr(arg, "shape", None)
@@ -467,6 +584,9 @@ def declare_op(
     output: Active,
     forward_semantics: str,
     backward_semantics: str,
+    level: int | None = None,
+    family: str | None = None,
+    reference_dtype: str | None = None,
     extra_constraints: str = "",
     grad_order: tuple[str, ...] | None = None,
     correctness: tuple[Workload, ...] = (),
@@ -493,6 +613,9 @@ def declare_op(
         output=output,
         forward_semantics=forward_semantics,
         backward_semantics=backward_semantics,
+        level=level,
+        family=family,
+        reference_dtype=reference_dtype,
         extra_constraints=extra_constraints,
         grad_order=tuple(grad_order) if grad_order is not None else None,
         correctness=tuple(correctness),

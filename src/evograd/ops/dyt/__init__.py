@@ -1,7 +1,14 @@
 """Operator declaration: dynamic tanh (DyT)."""
 
 from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl.models import (
+    LLAMA_3_8B,
+    LLAMA_REGIME_SPLIT,
+    LLAMA_TOKEN_SWEEP,
+)
 from evograd.ops._common import (
+    fixed_shape_suites,
+    model_workloads,
     STANDARD_TOLERANCES,
     dtype_for,
     log_distance_weight,
@@ -17,9 +24,19 @@ _SHAPES = (
     (32768, 1024), (49152, 1024), (65024, 1024), (12288, 4096),
     (61440, 3072), (8192, 8192),
 )
-_SPLIT = 4096
-_BENCHMARK = workloads_2d(
+_SPLIT = LLAMA_REGIME_SPLIT
+_LEGACY_BENCHMARK = workloads_2d(
     _SHAPES, ("bfloat16",), tolerances=STANDARD_TOLERANCES
+)
+# Timed grid derived from Llama-3-8B, so every case names the layer it
+# came from. The pre-v1 hand-picked grid above is kept as an ablation
+# suite rather than deleted.
+_BENCHMARK = model_workloads(
+    LLAMA_3_8B,
+    'elementwise',
+    tuple({'tokens': t} for t in LLAMA_TOKEN_SWEEP),
+    ("bfloat16",),
+    tolerances=STANDARD_TOLERANCES,
 )
 _REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
 
@@ -59,6 +76,8 @@ def _liger_factory():
 
 op = declare_op(
     name="dyt",
+    level=1,
+    family="norm",
     forward="evograd.ops.dyt.forward_ref:dyt_forward_ref",
     dims=("rows", "cols"),
     args=(
@@ -75,7 +94,11 @@ op = declare_op(
     ),
     correctness=standard_correctness(),
     benchmark=_BENCHMARK,
-    benchmark_suites=regime_suites(_BENCHMARK, _feature, _SPLIT),
+    benchmark_suites={
+        **regime_suites(_BENCHMARK, _feature, _SPLIT),
+        **fixed_shape_suites(_BENCHMARK),
+        "legacy": _LEGACY_BENCHMARK,
+    },
     tolerances=STANDARD_TOLERANCES,
     tolerance_hook=_tolerance,
     performance_baselines={

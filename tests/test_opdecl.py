@@ -82,33 +82,91 @@ class TestDerivedNaming(unittest.TestCase):
         op = get_op("evoattention")
         self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
 
-    def test_registry_covers_all_twenty_one(self):
+    def test_registry_is_grouped_by_benchmark_level(self):
+        by_level = {}
+        for name, op in OPS.items():
+            by_level.setdefault(op.level, []).append(name)
         self.assertEqual(
-            sorted(OPS),
-            [
-                "conv2d",
-                "cross_entropy",
-                "dyt",
-                "evoattention",
-                "fused_add_rms_norm",
-                "fused_moe_swiglu",
-                "geglu",
-                "gemm_leaky_relu",
-                "jsd",
-                "kl_div",
-                "layernorm",
-                "layernorm_linear",
-                "linear",
-                "matmul",
-                "poly_norm",
-                "relu_squared",
-                "rmsnorm",
-                "softmax",
-                "sparsemax",
-                "swiglu",
-                "tvd",
-            ],
+            {level: sorted(names) for level, names in sorted(by_level.items())},
+            {
+                1: [
+                    "conv2d",
+                    "cross_entropy",
+                    "dyt",
+                    "evoattention",
+                    "geglu",
+                    "jsd",
+                    "kl_div",
+                    "layernorm",
+                    "linear",
+                    "matmul",
+                    "poly_norm",
+                    "relu_squared",
+                    "rmsnorm",
+                    "rope",
+                    "softmax",
+                    "sparsemax",
+                    "swiglu",
+                    "tvd",
+                ],
+                2: [
+                    "fused_add_rms_norm",
+                    "fused_linear_cross_entropy",
+                    "fused_moe_swiglu",
+                    "gemm_leaky_relu",
+                    "layernorm_linear",
+                ],
+                3: [
+                    "af3_single_repr_block",
+                    "llama3_decoder_layer",
+                ],
+            },
         )
+
+    def test_level_three_blocks_use_a_widened_reference(self):
+        """A block composes ~10 operators, so a same-dtype reference is useless.
+
+        At that depth a bfloat16 reference carries as much rounding error as the
+        candidate does, and the tolerance stops meaning "how wrong is the
+        candidate". Every level-3 task therefore computes its reference in
+        float32 and gates bfloat16 candidates against it.
+        """
+        for name, op in OPS.items():
+            if op.level != 3:
+                continue
+            with self.subTest(op=name):
+                self.assertEqual(op.reference_dtype, "float32")
+                self.assertIn(
+                    "float32",
+                    {case.dtype for case in op.correctness},
+                    f"{name}: a bfloat16-only gate cannot separate a real "
+                    "algebra bug from ordinary rounding",
+                )
+
+    def test_liger_paper_kernels_are_all_declared(self):
+        """The seven kernels the Liger paper reports must each have a task.
+
+        RoPE and fused-linear-cross-entropy were the two missing before v1, and
+        they are the second and third most-patched Liger operators after
+        RMSNorm — so their absence meant the benchmark skipped most of what a
+        Llama training step actually spends its kernel time on.
+        """
+        for name in (
+            "rmsnorm",
+            "layernorm",
+            "rope",
+            "swiglu",
+            "geglu",
+            "cross_entropy",
+            "fused_linear_cross_entropy",
+        ):
+            with self.subTest(op=name):
+                op = get_op(name)
+                self.assertIn(
+                    "liger",
+                    op.performance_baselines,
+                    f"{name}: a Liger paper kernel with no Liger baseline",
+                )
 
     def test_registry_is_discovery_based(self):
         import inspect
@@ -181,26 +239,50 @@ class TestValidation(unittest.TestCase):
 
 
 class TestLigerSuiteMigration(unittest.TestCase):
-    def test_final_fork_workload_counts(self):
-        expected = {
-            "cross_entropy": (6, 42),
-            "dyt": (6, 15),
-            "fused_add_rms_norm": (6, 16),
-            "fused_moe_swiglu": (2, 6),
-            "geglu": (6, 42),
-            "jsd": (6, 14),
-            "kl_div": (6, 39),
-            "poly_norm": (6, 14),
-            "relu_squared": (6, 14),
-            "softmax": (6, 36),
-            "sparsemax": (4, 15),
-            "swiglu": (6, 42),
-            "tvd": (6, 14),
-        }
-        for name, counts in expected.items():
+    # (correctness cases, fork-era benchmark cases). The timed suites moved onto
+    # model-derived grids in v1, so the fork counts now live in each
+    # declaration's ``legacy`` ablation suite. Asserting them there is a
+    # stronger check than the original: it proves the migration *preserved* the
+    # historical grids rather than silently discarding them.
+    _FORK_COUNTS = {
+        "cross_entropy": (6, 42),
+        "dyt": (6, 15),
+        "fused_add_rms_norm": (6, 16),
+        "geglu": (6, 42),
+        "jsd": (6, 14),
+        "kl_div": (6, 39),
+        "poly_norm": (6, 14),
+        "relu_squared": (6, 14),
+        "softmax": (6, 36),
+        "sparsemax": (4, 15),
+        "swiglu": (6, 42),
+        "tvd": (6, 14),
+    }
+
+    def test_final_fork_workload_counts_are_preserved_as_ablation_suites(self):
+        for name, (correctness, benchmark) in self._FORK_COUNTS.items():
             with self.subTest(op=name):
                 op = get_op(name)
-                self.assertEqual((len(op.correctness), len(op.benchmark)), counts)
+                self.assertEqual(len(op.correctness), correctness)
+                self.assertEqual(
+                    len(op.benchmark_workloads("legacy")),
+                    benchmark,
+                    f"{name}: the fork's benchmark grid must survive as 'legacy'",
+                )
+
+    def test_fused_moe_keeps_its_liger_grid_as_the_timed_suite(self):
+        # The one Liger-derived operator whose grid is not model-derived: it is
+        # quoted from Liger's own MoE sweep, so there is nothing to migrate.
+        op = get_op("fused_moe_swiglu")
+        self.assertEqual((len(op.correctness), len(op.benchmark)), (2, 6))
+        self.assertEqual(op.benchmark[0].provenance.source, "paper")
+
+    def test_timed_suites_are_model_derived(self):
+        for name in self._FORK_COUNTS:
+            with self.subTest(op=name):
+                op = get_op(name)
+                sources = {case.provenance.source for case in op.benchmark}
+                self.assertEqual(sources, {"hf_config"}, name)
 
     def test_shape_regime_suites_partition_full_suite(self):
         for name in (

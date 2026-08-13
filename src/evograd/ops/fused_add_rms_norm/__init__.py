@@ -1,7 +1,14 @@
 """Operator declaration: fused residual add plus RMSNorm."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl.models import (
+    LLAMA_3_8B,
+    LLAMA_REGIME_SPLIT,
+    LLAMA_TOKEN_SWEEP,
+)
 from evograd.ops._common import (
+    fixed_shape_suites,
+    model_workloads,
     STANDARD_TOLERANCES,
     dtype_for,
     log_distance_weight,
@@ -17,9 +24,19 @@ _SHAPES = (
     (65536, 1024), (131072, 1024), (8192, 4096), (32768, 4096),
     (4096, 8192), (12345, 3072), (49152, 1536),
 )
-_SPLIT = 4096
-_BENCHMARK = workloads_2d(
+_SPLIT = LLAMA_REGIME_SPLIT
+_LEGACY_BENCHMARK = workloads_2d(
     _SHAPES, ("bfloat16",), tolerances=STANDARD_TOLERANCES
+)
+# Timed grid derived from Llama-3-8B, so every case names the layer it
+# came from. The pre-v1 hand-picked grid above is kept as an ablation
+# suite rather than deleted.
+_BENCHMARK = model_workloads(
+    LLAMA_3_8B,
+    'elementwise',
+    tuple({'tokens': t} for t in LLAMA_TOKEN_SWEEP),
+    ("bfloat16",),
+    tolerances=STANDARD_TOLERANCES,
 )
 _REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
 
@@ -58,6 +75,8 @@ def _liger_factory():
 
 op = declare_op(
     name="fused_add_rms_norm",
+    level=2,
+    family="norm",
     forward=(
         "evograd.ops.fused_add_rms_norm.forward_ref:"
         "fused_add_rms_norm_forward_ref"
@@ -80,7 +99,11 @@ op = declare_op(
     ),
     correctness=standard_correctness(),
     benchmark=_BENCHMARK,
-    benchmark_suites=regime_suites(_BENCHMARK, _feature, _SPLIT),
+    benchmark_suites={
+        **regime_suites(_BENCHMARK, _feature, _SPLIT),
+        **fixed_shape_suites(_BENCHMARK),
+        "legacy": _LEGACY_BENCHMARK,
+    },
     tolerances=STANDARD_TOLERANCES,
     tolerance_hook=_tolerance,
     performance_baselines={

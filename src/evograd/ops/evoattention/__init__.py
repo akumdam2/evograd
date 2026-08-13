@@ -1,6 +1,8 @@
 """Operator declaration: evoattention."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl.models import AF3_RESIDUE_SWEEP, ALPHAFOLD3
+from evograd.ops._common import fixed_shape_suites, model_workloads
 
 
 def make_evoattention_inputs(torch, op, workload, device="cuda"):
@@ -32,9 +34,54 @@ def make_evoattention_inputs(torch, op, workload, device="cuda"):
     return {"q": q, "k": k, "v": v, "res_mask": res_mask, "pair_bias": pair_bias, "do": do}
 
 
+_DTYPES = ("float16", "bfloat16")
+
+# Each AlphaFold3 attention flavour carries its own head count and head dim, so
+# the grid is three derived families rather than one sweep. The pre-v1 grid had
+# the right (H, D) pairs but set S=64 for triangle attention at N in {128, 256};
+# in real triangle attention the MSA axis *is* the third residue index, so those
+# cases understated the work by 2x and 4x. Deriving S from the residue count
+# makes that mistake unrepresentable.
+_PAIR_BIAS = model_workloads(
+    ALPHAFOLD3,
+    "pair_bias_attention",
+    tuple({"batch": 1, "n_seq": 1, "residues": n} for n in AF3_RESIDUE_SWEEP),
+    _DTYPES,
+    scaled=True,
+    note="MegaFold benchmarks batch 4; batch 1 keeps the grid on a single GPU",
+)
+_TRIANGLE = model_workloads(
+    ALPHAFOLD3,
+    "triangle_attention",
+    tuple({"batch": 1, "residues": n} for n in AF3_RESIDUE_SWEEP[:2]),
+    _DTYPES,
+    scaled=True,
+    note=(
+        "MegaFold benchmarks batch 4; batch 1 keeps the grid on a single GPU. "
+        "Residues stop at 256 because S == N makes this the most expensive family"
+    ),
+)
+_MSA = model_workloads(
+    ALPHAFOLD3,
+    "msa_attention",
+    tuple({"batch": 1, "n_seq": 64, "residues": n} for n in AF3_RESIDUE_SWEEP[:2]),
+    _DTYPES,
+    scaled=True,
+    note="MegaFold benchmarks batch 4; batch 1 keeps the grid on a single GPU",
+)
+_BENCHMARK = _PAIR_BIAS + _TRIANGLE + _MSA
+
+_STRESS = tuple(
+    Workload(dims=dict(B=1, S=1, H=8, N=n, D=128), dtype=dtype)
+    for n in (256, 384)
+    for dtype in _DTYPES
+)
+
 op = declare_op(
     name="evoattention",
     forward="evograd.ops.evoattention.forward_ref:evoattention_forward_ref",
+    level=1,
+    family="attention",
     dims=('B', 'S', 'H', 'N', 'D'),
     args=(
         Active("q", "[B, S, N, H, D]", dtype="float16|bfloat16"),
@@ -60,23 +107,30 @@ op = declare_op(
         # Dim=128: large accumulators / register-pressure path.
         Workload(dims=dict(B=1, S=1, H=4, N=48, D=128), dtype="float16", atol=3e-2, rtol=3e-2),
     ),
-    benchmark=tuple(
-        Workload(dims=dict(B=b, S=s, H=h, N=n, D=d), dtype=dtype)
-        for (b, s, h, n, d) in (
-            # Dim=64 attention-pair-bias
-            (1, 1, 16, 128, 64),
-            (1, 1, 16, 256, 64),
-            (1, 1, 16, 384, 64),
-            # Dim=32 triangle attention
-            (1, 64, 4, 128, 32),
-            (1, 64, 4, 256, 32),
-            (1, 128, 4, 128, 32),
-            # Dim=128 register-spill stress shapes
-            (1, 1, 8, 256, 128),
-            (1, 1, 8, 384, 128),
-        )
-        for dtype in ("float16", "bfloat16")
-    ),
+    benchmark=_BENCHMARK,
+    coverage=_BENCHMARK + _STRESS,
+    benchmark_suites={
+        "pair_bias": _PAIR_BIAS,
+        "triangle": _TRIANGLE,
+        "msa": _MSA,
+        **fixed_shape_suites(_BENCHMARK),
+        # Not an AlphaFold3 configuration: no AF3 module uses head dim 128 (the
+        # largest is 64). These probe register pressure, which is worth running
+        # but is not evidence about protein-model performance, so they are an
+        # ablation suite and untimed coverage rather than part of the objective.
+        "register_pressure": _STRESS,
+        # Pre-v1 grid. Retained for comparison with earlier runs; note its
+        # triangle-attention cases set S != N, which understates the real work.
+        "legacy": tuple(
+            Workload(dims=dict(B=b, S=s, H=h, N=n, D=d), dtype=dtype)
+            for (b, s, h, n, d) in (
+                (1, 1, 16, 128, 64), (1, 1, 16, 256, 64), (1, 1, 16, 384, 64),
+                (1, 64, 4, 128, 32), (1, 64, 4, 256, 32), (1, 128, 4, 128, 32),
+                (1, 1, 8, 256, 128), (1, 1, 8, 384, 128),
+            )
+            for dtype in ("float16", "bfloat16")
+        ),
+    },
     tolerances={"float16": (2e-2, 2e-2), "bfloat16": (4e-2, 4e-2)},
     tolerance_multipliers={"d_pair_bias": (2.0, 1.0)},
     make_inputs=make_evoattention_inputs,

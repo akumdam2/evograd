@@ -1,6 +1,24 @@
 """Operator declaration: linear."""
 
 from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl.models import LLAMA_3_8B
+from evograd.ops._common import fixed_shape_suites, model_workloads
+
+# The same four Llama-3-8B projections `matmul` measures, but through the
+# bias-carrying Linear contract, so `dbias` (a full row reduction) is exercised
+# at real widths rather than at square toy shapes.
+_GEMM_COMPONENTS = ("attn_qkv", "mlp_up", "mlp_down", "lm_head")
+_GEMM_TOKENS = (2048, 8192)
+_DERIVED = tuple(
+    workload
+    for component in _GEMM_COMPONENTS
+    for workload in model_workloads(
+        LLAMA_3_8B,
+        component,
+        tuple({"tokens": tokens} for tokens in _GEMM_TOKENS),
+        ("bfloat16",),
+    )
+)
 
 
 def make_linear_inputs(torch, op, workload, device="cuda"):
@@ -17,6 +35,8 @@ def make_linear_inputs(torch, op, workload, device="cuda"):
 op = declare_op(
     name="linear",
     forward="evograd.ops.linear.forward_ref:linear_forward_ref",
+    level=1,
+    family="gemm",
     dims=('M', 'K', 'N'),
     args=(
         Active("x", "[M, K]"),
@@ -35,14 +55,25 @@ op = declare_op(
         Workload(dims=dict(M=128, K=128, N=256), dtype="float16"),
         Workload(dims=dict(M=512, K=256, N=512), dtype="float16"),
     ),
-    benchmark=tuple(
-        Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
-        for (m, n, k) in (
-            (512, 512, 512), (1024, 1024, 1024), (2048, 1024, 1024),
-            (1024, 2048, 1024), (2048, 2048, 1024), (4096, 1024, 1024),
-        )
-        for dtype in ("float32", "float16")
-    ),
-    tolerances={"float32": (8e-2, 2e-2), "float16": (1e-1, 2e-2)},
+    benchmark=_DERIVED,
+    benchmark_suites={
+        **fixed_shape_suites(_DERIVED),
+        # Pre-v1 square grid, retained as an ablation control.
+        "legacy": tuple(
+            Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
+            for (m, n, k) in (
+                (512, 512, 512), (1024, 1024, 1024), (2048, 1024, 1024),
+                (1024, 2048, 1024), (2048, 2048, 1024), (4096, 1024, 1024),
+            )
+            for dtype in ("float32", "float16")
+        ),
+    },
+    # bfloat16 added for the derived grid: Llama-3 trains in bf16, and a GEMM
+    # benchmark that only measures fp32/fp16 is not measuring the training path.
+    tolerances={
+        "float32": (8e-2, 2e-2),
+        "float16": (1e-1, 2e-2),
+        "bfloat16": (1.5e-1, 3e-2),
+    },
     make_inputs=make_linear_inputs,
 )

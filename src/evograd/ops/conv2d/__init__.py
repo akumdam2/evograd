@@ -1,6 +1,22 @@
 """Operator declaration: dense NCHW conv2d."""
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, Provenance, Workload, declare_op
+
+# ResNet-style stage resolutions and channel widths (56x56x64, 28x28x256,
+# 14x14x512), but NOT literal ResNet layers: the declared contract is
+# stride 1 / padding 0 / dilation 1 / groups 1, whereas ResNet's 3x3
+# convolutions use padding 1. Recorded as handpicked rather than derived,
+# because inventing a model config to justify these numbers would be exactly
+# the pretence provenance exists to prevent.
+_PROVENANCE = Provenance(
+    model="resnet_style",
+    component="conv_stage",
+    source="handpicked",
+    note=(
+        "ResNet-50 stage resolutions and channel widths; the stride-1/padding-0 "
+        "contract means these are not literal ResNet layers"
+    ),
+)
 
 
 _DIMS = ("B", "C", "H", "W", "O", "KH", "KW", "OH", "OW")
@@ -16,7 +32,9 @@ _BENCHMARK_CASES = (
 
 
 def _workload(values, dtype):
-    return Workload(dims=dict(zip(_DIMS, values)), dtype=dtype)
+    return Workload(
+        dims=dict(zip(_DIMS, values)), dtype=dtype, provenance=_PROVENANCE
+    )
 
 
 def _benchmark_workloads():
@@ -61,6 +79,8 @@ def make_conv2d_inputs(torch, op, workload, device="cuda"):
 
 op = declare_op(
     name="conv2d",
+    level=1,
+    family="conv",
     forward="evograd.ops.conv2d.forward_ref:conv2d_forward_ref",
     dims=_DIMS,
     args=(
