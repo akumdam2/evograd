@@ -300,6 +300,7 @@ def evograd(
     force: bool = False,
     ncu: bool = False,
     save_programs: bool = False,
+    groups: tuple[str, ...] | None = None,
 ) -> EvogradResult:
     """Generate, evolve, dispatch, and report for one declared operator.
 
@@ -365,13 +366,22 @@ def evograd(
             )
         )
 
-        groups = ["full"]
-        if (
-            declared.regime_feature is not None
-            and declared.benchmark_suites.get("small")
-            and declared.benchmark_suites.get("large")
-        ):
-            groups.extend(("small", "large"))
+        # ``groups=None`` keeps the historical behaviour: a declaration with
+        # shape regimes also evolves a small- and a large-shape specialist, and
+        # ``evograd dispatch`` later picks a routing threshold between them.
+        # That triples the work, so a caller studying the generalist alone —
+        # the baseline method, without shape-aware specialization — passes
+        # ``groups=("full",)`` and pays for one evolution instead of three.
+        if groups is not None:
+            groups = list(groups)
+        else:
+            groups = ["full"]
+            if (
+                declared.regime_feature is not None
+                and declared.benchmark_suites.get("small")
+                and declared.benchmark_suites.get("large")
+            ):
+                groups.extend(("small", "large"))
 
         programs: dict[str, Path] = {}
         pending = []

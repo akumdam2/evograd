@@ -322,7 +322,7 @@ from evograd.opdecl import Active, Inactive, Workload, declare_op
 
 op = declare_op(
     name="layernorm",
-    forward="evograd.ops.layernorm.forward_ref:layernorm_forward_ref",
+    forward="evograd.ops.level1.layernorm.forward_ref:layernorm_forward_ref",
     dims=("rows", "hidden"),
     args=(
         Active("x", "[rows, hidden]"),
@@ -396,6 +396,80 @@ The forward is allowed to choose what it saves. The saved state may mix tensors
 with immutable scalar metadata; only tensor storage contributes to the memory
 score. The declaration determines the backward return names and ordering, and
 the generic autograd binding inserts `None` for every `Inactive` input.
+
+## Running the benchmark
+
+The benchmark is specified in [docs/BENCHMARK.md](docs/BENCHMARK.md): 25
+operators over three levels, 191 timed configurations, every shape traceable to
+a layer of a real model. This section is the operational half — how to run it
+and how to submit something to it.
+
+### The reference line
+
+Before measuring anything of your own, reproduce the reference line. Any
+reviewed pair baseline can stand in as the candidate, which answers "what does a
+hand-written production kernel achieve here" without needing a generated program
+for all 25 operators:
+
+```bash
+evograd suite --candidate-baseline liger --out results/liger/
+```
+
+That times Liger-Kernel against eager PyTorch on every operator declaring a
+`liger` adapter, and writes `suite_report.json` plus `SUITE_RESULTS.md`. The
+report states what it measured in its first line — a suite result is unreadable
+without knowing whether the thing being timed was a production library or a
+generated kernel.
+
+Operators with no such baseline are reported as **uncovered**, never skipped:
+"we did not run it" and "it has no speedup" are different claims.
+
+### Submitting a kernel
+
+A submission is one Python module per operator implementing that operator's
+autograd pair (see [Candidate API](#candidate-api) for the two function
+signatures). Lay them out by operator name:
+
+```text
+my_kernels/
+├── layernorm.py           # or my_kernels/layernorm/anything.py
+├── rmsnorm.py
+└── softmax.py
+```
+
+Then run whichever subset you are claiming:
+
+```bash
+# everything you have
+evograd suite --candidates my_kernels/ --out results/mine/
+
+# one level, or one operator
+evograd suite --candidates my_kernels/ --level 1 --out results/mine/
+evograd suite --candidates my_kernels/ --op rmsnorm --out results/mine/
+```
+
+Rules that follow from the specification rather than from this tool:
+
+- **Correctness is a hard gate.** A candidate that fails any correctness case is
+  not timed at all. Check yours first, on CPU if you like:
+  `evograd verify --op rmsnorm --device cpu my_kernels/rmsnorm.py`
+- **Partial submissions are legitimate**, and are reported as reduced coverage
+  rather than as a smaller benchmark. Coverage is never folded into speedup.
+- **You choose what the forward saves.** That choice is measured — saved-state
+  bytes are reported alongside latency, because trading recomputation against
+  retained memory is the thing this benchmark exists to expose.
+- **Inputs must not be mutated.** The final-report protocol checks tensor
+  content, shape, stride, dtype, and storage offset outside the timed regions.
+
+### Single-operator measurement
+
+For iterating on one kernel, the final-report protocol is available directly,
+including its identity control:
+
+```bash
+evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
+evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
+```
 
 ## Correctness and evaluation
 
@@ -613,7 +687,10 @@ gradients, and stateful operators require declaration/API extensions.
 ```text
 src/evograd/
 ├── opdecl/                    # declaration types, oracle, binding, verification
-├── ops/                       # one self-contained package per operator
+├── ops/                       # one self-contained package per operator,
+│   ├── level1/                #   grouped by benchmark level: 18 primitive,
+│   ├── level2/                #   5 fused, 2 architectural blocks. The grouping
+│   └── level3/                #   follows OpDecl.level, which stays the authority
 ├── atenir/
 │   ├── extract.py             # PyTorch/autograd graph extraction
 │   ├── compose.py             # serialized graph execution

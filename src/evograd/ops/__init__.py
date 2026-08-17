@@ -1,9 +1,17 @@
 """Automatic registry for declaration modules in :mod:`evograd.ops`.
 
-An operator is registered by adding an ``evograd/ops/<name>/`` package whose
-``__init__.py`` exposes ``op = declare_op(...)``. Its forward reference,
+An operator is registered by adding an ``evograd/ops/level<N>/<name>/`` package
+whose ``__init__.py`` exposes ``op = declare_op(...)``. Its forward reference,
 input-generation helpers, baselines, and related implementation files live in
-that same package. No central list is edited when operator #7 is added.
+that same package. No central list is edited when operator #26 is added.
+
+Operators are grouped into ``level1/``, ``level2/`` and ``level3/`` directories
+matching the benchmark hierarchy. The grouping is presentation only — the
+authority on an operator's level remains ``OpDecl.level``, and
+``tests/test_ops_layout.py`` asserts the directory agrees with the declaration
+so the two cannot drift apart. Discovery therefore recurses one level into
+those group packages, and a package that declares no ``op`` is treated as a
+group rather than an error.
 """
 
 from __future__ import annotations
@@ -18,10 +26,8 @@ from pathlib import Path
 from evograd.opdecl import OpDecl
 
 
-def _discover_ops() -> dict[str, OpDecl]:
-    discovered: dict[str, OpDecl] = {}
-    prefix = f"{__name__}."
-    for module_info in pkgutil.iter_modules(__path__, prefix):
+def _collect_ops(search_path, prefix: str, discovered: dict[str, OpDecl], *, depth: int) -> None:
+    for module_info in pkgutil.iter_modules(search_path, prefix):
         if not module_info.ispkg:
             continue
         short_name = module_info.name.rsplit(".", 1)[-1]
@@ -30,6 +36,14 @@ def _discover_ops() -> dict[str, OpDecl]:
         module = importlib.import_module(module_info.name)
         op = getattr(module, "op", None)
         if op is None:
+            # A grouping package (level1/, level2/, level3/) rather than an
+            # operator. Recurse once; deeper nesting is not a layout we use, and
+            # allowing it would make a stray package anywhere silently register
+            # operators.
+            if depth > 0:
+                _collect_ops(
+                    module.__path__, f"{module_info.name}.", discovered, depth=depth - 1
+                )
             continue
         if not isinstance(op, OpDecl):
             raise TypeError(f"{module_info.name}.op must be OpDecl, got {type(op).__name__}")
@@ -40,6 +54,11 @@ def _discover_ops() -> dict[str, OpDecl]:
         if op.name in discovered:
             raise ValueError(f"duplicate operator declaration {op.name!r}")
         discovered[op.name] = op
+
+
+def _discover_ops() -> dict[str, OpDecl]:
+    discovered: dict[str, OpDecl] = {}
+    _collect_ops(__path__, f"{__name__}.", discovered, depth=1)
     return dict(sorted(discovered.items()))
 
 

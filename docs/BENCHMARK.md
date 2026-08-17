@@ -66,7 +66,7 @@ Provenance(model="llama_3_8b", component="mlp_down", free={"tokens": 8192})
 declared shape and the model it cites ever disagree. Provenance is an assertion,
 not a comment — 172 of the 191 timed configurations are checked this way.
 
-Three operators carry a weaker claim, and say so rather than inventing a
+Four operators carry a weaker claim, and say so rather than inventing a
 configuration to justify their numbers:
 
 | Operator | Source | Why |
@@ -74,6 +74,7 @@ configuration to justify their numbers:
 | `conv2d` | `handpicked` | ResNet-style stage resolutions and channel widths, but the declared contract is stride 1 / padding 0, whereas ResNet's 3×3 convolutions pad by 1. These are not literal ResNet layers. |
 | `gemm_leaky_relu` | `handpicked` | From Triton's tutorial. No shipped architecture fuses Leaky-ReLU into a GEMM epilogue. |
 | `fused_moe_swiglu` | `paper` | Liger's own MoE benchmark grid; routing matches Mixtral-style top-2 over 8–16 experts, with the widths scaled down to fit one GPU. |
+| `sparsemax` | `handpicked` | No shipped architecture contains sparsemax at all. The v1 grid claimed Llama-3's 128256-wide logits — sparsemax substituted for softmax — which asserted more than the evidence supports: Triton implementations cap a row at 65536 columns, which is what you would expect if nobody runs it at vocabulary width. The timed grid uses 32768 (mid-sized-vocabulary scale) and the vocabulary widths stay in untimed `coverage`, so the point where implementations stop is still recorded. |
 
 The test suite requires those to explain themselves in a `note`; it does not
 require them to re-derive.
@@ -117,6 +118,31 @@ say — from ordinary rounding, because both land at the same magnitude.
 The promotion applies to the correctness path only. The eager-PyTorch
 *performance* baseline runs through the same reference function, and timing it
 at float32 against a bfloat16 candidate would not be a baseline at all.
+
+### Inputs a backward may overwrite
+
+Benchmark inputs are immutable by default, and the final-report protocol checks
+it: a candidate that rewrites its inputs both skews repeated timings and skips
+work the others do.
+
+Writing a gradient over the activation that produced it is the exception worth
+allowing. The gradient has the activation's exact shape, and under autograd the
+activation is dead once the backward has read it, so a SwiGLU backward can skip
+allocating two full tensors and write in place. Liger does this. Forbidding it
+outright would exclude a real optimization from the benchmark.
+
+A declaration therefore names the inputs its backward may overwrite:
+
+```python
+backward_may_overwrite=("a", "b")
+```
+
+Three properties make this an allowance rather than a loophole. It belongs to
+the **operator**, so every candidate for that operator has it — a baseline
+cannot enjoy it privately. It covers **contents only**: shape, strides, dtype
+and storage offset are still enforced, because a reused buffer is still the same
+buffer. And the suite report **lists every relaxation it ran under**, so a
+reader knows which numbers were measured with it.
 
 ### Coverage
 
@@ -162,6 +188,54 @@ Inputs that are not model state — integer class labels, routing indices,
 attention masks, rotary tables — are excluded from the ratio via
 `memory_inputs`, though a candidate remains free to save them.
 
+## What the eager baseline runs
+
+Every operator declares a `forward` that spells its mathematics out in
+primitives. That is what the oracle differentiates and what AtenIR lowers into
+an unfused seed, and both need it to stay primitive. It is the wrong thing to
+**time** against: LayerNorm written as mean/sub/square/mean/rsqrt/mul/add
+launches a dozen kernels and re-reads the row from HBM each time, where
+`F.layer_norm` is one fused kernel. Timing a candidate against the primitive
+spelling reports how much faster it is than a strawman.
+
+Declarations therefore carry a second, optional reference:
+
+```python
+runtime_forward="...forward_ref:layernorm_runtime_ref"   # F.layer_norm
+```
+
+**The rule is: the eager baseline is the best implementation available in the
+PyTorch version being used.** Where a fused `F.xxx` exists, it is used. Where
+PyTorch has none — `dyt`, `poly_norm`, `sparsemax`, `jsd`, `tvd`, all recent
+enough that no fused equivalent exists — the primitive spelling *is* the best
+available, and timing against it is honest.
+
+`verify_runtime_forward` checks the two agree numerically before any timing is
+trusted. Without it the suite could time one function while checking the
+correctness of another, and a faster-but-different baseline is indistinguishable
+from a faster one.
+
+### Why not match what HuggingFace runs
+
+A tempting alternative is to baseline against the implementation a real training
+stack executes — for `rmsnorm` that would be HuggingFace's `LlamaRMSNorm`, which
+is still written in primitives today. Liger's own published numbers use that
+comparison, and for a library it is the right one: it answers "what do you gain
+by switching to us".
+
+A benchmark answers a different question and must not adopt that baseline.
+Measured on a GH200, the choice moves `rmsnorm` from **0.90x to 5.97x** — the
+same kernel, a six-fold difference in headline, decided entirely by which
+PyTorch spelling sits on the other side. Benchmarking against the weaker
+spelling would flatter every submission, including future generated kernels,
+and would not survive the first person who asks why `F.rms_norm` was not used.
+
+The consequence is worth stating plainly: under this rule Liger's RMSNorm and
+LayerNorm are **slower** than PyTorch's fused implementations on this hardware,
+while its SwiGLU, RoPE and TVD kernels — which have no fused PyTorch
+counterpart — remain genuinely faster. A benchmark exists to report that
+distinction, not to protect any implementation from it.
+
 ## Baselines
 
 | Baseline | Availability | Notes |
@@ -189,17 +263,36 @@ Two harnesses, deliberately separate.
 The **evolution harness** is low overhead: it is called thousands of times
 inside the search, caches baseline timings, and reports medians.
 
-The **final-report protocol** (`evograd fair-bench`, `evograd-final-runtime-v1`)
-re-measures both providers under conditions designed to make the comparison
-defensible:
+The **final-report protocol** (`evograd fair-bench`, `evograd suite`,
+`evograd-final-runtime-v1`) re-measures both providers under conditions designed
+to make the comparison defensible:
 
 - L2 cache cleared before every timed region
-- provider order randomized in paired blocks
+- batched CUDA events with a single synchronize, not one per sample
+- provider order randomized
 - inputs checked for mutation — content, shape, stride, dtype, and storage
   offset — outside the timed regions
-- batched CUDA events with one synchronize per block
-- raw samples retained; block-bootstrap 95% confidence intervals
+- median of the retained samples
 - `--identity-control` runs the baseline against itself, which must report ~1.0×
+
+The first, second and last of those are exactly what `triton.testing.do_bench`
+does, and therefore what KernelBench, TritonBench and FastKernels measure with.
+The order randomization and the mutation check are additions; both are cheap.
+
+**Every published number comes from this protocol.** `evograd suite` uses it by
+default; `--protocol fast` selects the evolution harness for iteration only, and
+any report produced that way says so in its header. The difference is not
+cosmetic: measured on a GH200, the same operators re-run under the evolution
+harness moved by up to 17% between runs — the drift concentrates in small
+kernels, whose execution time approaches the timing overhead itself, while large
+ones stayed within 0.1%.
+
+`evograd fair-bench` additionally accepts `--blocks N` (default 3) and reports
+block-bootstrap 95% confidence intervals across those repeats. The suite runs a
+single block: the bootstrap resamples *blocks*, so with one block every interval
+collapses to zero width, and paying three times the measurement cost for a
+statistic the suite does not report would be waste. Use `fair-bench` when the
+question is how much a specific difference is supported by the samples.
 
 ## Running it
 
@@ -211,6 +304,10 @@ evograd fair-bench --op layernorm --candidate best.py
 # the whole suite, one candidate per operator under programs/
 evograd suite --candidates programs/ --out results/
 evograd suite --level 1 --level 2 --out results/     # restrict to a level
+
+# the reference line: a reviewed pair baseline as the candidate, so the suite
+# reports a number before anything has been generated for all 25 operators
+evograd suite --candidate-baseline liger --out results/liger/
 ```
 
 `evograd suite` writes `suite_report.json` and `SUITE_RESULTS.md`, with

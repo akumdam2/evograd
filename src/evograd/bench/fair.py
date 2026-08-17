@@ -21,9 +21,18 @@ from evograd.bench.harness import describe_saved, normalize_saved
 from evograd.opdecl.activity import OpDecl, Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
-from evograd.opdecl.oracle import resolve_forward
+from evograd.opdecl.oracle import resolve_runtime_forward
 
 PROTOCOL_VERSION = "evograd-final-runtime-v1"
+
+#: Wall-clock budget per timed loop, in milliseconds. ``triton.testing.do_bench``
+#: sizes its loops the same way (its ``rep`` argument is a duration, not a
+#: count) and defaults to 100 ms.
+_REP_BUDGET_MS = 100.0
+
+#: Never drop below this many samples, however slow one iteration is — a median
+#: over two points is not a median.
+_MIN_REPS = 5
 
 
 @dataclass(frozen=True)
@@ -40,7 +49,9 @@ class PairProvider:
 @dataclass(frozen=True)
 class TensorSnapshot:
     name: str
-    value: torch.Tensor
+    #: ``None`` when the declaration permits the backward to overwrite this
+    #: input, in which case only the metadata below is enforced.
+    value: torch.Tensor | None
     shape: tuple[int, ...]
     stride: tuple[int, ...]
     dtype: torch.dtype
@@ -139,8 +150,13 @@ def liger_provider(op: OpDecl) -> PairProvider:
 
 
 def pytorch_autograd_provider(op: OpDecl) -> PairProvider:
-    """Expose eager PyTorch autograd through the common provider boundary."""
-    forward_ref = resolve_forward(op)
+    """Expose eager PyTorch autograd through the common provider boundary.
+
+    Timed through ``runtime_forward`` when the declaration has one — see
+    ``resolve_runtime_forward``. The oracle keeps using ``forward`` regardless;
+    only what gets timed changes.
+    """
+    forward_ref = resolve_runtime_forward(op)
     arg_names = tuple(arg.name for arg in op.args)
     active_args = tuple(op.active_args())
     active_names = tuple(arg.name for arg in active_args)
@@ -193,11 +209,21 @@ def clone_values(values: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def snapshot_tensors(values: dict[str, Any]) -> tuple[TensorSnapshot, ...]:
+def snapshot_tensors(
+    values: dict[str, Any], *, may_overwrite: tuple[str, ...] = ()
+) -> tuple[TensorSnapshot, ...]:
+    """Record inputs so a provider can be shown not to have changed them.
+
+    Inputs the declaration lists in ``backward_may_overwrite`` are recorded by
+    metadata only: their contents may legitimately be replaced by the gradient,
+    but the buffer must keep its shape, strides, dtype and storage offset — a
+    reused buffer is still the same buffer. Skipping their clone also removes
+    the copy, which matters when the input is large.
+    """
     return tuple(
         TensorSnapshot(
             name=name,
-            value=value.detach().clone(),
+            value=None if name in may_overwrite else value.detach().clone(),
             shape=tuple(value.shape),
             stride=tuple(value.stride()),
             dtype=value.dtype,
@@ -222,7 +248,14 @@ def assert_tensors_unchanged(
             and current.dtype == snapshot.dtype
             and current.storage_offset() == snapshot.storage_offset
         )
-        if not metadata_ok or not torch.equal(current, snapshot.value):
+        if not metadata_ok:
+            raise RuntimeError(
+                f"{provider}: changed the shape, strides, dtype or storage "
+                f"offset of benchmark input {snapshot.name!r}"
+            )
+        # value is None for inputs the declaration allows the backward to
+        # overwrite; their contents are exempt, their identity is not.
+        if snapshot.value is not None and not torch.equal(current, snapshot.value):
             raise RuntimeError(
                 f"{provider}: mutated benchmark input {snapshot.name!r}"
             )
@@ -302,6 +335,36 @@ def _warm_provider(
     torch.cuda.synchronize()
 
 
+def _adaptive_reps(estimate_ms: float, reps: int, budget_ms: float) -> int:
+    """How many timed iterations to run for a region taking ``estimate_ms``.
+
+    ``do_bench`` sizes its loops by a time budget rather than a fixed count, and
+    that is not only about spending measurement time evenly. A block runs
+    without synchronizing — that is the point, it keeps event overhead out of
+    the samples — so every iteration's intermediates stay resident until the
+    block ends. ``fused_linear_cross_entropy`` allocates 3 GiB per forward at
+    its largest workload; fifty of those is 150 GiB on a 95 GiB card, and the
+    allocator does not fail cleanly, it thrashes. Fast kernels still get their
+    full ``reps``; slow, memory-hungry ones get as many as fit the budget.
+    """
+    if estimate_ms <= 0:
+        return reps
+    return max(_MIN_REPS, min(reps, int(budget_ms / estimate_ms)))
+
+
+def _estimate_ms(fn: Callable[[], Any], *, iterations: int = 3) -> float:
+    """Rough cost of one call, used only to size the timed loops."""
+    torch.cuda.synchronize()
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+    start.record()
+    for _ in range(iterations):
+        fn()
+    end.record()
+    torch.cuda.synchronize()
+    return float(start.elapsed_time(end)) / iterations
+
+
 def _measure_provider_block(
     provider: PairProvider,
     values: dict[str, Any],
@@ -313,8 +376,22 @@ def _measure_provider_block(
     forward_samples = []
     backward_samples = []
     full_samples = []
-    forward_starts = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
-    forward_ends = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
+
+    def _full_step():
+        _output, saved = provider.forward(values)
+        return provider.backward(dout, saved, values)
+
+    # Size each loop from its own cost: the forward alone is cheaper than a
+    # full step, and giving both the same count would either over-measure the
+    # cheap one or exhaust memory on the expensive one.
+    forward_reps = _adaptive_reps(
+        _estimate_ms(lambda: provider.forward(values)), reps, _REP_BUDGET_MS
+    )
+    step_reps = _adaptive_reps(_estimate_ms(_full_step), reps, _REP_BUDGET_MS)
+    torch.cuda.empty_cache()
+
+    forward_starts = [torch.cuda.Event(enable_timing=True) for _ in range(forward_reps)]
+    forward_ends = [torch.cuda.Event(enable_timing=True) for _ in range(forward_reps)]
     for start, end in zip(forward_starts, forward_ends):
         clear_l2()
         start.record()
@@ -327,10 +404,10 @@ def _measure_provider_block(
     )
 
     backward_starts = [
-        torch.cuda.Event(enable_timing=True) for _ in range(reps)
+        torch.cuda.Event(enable_timing=True) for _ in range(step_reps)
     ]
     backward_ends = [
-        torch.cuda.Event(enable_timing=True) for _ in range(reps)
+        torch.cuda.Event(enable_timing=True) for _ in range(step_reps)
     ]
     for start, end in zip(backward_starts, backward_ends):
         _output, saved = provider.forward(values)
@@ -344,16 +421,12 @@ def _measure_provider_block(
         for start, end in zip(backward_starts, backward_ends)
     )
 
-    full_starts = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
-    full_ends = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
+    full_starts = [torch.cuda.Event(enable_timing=True) for _ in range(step_reps)]
+    full_ends = [torch.cuda.Event(enable_timing=True) for _ in range(step_reps)]
     for start, end in zip(full_starts, full_ends):
-        def full_step():
-            _output, saved = provider.forward(values)
-            return provider.backward(dout, saved, values)
-
         clear_l2()
         start.record()
-        full_step()
+        _full_step()
         end.record()
     torch.cuda.synchronize()
     full_samples.extend(
@@ -445,8 +518,14 @@ def benchmark_case_fair(
     values_by_provider = {
         provider.name: clone_values(canonical) for provider in providers
     }
+    # The exemption comes from the operator's declaration, so it applies to
+    # every provider alike — a baseline cannot enjoy it while a candidate is
+    # held to the stricter rule.
+    may_overwrite = tuple(getattr(op, "backward_may_overwrite", ()) or ())
     snapshots = {
-        provider.name: snapshot_tensors(values_by_provider[provider.name])
+        provider.name: snapshot_tensors(
+            values_by_provider[provider.name], may_overwrite=may_overwrite
+        )
         for provider in providers
     }
     cache = L2Cache()

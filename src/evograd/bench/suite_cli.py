@@ -19,7 +19,13 @@ import sys
 import traceback
 from pathlib import Path
 
-from evograd.bench.suite import SuiteReport, TaskResult, task_from_benchmark_report, write_report
+from evograd.bench.suite import (
+    SuiteReport,
+    TaskResult,
+    task_from_benchmark_report,
+    task_from_fair_report,
+    write_report,
+)
 
 
 def _load_module(path: Path):
@@ -45,11 +51,20 @@ def _find_candidate(root: Path, op_name: str) -> Path | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument(
         "--candidates",
         type=Path,
-        required=True,
         help="directory holding one candidate program per operator",
+    )
+    source.add_argument(
+        "--candidate-baseline",
+        help=(
+            "run a reviewed pair baseline (liger, cublas_pair, ...) as the "
+            "candidate on every operator that declares it. Produces the suite's "
+            "reference line without needing a generated program per operator. "
+            "Operators without that baseline are reported as uncovered."
+        ),
     )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument(
@@ -66,17 +81,57 @@ def main(argv: list[str] | None = None) -> int:
         dest="ops",
         help="restrict to these operators (repeatable)",
     )
-    parser.add_argument("--baseline", default="auto")
+    # Deliberately not defaulted to "auto" here: with --candidate-baseline liger,
+    # "auto" would also resolve to liger and every operator would report a
+    # perfect 1.000x against itself, which reads as a finished run rather than a
+    # mistake. Resolved below once the candidate source is known.
+    parser.add_argument("--baseline", default=None)
+    parser.add_argument(
+        "--protocol",
+        choices=("fair", "fast"),
+        default="fair",
+        help=(
+            "fair (default): the final-report protocol — L2 cleared before every "
+            "timed region, batched CUDA events, randomized provider order, "
+            "mutation checks. fast: the low-overhead harness the evolutionary "
+            "search uses, for iterating only. Published numbers must come from "
+            "fair; the fast harness measured 17%% run-to-run drift on small "
+            "kernels."
+        ),
+    )
     parser.add_argument("--suite", default=None, help="named benchmark suite")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--warmup", type=int, default=None)
     parser.add_argument("--reps", type=int, default=None)
     args = parser.parse_args(argv)
 
+    if args.baseline is None:
+        # A baseline run measures the reference line against eager PyTorch; a
+        # candidate run may pick the strongest available comparison.
+        args.baseline = "pytorch_autograd" if args.candidate_baseline else "auto"
+    if args.candidate_baseline and args.candidate_baseline == args.baseline:
+        parser.error(
+            f"--candidate-baseline {args.candidate_baseline} would be timed "
+            "against itself, reporting 1.0x everywhere. Use "
+            "`evograd fair-bench --identity-control` for that check."
+        )
+
     import torch
 
-    from evograd.bench.fair import environment_fingerprint
+    from evograd.bench.fair import (
+        candidate_provider,
+        declared_provider,
+        environment_fingerprint,
+        pytorch_autograd_provider,
+        run_fair_benchmarks,
+    )
     from evograd.bench.harness import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
+    from evograd.opdecl.baselines import (
+        baseline_candidate_module,
+        resolve_performance_baseline,
+        verify_performance_baseline,
+        verify_runtime_forward,
+    )
     from evograd.ops import OPS
 
     # Fail here rather than after minutes of work. The harness times with CUDA
@@ -105,10 +160,48 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # no CUDA, or torch without a device
         environment = {"note": "environment fingerprint unavailable"}
 
-    report = SuiteReport(environment=environment)
+    candidate_source = (
+        f"the reviewed `{args.candidate_baseline}` baseline standing in as the "
+        "candidate (reference line, not a generated kernel)"
+        if args.candidate_baseline
+        else f"candidate programs under `{args.candidates}`"
+    )
+    timing_protocol = (
+        "evograd-final-runtime-v1 — L2 cleared before every timed region, "
+        "batched CUDA events with one synchronize, randomized provider order, "
+        "inputs checked for mutation outside the timed regions, median of "
+        "samples. Equivalent to triton.testing.do_bench plus the order "
+        "randomization and mutation check"
+        if args.protocol == "fair"
+        else "low-overhead evolution harness — NOT the final protocol; "
+        "for iteration only, not for publication"
+    )
+    report = SuiteReport(
+        environment=environment,
+        candidate_source=candidate_source,
+        timing_protocol=timing_protocol,
+    )
     for name, op in sorted(selected.items(), key=lambda i: (i[1].level, i[1].family, i[0])):
-        candidate = _find_candidate(args.candidates, name)
-        if candidate is None:
+        try:
+            if args.candidate_baseline:
+                # Raises for an operator that does not declare this baseline, or
+                # declares it as a compiled (non-pair) one. Both are "we did not
+                # run it", which the report must distinguish from "it has no
+                # speedup".
+                module = baseline_candidate_module(op, args.candidate_baseline)
+            else:
+                candidate = _find_candidate(args.candidates, name)
+                if candidate is None:
+                    raise FileNotFoundError(
+                        f"no candidate program found under {args.candidates}"
+                    )
+                module = _load_module(candidate)
+        except Exception as exc:
+            reason = (
+                str(exc)
+                if isinstance(exc, (FileNotFoundError, ValueError))
+                else f"{type(exc).__name__}: {exc}"
+            )
             report.tasks.append(
                 TaskResult(
                     op=name,
@@ -116,24 +209,69 @@ def main(argv: list[str] | None = None) -> int:
                     family=op.family,
                     baseline=args.baseline,
                     cases_total=len(op.benchmark_workloads(suite=args.suite)),
-                    error=f"no candidate program found under {args.candidates}",
+                    error=reason,
                 )
             )
             print(f"{name:28s} no candidate", file=sys.stderr)
             continue
         try:
-            module = _load_module(candidate)
-            benchmark = run_benchmarks(
-                op,
-                module,
-                warmup=args.warmup if args.warmup is not None else DEFAULT_WARMUP,
-                reps=args.reps if args.reps is not None else DEFAULT_REPS,
-                device=args.device,
-                workloads=op.benchmark_workloads(suite=args.suite),
-                performance_baseline=args.baseline,
-                on_error="record",
-            )
-            task = task_from_benchmark_report(name, op.level, op.family, benchmark)
+            workloads = op.benchmark_workloads(suite=args.suite)
+            # A production-spelled eager baseline must match the definition it
+            # is verified against before its timings mean anything.
+            verify_runtime_forward(op, device=args.device)
+            if args.protocol == "fair":
+                resolved = resolve_performance_baseline(op, args.baseline)
+                if resolved == "pytorch_autograd":
+                    baseline_provider = pytorch_autograd_provider(op)
+                else:
+                    # Never trust a baseline's timings before its numbers match
+                    # the oracle.
+                    verify_performance_baseline(op, resolved, device=args.device)
+                    baseline_provider = declared_provider(op, resolved)
+                fair = run_fair_benchmarks(
+                    op,
+                    candidate_provider(op, module),
+                    baseline_provider,
+                    workloads=workloads,
+                    device=args.device,
+                    # One block. What remains — L2 cleared before every timed
+                    # region, batched events with a single synchronize, median
+                    # of the samples — is exactly what triton.testing.do_bench
+                    # does, and what KernelBench, TritonBench and FastKernels
+                    # measure with. Repeated blocks exist to feed the block
+                    # bootstrap; with one block the resampling has nothing to
+                    # draw from and every interval collapses to zero width, so
+                    # asking for three would triple the cost to produce a
+                    # statistic the suite does not report.
+                    blocks=1,
+                    **(
+                        {"warmup": args.warmup} if args.warmup is not None else {}
+                    ),
+                    **({"reps": args.reps} if args.reps is not None else {}),
+                )
+                task = task_from_fair_report(
+                    name,
+                    op.level,
+                    op.family,
+                    resolved,
+                    fair,
+                    backward_may_overwrite=tuple(
+                        getattr(op, "backward_may_overwrite", ()) or ()
+                    ),
+                    op=op,
+                )
+            else:
+                benchmark = run_benchmarks(
+                    op,
+                    module,
+                    warmup=args.warmup if args.warmup is not None else DEFAULT_WARMUP,
+                    reps=args.reps if args.reps is not None else DEFAULT_REPS,
+                    device=args.device,
+                    workloads=workloads,
+                    performance_baseline=args.baseline,
+                    on_error="record",
+                )
+                task = task_from_benchmark_report(name, op.level, op.family, benchmark)
         except Exception as exc:
             task = TaskResult(
                 op=name,

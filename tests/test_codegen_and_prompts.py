@@ -80,7 +80,7 @@ class TestWrapperCodegen(unittest.TestCase):
         op = get_op("fused_moe_swiglu")
         self.assertEqual(grad_indices(op), [0, 1, 2, 3])
         wrapper = render_autograd_pair_wrapper(
-            "evograd.ops.fused_moe_swiglu.forward_ref:"
+            "evograd.ops.level2.fused_moe_swiglu.forward_ref:"
             "fused_moe_swiglu_forward_ref",
             op,
         )

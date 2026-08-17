@@ -168,6 +168,15 @@ def _run(argv: list[str]) -> int:
         help="attempt an accepted-only NCU refinement after each evolve group",
     )
     parser.add_argument(
+        "--groups",
+        default=None,
+        help=(
+            "comma-separated evolution groups (e.g. 'full'). Default: 'full' "
+            "plus small/large specialists when the declaration defines shape "
+            "regimes, which costs three evolutions instead of one."
+        ),
+    )
+    parser.add_argument(
         "--save-programs",
         action="store_true",
         help="keep every evaluated candidate under each group's programs/ directory",
@@ -191,6 +200,11 @@ def _run(argv: list[str]) -> int:
         force=args.force,
         ncu=args.ncu,
         save_programs=args.save_programs,
+        groups=(
+            tuple(g.strip() for g in args.groups.split(",") if g.strip())
+            if args.groups
+            else None
+        ),
     )
     print(f"program : {result.program}")
     print(f"report  : {result.report}")

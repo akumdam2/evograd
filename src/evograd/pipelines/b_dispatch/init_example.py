@@ -330,7 +330,7 @@ def clone_copy(a):
 
 
 
-_FORWARD_SPEC = 'evograd.ops.rmsnorm.forward_ref:rmsnorm_forward_ref'
+_FORWARD_SPEC = 'evograd.ops.level1.rmsnorm.forward_ref:rmsnorm_forward_ref'
 
 
 def _load_forward_callable():

@@ -19,6 +19,21 @@ def resolve_forward(op: OpDecl):
     return resolve_callable(op.forward)
 
 
+def resolve_runtime_forward(op: OpDecl):
+    """The forward to *time* the eager baseline through.
+
+    ``op.forward`` states the mathematics in primitives, which is what the
+    oracle must differentiate and what AtenIR lowers into an unfused seed. It is
+    not what a production PyTorch user would run, and timing against it turns
+    every speedup into a comparison with a strawman. Declarations that have a
+    fused equivalent name it in ``runtime_forward``; the rest fall back, because
+    for them the primitive spelling really is the best PyTorch available.
+    """
+    if op.runtime_forward:
+        return resolve_callable(op.runtime_forward)
+    return resolve_callable(op.forward)
+
+
 def _promote(value, reference_dtype: torch.dtype):
     """Widen a floating tensor to the reference dtype; leave everything else."""
     if torch.is_tensor(value) and value.is_floating_point():

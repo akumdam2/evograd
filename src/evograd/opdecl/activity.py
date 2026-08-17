@@ -190,6 +190,28 @@ class OpDecl:
     output: Active
     forward_semantics: str
     backward_semantics: str
+    # Optional second forward, as "module.path:callable": the same mathematics
+    # written the way a production PyTorch user would write it.
+    #
+    # ``forward`` is deliberately unfused — it spells the definition out in
+    # primitives so AtenIR can lower it into an unfused seed, and so the oracle
+    # differentiates the definition rather than someone's optimization of it.
+    # That makes it the wrong thing to *time* against: a LayerNorm written as
+    # mean/sub/square/mean/rsqrt/mul/add launches a dozen kernels and reads HBM
+    # a dozen times, where ``F.layer_norm`` is one fused kernel. Timing a
+    # candidate against the primitive spelling reports how much faster it is
+    # than a strawman, and inflates every speedup.
+    #
+    # When set, the eager baseline is timed through this instead. Operators
+    # PyTorch has no fused implementation for (dyt, poly_norm, sparsemax, jsd,
+    # tvd) leave it None, because there the primitive spelling *is* the best
+    # available PyTorch, and timing against it is honest.
+    #
+    # The two must agree numerically — ``verify_runtime_forward`` checks it
+    # before any timing is trusted, since otherwise this would silently compare
+    # the runtimes of two different functions.
+    runtime_forward: str | None = None
+
     # ── benchmark taxonomy ────────────────────────────────────────────────
     # Task hierarchy level: 1 primitive, 2 fused, 3 architectural block.
     # ``None`` means "not a benchmark task" — scaffolded and user-supplied
@@ -249,6 +271,18 @@ class OpDecl:
     # zeros per Inactive tensor — override when an Inactive input has semantics (e.g.
     # evoattention's additive keep/drop mask).
     make_inputs: object | None = None
+    # Inputs whose storage the backward is permitted to overwrite with their own
+    # gradient. The fair-bench protocol otherwise rejects any implementation
+    # that mutates a benchmark input, because a candidate that quietly rewrites
+    # its inputs both skews repeated timings and skips work everyone else does.
+    # But writing a gradient back over the activation that produced it is a real
+    # optimization — it is what Liger's SwiGLU does, and it is safe under
+    # autograd, which guarantees the activation is dead once the backward has
+    # consumed it. Naming those inputs here keeps the rule public and symmetric:
+    # every candidate for this operator may reuse exactly these buffers, and
+    # the suite report states which ones were relaxed. It is a property of the
+    # operator's contract, never of one implementation.
+    backward_may_overwrite: tuple[str, ...] = ()
 
     # ── derived views ─────────────────────────────────────────────────────
 
@@ -602,6 +636,8 @@ def declare_op(
     case_weight: object | None = None,
     tolerance_hook: object | None = None,
     make_inputs: object | None = None,
+    backward_may_overwrite: tuple[str, ...] = (),
+    runtime_forward: str | None = None,
 ) -> OpDecl:
     """Build and validate an :class:`OpDecl`. The only way ops should be made."""
     op = OpDecl(
@@ -639,6 +675,8 @@ def declare_op(
         case_weight=case_weight,
         tolerance_hook=tolerance_hook,
         make_inputs=make_inputs,
+        backward_may_overwrite=tuple(backward_may_overwrite),
+        runtime_forward=runtime_forward,
     )
     op.validate()
     return op

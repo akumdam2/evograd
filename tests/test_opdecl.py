@@ -184,10 +184,14 @@ class TestDerivedNaming(unittest.TestCase):
         ops_root = Path(ops_module.__file__).parent
         for name, op in OPS.items():
             with self.subTest(op=name):
-                package = ops_root / name
+                # Operators are grouped by level; the group comes from the
+                # declaration rather than being written down again here.
+                package = ops_root / f"level{op.level}" / name
                 self.assertTrue((package / "__init__.py").is_file())
                 self.assertTrue((package / "forward_ref.py").is_file())
-                self.assertTrue(op.forward.startswith(f"evograd.ops.{name}."))
+                self.assertTrue(
+                    op.forward.startswith(f"evograd.ops.level{op.level}.{name}.")
+                )
 
 
 def _minimal(**overrides):
@@ -277,12 +281,44 @@ class TestLigerSuiteMigration(unittest.TestCase):
         self.assertEqual((len(op.correctness), len(op.benchmark)), (2, 6))
         self.assertEqual(op.benchmark[0].provenance.source, "paper")
 
+    #: Operators whose timed grid cannot be model-derived, and why. Being on this
+    #: list is not an exemption from provenance — it is a stronger requirement:
+    #: the declaration has to justify its own numbers in a note, which
+    #: ``test_weaker_provenance_claims_explain_themselves`` enforces.
+    _NOT_MODEL_DERIVED = {
+        "sparsemax": "no shipped architecture contains sparsemax",
+    }
+
     def test_timed_suites_are_model_derived(self):
         for name in self._FORK_COUNTS:
+            if name in self._NOT_MODEL_DERIVED:
+                continue
             with self.subTest(op=name):
                 op = get_op(name)
                 sources = {case.provenance.source for case in op.benchmark}
                 self.assertEqual(sources, {"hf_config"}, name)
+
+    def test_weaker_provenance_claims_explain_themselves(self):
+        """An operator that cannot derive its shapes must say so, in writing.
+
+        Dropping to ``handpicked`` is allowed — inventing a model configuration
+        to justify a number would be worse — but it may not be silent, or the
+        distinction between a derived shape and a chosen one stops being
+        visible to anyone reading the results.
+        """
+        for name, reason in self._NOT_MODEL_DERIVED.items():
+            with self.subTest(op=name):
+                op = get_op(name)
+                for case in op.benchmark:
+                    self.assertNotEqual(
+                        case.provenance.source,
+                        "hf_config",
+                        f"{name}: {reason}, so it must not claim hf_config",
+                    )
+                    self.assertTrue(
+                        case.provenance.note.strip(),
+                        f"{name}: a weaker provenance claim needs a note saying why",
+                    )
 
     def test_shape_regime_suites_partition_full_suite(self):
         for name in (

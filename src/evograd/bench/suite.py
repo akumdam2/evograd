@@ -55,12 +55,21 @@ class TaskResult:
     level: int
     family: str
     baseline: str
+    #: Inputs this operator's contract lets the backward overwrite. Published so
+    #: a reader can see which operators were measured under the relaxed rule,
+    #: and so a submitter knows the same allowance is theirs.
+    backward_may_overwrite: tuple[str, ...] = ()
     speedups: tuple[float, ...] = ()
     cases_total: int = 0
     cases_ok: int = 0
     saved_bytes: float = 0.0
     input_bytes: float = 0.0
     error: str | None = None
+    #: Distinct reasons the failing cases gave, in first-seen order. A published
+    #: benchmark has to say *why* a case did not run: "Liger's sparsemax refuses
+    #: a 128256-wide row" is a finding about the baseline, while a bare "4 of 4
+    #: cases failed" reads as a defect in the harness.
+    case_errors: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -93,7 +102,122 @@ class TaskResult:
             "saved_memory_ratio": self.saved_memory_ratio,
             "ok": self.ok,
             "error": self.error,
+            "case_errors": list(self.case_errors),
+            "backward_may_overwrite": list(self.backward_may_overwrite),
         }
+
+
+def _declared_input_bytes(op, case: dict[str, Any], memory_inputs) -> float:
+    """Bytes of the inputs the saved-memory ratio is measured against.
+
+    The fair protocol records what a provider retained but not what it was
+    given, so the denominator is reconstructed from the declaration's shapes
+    bound to this case's dims — the same set `memory_input_names()` selects, so
+    integer labels and rotary tables stay out of it exactly as they do on the
+    low-overhead path.
+    """
+    if op is None or not memory_inputs:
+        return 0.0
+    from evograd.opdecl.activity import bind_shape
+
+    dims = case.get("dims") or {}
+    dtype_bytes = {"float32": 4, "float16": 2, "bfloat16": 2, "float64": 8}
+    element = dtype_bytes.get(case.get("dtype", ""), 4)
+    by_name = {arg.name: arg for arg in op.args}
+    total = 0.0
+    for name in memory_inputs:
+        arg = by_name.get(name)
+        if arg is None or not getattr(arg, "shape", None):
+            continue
+        try:
+            shape = bind_shape(arg.shape, dims)
+        except Exception:
+            continue
+        count = 1
+        for extent in shape:
+            count *= extent
+        total += count * element
+    return float(total)
+
+
+def task_from_fair_report(
+    op_name: str,
+    level: int,
+    family: str,
+    baseline: str,
+    report: dict[str, Any],
+    *,
+    backward_may_overwrite: tuple[str, ...] = (),
+    op=None,
+) -> TaskResult:
+    """Read one ``run_fair_benchmarks`` report into the suite's task shape.
+
+    The fair protocol's own aggregate is a ratio of summed times across
+    workloads, which weights a case by how slow it is. The suite's rule is a
+    geometric mean over cases, so the per-case ``speedup.pair_full`` values are
+    read directly and pooled here — the aggregation stays defined in one place
+    regardless of which timing protocol produced the samples.
+    """
+    cases = report.get("cases") or []
+    speedups = []
+    for case in cases:
+        value = float((case.get("speedup") or {}).get("pair_full", 0.0))
+        if value > 0.0 and math.isfinite(value):
+            speedups.append(value)
+
+    # Saved state is a property of the candidate, and every case reports it for
+    # both providers; sum the candidate's across cases to match what the
+    # low-overhead harness aggregates.
+    #
+    # The field names differ between the two timing paths: the harness emits
+    # `saved_bytes`/`input_bytes`, the fair protocol emits
+    # `logical_saved_bytes` and does not carry the input total at all. Reading
+    # the harness's names here returned 0 for every operator while the report
+    # still printed a plausible-looking 1.000 aggregate, because a geometric
+    # mean over an all-zero set falls back to 1. Read the fair names, and
+    # compute the denominator from the declaration.
+    saved_bytes = 0.0
+    input_bytes = 0.0
+    memory_inputs = tuple(op.memory_input_names()) if op is not None else ()
+    for case in cases:
+        # Keyed on the name fair.candidate_provider assigns. Deliberately no
+        # fallback to "whichever provider comes first": that would silently
+        # report the *baseline's* retained memory as the candidate's, and the
+        # number would look entirely plausible.
+        candidate = (case.get("providers") or {}).get("candidate") or {}
+        saved = candidate.get("saved_state") or {}
+        saved_bytes += float(saved.get("logical_saved_bytes", 0.0))
+        input_bytes += _declared_input_bytes(op, case, memory_inputs)
+
+    return TaskResult(
+        op=op_name,
+        level=level,
+        family=family,
+        baseline=baseline,
+        speedups=tuple(speedups),
+        cases_total=len(cases),
+        cases_ok=len(speedups),
+        saved_bytes=saved_bytes,
+        input_bytes=input_bytes,
+        backward_may_overwrite=tuple(backward_may_overwrite),
+    )
+
+
+def _case_error_summary(error: Any, *, limit: int = 200) -> str:
+    """One line naming why a case did not run, without the traceback.
+
+    Distinct reasons are collected per operator, so several shapes failing for
+    the same reason report it once rather than repeating it per case.
+    """
+    if not error:
+        return ""
+    if isinstance(error, dict):
+        kind = error.get("error_type") or "error"
+        message = " ".join(str(error.get("error_message", "")).split())
+        text = f"{kind}: {message}" if message else str(kind)
+    else:
+        text = " ".join(str(error).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def task_from_benchmark_report(
@@ -112,8 +236,12 @@ def task_from_benchmark_report(
     cases = report.get("cases") or []
     speedups = []
     ok_cases = 0
+    case_errors: list[str] = []
     for case in cases:
         if not case.get("ok"):
+            reason = _case_error_summary(case.get("error"))
+            if reason and reason not in case_errors:
+                case_errors.append(reason)
             continue
         value = float(case.get(FULL_STEP_SPEEDUP_KEY, 0.0))
         if value > 0.0 and math.isfinite(value):
@@ -135,6 +263,7 @@ def task_from_benchmark_report(
             if setup_error
             else None
         ),
+        case_errors=tuple(case_errors),
     )
 
 
@@ -173,6 +302,15 @@ def _level_block(tasks: list[TaskResult]) -> dict[str, Any]:
 class SuiteReport:
     tasks: list[TaskResult] = field(default_factory=list)
     environment: dict[str, Any] = field(default_factory=dict)
+    #: What was measured — a candidate directory, or a reviewed baseline
+    #: standing in as the candidate. A suite result is unreadable without it:
+    #: "1.6x at level 1" means something entirely different when the thing
+    #: being timed is Liger than when it is a generated kernel.
+    candidate_source: str = "unspecified"
+    #: Which timing protocol produced the samples. The suite's own aggregation
+    #: is identical either way, but the numbers are not comparable across the
+    #: two: the low-overhead harness clears no cache and randomizes no order.
+    timing_protocol: str = "unspecified"
 
     def to_dict(self) -> dict[str, Any]:
         by_level: dict[int, list[TaskResult]] = {}
@@ -184,6 +322,8 @@ class SuiteReport:
         measured = [task for task in self.tasks if task.speedups]
         return {
             "protocol": REPORT_VERSION,
+            "candidate": self.candidate_source,
+            "timing_protocol": self.timing_protocol,
             "metric": {
                 "speedup": FULL_STEP_SPEEDUP_KEY,
                 "definition": "S_i = T_reference_full_step / T_candidate_full_step",
@@ -206,9 +346,17 @@ class SuiteReport:
                     if self.tasks
                     else 0.0
                 ),
+                # Only operators that actually reported retained bytes. A
+                # geometric mean over a set containing zeros collapses to 1.0,
+                # which reads as "saves exactly its inputs" — the most
+                # unremarkable value possible — when the truth is that nothing
+                # was measured. Reporting 0.0 for an empty set says so.
                 "saved_memory_ratio_geomean": (
-                    geomean([t.saved_memory_ratio for t in measured])
-                    if measured
+                    geomean(ratios)
+                    if (ratios := [
+                        t.saved_memory_ratio for t in measured
+                        if t.saved_memory_ratio > 0
+                    ])
                     else 0.0
                 ),
                 "operators": len(self.tasks),
@@ -227,6 +375,10 @@ class SuiteReport:
         data = self.to_dict()
         lines = [
             "# evograd benchmark suite",
+            "",
+            f"**Measured: {data['candidate']}.**",
+            "",
+            f"**Timing: {data['timing_protocol']}.**",
             "",
             f"Protocol `{data['protocol']}`. "
             f"Speedup is full-step (`{FULL_STEP_SPEEDUP_KEY}`): "
@@ -273,6 +425,25 @@ class SuiteReport:
                 f"| {task['coverage']:.0%} ({task['cases_ok']}/{task['cases_total']}) "
                 f"| {task['saved_memory_ratio']:.3f} |"
             )
+        relaxed = [t for t in data["tasks"] if t.get("backward_may_overwrite")]
+        if relaxed:
+            lines.extend(
+                [
+                    "",
+                    "## Inputs the backward may overwrite",
+                    "",
+                    "These operators' contracts allow the backward to write a "
+                    "gradient over the input that produced it, so those buffers "
+                    "are exempt from the mutation check — for every candidate, "
+                    "not only the baseline. Shape, strides, dtype and storage "
+                    "offset are still enforced.",
+                    "",
+                ]
+            )
+            for task in relaxed:
+                names = ", ".join(f"`{n}`" for n in task["backward_may_overwrite"])
+                lines.append(f"- `{task['op']}`: {names}")
+
         failures = [t for t in data["tasks"] if not t["ok"]]
         if failures:
             lines.extend(["", "## Not fully covered", ""])
@@ -282,6 +453,10 @@ class SuiteReport:
                     f"{task['cases_total']} cases failed"
                 )
                 lines.append(f"- `{task['op']}`: {detail}")
+                # Why, not just how many. A shape that the baseline refuses to
+                # run is a result about the baseline and belongs in the report.
+                for reason in task.get("case_errors", ()):
+                    lines.append(f"  - {reason}")
         return "\n".join(lines) + "\n"
 
 

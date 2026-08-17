@@ -27,7 +27,7 @@ from evograd.opdecl.baselines import (
 )
 from evograd.opdecl.bind import backward_inactive_kwargs, bind, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
-from evograd.opdecl.oracle import oracle, resolve_forward
+from evograd.opdecl.oracle import oracle, resolve_runtime_forward
 from evograd.evolve.scoring import geomean, weighted_geomean
 
 DEFAULT_WARMUP = 10
@@ -229,7 +229,9 @@ def benchmark_case(
     dout = inputs[op.upstream_grad_name]
     positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
     bwd_kwargs = backward_inactive_kwargs(op, bwd, inputs)
-    forward_ref = resolve_forward(op)
+    # The eager baseline is timed through the production spelling when the
+    # declaration has one; `oracle()` above still differentiates `forward`.
+    forward_ref = resolve_runtime_forward(op)
 
     def forward_only():
         return fwd(*positional)
