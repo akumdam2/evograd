@@ -81,6 +81,18 @@ def _evolve(argv: list[str]) -> int:
     )
     parser.add_argument("--feature-bins", type=int, default=10)
     parser.add_argument(
+        "--num-islands",
+        type=int,
+        default=2,
+        help="MAP-Elites islands; 1 concentrates all cell competition",
+    )
+    parser.add_argument(
+        "--archive-size",
+        type=int,
+        default=20,
+        help="elite archive size; must not exceed the feature grid cell count",
+    )
+    parser.add_argument(
         "--ncu",
         action="store_true",
         help="profile and attempt one accepted-only NCU-guided refinement of the final best",
@@ -133,6 +145,8 @@ def _evolve(argv: list[str]) -> int:
         save_programs=args.save_programs,
         feature_dimensions=tuple(args.feature_dim) if args.feature_dim else None,
         feature_bins=args.feature_bins,
+        num_islands=args.num_islands,
+        archive_size=args.archive_size,
         ncu=args.ncu,
         ncu_model=args.ncu_model,
         ncu_timeout=args.ncu_timeout,

@@ -35,10 +35,25 @@ def render_config(
     template: Path | None = None,
     feature_dimensions: tuple[str, ...] = DEFAULT_FEATURE_DIMENSIONS,
     feature_bins: int = 10,
+    num_islands: int = 2,
+    archive_size: int = 20,
 ) -> str:
     feature_dimensions = validate_feature_dimensions(tuple(feature_dimensions))
     if feature_bins < 1:
         raise ValueError(f"feature_bins must be >= 1, got {feature_bins}")
+    if num_islands < 1:
+        raise ValueError(f"num_islands must be >= 1, got {num_islands}")
+    if archive_size < 1:
+        raise ValueError(f"archive_size must be >= 1, got {archive_size}")
+    # OpenEvolve clamps integer feature_bins up to ceil(archive_size^(1/dims));
+    # an archive larger than the grid silently undoes a coarse-bin request.
+    min_cells = feature_bins ** len(feature_dimensions)
+    if archive_size > min_cells:
+        raise ValueError(
+            f"archive_size {archive_size} exceeds the {min_cells}-cell grid "
+            f"({feature_bins} bins ^ {len(feature_dimensions)} dims); OpenEvolve "
+            "would raise the bin count and remove cell contention"
+        )
     text = (template or _TEMPLATE).read_text(encoding="utf-8")
     replacements = {
         "__MAX_ITERATIONS__": str(iterations),
@@ -47,6 +62,8 @@ def render_config(
         "__API_BASE__": api_base,
         "__FEATURE_DIMENSIONS__": json.dumps(list(feature_dimensions)),
         "__FEATURE_BINS__": str(feature_bins),
+        "__NUM_ISLANDS__": str(num_islands),
+        "__ARCHIVE_SIZE__": str(archive_size),
         "__FORWARD_FN__": op.forward_fn_name,
         "__FORWARD_ARGS__": op.forward_parameters(),
         "__BACKWARD_FN__": op.backward_fn_name,
@@ -117,6 +134,8 @@ def run_evolve(
     save_programs: bool = False,
     feature_dimensions: tuple[str, ...] | None = None,
     feature_bins: int = 10,
+    num_islands: int = 2,
+    archive_size: int = 20,
     extra_env: dict[str, str] | None = None,
     ncu: bool = False,
     ncu_model: str | None = None,
@@ -155,6 +174,8 @@ def run_evolve(
                 api_base=api_base,
                 feature_dimensions=feature_dimensions,
                 feature_bins=feature_bins,
+                num_islands=num_islands,
+                archive_size=archive_size,
             ),
             encoding="utf-8",
         )

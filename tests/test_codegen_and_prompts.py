@@ -297,6 +297,32 @@ class TestEvolveConfigRendering(unittest.TestCase):
         with self.assertRaises(ValueError):
             render_config(get_op("layernorm"), feature_bins=0)
 
+    def test_grid_density_controls_render_and_validate(self):
+        from evograd.evolve.run import render_config
+
+        config = render_config(get_op("layernorm"))
+        self.assertIn("num_islands: 2", config)
+        self.assertIn("archive_size: 20", config)
+        dense = render_config(
+            get_op("layernorm"),
+            feature_dimensions=("saved_memory_ratio", "shape_specialization"),
+            feature_bins=3,
+            num_islands=1,
+            archive_size=8,
+        )
+        self.assertIn("num_islands: 1", dense)
+        self.assertIn("archive_size: 8", dense)
+        self.assertIn("feature_bins: 3", dense)
+        # OpenEvolve clamps int bins up to ceil(archive^(1/dims)): an archive
+        # bigger than the grid would silently undo the coarse-bin request.
+        with self.assertRaises(ValueError):
+            render_config(
+                get_op("layernorm"),
+                feature_dimensions=("saved_memory_ratio", "shape_specialization"),
+                feature_bins=3,
+                archive_size=10,
+            )
+
     def test_evaluator_failure_results_carry_feature_metrics(self):
         # OpenEvolve raises if a configured custom feature dimension is missing
         # from any program's metrics, so failure paths must include them too.

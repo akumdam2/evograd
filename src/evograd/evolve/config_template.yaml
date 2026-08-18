@@ -64,8 +64,8 @@ prompt:
 
 database:
   population_size: 30
-  archive_size: 20
-  num_islands: 2
+  archive_size: __ARCHIVE_SIZE__
+  num_islands: __NUM_ISLANDS__
   elite_selection_ratio: 0.25
   exploitation_ratio: 0.75
   similarity_threshold: 0.99
