@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 # Seed → verify → bench every declared operator through one or more pipelines.
 #
-#   bash scripts/seed_matrix.sh                 # all ops, pipelines D and B
-#   OPS="layernorm rmsnorm" bash scripts/seed_matrix.sh
+#   bash scripts/seed_matrix.sh                      # all ops, pipelines D and B
+#   bash scripts/seed_matrix.sh layernorm rmsnorm    # just these two
 #   PIPELINES=D RESEED=1 bash scripts/seed_matrix.sh
+#   PIPELINES="A B C D" OPENAI_API_KEY=... bash scripts/seed_matrix.sh
+#
+# Operators come from the argument list, or from $OPS when no arguments are
+# given. Prefer the arguments: `OPS=...` on its own line is a shell variable,
+# not an environment variable, so it never reaches this script -- and the run
+# silently widens to every declared operator instead of failing.
 #
 # What it does differently from the obvious loop:
 #
@@ -27,6 +33,11 @@ TIMEOUT=${TIMEOUT:-1800}
 RESEED=${RESEED:-0}
 AUTOTUNE=${AUTOTUNE:-0}   # AUTOTUNE=1 lets Pipeline D sweep launch configs
 OPS=${OPS:-}
+[ "$#" -gt 0 ] && OPS="$*"
+# Pipelines A and C are LLM-driven; B and D are not.
+MODEL=${MODEL:-gpt-5.5}
+API_BASE=${API_BASE:-https://api.openai.com/v1}
+MAX_ATTEMPTS=${MAX_ATTEMPTS:-5}
 
 export EVOGRAD_BASELINE_TIMING_CACHE_PATH="${EVOGRAD_BASELINE_TIMING_CACHE_PATH:-$EG/baseline_timings.json}"
 
@@ -139,16 +150,36 @@ while IFS=$'\t' read -r op dtype bench_dtype note; do
         dir="$EG/$op/$pipeline"
         seed="$dir/initial_program_autograd_pair.py"
 
+        # A and C write their winner to <output-dir>/best/; B and D write it at
+        # the top level. Normalize so the cache check and every later stage see
+        # one path per pipeline.
+        promote() {
+            [ -f "$seed" ] || [ ! -f "$dir/best/initial_program_autograd_pair.py" ] \
+                || cp "$dir/best/initial_program_autograd_pair.py" "$seed"
+        }
+        promote
+
         if [ -f "$seed" ] && [ "$RESEED" != "1" ]; then
             printf '  %-6s %-6s cached\n' "$pipeline" "seed"
         else
-            seed_args=(--dtype "$dtype")
-            # --autotune is Pipeline D's default; --no-autotune pins each kernel
-            # to the config capture chose, which makes the seed deterministic.
-            [ "$lower" = "d" ] && [ "$AUTOTUNE" != "1" ] && seed_args+=(--no-autotune)
+            case "$lower" in
+            a|c)
+                # A and C take no --dtype: they verify on every declared
+                # correctness dtype and need an LLM endpoint instead.
+                seed_args=(--model "$MODEL" --api-base "$API_BASE"
+                           --max-attempts "$MAX_ATTEMPTS")
+                ;;
+            *)
+                seed_args=(--dtype "$dtype")
+                # --autotune is Pipeline D's default; --no-autotune pins each kernel
+                # to the config capture chose, which makes the seed deterministic.
+                [ "$lower" = "d" ] && [ "$AUTOTUNE" != "1" ] && seed_args+=(--no-autotune)
+                ;;
+            esac
             run_step "$op" "$pipeline" "seed" "$EG/$op/seed_$pipeline.log" \
                 evograd seed "$lower" --op "$op" "${seed_args[@]}" --output-dir "$dir" \
-                || continue
+                || { promote; [ -f "$seed" ] || continue; }
+            promote
         fi
 
         [ -f "$seed" ] || { record "$op" "$pipeline" "seed" 1 0 "no seed emitted"; continue; }

@@ -214,6 +214,34 @@ def _describe_saved(nodes: list[Any]) -> tuple[SavedTensor, ...]:
     return tuple(saved)
 
 
+def _check_triton_backend(device: str) -> None:
+    """Fail early, and by name, when Triton cannot bring up its CUDA driver.
+
+    On CUDA every Inductor kernel goes through ``triton_hash_with_backend``,
+    which forces ``driver.active`` -- and that shells out to ``cc`` to build a
+    small shim against libcuda and the CPython headers. Triton runs that compile
+    with ``stdout=DEVNULL`` and re-raises a bare ``CalledProcessError``, so the
+    failure arrives forty frames deep inside ``codegen_kernel`` looking like a
+    lowering bug, while the compiler's actual message is only in the job log.
+    Probing it here costs one cached call and keeps the diagnosis attached to
+    the cause.
+    """
+    if not device.startswith("cuda"):
+        return
+    from torch.utils._triton import triton_hash_with_backend
+
+    try:
+        triton_hash_with_backend()
+    except Exception as exc:  # noqa: BLE001 - re-raised with the real diagnosis
+        raise RuntimeError(
+            "Triton cannot initialize its CUDA driver, so no kernel can be "
+            "lowered on this node -- this is an environment failure, not a "
+            "capture failure. Run `python scripts/triton_env_check.py` here for "
+            "the compiler's own error message and the inputs it depends on "
+            f"(compiler, libcuda, Python headers). Underlying: {exc!r}"
+        ) from exc
+
+
 def capture_inductor_pair(
     op: OpDecl,
     workload: Workload,
@@ -230,6 +258,8 @@ def capture_inductor_pair(
 
     from evograd.opdecl.importing import resolve_callable
     from evograd.opdecl.inputs import make_case_inputs
+
+    _check_triton_backend(device)
 
     forward_fn = resolve_callable(op.forward)
     values = make_case_inputs(op, workload, device=device)
