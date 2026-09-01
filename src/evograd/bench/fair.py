@@ -11,6 +11,7 @@ import hashlib
 import inspect
 import random
 import statistics
+import traceback
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Callable
@@ -189,6 +190,128 @@ def pytorch_autograd_provider(op: OpDecl) -> PairProvider:
         source_hash=_callable_hash(forward_ref, forward, backward),
         adapter_kind="pytorch_eager_autograd",
     )
+
+
+def torch_compile_provider(
+    op: OpDecl,
+    *,
+    name: str = "torch_compile",
+    mode: str | None = None,
+    dynamic: bool | None = False,
+) -> PairProvider:
+    """Expose a compiled forward/backward through the common pair boundary.
+
+    ``torch.compile`` compiles the forward eagerly and its AOTAutograd backward
+    lazily on the first ``torch.autograd.grad`` call.  The fair runner warms both
+    before recording samples, so compilation time is never included.  With the
+    default ``dynamic=False`` a new specialization may be compiled for each
+    workload shape, matching the existing built-in baseline's strongest
+    per-shape policy.
+
+    The output is retained only as the handle from which autograd runs the
+    compiled backward.  This makes runtime measurement symmetric with every
+    other provider, but it is not a claim that the output alone describes
+    AOTAutograd's internal save-set; Pipeline D records that separately.
+    """
+    from evograd.opdecl.compiled import compile_forward
+    from evograd.opdecl.oracle import resolve_forward
+
+    compiled = compile_forward(op, mode, dynamic)
+    forward_ref = resolve_forward(op)
+    arg_names = tuple(arg.name for arg in op.args)
+    active_args = tuple(op.active_args())
+    active_names = tuple(arg.name for arg in active_args)
+    by_grad = {arg.grad_name: arg.name for arg in active_args}
+
+    def forward(values):
+        for active_name in active_names:
+            value = values[active_name]
+            if not value.requires_grad:
+                value.requires_grad_(True)
+        # A static sweep deliberately compiles more shapes than Dynamo's usual
+        # per-code-object cache limit.  Without raising it, the ninth shape can
+        # fall back to eager and still be labelled ``torch_compile``.
+        import torch._dynamo.config as dynamo_config
+
+        with dynamo_config.patch(cache_size_limit=max(64, dynamo_config.cache_size_limit)):
+            output = compiled(*(values[arg_name] for arg_name in arg_names))
+        return output, (output,)
+
+    def backward(dout, saved, values):
+        (output,) = saved
+        gradients = torch.autograd.grad(
+            output,
+            tuple(values[active_name] for active_name in active_names),
+            dout,
+            retain_graph=False,
+            create_graph=False,
+        )
+        by_name = dict(zip(active_names, gradients))
+        return tuple(by_name[by_grad[grad_name]] for grad_name in op.grad_names())
+
+    digest = hashlib.sha256()
+    digest.update(_callable_hash(forward_ref).encode("utf-8"))
+    digest.update(repr((name, mode, dynamic)).encode("utf-8"))
+    return PairProvider(
+        name=name,
+        forward=forward,
+        backward=backward,
+        source_hash=digest.hexdigest(),
+        adapter_kind=(
+            f"torch_compile_{mode or 'default'}_"
+            f"{'dynamic' if dynamic else 'static'}"
+        ),
+    )
+
+
+def verify_pair_provider(
+    op: OpDecl,
+    provider: PairProvider,
+    workloads: tuple[Workload, ...],
+    *,
+    device: str = "cuda",
+):
+    """Correctness-check a provider on the exact shapes that will be timed.
+
+    This is especially important for ``torch_compile_provider``: using the same
+    provider here both validates the compiled results and warms its per-shape
+    compilation cache, instead of compiling a throwaway callable on an unrelated
+    correctness grid before the benchmark starts.
+    """
+    from evograd.opdecl.oracle import oracle
+    from evograd.opdecl.verify import CaseResult, VerifyReport, _check
+
+    cases = []
+    for workload in workloads:
+        dims, dtype = dict(workload.dims), workload.dtype
+        try:
+            values = make_case_inputs(op, workload, device=device)
+            expected_output, expected_grads = oracle(op, values)
+            output, saved = provider.forward(values)
+            gradients = provider.backward(
+                values[op.upstream_grad_name], saved, values
+            )
+            gradients = (
+                (gradients,) if torch.is_tensor(gradients) else tuple(gradients)
+            )
+            if len(gradients) != len(op.grad_names()):
+                raise ValueError(
+                    f"provider returned {len(gradients)} gradients, expected "
+                    f"{len(op.grad_names())}: {op.grad_names()}"
+                )
+            atol, rtol = op.tolerance_for(workload)
+            checks = [_check(op.output.name, output, expected_output, atol, rtol)]
+            for grad_name, actual in zip(op.grad_names(), gradients):
+                atol, rtol = op.tolerance_for(workload, grad_name)
+                checks.append(
+                    _check(grad_name, actual, expected_grads[grad_name], atol, rtol)
+                )
+            cases.append(CaseResult(dims=dims, dtype=dtype, checks=tuple(checks)))
+        except Exception:
+            cases.append(
+                CaseResult(dims=dims, dtype=dtype, error=traceback.format_exc())
+            )
+    return VerifyReport(op_name=op.name, cases=tuple(cases))
 
 
 def renamed_provider(provider: PairProvider, name: str) -> PairProvider:

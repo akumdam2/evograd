@@ -165,5 +165,72 @@ class TestTimingSplit(unittest.TestCase):
         self.assertIs(kwargs["dynamic"], False)
 
 
+class TestFairProvider(unittest.TestCase):
+    def test_compiled_pair_matches_declared_gradient_order(self):
+        import torch
+
+        from evograd.bench.fair import torch_compile_provider
+
+        op = get_op("layernorm")
+
+        def fake_compiled(x, weight, bias, eps):
+            return x * weight + bias + eps
+
+        with mock.patch(
+            "evograd.opdecl.compiled.compile_forward", return_value=fake_compiled
+        ):
+            provider = torch_compile_provider(
+                op, name="torch_compile", mode=None, dynamic=False
+            )
+
+        values = {
+            "x": torch.randn(3, 4),
+            "weight": torch.randn(4),
+            "bias": torch.randn(4),
+            "eps": 1e-5,
+        }
+        dout = torch.randn(3, 4)
+        output, saved = provider.forward(values)
+        grads = provider.backward(dout, saved, values)
+
+        self.assertEqual(provider.name, "torch_compile")
+        self.assertEqual(provider.adapter_kind, "torch_compile_default_static")
+        self.assertEqual(len(grads), 3)
+        torch.testing.assert_close(grads[0], dout * values["weight"])
+        torch.testing.assert_close(grads[1], (dout * values["x"]).sum(0))
+        torch.testing.assert_close(grads[2], dout.sum(0))
+
+    def test_exact_workload_provider_gate(self):
+        import torch
+
+        from evograd.bench.fair import PairProvider, verify_pair_provider
+        from evograd.opdecl.activity import Workload
+
+        op = get_op("layernorm")
+
+        def forward(values):
+            x = values["x"].detach().requires_grad_(True)
+            weight = values["weight"].detach().requires_grad_(True)
+            bias = values["bias"].detach().requires_grad_(True)
+            values.update(x=x, weight=weight, bias=bias)
+            output = torch.nn.functional.layer_norm(
+                x, (x.shape[-1],), weight, bias, values["eps"]
+            )
+            return output, (output,)
+
+        def backward(dout, saved, values):
+            return torch.autograd.grad(
+                saved[0],
+                (values["x"], values["weight"], values["bias"]),
+                dout,
+            )
+
+        provider = PairProvider("compiled", forward, backward, "hash", "test")
+        workloads = (Workload({"rows": 3, "hidden": 7}, "float32"),)
+        report = verify_pair_provider(op, provider, workloads, device="cpu")
+        self.assertTrue(report.ok, report.to_dict())
+        self.assertEqual(report.cases[0].dims, {"rows": 3, "hidden": 7})
+
+
 if __name__ == "__main__":
     unittest.main()

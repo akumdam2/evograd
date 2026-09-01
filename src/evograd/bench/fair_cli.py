@@ -33,10 +33,9 @@ def main(argv: list[str] | None = None) -> int:
         "--baseline",
         default="auto",
         help=(
-            "auto, pytorch_autograd, or any baseline the declaration provides "
-            "(liger, cublas_pair, triton_tutorial, ...). Validated against the "
-            "operator rather than a fixed list, so a new declared baseline "
-            "works here without editing this file."
+            "auto, pytorch_autograd, torch_compile, "
+            "torch_compile_max_autotune, or any baseline the declaration "
+            "provides (liger, cublas_pair, triton_tutorial, ...)."
         ),
     )
     parser.add_argument("--suite", default=None)
@@ -65,15 +64,22 @@ def main(argv: list[str] | None = None) -> int:
         pytorch_autograd_provider,
         renamed_provider,
         run_fair_benchmarks,
+        torch_compile_provider,
+        verify_pair_provider,
     )
     from evograd.opdecl.baselines import (
         available_baselines,
         verify_performance_baseline,
     )
     from evograd.opdecl.verify import verify
+    from evograd.opdecl.compiled import BUILTIN_MODES
     from evograd.ops import get_op
 
     op = get_op(args.op)
+    workloads = op.benchmark_workloads(
+        suite=args.suite,
+        dtypes=tuple(args.dtypes) if args.dtypes else None,
+    )
     baseline_name = args.baseline
     if baseline_name == "auto":
         baseline_name = (
@@ -81,6 +87,22 @@ def main(argv: list[str] | None = None) -> int:
         )
     if baseline_name == "pytorch_autograd":
         baseline = pytorch_autograd_provider(op)
+    elif baseline_name in BUILTIN_MODES:
+        baseline = torch_compile_provider(
+            op,
+            name=baseline_name,
+            mode=BUILTIN_MODES[baseline_name],
+            dynamic=False,
+        )
+        # Check exactly the requested shapes and retain the compiled variants
+        # for timing.  A throwaway baseline verifier would compile an unrelated
+        # correctness grid, then make this sweep compile everything again.
+        baseline_correctness = verify_pair_provider(op, baseline, workloads)
+        if not baseline_correctness.ok:
+            raise RuntimeError(
+                "torch.compile baseline correctness failed:\n"
+                + json.dumps(baseline_correctness.to_dict(), indent=2)
+            )
     elif baseline_name in op.performance_baselines:
         baseline = declared_provider(op, baseline_name)
         # Never trust a baseline's timings before its numbers match the oracle.
@@ -94,7 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         candidate = renamed_provider(baseline, "candidate")
     else:
         module = _load_module(args.candidate)
-        correctness = verify(op, module)
+        # A named sweep can extend far beyond the ordinary correctness grid.
+        # Gate every shape we are about to time so an out-of-range kernel cannot
+        # silently become a benchmark result.
+        correctness = verify(op, module, workloads=workloads)
         if not correctness.ok:
             raise RuntimeError(
                 "candidate correctness failed:\n"
@@ -106,10 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         op,
         candidate,
         baseline,
-        workloads=op.benchmark_workloads(
-            suite=args.suite,
-            dtypes=tuple(args.dtypes) if args.dtypes else None,
-        ),
+        workloads=workloads,
         warmup=args.warmup,
         reps=args.reps,
         blocks=args.blocks,

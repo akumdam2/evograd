@@ -124,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
         environment_fingerprint,
         pytorch_autograd_provider,
         run_fair_benchmarks,
+        torch_compile_provider,
+        verify_pair_provider,
     )
     from evograd.bench.harness import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
     from evograd.opdecl.baselines import (
@@ -132,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         verify_performance_baseline,
         verify_runtime_forward,
     )
+    from evograd.opdecl.compiled import BUILTIN_MODES
     from evograd.ops import OPS
 
     # Fail here rather than after minutes of work. The harness times with CUDA
@@ -223,6 +226,21 @@ def main(argv: list[str] | None = None) -> int:
                 resolved = resolve_performance_baseline(op, args.baseline)
                 if resolved == "pytorch_autograd":
                     baseline_provider = pytorch_autograd_provider(op)
+                elif resolved in BUILTIN_MODES:
+                    baseline_provider = torch_compile_provider(
+                        op,
+                        name=resolved,
+                        mode=BUILTIN_MODES[resolved],
+                        dynamic=False,
+                    )
+                    compiled_correctness = verify_pair_provider(
+                        op, baseline_provider, workloads, device=args.device
+                    )
+                    if not compiled_correctness.ok:
+                        raise RuntimeError(
+                            "torch.compile baseline correctness failed:\n"
+                            + json.dumps(compiled_correctness.to_dict(), indent=2)
+                        )
                 else:
                     # Never trust a baseline's timings before its numbers match
                     # the oracle.
