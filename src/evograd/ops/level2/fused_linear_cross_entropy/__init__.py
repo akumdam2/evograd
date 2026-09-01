@@ -106,6 +106,7 @@ op = declare_op(
         Inactive("target", "[rows]", dtype="int64", note="hard class labels"),
     ),
     output=Active("loss", "[]"),
+    parameter_args=("weight",),
     forward_semantics=(
         "Compute logits = x @ weight.T and return their mean hard-label cross "
         "entropy against target, with ignore_index=-100, no label smoothing and "

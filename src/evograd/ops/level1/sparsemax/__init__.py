@@ -110,6 +110,7 @@ op = declare_op(
     dims=("rows", "cols"),
     args=(Active("x", "[rows, cols]", dtype="float32"),),
     output=Active("out", "[rows, cols]", dtype="float32"),
+    parameter_args=(),
     forward_semantics="Project each row onto the probability simplex with sparsemax.",
     backward_semantics=(
         "On support S={i:out_i>0}, return dx_i=dout_i-mean_S(dout); "

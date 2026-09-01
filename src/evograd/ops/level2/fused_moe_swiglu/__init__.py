@@ -105,6 +105,7 @@ op = declare_op(
         Active("top_k_weights", "[T, K]"),
     ),
     output=Active("out", "[T, H]"),
+    parameter_args=("gate_up_proj", "down_proj"),
     forward_semantics=(
         "For each token and routed expert, compute a grouped gate/up GEMM, "
         "apply SwiGLU as silu(gate) * up, compute the expert down-projection, "

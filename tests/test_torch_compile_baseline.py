@@ -169,7 +169,7 @@ class TestFairProvider(unittest.TestCase):
     def test_compiled_pair_matches_declared_gradient_order(self):
         import torch
 
-        from evograd.bench.fair import torch_compile_provider
+        from evograd.bench.tier1 import torch_compile_provider
 
         op = get_op("layernorm")
 
@@ -203,7 +203,7 @@ class TestFairProvider(unittest.TestCase):
     def test_exact_workload_provider_gate(self):
         import torch
 
-        from evograd.bench.fair import PairProvider, verify_pair_provider
+        from evograd.bench.tier1 import PairProvider, verify_pair_provider
         from evograd.opdecl.activity import Workload
 
         op = get_op("layernorm")

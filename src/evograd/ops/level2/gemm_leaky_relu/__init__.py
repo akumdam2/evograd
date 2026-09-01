@@ -69,6 +69,7 @@ op = declare_op(
         Inactive("negative_slope", default=0.01),
     ),
     output=Active("c", "[M, N]"),
+    parameter_args=(),
     forward_semantics=(
         "Compute pre = a @ b with float32 accumulation, then apply a fused "
         "Leaky-ReLU epilogue: c = pre when pre >= 0, otherwise "

@@ -78,6 +78,7 @@ op = declare_op(
         Inactive("target", "[rows, cols]", note="fixed log-probability target log_p"),
     ),
     output=Active("out", "[]", dtype="float32"),
+    parameter_args=(),
     forward_semantics=(
         "Generalized JSD with beta=0.5 between target log_p and predicted log_q, "
         "summed over all elements and divided by rows."

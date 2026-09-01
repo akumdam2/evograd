@@ -255,6 +255,29 @@ class OpDecl:
     # tensor inputs. This excludes non-model state such as integer labels from
     # ratios while still allowing the candidate to save them.
     memory_inputs: tuple[str, ...] | None = None
+    # Which ``Active`` args are persistent module state rather than activations
+    # flowing through the network. LayerNorm's ``weight``/``bias`` are
+    # parameters; ``x`` is not.
+    #
+    # Nothing else in the declaration distinguishes them — both are ``Active``,
+    # because both need gradients — and for the pair benchmark the distinction
+    # does not exist: every argument is passed positionally at every call. It
+    # appears the moment the operator is measured as an ``nn.Module``, which
+    # takes only activations as call arguments and holds parameters as its own
+    # state. Shape cannot be inferred from: ``linear``, ``matmul`` and ``geglu``
+    # each break the "does it carry the batch dim" rule differently, and
+    # ``matmul``'s second operand is a parameter in one context and an
+    # activation in another. So it is declared.
+    #
+    # ``None`` means *undeclared*, and the operator tier refuses to measure it:
+    # silently treating LayerNorm's ``weight`` as an activation would produce a
+    # benchmark that runs fine and compares the wrong thing. An empty tuple is
+    # a positive statement that the operator has no parameters — true of
+    # ``geglu``, ``softmax`` and every pure elementwise op — and is perfectly
+    # measurable at that tier, because the framework overhead the tier exists
+    # to charge is paid whether or not the module owns state.
+    parameter_args: tuple[str, ...] | None = None
+
     # Shape-aware specialization metadata. ``regime_feature`` maps a workload
     # to the scalar used to split the declared "small" and "large" suites;
     # ``case_weight`` optionally weights specialist geomeans.
@@ -460,6 +483,20 @@ class OpDecl:
                     f"{self.name}: memory_inputs names non-tensor/unknown inputs "
                     f"{sorted(unknown_memory_inputs)}"
                 )
+        if self.parameter_args is not None:
+            active_names = {arg.name for arg in self.active_args()}
+            unknown = set(self.parameter_args) - active_names
+            if unknown:
+                raise ValueError(
+                    f"{self.name}: parameter_args names {sorted(unknown)}, which are "
+                    f"not Active args; declared Active args are {sorted(active_names)}"
+                )
+            if active_names and set(self.parameter_args) == active_names:
+                raise ValueError(
+                    f"{self.name}: parameter_args names every Active arg, leaving no "
+                    "activation for an nn.Module to take as input"
+                )
+
         regime_values = (self.regime_feature, self.regime_split, self.case_weight)
         if any(value is not None for value in regime_values):
             if not callable(self.regime_feature) or self.regime_split is None:
@@ -560,7 +597,9 @@ class OpDecl:
             unknown = wanted - {w.dtype for w in workloads}
             if unknown:
                 raise ValueError(
-                    f"{self.name}: benchmark suite has no cases for dtypes {sorted(unknown)}"
+                    f"{self.name}: benchmark suite has no cases for dtypes "
+                    f"{sorted(unknown)}; this suite has "
+                    f"{sorted({w.dtype for w in workloads})}"
                 )
             workloads = tuple(w for w in workloads if w.dtype in wanted)
             if not workloads:
@@ -631,6 +670,7 @@ def declare_op(
     benchmark_suites: dict[str, tuple[Workload, ...]] | None = None,
     performance_baselines: dict[str, object] | None = None,
     memory_inputs: tuple[str, ...] | None = None,
+    parameter_args: tuple[str, ...] | None = None,
     regime_feature: object | None = None,
     regime_split: float | None = None,
     case_weight: object | None = None,
@@ -670,6 +710,9 @@ def declare_op(
             dict(performance_baselines) if performance_baselines is not None else {}
         ),
         memory_inputs=tuple(memory_inputs) if memory_inputs is not None else None,
+        parameter_args=(
+            tuple(parameter_args) if parameter_args is not None else None
+        ),
         regime_feature=regime_feature,
         regime_split=regime_split,
         case_weight=case_weight,

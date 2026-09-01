@@ -152,6 +152,7 @@ op = declare_op(
         Inactive("eps", default=1e-5),
     ),
     output=Active("out", "[B, S, N, C]"),
+    parameter_args=("ln1_weight", "ln1_bias", "q_weight", "k_weight", "v_weight", "out_weight", "ln2_weight", "ln2_bias", "gate_weight", "up_weight", "down_weight"),
     forward_semantics=(
         "One AlphaFold3 single-representation block over x of shape "
         "[batch, n_seq, n_res, channels]: LayerNorm -> Q/K/V projections to "

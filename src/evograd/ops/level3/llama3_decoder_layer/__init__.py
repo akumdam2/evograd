@@ -163,6 +163,7 @@ op = declare_op(
         Inactive("eps", default=1e-5),
     ),
     output=Active("out", "[B, T, hidden]"),
+    parameter_args=("input_norm_weight", "q_weight", "k_weight", "v_weight", "o_weight", "post_norm_weight", "gate_weight", "up_weight", "down_weight"),
     forward_semantics=(
         "One Llama-3 decoder layer over x of shape [batch, tokens, hidden]: "
         "RMSNorm -> Q/K/V projections -> half-rotated RoPE on Q and K -> causal "

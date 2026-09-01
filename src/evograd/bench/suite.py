@@ -32,14 +32,18 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
 
+from evograd.bench.report import BenchReport, from_fair_report, from_harness_report
 from evograd.evolve.scoring import geomean
 
-#: The one speedup key the suite report reads. Named once, here, so that a
-#: future edit cannot quietly reintroduce the asymmetric backward-only metric.
+#: The harness key this suite once read to get its speedup. It is no longer
+#: read anywhere: `CaseMetrics.speedup_full` derives the ratio from the times a
+#: protocol reports, so the asymmetric backward-only metric is not reachable by
+#: a wrong lookup. Kept because the published report names its own metric, and
+#: because the name is the one a reader of an older report will search for.
 FULL_STEP_SPEEDUP_KEY = "speedup_vs_baseline_raw_full_step"
 
 REPORT_VERSION = "evograd-suite-v1"
@@ -52,9 +56,18 @@ class TaskResult:
     """One operator's contribution to the suite."""
 
     op: str
+    #: Task hierarchy: 1 primitive, 2 fused, 3 block. What kind of operator
+    #: this is. Not to be confused with `tier`.
     level: int
     family: str
     baseline: str
+    #: Evaluation tier: what was measured (a kernel pair, an operator through
+    #: autograd, a training step). See `bench.report.TIERS`.
+    tier: str = "pair"
+    #: How carefully it was measured — "fair" or "fast". Rows measured under
+    #: different protocols are not comparable, so a report that mixes them has
+    #: to say which is which per row, not only in its header.
+    protocol: str = "fair"
     #: Inputs this operator's contract lets the backward overwrite. Published so
     #: a reader can see which operators were measured under the relaxed rule,
     #: and so a submitter knows the same allowance is theirs.
@@ -93,6 +106,8 @@ class TaskResult:
             "op": self.op,
             "level": self.level,
             "family": self.family,
+            "tier": self.tier,
+            "protocol": self.protocol,
             "baseline": self.baseline,
             "speedup_full_step": self.speedup,
             "per_case_speedups": list(self.speedups),
@@ -107,37 +122,59 @@ class TaskResult:
         }
 
 
-def _declared_input_bytes(op, case: dict[str, Any], memory_inputs) -> float:
-    """Bytes of the inputs the saved-memory ratio is measured against.
+def task_from_report(
+    report: BenchReport,
+    *,
+    level: int,
+    family: str,
+) -> TaskResult:
+    """Turn a canonical :class:`BenchReport` into one suite row.
 
-    The fair protocol records what a provider retained but not what it was
-    given, so the denominator is reconstructed from the declaration's shapes
-    bound to this case's dims — the same set `memory_input_names()` selects, so
-    integer labels and rotary tables stay out of it exactly as they do on the
-    low-overhead path.
+    This is the only place a measurement becomes a suite result, so the rules
+    that decide what a benchmark number means live here once, whatever protocol
+    or tier produced the samples:
+
+    * the speedup is the like-for-like full step, derived from times by
+      :class:`CaseMetrics` — there is no key to read, and so no asymmetric
+      backward-only key to read by mistake;
+    * a case that did not run contributes no speedup and is still counted, so
+      an operator that works on four shapes out of five reports 80% coverage
+      rather than four shapes' worth of speedup;
+    * saved and input bytes are summed over the cases that ran, matching the
+      denominator each protocol was given.
     """
-    if op is None or not memory_inputs:
-        return 0.0
-    from evograd.opdecl.activity import bind_shape
+    speedups: list[float] = []
+    case_errors: list[str] = []
+    saved_bytes = 0.0
+    input_bytes = 0.0
+    for case in report.cases:
+        if not case.ok:
+            reason = case.error or ""
+            if reason and reason not in case_errors:
+                case_errors.append(reason)
+            continue
+        speedup = case.speedup_full
+        if speedup is None or not math.isfinite(speedup) or speedup <= 0.0:
+            continue
+        speedups.append(speedup)
+        saved_bytes += case.saved_bytes
+        input_bytes += case.input_bytes
 
-    dims = case.get("dims") or {}
-    dtype_bytes = {"float32": 4, "float16": 2, "bfloat16": 2, "float64": 8}
-    element = dtype_bytes.get(case.get("dtype", ""), 4)
-    by_name = {arg.name: arg for arg in op.args}
-    total = 0.0
-    for name in memory_inputs:
-        arg = by_name.get(name)
-        if arg is None or not getattr(arg, "shape", None):
-            continue
-        try:
-            shape = bind_shape(arg.shape, dims)
-        except Exception:
-            continue
-        count = 1
-        for extent in shape:
-            count *= extent
-        total += count * element
-    return float(total)
+    return TaskResult(
+        op=report.op,
+        level=level,
+        family=family,
+        tier=report.tier,
+        protocol=report.protocol,
+        baseline=report.baseline,
+        speedups=tuple(speedups),
+        cases_total=len(report.cases),
+        cases_ok=len(speedups),
+        saved_bytes=saved_bytes,
+        input_bytes=input_bytes,
+        error=report.error,
+        case_errors=tuple(case_errors),
+    )
 
 
 def task_from_fair_report(
@@ -150,74 +187,13 @@ def task_from_fair_report(
     backward_may_overwrite: tuple[str, ...] = (),
     op=None,
 ) -> TaskResult:
-    """Read one ``run_fair_benchmarks`` report into the suite's task shape.
-
-    The fair protocol's own aggregate is a ratio of summed times across
-    workloads, which weights a case by how slow it is. The suite's rule is a
-    geometric mean over cases, so the per-case ``speedup.pair_full`` values are
-    read directly and pooled here — the aggregation stays defined in one place
-    regardless of which timing protocol produced the samples.
-    """
-    cases = report.get("cases") or []
-    speedups = []
-    for case in cases:
-        value = float((case.get("speedup") or {}).get("pair_full", 0.0))
-        if value > 0.0 and math.isfinite(value):
-            speedups.append(value)
-
-    # Saved state is a property of the candidate, and every case reports it for
-    # both providers; sum the candidate's across cases to match what the
-    # low-overhead harness aggregates.
-    #
-    # The field names differ between the two timing paths: the harness emits
-    # `saved_bytes`/`input_bytes`, the fair protocol emits
-    # `logical_saved_bytes` and does not carry the input total at all. Reading
-    # the harness's names here returned 0 for every operator while the report
-    # still printed a plausible-looking 1.000 aggregate, because a geometric
-    # mean over an all-zero set falls back to 1. Read the fair names, and
-    # compute the denominator from the declaration.
-    saved_bytes = 0.0
-    input_bytes = 0.0
-    memory_inputs = tuple(op.memory_input_names()) if op is not None else ()
-    for case in cases:
-        # Keyed on the name fair.candidate_provider assigns. Deliberately no
-        # fallback to "whichever provider comes first": that would silently
-        # report the *baseline's* retained memory as the candidate's, and the
-        # number would look entirely plausible.
-        candidate = (case.get("providers") or {}).get("candidate") or {}
-        saved = candidate.get("saved_state") or {}
-        saved_bytes += float(saved.get("logical_saved_bytes", 0.0))
-        input_bytes += _declared_input_bytes(op, case, memory_inputs)
-
-    return TaskResult(
-        op=op_name,
+    """Read one ``run_fair_benchmarks`` report into the suite's task shape."""
+    task = task_from_report(
+        from_fair_report(op_name, report, baseline=baseline, op=op),
         level=level,
         family=family,
-        baseline=baseline,
-        speedups=tuple(speedups),
-        cases_total=len(cases),
-        cases_ok=len(speedups),
-        saved_bytes=saved_bytes,
-        input_bytes=input_bytes,
-        backward_may_overwrite=tuple(backward_may_overwrite),
     )
-
-
-def _case_error_summary(error: Any, *, limit: int = 200) -> str:
-    """One line naming why a case did not run, without the traceback.
-
-    Distinct reasons are collected per operator, so several shapes failing for
-    the same reason report it once rather than repeating it per case.
-    """
-    if not error:
-        return ""
-    if isinstance(error, dict):
-        kind = error.get("error_type") or "error"
-        message = " ".join(str(error.get("error_message", "")).split())
-        text = f"{kind}: {message}" if message else str(kind)
-    else:
-        text = " ".join(str(error).split())
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    return replace(task, backward_may_overwrite=tuple(backward_may_overwrite))
 
 
 def task_from_benchmark_report(
@@ -226,45 +202,13 @@ def task_from_benchmark_report(
     family: str,
     report: dict[str, Any],
 ) -> TaskResult:
-    """Read one ``run_benchmarks(..., on_error="record")`` report.
-
-    Cases that failed are counted but contribute no speedup, which is the whole
-    point: a kernel that works on four shapes out of five is not a kernel with
-    four shapes' worth of speedup, it is a kernel with 80% coverage.
-    """
-    setup_error = report.get("error")
-    cases = report.get("cases") or []
-    speedups = []
-    ok_cases = 0
-    case_errors: list[str] = []
-    for case in cases:
-        if not case.get("ok"):
-            reason = _case_error_summary(case.get("error"))
-            if reason and reason not in case_errors:
-                case_errors.append(reason)
-            continue
-        value = float(case.get(FULL_STEP_SPEEDUP_KEY, 0.0))
-        if value > 0.0 and math.isfinite(value):
-            speedups.append(value)
-            ok_cases += 1
-    aggregate = report.get("aggregate") or {}
-    return TaskResult(
-        op=op_name,
+    """Read one ``run_benchmarks(..., on_error="record")`` report."""
+    return task_from_report(
+        from_harness_report(op_name, report),
         level=level,
         family=family,
-        baseline=str(report.get("performance_baseline", "unknown")),
-        speedups=tuple(speedups),
-        cases_total=len(cases),
-        cases_ok=ok_cases,
-        saved_bytes=float(aggregate.get("saved_bytes", 0.0)),
-        input_bytes=float(aggregate.get("input_bytes", 0.0)),
-        error=(
-            f"{setup_error['error_type']}: {setup_error['error_message']}"
-            if setup_error
-            else None
-        ),
-        case_errors=tuple(case_errors),
     )
+
 
 
 def _pool_by_family(tasks: Iterable[TaskResult]) -> float:

@@ -87,6 +87,7 @@ op = declare_op(
         Active("beta", "[cols]"),
     ),
     output=Active("out", "[rows, cols]"),
+    parameter_args=("alpha", "gamma", "beta"),
     forward_semantics="out = gamma * tanh(alpha*x) + beta, computed in fp32.",
     backward_semantics=(
         "Return dx, dalpha, dgamma, dbeta. Parameter gradients reduce across rows; "

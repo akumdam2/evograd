@@ -66,6 +66,7 @@ op = declare_op(
     dims=("rows", "cols"),
     args=(Active("a", "[rows, cols]"), Active("b", "[rows, cols]")),
     output=Active("c", "[rows, cols]"),
+    parameter_args=(),
     forward_semantics=(
         "Element-wise c = gelu(a, approximate='tanh') * b. Use the tanh "
         "approximation, fp32 intermediates, and preserve input dtype."

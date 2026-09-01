@@ -93,6 +93,7 @@ op = declare_op(
         Inactive("eps", default=1e-6),
     ),
     output=Active("out", "[rows, cols]"),
+    parameter_args=("weight",),
     forward_semantics=(
         "Set s=x+r, compute rstd=rsqrt(mean(s**2,lastdim)+eps) in fp32, "
         "and return s*rstd*weight."

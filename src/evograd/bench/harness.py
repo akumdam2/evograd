@@ -1,4 +1,12 @@
-"""Latency/memory benchmark harness, generic over operator declarations.
+"""Tier 1 (direct pair), `fast` protocol — the evolutionary search's benchmark.
+
+The cheap half of tier 1. ``tier1.py`` is the same interface measured under the
+``fair`` protocol, and it is the one every published number comes from; this
+file exists because the search calls a benchmark thousands of times per run and
+can amortize the baseline across candidates, which a report must not do. A
+report produced here says so in its header.
+
+Latency/memory benchmark harness, generic over operator declarations.
 
 Ported from the per-bench ``_benchmark_case`` / ``_run_benchmarks`` in the old
 ``evaluator_autograd_pair.py`` files, with the operator-specific parts

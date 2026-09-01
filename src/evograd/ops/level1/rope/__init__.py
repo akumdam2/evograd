@@ -111,6 +111,7 @@ op = declare_op(
         Inactive("sin", "[T, head_dim]", note="rotary sine table, same layout as cos"),
     ),
     output=Active("y", "[B, n_heads, T, head_dim]"),
+    parameter_args=(),
     forward_semantics=(
         "Apply half-rotated (GPT-NeoX / Llama) rotary embedding to x, laid out "
         "as [batch, heads, tokens, head_dim]. With x1, x2 the two halves of the "

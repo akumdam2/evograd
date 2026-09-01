@@ -71,6 +71,7 @@ op = declare_op(
     dims=("rows", "cols"),
     args=(Active("p", "[rows, cols]"), Active("q", "[rows, cols]")),
     output=Active("out", "[]"),
+    parameter_args=(),
     forward_semantics="out = 0.5 * sum(abs(p-q)) / rows.",
     backward_semantics=(
         "Return dp=dout*0.5*sign(p-q)/rows and dq=-dp, using the zero "
