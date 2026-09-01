@@ -362,21 +362,19 @@ class _ProgramBuilder:
         self.constants.setdefault(
             "_resolve_aten", inspect.getsource(self.dispatch_mod._resolve_aten)
         )
-        args_ordered = (node or {}).get("args_ordered") or []
-        if any(e.get("kind") == "scalar" for e in args_ordered):
-            # arg_exprs carries only tensor/sym/shape-list expressions (in
-            # args_ordered order); the raw aten op needs every positional arg,
-            # so scalar literals (dim ints, descending flags, fill values, …)
-            # are re-interleaved at their slots.
-            runtime = iter(arg_exprs)
-            exprs = [
-                _scalar_literal(e.get("value")) if e.get("kind") == "scalar" else next(runtime)
-                for e in args_ordered
-            ]
-            exprs.extend(runtime)
-        else:
-            exprs = arg_exprs
-        return f"_resolve_aten({target!r})({', '.join(exprs)})"
+        # `arg_exprs` is already the complete positional list: when the node
+        # carries `args_ordered`, the caller built it with `_ordered_arg_exprs`,
+        # which renders scalars too. Re-interleaving them here emitted each
+        # scalar twice — `aten._log_softmax.default(mm, 1, False, 1, False)`
+        # against a three-argument schema — because the list comprehension
+        # consumed only the non-scalars and the trailing `extend` appended the
+        # scalars again.
+        #
+        # `dispatch.py::_generic_fallback` does interleave, and is right to:
+        # at runtime `compose.run_graph` passes only tensor arguments, so the
+        # scalars genuinely are missing there. The two contexts differ; only
+        # this one had the duplication.
+        return f"_resolve_aten({target!r})({', '.join(arg_exprs)})"
 
     def _submodule_short(self, modname: str) -> str | None:
         for short in _SUBMODULE_NAMES:

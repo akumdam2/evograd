@@ -63,6 +63,9 @@ _SHAPE_SUITES = {
     "tb_large": tuple(_tb(i) for i in range(23, 28)),
     "tb_mixed": _TB_MIXED,
     "tb_sweep": _TB_SWEEP,
+    # Exact scaling sweep used for compiler-vs-evolved comparisons: total
+    # elements double from 2^13 through 2^27 while hidden stays fixed at 1024.
+    "tb_sweep_13_27": tuple(_tb(i) for i in range(13, 28)),
     **{f"tb_i{i}": (_tb(i),) for i in range(12, 28)},
 }
 

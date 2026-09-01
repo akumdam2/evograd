@@ -502,6 +502,45 @@ def build_evaluate(
 
         aggregate = benchmark["aggregate"]
         combined_score, score_details = score_from_aggregate(aggregate, policy)
+
+        # Production-aligned fitness. The direct-pair score above measures two
+        # functions called by hand; this measures the same program as an
+        # nn.Module inside a real training step, which is the deployment path.
+        # Both are always recorded. Which one drives the search is chosen by
+        # EVOGRAD_FITNESS so that switching it is a decision, not a side effect.
+        # Off by default. Level 1 is the direct forward/backward pair runtime,
+        # measured exactly as it was before the integrated metric existed, and
+        # a diagnostic that runs on every candidate is not free: it multiplies
+        # evaluation cost by the shape count. Opt in with
+        # EVOGRAD_INTEGRATED_METRIC=1, which EVOGRAD_FITNESS=integrated implies.
+        integrated = None
+        _want_integrated = os.environ.get("EVOGRAD_INTEGRATED_METRIC") == "1" or (
+            os.environ.get("EVOGRAD_FITNESS") == "integrated"
+        )
+        if _want_integrated:
+            try:
+                from evograd.bench.integrated import integrated_ratio_report
+
+                integrated = integrated_ratio_report(
+                    op,
+                    module,
+                    tuple(benchmark_workloads or op.benchmark_workloads()),
+                    warmup=int(os.environ.get("EVOGRAD_INTEGRATED_WARMUP", 10)),
+                    steps=int(os.environ.get("EVOGRAD_INTEGRATED_STEPS", 200)),
+                    blocks=int(os.environ.get("EVOGRAD_INTEGRATED_BLOCKS", 3)),
+                )
+            except Exception as exc:  # never let a diagnostic kill a candidate
+                integrated = {"error": f"{type(exc).__name__}: {exc}"}
+
+        if (
+            os.environ.get("EVOGRAD_FITNESS") == "integrated"
+            and integrated
+            and "speedup_vs_eager_geomean" in integrated
+        ):
+            # Lower ratio is better, so the score is its reciprocal: the
+            # equal-weight geometric mean speedup over eager PyTorch.
+            combined_score = float(integrated["speedup_vs_eager_geomean"])
+
         metrics = {
             "combined_score": float(combined_score),
             "correct": 1.0,
@@ -509,6 +548,19 @@ def build_evaluate(
             "forward_correct": 1.0,
             "forward_ms": float(aggregate["forward_ms"]),
             "backward_from_saved_ms": float(aggregate["backward_from_saved_ms"]),
+            **(
+                {
+                    "integrated_ratio_vs_eager_geomean": float(
+                        integrated["ratio_vs_eager_geomean"]
+                    ),
+                    "integrated_speedup_vs_eager_geomean": float(
+                        integrated["speedup_vs_eager_geomean"]
+                    ),
+                    "integrated_shapes": float(integrated["shapes"]),
+                }
+                if integrated and "ratio_vs_eager_geomean" in integrated
+                else {}
+            ),
             "forward_backward_full_step_ms": float(aggregate["forward_backward_full_step_ms"]),
             "raw_forward_backward_full_step_ms": float(
                 aggregate["raw_forward_backward_full_step_ms"]

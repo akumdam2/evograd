@@ -51,7 +51,10 @@ def make_flce_inputs(torch, op, workload, device="cuda"):
     # training step, so its upstream gradient is 1.0 by construction. Liger's
     # backward early-outs on that value, and a benchmark that fed it something
     # else would be measuring a rescale no training run performs.
-    dloss = torch.ones((), device=device, dtype=dtype)
+    # float32, matching the loss the reference and Liger both return. It was
+    # previously built in the workload dtype, which disagreed with both and made
+    # `loss.backward(dloss)` a dtype mismatch at Level 2.
+    dloss = torch.ones((), device=device, dtype=torch.float32)
     return {"x": x, "weight": weight, "target": target, "dloss": dloss}
 
 
@@ -125,7 +128,10 @@ op = declare_op(
     extra_constraints=(
         "Tensor layout notes:\n"
         "- x: [rows, hidden], weight: [vocab, hidden], target: [rows] int64\n"
-        "- loss is a float32-accumulated scalar cast to x's dtype\n"
+        "- loss is a float32 scalar. It is NOT cast to x's dtype: Liger returns\n"
+        "  float32 (its `loss_1d` buffer is float32 and the reduction sums it),\n"
+        "  the reference returns float32, and a bfloat16 mean over a 128k-vocab\n"
+        "  logsumexp is not a usable loss. dloss is float32 to match.\n"
         "- dloss is 1.0 in every declared workload, because this operator is the "
         "last layer of a training step\n"
         "- vocab is 128256 (Llama-3), so a materialized logits tensor is 2.1 GB "

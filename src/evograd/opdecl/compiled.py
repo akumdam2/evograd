@@ -29,6 +29,11 @@ from evograd.opdecl.activity import Active, OpDecl
 BUILTIN_MODES: dict[str, str | None] = {
     "torch_compile": None,
     "torch_compile_max_autotune": "max-autotune",
+    # CUDA-graph capture of the compiled regions. Relevant as an end-to-end
+    # baseline because it removes per-launch dispatch cost, which is exactly
+    # what dominates a small LayerNorm step -- so it separates "the kernels are
+    # slower" from "the eager autograd engine costs more to drive".
+    "torch_compile_reduce_overhead": "reduce-overhead",
 }
 
 

@@ -47,6 +47,8 @@ from evograd.bench.provider import (  # noqa: F401  (re-export)
     renamed_provider,
     saved_state_report,
     snapshot_tensors,
+    torch_compile_provider,
+    verify_pair_provider,
 )
 from evograd.bench.provider import saved_state_report as _saved_state_report  # noqa: F401
 

@@ -397,6 +397,41 @@ with immutable scalar metadata; only tensor storage contributes to the memory
 score. The declaration determines the backward return names and ordering, and
 the generic autograd binding inserts `None` for every `Inactive` input.
 
+## Action required: regenerate seeds produced before this fix
+
+`program_codegen` emitted every scalar argument of a serialized `aten` fallback
+**twice**. `_ordered_arg_exprs` already renders scalars, and
+`_generic_fallback_call` re-interleaved them on top of that, so a node with `S`
+scalars and `N` other arguments was emitted with `S + N + S` positional
+arguments. The generated seed then raised on its first call:
+
+```
+RuntimeError: aten::_log_softmax() expected at most 3 argument(s) but received 5 argument(s)
+RuntimeError: aten::sort() expected at most 3 argument(s) but received 5 argument(s)
+```
+
+Four operators' seeds failed their verification gate for this reason —
+`cross_entropy`, `poly_norm`, `sparsemax` and `fused_linear_cross_entropy` — and
+`sparsemax` was reported as 0% covered because of it. Any seed generated before
+this fix whose graph contains an `aten` fallback with scalar arguments is
+affected and should be regenerated.
+
+Check an existing program without regenerating it:
+
+```bash
+python tools/check_seed_arity.py --program path/to/initial_program_autograd_pair.py
+```
+
+It compares every emitted `_resolve_aten(...)` call against that operator's
+schema and exits non-zero on a mismatch. A clean seed prints
+`0 arity mismatch(es)`.
+
+Note that an evolved program derived from a broken seed may still be correct:
+the search rewrites the block, and three of the four operators above produced
+candidates that passed verification independently. The seed being invalid does
+not by itself invalidate a downstream result — but it does mean the search
+started from a program that could not run.
+
 ## Running the benchmark
 
 The benchmark is specified in [docs/BENCHMARK.md](docs/BENCHMARK.md): 25
@@ -467,8 +502,18 @@ For iterating on one kernel, the final-report protocol is available directly,
 including its identity control:
 
 ```bash
+<<<<<<< HEAD
 evograd tier1-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
 evograd tier1-bench --op rmsnorm --identity-control    # must report ~1.0x
+=======
+evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
+evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
+
+# static torch.compile specialist versus an evolved pair, across 2^13..2^27
+# total elements at hidden=1024; compilation is outside the timed regions
+evograd fair-bench --op layernorm --candidate my_kernels/layernorm.py \
+    --baseline torch_compile --suite tb_sweep_13_27
+>>>>>>> main
 ```
 
 (`fair-bench` still works; it is the former name of the same command.)

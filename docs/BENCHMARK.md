@@ -294,12 +294,103 @@ collapses to zero width, and paying three times the measurement cost for a
 statistic the suite does not report would be waste. Use `fair-bench` when the
 question is how much a specific difference is supported by the samples.
 
+## Pitfalls that silently produce wrong numbers
+
+Every item here was measured, not theorised, and every one of them is silent:
+the run completes, the numbers look plausible, and they answer a different
+question than the one asked.
+
+### Build the upstream gradient outside the timed region
+
+A `full` step measured as
+
+```python
+def full():
+    y = model(x)
+    y.backward(torch.randn_like(y), retain_graph=True)   # WRONG
+```
+
+allocates and fills an activation-sized tensor inside every timed iteration.
+At 8 rows it is noise; at 131072 x 1024 it is a 268 MB `randn` per iteration,
+and the measurement is dominated by the random number generator. Build `dy`
+once, before timing:
+
+```python
+dy = torch.randn_like(x)          # once, outside
+
+def full():
+    y = model(x)
+    y.backward(dy, retain_graph=True)
+```
+
+Note that Liger's own published benchmark (`benchmark/scripts/utils.py`) uses
+the first form, so its published `full` numbers carry that cost and are not
+directly comparable to numbers taken the second way.
+
+### A per-shape `torch.compile` baseline needs three settings, or it is not one
+
+Compiling one model per shape is not enough. Dynamo's automatic dynamic-shape
+promotion turns later specializations into a shared dynamic graph, and
+`suppress_errors` hides a frame that fails to compile by falling back to eager.
+A sweep that looked like fifteen static specializations was measured producing
+**eight unique graphs from nine frames, one of which failed to compile** — while
+still being labelled "per-shape compile". Require all of:
+
+- one shape per process, and one compiled model in that process;
+- `torch._dynamo.config.automatic_dynamic_shapes = False`;
+- `torch._dynamo.config.suppress_errors = False`.
+
+Then record `frames`, `graph_breaks` and `recompiles` from
+`torch._dynamo.utils.counters` and assert they are 1/1, 0 and 0. Confirm with a
+profiler that Inductor kernels actually ran: classify by the generator's naming
+prefix (`triton_*`) rather than by what the kernel computes, since Inductor
+names its kernels after the ATen ops they fuse — `triton_per_fused_native_layer_norm_0`
+contains `layer_norm` and is not an eager fallback.
+
+### Direct-pair and integrated latency are different quantities
+
+The direct pair calls `forward_with_saved` then `backward_from_saved` by hand.
+The integrated path runs the same program as an `nn.Module` through the autograd
+engine, which is how it is deployed. On LayerNorm at hidden=1024 the GPU
+kernels account for **1-6% of an integrated training step**; the rest is
+dispatch. The two therefore rank implementations differently, and at small
+shapes they can disagree about the winner. State which one a number came from,
+and do not compare across them.
+
+`evograd.bench.integrated` defines the integrated region once so the evolution
+fitness and the final benchmark cannot drift apart. It is opt-in: set
+`EVOGRAD_INTEGRATED_METRIC=1` for the diagnostic, or `EVOGRAD_FITNESS=integrated`
+to drive the search with it. The default fitness remains the direct pair.
+
+### Do not rank differences inside the measured variance
+
+Re-running the *same* script on a different node reproduced its own recorded
+`torch.compile` latencies to within -14% at one shape and +22% at another, with
+one shape landing exactly. The drift is shape-dependent, not a uniform node
+offset, and is consistent with Inductor autotuning selecting different
+configurations between sessions. Across three sessions per cell, the median
+spread was around 9% with a tail past 50% on the smallest shapes.
+
+Consequences: run at least three independent sessions per cell and report the
+median across them; keep every per-session value; and treat differences below
+roughly 20% at a single shape as unresolved. Geometric means over many shapes
+are more robust than any single cell, but a gap of a few percent between two
+geomeans is still not a ranking.
+
+### Aggregate with geometric means of ratios, never sums of runtimes
+
+A sweep spanning a 16384x range in rows is decided entirely by its largest
+shape if latencies are summed. Take the per-shape ratio to the baseline and
+report its geometric mean.
+
 ## Running it
 
 ```bash
 # one operator
 evograd bench --op layernorm --candidate best.py --baseline liger
 evograd fair-bench --op layernorm --candidate best.py
+evograd fair-bench --op layernorm --candidate best.py \
+    --baseline torch_compile --suite tb_sweep_13_27
 
 # the whole suite, one candidate per operator under programs/
 evograd suite --candidates programs/ --out results/
