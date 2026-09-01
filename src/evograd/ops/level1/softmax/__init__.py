@@ -74,6 +74,7 @@ op = declare_op(
     dims=("rows", "cols"),
     args=(Active("x", "[rows, cols]"),),
     output=Active("y", "[rows, cols]"),
+    parameter_args=(),
     forward_semantics="Numerically stable softmax over the last dimension in fp32.",
     backward_semantics="Return dx = y * (dy - sum(dy*y, dim=-1, keepdim=True)).",
     correctness=_CORRECTNESS,

@@ -99,9 +99,15 @@ class CaseMetrics:
     baseline_backward_ms: float | None = None
     baseline_full_ms: float | None = None
     #: Bytes the candidate retained for its backward, and the bytes of the
-    #: declared memory inputs it was given.
+    #: declared memory inputs it was given. Tier 1 only: at the operator and
+    #: model tiers the saved state lives inside autograd's ``ctx``, where
+    #: nothing can read it, so those tiers report peak allocation instead.
     saved_bytes: float = 0.0
     input_bytes: float = 0.0
+    #: Peak CUDA allocation across one full step, for the tiers that can only
+    #: observe memory from the outside. ``None`` where it was not measured.
+    candidate_peak_memory_bytes: float | None = None
+    baseline_peak_memory_bytes: float | None = None
     error: str | None = None
 
     @staticmethod
@@ -310,6 +316,84 @@ def from_fair_report(
                 baseline_full_ms=float(reference("pair_full", "median_ms")),
                 saved_bytes=float(candidate("saved_state", "logical_saved_bytes")),
                 input_bytes=declared_input_bytes(op, case),
+            )
+        )
+    return BenchReport(
+        op=op_name,
+        tier=tier,
+        protocol=protocol,
+        baseline=baseline,
+        cases=tuple(cases),
+        environment=dict(report.get("environment") or {}),
+    )
+
+
+def from_tier2_report(
+    op_name: str,
+    report: dict[str, Any],
+    *,
+    baseline: str,
+    candidate: str = "candidate",
+    tier: str = TIER_OPERATOR,
+    protocol: str = PROTOCOL_FAIR,
+) -> BenchReport:
+    """Read a ``tier2.run_tier2`` report for one candidate/baseline pairing.
+
+    Tier 2 measures three or four providers at once, where tiers 1 and 3 measure
+    two. A suite row still compares exactly two, so the pairing is chosen here:
+    ``from_tier2_report(..., candidate="candidate", baseline="eager")`` and
+    ``baseline="liger"`` read the same measurement two ways, at no extra GPU
+    cost. Both names are required rather than inferred — guessing which provider
+    is the reference is how a report ends up quoting the wrong one plausibly.
+
+    A provider that failed correctness or died at one shape marks that case not
+    ok, so it contributes no speedup and still counts against coverage.
+    """
+    cases: list[CaseMetrics] = []
+    for case in report.get("cases") or []:
+        left = _require(case, "providers", candidate)
+        right = _require(case, "providers", baseline)
+        dims = dict(_require(case, "dims"))
+        dtype = str(_require(case, "dtype"))
+        if not (left.get("ok") and right.get("ok")):
+            failed = candidate if not left.get("ok") else baseline
+            reason = (left if failed == candidate else right).get("error")
+            cases.append(
+                CaseMetrics(
+                    dims=dims,
+                    dtype=dtype,
+                    ok=False,
+                    error=f"{failed}: {summarize_error(reason) or 'did not run'}",
+                )
+            )
+            continue
+        cases.append(
+            CaseMetrics(
+                dims=dims,
+                dtype=dtype,
+                ok=True,
+                candidate_forward_ms=float(
+                    _require(case, "providers", candidate, "forward", "median_ms")
+                ),
+                candidate_full_ms=float(
+                    _require(case, "providers", candidate, "full_step", "median_ms")
+                ),
+                baseline_forward_ms=float(
+                    _require(case, "providers", baseline, "forward", "median_ms")
+                ),
+                baseline_full_ms=float(
+                    _require(case, "providers", baseline, "full_step", "median_ms")
+                ),
+                # No backward-only region at this tier: the autograd engine does
+                # not expose one. `.backward()` is the whole step.
+                candidate_backward_ms=None,
+                baseline_backward_ms=None,
+                candidate_peak_memory_bytes=float(
+                    _require(case, "providers", candidate, "peak_memory_bytes")
+                ),
+                baseline_peak_memory_bytes=float(
+                    _require(case, "providers", baseline, "peak_memory_bytes")
+                ),
             )
         )
     return BenchReport(

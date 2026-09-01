@@ -83,6 +83,7 @@ op = declare_op(
         Inactive("eps", default=1e-6),
     ),
     output=Active("out", "[rows, cols]"),
+    parameter_args=("weight", "bias"),
     forward_semantics=(
         "For p in {3,2,1}, row-normalize x**p by its RMS, then return "
         "weight[0]*n3 + weight[1]*n2 + weight[2]*n1 + bias in x dtype."

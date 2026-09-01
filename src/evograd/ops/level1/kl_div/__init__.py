@@ -84,6 +84,7 @@ op = declare_op(
         Inactive("y_true", "[rows, cols]"),
     ),
     output=Active("loss", "[]"),
+    parameter_args=(),
     forward_semantics=(
         "Batchmean KL divergence where y_pred is log-probability and y_true is "
         "probability (log_target=False), using fp32 math."

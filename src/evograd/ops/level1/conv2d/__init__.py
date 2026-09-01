@@ -89,6 +89,7 @@ op = declare_op(
         Active("bias", "[O]"),
     ),
     output=Active("y", "[B, O, OH, OW]"),
+    parameter_args=("weight", "bias"),
     forward_semantics=(
         "Compute a dense groups=1, dilation=1 NCHW convolution with OIHW "
         "weights, fixed stride=1 and padding=0, followed by a "

@@ -135,6 +135,7 @@ op = declare_op(
         Inactive("eps", default=1e-5),
     ),
     output=Active("y", "[rows, hidden]"),
+    parameter_args=("weight", "bias"),
     forward_semantics='Do not call PyTorch autograd or PyTorch reference LayerNorm in the generated math. Forward must produce the same `y` as row-wise LayerNorm over the last dimension.',
     backward_semantics='Backward must consume only `dy`, `saved_tensors`, and `eps`. Return `dx` with `x` dtype, `dweight` with `weight` dtype, and `dbias` with `bias` dtype.',
     # Correctness retains all supported dtypes. Evolution performance follows

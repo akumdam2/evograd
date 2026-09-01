@@ -93,6 +93,7 @@ op = declare_op(
                note="trainable; broadcast over the N_seq (S) axis"),
     ),
     output=Active("o", "[B, S, N, H, D]"),
+    parameter_args=(),
     forward_semantics='Forward must produce the same output as: softmax(scale * Q @ K^T + pair_bias + res_mask) @ V, where scale = dim**-0.5 and Q/K/V are first transposed from [B, N_seq, N_res, Head, Dim] to [B, N_seq, Head, N_res, Dim]. The softmax is taken over the key residue axis in float32. Do not call PyTorch sdpa, flash_attn, or high-level attention APIs in the generated math.',
     backward_semantics='Backward must return (dq, dk, dv, d_pair_bias). dq/dk/dv have the same shape [B, N_seq, N_res, Head, Dim] and dtype as q/k/v. d_pair_bias has shape [B, 1, Head, N_res, N_res] and the same dtype as pair_bias. The AtenIR graph may produce a d_res_mask output — discard it, do not include it in the return tuple.',
     extra_constraints='Tensor layout notes:\n- q, k, v, do: [B, N_seq, N_res, Head, Dim], float16 or bfloat16\n- res_mask: [B, N_seq, 1, 1, N_res], float32, additive (0 = keep, large-negative = drop key)\n- pair_bias: [B, 1, Head, N_res, N_res], float32, broadcast over N_seq\n- output / do: [B, N_seq, N_res, Head, Dim]\n- Attention contracts over the N_res (key) axis, not Head or Dim.\n- pair_bias is shared across N_seq; d_pair_bias must sum/reduce over the N_seq axis.\n- Use float32 accumulation for all reductions (softmax, dV, dK, dQ).',

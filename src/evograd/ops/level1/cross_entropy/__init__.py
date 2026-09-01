@@ -84,6 +84,7 @@ op = declare_op(
         Inactive("target", "[rows]", dtype="int64"),
     ),
     output=Active("loss", "[]"),
+    parameter_args=(),
     forward_semantics=(
         "Mean-reduced hard-label cross entropy with ignore_index=-100, no label "
         "smoothing, z-loss, or class weights. Compute logsumexp in fp32."

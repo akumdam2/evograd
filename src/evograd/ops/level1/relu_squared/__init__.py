@@ -70,6 +70,7 @@ op = declare_op(
     dims=("rows", "cols"),
     args=(Active("x", "[rows, cols]"),),
     output=Active("out", "[rows, cols]"),
+    parameter_args=(),
     forward_semantics="Element-wise out = relu(x)^2.",
     backward_semantics="Return dx = dout * 2*x where x>0 and zero otherwise.",
     correctness=standard_correctness(),
