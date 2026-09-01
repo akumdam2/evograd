@@ -20,22 +20,51 @@ from evograd.bench.suite import (
 
 
 def _case(speedup, ok=True, dims=None):
+    """A harness case whose *times* encode the speedup.
+
+    Ratios are derived from measured times now, not read from a key, so every
+    precomputed speedup below is deliberately wrong. Two guards ride along:
+    the backward times are off by the same 10x the old fixture used, so the
+    defence against reading the asymmetric backward-only metric survives; and
+    the precomputed full-step key is off by 100x, so a regression to reading a
+    key instead of dividing fails loudly rather than agreeing by accident.
+    """
+    dims = dims or {"rows": 1024}
+    if not ok:
+        return {
+            "dims": dims,
+            "dtype": "bfloat16",
+            "ok": False,
+            "error": {"error_type": "CompileError", "error_message": "no such shape"},
+        }
     return {
-        "dims": dims or {"rows": 1024},
+        "dims": dims,
         "dtype": "bfloat16",
-        "ok": ok,
-        FULL_STEP_SPEEDUP_KEY: speedup,
-        # The asymmetric metric is deliberately present and deliberately wrong,
-        # so a test would fail if anything started reading it.
+        "ok": True,
+        "forward_ms": 0.5,
+        "backward_from_saved_ms": 1.0,
+        "raw_forward_backward_full_step_ms": 1.0,
+        "baseline_backward_ms": speedup * 10.0,
+        "baseline_raw_full_step_ms": speedup * 1.0,
+        "saved_bytes": 100.0,
+        "input_bytes": 200.0,
+        FULL_STEP_SPEEDUP_KEY: speedup * 100.0,
         "speedup_vs_baseline_backward": speedup * 10.0,
     }
 
 
 def _report(cases, saved=100.0, inputs=200.0, baseline="liger", error=None):
+    cases = [
+        {**case, "saved_bytes": saved, "input_bytes": inputs} if case["ok"] else case
+        for case in cases
+    ]
     return {
         "performance_baseline": baseline,
         "cases": cases,
-        "aggregate": {"saved_bytes": saved, "input_bytes": inputs},
+        # Deliberately wrong: memory is summed from the cases that ran. Reading
+        # a precomputed aggregate is how the fair adapter once published 1.000
+        # for every operator.
+        "aggregate": {"saved_bytes": -1.0, "input_bytes": -1.0},
         "error": error,
     }
 
