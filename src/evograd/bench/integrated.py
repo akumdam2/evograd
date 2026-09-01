@@ -13,8 +13,9 @@ gradient-reset policy, same saved-state semantics.
 The measured region is::
 
     model.zero_grad(set_to_none=True)
-    x.grad = None
-    y = model(x)
+    for activation in activations:
+        activation.grad = None
+    y = model(*activations)
     y.backward(dy)
 
 Gradient reset is inside it. Real training pays it every step, and the batched
@@ -34,25 +35,48 @@ import torch
 from torch import nn
 
 from evograd.opdecl.activity import Active, OpDecl, Workload
-from evograd.opdecl.bind import lookup_pair
+from evograd.opdecl.bind import bind, lookup_pair
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import resolve_runtime_forward
 
 
-def input_and_parameter_args(op: OpDecl) -> tuple[Active, tuple[Active, ...]]:
-    """Split the Active tensor args into the activation and the parameters.
+def activation_and_parameter_args(
+    op: OpDecl,
+) -> tuple[tuple[Active, ...], tuple[Active, ...]]:
+    """Split the Active tensor args into activations and parameters.
 
-    The first Active tensor is the layer's input; the rest are its weights. That
-    is the shape of every declaration this is used with (LayerNorm's
-    ``x, weight, bias``), and anything else raises rather than guessing.
+    Read from the declaration's ``parameter_args``, never inferred. This used to
+    guess -- "the first Active tensor is the layer's input, the rest are its
+    weights" -- which is true of LayerNorm's ``x, weight, bias`` and of nine
+    other declarations, and false of nine more. ``geglu(a, b)`` and
+    ``swiglu(a, b)`` take two activations and own no weights at all, so the
+    guess registered a tensor flowing through the network as an
+    ``nn.Parameter``; ``fused_add_rms_norm(x, r, weight)`` did the same to the
+    residual. Nothing raised. The module built fine and the training step it
+    measured was not the one the operator describes.
+
+    Both are ``Active`` because both take gradients, and at the direct-pair
+    level the distinction does not exist -- every argument is passed
+    positionally. It appears only here, where an ``nn.Module`` has to hold some
+    of them and be called with the rest, which is why the declaration carries it
+    explicitly.
     """
-    actives = [a for a in op.args if isinstance(a, Active) and getattr(a, "shape", None)]
-    if len(actives) < 2:
+    if op.parameter_args is None:
         raise ValueError(
-            f"{op.name}: integrated wrapping needs one input plus at least one "
-            f"parameter; got {[a.name for a in actives]}"
+            f"{op.name}: the integrated step wraps the operator as an nn.Module, "
+            "which holds parameters and takes activations as call arguments. The "
+            "declaration does not say which Active args are which -- set "
+            "`parameter_args` to the names of its parameters, or to `()` if it "
+            "has none."
         )
-    return actives[0], tuple(actives[1:])
+    parameters = tuple(a for a in op.active_args() if a.name in op.parameter_args)
+    activations = tuple(a for a in op.active_args() if a.name not in op.parameter_args)
+    if not activations:
+        raise ValueError(
+            f"{op.name}: parameter_args names every Active arg, leaving no "
+            "activation to call the module with"
+        )
+    return activations, parameters
 
 
 def scalar_kwargs(op: OpDecl) -> dict[str, Any]:
@@ -63,39 +87,20 @@ def scalar_kwargs(op: OpDecl) -> dict[str, Any]:
     }
 
 
-class _PairFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, forward_fn, backward_fn, scalars, x, *params):
-        y, saved = forward_fn(x, *params, **scalars)
-        saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
-        layout = tuple(torch.is_tensor(s) for s in saved)
-        ctx.save_for_backward(*(s for s, t in zip(saved, layout) if t))
-        ctx._layout = layout
-        ctx._others = tuple(s for s, t in zip(saved, layout) if not t)
-        ctx._backward_fn = backward_fn
-        ctx._scalars = scalars
-        return y
+class _LayerModule(nn.Module):
+    """Shared wrapping: declared parameters held, declared activations taken.
 
-    @staticmethod
-    def backward(ctx, dy):
-        tensors = iter(ctx.saved_tensors)
-        others = iter(ctx._others)
-        saved = tuple(next(tensors) if t else next(others) for t in ctx._layout)
-        grads = ctx._backward_fn(dy, saved, **ctx._scalars)
-        grads = (grads,) if torch.is_tensor(grads) else tuple(grads)
-        # forward_fn, backward_fn, scalars carry no gradient.
-        return (None, None, None) + grads
+    Subclasses differ only in the callable they route to. Both are called with
+    the activations in declared order and supply the parameters and scalars
+    themselves, so the eager baseline and the candidate are invoked through the
+    same shape of call.
+    """
 
-
-class CandidateModule(nn.Module):
-    """A candidate program's pair, wrapped as the layer it is meant to replace."""
-
-    def __init__(self, op: OpDecl, program_module, *, param_shapes: dict[str, tuple[int, ...]]):
+    def __init__(self, op: OpDecl, *, param_shapes: dict[str, tuple[int, ...]]):
         super().__init__()
         self.op_name = op.name
-        self._input_arg, self._param_args = input_and_parameter_args(op)
+        self._activation_args, self._param_args = activation_and_parameter_args(op)
         self._scalars = scalar_kwargs(op)
-        self._forward_fn, self._backward_fn = lookup_pair(op, program_module)
         for arg in self._param_args:
             self.register_parameter(
                 arg.name, nn.Parameter(torch.empty(param_shapes[arg.name]))
@@ -104,13 +109,35 @@ class CandidateModule(nn.Module):
     def parameter_list(self):
         return [getattr(self, arg.name) for arg in self._param_args]
 
-    def forward(self, x):
-        return _PairFunction.apply(
-            self._forward_fn, self._backward_fn, self._scalars, x, *self.parameter_list()
-        )
+    def _named(self, activations):
+        named = {a.name: v for a, v in zip(self._activation_args, activations)}
+        named.update({a.name: getattr(self, a.name) for a in self._param_args})
+        named.update(self._scalars)
+        return named
 
 
-class EagerModule(nn.Module):
+class CandidateModule(_LayerModule):
+    """A candidate program's pair, wrapped as the layer it is meant to replace.
+
+    The autograd wiring is ``opdecl.bind``, not a local ``autograd.Function``.
+    It routes the saved state through ``save_for_backward`` while keeping plain
+    values in a side layout, checks the returned gradient count against
+    ``op.grad_names()``, and places each gradient in its declared argument slot.
+    That last part is what a positional wrapper cannot do: once an operator's
+    activations are not its leading arguments -- ``af3_single_repr_block`` has
+    ``pair_bias`` in the middle -- gradient order and call order diverge.
+    """
+
+    def __init__(self, op: OpDecl, program_module, *, param_shapes: dict[str, tuple[int, ...]]):
+        super().__init__(op, param_shapes=param_shapes)
+        lookup_pair(op, program_module)  # fail here, not inside a timed region
+        self._call = bind(op, program_module)
+
+    def forward(self, *activations):
+        return self._call(**self._named(activations))
+
+
+class EagerModule(_LayerModule):
     """The declared production forward, differentiated by the autograd engine.
 
     This is the eager PyTorch baseline every ratio is taken against. It calls
@@ -119,31 +146,29 @@ class EagerModule(nn.Module):
     """
 
     def __init__(self, op: OpDecl, *, param_shapes: dict[str, tuple[int, ...]]):
-        super().__init__()
-        self.op_name = op.name
-        self._input_arg, self._param_args = input_and_parameter_args(op)
-        self._scalars = scalar_kwargs(op)
+        super().__init__(op, param_shapes=param_shapes)
+        self._arg_names = tuple(arg.name for arg in op.args)
         self._forward = resolve_runtime_forward(op)
-        for arg in self._param_args:
-            self.register_parameter(
-                arg.name, nn.Parameter(torch.empty(param_shapes[arg.name]))
-            )
 
-    def parameter_list(self):
-        return [getattr(self, arg.name) for arg in self._param_args]
-
-    def forward(self, x):
-        return self._forward(x, *self.parameter_list(), **self._scalars)
+    def forward(self, *activations):
+        named = self._named(activations)
+        return self._forward(*(named[name] for name in self._arg_names))
 
 
 def case_tensors(op: OpDecl, workload: Workload, *, device: str = "cuda"):
-    """Input, upstream gradient, and parameter values for one workload."""
+    """Activations, upstream gradient, and parameter values for one workload.
+
+    Returns a *list* of activations: an operator may take more than one --
+    ``geglu(a, b)`` takes two and owns no parameters at all.
+    """
     values = make_case_inputs(op, workload, device=device)
-    input_arg, param_args = input_and_parameter_args(op)
-    x = values[input_arg.name].detach().clone().requires_grad_(True)
+    activation_args, param_args = activation_and_parameter_args(op)
+    activations = [
+        values[a.name].detach().clone().requires_grad_(True) for a in activation_args
+    ]
     dy = values[op.upstream_grad_name].detach().clone()
     params = {a.name: values[a.name].detach().clone() for a in param_args}
-    return x, dy, params
+    return activations, dy, params
 
 
 def load_parameters(model: nn.Module, params: dict[str, torch.Tensor]) -> None:
@@ -152,13 +177,16 @@ def load_parameters(model: nn.Module, params: dict[str, torch.Tensor]) -> None:
             getattr(model, name).copy_(value)
 
 
-def make_training_step(model: nn.Module, x: torch.Tensor, dy: torch.Tensor) -> Callable[[], None]:
+def make_training_step(
+    model: nn.Module, activations: list[torch.Tensor], dy: torch.Tensor
+) -> Callable[[], None]:
     """THE timed region. Imported by both the fitness and the benchmark."""
 
     def step() -> None:
         model.zero_grad(set_to_none=True)
-        x.grad = None
-        y = model(x)
+        for activation in activations:
+            activation.grad = None
+        y = model(*activations)
         y.backward(dy)
 
     return step
@@ -227,12 +255,13 @@ def eager_step_ms(
     if key in cache:
         return float(cache[key])
 
-    x, dy, params = case_tensors(op, workload, device=device)
+    activations, dy, params = case_tensors(op, workload, device=device)
     model = EagerModule(op, param_shapes={k: tuple(v.shape) for k, v in params.items()})
-    model = model.to(device=device, dtype=x.dtype)
+    model = model.to(device=device, dtype=activations[0].dtype)
     load_parameters(model, params)
     result = batched_step_ms(
-        make_training_step(model, x, dy), warmup=warmup, steps=steps, blocks=blocks
+        make_training_step(model, activations, dy),
+        warmup=warmup, steps=steps, blocks=blocks,
     )
     value = float(result["median_ms"])
     if path:
@@ -255,14 +284,15 @@ def candidate_step_ms(
     steps: int = 200,
     blocks: int = 3,
 ) -> float:
-    x, dy, params = case_tensors(op, workload, device=device)
+    activations, dy, params = case_tensors(op, workload, device=device)
     model = CandidateModule(
         op, program_module, param_shapes={k: tuple(v.shape) for k, v in params.items()}
     )
-    model = model.to(device=device, dtype=x.dtype)
+    model = model.to(device=device, dtype=activations[0].dtype)
     load_parameters(model, params)
     result = batched_step_ms(
-        make_training_step(model, x, dy), warmup=warmup, steps=steps, blocks=blocks
+        make_training_step(model, activations, dy),
+        warmup=warmup, steps=steps, blocks=blocks,
     )
     return float(result["median_ms"])
 

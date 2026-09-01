@@ -133,5 +133,57 @@ class TestProviderComposition(unittest.TestCase):
         )
 
 
+class TestIntegratedUsesTheDeclaration(unittest.TestCase):
+    """`bench.integrated` wraps the same operators and must split them the same way.
+
+    It used to infer the split — "the first Active tensor is the input, the rest
+    are weights" — which is right for LayerNorm and wrong for nine other
+    declarations. Nothing raised: the module built, and the training step it
+    measured was not the one the operator describes.
+    """
+
+    def test_the_split_matches_parameter_args_for_every_operator(self):
+        from evograd.bench.integrated import activation_and_parameter_args
+        from evograd.ops import OPS
+
+        for name, op in OPS.items():
+            with self.subTest(op=name):
+                activations, parameters = activation_and_parameter_args(op)
+                self.assertEqual(
+                    tuple(a.name for a in parameters), tuple(op.parameter_args)
+                )
+                self.assertEqual(
+                    tuple(a.name for a in activations),
+                    tuple(
+                        a.name
+                        for a in op.active_args()
+                        if a.name not in op.parameter_args
+                    ),
+                )
+
+    def test_a_parameter_free_operator_keeps_both_activations(self):
+        from evograd.bench.integrated import activation_and_parameter_args
+
+        activations, parameters = activation_and_parameter_args(get_op("geglu"))
+        self.assertEqual([a.name for a in activations], ["a", "b"])
+        self.assertEqual(parameters, ())
+
+    def test_the_residual_is_an_activation_not_a_parameter(self):
+        from evograd.bench.integrated import activation_and_parameter_args
+
+        activations, parameters = activation_and_parameter_args(
+            get_op("fused_add_rms_norm")
+        )
+        self.assertEqual([a.name for a in activations], ["x", "r"])
+        self.assertEqual([a.name for a in parameters], ["weight"])
+
+    def test_an_undeclared_split_raises(self):
+        from evograd.bench.integrated import activation_and_parameter_args
+
+        with self.assertRaises(ValueError) as caught:
+            activation_and_parameter_args(_decl())
+        self.assertIn("parameter_args", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
