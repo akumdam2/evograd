@@ -1,4 +1,4 @@
-"""Tier 2: the operator measured the way training reaches it.
+"""Tier 2 (operator), `fair` protocol — the operator measured the way training reaches it.
 
 At tier 1 *you* are the autograd engine — you call ``forward_with_saved``, you
 hold the saved state in a local, you hand the upstream gradient back to
@@ -385,7 +385,7 @@ def identity_control_specs() -> tuple[ProviderSpec, ...]:
     Whatever speedup this reports is the driver's noise floor, not a result.
     It answers the one question a new benchmark cannot answer about itself:
     when the two things being compared are provably identical, does the
-    protocol say so? `fair.py` has had this since it was written; a tier
+    protocol say so? `tier1.py` has had this since it was written; a tier
     without it is a tier whose numbers nobody has calibrated.
     """
     return (
@@ -497,7 +497,7 @@ def run_tier2(
     check: bool = True,
 ) -> dict[str, Any]:
     _require_declared_split(op)
-    from evograd.bench.fair import environment_fingerprint
+    from evograd.bench.tier1 import environment_fingerprint
 
     cases = [
         run_case(

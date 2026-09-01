@@ -1,8 +1,22 @@
-"""Versioned final-report protocol with symmetric provider routing.
+"""Tier 1 (direct pair), `fair` protocol — the numbers that get published.
 
-This is deliberately separate from the low-overhead evolution harness: final
-reports remeasure both providers, clear L2 at each timed step entry, retain raw
-samples, and reject input mutation.
+Two axes run through ``bench/``, and it helps to keep them apart:
+
+    *tier*      what is measured — a kernel pair, an operator through the
+                autograd engine (``tier2``), a training step (tier 3, unbuilt)
+    *protocol*  how carefully — ``fast`` for the evolutionary search,
+                ``fair`` for anything anyone reads
+
+This file is tier 1 x fair. ``harness.py`` is tier 1 x fast: the same interface
+measured cheaply, because the search calls it thousands of times per run and
+caches the baseline across candidates. The two are not interchangeable and the
+suite records which produced a report.
+
+What ``fair`` buys, and why the split exists: both providers are remeasured
+every time (no baseline cache), L2 is cleared before each timed region, event
+recording is batched with a single synchronize, provider order is randomized in
+paired blocks, inputs are checked for mutation outside the timed regions, and
+speedups carry block-bootstrap confidence intervals.
 """
 
 from __future__ import annotations
@@ -19,7 +33,7 @@ from evograd.opdecl.inputs import make_case_inputs
 
 # The provider boundary and the input-mutation guards live in bench.provider so
 # that protocols other than this one can reuse them. Re-exported here because
-# `from evograd.bench.fair import PairProvider` is the spelling in existing
+# `from evograd.bench.tier1 import PairProvider` is the spelling in existing
 # callers, CLIs and tests.
 from evograd.bench.provider import (  # noqa: F401  (re-export)
     PairProvider,

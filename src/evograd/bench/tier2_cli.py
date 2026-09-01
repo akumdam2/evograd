@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.result_json).write_text(json.dumps(case), encoding="utf-8")
         return 0
 
-    from evograd.bench.fair import environment_fingerprint
+    from evograd.bench.tier1 import environment_fingerprint
     from evograd.bench.tier2 import (
         DEFAULT_REP_MS,
         DEFAULT_WARMUP_MS,

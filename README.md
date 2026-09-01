@@ -467,9 +467,129 @@ For iterating on one kernel, the final-report protocol is available directly,
 including its identity control:
 
 ```bash
-evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
-evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
+evograd tier1-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
+evograd tier1-bench --op rmsnorm --identity-control    # must report ~1.0x
 ```
+
+(`fair-bench` still works; it is the former name of the same command.)
+
+## Evaluation tiers
+
+Two independent axes decide how a kernel is measured, and conflating them is
+how a benchmark ends up quoting a number that answers a different question than
+the one asked.
+
+**Tier — what is measured.**
+
+| Tier | What runs | Module |
+| ---- | --------- | ------ |
+| 1 — pair | `y, saved = fwd(x, ...)` then `bwd(dy, saved)`, called directly | `bench/tier1.py` |
+| 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | `bench/tier2.py` |
+| 3 — model | a full training step, evolved kernels patched into a real model | not built |
+
+At tier 1 *you* are the autograd engine: you hold the saved state, you route the
+upstream gradient, you receive the gradients as return values. No training loop
+does that. It writes `loss.backward()` and PyTorch records a graph, keeps the
+saved state alive in its `ctx`, schedules the backward, and accumulates into
+`.grad`. That work is real and a training step pays it every iteration, which is
+why a tier-1 speedup is not a training speedup and must not be reported as one.
+Measured on a GH200, an evolved LayerNorm that is 1.4x faster than eager at tier
+1 is *slower* than eager at tier 2 until the rows reach five figures — the
+crossover is the result, and only tier 2 can see it.
+
+Tier 2 puts eager PyTorch, `torch.compile`, Liger and the evolved kernel behind
+one `nn.Module` interface so all four pay the same framework cost. It needs one
+thing tier 1 does not: `parameter_args` on the declaration, naming which
+`Active` arguments are module state rather than activations. Both are `Active`
+because both take gradients, and passing them positionally makes the question
+moot at tier 1 — it only arises once an `nn.Module` has to hold some of them.
+
+**Protocol — how carefully.** Orthogonal to tier. `fast` (`bench/harness.py`) is
+what the evolutionary search calls thousands of times per run; it caches the
+baseline across candidates and controls neither cache state nor provider order.
+`fair` (`bench/tier1.py`, `bench/tier2.py`) remeasures both providers every
+time, clears L2 before each timed region, randomizes provider order, rejects
+input mutation, and reports bootstrap confidence intervals. **Every published
+number comes from `fair`**, and every report records which protocol produced it.
+
+### Running each tier
+
+**Tier 1 — the kernel pair, called directly.**
+
+```bash
+# one operator against the strongest declared baseline
+evograd tier1-bench --op layernorm --candidate best.py --out results/t1.json
+
+# pick the comparison explicitly
+evograd tier1-bench --op layernorm --candidate best.py --baseline pytorch_autograd
+evograd tier1-bench --op matmul    --candidate best.py --baseline cublas_pair
+
+# narrow the sweep while iterating
+evograd tier1-bench --op layernorm --candidate best.py --dtype bfloat16 --suite tb_mixed
+
+# calibrate the harness: same provider both sides, must report ~1.0x
+evograd tier1-bench --op layernorm --identity-control
+
+# confidence intervals: --blocks resamples, so >1 is needed for a non-zero width
+evograd tier1-bench --op layernorm --candidate best.py --blocks 5
+```
+
+**Tier 2 — the operator through the autograd engine.** Compares four providers
+at once: eager, `torch.compile`, the declared pair baseline, and the candidate.
+
+```bash
+# all four providers, every shape in the default suite, one process per shape
+evograd tier2-bench --op layernorm --candidate best.py --out results/t2.json
+
+# the reference line: no candidate, just what a production library achieves
+evograd tier2-bench --op layernorm --out results/t2_reference.json
+
+# drop torch.compile (it dominates wall-clock when iterating)
+evograd tier2-bench --op layernorm --candidate best.py --no-compile
+
+# a different declared baseline, and a dtype subset
+evograd tier2-bench --op geglu --candidate best.py --baseline liger --dtype fp32
+
+# faster loops while debugging; --no-isolate keeps everything in one process,
+# so a hang takes the run down instead of one shape
+evograd tier2-bench --op layernorm --candidate best.py --rep-ms 100 --no-isolate
+
+# calibrate: eager against itself, must report ~1.0x
+evograd tier2-bench --op layernorm --identity-control
+```
+
+An operator is measurable at tier 2 only if its declaration sets
+`parameter_args`. All 25 built-ins do; a new or external declaration must say
+which `Active` args are module state, or `()` if it has none.
+
+**Tier 3 — a full training step.** Not built. See
+[docs/BENCHMARK.md](docs/BENCHMARK.md) for the shape it will take.
+
+**The cross-operator suite** runs tier 1 over every operator and pools the
+result by family, then by level:
+
+```bash
+evograd suite --candidate-baseline liger --out results/liger/   # the reference line
+evograd suite --candidate my_kernels/   --out results/mine/     # a submission
+evograd suite --candidate my_kernels/   --out results/quick/ --protocol fast
+```
+
+`--protocol fast` selects the evolution harness for iteration only; the report
+says so in its header, and published numbers must not come from it.
+
+**Running both tiers on the same operator** is the experiment that justifies
+having tiers at all — the gap between them is the framework cost a training
+loop pays, and the shape where the two curves cross is the deployment answer:
+
+```bash
+evograd tier1-bench --op layernorm --candidate best.py --out results/t1.json
+evograd tier2-bench --op layernorm --candidate best.py --out results/t2.json
+```
+
+One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
+`ops/level3/` and `OpDecl.level` are the **task** hierarchy — primitive, fused,
+architectural block — and have nothing to do with evaluation tiers. A level-1
+primitive measured at tier 2 is an ordinary thing to want.
 
 ## Correctness and evaluation
 

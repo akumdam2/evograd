@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import torch
 
-    from evograd.bench.fair import (
+    from evograd.bench.tier1 import (
         candidate_provider,
         declared_provider,
         environment_fingerprint,

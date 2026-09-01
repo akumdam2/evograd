@@ -34,7 +34,7 @@ def _load_module(path: Path):
 
 
 def _fair_bench(op_name: str, candidate: Path, suite: str, out: Path) -> dict:
-    from evograd.bench.fair import (
+    from evograd.bench.tier1 import (
         candidate_provider,
         liger_provider,
         run_fair_benchmarks,
@@ -94,7 +94,7 @@ def _paired_fair_bench(
     out: Path,
 ) -> dict:
     """Direct paired timing; speedup > 1 means MAP is faster than Explicit."""
-    from evograd.bench.fair import (
+    from evograd.bench.tier1 import (
         candidate_provider,
         renamed_provider,
         run_fair_benchmarks,

@@ -7,7 +7,8 @@
     evograd evolve --op rmsnorm --seed seed.py --output-dir ...
     evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
     evograd bench --op rmsnorm --candidate best.py
-    evograd fair-bench --op layernorm --candidate best.py
+    evograd tier1-bench --op layernorm --candidate best.py
+    evograd tier2-bench --op layernorm --candidate best.py
     evograd suite --candidates programs/ --out results/  # cross-operator report
 """
 
@@ -161,8 +162,14 @@ def _bench(argv: list[str]) -> int:
     return main(argv)
 
 
-def _fair_bench(argv: list[str]) -> int:
-    from evograd.bench.fair_cli import main
+def _tier1_bench(argv: list[str]) -> int:
+    from evograd.bench.tier1_cli import main
+
+    return main(argv)
+
+
+def _tier2_bench(argv: list[str]) -> int:
+    from evograd.bench.tier2_cli import main
 
     return main(argv)
 
@@ -285,7 +292,11 @@ _COMMANDS = {
     "evolve": _evolve,
     "run": _run,
     "bench": _bench,
-    "fair-bench": _fair_bench,
+    "tier1-bench": _tier1_bench,
+    "tier2-bench": _tier2_bench,
+    # The tier vocabulary postdates this command; the old name still works
+    # because it is in published docs and in people's shell history.
+    "fair-bench": _tier1_bench,
     "suite": _suite,
     "dispatch": _dispatch,
     "ncu": _ncu,

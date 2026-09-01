@@ -15,7 +15,7 @@ autograd all reduce to it, after which the protocol driving them cannot tell
 them apart — which is the property that makes the division fair.
 
 This module holds no timing code on purpose. It was extracted from
-``bench.fair`` so that protocols other than the level-1 pair benchmark can
+``bench.tier1`` so that protocols other than the level-1 pair benchmark can
 reuse the boundary and the input-mutation guards instead of restating them;
 ``fair`` re-exports every name for existing callers.
 """

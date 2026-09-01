@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.blocks < 1:
         parser.error("--blocks must be >= 1")
 
-    from evograd.bench.fair import (
+    from evograd.bench.tier1 import (
         candidate_provider,
         declared_provider,
         pytorch_autograd_provider,

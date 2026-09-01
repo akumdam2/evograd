@@ -267,12 +267,12 @@ class TestBaselineSchema(unittest.TestCase):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestFairBenchmarkPrimitives(unittest.TestCase):
     def test_final_protocol_has_stable_generic_version(self):
-        from evograd.bench.fair import PROTOCOL_VERSION
+        from evograd.bench.tier1 import PROTOCOL_VERSION
 
         self.assertEqual(PROTOCOL_VERSION, "evograd-final-runtime-v1")
 
     def test_pytorch_autograd_provider_matches_oracle(self):
-        from evograd.bench.fair import pytorch_autograd_provider
+        from evograd.bench.tier1 import pytorch_autograd_provider
         from evograd.opdecl.inputs import make_case_inputs
         from evograd.opdecl.oracle import oracle
         from evograd.ops import get_op
@@ -297,7 +297,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
         self.assertEqual(provider.adapter_kind, "pytorch_eager_autograd")
 
     def test_mutation_guard_accepts_unchanged_and_rejects_in_place_write(self):
-        from evograd.bench.fair import assert_tensors_unchanged, snapshot_tensors
+        from evograd.bench.tier1 import assert_tensors_unchanged, snapshot_tensors
 
         values = {"x": torch.arange(4.0), "eps": 1e-5}
         snapshots = snapshot_tensors(values)
@@ -307,7 +307,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
             assert_tensors_unchanged(values, snapshots, provider="candidate")
 
     def test_identity_provider_reuses_exact_callables(self):
-        from evograd.bench.fair import PairProvider, renamed_provider
+        from evograd.bench.tier1 import PairProvider, renamed_provider
 
         def forward(values):
             return values["x"], (values["x"],)
@@ -325,7 +325,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
         self.assertEqual(identity.adapter_kind, baseline.adapter_kind)
 
     def test_saved_state_report_distinguishes_alias_and_new_storage(self):
-        from evograd.bench.fair import _saved_state_report
+        from evograd.bench.tier1 import _saved_state_report
 
         x = torch.arange(8.0)
         report = _saved_state_report((x[:4], x.clone()), {"x": x})
