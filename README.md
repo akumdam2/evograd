@@ -473,9 +473,31 @@ Available scoring policies are:
 | `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. The memory penalty and the worst-case guard are
-what stop the search from winning on one shape or by caching everything;
-`--scoring` selects another.
+The default is `speed_memory`. Seventeen declarations expose reviewed optional
+Liger baselines. `--baseline auto` selects Liger when its adapter and
+`liger-kernel` are available, otherwise PyTorch autograd; an explicit
+`--baseline liger` hard-fails rather than silently changing the comparison:
+
+```bash
+pip install -e ".[baselines]"
+evograd bench --op layernorm --candidate best.py --baseline liger
+```
+
+Two built-in `torch.compile` baselines are available for every operator without
+any declaration support — `torch_compile` and `torch_compile_max_autotune`:
+
+```bash
+evograd bench --op layernorm --candidate best.py --baseline torch_compile
+```
+
+They matter for Pipeline D. `pytorch_autograd` measures _eager_ PyTorch, while a
+D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
+itself would emit — so beating eager is expected and says little about the
+kernel. Both compiled baselines are checked against the eager oracle before
+their timings are used, and they are never selected by `--baseline auto`: each
+benchmark case compiles a shape specialist, which costs real wall time on the
+first run (it is absorbed by warmup and by the persistent baseline timing
+cache).
 
 ### NCU-guided refinement
 
@@ -533,20 +555,20 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 2 — fused operators
 
-| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
-| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
-| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                      |
-| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                      |
-| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                       |
-| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
-| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
+| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline       |
+| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | -------------------- |
+| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                  |
+| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                  |
+| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                   |
+| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial) |
+| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                  |
 
 ### Level 3 — architectural blocks
 
 | Operator                | Family        | Forward                                                | Gradients |
 | ----------------------- | ------------- | ------------------------------------------------------ | --------: |
-| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)    | 10        |
-| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias  | 13        |
+| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)   |        10 |
+| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias |        13 |
 
 Both blocks compute their correctness reference in float32 while the candidate
 runs in bfloat16 (`reference_dtype`). Composing ten operators makes a
