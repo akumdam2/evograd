@@ -263,6 +263,29 @@ LLAMA_3_8B = ModelConfig(
     source="meta-llama/Meta-Llama-3-8B; Liger benchmark/scripts/benchmark_model_configs.py",
 )
 
+#: Llama-3-8B's architecture with four layers instead of thirty-two.
+#:
+#: For measuring what a kernel does to a training step, layer count is the one
+#: dimension that can be cut without changing the answer: every per-layer effect
+#: scales linearly in it, and the loss kernel's memory — a ``[tokens, vocab]``
+#: logits tensor at 128256 vocab — does not depend on it at all. Every other
+#: field is Llama-3-8B's, so the shapes each kernel sees are the real ones.
+#:
+#: Use it to iterate. Report from ``LLAMA_3_8B``.
+LLAMA_3_8B_4L = ModelConfig(
+    name="llama_3_8b_4l",
+    hidden=LLAMA_3_8B.hidden,
+    intermediate=LLAMA_3_8B.intermediate,
+    n_heads=LLAMA_3_8B.n_heads,
+    n_kv_heads=LLAMA_3_8B.n_kv_heads,
+    head_dim=LLAMA_3_8B.head_dim,
+    vocab=LLAMA_3_8B.vocab,
+    layers=4,
+    rope_theta=LLAMA_3_8B.rope_theta,
+    dtype=LLAMA_3_8B.dtype,
+    source="LLAMA_3_8B with layers=4; iteration config, not a published model",
+)
+
 ALPHAFOLD3 = AlphaFoldConfig(
     name="alphafold3",
     c_s=384,
