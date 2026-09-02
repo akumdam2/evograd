@@ -502,18 +502,8 @@ For iterating on one kernel, the final-report protocol is available directly,
 including its identity control:
 
 ```bash
-<<<<<<< HEAD
 evograd tier1-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
 evograd tier1-bench --op rmsnorm --identity-control    # must report ~1.0x
-=======
-evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
-evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
-
-# static torch.compile specialist versus an evolved pair, across 2^13..2^27
-# total elements at hidden=1024; compilation is outside the timed regions
-evograd fair-bench --op layernorm --candidate my_kernels/layernorm.py \
-    --baseline torch_compile --suite tb_sweep_13_27
->>>>>>> main
 ```
 
 (`fair-bench` still works; it is the former name of the same command.)
@@ -526,20 +516,20 @@ the one asked.
 
 **Tier — what is measured.**
 
-| Tier | What runs | Module |
-| ---- | --------- | ------ |
-| 1 — pair | `y, saved = fwd(x, ...)` then `bwd(dy, saved)`, called directly | `bench/tier1.py` |
+| Tier         | What runs                                                         | Module           |
+| ------------ | ----------------------------------------------------------------- | ---------------- |
+| 1 — pair     | `y, saved = fwd(x, ...)` then `bwd(dy, saved)`, called directly   | `bench/tier1.py` |
 | 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | `bench/tier2.py` |
-| 3 — model | a full training step, evolved kernels patched into a real model | not built |
+| 3 — model    | a full training step, evolved kernels patched into a real model   | not built        |
 
-At tier 1 *you* are the autograd engine: you hold the saved state, you route the
+At tier 1 _you_ are the autograd engine: you hold the saved state, you route the
 upstream gradient, you receive the gradients as return values. No training loop
 does that. It writes `loss.backward()` and PyTorch records a graph, keeps the
 saved state alive in its `ctx`, schedules the backward, and accumulates into
 `.grad`. That work is real and a training step pays it every iteration, which is
 why a tier-1 speedup is not a training speedup and must not be reported as one.
 Measured on a GH200, an evolved LayerNorm that is 1.4x faster than eager at tier
-1 is *slower* than eager at tier 2 until the rows reach five figures — the
+1 is _slower_ than eager at tier 2 until the rows reach five figures — the
 crossover is the result, and only tier 2 can see it.
 
 Tier 2 puts eager PyTorch, `torch.compile`, Liger and the evolved kernel behind
@@ -686,7 +676,7 @@ any declaration support — `torch_compile` and `torch_compile_max_autotune`:
 evograd bench --op layernorm --candidate best.py --baseline torch_compile
 ```
 
-They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
+They matter for Pipeline D. `pytorch_autograd` measures _eager_ PyTorch, while a
 D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
 itself would emit — so beating eager is expected and says little about the
 kernel. Both compiled baselines are checked against the eager oracle before
@@ -751,20 +741,20 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 2 — fused operators
 
-| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
-| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
-| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                      |
-| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                      |
-| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                       |
-| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
-| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
+| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline       |
+| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | -------------------- |
+| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                  |
+| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                  |
+| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                   |
+| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial) |
+| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                  |
 
 ### Level 3 — architectural blocks
 
 | Operator                | Family        | Forward                                                | Gradients |
 | ----------------------- | ------------- | ------------------------------------------------------ | --------: |
-| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)    | 10        |
-| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias  | 13        |
+| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)   |        10 |
+| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias |        13 |
 
 Both blocks compute their correctness reference in float32 while the candidate
 runs in bfloat16 (`reference_dtype`). Composing ten operators makes a
