@@ -9,6 +9,7 @@
     evograd bench --op rmsnorm --candidate best.py
     evograd tier1-bench --op layernorm --candidate best.py
     evograd tier2-bench --op layernorm --candidate best.py
+    evograd tier3-bench --model llama_3_8b_4l
     evograd suite --candidates programs/ --out results/  # cross-operator report
 """
 
@@ -174,6 +175,12 @@ def _tier2_bench(argv: list[str]) -> int:
     return main(argv)
 
 
+def _tier3_bench(argv: list[str]) -> int:
+    from evograd.bench.tier3_cli import main
+
+    return main(argv)
+
+
 def _run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="evograd run")
     parser.add_argument("--op", required=True)
@@ -294,6 +301,7 @@ _COMMANDS = {
     "bench": _bench,
     "tier1-bench": _tier1_bench,
     "tier2-bench": _tier2_bench,
+    "tier3-bench": _tier3_bench,
     # The tier vocabulary postdates this command; the old name still works
     # because it is in published docs and in people's shell history.
     "fair-bench": _tier1_bench,

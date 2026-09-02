@@ -50,6 +50,11 @@ def _apply_rope(x, cos, sin):
     )
 
 
+def _default_swiglu(gate, up):
+    """SiLU in float32: the activation is where a bfloat16 MLP loses the most."""
+    return (F.silu(gate.float()) * up.float()).to(gate.dtype)
+
+
 def _llama3_decoder_layer(
     rms_norm,
     x,
@@ -65,6 +70,7 @@ def _llama3_decoder_layer(
     cos,
     sin,
     eps=1e-5,
+    swiglu=_default_swiglu,
 ):
     """One decoder layer. ``x`` is ``[batch, tokens, hidden]``.
 
@@ -112,9 +118,12 @@ def _llama3_decoder_layer(
     h = rms_norm(x, post_norm_weight, eps)
     gate = F.linear(h, gate_weight)
     up = F.linear(h, up_weight)
-    # SiLU in float32: the activation is where a bfloat16 MLP loses the most.
-    swiglu = (F.silu(gate.float()) * up.float()).to(h.dtype)
-    return x + F.linear(swiglu, down_weight)
+    # The activation is injected for the same reason `rms_norm` is: tier 3
+    # replaces it with an evolved kernel, and forking the body to do that would
+    # let the patched and eager paths compute different mathematics. The default
+    # is the definition, so every existing caller is unaffected.
+    activated = swiglu(gate, up)
+    return x + F.linear(activated, down_weight)
 
 
 def _rms_norm_fused(x, weight, eps):

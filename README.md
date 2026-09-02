@@ -432,232 +432,52 @@ candidates that passed verification independently. The seed being invalid does
 not by itself invalidate a downstream result — but it does mean the search
 started from a program that could not run.
 
-## Running the benchmark
+## Evaluation
 
-The benchmark is specified in [docs/BENCHMARK.md](docs/BENCHMARK.md): 25
-operators over three levels, 191 timed configurations, every shape traceable to
-a layer of a real model. This section is the operational half — how to run it
-and how to submit something to it.
+A kernel is measured at three tiers, and they answer different questions:
 
-### The reference line
+| Tier | What runs | Answers |
+| ---- | --------- | ------- |
+| 1 — pair | `fwd(x, ...)` then `bwd(dy, saved)`, called directly | how fast is the kernel |
+| 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | what does it cost when PyTorch calls it |
+| 3 — model | a full training step with the kernel patched in | does any of it reach training throughput |
 
-Before measuring anything of your own, reproduce the reference line. Any
-reviewed pair baseline can stand in as the candidate, which answers "what does a
-hand-written production kernel achieve here" without needing a generated program
-for all 25 operators:
-
-```bash
-evograd suite --candidate-baseline liger --out results/liger/
-```
-
-That times Liger-Kernel against eager PyTorch on every operator declaring a
-`liger` adapter, and writes `suite_report.json` plus `SUITE_RESULTS.md`. The
-report states what it measured in its first line — a suite result is unreadable
-without knowing whether the thing being timed was a production library or a
-generated kernel.
-
-Operators with no such baseline are reported as **uncovered**, never skipped:
-"we did not run it" and "it has no speedup" are different claims.
-
-### Submitting a kernel
-
-A submission is one Python module per operator implementing that operator's
-autograd pair (see [Candidate API](#candidate-api) for the two function
-signatures). Lay them out by operator name:
-
-```text
-my_kernels/
-├── layernorm.py           # or my_kernels/layernorm/anything.py
-├── rmsnorm.py
-└── softmax.py
-```
-
-Then run whichever subset you are claiming:
-
-```bash
-# everything you have
-evograd suite --candidates my_kernels/ --out results/mine/
-
-# one level, or one operator
-evograd suite --candidates my_kernels/ --level 1 --out results/mine/
-evograd suite --candidates my_kernels/ --op rmsnorm --out results/mine/
-```
-
-Rules that follow from the specification rather than from this tool:
-
-- **Correctness is a hard gate.** A candidate that fails any correctness case is
-  not timed at all. Check yours first, on CPU if you like:
-  `evograd verify --op rmsnorm --device cpu my_kernels/rmsnorm.py`
-- **Partial submissions are legitimate**, and are reported as reduced coverage
-  rather than as a smaller benchmark. Coverage is never folded into speedup.
-- **You choose what the forward saves.** That choice is measured — saved-state
-  bytes are reported alongside latency, because trading recomputation against
-  retained memory is the thing this benchmark exists to expose.
-- **Inputs must not be mutated.** The final-report protocol checks tensor
-  content, shape, stride, dtype, and storage offset outside the timed regions.
-
-### Single-operator measurement
-
-For iterating on one kernel, the final-report protocol is available directly,
-including its identity control:
-
-```bash
-<<<<<<< HEAD
-evograd tier1-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
-evograd tier1-bench --op rmsnorm --identity-control    # must report ~1.0x
-=======
-evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
-evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
-
-# static torch.compile specialist versus an evolved pair, across 2^13..2^27
-# total elements at hidden=1024; compilation is outside the timed regions
-evograd fair-bench --op layernorm --candidate my_kernels/layernorm.py \
-    --baseline torch_compile --suite tb_sweep_13_27
->>>>>>> main
-```
-
-(`fair-bench` still works; it is the former name of the same command.)
-
-## Evaluation tiers
-
-Two independent axes decide how a kernel is measured, and conflating them is
-how a benchmark ends up quoting a number that answers a different question than
-the one asked.
-
-**Tier — what is measured.**
-
-| Tier | What runs | Module |
-| ---- | --------- | ------ |
-| 1 — pair | `y, saved = fwd(x, ...)` then `bwd(dy, saved)`, called directly | `bench/tier1.py` |
-| 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | `bench/tier2.py` |
-| 3 — model | a full training step, evolved kernels patched into a real model | not built |
-
-At tier 1 *you* are the autograd engine: you hold the saved state, you route the
-upstream gradient, you receive the gradients as return values. No training loop
-does that. It writes `loss.backward()` and PyTorch records a graph, keeps the
-saved state alive in its `ctx`, schedules the backward, and accumulates into
-`.grad`. That work is real and a training step pays it every iteration, which is
-why a tier-1 speedup is not a training speedup and must not be reported as one.
-Measured on a GH200, an evolved LayerNorm that is 1.4x faster than eager at tier
-1 is *slower* than eager at tier 2 until the rows reach five figures — the
-crossover is the result, and only tier 2 can see it.
-
-Tier 2 puts eager PyTorch, `torch.compile`, Liger and the evolved kernel behind
-one `nn.Module` interface so all four pay the same framework cost. It needs one
-thing tier 1 does not: `parameter_args` on the declaration, naming which
-`Active` arguments are module state rather than activations. Both are `Active`
-because both take gradients, and passing them positionally makes the question
-moot at tier 1 — it only arises once an `nn.Module` has to hold some of them.
-
-**Protocol — how carefully.** Orthogonal to tier. `fast` (`bench/harness.py`) is
-what the evolutionary search calls thousands of times per run; it caches the
-baseline across candidates and controls neither cache state nor provider order.
-`fair` (`bench/tier1.py`, `bench/tier2.py`) remeasures both providers every
-time, clears L2 before each timed region, randomizes provider order, rejects
-input mutation, and reports bootstrap confidence intervals. **Every published
-number comes from `fair`**, and every report records which protocol produced it.
-
-### Running each tier
-
-**Tier 1 — the kernel pair, called directly.**
-
-```bash
-# one operator against the strongest declared baseline
-evograd tier1-bench --op layernorm --candidate best.py --out results/t1.json
-
-# pick the comparison explicitly
-evograd tier1-bench --op layernorm --candidate best.py --baseline pytorch_autograd
-evograd tier1-bench --op matmul    --candidate best.py --baseline cublas_pair
-
-# narrow the sweep while iterating
-evograd tier1-bench --op layernorm --candidate best.py --dtype bfloat16 --suite tb_mixed
-
-# calibrate the harness: same provider both sides, must report ~1.0x
-evograd tier1-bench --op layernorm --identity-control
-
-# confidence intervals: --blocks resamples, so >1 is needed for a non-zero width
-evograd tier1-bench --op layernorm --candidate best.py --blocks 5
-```
-
-**Tier 2 — the operator through the autograd engine.** Compares four providers
-at once: eager, `torch.compile`, the declared pair baseline, and the candidate.
-
-```bash
-# all four providers, every shape in the default suite, one process per shape
-evograd tier2-bench --op layernorm --candidate best.py --out results/t2.json
-
-# the reference line: no candidate, just what a production library achieves
-evograd tier2-bench --op layernorm --out results/t2_reference.json
-
-# drop torch.compile (it dominates wall-clock when iterating)
-evograd tier2-bench --op layernorm --candidate best.py --no-compile
-
-# a different declared baseline, and a dtype subset
-evograd tier2-bench --op geglu --candidate best.py --baseline liger --dtype fp32
-
-# faster loops while debugging; --no-isolate keeps everything in one process,
-# so a hang takes the run down instead of one shape
-evograd tier2-bench --op layernorm --candidate best.py --rep-ms 100 --no-isolate
-
-# calibrate: eager against itself, must report ~1.0x
-evograd tier2-bench --op layernorm --identity-control
-```
-
-An operator is measurable at tier 2 only if its declaration sets
-`parameter_args`. All 25 built-ins do; a new or external declaration must say
-which `Active` args are module state, or `()` if it has none.
-
-**Tier 3 — a full training step.** Not built. See
-[docs/BENCHMARK.md](docs/BENCHMARK.md) for the shape it will take.
-
-**The cross-operator suite** runs tier 1 over every operator and pools the
-result by family, then by level:
+Orthogonally, two protocols: `fast` for the evolutionary search, `fair` for
+anything anyone reads. **Every published number comes from `fair`**, and every
+report records which produced it.
 
 ```bash
 evograd suite --candidate-baseline liger --out results/liger/   # the reference line
-evograd suite --candidate my_kernels/   --out results/mine/     # a submission
-evograd suite --candidate my_kernels/   --out results/quick/ --protocol fast
+evograd tier1-bench --op layernorm --candidate best.py          # one kernel
+evograd tier2-bench --op layernorm --candidate best.py          # through autograd
+evograd tier3-bench --candidate rms_norm=best.py                # in a model
 ```
 
-`--protocol fast` selects the evolution harness for iteration only; the report
-says so in its header, and published numbers must not come from it.
+Correctness is a hard gate at tiers 1 and 2 — candidates are checked against an
+autograd oracle derived from the declaration, and only correct ones are timed.
+**Tier 3 has no such gate yet**; it reports loss agreement rather than enforcing
+it, so verify before you measure there.
 
-**Running both tiers on the same operator** is the experiment that justifies
-having tiers at all — the gap between them is the framework cost a training
-loop pays, and the shape where the two curves cross is the deployment answer:
-
-```bash
-evograd tier1-bench --op layernorm --candidate best.py --out results/t1.json
-evograd tier2-bench --op layernorm --candidate best.py --out results/t2.json
-```
+Full detail — the protocols, the identity controls, submitting a kernel,
+bringing your own model, and the known gaps — is in
+[src/evograd/bench/README.md](src/evograd/bench/README.md).
 
 One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
 `ops/level3/` and `OpDecl.level` are the **task** hierarchy — primitive, fused,
 architectural block — and have nothing to do with evaluation tiers. A level-1
 primitive measured at tier 2 is an ordinary thing to want.
 
-## Correctness and evaluation
+## Evolution
 
-For every declared correctness workload, evograd:
+OpenEvolve mutates a seed program; evograd supplies the operator-specific
+environment around it — the correctness gate, the benchmark, and the single
+number the search maximizes.
 
-1. Constructs deterministic inputs.
-2. Runs the trusted forward reference.
-3. Computes expected gradients with `torch.autograd.grad` for exactly the
-   `Active` inputs.
-4. Runs the candidate forward and backward.
-5. Checks forward and gradient values, shapes, and dtypes with the declared
-   per-dtype and per-output tolerances.
-
-Only candidates that pass every correctness case are benchmarked. The harness
-reports candidate forward latency, backward-from-saved latency, forward plus
-backward latency, autograd-bound full-step latency, baseline latency, and saved
-tensor bytes. After correctness it also makes one untimed call at every selected
-benchmark shape, so a shape-dependent deadlock is rejected before timing.
-
-Every evaluation runs in a killable child process. A candidate that hangs or
-corrupts its CUDA context is terminated without poisoning the OpenEvolve
-worker. Baseline timings are cached persistently by operator, baseline, GPU,
-timing settings, dtype, and dimensions; the candidate is always re-timed.
+That number comes from the tier-1 `fast` protocol (see
+[the evaluation guide](src/evograd/bench/README.md)), collapsed to a scalar by a
+scoring policy. Correctness is a hard gate before it: only candidates that pass
+every declared workload are timed at all, and a failure scores far below any
+working kernel rather than being ranked among them.
 
 Available scoring policies are:
 
@@ -669,31 +489,9 @@ Available scoring policies are:
 | `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. Seventeen declarations expose reviewed optional
-Liger baselines. `--baseline auto` selects Liger when its adapter and
-`liger-kernel` are available, otherwise PyTorch autograd; an explicit
-`--baseline liger` hard-fails rather than silently changing the comparison:
-
-```bash
-pip install -e ".[baselines]"
-evograd bench --op layernorm --candidate best.py --baseline liger
-```
-
-Two built-in `torch.compile` baselines are available for every operator without
-any declaration support — `torch_compile` and `torch_compile_max_autotune`:
-
-```bash
-evograd bench --op layernorm --candidate best.py --baseline torch_compile
-```
-
-They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
-D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
-itself would emit — so beating eager is expected and says little about the
-kernel. Both compiled baselines are checked against the eager oracle before
-their timings are used, and they are never selected by `--baseline auto`: each
-benchmark case compiles a shape specialist, which costs real wall time on the
-first run (it is absorbed by warmup and by the persistent baseline timing
-cache).
+The default is `speed_memory`. The memory penalty and the worst-case guard are
+what stop the search from winning on one shape or by caching everything;
+`--scoring` selects another.
 
 ### NCU-guided refinement
 
