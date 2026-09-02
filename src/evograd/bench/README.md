@@ -50,6 +50,28 @@ generated kernel.
 Operators with no such baseline are reported as **uncovered**, never skipped:
 "we did not run it" and "it has no speedup" are different claims.
 
+### What the reports contain
+
+`evograd suite` writes `suite_report.json` and `SUITE_RESULTS.md` with
+per-operator, per-level, and overall full-step speedup, coverage, and saved
+memory. Restrict the scope with `--level` or `--op`:
+
+```bash
+evograd suite --candidates programs/ --out results/
+evograd suite --level 1 --level 2 --out results/
+evograd suite --candidates programs/ --op rmsnorm --out results/
+```
+
+`evograd bench` exits non-zero when anything fails and prints the failure to
+stderr. With `--out` the report is written either way, because a run that died
+partway is still evidence: `report["ok"]` is the verdict, `report["error"]`
+holds a setup failure (unknown op, a candidate that raises on import, a
+`--dtype` the declared benchmark suite has no cases for), and
+`report["cases"][i]["error"]` holds a per-workload failure. Cases that did run
+are still aggregated — an operator that works on four shapes out of five is not
+an operator with four shapes' worth of speedup, it is one with 80% coverage, and
+the report says so rather than averaging the gap away.
+
 ### Submitting a kernel
 
 A submission is one Python module per operator implementing that operator's

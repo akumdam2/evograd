@@ -126,31 +126,15 @@ evograd evolve \
 it, OpenEvolve returns only the best program and the rest of the population is
 unrecoverable.
 
-Benchmark the best candidate:
+Measure it — one operator, then the whole suite:
 
 ```bash
-evograd bench \
-    --op layernorm \
-    --candidate /tmp/evolve_layernorm/evolved_best_program.py
-```
-
-Run the whole benchmark suite and get the cross-operator report:
-
-```bash
+evograd tier1-bench --op layernorm --candidate /tmp/evolve_layernorm/evolved_best_program.py
 evograd suite --candidates programs/ --out results/
-evograd suite --level 1 --level 2 --out results/   # restrict to a level
 ```
 
-This writes `suite_report.json` and `SUITE_RESULTS.md` with per-operator,
-per-level, and overall full-step speedup, coverage, and saved memory. See
-[the benchmark specification](docs/BENCHMARK.md) for what those numbers mean.
-
-`bench` exits non-zero when anything fails and prints the failure to stderr.
-With `--out`, the report is written either way: `report["ok"]` is the verdict,
-`report["error"]` holds a setup failure (unknown op, candidate that raises on
-import, a `--dtype` the declared benchmark suite has no cases for), and
-`report["cases"][i]["error"]` holds a per-workload failure. Cases that did run
-are still aggregated.
+Three tiers, two protocols, correctness gates, submitting a kernel, and what the
+reports contain: [the evaluation guide](src/evograd/bench/README.md).
 
 ## One-call Python API
 
