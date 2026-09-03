@@ -1,22 +1,26 @@
 # The evograd benchmark
 
 A benchmark for generated **training** kernels: correctness, speed, and the
-memory a forward pass retains for its backward. Every task is a forward/backward
-pair, not a forward alone, and every timed shape is traceable to a layer of a
-real model.
+memory a forward pass retains for its backward. Every level-1..3 task is a
+forward/backward pair, not a forward alone; the level-4 tasks are whole-model
+training steps the pairs get patched into; and every timed shape is traceable
+to a layer of a real model.
 
-25 operators across three levels, 191 timed configurations.
+25 operators across three levels, 191 timed configurations, plus one
+whole-model workload at level 4.
 
 ## Task hierarchy
 
-| Level | What it is | Operators |
+| Level | What it is | Tasks |
 | ---: | --- | ---: |
 | 1 | **Primitive operators** — one mathematical operation, plus the saved state its backward needs | 18 |
 | 2 | **Fused operators** — compositions that occur in real training, evaluated on whether an implementation can optimize across the operator boundary while preserving autograd semantics | 5 |
 | 3 | **Architectural blocks** — a whole decoder layer or protein-model block, where the saved-state decision becomes a property of the block rather than of one kernel | 2 |
+| 4 | **Whole-model workloads** — a complete training step with evolved kernels patched into a real model, measuring whether local speedups survive integration | 1 |
 
-Levels are declared, not inferred: `OpDecl.level` and `OpDecl.family`. Family
-exists for aggregation — see [Metrics](#metrics).
+Levels are declared, not inferred: `OpDecl.level` and `OpDecl.family` for
+levels 1–3, `WorkloadDecl` for level 4. Family exists for aggregation — see
+[Metrics](#metrics).
 
 ### Level 1 — primitives
 
@@ -49,6 +53,37 @@ update only** — a full pairformer block maps `(single, pair) → (single', pai
 and cannot be declared with one output. The pair path is still exercised in the
 backward, because `pair_bias` is a differentiable input and `d_pair_bias`
 reduces over the MSA axis; the triangle-multiplicative pair update is not.
+
+### Level 4 — whole-model workloads
+
+- **`alphafold3`** — one full AlphaFold3 training step: forward to the model's
+  own combined loss, backward, optimizer step. The model is
+  [alphafold3-pytorch](https://pypi.org/project/alphafold3-pytorch/) — the
+  implementation MegaFold builds on, and MegaFold is where every AF3 shape at
+  levels 1–3 came from, so the provenance chain closes at the top.
+
+A level-4 task is not an operator pair, so it is not an `OpDecl`: it has no
+single output, no saved-state contract, and nothing in it is evolved. It is a
+`WorkloadDecl` (`evograd/opdecl/workloads.py`) naming the model configuration
+it trains, the **patch sites** — which submodules evolved level-1/2 kernels
+replace, and which declared operator each site accepts — and the benchmark
+cases, provenance-checked against the configuration like every other level.
+The AlphaFold3 sites are `layer_norm` (`layernorm`), `transition` (`swiglu`),
+and `pair_bias_attention`/`triangle_attention` (both `evoattention`) — the same
+surface MegaFold's hand-written kernels attack. Everything else in the model
+(triangle-multiplicative updates, outer-product mean, diffusion internals,
+confidence heads) runs stock eager inside the timed step; the resulting
+dilution of the speedup is the level-4 result, not a flaw.
+
+Measurement is the tier-3 protocol (`evograd tier3-bench --model
+alphafold3_2l`, or `--model alphafold3` for the full 48-block report
+configuration): every provider trains from identical seeded weights on identical
+seeded synthetic batches, and the report carries step latency, throughput,
+peak memory, short-horizon loss agreement, and `cpu_bound_fraction`. The suite
+folds a finished tier-3 report in as the level-4 row (`evograd suite
+--tier3-report alphafold3=<path>`); without one the task is reported
+uncovered, never skipped. The task requires the `af3` extra
+(`pip install 'evograd[af3]'`).
 
 ## Where the shapes come from
 

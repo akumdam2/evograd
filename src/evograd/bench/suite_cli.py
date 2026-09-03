@@ -24,6 +24,7 @@ from evograd.bench.suite import (
     TaskResult,
     task_from_benchmark_report,
     task_from_fair_report,
+    task_from_tier3_report,
     write_report,
 )
 
@@ -72,8 +73,20 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         action="append",
         dest="levels",
-        choices=(1, 2, 3),
+        choices=(1, 2, 3, 4),
         help="restrict to these benchmark levels (repeatable; default: all)",
+    )
+    parser.add_argument(
+        "--tier3-report",
+        action="append",
+        default=[],
+        metavar="WORKLOAD=PATH",
+        help=(
+            "fold a finished tier-3 training-step report into the suite as "
+            "that level-4 workload's row (e.g. alphafold3=results/t3.json). "
+            "Level-4 tasks are measured by `evograd tier3-bench`, not by this "
+            "command; without a report here they appear as uncovered."
+        ),
     )
     parser.add_argument(
         "--op",
@@ -304,6 +317,50 @@ def main(argv: list[str] | None = None) -> int:
         marker = f"{task.speedup:.3f}x" if task.speedups else "—"
         print(
             f"{name:28s} L{op.level} {marker:>9s} "
+            f"coverage {task.cases_ok}/{task.cases_total}",
+            file=sys.stderr,
+        )
+
+    # Level-4 workloads: measured by tier3-bench, reported here. A declared
+    # workload with no supplied report is a coverage fact, not an omission.
+    from evograd.ops import WORKLOADS
+
+    tier3_reports = {}
+    for entry in args.tier3_report:
+        workload_name, _, path = entry.partition("=")
+        if not path or workload_name not in WORKLOADS:
+            parser.error(
+                f"--tier3-report wants WORKLOAD=PATH with a declared workload "
+                f"({sorted(WORKLOADS)}), got {entry!r}"
+            )
+        tier3_reports[workload_name] = Path(path)
+
+    for name, decl in sorted(WORKLOADS.items()):
+        if args.levels and decl.level not in args.levels:
+            continue
+        if args.ops and name not in args.ops:
+            continue
+        if name in tier3_reports:
+            tier3 = json.loads(tier3_reports[name].read_text(encoding="utf-8"))
+            task = task_from_tier3_report(name, decl.family, tier3)
+        else:
+            task = TaskResult(
+                op=name,
+                level=decl.level,
+                family=decl.family,
+                baseline="eager",
+                tier="model",
+                cases_total=len(decl.benchmark),
+                error=(
+                    "not measured in this run; produce a report with "
+                    f"`evograd tier3-bench --workload {name}` and pass it via "
+                    f"--tier3-report {name}=<path>"
+                ),
+            )
+        report.tasks.append(task)
+        marker = f"{task.speedup:.3f}x" if task.speedups else "—"
+        print(
+            f"{name:28s} L{decl.level} {marker:>9s} "
             f"coverage {task.cases_ok}/{task.cases_total}",
             file=sys.stderr,
         )

@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MODELS = ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b")
+MODELS = ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b", "alphafold3_2l", "alphafold3")
 
 #: Per-provider wall-clock budget. A tier-3 provider trains a model, so this is
 #: minutes rather than the seconds a tier-1 case takes.
@@ -99,12 +99,18 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-seed", type=int, default=0,
                         help="qwen3 only: move the token stream without changing "
                              "the workload identity")
+    parser.add_argument("--residues", type=int, default=None,
+                        help="alphafold3 only: crop length; defaults to 128")
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--blocks", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--loss-steps", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
-    parser.add_argument("--dtype", default="bfloat16", choices=("bfloat16", "float16", "float32"))
+    # No hard default: the language models train bf16 and AlphaFold3 fp32 (as
+    # MegaFold does), so the effective default follows the selected model and
+    # only an explicit flag overrides it.
+    parser.add_argument("--dtype", default=None, choices=("bfloat16", "float16", "float32"),
+                        help="llama/qwen3 default bfloat16; alphafold3 defaults to float32")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None)
@@ -263,11 +269,33 @@ def build_workload(args):
     """
     import torch
 
+    dtype = args.dtype or (
+        "float32" if args.model.startswith("alphafold3") else "bfloat16"
+    )
+
+    if args.model.startswith("alphafold3"):
+        from evograd.opdecl import models as model_registry
+        from evograd.opdecl.activity import Workload
+        from evograd.ops.level4.alphafold3.workload import make_workload
+
+        config = {
+            "alphafold3_2l": model_registry.ALPHAFOLD3_2L,
+            "alphafold3": model_registry.ALPHAFOLD3,
+        }[args.model]
+        case = Workload(
+            dims=config.train_step_dims(
+                batch=args.batch if args.batch is not None else 1,
+                residues=args.residues if args.residues is not None else 128,
+            ),
+            dtype=dtype,
+        )
+        return make_workload(case, device=args.device, seed=args.seed, config=config)
+
     if args.model == "qwen3_0_6b":
         from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
 
         config = {
-            "dtype": args.dtype,
+            "dtype": dtype,
             "device": args.device,
             "seed": args.seed,
             "data_seed": args.data_seed,
@@ -292,7 +320,7 @@ def build_workload(args):
     return LlamaWorkload(
         config, batch=args.batch if args.batch is not None else 4,
         tokens=args.tokens if args.tokens is not None else 1024,
-        device=args.device, dtype=getattr(torch, args.dtype), seed=args.seed,
+        device=args.device, dtype=getattr(torch, dtype), seed=args.seed,
     )
 
 

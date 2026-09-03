@@ -48,7 +48,7 @@ FULL_STEP_SPEEDUP_KEY = "speedup_vs_baseline_raw_full_step"
 
 REPORT_VERSION = "evograd-suite-v1"
 
-LEVEL_NAMES = {1: "primitive", 2: "fused", 3: "block"}
+LEVEL_NAMES = {1: "primitive", 2: "fused", 3: "block", 4: "model"}
 
 
 @dataclass(frozen=True)
@@ -209,6 +209,57 @@ def task_from_benchmark_report(
         family=family,
     )
 
+
+
+def task_from_tier3_report(
+    workload_name: str,
+    family: str,
+    report: dict[str, Any],
+    *,
+    provider: str = "candidate",
+    reference: str = "eager",
+) -> TaskResult:
+    """Read one tier-3 (training-step) report into a level-4 suite row.
+
+    A level-4 task is measured by ``bench.tier3_runner`` — a full training step
+    per provider — not by the pair or operator protocols, so its suite row is
+    built from step latency: the full-step speedup is the reference provider's
+    ``step_ms`` over the candidate's, one case per report. Saved-state memory
+    is a pair-boundary concept and does not exist at this tier; the tier-3
+    report carries whole-step peak memory instead, which the suite leaves
+    where it is rather than misfiling it as saved bytes.
+    """
+    providers = report.get("providers") or {}
+    base = providers.get(reference) or {}
+    cand = providers.get(provider) or {}
+
+    error = None
+    speedups: tuple[float, ...] = ()
+    case_errors: list[str] = []
+    if not base:
+        error = f"tier-3 report has no {reference!r} provider"
+    elif not cand:
+        error = f"tier-3 report has no {provider!r} provider"
+    elif not base.get("ok"):
+        error = f"{reference} failed: {base.get('error')}"
+    elif not cand.get("ok"):
+        case_errors.append(f"{provider} failed: {cand.get('error')}")
+    elif base.get("step_ms") and cand.get("step_ms"):
+        speedups = (base["step_ms"] / cand["step_ms"],)
+
+    return TaskResult(
+        op=workload_name,
+        level=4,
+        family=family,
+        tier="model",
+        protocol=str(report.get("protocol", "")) or "fair",
+        baseline=reference,
+        speedups=speedups,
+        cases_total=1,
+        cases_ok=len(speedups),
+        error=error,
+        case_errors=tuple(case_errors),
+    )
 
 
 def _pool_by_family(tasks: Iterable[TaskResult]) -> float:

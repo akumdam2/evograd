@@ -20,6 +20,7 @@ from evograd.opdecl.activity import (
     declare_op,
     format_default,
 )
+from evograd.opdecl.workloads import WorkloadDecl, declare_workload
 
 _LAZY = {
     "oracle": "evograd.opdecl.oracle",
@@ -67,9 +68,11 @@ __all__ = [
     "Provenance",
     "VerifyReport",
     "Workload",
+    "WorkloadDecl",
     "bind",
     "bind_shape",
     "declare_op",
+    "declare_workload",
     "format_default",
     "make_case_inputs",
     "oracle",

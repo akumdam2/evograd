@@ -33,8 +33,8 @@ bench/
 
 ## Running the benchmark
 
-25 operators over three levels, 191 timed configurations, every shape traceable
-to a layer of a real model.
+25 operators over three levels plus a level-4 whole-model workload, 191 timed
+configurations, every shape traceable to a layer of a real model.
 
 ### The reference line
 
@@ -277,6 +277,34 @@ from `llama_3_8b`. Large runs want
 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`: the eager loss materializes
 a `[tokens, vocab]` logits tensor, and fragmentation rather than capacity is
 usually what ends a run.
+
+**The AlphaFold3 workload (benchmark level 4).** The same tier, a different
+model and a different patchable surface — `--model` picks both, because the
+site registry is the workload's:
+
+```bash
+# reference line on the iteration config (2 pairformer blocks, real widths)
+evograd tier3-bench --model alphafold3_2l --identity-control --out results/af3.json
+
+# evolved kernels at the AF3 sites; report from the full 48-block model
+evograd tier3-bench --model alphafold3 --residues 384 \
+    --candidate layer_norm=evolved_ln.py \
+    --candidate pair_bias_attention=evolved_attn.py
+
+# fold the finished report into the suite as the level-4 row
+evograd suite --candidates programs/ --tier3-report alphafold3=results/af3.json \
+    --out results/
+```
+
+AF3 defaults differ where the model does: `--batch 1 --residues 128
+--dtype float32`, matching how MegaFold trains. Its sites are
+`layer_norm`, `transition`, `pair_bias_attention` and `triangle_attention`;
+what each accepts, and what the workload deliberately leaves eager, is stated
+in the declaration (`ops/level4/alphafold3`). The workload needs the `af3`
+extra (`pip install 'evograd[af3]'`) — and note that one of its transitive
+dependencies (`icecream`) installs a top-level `tests` package that shadows
+this repository's `tests/` under pytest; delete it from site-packages or run
+pytest with `--import-mode=importlib`.
 
 #### Three parts
 

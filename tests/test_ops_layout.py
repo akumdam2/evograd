@@ -11,10 +11,10 @@ quietly wrong.
 import unittest
 from pathlib import Path
 
-from evograd.ops import OPS
+from evograd.ops import OPS, WORKLOADS
 
 OPS_ROOT = Path(__file__).resolve().parents[1] / "src" / "evograd" / "ops"
-GROUPS = ("level1", "level2", "level3")
+GROUPS = ("level1", "level2", "level3", "level4")
 
 
 class TestOpsLayout(unittest.TestCase):
@@ -27,6 +27,10 @@ class TestOpsLayout(unittest.TestCase):
                     f"{name} declares level {op.level} but "
                     f"{expected.relative_to(OPS_ROOT)} does not exist",
                 )
+        for name, workload in sorted(WORKLOADS.items()):
+            with self.subTest(workload=name):
+                expected = OPS_ROOT / f"level{workload.level}" / name
+                self.assertTrue(expected.is_dir())
 
     def test_no_operator_package_sits_directly_under_ops(self):
         """A package left at the top level would still be discovered, so a
@@ -59,16 +63,20 @@ class TestOpsLayout(unittest.TestCase):
             entry.name
             for group in GROUPS
             for entry in (OPS_ROOT / group).iterdir()
-            if entry.is_dir() and (entry / "__init__.py").is_file()
+            if entry.is_dir()
+            and (entry / "__init__.py").is_file()
+            and not entry.name.startswith("_")
         }
-        self.assertEqual(on_disk, set(OPS))
+        self.assertEqual(on_disk, set(OPS) | set(WORKLOADS))
 
     def test_expected_counts_per_level(self):
         """The benchmark specification states 18 / 5 / 2, plus the operators
         derived from an observed workload rather than specified up front --
         currently ``qwen3_swiglu_mlp``, ``qwen3_attention`` and
         ``qwen3_qkv_norm_rope``, extracted from the
-        Qwen3-0.6B Level-4 harvest. Counted separately so the specified suite stays legible."""
+        Qwen3-0.6B Level-4 harvest. Counted separately so the specified suite
+        stays legible. Whole-model tasks are WorkloadDecls, not operators, and
+        are counted on their own registry."""
         counts = {level: 0 for level in (1, 2, 3)}
         for op in OPS.values():
             counts[op.level] += 1
@@ -76,6 +84,10 @@ class TestOpsLayout(unittest.TestCase):
         for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope"):
             self.assertIn(name, OPS)
             self.assertEqual(OPS[name].level, 2)
+        self.assertEqual(
+            {name: decl.level for name, decl in WORKLOADS.items()},
+            {"alphafold3": 4},
+        )
 
 
 if __name__ == "__main__":
