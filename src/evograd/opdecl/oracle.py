@@ -53,7 +53,9 @@ def oracle(
     ``inputs`` maps declared arg names to values (scalar ``Inactive`` args may be
     omitted; their declared default is used). ``grads`` maps gradient names to
     tensors, ordered per ``op.grad_names()``. ``dout`` defaults to
-    ``inputs[op.upstream_grad_name]``.
+    the declaration's upstream gradients from ``inputs``. For a multi-output
+    declaration ``y`` is an ordered tuple and ``dout`` may be a matching tuple;
+    a single-output declaration returns a bare Tensor, exactly as before.
 
     When the declaration sets ``reference_dtype``, every floating input is
     widened to it, the reference runs at that precision, and the results are
@@ -93,19 +95,32 @@ def oracle(
             value = _promote(value, reference_dtype)
         positional.append(value)
 
-    y = fwd(*positional)
+    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
+
+    result = fwd(*positional)
+    ys = as_output_tuple(op, result)
 
     if dout is None:
-        dout = inputs[op.upstream_grad_name]
-    y_dtype = dout.dtype
+        dout = upstream_grad_values(op, inputs)
+    douts = dout if isinstance(dout, (tuple, list)) else (dout,)
+    if len(douts) != len(ys):
+        raise ValueError(
+            f"{op.name}: got {len(douts)} upstream gradients for {len(ys)} outputs"
+        )
+    y_dtypes = [d.dtype for d in douts]
     if reference_dtype is not None:
-        dout = _promote(dout, reference_dtype)
-    grad_tensors = torch.autograd.grad(y, [t for _, t in leaves], grad_outputs=dout)
+        douts = tuple(_promote(d, reference_dtype) for d in douts)
+    grad_tensors = torch.autograd.grad(
+        ys, [t for _, t in leaves], grad_outputs=tuple(douts)
+    )
 
     by_name = {name: g for (name, _), g in zip(leaves, grad_tensors)}
     if reference_dtype is not None:
-        y = y.to(y_dtype)
+        ys = tuple(y.to(dtype) for y, dtype in zip(ys, y_dtypes))
         by_name = {
             name: grad.to(output_dtypes[name]) for name, grad in by_name.items()
         }
-    return y, {name: by_name[name] for name in op.grad_names()}
+    # A single-output declaration still returns a bare Tensor, so every existing
+    # caller is untouched.
+    out = ys if op.is_multi_output else ys[0]
+    return out, {name: by_name[name] for name in op.grad_names()}

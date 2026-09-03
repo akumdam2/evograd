@@ -100,6 +100,7 @@ from dataclasses import replace
 
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
+from evograd.opdecl.inputs import upstream_grad_values
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.ops import get_op, load_op
 
@@ -111,7 +112,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 forward, backward = lookup_pair(op, module)
 {values}
-dout = values[op.upstream_grad_name]
+dout = upstream_grad_values(op, values)
 args = [values.get(arg.name, getattr(arg, "default", None)) for arg in op.args]
 kwargs = backward_inactive_kwargs(op, backward, values)
 {invocation}

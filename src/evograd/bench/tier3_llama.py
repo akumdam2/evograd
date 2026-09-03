@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from evograd.bench.tier3_patch import KernelSet
+from evograd.bench.tier3_patch import LLAMA_SITES, KernelSet
 from evograd.opdecl.models import ModelConfig
 from evograd.ops.level3.llama3_decoder_layer.forward_ref import _llama3_decoder_layer
 
@@ -183,6 +183,9 @@ class LlamaWorkload:
     """
 
     unit_name = "tokens"
+    #: This model's three sites. Declared here rather than read from a module
+    #: global, so a second architecture adds a registry instead of editing one.
+    site_registry = LLAMA_SITES
 
     def __init__(
         self,

@@ -72,6 +72,9 @@ def bind(op: OpDecl, module):
         @staticmethod
         def forward(ctx, *args):
             y, saved = fwd(*args)
+            ctx.multi_output = isinstance(y, (tuple, list))
+            if ctx.multi_output:
+                y = tuple(y)
             saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
             # save_for_backward only handles tensors; keep plain values (block
             # sizes, shapes...) in a layout list so any saved contract works.
@@ -92,7 +95,10 @@ def bind(op: OpDecl, module):
             return y
 
         @staticmethod
-        def backward(ctx, dout):
+        def backward(ctx, *douts):
+            # One incoming gradient per declared output; the pair's backward
+            # receives them as a tuple when there are several.
+            dout = tuple(douts) if ctx.multi_output else douts[0]
             saved = tuple(
                 ctx.saved_tensors[payload] if kind == "tensor" else payload
                 for kind, payload in ctx.saved_layout

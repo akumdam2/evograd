@@ -54,7 +54,7 @@ Public API to implement:
 
 ```python
 def {op.forward_fn_name}({op.forward_parameters()}):
-    return y, saved_tensors
+    return {op.forward_returns()}
 
 def {op.backward_fn_name}({op.backward_parameters()}):
     return {op.backward_returns()}

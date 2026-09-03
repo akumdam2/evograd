@@ -98,13 +98,32 @@ class TestWrapperCodegen(unittest.TestCase):
         )
         self.assertNotIn("_grads[4]", wrapper)
 
-    def test_wrapper_compiles_for_every_op(self):
+    def test_wrapper_compiles_for_every_single_output_op(self):
         from evograd.ops import OPS
 
         for name, op in OPS.items():
+            if op.is_multi_output:
+                continue
             with self.subTest(op=name):
                 wrapper = render_autograd_pair_wrapper("m:f", op)
                 compile("def run_graph_program(*a): pass\n" + wrapper, f"<{name}>", "exec")
+
+    def test_a_multi_output_op_is_refused_rather_than_half_generated(self):
+        """Pipeline B's wrapper assumes one upstream gradient tensor.
+
+        Emitting a wrapper that looked right and passed a single gradient where
+        the contract requires a tuple would produce a seed that fails at its
+        first backward, in a place far from the cause. Failing here says so.
+        """
+        from evograd.ops import OPS
+
+        multi = [op for op in OPS.values() if op.is_multi_output]
+        self.assertTrue(multi, "no multi-output operator to check")
+        for op in multi:
+            with self.subTest(op=op.name):
+                with self.assertRaises(NotImplementedError) as ctx:
+                    render_autograd_pair_wrapper("m:f", op)
+                self.assertIn(op.name, str(ctx.exception))
 
 
 class TestDispatchProgramCodegen(unittest.TestCase):

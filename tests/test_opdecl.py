@@ -90,6 +90,9 @@ class TestDerivedNaming(unittest.TestCase):
             {level: sorted(names) for level, names in sorted(by_level.items())},
             {
                 1: [
+                    # The one primitive a decoder-only step runs that had no
+                    # generic task before the Qwen3 Level-1 mapping.
+                    "causal_gqa_attention",
                     "conv2d",
                     "cross_entropy",
                     "dyt",
@@ -99,6 +102,8 @@ class TestDerivedNaming(unittest.TestCase):
                     "kl_div",
                     "layernorm",
                     "linear",
+                    # Biasless projections -- what a modern decoder runs.
+                    "linear_no_bias",
                     "matmul",
                     "poly_norm",
                     "relu_squared",
@@ -115,6 +120,11 @@ class TestDerivedNaming(unittest.TestCase):
                     "fused_moe_swiglu",
                     "gemm_leaky_relu",
                     "layernorm_linear",
+                    # Derived from the Qwen3-0.6B Level-4 harvest rather than
+                    # specified up front.
+                    "qwen3_attention",
+                    "qwen3_qkv_norm_rope",
+                    "qwen3_swiglu_mlp",
                 ],
                 3: [
                     "af3_single_repr_block",
@@ -237,9 +247,19 @@ class TestValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "memory_inputs"):
             _minimal(memory_inputs=("eps",))
 
-    def test_unknown_tolerance_gradient_rejected(self):
-        with self.assertRaisesRegex(ValueError, "unknown gradients"):
+    def test_unknown_tolerance_result_rejected(self):
+        with self.assertRaisesRegex(ValueError, "unknown results"):
             _minimal(tolerance_multipliers={"dmissing": (2.0, 1.0)})
+
+    def test_a_tolerance_multiplier_may_name_an_output(self):
+        """Two results of one operator can need genuinely different tolerances
+        -- ``fused_add_rms_norm``'s plain sum against its normalized output."""
+        op = get_op("fused_add_rms_norm")
+        case = op.benchmark_workloads("qwen3_0_6b_observed")[0]
+        self.assertIn("summed", op.output_names)
+        self.assertLess(
+            op.tolerance_for(case, "summed")[0], op.tolerance_for(case, "out")[0]
+        )
 
 
 class TestLigerSuiteMigration(unittest.TestCase):

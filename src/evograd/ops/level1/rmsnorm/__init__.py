@@ -13,6 +13,7 @@ from evograd.ops._common import (
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
+    qwen3_observed_workloads,
     regime_suites,
 )
 
@@ -64,7 +65,12 @@ _BENCHMARK = model_workloads(
 # Untimed compile/runtime coverage: the non-power-of-two hidden width and the
 # small row counts the pre-v1 grid used to time, which are worth running but are
 # not part of the performance objective.
-_COVERAGE = _BENCHMARK + tuple(
+#: Three deduplicated RMSNorm configurations per Qwen3-0.6B step: the
+#: residual-stream norm (4096 x 1024, 57 invocations) and the two per-head
+#: norms, which are many short rows rather than few long ones.
+_QWEN3_OBSERVED = qwen3_observed_workloads("rmsnorm")
+
+_COVERAGE = _QWEN3_OBSERVED + _BENCHMARK + tuple(
     Workload(dims=dict(rows=rows, hidden=hidden), dtype="bfloat16")
     for rows, hidden in ((1, 4096), (17, 4096), (128, 4096), (4096, 8192))
 )
@@ -101,6 +107,7 @@ op = declare_op(
     coverage=_COVERAGE,
     benchmark=_BENCHMARK,
     benchmark_suites={
+        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
         **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
         **fixed_shape_suites(_BENCHMARK),
         "coverage": _COVERAGE,

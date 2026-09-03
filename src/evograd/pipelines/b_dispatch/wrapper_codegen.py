@@ -58,6 +58,12 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     )
     forward_sig = ", ".join(tensor_names) + scalar_sig
     fwd_call = ", ".join(tensor_names + [c.name for c in scalar_inactive])
+    if op.is_multi_output:
+        raise NotImplementedError(
+            f"Pipeline B cannot yet generate a seed for a multi-output "
+            f"declaration ({op.name} returns {op.output_names}); its wrapper "
+            "assumes one upstream gradient tensor"
+        )
     backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"
     backward_call = ", ".join(
         [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalar_inactive]

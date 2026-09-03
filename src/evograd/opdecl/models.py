@@ -106,9 +106,127 @@ class ModelConfig:
         """down projection: [tokens, intermediate] @ [intermediate, hidden]."""
         return {"M": tokens, "K": self.intermediate, "N": self.hidden}
 
+    def swiglu_mlp_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The whole gated MLP block, kept in [B, T, H] rather than flattened.
+
+        The projections alone are ``mlp_up_dims``/``mlp_down_dims`` as plain
+        GEMMs over ``tokens``. This block keeps the batch and sequence axes
+        because it is declared from an observed module invocation, and the
+        observation records the shape the model actually passed -- flattening
+        would make the declared shape something no layer ever received.
+        """
+        return {"B": batch, "T": seq, "H": self.hidden, "I": self.intermediate}
+
+    def residual_rmsnorm_dims(self, *, tokens: int) -> dict[str, int]:
+        """The decoder's residual-add-then-RMSNorm fusion site.
+
+        Dimensionally identical to ``elementwise_dims`` -- one row per token,
+        one column per residual channel -- but named for the site it describes,
+        because the shape alone does not say that this is where an add and a
+        norm meet and can be fused.
+        """
+        return {"rows": tokens, "cols": self.hidden}
+
+    def residual_rmsnorm_fusion_sites(self) -> dict[str, int]:
+        """How many times per step that fusion site actually occurs.
+
+        Not ``2 * layers``. Each decoder layer performs two residual adds, and
+        each is followed by an RMSNorm -- but the norm that follows the *MLP*
+        add belongs to the *next* layer (or, for the last layer, to
+        ``model.norm``). The very first ``input_layernorm`` therefore has no
+        preceding decoder residual add and is not a fusion site, which is why
+        the count is one short of the number of residual-width RMSNorms the
+        model runs.
+        """
+        attention_sites = self.layers
+        mlp_sites_into_next_layer = self.layers - 1
+        final_mlp_site_into_model_norm = 1
+        return {
+            "attention_residual_then_post_attention_layernorm": attention_sites,
+            "mlp_residual_then_next_layer_input_layernorm": mlp_sites_into_next_layer,
+            "final_mlp_residual_then_model_norm": final_mlp_site_into_model_norm,
+            "excluded_layer0_input_layernorm": 1,
+            "total": attention_sites + mlp_sites_into_next_layer + final_mlp_site_into_model_norm,
+        }
+
+    def qkv_norm_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The projection-plus-normalize-plus-rotate prefix of attention.
+
+        Everything ``causal_gqa_attention_dims`` receives already prepared. The
+        two are complementary halves of one module, and share ``QO`` -- the
+        query fan-out -- which is where they meet.
+        """
+        return {
+            "B": batch,
+            "T": seq,
+            "H": self.hidden,
+            "HQ": self.n_heads,
+            "HK": self.n_kv_heads,
+            "D": self.head_dim,
+            "QO": self.q_out,
+            "KVO": self.kv_out,
+        }
+
+    def causal_gqa_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """Causal grouped-query SDPA plus the output projection.
+
+        The boundary an observed training step actually presents: the
+        projections and the rotary embedding happen *before* it and the residual
+        add after, so ``q``, ``k`` and ``v`` arrive already split into heads and
+        already rotated. ``QO`` is the query fan-out ``n_heads * head_dim``,
+        which is the output projection's input width and, for Qwen3, is not
+        ``hidden``.
+        """
+        return {
+            "B": batch,
+            "T": seq,
+            "HQ": self.n_heads,
+            "HK": self.n_kv_heads,
+            "D": self.head_dim,
+            "QO": self.q_out,
+            "H": self.hidden,
+        }
+
     def attn_qkv_dims(self, *, tokens: int) -> dict[str, int]:
         """The query projection, as a plain GEMM."""
         return {"M": tokens, "K": self.hidden, "N": self.q_out}
+
+    def attn_kv_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        """The key or value projection. Narrower than the query's under GQA."""
+        return {"M": tokens, "K": self.hidden, "N": self.kv_out}
+
+    def attn_out_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        """The output projection: back from the query fan-out to ``hidden``."""
+        return {"M": tokens, "K": self.q_out, "N": self.hidden}
+
+    def q_head_norm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """Qwen3's per-head RMSNorm on the queries, as a 2-D normalization.
+
+        The module sees ``[B, T, heads, head_dim]`` and reduces over the last
+        axis, so as a generic RMSNorm it is ``B * T * heads`` rows of
+        ``head_dim`` -- many short rows rather than few long ones, which is a
+        materially different occupancy regime from the residual-stream norm.
+        """
+        return {"rows": batch * seq * self.n_heads, "hidden": self.head_dim}
+
+    def k_head_norm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The same, on the keys, which have fewer heads under GQA."""
+        return {"rows": batch * seq * self.n_kv_heads, "hidden": self.head_dim}
+
+    def causal_gqa_sdpa_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """Causal grouped-query attention alone, without the output projection.
+
+        The Level-1 primitive inside ``causal_gqa_attention_dims``: q, k and v
+        in, one attention output out. ``o_proj`` is a separate GEMM and stays in
+        the Level-2 task.
+        """
+        return {
+            "B": batch,
+            "HQ": self.n_heads,
+            "HK": self.n_kv_heads,
+            "T": seq,
+            "D": self.head_dim,
+        }
 
     def rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """RoPE applied to one projected tensor, in [B, T, heads, head_dim]."""
@@ -263,6 +381,24 @@ LLAMA_3_8B = ModelConfig(
     source="meta-llama/Meta-Llama-3-8B; Liger benchmark/scripts/benchmark_model_configs.py",
 )
 
+#: Qwen3-0.6B, as ``Qwen/Qwen3-0.6B``'s ``config.json`` publishes it. Unlike
+#: Llama-3, ``n_heads * head_dim`` (2048) is *not* ``hidden`` (1024): Qwen3's
+#: query projection fans out and ``o_proj`` brings it back, which is why the
+#: harvested q_proj is 1024 -> 2048.
+QWEN3_0_6B = ModelConfig(
+    name="qwen3_0_6b",
+    hidden=1024,
+    intermediate=3072,
+    n_heads=16,
+    n_kv_heads=8,
+    head_dim=128,
+    vocab=151936,
+    layers=28,
+    rope_theta=1000000.0,
+    dtype="bfloat16",
+    source="Qwen/Qwen3-0.6B config.json; observed in the evograd Level-4 harvest",
+)
+
 #: Llama-3-8B's architecture with four layers instead of thirty-two.
 #:
 #: For measuring what a kernel does to a training step, layer count is the one
@@ -334,7 +470,7 @@ LLAMA_VOCAB_REGIME_SPLIT = 2048
 AF3_RESIDUE_SWEEP = (128, 256, 384)
 
 MODELS: dict[str, ModelConfig | AlphaFoldConfig] = {
-    config.name: config for config in (LLAMA_3_8B, ALPHAFOLD3)
+    config.name: config for config in (LLAMA_3_8B, QWEN3_0_6B, ALPHAFOLD3)
 }
 
 

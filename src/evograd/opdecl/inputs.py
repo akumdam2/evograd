@@ -69,7 +69,52 @@ def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> di
         else:
             values[arg.name] = arg.default
 
-    out_shape = bind_shape(op.output.shape, workload.dims)
-    out_dtype = resolve_dtype(arg_dtype_name(op.output, workload))
-    values[op.upstream_grad_name] = torch.randn(out_shape, device=device, dtype=out_dtype) * 0.5
+    # One upstream gradient per declared output, each under its own name. A
+    # single-output declaration therefore lands exactly one entry, as before.
+    for out in op.outputs:
+        out_shape = bind_shape(out.shape, workload.dims)
+        out_dtype = resolve_dtype(arg_dtype_name(out, workload))
+        values[out.grad_name] = torch.randn(out_shape, device=device, dtype=out_dtype) * 0.5
     return values
+
+
+def upstream_grad_values(op, values):
+    """The upstream gradient(s) in the shape the candidate ABI passes them.
+
+    A Tensor for a single output, an ordered tuple for several. Every caller
+    goes through this rather than indexing ``values`` directly, so the two ABIs
+    cannot drift apart.
+    """
+    grads = tuple(values[name] for name in op.upstream_grad_names)
+    return grads if op.is_multi_output else grads[0]
+
+
+def as_output_tuple(op, result):
+    """Normalize a forward's result to a tuple, checking arity.
+
+    A single-output candidate must return a Tensor and a multi-output candidate
+    a tuple of them; returning the wrong shape is a contract error rather than
+    something to be quietly unwrapped, because a one-element tuple and a Tensor
+    mean different things to the backward that follows.
+    """
+    import torch
+
+    if op.is_multi_output:
+        if torch.is_tensor(result) or not isinstance(result, (tuple, list)):
+            raise ValueError(
+                f"{op.name} declares {len(op.outputs)} outputs {op.output_names}; "
+                f"forward returned a single {type(result).__name__}"
+            )
+        values = tuple(result)
+        if len(values) != len(op.outputs):
+            raise ValueError(
+                f"{op.name}: forward returned {len(values)} outputs, contract "
+                f"requires {len(op.outputs)}: {op.output_names}"
+            )
+        return values
+    if not torch.is_tensor(result):
+        raise ValueError(
+            f"{op.name} declares one output {op.output_names[0]!r}; forward "
+            f"returned {type(result).__name__}"
+        )
+    return (result,)

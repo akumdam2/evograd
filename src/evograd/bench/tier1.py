@@ -29,7 +29,7 @@ from typing import Any, Callable
 import torch
 
 from evograd.opdecl.activity import OpDecl, Workload
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 
 # The provider boundary and the input-mutation guards live in bench.provider so
 # that protocols other than this one can reuse them. Re-exported here because
@@ -100,7 +100,7 @@ def _summary(samples: list[float]) -> dict[str, float | int]:
 def _warm_provider(
     provider: PairProvider,
     values: dict[str, Any],
-    dout: torch.Tensor,
+    dout: Any,
     *,
     warmup: int,
 ) -> None:
@@ -143,7 +143,10 @@ def _estimate_ms(fn: Callable[[], Any], *, iterations: int = 3) -> float:
 def _measure_provider_block(
     provider: PairProvider,
     values: dict[str, Any],
-    dout: torch.Tensor,
+    # A Tensor, or an ordered tuple of them for a multi-output declaration; it
+    # is passed through to the provider untouched either way, so every declared
+    # output is produced and differentiated inside the timed region.
+    dout: Any,
     *,
     reps: int,
     clear_l2: Callable[[], None],
@@ -309,7 +312,7 @@ def benchmark_case_fair(
     for provider in providers:
         values = values_by_provider[provider.name]
         _output, saved = provider.forward(values)
-        provider.backward(values[op.upstream_grad_name], saved, values)
+        provider.backward(upstream_grad_values(op, values), saved, values)
         assert_tensors_unchanged(
             values, snapshots[provider.name], provider=provider.name
         )
@@ -317,7 +320,7 @@ def benchmark_case_fair(
         _warm_provider(
             provider,
             values,
-            values[op.upstream_grad_name],
+            upstream_grad_values(op, values),
             warmup=warmup,
         )
         assert_tensors_unchanged(
@@ -339,7 +342,7 @@ def benchmark_case_fair(
         measured = _measure_provider_block(
             provider,
             values,
-            values[op.upstream_grad_name],
+            upstream_grad_values(op, values),
             reps=reps,
             clear_l2=cache.clear,
         )
@@ -485,7 +488,11 @@ def run_fair_benchmarks(
         "protocol": PROTOCOL_VERSION,
         "baseline_timing_cache": {"enabled": False, "reason": "final protocol"},
         "timing_protocol": {
-            "provider_contract": "forward(values)->(output,saved); backward(dout,saved,values)",
+            "provider_contract": (
+                "forward(values)->(output,saved); "
+                "backward(output_grads,saved,values); output and output_grads "
+                "are ordered tuples for a multi-output declaration"
+            ),
             "primary_full_metric": "pair_full",
             "l2_policy": "clear_before_each_timed_region",
             "forward_backward_cache": "no flush between forward and backward",

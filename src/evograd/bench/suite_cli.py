@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             f"--candidate-baseline {args.candidate_baseline} would be timed "
             "against itself, reporting 1.0x everywhere. Use "
-            "`evograd fair-bench --identity-control` for that check."
+            "`evograd tier1-bench --identity-control` for that check."
         )
 
     import torch

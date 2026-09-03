@@ -75,11 +75,16 @@ def reference_run(op: OpDecl, inputs: dict, *, mode: str | None, dynamic: bool |
     """
     import torch
 
+    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
+
     compiled = compile_forward(op, mode, dynamic)
     positional, leaves = _leaf_args(op, inputs)
     y = compiled(*positional)
+    douts = upstream_grad_values(op, inputs)
     grads = torch.autograd.grad(
-        y, [leaf for _, leaf in leaves], grad_outputs=inputs[op.upstream_grad_name]
+        as_output_tuple(op, y),
+        [leaf for _, leaf in leaves],
+        grad_outputs=douts if isinstance(douts, tuple) else (douts,),
     )
     by_name = {name: g for (name, _), g in zip(leaves, grads)}
     return y, tuple(by_name[name] for name in op.grad_names())

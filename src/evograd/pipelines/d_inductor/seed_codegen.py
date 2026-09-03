@@ -379,6 +379,12 @@ def _render_wrapper(op: OpDecl, dtype: str, captured: CapturedPair) -> str:
     )
     forward_sig = ", ".join(tensor_names) + scalar_sig
     fwd_args = ", ".join(f"{n}.contiguous()" for n in tensor_names)
+    if op.is_multi_output:
+        raise NotImplementedError(
+            f"Pipeline D cannot yet generate a seed for a multi-output "
+            f"declaration ({op.name} returns {op.output_names}); its wrapper "
+            "assumes one upstream gradient tensor"
+        )
     backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"
     backward_call = ", ".join(
         [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalars]

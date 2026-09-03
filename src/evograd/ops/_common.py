@@ -172,6 +172,59 @@ def seed_2d(workload: Workload) -> int:
     return rows * 100003 + cols
 
 
+def qwen3_observed_workloads(
+    task: str,
+    *,
+    tolerances: dict[str, tuple[float, float]] | None = None,
+    dtype: str | None = None,
+) -> tuple[Workload, ...]:
+    """Every observed Qwen3-0.6B configuration for one generic Level-1 task.
+
+    Read from the tracked workload snapshot, which derives them from the Level-4
+    harvest: dims, dtype, roles and frequency all come from what the canonical
+    step ran. Nothing here is a second hand-written copy, and the provenance each
+    workload carries re-derives the same dims from the published Qwen3-0.6B
+    configuration, so ``tests/test_provenance`` proves the two agree.
+
+    The snapshot is a small tracked JSON file with no torch dependency, so this
+    stays importable on a machine that has never run the workload.
+    """
+    from evograd.bench.workloads.qwen3.harvest.snapshot import load as _load_snapshot
+
+    entry = _load_snapshot()["level1"][task]
+    tolerances = tolerances or {}
+    workloads = []
+    for config in entry["configurations"]:
+        case_dtype = dtype or config["dtype"].replace("torch.", "")
+        atol, rtol = tolerances.get(case_dtype, (None, None))
+        workloads.append(
+            Workload(
+                dims=dict(config["dims"]),
+                dtype=case_dtype,
+                atol=atol,
+                rtol=rtol,
+                provenance=Provenance(
+                    model="qwen3_0_6b",
+                    component=config["provenance"]["component"],
+                    free=dict(config["provenance"]["free"]),
+                    source="hf_config",
+                ),
+            )
+        )
+    return tuple(workloads)
+
+
+def is_qwen3_observed(workload: Workload) -> bool:
+    """Whether a workload is one of the observed Qwen3-0.6B configurations.
+
+    Input generators branch on this to reproduce the layout and the rotary base
+    the model actually used, instead of benchmarking a contiguous substitute at
+    the right shape.
+    """
+    provenance = getattr(workload, "provenance", None)
+    return provenance is not None and provenance.model == "qwen3_0_6b"
+
+
 def make_pair_baseline(
     factory: Callable[[], tuple[Callable, Callable]],
     forward_args: tuple[str, ...],

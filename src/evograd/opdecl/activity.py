@@ -187,7 +187,12 @@ class OpDecl:
     declaration: str | None
     dims: tuple[str, ...]
     args: tuple[Arg, ...]
-    output: Active
+    # One ``Active`` output, or an ordered tuple of them. A single ``Active`` is
+    # kept as a bare ``Active`` rather than a one-element tuple so that every
+    # declaration written before structured outputs existed, and every caller
+    # reading ``op.output``, keeps working unchanged. Internal code should read
+    # :attr:`outputs`, which is always a tuple.
+    output: "Active | tuple[Active, ...]"
     forward_semantics: str
     backward_semantics: str
     # Optional second forward, as "module.path:callable": the same mathematics
@@ -338,7 +343,7 @@ class OpDecl:
 
     def backward_parameters(self) -> str:
         """Candidate-facing backward parameter list."""
-        parts = [self.upstream_grad_name, "saved_tensors"]
+        parts = [self.upstream_grad_parameter, "saved_tensors"]
         for arg in self.scalar_inactive_args():
             suffix = f"={format_default(arg.default)}" if arg.default is not None else ""
             parts.append(f"{arg.name}{suffix}")
@@ -347,9 +352,71 @@ class OpDecl:
     def backward_returns(self) -> str:
         return ", ".join(self.grad_names())
 
+    def forward_returns(self) -> str:
+        """What the candidate's forward returns, as the contract spells it.
+
+        ``y, saved_tensors`` for one output; ``(q, k, v), saved_tensors`` for
+        several -- a tuple, so the backward's first parameter and this line
+        describe the same thing.
+        """
+        if self.is_multi_output:
+            return f"({', '.join(self.output_names)}), saved_tensors"
+        return f"{self.output.name}, saved_tensors"
+
+    # ── outputs ───────────────────────────────────────────────────────────
+    # A declaration states either one output or an ordered tuple of them. The
+    # ABI follows: a single-output candidate returns a Tensor and takes one
+    # upstream gradient, exactly as before; a multi-output candidate returns a
+    # tuple of Tensors and takes a tuple of upstream gradients in the same
+    # order.
+    #
+    #     outputs, saved = candidate_forward(...)
+    #     input_grads    = candidate_backward(output_grads, saved)
+
+    @property
+    def outputs(self) -> tuple["Active", ...]:
+        """Every output, always as a tuple. The accessor internal code uses."""
+        return (self.output,) if isinstance(self.output, Active) else tuple(self.output)
+
+    @property
+    def is_multi_output(self) -> bool:
+        return not isinstance(self.output, Active)
+
+    @property
+    def output_names(self) -> tuple[str, ...]:
+        return tuple(out.name for out in self.outputs)
+
+    @property
+    def upstream_grad_names(self) -> tuple[str, ...]:
+        """One upstream gradient per output, in output order."""
+        return tuple(out.grad_name for out in self.outputs)
+
     @property
     def upstream_grad_name(self) -> str:
+        """The single upstream gradient's name.
+
+        Deliberately raises for a multi-output declaration instead of returning
+        the first: every path that reads this treats it as *the* gradient, and
+        silently handing back one of several would produce a backward that is
+        wrong in a way no shape check catches.
+        """
+        if self.is_multi_output:
+            raise ValueError(
+                f"{self.name} has {len(self.outputs)} outputs "
+                f"{self.output_names}; use upstream_grad_names (or "
+                "upstream_grad_parameter for the candidate-facing name)"
+            )
         return self.output.grad_name
+
+    @property
+    def upstream_grad_parameter(self) -> str:
+        """What the candidate's backward calls its first parameter.
+
+        Single output keeps its own gradient's name (``dy``, ``dout``, ...) so
+        no existing contract text changes. Multi-output binds the whole ordered
+        tuple to one name, because that is what it receives.
+        """
+        return "output_grads" if self.is_multi_output else self.output.grad_name
 
     @property
     def forward_fn_name(self) -> str:
@@ -377,7 +444,9 @@ class OpDecl:
         names = [a.name for a in self.args]
         if len(names) != len(set(names)):
             raise ValueError(f"{self.name}: duplicate argument names in {names}")
-        invalid_names = [name for name in (*names, self.output.name) if not name.isidentifier()]
+        invalid_names = [
+            name for name in (*names, *self.output_names) if not name.isidentifier()
+        ]
         if invalid_names:
             raise ValueError(f"{self.name}: argument/output names must be identifiers: {invalid_names}")
         if len(self.dims) != len(set(self.dims)) or any(not dim.isidentifier() for dim in self.dims):
@@ -392,8 +461,39 @@ class OpDecl:
                 )
             saw_default = saw_default or has_default
 
-        if not isinstance(self.output, Active):
-            raise ValueError(f"{self.name}: output must be Active (it receives an upstream gradient)")
+        if isinstance(self.output, Active):
+            declared_outputs: tuple[Active, ...] = (self.output,)
+        elif isinstance(self.output, tuple):
+            declared_outputs = self.output
+            if not declared_outputs:
+                raise ValueError(
+                    f"{self.name}: an output tuple must be non-empty; declare a "
+                    "single Active instead of an empty tuple"
+                )
+        else:
+            raise ValueError(
+                f"{self.name}: output must be an Active or a tuple of Active, got "
+                f"{type(self.output).__name__}"
+            )
+        non_active = [o for o in declared_outputs if not isinstance(o, Active)]
+        if non_active:
+            raise ValueError(
+                f"{self.name}: every output must be Active (each receives an "
+                f"upstream gradient); got {[type(o).__name__ for o in non_active]}"
+            )
+        output_names = [o.name for o in declared_outputs]
+        if len(output_names) != len(set(output_names)):
+            raise ValueError(f"{self.name}: duplicate output names in {output_names}")
+        collisions = sorted(set(output_names) & set(names))
+        if collisions:
+            raise ValueError(
+                f"{self.name}: output names collide with argument names: {collisions}"
+            )
+        upstream = [o.grad_name for o in declared_outputs]
+        if len(upstream) != len(set(upstream)):
+            raise ValueError(
+                f"{self.name}: upstream gradient names must be unique: {upstream}"
+            )
 
         if (self.level is None) != (self.family is None):
             raise ValueError(
@@ -432,7 +532,7 @@ class OpDecl:
                     f"provenance: {unsourced}"
                 )
 
-        for arg in (*self.args, self.output):
+        for arg in (*self.args, *self.outputs):
             shape = getattr(arg, "shape", None)
             if shape is None or shape == "unspecified":
                 continue
@@ -451,12 +551,24 @@ class OpDecl:
             not name.isidentifier() for name in grad_names
         ):
             raise ValueError(f"{self.name}: gradient names must be unique identifiers: {grad_names}")
+        shared = sorted(set(grad_names) & set(upstream))
+        if shared:
+            raise ValueError(
+                f"{self.name}: upstream gradient names collide with the backward's "
+                f"return names: {shared}"
+            )
 
-        unknown_tolerances = set(self.tolerance_multipliers) - set(self.grad_names())
+        # A multiplier may name any result the gate compares: an output as well
+        # as a gradient. Outputs became eligible with structured outputs, where
+        # two results of one operator can need genuinely different tolerances --
+        # a normalized value and the plain sum it was computed from, say.
+        known_results = set(self.grad_names()) | set(self.output_names)
+        unknown_tolerances = set(self.tolerance_multipliers) - known_results
         if unknown_tolerances:
             raise ValueError(
-                f"{self.name}: tolerance multipliers name unknown gradients "
-                f"{sorted(unknown_tolerances)}"
+                f"{self.name}: tolerance multipliers name unknown results "
+                f"{sorted(unknown_tolerances)}; known results are "
+                f"{sorted(known_results)}"
             )
 
         for name, multipliers in self.tolerance_multipliers.items():
@@ -490,6 +602,13 @@ class OpDecl:
                 raise ValueError(
                     f"{self.name}: parameter_args names {sorted(unknown)}, which are "
                     f"not Active args; declared Active args are {sorted(active_names)}"
+                )
+            # A repeat would register the same nn.Parameter twice and make the
+            # activation/parameter split depend on which copy was read.
+            if len(self.parameter_args) != len(set(self.parameter_args)):
+                raise ValueError(
+                    f"{self.name}: parameter_args repeats a name: "
+                    f"{list(self.parameter_args)}"
                 )
             if active_names and set(self.parameter_args) == active_names:
                 raise ValueError(
@@ -654,7 +773,7 @@ def declare_op(
     declaration: str | None = None,
     dims: tuple[str, ...],
     args: tuple[Arg, ...],
-    output: Active,
+    output: "Active | tuple[Active, ...]",
     forward_semantics: str,
     backward_semantics: str,
     level: int | None = None,

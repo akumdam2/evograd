@@ -105,19 +105,24 @@ def verify_runtime_forward(op: OpDecl, *, device: str = "cuda") -> None:
         values = make_case_inputs(op, workload, device=device)
         args = [values.get(name, getattr(arg, "default", None))
                 for name, arg in zip(arg_names, op.args)]
-        expected = definition(*args)
-        actual = production(*args)
-        atol, rtol = op.tolerance_for(workload)
-        if (
-            actual.shape != expected.shape
-            or actual.dtype != expected.dtype
-            or not torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
-        ):
-            raise RuntimeError(
-                f"{op.name}: runtime_forward disagrees with forward at "
-                f"{workload.dims}/{workload.dtype}; the eager baseline would be "
-                "timing a different function than the one it is verified against"
-            )
+        from evograd.opdecl.inputs import as_output_tuple
+
+        expected_outputs = as_output_tuple(op, definition(*args))
+        actual_outputs = as_output_tuple(op, production(*args))
+        for out, actual, expected in zip(op.outputs, actual_outputs, expected_outputs):
+            atol, rtol = op.tolerance_for(workload, out.name)
+            if (
+                actual.shape != expected.shape
+                or actual.dtype != expected.dtype
+                or actual.stride() != expected.stride()
+                or not torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
+            ):
+                raise RuntimeError(
+                    f"{op.name}: runtime_forward disagrees with forward on output "
+                    f"{out.name!r} at {workload.dims}/{workload.dtype}; the eager "
+                    "baseline would be timing a different function than the one it "
+                    "is verified against"
+                )
     _RUNTIME_FORWARD_VERIFIED.add(op.name)
 
 
@@ -261,7 +266,7 @@ def verify_performance_baseline(
         _VERIFIED.add(key)
         return
 
-    from evograd.opdecl.inputs import make_case_inputs
+    from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
     from evograd.opdecl.oracle import oracle
 
     if factory is not None:
@@ -273,7 +278,7 @@ def verify_performance_baseline(
             y, saved = forward(*(values[name] for name in forward_args))
             saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
             grads = backward(
-                values[op.upstream_grad_name],
+                upstream_grad_values(op, values),
                 saved,
                 *(values[name] for name in backward_extras),
             )
@@ -291,16 +296,21 @@ def verify_performance_baseline(
                 f"{op.name}: {baseline} baseline returned {len(actual)} gradients; "
                 f"expected {len(op.grad_names())}"
             )
-        atol, rtol = op.tolerance_for(workload)
-        if (
-            y.shape != y_ref.shape
-            or y.dtype != y_ref.dtype
-            or not torch.allclose(y.float(), y_ref.float(), atol=atol, rtol=rtol)
+        from evograd.opdecl.inputs import as_output_tuple
+
+        for out, got, ref in zip(
+            op.outputs, as_output_tuple(op, y), as_output_tuple(op, y_ref)
         ):
-            raise RuntimeError(
-                f"{op.name}: {baseline} baseline forward failed at "
-                f"{workload.dims}/{workload.dtype}"
-            )
+            atol, rtol = op.tolerance_for(workload, out.name)
+            if (
+                got.shape != ref.shape
+                or got.dtype != ref.dtype
+                or not torch.allclose(got.float(), ref.float(), atol=atol, rtol=rtol)
+            ):
+                raise RuntimeError(
+                    f"{op.name}: {baseline} baseline forward failed on output "
+                    f"{out.name!r} at {workload.dims}/{workload.dtype}"
+                )
         for name, got in zip(op.grad_names(), actual):
             ref = expected[name]
             atol, rtol = op.tolerance_for(workload, name)

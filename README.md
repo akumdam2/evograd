@@ -437,13 +437,20 @@ evograd tier2-bench --op layernorm --candidate best.py          # through autogr
 evograd tier3-bench --candidate rms_norm=best.py                # in a model
 ```
 
-Correctness is a hard gate at tiers 1 and 2 — candidates are checked against an
-autograd oracle derived from the declaration, and only correct ones are timed.
-**Tier 3 has no such gate yet**; it reports loss agreement rather than enforcing
-it, so verify before you measure there.
+Correctness is a hard gate at every tier. Candidates are checked against an
+autograd oracle derived from the declaration, and only correct ones are timed —
+tier 3 puts each patched kernel through the tier-1 pair gate before it builds a
+model, and requires every loss to be a finite scalar. Loss-trajectory agreement
+is reported on top of that, and gated only where a workload declares a
+threshold.
+
+A fourth stage sits above the tiers rather than inside them: **level 4** runs one
+real model the way training runs it and harvests what it invokes, which is where
+the Qwen3-0.6B operator shapes came from — see
+[docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
 
 Full detail — the protocols, the identity controls, submitting a kernel,
-bringing your own model, and the known gaps — is in
+bringing your own model, the level-4 workload, and the known gaps — is in
 [src/evograd/bench/README.md](src/evograd/bench/README.md).
 
 One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
@@ -490,7 +497,7 @@ any declaration support — `torch_compile` and `torch_compile_max_autotune`:
 evograd bench --op layernorm --candidate best.py --baseline torch_compile
 ```
 
-They matter for Pipeline D. `pytorch_autograd` measures _eager_ PyTorch, while a
+They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
 D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
 itself would emit — so beating eager is expected and says little about the
 kernel. Both compiled baselines are checked against the eager oracle before
@@ -555,20 +562,20 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 2 — fused operators
 
-| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline       |
-| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | -------------------- |
-| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                  |
-| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                  |
-| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                   |
-| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial) |
-| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                  |
+| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
+| ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
+| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                      |
+| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                      |
+| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                       |
+| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
+| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
 
 ### Level 3 — architectural blocks
 
 | Operator                | Family        | Forward                                                | Gradients |
 | ----------------------- | ------------- | ------------------------------------------------------ | --------: |
-| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)   |        10 |
-| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias |        13 |
+| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)    | 10        |
+| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias  | 13        |
 
 Both blocks compute their correctness reference in float32 while the candidate
 runs in bfloat16 (`reference_dtype`). Composing ten operators makes a
@@ -672,6 +679,20 @@ src/evograd/
 │   └── shared/
 ├── evolve/                    # OpenEvolve evaluator, scoring, and run wrapper
 ├── bench/                     # generic latency and memory harness
+│   ├── README.md              # the evaluation guide: tiers, protocols, gates
+│   ├── provider.py            # the pair provider boundary and mutation guards
+│   ├── harness.py             # tier 1 x fast: the evolution search's benchmark
+│   ├── tier1.py               # tier 1 x fair: the direct pair, published numbers
+│   ├── tier2.py               # tier 2 x fair: the operator through autograd
+│   ├── tier3_model.py         # tier 3 part 1: what is measured
+│   ├── tier3_patch.py         # tier 3 part 2: how a kernel gets into a model
+│   ├── tier3_runner.py        # tier 3 part 3: verify, build, step, time, report
+│   ├── tier3_llama.py         # tier 3: the built-in Llama-3 architecture
+│   ├── report.py              # one canonical report shape for every protocol
+│   └── workloads/qwen3/       # the Qwen3-0.6B workload; see its own README.md
+│       ├── harvest/           #   the instrumented run and its tracked snapshot
+│       ├── levels/            #   level 4/3/2/1: step, layer, operators, primitives
+│       └── evaluation/tier3/  #   drop-in replacement, its gate and calibration
 ├── ncu/                       # NCU profiling, roofline triage, accepted refinement
 ├── scaffold.py                # forward -> external declare_op contract
 ├── dispatch.py                # measured generalist/specialist deployment

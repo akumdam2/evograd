@@ -1,0 +1,3205 @@
+{
+  "schema_version": "evograd-qwen3-snapshot/4",
+  "workload_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad",
+  "workload_hash": "6e7919ad5cf60ba7",
+  "config_hash": "6e254de2e1abf1a0",
+  "manifest_hash": "3ab24571b6d5860859eb5c947daef94f30dfee4d949ec3cf0dea518ad9c7fabc",
+  "manifest_schema": "evograd-qwen3-harvest/1",
+  "model": {
+    "name": "Qwen3-0.6B",
+    "hidden_size": 1024,
+    "intermediate_size": 3072,
+    "num_hidden_layers": 28,
+    "hidden_act": "silu",
+    "num_attention_heads": 16,
+    "num_key_value_heads": 8,
+    "head_dim": 128
+  },
+  "batch_size": 2,
+  "seq_len": 2048,
+  "dtype": "bfloat16",
+  "level1": {
+    "linear_no_bias": {
+      "harvested_task": "linear",
+      "configurations": [
+        {
+          "config_id": "512569f88d48860a",
+          "harvested_task": "linear",
+          "roles": [
+            "gate_proj",
+            "up_proj"
+          ],
+          "frequency": 56,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.mlp.gate_proj",
+            "model.layers.0.mlp.up_proj",
+            "model.layers.1.mlp.gate_proj",
+            "model.layers.1.mlp.up_proj",
+            "model.layers.2.mlp.gate_proj",
+            "model.layers.2.mlp.up_proj",
+            "model.layers.3.mlp.gate_proj",
+            "model.layers.3.mlp.up_proj",
+            "model.layers.4.mlp.gate_proj",
+            "model.layers.4.mlp.up_proj",
+            "model.layers.5.mlp.gate_proj",
+            "model.layers.5.mlp.up_proj",
+            "model.layers.6.mlp.gate_proj",
+            "model.layers.6.mlp.up_proj",
+            "model.layers.7.mlp.gate_proj",
+            "model.layers.7.mlp.up_proj",
+            "model.layers.8.mlp.gate_proj",
+            "model.layers.8.mlp.up_proj",
+            "model.layers.9.mlp.gate_proj",
+            "model.layers.9.mlp.up_proj",
+            "model.layers.10.mlp.gate_proj",
+            "model.layers.10.mlp.up_proj",
+            "model.layers.11.mlp.gate_proj",
+            "model.layers.11.mlp.up_proj",
+            "model.layers.12.mlp.gate_proj",
+            "model.layers.12.mlp.up_proj",
+            "model.layers.13.mlp.gate_proj",
+            "model.layers.13.mlp.up_proj",
+            "model.layers.14.mlp.gate_proj",
+            "model.layers.14.mlp.up_proj",
+            "model.layers.15.mlp.gate_proj",
+            "model.layers.15.mlp.up_proj",
+            "model.layers.16.mlp.gate_proj",
+            "model.layers.16.mlp.up_proj",
+            "model.layers.17.mlp.gate_proj",
+            "model.layers.17.mlp.up_proj",
+            "model.layers.18.mlp.gate_proj",
+            "model.layers.18.mlp.up_proj",
+            "model.layers.19.mlp.gate_proj",
+            "model.layers.19.mlp.up_proj",
+            "model.layers.20.mlp.gate_proj",
+            "model.layers.20.mlp.up_proj",
+            "model.layers.21.mlp.gate_proj",
+            "model.layers.21.mlp.up_proj",
+            "model.layers.22.mlp.gate_proj",
+            "model.layers.22.mlp.up_proj",
+            "model.layers.23.mlp.gate_proj",
+            "model.layers.23.mlp.up_proj",
+            "model.layers.24.mlp.gate_proj",
+            "model.layers.24.mlp.up_proj",
+            "model.layers.25.mlp.gate_proj",
+            "model.layers.25.mlp.up_proj",
+            "model.layers.26.mlp.gate_proj",
+            "model.layers.26.mlp.up_proj",
+            "model.layers.27.mlp.gate_proj",
+            "model.layers.27.mlp.up_proj"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 1024,
+            "N": 3072
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "mlp_up",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "be060ca58cf90863",
+          "harvested_task": "linear",
+          "roles": [
+            "k_proj",
+            "v_proj"
+          ],
+          "frequency": 56,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn.k_proj",
+            "model.layers.0.self_attn.v_proj",
+            "model.layers.1.self_attn.k_proj",
+            "model.layers.1.self_attn.v_proj",
+            "model.layers.2.self_attn.k_proj",
+            "model.layers.2.self_attn.v_proj",
+            "model.layers.3.self_attn.k_proj",
+            "model.layers.3.self_attn.v_proj",
+            "model.layers.4.self_attn.k_proj",
+            "model.layers.4.self_attn.v_proj",
+            "model.layers.5.self_attn.k_proj",
+            "model.layers.5.self_attn.v_proj",
+            "model.layers.6.self_attn.k_proj",
+            "model.layers.6.self_attn.v_proj",
+            "model.layers.7.self_attn.k_proj",
+            "model.layers.7.self_attn.v_proj",
+            "model.layers.8.self_attn.k_proj",
+            "model.layers.8.self_attn.v_proj",
+            "model.layers.9.self_attn.k_proj",
+            "model.layers.9.self_attn.v_proj",
+            "model.layers.10.self_attn.k_proj",
+            "model.layers.10.self_attn.v_proj",
+            "model.layers.11.self_attn.k_proj",
+            "model.layers.11.self_attn.v_proj",
+            "model.layers.12.self_attn.k_proj",
+            "model.layers.12.self_attn.v_proj",
+            "model.layers.13.self_attn.k_proj",
+            "model.layers.13.self_attn.v_proj",
+            "model.layers.14.self_attn.k_proj",
+            "model.layers.14.self_attn.v_proj",
+            "model.layers.15.self_attn.k_proj",
+            "model.layers.15.self_attn.v_proj",
+            "model.layers.16.self_attn.k_proj",
+            "model.layers.16.self_attn.v_proj",
+            "model.layers.17.self_attn.k_proj",
+            "model.layers.17.self_attn.v_proj",
+            "model.layers.18.self_attn.k_proj",
+            "model.layers.18.self_attn.v_proj",
+            "model.layers.19.self_attn.k_proj",
+            "model.layers.19.self_attn.v_proj",
+            "model.layers.20.self_attn.k_proj",
+            "model.layers.20.self_attn.v_proj",
+            "model.layers.21.self_attn.k_proj",
+            "model.layers.21.self_attn.v_proj",
+            "model.layers.22.self_attn.k_proj",
+            "model.layers.22.self_attn.v_proj",
+            "model.layers.23.self_attn.k_proj",
+            "model.layers.23.self_attn.v_proj",
+            "model.layers.24.self_attn.k_proj",
+            "model.layers.24.self_attn.v_proj",
+            "model.layers.25.self_attn.k_proj",
+            "model.layers.25.self_attn.v_proj",
+            "model.layers.26.self_attn.k_proj",
+            "model.layers.26.self_attn.v_proj",
+            "model.layers.27.self_attn.k_proj",
+            "model.layers.27.self_attn.v_proj"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 1024,
+            "N": 1024
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "attn_kv_proj",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "6163dcf09417a929",
+          "harvested_task": "linear",
+          "roles": [
+            "down_proj"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.mlp.down_proj",
+            "model.layers.1.mlp.down_proj",
+            "model.layers.2.mlp.down_proj",
+            "model.layers.3.mlp.down_proj",
+            "model.layers.4.mlp.down_proj",
+            "model.layers.5.mlp.down_proj",
+            "model.layers.6.mlp.down_proj",
+            "model.layers.7.mlp.down_proj",
+            "model.layers.8.mlp.down_proj",
+            "model.layers.9.mlp.down_proj",
+            "model.layers.10.mlp.down_proj",
+            "model.layers.11.mlp.down_proj",
+            "model.layers.12.mlp.down_proj",
+            "model.layers.13.mlp.down_proj",
+            "model.layers.14.mlp.down_proj",
+            "model.layers.15.mlp.down_proj",
+            "model.layers.16.mlp.down_proj",
+            "model.layers.17.mlp.down_proj",
+            "model.layers.18.mlp.down_proj",
+            "model.layers.19.mlp.down_proj",
+            "model.layers.20.mlp.down_proj",
+            "model.layers.21.mlp.down_proj",
+            "model.layers.22.mlp.down_proj",
+            "model.layers.23.mlp.down_proj",
+            "model.layers.24.mlp.down_proj",
+            "model.layers.25.mlp.down_proj",
+            "model.layers.26.mlp.down_proj",
+            "model.layers.27.mlp.down_proj"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 3072,
+            "N": 1024
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "mlp_down",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "b9cc24095ee7dc62",
+          "harvested_task": "linear",
+          "roles": [
+            "q_proj"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn.q_proj",
+            "model.layers.1.self_attn.q_proj",
+            "model.layers.2.self_attn.q_proj",
+            "model.layers.3.self_attn.q_proj",
+            "model.layers.4.self_attn.q_proj",
+            "model.layers.5.self_attn.q_proj",
+            "model.layers.6.self_attn.q_proj",
+            "model.layers.7.self_attn.q_proj",
+            "model.layers.8.self_attn.q_proj",
+            "model.layers.9.self_attn.q_proj",
+            "model.layers.10.self_attn.q_proj",
+            "model.layers.11.self_attn.q_proj",
+            "model.layers.12.self_attn.q_proj",
+            "model.layers.13.self_attn.q_proj",
+            "model.layers.14.self_attn.q_proj",
+            "model.layers.15.self_attn.q_proj",
+            "model.layers.16.self_attn.q_proj",
+            "model.layers.17.self_attn.q_proj",
+            "model.layers.18.self_attn.q_proj",
+            "model.layers.19.self_attn.q_proj",
+            "model.layers.20.self_attn.q_proj",
+            "model.layers.21.self_attn.q_proj",
+            "model.layers.22.self_attn.q_proj",
+            "model.layers.23.self_attn.q_proj",
+            "model.layers.24.self_attn.q_proj",
+            "model.layers.25.self_attn.q_proj",
+            "model.layers.26.self_attn.q_proj",
+            "model.layers.27.self_attn.q_proj"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 1024,
+            "N": 2048
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                2048
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "attn_qkv",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "ea5311a8e1cbba90",
+          "harvested_task": "linear",
+          "roles": [
+            "o_proj"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn.o_proj",
+            "model.layers.1.self_attn.o_proj",
+            "model.layers.2.self_attn.o_proj",
+            "model.layers.3.self_attn.o_proj",
+            "model.layers.4.self_attn.o_proj",
+            "model.layers.5.self_attn.o_proj",
+            "model.layers.6.self_attn.o_proj",
+            "model.layers.7.self_attn.o_proj",
+            "model.layers.8.self_attn.o_proj",
+            "model.layers.9.self_attn.o_proj",
+            "model.layers.10.self_attn.o_proj",
+            "model.layers.11.self_attn.o_proj",
+            "model.layers.12.self_attn.o_proj",
+            "model.layers.13.self_attn.o_proj",
+            "model.layers.14.self_attn.o_proj",
+            "model.layers.15.self_attn.o_proj",
+            "model.layers.16.self_attn.o_proj",
+            "model.layers.17.self_attn.o_proj",
+            "model.layers.18.self_attn.o_proj",
+            "model.layers.19.self_attn.o_proj",
+            "model.layers.20.self_attn.o_proj",
+            "model.layers.21.self_attn.o_proj",
+            "model.layers.22.self_attn.o_proj",
+            "model.layers.23.self_attn.o_proj",
+            "model.layers.24.self_attn.o_proj",
+            "model.layers.25.self_attn.o_proj",
+            "model.layers.26.self_attn.o_proj",
+            "model.layers.27.self_attn.o_proj"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 2048,
+            "N": 1024
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                2048
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "attn_out_proj",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "cbada5ef6e5d6e6c",
+          "harvested_task": "linear",
+          "roles": [
+            "lm_head"
+          ],
+          "frequency": 1,
+          "layer_indices": [
+            null
+          ],
+          "module_paths": [
+            "lm_head"
+          ],
+          "dims": {
+            "M": 4096,
+            "K": 1024,
+            "N": 151936
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                151936
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                311164928,
+                151936,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "bias": false
+          },
+          "provenance": {
+            "component": "lm_head",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        }
+      ],
+      "total_frequency": 197
+    },
+    "rmsnorm": {
+      "harvested_task": "rms_norm",
+      "configurations": [
+        {
+          "config_id": "1bf435a6d3df750a",
+          "harvested_task": "rms_norm",
+          "roles": [
+            "input_layernorm",
+            "norm",
+            "post_attention_layernorm"
+          ],
+          "frequency": 57,
+          "layer_indices": [
+            null,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.input_layernorm",
+            "model.layers.0.post_attention_layernorm",
+            "model.layers.1.input_layernorm",
+            "model.layers.1.post_attention_layernorm",
+            "model.layers.2.input_layernorm",
+            "model.layers.2.post_attention_layernorm",
+            "model.layers.3.input_layernorm",
+            "model.layers.3.post_attention_layernorm",
+            "model.layers.4.input_layernorm",
+            "model.layers.4.post_attention_layernorm",
+            "model.layers.5.input_layernorm",
+            "model.layers.5.post_attention_layernorm",
+            "model.layers.6.input_layernorm",
+            "model.layers.6.post_attention_layernorm",
+            "model.layers.7.input_layernorm",
+            "model.layers.7.post_attention_layernorm",
+            "model.layers.8.input_layernorm",
+            "model.layers.8.post_attention_layernorm",
+            "model.layers.9.input_layernorm",
+            "model.layers.9.post_attention_layernorm",
+            "model.layers.10.input_layernorm",
+            "model.layers.10.post_attention_layernorm",
+            "model.layers.11.input_layernorm",
+            "model.layers.11.post_attention_layernorm",
+            "model.layers.12.input_layernorm",
+            "model.layers.12.post_attention_layernorm",
+            "model.layers.13.input_layernorm",
+            "model.layers.13.post_attention_layernorm",
+            "model.layers.14.input_layernorm",
+            "model.layers.14.post_attention_layernorm",
+            "model.layers.15.input_layernorm",
+            "model.layers.15.post_attention_layernorm",
+            "model.layers.16.input_layernorm",
+            "model.layers.16.post_attention_layernorm",
+            "model.layers.17.input_layernorm",
+            "model.layers.17.post_attention_layernorm",
+            "model.layers.18.input_layernorm",
+            "model.layers.18.post_attention_layernorm",
+            "model.layers.19.input_layernorm",
+            "model.layers.19.post_attention_layernorm",
+            "model.layers.20.input_layernorm",
+            "model.layers.20.post_attention_layernorm",
+            "model.layers.21.input_layernorm",
+            "model.layers.21.post_attention_layernorm",
+            "model.layers.22.input_layernorm",
+            "model.layers.22.post_attention_layernorm",
+            "model.layers.23.input_layernorm",
+            "model.layers.23.post_attention_layernorm",
+            "model.layers.24.input_layernorm",
+            "model.layers.24.post_attention_layernorm",
+            "model.layers.25.input_layernorm",
+            "model.layers.25.post_attention_layernorm",
+            "model.layers.26.input_layernorm",
+            "model.layers.26.post_attention_layernorm",
+            "model.layers.27.input_layernorm",
+            "model.layers.27.post_attention_layernorm",
+            "model.norm"
+          ],
+          "dims": {
+            "rows": 4096,
+            "hidden": 1024
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "eps": 1e-06
+          },
+          "provenance": {
+            "component": "rmsnorm",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        },
+        {
+          "config_id": "494b2d469ae06000",
+          "harvested_task": "rms_norm",
+          "roles": [
+            "k_norm"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn.k_norm",
+            "model.layers.1.self_attn.k_norm",
+            "model.layers.2.self_attn.k_norm",
+            "model.layers.3.self_attn.k_norm",
+            "model.layers.4.self_attn.k_norm",
+            "model.layers.5.self_attn.k_norm",
+            "model.layers.6.self_attn.k_norm",
+            "model.layers.7.self_attn.k_norm",
+            "model.layers.8.self_attn.k_norm",
+            "model.layers.9.self_attn.k_norm",
+            "model.layers.10.self_attn.k_norm",
+            "model.layers.11.self_attn.k_norm",
+            "model.layers.12.self_attn.k_norm",
+            "model.layers.13.self_attn.k_norm",
+            "model.layers.14.self_attn.k_norm",
+            "model.layers.15.self_attn.k_norm",
+            "model.layers.16.self_attn.k_norm",
+            "model.layers.17.self_attn.k_norm",
+            "model.layers.18.self_attn.k_norm",
+            "model.layers.19.self_attn.k_norm",
+            "model.layers.20.self_attn.k_norm",
+            "model.layers.21.self_attn.k_norm",
+            "model.layers.22.self_attn.k_norm",
+            "model.layers.23.self_attn.k_norm",
+            "model.layers.24.self_attn.k_norm",
+            "model.layers.25.self_attn.k_norm",
+            "model.layers.26.self_attn.k_norm",
+            "model.layers.27.self_attn.k_norm"
+          ],
+          "dims": {
+            "rows": 32768,
+            "hidden": 128
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                8,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                8,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "eps": 1e-06
+          },
+          "provenance": {
+            "component": "k_head_norm",
+            "free": {
+              "batch": 2,
+              "seq": 2048
+            }
+          }
+        },
+        {
+          "config_id": "a872639f0512398e",
+          "harvested_task": "rms_norm",
+          "roles": [
+            "q_norm"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn.q_norm",
+            "model.layers.1.self_attn.q_norm",
+            "model.layers.2.self_attn.q_norm",
+            "model.layers.3.self_attn.q_norm",
+            "model.layers.4.self_attn.q_norm",
+            "model.layers.5.self_attn.q_norm",
+            "model.layers.6.self_attn.q_norm",
+            "model.layers.7.self_attn.q_norm",
+            "model.layers.8.self_attn.q_norm",
+            "model.layers.9.self_attn.q_norm",
+            "model.layers.10.self_attn.q_norm",
+            "model.layers.11.self_attn.q_norm",
+            "model.layers.12.self_attn.q_norm",
+            "model.layers.13.self_attn.q_norm",
+            "model.layers.14.self_attn.q_norm",
+            "model.layers.15.self_attn.q_norm",
+            "model.layers.16.self_attn.q_norm",
+            "model.layers.17.self_attn.q_norm",
+            "model.layers.18.self_attn.q_norm",
+            "model.layers.19.self_attn.q_norm",
+            "model.layers.20.self_attn.q_norm",
+            "model.layers.21.self_attn.q_norm",
+            "model.layers.22.self_attn.q_norm",
+            "model.layers.23.self_attn.q_norm",
+            "model.layers.24.self_attn.q_norm",
+            "model.layers.25.self_attn.q_norm",
+            "model.layers.26.self_attn.q_norm",
+            "model.layers.27.self_attn.q_norm"
+          ],
+          "dims": {
+            "rows": 65536,
+            "hidden": 128
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                16,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                16,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "eps": 1e-06
+          },
+          "provenance": {
+            "component": "q_head_norm",
+            "free": {
+              "batch": 2,
+              "seq": 2048
+            }
+          }
+        }
+      ],
+      "total_frequency": 113
+    },
+    "rope": {
+      "harvested_task": "rope_apply",
+      "configurations": [
+        {
+          "config_id": "34378ecf454fc895",
+          "harvested_task": "rope_apply",
+          "roles": [
+            "apply_rotary_pos_emb"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn",
+            "model.layers.1.self_attn",
+            "model.layers.2.self_attn",
+            "model.layers.3.self_attn",
+            "model.layers.4.self_attn",
+            "model.layers.5.self_attn",
+            "model.layers.6.self_attn",
+            "model.layers.7.self_attn",
+            "model.layers.8.self_attn",
+            "model.layers.9.self_attn",
+            "model.layers.10.self_attn",
+            "model.layers.11.self_attn",
+            "model.layers.12.self_attn",
+            "model.layers.13.self_attn",
+            "model.layers.14.self_attn",
+            "model.layers.15.self_attn",
+            "model.layers.16.self_attn",
+            "model.layers.17.self_attn",
+            "model.layers.18.self_attn",
+            "model.layers.19.self_attn",
+            "model.layers.20.self_attn",
+            "model.layers.21.self_attn",
+            "model.layers.22.self_attn",
+            "model.layers.23.self_attn",
+            "model.layers.24.self_attn",
+            "model.layers.25.self_attn",
+            "model.layers.26.self_attn",
+            "model.layers.27.self_attn"
+          ],
+          "dims": {
+            "B": 2,
+            "n_heads": 16,
+            "T": 2048,
+            "head_dim": 128
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                1,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                262144,
+                128,
+                1
+              ],
+              "contiguous": true
+            },
+            {
+              "shape": [
+                1,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                262144,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "attrs": {
+            "rotated": "q",
+            "unsqueeze_dim": 1
+          },
+          "provenance": {
+            "component": "rope",
+            "free": {
+              "batch": 2,
+              "seq": 2048
+            }
+          }
+        },
+        {
+          "config_id": "34378ecf454fc895",
+          "harvested_task": "rope_apply",
+          "roles": [
+            "apply_rotary_pos_emb"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn",
+            "model.layers.1.self_attn",
+            "model.layers.2.self_attn",
+            "model.layers.3.self_attn",
+            "model.layers.4.self_attn",
+            "model.layers.5.self_attn",
+            "model.layers.6.self_attn",
+            "model.layers.7.self_attn",
+            "model.layers.8.self_attn",
+            "model.layers.9.self_attn",
+            "model.layers.10.self_attn",
+            "model.layers.11.self_attn",
+            "model.layers.12.self_attn",
+            "model.layers.13.self_attn",
+            "model.layers.14.self_attn",
+            "model.layers.15.self_attn",
+            "model.layers.16.self_attn",
+            "model.layers.17.self_attn",
+            "model.layers.18.self_attn",
+            "model.layers.19.self_attn",
+            "model.layers.20.self_attn",
+            "model.layers.21.self_attn",
+            "model.layers.22.self_attn",
+            "model.layers.23.self_attn",
+            "model.layers.24.self_attn",
+            "model.layers.25.self_attn",
+            "model.layers.26.self_attn",
+            "model.layers.27.self_attn"
+          ],
+          "dims": {
+            "B": 2,
+            "n_heads": 8,
+            "T": 2048,
+            "head_dim": 128
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                1,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                262144,
+                128,
+                1
+              ],
+              "contiguous": true
+            },
+            {
+              "shape": [
+                1,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                262144,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "attrs": {
+            "rotated": "k",
+            "unsqueeze_dim": 1
+          },
+          "provenance": {
+            "component": "rope_kv",
+            "free": {
+              "batch": 2,
+              "seq": 2048
+            }
+          }
+        }
+      ],
+      "total_frequency": 28
+    },
+    "swiglu": {
+      "harvested_task": "silu",
+      "configurations": [
+        {
+          "config_id": "be8d90aa36b9bf50",
+          "harvested_task": "silu",
+          "roles": [
+            "act_fn"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.mlp.act_fn",
+            "model.layers.1.mlp.act_fn",
+            "model.layers.2.mlp.act_fn",
+            "model.layers.3.mlp.act_fn",
+            "model.layers.4.mlp.act_fn",
+            "model.layers.5.mlp.act_fn",
+            "model.layers.6.mlp.act_fn",
+            "model.layers.7.mlp.act_fn",
+            "model.layers.8.mlp.act_fn",
+            "model.layers.9.mlp.act_fn",
+            "model.layers.10.mlp.act_fn",
+            "model.layers.11.mlp.act_fn",
+            "model.layers.12.mlp.act_fn",
+            "model.layers.13.mlp.act_fn",
+            "model.layers.14.mlp.act_fn",
+            "model.layers.15.mlp.act_fn",
+            "model.layers.16.mlp.act_fn",
+            "model.layers.17.mlp.act_fn",
+            "model.layers.18.mlp.act_fn",
+            "model.layers.19.mlp.act_fn",
+            "model.layers.20.mlp.act_fn",
+            "model.layers.21.mlp.act_fn",
+            "model.layers.22.mlp.act_fn",
+            "model.layers.23.mlp.act_fn",
+            "model.layers.24.mlp.act_fn",
+            "model.layers.25.mlp.act_fn",
+            "model.layers.26.mlp.act_fn",
+            "model.layers.27.mlp.act_fn"
+          ],
+          "dims": {
+            "rows": 4096,
+            "cols": 3072
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "attrs": {},
+          "provenance": {
+            "component": "mlp_activation",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        }
+      ],
+      "total_frequency": 28,
+      "supporting": {
+        "mlp": {
+          "config_id": "9d23bb006130d36b",
+          "task": "mlp",
+          "roles": [
+            "mlp"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "hidden_size": 1024,
+            "intermediate_size": 3072,
+            "hidden_act": "silu"
+          }
+        },
+        "gate_up_projection": {
+          "config_id": "512569f88d48860a",
+          "task": "linear",
+          "roles": [
+            "gate_proj",
+            "up_proj"
+          ],
+          "frequency": 56,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                3072,
+                1024
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 1024,
+            "out_features": 3072,
+            "bias": false
+          }
+        }
+      }
+    },
+    "causal_gqa_attention": {
+      "harvested_task": "sdpa",
+      "configurations": [
+        {
+          "config_id": "9674b971ae24b325",
+          "harvested_task": "sdpa",
+          "roles": [
+            "scaled_dot_product_attention"
+          ],
+          "frequency": 28,
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27
+          ],
+          "module_paths": [
+            "model.layers.0.self_attn",
+            "model.layers.1.self_attn",
+            "model.layers.2.self_attn",
+            "model.layers.3.self_attn",
+            "model.layers.4.self_attn",
+            "model.layers.5.self_attn",
+            "model.layers.6.self_attn",
+            "model.layers.7.self_attn",
+            "model.layers.8.self_attn",
+            "model.layers.9.self_attn",
+            "model.layers.10.self_attn",
+            "model.layers.11.self_attn",
+            "model.layers.12.self_attn",
+            "model.layers.13.self_attn",
+            "model.layers.14.self_attn",
+            "model.layers.15.self_attn",
+            "model.layers.16.self_attn",
+            "model.layers.17.self_attn",
+            "model.layers.18.self_attn",
+            "model.layers.19.self_attn",
+            "model.layers.20.self_attn",
+            "model.layers.21.self_attn",
+            "model.layers.22.self_attn",
+            "model.layers.23.self_attn",
+            "model.layers.24.self_attn",
+            "model.layers.25.self_attn",
+            "model.layers.26.self_attn",
+            "model.layers.27.self_attn"
+          ],
+          "dims": {
+            "B": 2,
+            "HQ": 16,
+            "HK": 8,
+            "T": 2048,
+            "D": 128
+          },
+          "dtype": "torch.bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "attrs": {
+            "dropout_p": 0.0,
+            "is_causal": true,
+            "scale": 0.08838834764831845,
+            "enable_gqa": true,
+            "attn_mask_provided": false
+          },
+          "provenance": {
+            "component": "causal_gqa_sdpa",
+            "free": {
+              "batch": 2,
+              "seq": 2048
+            }
+          }
+        }
+      ],
+      "total_frequency": 28
+    },
+    "cross_entropy": {
+      "harvested_task": "cross_entropy",
+      "configurations": [
+        {
+          "config_id": "b33722d17d3a0916",
+          "harvested_task": "cross_entropy",
+          "roles": [
+            "fixed_cross_entropy"
+          ],
+          "frequency": 1,
+          "layer_indices": [
+            null
+          ],
+          "module_paths": [],
+          "dims": {
+            "rows": 4096,
+            "cols": 151936
+          },
+          "dtype": "torch.float32",
+          "inputs": [
+            {
+              "shape": [
+                4096,
+                151936
+              ],
+              "dtype": "torch.float32",
+              "stride": [
+                151936,
+                1
+              ],
+              "contiguous": true
+            },
+            {
+              "shape": [
+                4096
+              ],
+              "dtype": "torch.int64",
+              "stride": [
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "outputs": [
+            {
+              "shape": [],
+              "dtype": "torch.float32",
+              "stride": [],
+              "contiguous": true
+            }
+          ],
+          "attrs": {
+            "ignore_index": -100,
+            "reduction": "mean"
+          },
+          "provenance": {
+            "component": "logits",
+            "free": {
+              "tokens": 4096
+            }
+          }
+        }
+      ],
+      "total_frequency": 1,
+      "supporting": {
+        "causal_wrapper": {
+          "config_id": "68980a682f33146e",
+          "task": "causal_cross_entropy",
+          "roles": [
+            "loss_function"
+          ],
+          "frequency": 1,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                151936
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                311164928,
+                151936,
+                1
+              ],
+              "contiguous": true
+            },
+            {
+              "shape": [
+                2,
+                2048
+              ],
+              "dtype": "torch.int64",
+              "stride": [
+                2048,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [],
+              "dtype": "torch.float32",
+              "stride": [],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "vocab_size": 151936,
+            "ignore_index": -100,
+            "shift_labels_provided": false
+          }
+        }
+      }
+    }
+  },
+  "representative_layer": {
+    "layer_index": 14,
+    "module_path": "model.layers.14",
+    "event_ordinal": 239
+  },
+  "tasks": {
+    "qwen3_swiglu_mlp": {
+      "config_id": "9d23bb006130d36b",
+      "harvested_task": "mlp",
+      "roles": [
+        "mlp"
+      ],
+      "frequency": 28,
+      "module_paths": [
+        "model.layers.0.mlp",
+        "model.layers.1.mlp",
+        "model.layers.2.mlp",
+        "model.layers.3.mlp",
+        "model.layers.4.mlp",
+        "model.layers.5.mlp",
+        "model.layers.6.mlp",
+        "model.layers.7.mlp",
+        "model.layers.8.mlp",
+        "model.layers.9.mlp",
+        "model.layers.10.mlp",
+        "model.layers.11.mlp",
+        "model.layers.12.mlp",
+        "model.layers.13.mlp",
+        "model.layers.14.mlp",
+        "model.layers.15.mlp",
+        "model.layers.16.mlp",
+        "model.layers.17.mlp",
+        "model.layers.18.mlp",
+        "model.layers.19.mlp",
+        "model.layers.20.mlp",
+        "model.layers.21.mlp",
+        "model.layers.22.mlp",
+        "model.layers.23.mlp",
+        "model.layers.24.mlp",
+        "model.layers.25.mlp",
+        "model.layers.26.mlp",
+        "model.layers.27.mlp"
+      ],
+      "layer_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "input_shapes": [
+        {
+          "shape": [
+            2,
+            2048,
+            1024
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            1024,
+            1
+          ],
+          "contiguous": true
+        }
+      ],
+      "output_shapes": [
+        {
+          "shape": [
+            2,
+            2048,
+            1024
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            1024,
+            1
+          ],
+          "contiguous": true
+        }
+      ],
+      "dtype": "torch.bfloat16",
+      "params": {},
+      "attrs": {
+        "hidden_size": 1024,
+        "intermediate_size": 3072,
+        "hidden_act": "silu"
+      },
+      "supporting": {
+        "gate_up_projection": {
+          "config_id": "512569f88d48860a",
+          "task": "linear",
+          "roles": [
+            "gate_proj",
+            "up_proj"
+          ],
+          "frequency": 56,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                3072,
+                1024
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 1024,
+            "out_features": 3072,
+            "bias": false
+          }
+        },
+        "down_projection": {
+          "config_id": "6163dcf09417a929",
+          "task": "linear",
+          "roles": [
+            "down_proj"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                1024,
+                3072
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 3072,
+            "out_features": 1024,
+            "bias": false
+          }
+        },
+        "activation": {
+          "config_id": "be8d90aa36b9bf50",
+          "task": "silu",
+          "roles": [
+            "act_fn"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                3072
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                6291456,
+                3072,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {}
+        }
+      }
+    },
+    "fused_add_rms_norm": {
+      "config_id": "1bf435a6d3df750a",
+      "harvested_task": "rms_norm",
+      "roles": [
+        "input_layernorm",
+        "norm",
+        "post_attention_layernorm"
+      ],
+      "frequency": 57,
+      "module_paths": [
+        "model.layers.0.input_layernorm",
+        "model.layers.0.post_attention_layernorm",
+        "model.layers.1.input_layernorm",
+        "model.layers.1.post_attention_layernorm",
+        "model.layers.2.input_layernorm",
+        "model.layers.2.post_attention_layernorm",
+        "model.layers.3.input_layernorm",
+        "model.layers.3.post_attention_layernorm",
+        "model.layers.4.input_layernorm",
+        "model.layers.4.post_attention_layernorm",
+        "model.layers.5.input_layernorm",
+        "model.layers.5.post_attention_layernorm",
+        "model.layers.6.input_layernorm",
+        "model.layers.6.post_attention_layernorm",
+        "model.layers.7.input_layernorm",
+        "model.layers.7.post_attention_layernorm",
+        "model.layers.8.input_layernorm",
+        "model.layers.8.post_attention_layernorm",
+        "model.layers.9.input_layernorm",
+        "model.layers.9.post_attention_layernorm",
+        "model.layers.10.input_layernorm",
+        "model.layers.10.post_attention_layernorm",
+        "model.layers.11.input_layernorm",
+        "model.layers.11.post_attention_layernorm",
+        "model.layers.12.input_layernorm",
+        "model.layers.12.post_attention_layernorm",
+        "model.layers.13.input_layernorm",
+        "model.layers.13.post_attention_layernorm",
+        "model.layers.14.input_layernorm",
+        "model.layers.14.post_attention_layernorm",
+        "model.layers.15.input_layernorm",
+        "model.layers.15.post_attention_layernorm",
+        "model.layers.16.input_layernorm",
+        "model.layers.16.post_attention_layernorm",
+        "model.layers.17.input_layernorm",
+        "model.layers.17.post_attention_layernorm",
+        "model.layers.18.input_layernorm",
+        "model.layers.18.post_attention_layernorm",
+        "model.layers.19.input_layernorm",
+        "model.layers.19.post_attention_layernorm",
+        "model.layers.20.input_layernorm",
+        "model.layers.20.post_attention_layernorm",
+        "model.layers.21.input_layernorm",
+        "model.layers.21.post_attention_layernorm",
+        "model.layers.22.input_layernorm",
+        "model.layers.22.post_attention_layernorm",
+        "model.layers.23.input_layernorm",
+        "model.layers.23.post_attention_layernorm",
+        "model.layers.24.input_layernorm",
+        "model.layers.24.post_attention_layernorm",
+        "model.layers.25.input_layernorm",
+        "model.layers.25.post_attention_layernorm",
+        "model.layers.26.input_layernorm",
+        "model.layers.26.post_attention_layernorm",
+        "model.layers.27.input_layernorm",
+        "model.layers.27.post_attention_layernorm",
+        "model.norm"
+      ],
+      "layer_indices": [
+        null,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "input_shapes": [
+        {
+          "shape": [
+            2,
+            2048,
+            1024
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            1024,
+            1
+          ],
+          "contiguous": true
+        }
+      ],
+      "output_shapes": [
+        {
+          "shape": [
+            2,
+            2048,
+            1024
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            1024,
+            1
+          ],
+          "contiguous": true
+        }
+      ],
+      "dtype": "torch.bfloat16",
+      "params": {
+        "weight": {
+          "shape": [
+            1024
+          ],
+          "dtype": "torch.bfloat16"
+        }
+      },
+      "attrs": {
+        "normalized_size": 1024,
+        "eps": 1e-06
+      },
+      "supporting": {
+        "decoder_layer": {
+          "config_id": "88c8166a35aab477",
+          "task": "decoder_layer",
+          "roles": [
+            "decoder_layer"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "hidden_size": 1024
+          }
+        }
+      },
+      "fusion_sites": {
+        "attention_residual_then_post_attention_layernorm": 28,
+        "mlp_residual_then_next_layer_input_layernorm": 27,
+        "final_mlp_residual_then_model_norm": 1,
+        "excluded_layer0_input_layernorm": 1,
+        "total": 56,
+        "observed_rms_norm_invocations": 57,
+        "directly_verified_invocations": 1,
+        "directly_verified_note": "one canonical invocation is verified against the model, inside layer 14; the other 55 are the same configuration by deduplication, not by direct comparison"
+      }
+    },
+    "qwen3_qkv_norm_rope": {
+      "config_id": "34378ecf454fc895",
+      "harvested_task": "rope_apply",
+      "roles": [
+        "apply_rotary_pos_emb"
+      ],
+      "frequency": 28,
+      "module_paths": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn",
+        "model.layers.16.self_attn",
+        "model.layers.17.self_attn",
+        "model.layers.18.self_attn",
+        "model.layers.19.self_attn",
+        "model.layers.20.self_attn",
+        "model.layers.21.self_attn",
+        "model.layers.22.self_attn",
+        "model.layers.23.self_attn",
+        "model.layers.24.self_attn",
+        "model.layers.25.self_attn",
+        "model.layers.26.self_attn",
+        "model.layers.27.self_attn"
+      ],
+      "layer_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "input_shapes": [
+        {
+          "shape": [
+            2,
+            16,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            4194304,
+            128,
+            2048,
+            1
+          ],
+          "contiguous": false
+        },
+        {
+          "shape": [
+            2,
+            8,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            128,
+            1024,
+            1
+          ],
+          "contiguous": false
+        },
+        {
+          "shape": [
+            1,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            262144,
+            128,
+            1
+          ],
+          "contiguous": true
+        },
+        {
+          "shape": [
+            1,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            262144,
+            128,
+            1
+          ],
+          "contiguous": true
+        }
+      ],
+      "output_shapes": [
+        {
+          "shape": [
+            2,
+            16,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            4194304,
+            128,
+            2048,
+            1
+          ],
+          "contiguous": false
+        },
+        {
+          "shape": [
+            2,
+            8,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            128,
+            1024,
+            1
+          ],
+          "contiguous": false
+        }
+      ],
+      "dtype": "torch.bfloat16",
+      "params": {},
+      "attrs": {
+        "unsqueeze_dim": 1
+      },
+      "supporting": {
+        "q_projection": {
+          "config_id": "b9cc24095ee7dc62",
+          "task": "linear",
+          "roles": [
+            "q_proj"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                2048
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 1024,
+            "out_features": 2048,
+            "bias": false
+          }
+        },
+        "kv_projection": {
+          "config_id": "be060ca58cf90863",
+          "task": "linear",
+          "roles": [
+            "k_proj",
+            "v_proj"
+          ],
+          "frequency": 56,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                1024,
+                1024
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 1024,
+            "out_features": 1024,
+            "bias": false
+          }
+        },
+        "q_norm": {
+          "config_id": "a872639f0512398e",
+          "task": "rms_norm",
+          "roles": [
+            "q_norm"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                16,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                16,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                128
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "normalized_size": 128,
+            "eps": 1e-06
+          }
+        },
+        "k_norm": {
+          "config_id": "494b2d469ae06000",
+          "task": "rms_norm",
+          "roles": [
+            "k_norm"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                8,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                8,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                128,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                128
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "normalized_size": 128,
+            "eps": 1e-06
+          }
+        },
+        "consumer": {
+          "config_id": "9674b971ae24b325",
+          "task": "sdpa",
+          "roles": [
+            "scaled_dot_product_attention"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            },
+            {
+              "shape": [
+                2,
+                8,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                128,
+                1024,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                16,
+                2048,
+                128
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                128,
+                2048,
+                1
+              ],
+              "contiguous": false
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "dropout_p": 0.0,
+            "is_causal": true,
+            "scale": 0.08838834764831845,
+            "enable_gqa": true,
+            "attn_mask_provided": false
+          }
+        },
+        "enclosing_attention": {
+          "config_id": "836689711fd587b0",
+          "task": "attention",
+          "roles": [
+            "self_attn"
+          ],
+          "frequency": 28,
+          "input_shapes": [],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "num_attention_heads": 16,
+            "num_key_value_heads": 8,
+            "num_key_value_groups": 2,
+            "head_dim": 128,
+            "scaling": 0.08838834764831845,
+            "attention_dropout": 0.0,
+            "is_causal": true,
+            "sliding_window": null,
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
+    "qwen3_attention": {
+      "config_id": "9674b971ae24b325",
+      "harvested_task": "sdpa",
+      "roles": [
+        "scaled_dot_product_attention"
+      ],
+      "frequency": 28,
+      "module_paths": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn",
+        "model.layers.16.self_attn",
+        "model.layers.17.self_attn",
+        "model.layers.18.self_attn",
+        "model.layers.19.self_attn",
+        "model.layers.20.self_attn",
+        "model.layers.21.self_attn",
+        "model.layers.22.self_attn",
+        "model.layers.23.self_attn",
+        "model.layers.24.self_attn",
+        "model.layers.25.self_attn",
+        "model.layers.26.self_attn",
+        "model.layers.27.self_attn"
+      ],
+      "layer_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "input_shapes": [
+        {
+          "shape": [
+            2,
+            16,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            4194304,
+            128,
+            2048,
+            1
+          ],
+          "contiguous": false
+        },
+        {
+          "shape": [
+            2,
+            8,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            128,
+            1024,
+            1
+          ],
+          "contiguous": false
+        },
+        {
+          "shape": [
+            2,
+            8,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            2097152,
+            128,
+            1024,
+            1
+          ],
+          "contiguous": false
+        }
+      ],
+      "output_shapes": [
+        {
+          "shape": [
+            2,
+            16,
+            2048,
+            128
+          ],
+          "dtype": "torch.bfloat16",
+          "stride": [
+            4194304,
+            128,
+            2048,
+            1
+          ],
+          "contiguous": false
+        }
+      ],
+      "dtype": "torch.bfloat16",
+      "params": {},
+      "attrs": {
+        "dropout_p": 0.0,
+        "is_causal": true,
+        "scale": 0.08838834764831845,
+        "enable_gqa": true,
+        "attn_mask_provided": false
+      },
+      "supporting": {
+        "output_projection": {
+          "config_id": "ea5311a8e1cbba90",
+          "task": "linear",
+          "roles": [
+            "o_proj"
+          ],
+          "frequency": 28,
+          "input_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                2048
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                4194304,
+                2048,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {
+            "weight": {
+              "shape": [
+                1024,
+                2048
+              ],
+              "dtype": "torch.bfloat16"
+            }
+          },
+          "attrs": {
+            "in_features": 2048,
+            "out_features": 1024,
+            "bias": false
+          }
+        },
+        "enclosing_attention": {
+          "config_id": "836689711fd587b0",
+          "task": "attention",
+          "roles": [
+            "self_attn"
+          ],
+          "frequency": 28,
+          "input_shapes": [],
+          "output_shapes": [
+            {
+              "shape": [
+                2,
+                2048,
+                1024
+              ],
+              "dtype": "torch.bfloat16",
+              "stride": [
+                2097152,
+                1024,
+                1
+              ],
+              "contiguous": true
+            }
+          ],
+          "params": {},
+          "attrs": {
+            "num_attention_heads": 16,
+            "num_key_value_heads": 8,
+            "num_key_value_groups": 2,
+            "head_dim": 128,
+            "scaling": 0.08838834764831845,
+            "attention_dropout": 0.0,
+            "is_causal": true,
+            "sliding_window": null,
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    }
+  },
+  "snapshot_hash": "e456ae5a9eedae4ffa4ac560097e22b6778581df1ba7de1a0b859cbe7275bb12"
+}

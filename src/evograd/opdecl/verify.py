@@ -14,7 +14,11 @@ import torch
 
 from evograd.opdecl.activity import OpDecl, Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 from evograd.opdecl.oracle import oracle
 
 
@@ -125,11 +129,18 @@ def _run_case(op: OpDecl, module, workload: Workload, device: str) -> CaseResult
         positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
         y, saved = fwd(*positional)
         kwargs = backward_inactive_kwargs(op, bwd, inputs)
-        grads = bwd(inputs[op.upstream_grad_name], saved, **kwargs)
+        grads = bwd(upstream_grad_values(op, inputs), saved, **kwargs)
         grads = (grads,) if torch.is_tensor(grads) else tuple(grads)
 
-        atol, rtol = op.tolerance_for(workload)
-        checks = [_check(op.output.name, y, y_ref, atol, rtol)]
+        # One check per declared output, each against its own tolerance, so a
+        # task whose outputs have different magnitudes is not gated by whichever
+        # one happens to be largest.
+        outputs = as_output_tuple(op, y)
+        references = as_output_tuple(op, y_ref)
+        checks = []
+        for out, actual, expected in zip(op.outputs, outputs, references):
+            atol, rtol = op.tolerance_for(workload, out.name)
+            checks.append(_check(out.name, actual, expected, atol, rtol))
         if len(grads) != len(op.grad_names()):
             raise ValueError(
                 f"backward returned {len(grads)} gradients, "

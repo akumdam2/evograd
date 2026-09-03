@@ -31,13 +31,41 @@ def _rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def rope_runtime_ref(x, cos, sin):
+    """The exact spelling ``apply_rotary_pos_emb`` executes, in the model dtype.
+
+    Transformers computes ``q*cos + rotate_half(q)*sin`` entirely at the model's
+    precision -- there is no float32 upcast anywhere in it. The oracle above
+    upcasts, which makes it a better reference and a *slower* one, so timing the
+    eager baseline through it would charge the baseline for casts the model
+    never executes and inflate every speedup.
+
+    Broadcasting matches too: Transformers unsqueezes ``cos``/``sin`` at
+    ``unsqueeze_dim=1`` to reach ``[1, 1, T, D]`` against ``[B, H, T, D]``, which
+    is what ``cos[None, None]`` produces from this task's ``[T, D]`` tables.
+    """
+    if x.ndim != 4:
+        raise ValueError(
+            f"rope expects [batch, heads, tokens, head_dim], got {tuple(x.shape)}"
+        )
+    cos_b = cos[None, None]
+    sin_b = sin[None, None]
+    return x * cos_b + _rotate_half(x) * sin_b
+
+
 def rope_forward_ref(x, cos, sin):
     """Apply RoPE to ``x`` of shape ``[batch, heads, tokens, head_dim]``.
 
     ``cos``/``sin`` are ``[tokens, head_dim]`` and broadcast over batch and
     heads. The rotation is evaluated in float32 and cast back: at bfloat16 the
     products ``x*cos`` and ``x*sin`` lose enough precision to dominate the
-    tolerance, and every production implementation upcasts here.
+    tolerance, so this is the more accurate answer and the right oracle.
+
+    It is *not* what the model runs. ``apply_rotary_pos_emb`` stays in the model
+    dtype throughout -- ``rope_runtime_ref`` above reproduces it bitwise -- and
+    the two differ by about 5e-3 relative at bfloat16. Timing the eager baseline
+    through this spelling would charge it for casts Transformers never executes,
+    which is why ``runtime_forward`` names the other one.
     """
     if x.ndim != 4:
         raise ValueError(f"rope expects [batch, heads, tokens, head_dim], got {tuple(x.shape)}")

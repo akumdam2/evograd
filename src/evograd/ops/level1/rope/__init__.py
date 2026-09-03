@@ -11,12 +11,15 @@ from evograd.opdecl.models import (
     LLAMA_3_8B,
     LLAMA_REGIME_SPLIT,
     LLAMA_TOKEN_SWEEP,
+    MODELS,
 )
 from evograd.ops._common import (
     fixed_shape_suites,
+    is_qwen3_observed,
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
+    qwen3_observed_workloads,
     regime_suites,
 )
 
@@ -43,12 +46,30 @@ def make_rope_inputs(torch, op, workload, device="cuda"):
     dtype = getattr(torch, workload.dtype)
     torch.manual_seed(tokens * 100003 + heads * 1009 + head_dim)
 
-    x = torch.randn((batch, heads, tokens, head_dim), device=device, dtype=dtype) * 0.5
-    # theta = 500000 is Llama-3's value. Llama-2's 10000 produces a kernel that
-    # is self-consistent and wrong, which is exactly the kind of error a
-    # benchmark should not be able to express by accident.
+    # A model reaches RoPE by projecting into [B, T, heads, head_dim] and
+    # transposing, so the tensor it rotates is a non-contiguous head-major view.
+    # The observed Qwen3 configurations are reproduced that way; the historical
+    # Llama grid keeps the contiguous layout it has always been measured at, so
+    # its numbers stay comparable with earlier runs.
+    observed = is_qwen3_observed(workload)
+
+    def draw():
+        if observed:
+            token_major = torch.randn(
+                (batch, tokens, heads, head_dim), device=device, dtype=dtype
+            )
+            return (token_major * 0.5).transpose(1, 2)
+        return torch.randn((batch, heads, tokens, head_dim), device=device, dtype=dtype) * 0.5
+
+    x = draw()
+    # theta = 500000 is Llama-3's value and 1000000 is Qwen3's. Llama-2's 10000
+    # produces a kernel that is self-consistent and completely wrong, which is
+    # exactly the kind of error a benchmark should not be able to express by
+    # accident -- so the base comes from the workload's own provenance rather
+    # than from a constant.
+    config = MODELS[workload.provenance.model] if workload.provenance else LLAMA_3_8B
     positions = torch.arange(tokens, device=device, dtype=torch.float32)[:, None]
-    inv_freq = LLAMA_3_8B.rope_theta ** (
+    inv_freq = config.rope_theta ** (
         -torch.arange(0, head_dim, 2, device=device, dtype=torch.float32) / head_dim
     )
     freqs = positions * inv_freq[None, :]
@@ -58,7 +79,8 @@ def make_rope_inputs(torch, op, workload, device="cuda"):
     cos = angles.cos().to(dtype)
     sin = angles.sin().to(dtype)
 
-    dy = torch.randn((batch, heads, tokens, head_dim), device=device, dtype=dtype) * 0.5
+    # The rotated output carries the input's layout, so its gradient does too.
+    dy = draw()
     return {"x": x, "cos": cos, "sin": sin, "dy": dy}
 
 
@@ -83,6 +105,11 @@ _BENCHMARK = model_workloads(
     ("bfloat16",),
 )
 
+#: Both tensors one Qwen3-0.6B layer rotates: 16 query heads and 8 key heads,
+#: at batch 2 x sequence 2048 x head_dim 128, 28 times per step. They come from
+#: one harvested `apply_rotary_pos_emb` record, which rotates q and k together.
+_QWEN3_OBSERVED = qwen3_observed_workloads("rope")
+
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, n_heads=h, T=t, head_dim=d), dtype=dtype)
     for b, h, t, d in (
@@ -98,6 +125,10 @@ _CORRECTNESS = tuple(
 op = declare_op(
     name="rope",
     forward="evograd.ops.level1.rope.forward_ref:rope_forward_ref",
+    # The eager baseline is timed through the exact Transformers spelling, which
+    # rotates entirely in the model dtype. The declared forward upcasts to
+    # float32 -- more accurate, and slower by casts the model never executes.
+    runtime_forward="evograd.ops.level1.rope.forward_ref:rope_runtime_ref",
     level=1,
     family="positional",
     dims=_DIMS,
@@ -139,15 +170,23 @@ op = declare_op(
         "the point."
     ),
     correctness=_CORRECTNESS,
-    coverage=_BENCHMARK,
+    coverage=_BENCHMARK + _QWEN3_OBSERVED,
     benchmark=_BENCHMARK,
     benchmark_suites={
+        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
         **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
         **fixed_shape_suites(_BENCHMARK),
     },
     performance_baselines={
         "liger": make_pair_baseline(_liger_factory, ("x", "cos", "sin"))
     },
+    # Verified against the new `runtime_forward` rather than re-derived.
+    # `level1 calibrate --op rope` measures the oracle-vs-Transformers
+    # disagreement at worst 6.0e-03 (bfloat16, the observed 16-head case),
+    # 6.5e-04 (float16) and exactly 0.0 (float32) -- 13x, 77x and unbounded
+    # margins against the pair below. They are left alone because the same pair
+    # gates the reviewed Liger rope baseline and the historical Llama grid;
+    # tightening them is a separate change with its own blast radius.
     tolerances={
         "float32": (2e-5, 2e-5),
         "float16": (5e-2, 5e-2),

@@ -9,3 +9,9 @@ evograd_output/
 artifacts/
 *.ncu-rep
 .baseline_timing_cache.json
+# Local run artifacts: what one machine measured once. Declarations never
+# read them and no task identity depends on them; see
+# src/evograd/bench/workloads/qwen3/README.md.
+/results/
+# Captured tensor artifacts are large (tens to ~100 MB) wherever they land.
+*.pt

@@ -2,8 +2,6 @@
 
 import importlib
 
-import torch
-
 try:
     importlib.import_module("torch.distributed.tensor")
 except Exception:
@@ -25,17 +23,27 @@ def make_liger_fused_add_rms_norm_autograd_pair_fns():
             offset,
             casting_mode_name,
         )
-        return output, (summed, weight, rstd)
+        # Liger's forward already computes and returns the summed residual --
+        # its own autograd Function exposes it as a second output. The adapter
+        # used to discard it and hand back only `output`, which made this
+        # provider a *different operator* from the one being benchmarked.
+        return (output, summed), (summed, weight, rstd)
 
-    def backward_from_saved(dout, saved, eps):
+    def backward_from_saved(output_grads, saved, eps):
         del eps
+        dout, dsummed = output_grads
         summed, weight, rstd = saved
         block_size, num_warps = module.calculate_settings(summed.shape[-1])
         casting_mode = module._str_to_casting_mode[casting_mode_name]
-        d_s_out = torch.zeros_like(summed)
+        # `dS_out` is Liger's own name for the gradient arriving at the summed
+        # residual; its kernel adds it into dX after the normalization backward
+        # (`dX_row += dS_out_row`) and returns `dX, dX, dW`, which is exactly
+        # this task's contract. The adapter used to pass zeros here, silently
+        # dropping every gradient that reaches x and residual without going
+        # through the norm.
         return module.fused_add_rms_norm_backward(
             dout.contiguous(),
-            d_s_out,
+            dsummed.contiguous(),
             summed.contiguous(),
             weight.contiguous(),
             rstd.contiguous(),

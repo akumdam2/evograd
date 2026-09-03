@@ -23,6 +23,12 @@ bench/
   tier3_runner.py  tier 3, part 3   -- how it is measured
   tier3_llama.py   tier 3           -- the built-in architecture
   tier3.py         tier 3           -- facade
+
+  workloads/qwen3/                  -- the Qwen3-0.6B workload, organized by level
+    harvest/                        --   the instrumented run and its snapshot
+    levels/level4 3 2 1             --   step, captured layer, operators, primitives
+    evaluation/tier3/               --   drop-in replacement, gate, calibration
+                                    -- see workloads/qwen3/README.md
 ```
 
 ## Running the benchmark
@@ -75,7 +81,7 @@ the report says so rather than averaging the gap away.
 ### Submitting a kernel
 
 A submission is one Python module per operator implementing that operator's
-autograd pair (see [Candidate API](#candidate-api) for the two function
+autograd pair (see [Candidate API](../../../README.md#candidate-api) for the two function
 signatures). Lay them out by operator name:
 
 ```text
@@ -115,18 +121,13 @@ For iterating on one kernel, the final-report protocol is available directly,
 including its identity control:
 
 ```bash
-<<<<<<< HEAD
 evograd tier1-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
 evograd tier1-bench --op rmsnorm --identity-control    # must report ~1.0x
-=======
-evograd fair-bench --op rmsnorm --candidate my_kernels/rmsnorm.py
-evograd fair-bench --op rmsnorm --identity-control    # must report ~1.0x
 
 # static torch.compile specialist versus an evolved pair, across 2^13..2^27
 # total elements at hidden=1024; compilation is outside the timed regions
-evograd fair-bench --op layernorm --candidate my_kernels/layernorm.py \
+evograd tier1-bench --op layernorm --candidate my_kernels/layernorm.py \
     --baseline torch_compile --suite tb_sweep_13_27
->>>>>>> main
 ```
 
 (`fair-bench` still works; it is the former name of the same command.)
@@ -143,7 +144,7 @@ the one asked.
 | ---- | --------- | ------ |
 | 1 — pair | `y, saved = fwd(x, ...)` then `bwd(dy, saved)`, called directly | `bench/tier1.py` |
 | 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | `bench/tier2.py` |
-| 3 — model | a full training step, evolved kernels patched into a real model | not built |
+| 3 — model | a full training step, evolved kernels patched into a real model | `bench/tier3*.py` |
 
 At tier 1 *you* are the autograd engine: you hold the saved state, you route the
 upstream gradient, you receive the gradients as return values. No training loop
@@ -165,10 +166,16 @@ moot at tier 1 — it only arises once an `nn.Module` has to hold some of them.
 **Protocol — how carefully.** Orthogonal to tier. `fast` (`bench/harness.py`) is
 what the evolutionary search calls thousands of times per run; it caches the
 baseline across candidates and controls neither cache state nor provider order.
-`fair` (`bench/tier1.py`, `bench/tier2.py`) remeasures both providers every
-time, clears L2 before each timed region, randomizes provider order, rejects
-input mutation, and reports bootstrap confidence intervals. **Every published
-number comes from `fair`**, and every report records which protocol produced it.
+`fair` (`bench/tier1.py`, `bench/tier2.py`, `bench/tier3_runner.py`) remeasures
+every provider, randomizes provider order, rejects input mutation, and reports
+bootstrap confidence intervals. **Every published number comes from `fair`**,
+and every report records which protocol produced it.
+
+One `fair` rule is tier-specific rather than universal: tiers 1 and 2 clear L2
+before each timed region, because they measure one kernel on inputs it would
+otherwise find resident. Tier 3 never does — a training step's weights,
+activations and optimizer state are exactly as warm as the previous step left
+them, and that is the thing being measured.
 
 ### Running each tier
 
@@ -217,7 +224,7 @@ evograd tier2-bench --op layernorm --identity-control
 ```
 
 An operator is measurable at tier 2 only if its declaration sets
-`parameter_args`. All 25 built-ins do; a new or external declaration must say
+`parameter_args`. All 30 built-ins do; a new or external declaration must say
 which `Active` args are module state, or `()` if it has none.
 
 **Tier 3 — a full training step.** Evolved kernels patched into a model, measured
@@ -241,10 +248,26 @@ for b in 2 4 8 12 16; do
   evograd tier3-bench --batch $b --tokens 2048 --baseline liger \
       --steps 5 --blocks 1 --out results/t3_b$b.json
 done
+
+# one process for everything, so a debugger can reach the kernel
+evograd tier3-bench --candidate rms_norm=best.py --no-isolate
+
+# raise the per-provider budget for a large model, or skip the gate to time a
+# kernel you already know is wrong
+evograd tier3-bench --model llama_3_8b --timeout 3600
+evograd tier3-bench --candidate rms_norm=wip.py --no-verify
 ```
 
 Defaults: `--model llama_3_8b_4l --batch 4 --tokens 1024 --steps 10 --blocks 3
---warmup 3 --loss-steps 5 --dtype bfloat16 --baseline liger`.
+--warmup 3 --loss-steps 5 --learning-rate 1e-4 --dtype bfloat16 --baseline liger
+--timeout 1800` (`EVOGRAD_TIER3_TIMEOUT` overrides the last).
+
+Every provider runs in its own killable child process, in a **seeded random
+order** the report records: a GPU that warms or throttles across a run gives
+whichever provider went first a systematic advantage, and with a fixed order
+that advantage is indistinguishable from the kernel. A provider that hangs, dies,
+or is OOM-killed costs its own row and nothing else — `--no-isolate` gives that
+up for a debugger.
 
 `llama_3_8b_4l` is Llama-3-8B with four layers instead of thirty-two. Layer
 count is the one dimension that can be cut without changing what a kernel does
@@ -286,6 +309,78 @@ declared slot. Two things you must get right: **gradient order** matches
 declaration is written for rows; `kernel_from_pair` flattens and restores around
 your kernel, so write it exactly as the declaration specifies.
 
+#### Two workloads, two registries
+
+`llama_3` has three sites and supplies no preflight shapes. `qwen3_0_6b` has
+four and supplies its calibrated observed configuration for each, so a candidate
+is gated on the shape the model presents before tier 3 will time it:
+
+```bash
+# the canonical Qwen3-0.6B training step, batch 2 x sequence 2048, BF16
+evograd tier3-bench --model qwen3_0_6b --structural-identity
+evograd tier3-bench --model qwen3_0_6b --identity-control      # the bound pair
+evograd tier3-bench --model qwen3_0_6b --sites swiglu_mlp --layers 2   # a smoke
+```
+
+| site | operator | modules | invocations |
+| ---- | -------- | ------- | ----------- |
+| `qkv_norm_rope` | `qwen3_qkv_norm_rope` | `Qwen3Attention` | 28 |
+| `attention` | `qwen3_attention` | the same module | 28 |
+| `swiglu_mlp` | `qwen3_swiglu_mlp` | `Qwen3MLP` | 28 |
+| `residual_rmsnorm` | `fused_add_rms_norm` | decoder layers + `model.norm` | 56 |
+
+Both attention sites share **one** adapter on one module, selected
+independently; an unselected site runs the production spelling. The residual
+site is not a module at all — its add ends decoder layer *i* and its norm starts
+layer *i+1* — so the layer hands the un-added pair to the next fusion site and
+both returned outputs are used, `summed` as the residual stream and `normalized`
+into the next sublayer. Layer 0's `input_layernorm` has no preceding decoder add
+and stays unfused, which is why the count is 56 and not 57.
+
+No module is replaced: the adapters rebind `forward` on the existing instances,
+so the parameters are the same objects and `state_dict` is untouched by
+construction. `--structural-identity` proves it — same submodules, same order,
+native autograd, and **bitwise identical logits and loss** on the canonical
+model. See [docs/QWEN3_LEVEL4.md](../../../docs/QWEN3_LEVEL4.md) for what the
+backward comparison found.
+
+#### Patch sites belong to a workload
+
+There was one module-level `SITE_OPS` dict mapping site names to declared
+operators, and it was correct exactly as long as there was one model. With two
+it is wrong in both directions: Llama's identity control would patch a site
+belonging to another architecture, and a candidate would be accepted for
+`rms_norm` because that name happens to exist somewhere.
+
+A `TrainingWorkload` therefore declares a `site_registry`, and tier 3 refuses to
+guess when it does not:
+
+```python
+LLAMA_SITES = SiteRegistry(
+    name="llama_3",
+    sites=(
+        Site("rms_norm",      "rmsnorm",                     _rms_norm_fused),
+        Site("swiglu",        "swiglu",                      _default_swiglu),
+        Site("cross_entropy", "fused_linear_cross_entropy",  _eager_cross_entropy),
+    ),
+)
+```
+
+Every tier-3 operation reads it from the kernel set it is handed — candidate
+loading, baseline discovery, preflight, the identity control, `restrict`,
+provenance, CLI validation, and the report, which serializes the exact mapping
+under `site_registry`. An unknown site names the active workload and its valid
+sites, so "wrong site" and "wrong model" are distinguishable. `LLAMA_SITE_OPS`
+is the former global under a name that says whose it is.
+
+A `Site` can also carry **preflight workloads**: model-derived shapes the
+operator's own declared grid does not contain. This is what decides whether an
+operator's *observed* configuration can block timing. `rmsnorm`'s declared grid
+tops out at 128 rows; a model presents 4096, and a kernel can be right at one
+and wrong at the other — `tests/test_tier3_registry.py` proves exactly that,
+with a pair that passes the small grid and is caught by a supplied shape. Llama
+supplies none, so its behaviour is unchanged.
+
 #### Supplying a model
 
 The runner never asks what model it is driving. It asks a `TrainingWorkload`
@@ -325,45 +420,109 @@ training pays all of it.
 | `cpu_bound_fraction` | **could a faster kernel even show up** |
 | `losses` → `loss_agreement` | does it still train the same |
 
-Read `cpu_bound_fraction` as "the GPU was not the bottleneck", not "this is all
-dispatch cost" — the CPU also stops running when it blocks on an implicit
-synchronization, and a step allocating a multi-gigabyte logits tensor every
-iteration will do exactly that. Near 1.0 on the **unpatched** provider means the
-configuration cannot measure kernels at all, whatever the other numbers say.
+`cpu_bound_fraction` is the **CPU submission-and-blocking fraction** and nothing
+narrower. The CPU stops running both when it has finished submitting and when it
+blocks — on an implicit synchronization, on the allocator while a step reserves a
+multi-gigabyte logits tensor, on a stray `.item()`. All of those are real reasons
+a kernel improvement cannot surface, none is separable from the others without a
+profile, and reporting the number as dispatch cost claims a decomposition nobody
+measured. Near 1.0 on the **unpatched** provider means the configuration cannot
+measure kernels at all, whatever the other numbers say.
+
+Per provider the report also carries `per_block_ms`, a `latency` summary
+(median/min/q20/q80), the `patch_provenance` of that provider's own build, the
+`kernel_sources` behind each patched site, and the `verification` record for it.
+`speedup_intervals` gives each provider's step-time ratio against eager with a
+block-bootstrap 95% interval. Blocks are resampled within each provider
+independently — unlike tier 1, the providers here are not measured in
+interleaved paired blocks, since each builds and trains its own model, so there
+is no pairing to preserve. With the default three blocks the interval is wide;
+`--blocks` is how it narrows.
+
+#### The identity control is a ceiling, not a tax
 
 `--identity-control` adds a provider that patches every site with the eager
-kernel it already had: same mathematics, all of the patching machinery. The gap
-to plain eager is the harness tax, and nothing smaller than it is a kernel
-result. It reads as an upper bound — its backward recomputes the forward where a
-real candidate's is a kernel.
+kernel it already had: same mathematics, all of the patching machinery —
+`bind`, a Python `autograd.Function`, the rank adapter.
+
+Its backward **recomputes the forward** and differentiates it, where a real
+candidate's backward is a kernel. So the gap between it and plain eager is an
+**upper bound on what the patch plumbing costs**, not a measurement of it: the
+bound includes one extra forward per patched site that no candidate pays. Read
+it as a ceiling. If it lands near unpatched eager the plumbing is free and a
+slowdown belongs to the kernels; if a patched provider is slower than this bound
+the kernels are the story regardless; in between it is inconclusive, and
+`--sites` narrows it.
+
+#### Correctness before timing
+
+A wrong kernel at this tier does not raise. It returns a throughput — and a
+kernel that overflows to NaN reports *faster* than eager, because NaN arithmetic
+is not slower. So two gates run before anything is measured, and a provider that
+fails either is recorded as failed and never timed:
+
+1. **The tier-1 pair gate.** Every kernel a provider patches in goes through
+   `bench.provider.verify_pair_provider` — the same path tier 1's CLI and tier
+   2's `check_module` gate on — against its declaration's own correctness
+   workloads **plus whatever model-derived shapes the workload's registry adds
+   for that site**. The report lists every configuration actually checked, with
+   its dims and whether it was declared or workload-supplied. Tier 3 cannot verify the model-shaped call directly: at these
+   sites the model's activations are not a declared workload, and the only
+   oracle that exists is the declaration's. The kernel is verified where it *is*
+   specified, and the rank adapter carries that verdict to the model's shapes. A
+   site holding a raw callable that no declaration governs is reported as
+   `unverifiable` rather than passed.
+2. **Finite scalar losses.** Every loss, in the trajectory and in the timed
+   batch, must be a scalar and finite. NaN or Inf marks the provider failed.
+
+`loss_agreement` sits on top of those, not instead of them. It is reported and
+**not** gated by default: how much divergence is acceptable depends on dtype and
+horizon, and a threshold invented in the harness would be arbitrary in exactly
+the way that makes a gate worse than none. A workload that knows its own answer
+declares `loss_delta_threshold` and the trajectory becomes a gate for it alone.
+Whatever was gated, the report says so in `verification_policy`.
 
 #### Known gaps
 
-**Tier 3 runs no correctness gate.** Tier 2 checks every provider against the
-autograd oracle before timing it (`check_module`); tier 3 does not. A wrong
-kernel here produces numbers rather than an error, and shows up only as
-divergence in `loss_agreement` — which is reported, never enforced, because a
-defensible threshold depends on dtype and horizon. Until this is closed, verify
-before you measure:
+**Results do not reach the suite.** `report.py` has no tier-3 reader, and the
+metrics differ enough — throughput and peak memory rather than a speedup ratio —
+that `CaseMetrics` needs extending first.
 
-```bash
-evograd verify --op rmsnorm my_rmsnorm.py
-evograd tier1-bench --op rmsnorm --candidate my_rmsnorm.py
-evograd tier2-bench --op rmsnorm --candidate my_rmsnorm.py    # gated
-evograd tier3-bench --candidate rms_norm=my_rmsnorm.py        # not gated
-```
-
-Closing it means reusing `opdecl/verify.py` the way `tier2.check_module` does,
-on the shapes the model actually presents.
-
-Three smaller ones. **Providers are measured sequentially in a fixed order**,
-where tier 1 randomizes provider order in paired blocks to control for clock
-drift; it touches only `tier3_runner.py`. **Results do not reach the suite** —
-`report.py` has no tier-3 reader, and the metrics differ enough (throughput and
-peak memory rather than a speedup ratio) that `CaseMetrics` needs extending
-first. **The harness is unvalidated against a published number**: running Liger
-as the candidate and reproducing its published end-to-end figures is the check
+**The harness is unvalidated against a published number.** Running Liger as the
+candidate and reproducing its published end-to-end Llama figures is the check
 that gave confidence in tier 2, and it has not been done here.
+
+**Verification is at the declared shape, not the model's.** The preflight gate
+proves the kernel correct on its declaration's correctness workloads; what
+carries that to `[batch, tokens, hidden]` is the rank adapter, which is tested
+but is not itself an oracle. A kernel that is correct at `[rows, hidden]` and
+wrong only at some leading-dimension arrangement would pass.
+
+**`ModuleWorkload` cannot be isolated.** Its factory and loss are closures, so
+it is not picklable into a child process. Driving one means `run_tier3`
+in-process, where a kernel that hangs or wedges the CUDA context takes the whole
+run with it. The CLI's per-provider isolation covers the workloads that can be
+named on a command line.
+
+**A Qwen provider is gated on the whole model, not only on its sites.** Before
+tier 3 times a non-eager Qwen provider it runs one untimed canonical
+forward/backward/AdamW step and checks it against a *calibrated* per-role noise
+envelope — derived from the unmodified model compared with itself, validated on
+holdout seeds, and bound to the GPU, driver, CUDA, torch, transformers, SDPA
+backend and TF32 settings it was measured under. A failure is recorded
+`failed_at="model_correctness"` and never timed. There is no global tolerance
+constant; see [docs/QWEN3_LEVEL4.md](../../../docs/QWEN3_LEVEL4.md) for the
+formula and the three reference comparisons it separates.
+
+**Parameter gradients are not bitwise reproducible on this GPU.** The canonical
+Qwen3 model compared against *itself* — same seed, same batch, no patching —
+agrees bitwise on logits and loss and differs on a large and run-varying share
+of its parameter gradients. Any gradient-level identity claim is therefore
+relative to that floor, and a loss-trajectory comparison across providers
+inherits it.
+
+**Tier 3 has no reader in the suite and no published number.** The Qwen3
+workload exists and is validated; nothing has been timed with intent.
 
 **The cross-operator suite** runs tier 1 over every operator and pools the
 result by family, then by level:
@@ -390,6 +549,99 @@ One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
 `ops/level3/` and `OpDecl.level` are the **task** hierarchy — primitive, fused,
 architectural block — and have nothing to do with evaluation tiers. A level-1
 primitive measured at tier 2 is an ordinary thing to want.
+
+## Level 4: a whole-model training workload
+
+Levels 1-3 measure declared operators. Level 4 runs one real model the way
+training runs it, so that a later stage can observe a training step instead of
+guessing what one contains. So far this means a reference execution and a
+harvest of what it invokes -- no provider comparison and no timing.
+
+```bash
+pip install 'evograd[qwen3]'        # optional: transformers>=4.51
+
+PYTHONPATH=src python -m evograd.bench.workloads.qwen3 \
+    --out results/qwen3-level4/canonical.json
+```
+
+The canonical workload is Qwen3-0.6B, batch 2, sequence 2048, BF16, CUDA, SDPA,
+`model.train()`, `use_cache=False`, gradient checkpointing off, seed 0,
+randomly initialised from config with no weight or tokenizer download:
+
+```python
+loss = model(input_ids=input_ids, labels=labels, use_cache=False).loss
+loss.backward()
+```
+
+The JSON report records what was requested *and* what the built model actually
+reports, plus loss finiteness and per-parameter gradient coverage. Its memory
+and wall-time fields are diagnostic only and are not benchmark results.
+
+The same execution can be *harvested*: an observer on a fixed list of stable
+Qwen3 boundaries (decoder layer, attention, MLP, `nn.Linear`, RMSNorm, SiLU,
+RoPE application, SDPA, causal cross entropy) exports a manifest with the raw
+invocation transcript and a structurally deduplicated configuration set carrying
+frequency and provenance.
+
+```bash
+PYTHONPATH=src python -m evograd.bench.workloads.qwen3.harvest.harvest \
+    --out results/qwen3-level4/harvest.json
+```
+
+Forward-side semantic invocations only: the loss and backward pass execute and
+gradient coverage is validated, but no backward operation and no CUDA kernel is
+traced.
+
+One observed decoder layer can then be lifted out into a standalone Level-3
+reference. The capture records the arguments Transformers really passed, the
+layer's output, the upstream gradient the full-model backward delivered to it,
+and the weights and their gradients; a separate process rebuilds a single
+`Qwen3DecoderLayer` and reproduces all of it.
+
+```bash
+PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level3.capture \
+    --layer 14 --harvest results/qwen3-level4/harvest.json \
+    --out results/qwen3-level4/layer14.pt
+
+PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level3.replay \
+    --artifact results/qwen3-level4/layer14.pt \
+    --report results/qwen3-level4/layer14-replay.json
+```
+
+One `Qwen3MLP` invocation from that verified replay becomes
+[`qwen3_swiglu_mlp`](../ops/level2/qwen3_swiglu_mlp/) -- the first
+operator here whose benchmark shape was observed rather than chosen. Its
+provenance is checkable twice: `Provenance(model="qwen3_0_6b", ...)` re-derives
+the dims from the published configuration, and a small tracked snapshot
+(`workloads/qwen3/harvest/snapshot.json`) carries the harvested
+configuration id, the frequency of 28, and all 28 source module paths as
+structured data. Declarations never read `results/`.
+
+Two more Level-2 tasks come from the same artifact:
+[`qwen3_attention`](../ops/level2/qwen3_attention/) (causal
+grouped-query SDPA plus the output projection) and
+[`qwen3_qkv_norm_rope`](../ops/level2/qwen3_qkv_norm_rope/) (the
+projections, per-head Q/K RMSNorm and RoPE that feed it). The second returns
+three tensors, which is why `OpDecl.output` now accepts an ordered tuple of
+`Active` outputs; single-output declarations are unchanged.
+
+The fourth boundary, the residual add plus RMSNorm, corrected the *existing*
+generic [`fused_add_rms_norm`](../ops/level2/fused_add_rms_norm/)
+rather than adding a Qwen-specific duplicate: a decoder's residual stream keeps
+the un-normalized sum, so the task now returns `(normalized, summed)` and its
+backward combines both output paths.
+
+Finally, every observed configuration maps onto a generic **Level-1** task:
+`linear_no_bias`, `rmsnorm`, `rope`, `swiglu`, `cross_entropy` and the newly
+added [`causal_gqa_attention`](../ops/level1/causal_gqa_attention/).
+Each gains a `qwen3_0_6b_observed` suite derived from the snapshot; the
+Llama-derived defaults are untouched.
+
+```bash
+PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level1.mapping mapping
+```
+
+See [docs/QWEN3_LEVEL4.md](../../../docs/QWEN3_LEVEL4.md).
 
 ## Correctness and evaluation
 

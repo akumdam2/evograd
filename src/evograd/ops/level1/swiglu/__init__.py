@@ -7,12 +7,13 @@ from evograd.opdecl.models import (
     LLAMA_TOKEN_SWEEP,
 )
 from evograd.ops._common import (
-    fixed_shape_suites,
-    model_workloads,
     STANDARD_TOLERANCES,
     dtype_for,
+    fixed_shape_suites,
     log_distance_weight,
     make_pair_baseline,
+    model_workloads,
+    qwen3_observed_workloads,
     regime_suites,
     standard_correctness,
     workloads_2d,
@@ -58,6 +59,13 @@ def _liger_factory():
     return make_liger_swiglu_autograd_pair_fns()
 
 
+#: The observed Qwen3-0.6B pointwise boundary. The harvest records a bare SiLU
+#: module, but the production boundary is `silu(gate) * up` -- the activation
+#: never appears without the multiply -- so it maps here rather than onto a
+#: standalone activation task. The SiLU record and the gate/up projection it
+#: sits between are kept as supporting provenance in the snapshot.
+_QWEN3_OBSERVED = qwen3_observed_workloads("swiglu", tolerances=STANDARD_TOLERANCES)
+
 op = declare_op(
     name="swiglu",
     level=1,
@@ -73,8 +81,10 @@ op = declare_op(
         "da=dc*b*((a*s)*(1-s)+s). Preserve input dtypes."
     ),
     correctness=standard_correctness(),
+    coverage=_BENCHMARK + _QWEN3_OBSERVED,
     benchmark=_BENCHMARK,
     benchmark_suites={
+        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
         **regime_suites(_BENCHMARK, _feature, _SPLIT),
         **fixed_shape_suites(_BENCHMARK),
         "legacy": _LEGACY_BENCHMARK,

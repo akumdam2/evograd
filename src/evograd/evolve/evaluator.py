@@ -30,7 +30,11 @@ import torch
 
 from evograd.opdecl.activity import OpDecl
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 from evograd.opdecl.oracle import oracle
 from evograd.bench.harness import (
     DEFAULT_REPS,
@@ -268,19 +272,37 @@ def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]
             positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
             y, saved = fwd(*positional)
             kwargs = backward_inactive_kwargs(op, bwd, inputs)
-            actual = bwd(inputs[op.upstream_grad_name], saved, **kwargs)
+            actual = bwd(upstream_grad_values(op, inputs), saved, **kwargs)
             actual = (actual,) if torch.is_tensor(actual) else tuple(actual)
             torch.cuda.synchronize()
 
             with torch.no_grad():
                 _y2, saved2 = fwd(*positional)
                 saved_tensors = normalize_saved(saved2)
-            report["forward_shape"] = list(y.shape)
+            outputs = as_output_tuple(op, y)
+            references = as_output_tuple(op, y_ref)
+            report["forward_shape"] = (
+                [list(t.shape) for t in outputs]
+                if op.is_multi_output
+                else list(outputs[0].shape)
+            )
             report["saved_tensors"] = describe_saved(saved_tensors)
             report["saved_bytes"] = saved_bytes(saved_tensors)
 
-            atol, rtol = op.tolerance_for(workload)
-            forward_ok, forward_abs, forward_rel = _compare_tensor(y, y_ref, atol, rtol)
+            # One comparison per declared output, then the conjunction. A
+            # multi-output candidate that got one output right and another wrong
+            # must not read as a passing forward.
+            forward_ok, forward_abs, forward_rel = True, 0.0, 0.0
+            for out, got, ref in zip(op.outputs, outputs, references):
+                atol, rtol = op.tolerance_for(workload, out.name)
+                ok, max_abs, max_rel = _compare_tensor(got, ref, atol, rtol)
+                if op.is_multi_output:
+                    report[f"{out.name}_correct"] = ok
+                    report[f"{out.name}_max_abs_error"] = max_abs
+                    report[f"{out.name}_max_rel_error"] = max_rel
+                forward_ok = forward_ok and ok
+                forward_abs = max(forward_abs, max_abs)
+                forward_rel = max(forward_rel, max_rel)
             report["forward_correct"] = forward_ok
             report["forward_max_abs_error"] = forward_abs
             report["forward_max_rel_error"] = forward_rel
@@ -357,7 +379,7 @@ def _smoke_benchmark_shapes(
             with torch.no_grad():
                 _y, saved = fwd(*positional)
                 bwd(
-                    inputs[op.upstream_grad_name],
+                    upstream_grad_values(op, inputs),
                     normalize_saved(saved),
                     **kwargs,
                 )

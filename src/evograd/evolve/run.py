@@ -66,6 +66,7 @@ def render_config(
         "__ARCHIVE_SIZE__": str(archive_size),
         "__FORWARD_FN__": op.forward_fn_name,
         "__FORWARD_ARGS__": op.forward_parameters(),
+        "__FORWARD_RETURNS__": op.forward_returns(),
         "__BACKWARD_FN__": op.backward_fn_name,
         "__BACKWARD_ARGS__": op.backward_parameters(),
         "__BACKWARD_RETURNS__": op.backward_returns(),

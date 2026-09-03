@@ -34,7 +34,11 @@ from evograd.opdecl.baselines import (
     verify_performance_baseline,
 )
 from evograd.opdecl.bind import backward_inactive_kwargs, bind, lookup_pair
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 from evograd.opdecl.oracle import oracle, resolve_runtime_forward
 from evograd.evolve.scoring import geomean, weighted_geomean
 
@@ -234,7 +238,9 @@ def benchmark_case(
     performance_baseline = resolve_performance_baseline(op, performance_baseline)
     fwd, bwd = lookup_pair(op, module)
     inputs = make_case_inputs(op, workload, device=device)
-    dout = inputs[op.upstream_grad_name]
+    # A Tensor for a single-output declaration, an ordered tuple for several.
+    dout = upstream_grad_values(op, inputs)
+    dout_tuple = dout if isinstance(dout, tuple) else (dout,)
     positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
     bwd_kwargs = backward_inactive_kwargs(op, bwd, inputs)
     # The eager baseline is timed through the production spelling when the
@@ -266,7 +272,9 @@ def benchmark_case(
             args[i] = leaf
             leaves.append(leaf)
         y = bound(*args)
-        torch.autograd.backward(y, dout.detach().clone())
+        torch.autograd.backward(
+            as_output_tuple(op, y), tuple(d.detach().clone() for d in dout_tuple)
+        )
         return [leaf.grad for leaf in leaves]
 
     def baseline_backward():
@@ -283,7 +291,9 @@ def benchmark_case(
             args[i] = leaf
             leaves.append(leaf)
         y = forward_ref(*args)
-        torch.autograd.backward(y, dout.detach().clone())
+        torch.autograd.backward(
+            as_output_tuple(op, y), tuple(d.detach().clone() for d in dout_tuple)
+        )
         return [leaf.grad for leaf in leaves]
 
     with torch.no_grad():

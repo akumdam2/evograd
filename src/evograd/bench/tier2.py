@@ -44,7 +44,11 @@ import torch
 from evograd.opdecl.activity import OpDecl, Workload, bind_shape
 from evograd.opdecl.baselines import baseline_candidate_module
 from evograd.opdecl.bind import bind
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 from evograd.opdecl.oracle import oracle, resolve_runtime_forward
 
 TIER2_PROTOCOL_VERSION = "evograd-tier2-operator-v1"
@@ -109,7 +113,12 @@ class OperatorModule(torch.nn.Module):
             (arg_names.index(n), n) for n in self._parameter_names
         ]
 
-    def forward(self, *activations: torch.Tensor) -> torch.Tensor:
+    def forward(self, *activations: torch.Tensor) -> Any:
+        # Returns whatever the declaration says: a Tensor, or an ordered tuple
+        # of them. Nothing here unwraps a tuple -- the caller normalizes
+        # against `op.outputs`, so a provider that returns the wrong arity is
+        # caught by the contract rather than silently reduced to its first
+        # element.
         args = list(self._template)
         for slot, activation in zip(self._activation_slots, activations):
             args[slot] = activation
@@ -229,7 +238,9 @@ def check_module(
         name: (value.detach().clone() if torch.is_tensor(value) else value)
         for name, value in values.items()
     }
-    dy = workload_values[op.upstream_grad_name]
+    # One upstream gradient per declared output, in declared order.
+    upstream = upstream_grad_values(op, workload_values)
+    dys = upstream if isinstance(upstream, tuple) else (upstream,)
     y_ref, expected = oracle(op, workload_values)
 
     activations = [
@@ -238,12 +249,23 @@ def check_module(
     for parameter in module.parameters():
         parameter.grad = None
     y = module(*activations)
-    y.backward(dy)
-    torch.cuda.synchronize()
+    outputs = as_output_tuple(op, y)
+    # `torch.autograd.backward`, not `y.backward(dy)`: a multi-output module has
+    # no single `y` to call it on, and every output has to contribute its own
+    # gradient or the parameters would be checked against a partial backward.
+    torch.autograd.backward(outputs, dys)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
     checks: dict[str, Any] = {}
-    atol, rtol = op.tolerance_for(workload)
-    checks["y"] = _compare(y, y_ref, atol, rtol)
+    # Each output under its own declared name, with its own tolerance -- a task
+    # whose results have genuinely different magnitudes (a normalized value and
+    # the plain sum it came from) is not gated by whichever one is largest.
+    for out, actual, reference in zip(
+        op.outputs, outputs, as_output_tuple(op, y_ref)
+    ):
+        atol, rtol = op.tolerance_for(workload, out.name)
+        checks[out.name] = _compare(actual, reference, atol, rtol)
 
     by_grad_name = {arg.grad_name: arg.name for arg in op.active_args()}
     got: dict[str, torch.Tensor | None] = {}
@@ -262,6 +284,16 @@ def check_module(
 
 
 def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
+    """Compare one result against the oracle: shape, dtype, stride, finiteness, values.
+
+    ``stride_match`` is measured and reported but does not gate ``ok``. The
+    providers at this tier are different implementations of the same
+    mathematics, and a compiled or fused one may legitimately hand back an
+    equivalently-valued tensor under another layout; tier 1's gate does not
+    require stride equality either, so requiring it here would fail operators
+    tier 1 accepts for a property nothing downstream of this report reads. It
+    is recorded because a layout change is worth seeing when it happens.
+    """
     if not torch.is_tensor(actual):
         return {"ok": False, "reason": "no gradient produced"}
     if actual.shape != expected.shape or actual.dtype != expected.dtype:
@@ -271,13 +303,22 @@ def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
                 f"shape/dtype {tuple(actual.shape)}/{actual.dtype} != "
                 f"{tuple(expected.shape)}/{expected.dtype}"
             ),
+            "stride": list(actual.stride()),
+            "expected_stride": list(expected.stride()),
+            "stride_match": tuple(actual.stride()) == tuple(expected.stride()),
         }
-    difference = (actual.float() - expected.float()).abs()
+    difference = (actual.detach().float() - expected.detach().float()).abs()
+    finite = bool(torch.isfinite(actual.detach()).all())
     return {
         "ok": bool(
-            torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
+            finite
+            and torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
         ),
         "max_abs_error": float(difference.max()),
+        "finite": finite,
+        "stride": list(actual.stride()),
+        "expected_stride": list(expected.stride()),
+        "stride_match": tuple(actual.stride()) == tuple(expected.stride()),
     }
 
 
@@ -316,7 +357,8 @@ def measure_module(
     activations = [
         a.detach().clone().requires_grad_(True) for a in module.activations(values)
     ]
-    dy = values[op.upstream_grad_name]
+    upstream = upstream_grad_values(op, values)
+    dys = upstream if isinstance(upstream, tuple) else (upstream,)
 
     def forward_only():
         return module(*activations)
@@ -331,7 +373,9 @@ def measure_module(
         # keeps every iteration's saved tensors alive for the whole 500 ms
         # measurement window. Training frees the graph; so does this.
         y = module(*activations)
-        y.backward(dy)
+        # Every declared output is produced and differentiated inside the timed
+        # region; none can be left out of what is being measured.
+        torch.autograd.backward(as_output_tuple(op, y), dys)
 
     forward = do_bench(
         forward_only, warmup=warmup_ms, rep=rep_ms, quantiles=list(QUANTILES)
@@ -354,7 +398,7 @@ def measure_module(
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     y = module(*activations)
-    y.backward(dy)
+    torch.autograd.backward(as_output_tuple(op, y), dys)
     torch.cuda.synchronize()
     peak_memory = int(torch.cuda.max_memory_allocated())
 
@@ -515,7 +559,7 @@ def run_tier2(
             "warmup_ms": warmup_ms,
             "quantiles": list(QUANTILES),
             "grad_to_none": "activations only, matching Liger; parameter .grad accumulates",
-            "step": "y = model(*activations); y.backward(dy)",
+            "step": "y = model(*activations); torch.autograd.backward(y, output_grads)",
             "parameters": "built once and copied into every provider",
         },
         "environment": environment_fingerprint(),

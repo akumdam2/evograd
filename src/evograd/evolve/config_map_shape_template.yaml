@@ -28,7 +28,7 @@ prompt:
     forward/backward pair:
 
         def __FORWARD_FN__(__FORWARD_ARGS__):
-            return y, saved_tensors
+            return __FORWARD_RETURNS__
 
         def __BACKWARD_FN__(__BACKWARD_ARGS__):
             return __BACKWARD_RETURNS__

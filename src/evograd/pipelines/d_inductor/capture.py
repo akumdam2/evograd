@@ -222,6 +222,16 @@ def capture_inductor_pair(
     dynamic: bool = True,
 ) -> CapturedPair:
     """Trace, partition, and lower ``op``'s forward; return both generated halves."""
+    if op.is_multi_output:
+        # The AOT capture below keeps a single output as the graph handle and
+        # differentiates it against one upstream gradient. Refuse here rather
+        # than at `output = output[0]`, which would silently drop every result
+        # after the first and lower a graph for a different function.
+        raise NotImplementedError(
+            f"Pipeline D cannot yet capture a multi-output declaration "
+            f"({op.name} returns {op.output_names}); the AOT trace assumes one "
+            "output and one upstream gradient"
+        )
     import torch
     import torch._inductor.config as inductor_config
     from functorch.compile import aot_function, min_cut_rematerialization_partition

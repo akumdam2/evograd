@@ -12,8 +12,9 @@ import unittest
 from pathlib import Path
 
 from evograd.bench.tier3 import (
-    SITE_OPS,
+    LLAMA_SITE_OPS,
     KernelSet,
+    KernelSource,
     ModulePatch,
     ModuleWorkload,
     eager_pair_for,
@@ -33,14 +34,14 @@ class TestPatchSites(unittest.TestCase):
     def test_every_site_names_a_declared_operator(self):
         # A site whose operator does not exist would accept a candidate and then
         # fail at bind time, inside a run.
-        for site, op_name in SITE_OPS.items():
+        for site, op_name in LLAMA_SITE_OPS.items():
             with self.subTest(site=site):
                 self.assertIn(op_name, OPS)
 
     def test_each_site_operator_declares_its_parameter_split(self):
         # bind() and the module wrapping both need it; an undeclared split would
         # surface only once a candidate was patched in.
-        for op_name in SITE_OPS.values():
+        for op_name in LLAMA_SITE_OPS.values():
             with self.subTest(op=op_name):
                 self.assertIsNotNone(get_op(op_name).parameter_args)
 
@@ -268,8 +269,9 @@ class TestModuleSurgery(unittest.TestCase):
         model, Leaf = self._tree()
         patches = (ModulePatch("rms_norm", lambda m: getattr(m, "tag", None) == "replace-me",
                                lambda original, kernel: Leaf("patched")),)
-        replaced = patch_modules(model, patches, KernelSet())
-        self.assertEqual(replaced, [])
+        provenance = patch_modules(model, patches, KernelSet())
+        self.assertEqual(provenance.actual_sites, ())
+        self.assertEqual(provenance.paths, {})
         self.assertEqual(model.a.tag, "replace-me")
 
     def test_matching_submodules_are_replaced_and_reported(self):
@@ -277,10 +279,26 @@ class TestModuleSurgery(unittest.TestCase):
         patches = (ModulePatch("rms_norm", lambda m: getattr(m, "tag", None) == "replace-me",
                                lambda original, kernel: Leaf("patched")),)
         kernels = patch(KernelSet(), "rms_norm", lambda *a: None)
-        replaced = patch_modules(model, patches, kernels)
-        self.assertEqual(replaced, ["a"])
+        provenance = patch_modules(model, patches, kernels)
+        self.assertEqual(provenance.paths, {"rms_norm": ("a",)})
+        self.assertEqual(provenance.requested_sites, ("rms_norm",))
+        self.assertEqual(provenance.actual_sites, ("rms_norm",))
+        self.assertEqual(provenance.to_dict()["counts"], {"rms_norm": 1})
         self.assertEqual(model.a.tag, "patched")
         self.assertEqual(model.b.tag, "leave-me")   # non-matching left alone
+
+    def test_a_site_that_matches_nothing_is_an_error(self):
+        # A predicate that no longer recognizes the model -- a renamed class, a
+        # wrapper that moved -- would otherwise produce a provider labelled
+        # "patched" that is byte-identical to eager, and credit the kernel with
+        # eager's numbers.
+        model, Leaf = self._tree()
+        patches = (ModulePatch("rms_norm", lambda m: False,
+                               lambda original, kernel: Leaf("patched")),)
+        kernels = patch(KernelSet(), "rms_norm", lambda *a: None)
+        with self.assertRaises(ValueError) as caught:
+            patch_modules(model, patches, kernels)
+        self.assertIn("matched no submodule", str(caught.exception))
 
     def test_the_replacement_receives_the_original(self):
         # It has to carry the trained weights across; handing it only shapes
@@ -291,6 +309,39 @@ class TestModuleSurgery(unittest.TestCase):
                                lambda original, kernel: seen.append(original) or Leaf("p")),)
         patch_modules(model, patches, patch(KernelSet(), "rms_norm", lambda *a: None))
         self.assertEqual([m.tag for m in seen], ["replace-me"])
+
+
+class TestKernelProvenanceTravels(unittest.TestCase):
+    """A patched site records where its kernel came from, not just that it moved.
+
+    Without it the runner has nothing to preflight -- a bound callable has no
+    way back to the declaration it implements -- and the report cannot say
+    whether a site holds a candidate, a reviewed baseline, or the control.
+    """
+
+    def test_a_patched_site_carries_its_source(self):
+        source = KernelSource(site="swiglu", op_name="swiglu", module=object(),
+                              origin="candidate")
+        kernels = patch(KernelSet(), "swiglu", lambda g, u: None, source=source)
+        self.assertIs(kernels.source_for("swiglu"), source)
+        self.assertTrue(source.verifiable)
+
+    def test_a_raw_callable_is_recorded_as_unverifiable(self):
+        kernels = patch(KernelSet(), "swiglu", lambda g, u: None)
+        self.assertFalse(kernels.source_for("swiglu").verifiable)
+
+    def test_restricting_keeps_the_sources_of_the_sites_it_keeps(self):
+        source = KernelSource(site="swiglu", op_name="swiglu", module=object())
+        kernels = patch(KernelSet(), "swiglu", lambda g, u: None, source=source)
+        kernels = patch(kernels, "rms_norm", lambda *a: None)
+        kept = restrict(kernels, ("swiglu",))
+        self.assertEqual([s.site for s in kept.sources], ["swiglu"])
+        self.assertIs(kept.source_for("swiglu"), source)
+
+    def test_a_source_naming_another_site_is_rejected(self):
+        with self.assertRaises(ValueError):
+            patch(KernelSet(), "swiglu", lambda g, u: None,
+                  source=KernelSource(site="rms_norm"))
 
 
 class TestIdentityControl(unittest.TestCase):
@@ -305,7 +356,7 @@ class TestIdentityControl(unittest.TestCase):
 
     def test_it_patches_every_site_by_default(self):
         kernels = identity_control_kernels(OPS)
-        self.assertEqual(set(kernels.patched), set(SITE_OPS))
+        self.assertEqual(set(kernels.patched), set(LLAMA_SITE_OPS))
 
     def test_it_can_be_restricted_for_attribution(self):
         kernels = identity_control_kernels(OPS, ("rms_norm",))
@@ -322,7 +373,7 @@ class TestIdentityControl(unittest.TestCase):
         # It is fed to kernel_from_pair, which calls lookup_pair on it.
         from evograd.opdecl.bind import lookup_pair
 
-        for op_name in SITE_OPS.values():
+        for op_name in LLAMA_SITE_OPS.values():
             with self.subTest(op=op_name):
                 forward, backward = lookup_pair(
                     get_op(op_name), eager_pair_for(get_op(op_name))
@@ -333,7 +384,7 @@ class TestIdentityControl(unittest.TestCase):
 class TestSiteRestriction(unittest.TestCase):
     def test_restricting_keeps_only_the_named_sites(self):
         kernels = KernelSet()
-        for site in SITE_OPS:
+        for site in LLAMA_SITE_OPS:
             kernels = patch(kernels, site, lambda *a: None)
         self.assertEqual(restrict(kernels, ("swiglu",)).patched, ("swiglu",))
 

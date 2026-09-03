@@ -20,6 +20,9 @@ gpu = ["triton"]
 llm = ["openai"]
 dev = ["black"]
 baselines = ["liger-kernel"]
+# Level-4 model workloads. Qwen3 arrived in transformers 4.51.0;
+# the milestone was developed and measured against 5.16.1.
+qwen3 = ["transformers>=4.51"]
 
 [project.scripts]
 evograd = "evograd.cli:main"
@@ -28,7 +31,7 @@ evograd = "evograd.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-evograd = ["evolve/*.yaml"]
+evograd = ["evolve/*.yaml", "bench/workloads/qwen3/harvest/*.json"]
 
 [tool.black]
 line-length = 100

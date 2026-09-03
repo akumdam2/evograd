@@ -33,17 +33,30 @@ import torch
 from evograd.bench.harness import describe_saved, normalize_saved
 from evograd.opdecl.activity import OpDecl, Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 from evograd.opdecl.oracle import resolve_runtime_forward
 
 
 @dataclass(frozen=True)
 class PairProvider:
-    """A thin provider boundary consumed identically by the common runner."""
+    """A thin provider boundary consumed identically by the common runner.
+
+    ``forward`` returns ``(output, saved)`` where ``output`` is a Tensor for a
+    single-output declaration and an ordered tuple of Tensors for a
+    multi-output one; ``backward`` takes the matching upstream gradient in the
+    same shape. ``saved`` is the provider's private state and is never the
+    public output tuple, even when it happens to hold the same tensors.
+    """
 
     name: str
     forward: Callable[[dict[str, Any]], tuple[Any, tuple[Any, ...]]]
-    backward: Callable[[torch.Tensor, tuple[Any, ...], dict[str, Any]], Any]
+    #: ``(output_grads, saved, values) -> gradients``. ``output_grads`` is a
+    #: Tensor, or an ordered tuple of them for a multi-output declaration.
+    backward: Callable[[Any, tuple[Any, ...], dict[str, Any]], Any]
     source_hash: str
     adapter_kind: str
 
@@ -58,6 +71,22 @@ class TensorSnapshot:
     stride: tuple[int, ...]
     dtype: torch.dtype
     storage_offset: int
+
+
+def _grad_outputs(dout: Any, outputs: tuple[torch.Tensor, ...]) -> tuple[Any, ...]:
+    """Line the upstream gradient(s) up with the outputs autograd is given.
+
+    A single-output provider is handed a bare Tensor and a multi-output one an
+    ordered tuple; ``torch.autograd.grad`` wants a sequence either way. The
+    arity is checked here rather than left to autograd, whose own error names
+    neither the operator nor which side is short.
+    """
+    grads = tuple(dout) if isinstance(dout, (tuple, list)) else (dout,)
+    if len(grads) != len(outputs):
+        raise ValueError(
+            f"got {len(grads)} upstream gradients for {len(outputs)} outputs"
+        )
+    return grads
 
 
 def _callable_hash(*functions: Callable) -> str:
@@ -170,14 +199,18 @@ def pytorch_autograd_provider(op: OpDecl) -> PairProvider:
             if not value.requires_grad:
                 value.requires_grad_(True)
         output = forward_ref(*(values[name] for name in arg_names))
-        return output, (output,)
+        # The saved state is the graph handle: every declared output, because
+        # the backward has to differentiate all of them at once. It is built
+        # from the public result but is not it -- the caller still receives
+        # ``output`` in the declared shape, Tensor or tuple.
+        return output, as_output_tuple(op, output)
 
     def backward(dout, saved, values):
-        (output,) = saved
+        outputs = tuple(saved)
         gradients = torch.autograd.grad(
-            output,
+            outputs,
             tuple(values[name] for name in active_names),
-            dout,
+            _grad_outputs(dout, outputs),
             retain_graph=False,
             create_graph=False,
         )
@@ -236,14 +269,14 @@ def torch_compile_provider(
 
         with dynamo_config.patch(cache_size_limit=max(64, dynamo_config.cache_size_limit)):
             output = compiled(*(values[arg_name] for arg_name in arg_names))
-        return output, (output,)
+        return output, as_output_tuple(op, output)
 
     def backward(dout, saved, values):
-        (output,) = saved
+        outputs = tuple(saved)
         gradients = torch.autograd.grad(
-            output,
+            outputs,
             tuple(values[active_name] for active_name in active_names),
-            dout,
+            _grad_outputs(dout, outputs),
             retain_graph=False,
             create_graph=False,
         )
@@ -290,7 +323,7 @@ def verify_pair_provider(
             expected_output, expected_grads = oracle(op, values)
             output, saved = provider.forward(values)
             gradients = provider.backward(
-                values[op.upstream_grad_name], saved, values
+                upstream_grad_values(op, values), saved, values
             )
             gradients = (
                 (gradients,) if torch.is_tensor(gradients) else tuple(gradients)
@@ -300,8 +333,17 @@ def verify_pair_provider(
                     f"provider returned {len(gradients)} gradients, expected "
                     f"{len(op.grad_names())}: {op.grad_names()}"
                 )
-            atol, rtol = op.tolerance_for(workload)
-            checks = [_check(op.output.name, output, expected_output, atol, rtol)]
+            # One check per declared output, each against its own tolerance and
+            # under its own name, so a multi-output task is not gated by
+            # whichever result happens to have the largest magnitude.
+            actual_outputs = as_output_tuple(op, output)
+            expected_outputs = as_output_tuple(op, expected_output)
+            checks = []
+            for out, actual, expected in zip(
+                op.outputs, actual_outputs, expected_outputs
+            ):
+                atol, rtol = op.tolerance_for(workload, out.name)
+                checks.append(_check(out.name, actual, expected, atol, rtol))
             for grad_name, actual in zip(op.grad_names(), gradients):
                 atol, rtol = op.tolerance_for(workload, grad_name)
                 checks.append(

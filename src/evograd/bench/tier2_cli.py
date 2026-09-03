@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             "warmup_ms": args.warmup_ms or DEFAULT_WARMUP_MS,
             "quantiles": [0.5, 0.2, 0.8],
             "grad_to_none": "activations only, matching Liger; parameter .grad accumulates",
-            "step": "y = model(*activations); y.backward(dy)",
+            "step": "y = model(*activations); torch.autograd.backward(y, output_grads)",
             "isolation": "one process per shape" if not args.no_isolate else "single process",
         },
         "environment": environment_fingerprint(),

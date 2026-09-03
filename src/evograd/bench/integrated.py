@@ -16,7 +16,7 @@ The measured region is::
     for activation in activations:
         activation.grad = None
     y = model(*activations)
-    y.backward(dy)
+    torch.autograd.backward(y, dy)
 
 Gradient reset is inside it. Real training pays it every step, and the batched
 measurement runs many steps under one event pair -- with the reset outside, the
@@ -32,13 +32,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 import torch
-from torch import nn
 
+from evograd.bench.tier2 import eager_module, pair_module
 from evograd.opdecl.activity import Active, OpDecl, Workload
-from evograd.opdecl.bind import bind, lookup_pair
-from evograd.opdecl.inputs import make_case_inputs
-from evograd.opdecl.oracle import resolve_runtime_forward
-
+from evograd.opdecl.bind import lookup_pair
+from evograd.opdecl.inputs import (
+    as_output_tuple,
+    make_case_inputs,
+    upstream_grad_values,
+)
 
 def activation_and_parameter_args(
     op: OpDecl,
@@ -87,107 +89,93 @@ def scalar_kwargs(op: OpDecl) -> dict[str, Any]:
     }
 
 
-class _LayerModule(nn.Module):
-    """Shared wrapping: declared parameters held, declared activations taken.
-
-    Subclasses differ only in the callable they route to. Both are called with
-    the activations in declared order and supply the parameters and scalars
-    themselves, so the eager baseline and the candidate are invoked through the
-    same shape of call.
-    """
-
-    def __init__(self, op: OpDecl, *, param_shapes: dict[str, tuple[int, ...]]):
-        super().__init__()
-        self.op_name = op.name
-        self._activation_args, self._param_args = activation_and_parameter_args(op)
-        self._scalars = scalar_kwargs(op)
-        for arg in self._param_args:
-            self.register_parameter(
-                arg.name, nn.Parameter(torch.empty(param_shapes[arg.name]))
-            )
-
-    def parameter_list(self):
-        return [getattr(self, arg.name) for arg in self._param_args]
-
-    def _named(self, activations):
-        named = {a.name: v for a, v in zip(self._activation_args, activations)}
-        named.update({a.name: getattr(self, a.name) for a in self._param_args})
-        named.update(self._scalars)
-        return named
+# The module wrapper is `bench.tier2.OperatorModule`, not a second copy of it.
+# Both this file and tier 2 answer the same question -- hold the declared
+# parameters, take the declared activations, route the call through a
+# differentiable callable -- and two implementations of that would drift. What
+# stays here is the *protocol*: a training step with the gradient reset inside
+# the timed region, batched under one event pair, which is a different
+# measurement from tier 2's `do_bench` of forward and step.
+#
+# Reusing it also fixes a wrapper this file never had: `OperatorModule`
+# registers tensor `Inactive` args as buffers, so operators carrying rotary
+# tables or label tensors (`rope`, `cross_entropy`, `evoattention`) can be
+# wrapped at all. The local wrapper passed only activations, parameters and
+# scalars, and raised a `KeyError` on the rest.
 
 
-class CandidateModule(_LayerModule):
+def candidate_module(op: OpDecl, program_module, *, values: dict[str, Any]):
     """A candidate program's pair, wrapped as the layer it is meant to replace.
 
-    The autograd wiring is ``opdecl.bind``, not a local ``autograd.Function``.
-    It routes the saved state through ``save_for_backward`` while keeping plain
-    values in a side layout, checks the returned gradient count against
-    ``op.grad_names()``, and places each gradient in its declared argument slot.
-    That last part is what a positional wrapper cannot do: once an operator's
-    activations are not its leading arguments -- ``af3_single_repr_block`` has
-    ``pair_bias`` in the middle -- gradient order and call order diverge.
+    The autograd wiring is ``opdecl.bind``: it routes the saved state through
+    ``save_for_backward`` while keeping plain values in a side layout, checks
+    the returned gradient count against ``op.grad_names()``, and places each
+    gradient in its declared argument slot. That last part is what a positional
+    wrapper cannot do -- once an operator's activations are not its leading
+    arguments (``af3_single_repr_block`` has ``pair_bias`` in the middle),
+    gradient order and call order diverge.
     """
-
-    def __init__(self, op: OpDecl, program_module, *, param_shapes: dict[str, tuple[int, ...]]):
-        super().__init__(op, param_shapes=param_shapes)
-        lookup_pair(op, program_module)  # fail here, not inside a timed region
-        self._call = bind(op, program_module)
-
-    def forward(self, *activations):
-        return self._call(**self._named(activations))
+    lookup_pair(op, program_module)  # fail here, not inside a timed region
+    return pair_module(
+        op, program_module, adapter_kind="candidate_pair_module", values=values
+    )
 
 
-class EagerModule(_LayerModule):
+def eager_layer(op: OpDecl, values: dict[str, Any]):
     """The declared production forward, differentiated by the autograd engine.
 
     This is the eager PyTorch baseline every ratio is taken against. It calls
     ``runtime_forward`` -- the fused spelling a real model uses -- not the
     unfused reference the oracle differentiates.
     """
-
-    def __init__(self, op: OpDecl, *, param_shapes: dict[str, tuple[int, ...]]):
-        super().__init__(op, param_shapes=param_shapes)
-        self._arg_names = tuple(arg.name for arg in op.args)
-        self._forward = resolve_runtime_forward(op)
-
-    def forward(self, *activations):
-        named = self._named(activations)
-        return self._forward(*(named[name] for name in self._arg_names))
+    return eager_module(op, values)
 
 
 def case_tensors(op: OpDecl, workload: Workload, *, device: str = "cuda"):
-    """Activations, upstream gradient, and parameter values for one workload.
+    """Activations, upstream gradient(s), and parameter values for one workload.
 
     Returns a *list* of activations: an operator may take more than one --
-    ``geglu(a, b)`` takes two and owns no parameters at all.
+    ``geglu(a, b)`` takes two and owns no parameters at all. ``dy`` mirrors the
+    declared output shape: a Tensor for one output, an ordered tuple of them
+    for several. The third element is the full declared input dict, which the
+    shared module wrapper reads its parameters and buffers from.
     """
     values = make_case_inputs(op, workload, device=device)
-    activation_args, param_args = activation_and_parameter_args(op)
+    activation_args, _param_args = activation_and_parameter_args(op)
     activations = [
         values[a.name].detach().clone().requires_grad_(True) for a in activation_args
     ]
-    dy = values[op.upstream_grad_name].detach().clone()
-    params = {a.name: values[a.name].detach().clone() for a in param_args}
-    return activations, dy, params
-
-
-def load_parameters(model: nn.Module, params: dict[str, torch.Tensor]) -> None:
-    with torch.no_grad():
-        for name, value in params.items():
-            getattr(model, name).copy_(value)
+    upstream = upstream_grad_values(op, values)
+    dy = (
+        tuple(d.detach().clone() for d in upstream)
+        if isinstance(upstream, tuple)
+        else upstream.detach().clone()
+    )
+    # The whole declared input dict travels, not just the parameters: the shared
+    # wrapper takes its buffers from it too, and every provider built from the
+    # same dict runs on byte-identical weights.
+    return activations, dy, values
 
 
 def make_training_step(
-    model: nn.Module, activations: list[torch.Tensor], dy: torch.Tensor
+    model, activations: list[torch.Tensor], dy: Any
 ) -> Callable[[], None]:
-    """THE timed region. Imported by both the fitness and the benchmark."""
+    """THE timed region. Imported by both the fitness and the benchmark.
+
+    ``torch.autograd.backward`` rather than ``y.backward(dy)`` because a
+    multi-output layer has no single ``y`` to call it on: every declared output
+    is produced inside the region and every one is given its own upstream
+    gradient, so none of them can be dropped from what is timed.
+    """
+    op = model._op
+    dys = dy if isinstance(dy, tuple) else (dy,)
 
     def step() -> None:
         model.zero_grad(set_to_none=True)
         for activation in activations:
             activation.grad = None
         y = model(*activations)
-        y.backward(dy)
+        torch.autograd.backward(as_output_tuple(op, y), dys)
 
     return step
 
@@ -255,10 +243,8 @@ def eager_step_ms(
     if key in cache:
         return float(cache[key])
 
-    activations, dy, params = case_tensors(op, workload, device=device)
-    model = EagerModule(op, param_shapes={k: tuple(v.shape) for k, v in params.items()})
-    model = model.to(device=device, dtype=activations[0].dtype)
-    load_parameters(model, params)
+    activations, dy, values = case_tensors(op, workload, device=device)
+    model = eager_layer(op, values)
     result = batched_step_ms(
         make_training_step(model, activations, dy),
         warmup=warmup, steps=steps, blocks=blocks,
@@ -284,12 +270,8 @@ def candidate_step_ms(
     steps: int = 200,
     blocks: int = 3,
 ) -> float:
-    activations, dy, params = case_tensors(op, workload, device=device)
-    model = CandidateModule(
-        op, program_module, param_shapes={k: tuple(v.shape) for k, v in params.items()}
-    )
-    model = model.to(device=device, dtype=activations[0].dtype)
-    load_parameters(model, params)
+    activations, dy, values = case_tensors(op, workload, device=device)
+    model = candidate_module(op, program_module, values=values)
     result = batched_step_ms(
         make_training_step(model, activations, dy),
         warmup=warmup, steps=steps, blocks=blocks,
