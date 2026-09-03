@@ -24,17 +24,22 @@ per step from position ids and shares them across all 28 layers, so within this
 boundary they are tables, not activations, and they receive no gradient.
 """
 
-from evograd.bench.workloads.qwen3.harvest.snapshot import load as _load_snapshot
-from evograd.bench.workloads.qwen3.harvest.snapshot import task as _snapshot_task
+from evograd.bench.workloads import load_snapshot as _load_snapshot
+from evograd.bench.workloads import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
-_SNAPSHOT = _load_snapshot()
+#: The harvested workload these dims came from; also the ``Provenance``
+#: model key, so the declaration and the snapshot cannot disagree about
+#: which run they describe.
+_WORKLOAD = "qwen3_0_6b"
+
+_SNAPSHOT = _load_snapshot(_WORKLOAD)
 
 #: The harvested record this declaration is derived from: the RoPE application,
 #: whose two outputs *are* q and k, plus the projections and head norms that
 #: feed it and the SDPA call that consumes all three.
-HARVEST = _snapshot_task("qwen3_qkv_norm_rope")
+HARVEST = _snapshot_task(_WORKLOAD, "qwen3_qkv_norm_rope")
 
 #: 28 -- once per decoder layer, for every configuration in the boundary.
 FREQUENCY = HARVEST["frequency"]

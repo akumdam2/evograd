@@ -455,5 +455,131 @@ class TestLlamaBehaviourUnchanged(unittest.TestCase):
             self.assertIs(kernels.registry, LLAMA_SITES)
 
 
+class TestTier3WorkloadRegistry(unittest.TestCase):
+    """The CLI reaches a workload by name; it names no architecture itself.
+
+    ``tier3_cli`` used to hold three ``if args.model == "qwen3_0_6b"`` branches:
+    one to build the workload, one to add its structural-identity provider, and
+    one to reject that flag for anything else. A third workload was therefore an
+    edit in three places, and -- worse -- a flag that meant nothing for the
+    selected model was silently ignored rather than refused.
+    """
+
+    def test_the_cli_model_choices_come_from_the_registry(self):
+        from evograd.bench.tier3_cli import MODELS
+        from evograd.bench.workloads import TIER3_ADAPTERS
+
+        self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
+
+    def test_the_cli_source_names_no_architecture(self):
+        """The load-bearing one: evaluation must not know what a Qwen is."""
+        import pathlib
+
+        import evograd.bench.tier3_cli as cli
+
+        source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+        for architecture in ("qwen3", "Qwen3", "Qwen"):
+            self.assertNotIn(architecture, source, architecture)
+
+    def test_every_registered_adapter_resolves_and_is_well_formed(self):
+        from evograd.bench.workloads import (
+            Tier3Adapter, TIER3_ADAPTERS, tier3_adapter,
+        )
+
+        for name in TIER3_ADAPTERS:
+            with self.subTest(workload=name):
+                adapter = tier3_adapter(name)
+                self.assertIsInstance(adapter, Tier3Adapter)
+                self.assertEqual(adapter.name, name)
+                self.assertTrue(callable(adapter.build))
+                self.assertTrue(adapter.summary)
+                if adapter.providers is not None:
+                    self.assertTrue(callable(adapter.providers))
+
+    def test_an_unknown_workload_names_the_ones_that_exist(self):
+        from evograd.bench.workloads import UnknownWorkload, tier3_adapter
+
+        with self.assertRaises(UnknownWorkload) as caught:
+            tier3_adapter("gpt_9")
+        self.assertIn("gpt_9", str(caught.exception))
+        self.assertIn("llama_3_8b", str(caught.exception))
+
+    def test_the_registry_imports_no_adapter_until_one_is_asked_for(self):
+        """``ops`` imports this module at declaration time; an eager import of
+        the adapters would drag torch and Transformers in behind it."""
+        import ast
+        import pathlib
+
+        import evograd.bench.workloads as registry
+
+        tree = ast.parse(pathlib.Path(registry.__file__).read_text(encoding="utf-8"))
+        toplevel = {
+            node.module.split(".")[0]
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom) and node.module
+        } | {
+            alias.name.split(".")[0]
+            for node in tree.body
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        self.assertEqual(
+            toplevel, {"__future__", "importlib", "dataclasses", "pathlib", "typing"}
+        )
+
+    def test_a_workload_only_gets_the_providers_it_declares(self):
+        from evograd.bench.tier3_cli import _parser, build_providers
+
+        llama = _parser().parse_args(["--model", "llama_3_8b_4l", "--baseline", "none"])
+        self.assertEqual(sorted(build_providers(llama, quiet=True)), ["eager"])
+
+        qwen = _parser().parse_args([
+            "--model", "qwen3_0_6b", "--baseline", "none",
+            "--structural-identity", "--device", "cpu", "--layers", "1",
+        ])
+        self.assertEqual(
+            sorted(build_providers(qwen, quiet=True)),
+            ["eager", "structural_identity"],
+        )
+
+    def test_a_flag_the_workload_does_not_declare_is_refused_by_name(self):
+        """Previously ``--layers 2`` on Llama was accepted and ignored, which is
+        the failure that reports a number for a run that did not happen."""
+        import contextlib, io
+
+        from evograd.bench.tier3_cli import _parser, check_options
+
+        for flag, value in (("--structural-identity", None),
+                            ("--layers", "2"),
+                            ("--data-seed", "7")):
+            with self.subTest(flag=flag):
+                argv = ["--model", "llama_3_8b_4l", flag]
+                if value is not None:
+                    argv.append(value)
+                args = _parser().parse_args(argv)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+                    check_options(args)
+                message = stderr.getvalue()
+                self.assertIn(flag, message)
+                self.assertIn("llama_3_8b_4l", message)
+
+    def test_the_declaring_workload_accepts_those_same_flags(self):
+        from evograd.bench.tier3_cli import _parser, check_options
+
+        args = _parser().parse_args([
+            "--model", "qwen3_0_6b", "--structural-identity",
+            "--layers", "2", "--data-seed", "7",
+        ])
+        check_options(args)  # must not raise
+
+    def test_unset_optional_flags_are_never_refused(self):
+        from evograd.bench.tier3_cli import _parser, check_options
+
+        for model in ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b"):
+            with self.subTest(model=model):
+                check_options(_parser().parse_args(["--model", model]))
+
+
 if __name__ == "__main__":
     unittest.main()

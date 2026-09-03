@@ -172,31 +172,61 @@ def seed_2d(workload: Workload) -> int:
     return rows * 100003 + cols
 
 
-def qwen3_observed_workloads(
+def recorded_layout(shape: Iterable[int], stride: Iterable[int]) -> str:
+    """Classify one harvested tensor's memory layout from its recorded strides.
+
+    A decoder reaches attention and RoPE by projecting into ``[B, T, H, D]`` and
+    transposing, so what the kernel receives is a non-contiguous view of shape
+    ``[B, H, T, D]`` whose strides are ``[T*H*D, D, H*D, 1]``. That signature is
+    exact, so this reads the layout off the harvest rather than asking anyone to
+    declare it.
+
+    Anything else is reported as ``contiguous``: the layouts this distinguishes
+    are the ones an input generator can actually reproduce, and a shape it does
+    not recognise should fall back to the plain tensor rather than to a guess.
+    """
+    shape, stride = tuple(shape), tuple(stride)
+    if len(shape) == 4 and len(stride) == 4:
+        batch, heads, tokens, dim = shape
+        if stride == (tokens * heads * dim, dim, heads * dim, 1) and heads > 1:
+            return "head_major_view"
+    return "contiguous"
+
+
+def observed_workloads(
+    workload_name: str,
     task: str,
     *,
     tolerances: dict[str, tuple[float, float]] | None = None,
     dtype: str | None = None,
 ) -> tuple[Workload, ...]:
-    """Every observed Qwen3-0.6B configuration for one generic Level-1 task.
+    """Every observed configuration of one generic Level-1 task, for one workload.
 
-    Read from the tracked workload snapshot, which derives them from the Level-4
-    harvest: dims, dtype, roles and frequency all come from what the canonical
-    step ran. Nothing here is a second hand-written copy, and the provenance each
-    workload carries re-derives the same dims from the published Qwen3-0.6B
-    configuration, so ``tests/test_provenance`` proves the two agree.
+    Read from that workload's tracked snapshot, which derives them from its
+    Level-4 harvest: dims, dtype, roles, frequency and memory layout all come
+    from what the canonical step ran. Nothing here is a second hand-written
+    copy, and the provenance each workload carries re-derives the same dims from
+    the published model configuration, so ``tests/test_provenance`` proves the
+    two agree.
 
-    The snapshot is a small tracked JSON file with no torch dependency, so this
+    ``workload_name`` selects the snapshot; it is also the provenance's model
+    key, so a second harvested architecture reaches this function unchanged.
+
+    A snapshot is a small tracked JSON file with no torch dependency, so this
     stays importable on a machine that has never run the workload.
     """
-    from evograd.bench.workloads.qwen3.harvest.snapshot import load as _load_snapshot
+    from evograd.bench.workloads import load_snapshot
 
-    entry = _load_snapshot()["level1"][task]
+    entry = load_snapshot(workload_name)["level1"][task]
     tolerances = tolerances or {}
     workloads = []
     for config in entry["configurations"]:
         case_dtype = dtype or config["dtype"].replace("torch.", "")
         atol, rtol = tolerances.get(case_dtype, (None, None))
+        # The layout of the operator's primary activation input. Both inputs a
+        # generator branches on -- RoPE's `x`, attention's q/k/v -- are the
+        # leading argument at every harvested boundary.
+        primary = (config.get("inputs") or [{}])[0]
         workloads.append(
             Workload(
                 dims=dict(config["dims"]),
@@ -204,25 +234,29 @@ def qwen3_observed_workloads(
                 atol=atol,
                 rtol=rtol,
                 provenance=Provenance(
-                    model="qwen3_0_6b",
+                    model=workload_name,
                     component=config["provenance"]["component"],
                     free=dict(config["provenance"]["free"]),
                     source="hf_config",
+                    layout=recorded_layout(
+                        primary.get("shape", ()), primary.get("stride", ())
+                    ),
                 ),
             )
         )
     return tuple(workloads)
 
 
-def is_qwen3_observed(workload: Workload) -> bool:
-    """Whether a workload is one of the observed Qwen3-0.6B configurations.
+def is_head_major_view(workload: Workload) -> bool:
+    """Whether this workload's primary input is the non-contiguous view a model
+    hands its attention and RoPE kernels.
 
-    Input generators branch on this to reproduce the layout and the rotary base
-    the model actually used, instead of benchmarking a contiguous substitute at
-    the right shape.
+    Input generators branch on this rather than on the model's name, so every
+    harvested architecture reproduces the layout its own run recorded instead of
+    falling back to a contiguous substitute at the right shape.
     """
     provenance = getattr(workload, "provenance", None)
-    return provenance is not None and provenance.model == "qwen3_0_6b"
+    return provenance is not None and provenance.layout == "head_major_view"
 
 
 def make_pair_baseline(

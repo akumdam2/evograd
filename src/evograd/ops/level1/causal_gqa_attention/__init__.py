@@ -20,10 +20,10 @@ from evograd.opdecl.models import (
 )
 from evograd.ops._common import (
     fixed_shape_suites,
-    is_qwen3_observed,
+    is_head_major_view,
     log_distance_weight,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
     regime_suites,
 )
 
@@ -46,7 +46,7 @@ _BENCHMARK = model_workloads(
 
 #: The observed Qwen3-0.6B configuration: 16 query heads over 8 KV heads, batch
 #: 2 x sequence 2048, 28 invocations per step.
-_QWEN3_OBSERVED = qwen3_observed_workloads("causal_gqa_attention")
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "causal_gqa_attention")
 
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, HQ=hq, HK=hk, T=t, D=d), dtype=dtype)
@@ -72,7 +72,7 @@ def make_causal_gqa_attention_inputs(torch, op, workload, device="cuda"):
     dims = workload.dims
     dtype = getattr(torch, workload.dtype)
     torch.manual_seed(dims["T"] * 100003 + dims["HQ"] * 1009 + dims["D"])
-    observed = is_qwen3_observed(workload)
+    observed = is_head_major_view(workload)
 
     def draw(heads):
         if observed:

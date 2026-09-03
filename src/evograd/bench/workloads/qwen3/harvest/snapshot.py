@@ -18,6 +18,14 @@ it from a full harvest and fails if the two disagree, so the snapshot cannot
 quietly drift away from the run it claims to describe; ``--write`` regenerates
 it. Neither is needed to use it.
 
+**What is Qwen-specific, and what is not.** Reading a snapshot and verifying its
+hash is the same operation for every workload and lives in
+:mod:`..common.snapshot`. What stays here is the part that names things: which
+harvested boundaries collapse into which task (:data:`TASK_SOURCES`), which
+generic Level-1 operator each observed configuration maps onto
+(:data:`LEVEL1_SOURCES`), and the extraction that turns a manifest into the
+frozen file. Those are facts about Qwen3's decoder, not about snapshots.
+
 This module imports json, hashlib and pathlib. Nothing else -- no torch, no
 Transformers -- because everything that reads it must work without them.
 """
@@ -30,6 +38,24 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+
+from ...common.snapshot import SnapshotError, snapshot_hash
+from ...common.snapshot import load as _load
+from ...common.snapshot import task as _task
+
+__all__ = [
+    "LEVEL1_SOURCES",
+    "SCHEMA_VERSION",
+    "SNAPSHOT_PATH",
+    "SnapshotError",
+    "TASK_SOURCES",
+    "diff",
+    "extract",
+    "load",
+    "main",
+    "snapshot_hash",
+    "task",
+]
 
 #: Bumped from /1 when a task whose boundary takes three tensors was added:
 #: ``input_shape``/``output_shape`` became ``input_shapes``/``output_shapes``,
@@ -102,49 +128,14 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
 }
 
 
-class SnapshotError(RuntimeError):
-    """The snapshot is missing, malformed, or disagrees with a full harvest."""
-
-
-def _canonical(payload: Any) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
-def snapshot_hash(payload: dict[str, Any]) -> str:
-    """Deterministic hash over everything except the hash field itself."""
-    body = {key: value for key, value in payload.items() if key != "snapshot_hash"}
-    return hashlib.sha256(_canonical(body).encode("utf-8")).hexdigest()
-
-
 def load(path: Path | None = None) -> dict[str, Any]:
-    """The frozen snapshot, with its hash verified."""
-    path = Path(path or SNAPSHOT_PATH)
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:  # pragma: no cover - tracked in the repo
-        raise SnapshotError(f"{path} is missing; it is tracked, not generated") from exc
-    if payload.get("schema_version") != SCHEMA_VERSION:
-        raise SnapshotError(
-            f"{path}: schema {payload.get('schema_version')!r}, expected {SCHEMA_VERSION!r}"
-        )
-    recomputed = snapshot_hash(payload)
-    if payload.get("snapshot_hash") != recomputed:
-        raise SnapshotError(
-            f"{path}: snapshot hash mismatch (stored {payload.get('snapshot_hash')}, "
-            f"recomputed {recomputed}). The file was edited by hand; regenerate it "
-            "from a harvest with --write instead."
-        )
-    return payload
+    """The frozen Qwen3 snapshot, with its hash and exact schema verified."""
+    return _load(Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
-    payload = load(path)
-    try:
-        return payload["tasks"][name]
-    except KeyError:
-        raise SnapshotError(
-            f"the snapshot has no task {name!r}; it carries {sorted(payload['tasks'])}"
-        ) from None
+    """One Level-2 task entry from the Qwen3 snapshot."""
+    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 # --------------------------------------------------------------------------

@@ -13,7 +13,7 @@ from evograd.ops._common import (
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
     regime_suites,
     standard_correctness,
     workloads_2d,
@@ -64,7 +64,7 @@ def _liger_factory():
 #: never appears without the multiply -- so it maps here rather than onto a
 #: standalone activation task. The SiLU record and the gate/up projection it
 #: sits between are kept as supporting provenance in the snapshot.
-_QWEN3_OBSERVED = qwen3_observed_workloads("swiglu", tolerances=STANDARD_TOLERANCES)
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "swiglu", tolerances=STANDARD_TOLERANCES)
 
 op = declare_op(
     name="swiglu",

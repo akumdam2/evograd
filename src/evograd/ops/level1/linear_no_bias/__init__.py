@@ -19,7 +19,7 @@ from evograd.opdecl.models import LLAMA_3_8B
 from evograd.ops._common import (
     fixed_shape_suites,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
 )
 
 #: The four Llama-3-8B projections, all of which are biasless in the published
@@ -41,7 +41,7 @@ _DERIVED = tuple(
 #: The six deduplicated GEMMs one Qwen3-0.6B step runs -- q_proj, k/v_proj,
 #: o_proj, gate/up_proj, down_proj and lm_head -- at the shapes and dtype the
 #: harvest observed. All six are biasless, which is why they are here.
-_QWEN3_OBSERVED = qwen3_observed_workloads("linear_no_bias")
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "linear_no_bias")
 
 
 def make_linear_no_bias_inputs(torch, op, workload, device="cuda"):

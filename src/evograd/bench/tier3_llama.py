@@ -232,3 +232,58 @@ class LlamaWorkload:
             "tokens": self.tokens,
             "dtype": str(self.dtype).removeprefix("torch."),
         }
+
+
+# ── tier-3 CLI adapter ───────────────────────────────────────────────────────
+
+
+def _build_for(model_config):
+    """A ``(args) -> LlamaWorkload`` bound to one ``ModelConfig``.
+
+    Llama's batch and token defaults live here rather than on the parser: they
+    are this workload's answer to "how big is a step", and a parser default
+    would be one workload's number applied to every other.
+    """
+
+    def build(args) -> "LlamaWorkload":
+        return LlamaWorkload(
+            model_config,
+            batch=args.batch if args.batch is not None else 4,
+            tokens=args.tokens if args.tokens is not None else 1024,
+            device=args.device,
+            dtype=getattr(torch, args.dtype),
+            seed=args.seed,
+        )
+
+    return build
+
+
+def _adapter(name: str, model_config, summary: str):
+    from evograd.bench.workloads import Tier3Adapter
+
+    return Tier3Adapter(
+        name=name,
+        build=_build_for(model_config),
+        # No extra providers: this workload's kernels go in by construction, so
+        # `eager`, the identity control and any pair baseline already cover it.
+        providers=None,
+        # Neither `--layers` nor `--data-seed` means anything here: the layer
+        # count is the ModelConfig's, and the batch stream is drawn from the
+        # workload seed rather than a separate one.
+        options=frozenset(),
+        summary=summary,
+    )
+
+
+def __getattr__(name: str):
+    # Built on demand so importing this module does not import the model
+    # registry, and so `bench.workloads` can name these without a cycle.
+    from evograd.opdecl import models as model_registry
+
+    if name == "ADAPTER":
+        return _adapter("llama_3_8b", model_registry.LLAMA_3_8B,
+                        "Llama-3-8B, 32 layers, patched by construction")
+    if name == "ADAPTER_4L":
+        return _adapter("llama_3_8b_4l", model_registry.LLAMA_3_8B_4L,
+                        "Llama-3-8B shrunk to 4 layers; the one to iterate on")
+    raise AttributeError(name)

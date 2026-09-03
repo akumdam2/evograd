@@ -15,11 +15,11 @@ from evograd.opdecl.models import (
 )
 from evograd.ops._common import (
     fixed_shape_suites,
-    is_qwen3_observed,
+    is_head_major_view,
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
     regime_suites,
 )
 
@@ -51,7 +51,7 @@ def make_rope_inputs(torch, op, workload, device="cuda"):
     # The observed Qwen3 configurations are reproduced that way; the historical
     # Llama grid keeps the contiguous layout it has always been measured at, so
     # its numbers stay comparable with earlier runs.
-    observed = is_qwen3_observed(workload)
+    observed = is_head_major_view(workload)
 
     def draw():
         if observed:
@@ -108,7 +108,7 @@ _BENCHMARK = model_workloads(
 #: Both tensors one Qwen3-0.6B layer rotates: 16 query heads and 8 key heads,
 #: at batch 2 x sequence 2048 x head_dim 128, 28 times per step. They come from
 #: one harvested `apply_rotary_pos_emb` record, which rotates q and k together.
-_QWEN3_OBSERVED = qwen3_observed_workloads("rope")
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "rope")
 
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, n_heads=h, T=t, head_dim=d), dtype=dtype)

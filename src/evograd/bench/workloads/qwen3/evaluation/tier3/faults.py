@@ -21,6 +21,23 @@ Six shapes of fault, chosen because they fail differently:
 ``non_finite``      an infinity in one site's output.
 
 Each is a *reference* kernel with a defect injected, never an evolved program.
+
+**Why this is Qwen3's and not shared.** The mechanics -- the backward-scaling
+autograd function, the optimizer-state faults, the sensitivity table -- live in
+:mod:`evograd.bench.tier3_gate.faults`. Constructing a *kernel* fault does not
+generalize, because three of these encode facts about this model:
+
+* ``one_role`` unpacks ``q, k, v`` and disturbs only the query projection, which
+  is a statement about a three-output boundary;
+* ``non_finite`` unpacks ``normed, summed`` and poisons only the first, which is
+  a statement about a two-output boundary;
+* ``layer_subset`` and ``single_layer`` are wrong in 14 of 28 layers and in 1 of
+  28. The fraction is the control: 1/28th is where a pooled whole-model
+  statistic stops being able to see a defect.
+
+Rewritten as "perturb output 0 of an n-output operator at a configurable depth",
+they would be the same code making a weaker claim. These are the evidence the
+gate works, so they say exactly what they mean.
 """
 
 from __future__ import annotations
@@ -30,31 +47,21 @@ from typing import Any, Callable
 
 import torch
 
+from evograd.bench.tier3_gate.faults import (  # noqa: F401  (re-export)
+    GradScale as _GradScale,
+    StateFault,
+    runtime_forward_for as _runtime,
+    scale_grad as _scale_grad,
+    smallest_rejected,
+    state_catalogue,
+)
+
 from .sites import (
     SITE_MLP,
     SITE_QKV,
     SITE_RESIDUAL,
     structural_identity_kernels,
 )
-
-
-class _GradScale(torch.autograd.Function):
-    """Identity forward, scaled backward. The forward cannot detect this."""
-
-    @staticmethod
-    def forward(ctx, tensor, factor):
-        ctx.factor = factor
-        return tensor.clone()
-
-    @staticmethod
-    def backward(ctx, grad):
-        return grad * ctx.factor, None
-
-
-def _scale_grad(value, factor: float):
-    if isinstance(value, tuple):
-        return tuple(_GradScale.apply(v, factor) for v in value)
-    return _GradScale.apply(value, factor)
 
 
 @dataclass(frozen=True)
@@ -88,19 +95,6 @@ class Fault:
         return {"name": self.name, "site": self.site, "magnitude": self.magnitude,
                 "describes": self.describe}
 
-
-def _runtime(op_name: str) -> Callable:
-    """The declaration's production spelling, called the way a candidate is.
-
-    A fault must have the *declared operator's* signature, not the adapter's
-    internal production one: once a site is patched the adapter calls it with
-    the contract's argument list, and a fault written against the other
-    signature would be rejected by a TypeError. That is not the gate working.
-    """
-    from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.ops import get_op
-
-    return resolve_runtime_forward(get_op(op_name))
 
 
 def _build(fault: "Fault", registry) -> Callable:
@@ -215,75 +209,3 @@ def catalogue(magnitudes=(0.001, 0.005, 0.02)) -> list[Fault]:
               "2% high in one layer out of 28, exact everywhere else"),
     ]
     return faults
-
-
-def smallest_rejected(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Per fault kind, the smallest magnitude rejected on every seed tested."""
-    by_kind: dict[str, dict[float, list[bool]]] = {}
-    for record in results:
-        by_kind.setdefault(record["fault"]["name"], {}).setdefault(
-            record["fault"]["magnitude"], []
-        ).append(bool(record["rejected"]))
-    out: dict[str, Any] = {}
-    for kind, magnitudes in by_kind.items():
-        always = [m for m, verdicts in magnitudes.items() if verdicts and all(verdicts)]
-        out[kind] = {
-            "smallest_always_rejected": min(always) if always else None,
-            "tested": sorted(magnitudes),
-            "per_magnitude": {
-                str(m): {"rejected": sum(v), "of": len(v)}
-                for m, v in sorted(magnitudes.items())
-            },
-        }
-    return out
-
-
-# ── faults that are not in a kernel ──────────────────────────────────────────
-#
-# A kernel fault reaches the gate through the model. These do not: a wrong
-# parameter update with perfectly correct gradients, a corrupted Adam moment, a
-# step counter that has lost count. Nothing a kernel does can produce them, so
-# nothing a kernel-shaped control can prove the gate would catch them. They are
-# applied to a captured step instead, which is the only place they exist.
-
-
-@dataclass(frozen=True)
-class StateFault:
-    """A defect injected into the step's recorded state, not into a kernel."""
-
-    name: str
-    family: str
-    magnitude: float
-    describe: str
-
-    def apply(self, captured: dict[str, Any]) -> dict[str, Any]:
-        damaged = dict(captured)
-        if self.family == "steps":
-            damaged["steps"] = {
-                name: (None if value is None else value + self.magnitude)
-                for name, value in captured["steps"].items()
-            }
-            return damaged
-        damaged[self.family] = {
-            name: tensor * (1.0 + self.magnitude)
-            for name, tensor in captured[self.family].items()
-        }
-        return damaged
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "family": self.family,
-                "magnitude": self.magnitude, "describes": self.describe}
-
-
-def state_catalogue(magnitude: float = 0.02) -> list[StateFault]:
-    """The four defects that live in the optimizer rather than in a kernel."""
-    return [
-        StateFault("wrong_update", "updates", magnitude,
-                   "correct gradients, an update scaled by 1+m"),
-        StateFault("corrupt_exp_avg", "exp_avg", magnitude,
-                   "Adam's first moment scaled by 1+m"),
-        StateFault("corrupt_exp_avg_sq", "exp_avg_sq", magnitude,
-                   "Adam's second moment scaled by 1+m"),
-        StateFault("wrong_step_count", "steps", 1.0,
-                   "the optimizer has taken one more step than the reference"),
-    ]

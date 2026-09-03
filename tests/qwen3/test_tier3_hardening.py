@@ -15,9 +15,9 @@ import unittest
 import torch
 
 from evograd.bench.workloads.qwen3.evaluation.tier3 import boundary
-from evograd.bench.workloads.qwen3.evaluation.tier3 import numerics
+from evograd.bench.tier3_gate import numerics
 from evograd.bench.workloads.qwen3.evaluation.tier3 import purity
-from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+from evograd.bench.tier3_gate.numerics import (
     KIND_EXP_AVG,
     KIND_EXP_AVG_SQ,
     KIND_GRADIENT,
@@ -635,7 +635,7 @@ class _patched:
 
 
 def _fake_policy():
-    from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+    from evograd.bench.tier3_gate.numerics import (
         NumericsPolicy,
         SCHEMA_VERSION,
         TrajectoryPolicy,

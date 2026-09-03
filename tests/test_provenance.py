@@ -167,6 +167,134 @@ class TestDeclaredProvenance(unittest.TestCase):
             self.assertIn(op.level, (1, 2, 3), name)
 
 
+class TestObservedLayout(unittest.TestCase):
+    """Layout is a measurement, not a model name.
+
+    Two input generators -- RoPE's and causal GQA attention's -- build a
+    non-contiguous head-major view rather than a contiguous tensor at the same
+    shape, because that is what a decoder actually hands those kernels. They
+    used to decide by asking whether the workload's model was ``qwen3_0_6b``,
+    which is wrong for the *next* harvested architecture in the silent
+    direction: it would benchmark a contiguous substitute and report a number
+    for a layout no model runs.
+
+    So the layout is read off the strides the harvest recorded, and these pin
+    that it still lands where it did before.
+    """
+
+    def test_a_transposed_head_major_tensor_is_recognised(self):
+        from evograd.ops._common import recorded_layout
+
+        # [B, T, H, D] contiguous, transposed to [B, H, T, D].
+        batch, tokens, heads, dim = 2, 2048, 16, 128
+        shape = (batch, heads, tokens, dim)
+        stride = (tokens * heads * dim, dim, heads * dim, 1)
+        self.assertEqual(recorded_layout(shape, stride), "head_major_view")
+
+    def test_a_plain_contiguous_tensor_is_not(self):
+        from evograd.ops._common import recorded_layout
+
+        batch, heads, tokens, dim = 2, 16, 2048, 128
+        contiguous = (heads * tokens * dim, tokens * dim, dim, 1)
+        self.assertEqual(recorded_layout((batch, heads, tokens, dim), contiguous),
+                         "contiguous")
+        self.assertEqual(recorded_layout((4096, 1024), (1024, 1)), "contiguous")
+
+    def test_an_unrecognised_shape_falls_back_rather_than_guessing(self):
+        from evograd.ops._common import recorded_layout
+
+        self.assertEqual(recorded_layout((2, 3, 4, 5), (1, 1, 1, 1)), "contiguous")
+        self.assertEqual(recorded_layout((), ()), "contiguous")
+
+    def test_a_single_head_tensor_is_not_a_head_major_view(self):
+        """With one head the transposed and contiguous strides coincide, so the
+        signature cannot distinguish them; report the layout that is safe to
+        reproduce rather than the one that merely fits."""
+        from evograd.ops._common import recorded_layout
+
+        tokens, dim = 2048, 128
+        self.assertEqual(
+            recorded_layout((2, 1, tokens, dim), (tokens * dim, dim, dim, 1)),
+            "contiguous",
+        )
+
+    def test_the_observed_suites_carry_the_layout_their_strides_recorded(self):
+        """End to end: what the snapshot measured is what the workload declares."""
+        from evograd.ops._common import recorded_layout
+
+        expected = {
+            "rope": "head_major_view",
+            "causal_gqa_attention": "head_major_view",
+            "rmsnorm": "contiguous",
+            "linear_no_bias": "contiguous",
+            "cross_entropy": "contiguous",
+            "swiglu": "contiguous",
+        }
+        for name, layout in expected.items():
+            with self.subTest(op=name):
+                workloads = OPS[name].benchmark_workloads(suite="qwen3_0_6b_observed")
+                self.assertTrue(workloads, f"{name} has no observed suite")
+                for workload in workloads:
+                    self.assertEqual(workload.provenance.layout, layout)
+
+        # And the declared layout is genuinely re-derived from the snapshot,
+        # not a constant that happens to agree with it.
+        from evograd.bench.workloads import load_snapshot
+
+        level1 = load_snapshot("qwen3_0_6b")["level1"]
+        for name, layout in expected.items():
+            for config in level1[name]["configurations"]:
+                primary = config["inputs"][0]
+                self.assertEqual(
+                    recorded_layout(primary["shape"], primary["stride"]), layout, name
+                )
+
+    def test_an_unknown_layout_is_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            Provenance(model="llama_3_8b", component="rmsnorm", layout="column_major")
+        self.assertIn("column_major", str(caught.exception))
+
+
+class TestWorkloadRegistry(unittest.TestCase):
+    """``ops`` reaches a snapshot by workload *name*, not by import path."""
+
+    def test_every_registered_workload_has_a_readable_snapshot(self):
+        from evograd.bench.workloads import WORKLOADS, load_snapshot, snapshot_path
+
+        self.assertTrue(WORKLOADS)
+        for name in WORKLOADS:
+            with self.subTest(workload=name):
+                self.assertTrue(snapshot_path(name).is_file())
+                payload = load_snapshot(name)
+                self.assertIn("level1", payload)
+                self.assertIn("tasks", payload)
+
+    def test_an_unregistered_workload_names_the_ones_that_exist(self):
+        from evograd.bench.workloads import UnknownWorkload, load_snapshot
+
+        with self.assertRaises(UnknownWorkload) as caught:
+            load_snapshot("gpt_9")
+        self.assertIn("gpt_9", str(caught.exception))
+        self.assertIn("qwen3_0_6b", str(caught.exception))
+
+    def test_the_registry_does_not_import_a_workload_package(self):
+        """The registry is reached at ``ops`` import time. If it imported a
+        workload package it would drag Transformers in behind it."""
+        import ast
+        import pathlib
+
+        import evograd.bench.workloads as registry
+
+        tree = ast.parse(
+            pathlib.Path(registry.__file__).read_text(encoding="utf-8")
+        )
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                self.assertNotIn("qwen3", node.module)
+            for alias in getattr(node, "names", []):
+                self.assertNotIn("qwen3", alias.name)
+
+
 class TestFixedShapeSuites(unittest.TestCase):
     def test_one_case_per_suite_and_stable_keys(self):
         from evograd.ops._common import fixed_shape_suites
