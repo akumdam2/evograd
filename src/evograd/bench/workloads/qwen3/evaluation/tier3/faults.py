@@ -264,7 +264,7 @@ def observability(clean: dict[str, torch.Tensor],
     nothing" from "there was nothing to see". A fault whose stored footprint is
     zero has not been missed; it has not happened.
     """
-    from .numerics import role_of
+    from evograd.bench.tier3_gate.numerics import role_of
 
     changed = total = 0
     by_role: dict[str, dict[str, int]] = {}

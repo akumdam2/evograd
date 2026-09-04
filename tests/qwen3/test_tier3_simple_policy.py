@@ -347,7 +347,7 @@ class TestSchemaAndLegacy(unittest.TestCase):
             SimplePolicy.from_dict(payload)
 
     def test_the_detailed_policy_still_loads_and_is_unchanged(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import numerics
+        from evograd.bench.tier3_gate import numerics
 
         self.assertEqual(numerics.SAFETY_MARGIN, 2.0)
         self.assertEqual(numerics.GATED_METRICS, ("rel_l2", "max_abs_over_rms"))

@@ -881,7 +881,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
     """The loss curve is bounded the way the tensors are: drift plus drift."""
 
     def _policy(self, ee, sb):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+        from evograd.bench.tier3_gate.numerics import (
             TrajectoryPolicy,
         )
 
@@ -892,7 +892,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         return make(*ee), make(*sb)
 
     def test_the_two_halves_are_summed(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+        from evograd.bench.tier3_gate.numerics import (
             combined_trajectory,
         )
 
@@ -905,7 +905,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         # The smoke config is small enough that eager-vs-eager is bitwise, so
         # the E/E limit derives to exactly zero. Held to that alone, a correct
         # provider is rejected for one ULP on one loss.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+        from evograd.bench.tier3_gate.numerics import (
             combined_trajectory,
         )
 
@@ -919,7 +919,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
                         .check(curve, drifted)["ok"])
 
     def test_a_real_divergence_is_still_rejected(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+        from evograd.bench.tier3_gate.numerics import (
             combined_trajectory,
         )
 
@@ -931,7 +931,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         )
 
     def test_a_policy_without_an_integration_half_is_unchanged(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+        from evograd.bench.tier3_gate.numerics import (
             combined_trajectory,
         )
 

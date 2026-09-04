@@ -34,7 +34,10 @@ from typing import Any
 
 import torch
 
-from .numerics import environment_fingerprint, fingerprint_hash
+from evograd.bench.tier3_gate.numerics import (
+    environment_fingerprint,
+    fingerprint_hash,
+)
 from .simple import (
     HARD_METRICS,
     SAFETY_MARGIN,
