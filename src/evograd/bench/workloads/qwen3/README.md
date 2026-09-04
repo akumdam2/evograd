@@ -136,16 +136,66 @@ GPU numerical calibration is **environment-specific**: the tier-3 envelope
 measures one GPU, driver and library stack, is stamped with an environment hash,
 and is refused rather than reused when that hash does not match.
 
+## The simplified numerical policy (shadow mode, NOT promoted)
+
+`evaluation/tier3/simple.py` implements a second, much smaller whole-model
+correctness model, calibrated per `(workload, dtype, patch set)` against a
+trusted replacement that patches **exactly the sites the candidate patches**:
+
+```
+threshold[m] = max( max reference noise[m],        # eager vs rebuilt eager
+                    max matched trusted drift[m],  # eager vs R(P)
+                    FLOORS[m] ) * 2.0
+```
+
+Hard at model level: presence of every output and gradient, finiteness, logits
+relative L2, and one streamed global parameter-gradient relative L2. Everything
+the detailed policy measured is still collected as a **diagnostic**, including
+the five-step loss trajectory — a five-step delta is not evidence about
+long-horizon training quality and is no longer treated as if it were.
+
+**It is shadow-only by default and was not promoted.** `check_model_correctness`
+takes `simple_policy` and `simple_primary`; with `simple_primary=False`, the
+default, the detailed policy still decides and the simplified verdict is only
+recorded beside it.
+
+The blocker is specific. For `qkv_norm_rope`, `attention` and `swiglu_mlp` the
+matched trusted replacement recomputes through the *same* `runtime_forward` the
+production spelling calls, so its drift is identically zero and the threshold
+collapses onto the metric floor (2.0e-05 for logits). **`torch.compile` of that
+same reference function — a correct, independent implementation that passes
+tier 1, tier 2 and the full live-boundary gate — measures 1.0971e-02 and is
+rejected at 548x.** A trusted provider must pass, so the policy stays in shadow.
+No margin and no floor was adjusted in response.
+
+`residual_rmsnorm` is the counter-example showing the design is sound where the
+trusted reference is non-degenerate: drift 3.4285e-03, threshold 6.8569e-03,
+Liger passes at 2.6259e-03, the evolved candidate fails at 1.35x, and all seven
+negative controls are rejected.
+
+Measured separately, and not interchangeable: the calibrated smoke and canonical
+thresholds differ by between 1.00x and 38.57x depending on patch set and metric,
+so "smoke must pass before canonical" is a cost-saving prefilter rather than a
+sound implication.
+
 ## Current limitations
 
 - Evolved-kernel evaluation has not started. Every measurement so far uses an
   identity provider — the production spelling, or the bound-pair control — which
   shows the machinery is sound, not that anything is faster.
-- The `wrong_update` negative control still passes at 2% on BF16/GH200: an
-  update scaled by 1.02 stays inside the calibrated `parameter_update`
-  envelope. The same control is rejected on the CPU reference through the
-  identical code path, so this is an open measurement question, not a broken
-  path. It is not fixed here.
+- The simplified numerical policy above is **not promoted**; it runs in shadow
+  only, and its `qkv_norm_rope` threshold is known to reject `torch.compile`.
+- A 2% multiplicative update fault is **not detectable at bfloat16** and is no
+  longer required to be. One AdamW step at lr=1e-4 moves a projection weight by
+  1.22e-4, exactly two bfloat16 ULPs, so scaling it by 1.02 changes 3.9% of
+  stored values and leaves the rest bit-identical; on a norm weight, where the
+  ULP is 7.8e-3, the whole update rounds away and nothing changes at all. The
+  residual deviation is 5-11x below the measured hardware noise for that
+  quantity, and below it even with the integration term removed. The required
+  control is now a two-ULP perturbation of the stored parameter, which changes
+  every element by construction; `wrong_update` is kept as a diagnostic and
+  every control reports how much of its fault reached stored state, so "not
+  detected" can never be read as "no fault occurred".
 - A CUDA out-of-memory failure in the seed-17 controls run is pending
   verification: captures were moved to host memory to address it, and that
   change has not yet been re-run on a GPU.
