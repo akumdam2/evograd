@@ -489,15 +489,24 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(_parser().parse_args([]).model, MODELS[0])
 
-    def test_every_workload_family_has_a_model_choice(self):
-        """The CLI reaches a workload only through --model, so each family's
-        configs must be listed: Llama's two, Qwen3's canonical, and
-        AlphaFold3's iteration and report configs."""
-        from evograd.bench.tier3_cli import MODELS
+    def test_every_registered_workload_has_a_model_choice(self):
+        """The CLI reaches a workload only through ``--model``, so everything in
+        the registry must be offered -- and nothing else, or a name is listed
+        that cannot be built.
 
-        for name in ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b",
-                     "alphafold3_2l", "alphafold3"):
-            self.assertIn(name, MODELS)
+        Read from the registry rather than a hardcoded list: a workload added or
+        removed should not need this test edited, which is exactly how the
+        AlphaFold3 entries came to be absent from ``--model`` while the flags
+        that serve them survived.
+        """
+        from evograd.bench.tier3_cli import MODELS
+        from evograd.bench.workloads import TIER3_ADAPTERS, tier3_adapter
+
+        self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
+        self.assertTrue(MODELS)
+        for name in MODELS:
+            with self.subTest(model=name):
+                self.assertEqual(tier3_adapter(name).name, name)
 
     def test_dtype_follows_the_model_unless_stated(self):
         """AlphaFold3 trains fp32 (as MegaFold does) while the language models

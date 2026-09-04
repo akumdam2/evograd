@@ -116,20 +116,19 @@ def _parser() -> argparse.ArgumentParser:
                              "workloads that have one. A calibration is bound "
                              "to the workload it was measured for, so a shrunk "
                              "run needs its own rather than the canonical one")
-                        help="qwen3 only: move the token stream without changing "
-                             "the workload identity")
     parser.add_argument("--residues", type=int, default=None,
-                        help="alphafold3 only: crop length; defaults to 128")
+                        help="crop length, where the workload accepts it")
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--blocks", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--loss-steps", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
-    # No hard default: the language models train bf16 and AlphaFold3 fp32 (as
-    # MegaFold does), so the effective default follows the selected model and
-    # only an explicit flag overrides it.
+    # No hard default. Workloads disagree about their training dtype -- a
+    # language model trains bf16, AlphaFold3 fp32 -- and the canonical value is
+    # part of a workload's identity, so it belongs in that workload's spec
+    # rather than in this parser. Unset means "whatever the workload says".
     parser.add_argument("--dtype", default=None, choices=("bfloat16", "float16", "float32"),
-                        help="llama/qwen3 default bfloat16; alphafold3 defaults to float32")
+                        help="override the workload's own training dtype")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None)
@@ -298,7 +297,7 @@ def check_options(args) -> None:
     adapter = tier3_adapter(args.model)
     #: Flag -> the value that means "not requested".
     optional = {"structural_identity": False, "layers": None, "data_seed": 0,
-                "calibration": None}
+                "calibration": None, "residues": None}
     for dest, unset in optional.items():
         if dest in adapter.options:
             continue

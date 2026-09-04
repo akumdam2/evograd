@@ -35,13 +35,17 @@ def build(args) -> Any:
     from .workload import Qwen3Workload
 
     config: dict[str, Any] = {
-        "dtype": args.dtype,
         "device": args.device,
         "seed": args.seed,
         "data_seed": args.data_seed,
     }
-    # The canonical batch and sequence are part of the workload's identity, so a
-    # CLI default would silently replace them. Only an explicit flag overrides.
+    # The canonical batch, sequence and dtype are part of the workload's
+    # identity, so a CLI default would silently replace them. ``--dtype`` has no
+    # default for exactly that reason -- workloads disagree about theirs, and
+    # the canonical value belongs in the spec rather than in the parser. Only an
+    # explicit flag overrides any of them.
+    if args.dtype is not None:
+        config["dtype"] = args.dtype
     if args.batch is not None:
         config["batch_size"] = args.batch
     if args.tokens is not None:

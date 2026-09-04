@@ -74,12 +74,34 @@ AF3_SITES = SiteRegistry(
 
 
 def _require_model_package():
+    """Import ``alphafold3_pytorch``, distinguishing absent from broken.
+
+    These are different problems with different fixes, and reporting both as
+    "install the extra" sends someone to re-run an install that already
+    succeeded. A package whose own dependency chain is incomplete -- which is
+    easy to end up with on a platform where one of them has no wheel -- imports
+    with a ``ModuleNotFoundError`` naming *that* dependency, not this one.
+
+    Tier 3 reports a provider's failure by its message alone, so the underlying
+    cause goes into the text rather than only into ``__cause__``.
+    """
     try:
         import alphafold3_pytorch  # noqa: F401
     except ImportError as exc:
+        missing = getattr(exc, "name", None)
+        if missing in (None, "alphafold3_pytorch") or str(missing).startswith(
+            "alphafold3_pytorch."
+        ):
+            raise ImportError(
+                "the alphafold3 workload needs alphafold3-pytorch, which is not "
+                "installed. Install the 'af3' extra from the source tree: "
+                "pip install -e '.[af3]'"
+            ) from exc
         raise ImportError(
-            "the alphafold3 workload needs alphafold3-pytorch; "
-            "install the 'af3' extra (pip install 'evograd[af3]')"
+            f"alphafold3-pytorch is installed but cannot be imported: it needs "
+            f"{missing!r}, which is missing ({type(exc).__name__}: {exc}). "
+            f"Install that dependency -- re-installing alphafold3-pytorch will "
+            f"not help, and a --no-deps install leaves exactly this state."
         ) from exc
 
 

@@ -137,6 +137,8 @@ class Tier3Adapter:
 #: harvested workload can describe its shapes long before anything can patch it.
 TIER3_ADAPTERS: dict[str, str] = {
     "qwen3_0_6b": "evograd.bench.workloads.qwen3.evaluation.tier3.adapter:ADAPTER",
+    "alphafold3_2l": "evograd.ops.level4.alphafold3.adapter:ADAPTER_2L",
+    "alphafold3": "evograd.ops.level4.alphafold3.adapter:ADAPTER",
 }
 
 

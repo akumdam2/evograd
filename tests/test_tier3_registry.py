@@ -563,6 +563,48 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 if adapter.providers is not None:
                     self.assertTrue(callable(adapter.providers))
 
+    def test_alphafold3_is_registered_and_buildable(self):
+        """The regression this guards: AlphaFold3's workload, its site registry
+        and its ``--residues`` flag all landed, but nothing added it to
+        ``TIER3_ADAPTERS`` -- so ``--model alphafold3_2l`` was an invalid choice
+        while the flags that serve it sat in the parser looking supported."""
+        from evograd.bench.tier3_cli import _parser, build_workload, check_options
+
+        for name in ("alphafold3_2l", "alphafold3"):
+            with self.subTest(model=name):
+                args = _parser().parse_args(
+                    ["--model", name, "--device", "cpu", "--residues", "32",
+                     "--baseline", "none"]
+                )
+                check_options(args)
+                workload = build_workload(args)
+                self.assertEqual(workload.site_registry.name, "alphafold3")
+                self.assertTrue(workload.site_registry.names)
+
+    def test_each_workload_supplies_its_own_canonical_dtype(self):
+        """``--dtype`` has no parser default, so an unset flag must reach each
+        workload's own value -- not ``None``. This broke Qwen3 outright when the
+        default was removed for AlphaFold3's sake."""
+        from evograd.bench.tier3_cli import _parser, build_workload
+
+        expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32"}
+        for name, dtype in expected.items():
+            with self.subTest(model=name):
+                args = _parser().parse_args(
+                    ["--model", name, "--device", "cpu", "--baseline", "none"]
+                )
+                self.assertIsNone(args.dtype)
+                self.assertEqual(build_workload(args).describe()["dtype"], dtype)
+
+    def test_an_explicit_dtype_still_overrides_the_workloads_own(self):
+        from evograd.bench.tier3_cli import _parser, build_workload
+
+        args = _parser().parse_args(
+            ["--model", "alphafold3_2l", "--device", "cpu",
+             "--dtype", "bfloat16", "--baseline", "none"]
+        )
+        self.assertEqual(build_workload(args).describe()["dtype"], "bfloat16")
+
     def test_an_unknown_workload_names_the_ones_that_exist(self):
         from evograd.bench.workloads import UnknownWorkload, tier3_adapter
 
