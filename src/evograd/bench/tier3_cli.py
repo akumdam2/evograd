@@ -116,12 +116,20 @@ def _parser() -> argparse.ArgumentParser:
                              "workloads that have one. A calibration is bound "
                              "to the workload it was measured for, so a shrunk "
                              "run needs its own rather than the canonical one")
+                        help="qwen3 only: move the token stream without changing "
+                             "the workload identity")
+    parser.add_argument("--residues", type=int, default=None,
+                        help="alphafold3 only: crop length; defaults to 128")
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--blocks", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--loss-steps", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
-    parser.add_argument("--dtype", default="bfloat16", choices=("bfloat16", "float16", "float32"))
+    # No hard default: the language models train bf16 and AlphaFold3 fp32 (as
+    # MegaFold does), so the effective default follows the selected model and
+    # only an explicit flag overrides it.
+    parser.add_argument("--dtype", default=None, choices=("bfloat16", "float16", "float32"),
+                        help="llama/qwen3 default bfloat16; alphafold3 defaults to float32")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=None)

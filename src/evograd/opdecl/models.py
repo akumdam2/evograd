@@ -25,7 +25,7 @@ its ``free`` field, so the round-trip is ``cfg.<component>_dims(**free) == dims`
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -331,6 +331,28 @@ class AlphaFoldConfig:
     #: gated activation — the same ratio a transformer feed-forward block uses.
     transition_expansion: int = 4
 
+    # ── whole-model structure (level 4) ───────────────────────────────────
+    # Stack depths and input-feature widths, as the AF3 paper specifies them
+    # and as alphafold3-pytorch (the implementation MegaFold builds on) sets
+    # its defaults. A level-4 workload builds the training model from these,
+    # so a benchmark run is traceable to the published architecture rather
+    # than to whatever a harness happened to construct.
+    pairformer_depth: int = 48
+    msa_module_depth: int = 4
+    template_pairformer_depth: int = 2
+    diffusion_token_transformer_depth: int = 24
+    diffusion_atom_encoder_depth: int = 3
+    diffusion_atom_decoder_depth: int = 3
+    confidence_pairformer_depth: int = 4
+    #: Per-atom input feature width (alphafold3-pytorch's ``dim_atom_inputs``).
+    dim_atom_inputs: int = 77
+    #: Per-atom-pair input feature width (``dim_atompair_inputs``).
+    dim_atompair_inputs: int = 5
+    #: Template feature width (``dim_template_feats``).
+    dim_template_feats: int = 108
+    #: Sequence-local atom-transformer window (``atoms_per_window``).
+    atoms_per_window: int = 27
+
     def single_repr_block_dims(
         self, *, batch: int, n_seq: int, residues: int
     ) -> dict[str, int]:
@@ -362,6 +384,24 @@ class AlphaFoldConfig:
             "M": batch * n_seq * residues,
             "K": self.c_s,
             "N": self.pair_bias_attn_heads * self.pair_bias_attn_dim_head,
+        }
+
+    def train_step_dims(self, *, batch: int, residues: int) -> dict[str, int]:
+        """Every dim a whole-model training-step workload needs (level 4).
+
+        ``batch`` and ``residues`` (the crop length) are the free dimensions;
+        widths and stack depths come from the configuration, so a level-4
+        benchmark case cannot silently drift away from the architecture it
+        claims to train.
+        """
+        return {
+            "batch": batch,
+            "residues": residues,
+            "c_s": self.c_s,
+            "c_z": self.c_z,
+            "c_m": self.c_m,
+            "pairformer_depth": self.pairformer_depth,
+            "diffusion_depth": self.diffusion_token_transformer_depth,
         }
 
 
@@ -436,6 +476,25 @@ ALPHAFOLD3 = AlphaFoldConfig(
     source="MegaFold (arXiv:2506.20686) megafold/model/megafold.py",
 )
 
+#: AlphaFold3's architecture with the stacks cut to two pairformer blocks.
+#:
+#: The level-4 analogue of ``LLAMA_3_8B_4L``: every width, head count, and
+#: input-feature dimension is the real configuration, only the stack depths are
+#: reduced, so the kernels see the true shapes while a training step stays
+#: cheap enough to iterate on. Use it to iterate; report from ``ALPHAFOLD3``.
+ALPHAFOLD3_2L = replace(
+    ALPHAFOLD3,
+    name="alphafold3_2l",
+    pairformer_depth=2,
+    msa_module_depth=1,
+    template_pairformer_depth=1,
+    diffusion_token_transformer_depth=2,
+    diffusion_atom_encoder_depth=1,
+    diffusion_atom_decoder_depth=1,
+    confidence_pairformer_depth=1,
+    source="ALPHAFOLD3 with reduced stack depths; iteration config, not a published model",
+)
+
 #: Token counts the residual-stream and MLP operators sweep. Chosen to bracket
 #: the regimes a real training step visits: a partial batch, Liger's own e2e
 #: setting (batch 64 x seq 512 = 32768 tokens sharded over 4 GPUs, so ~8192 per
@@ -505,6 +564,7 @@ def rederive_dims(provenance) -> dict[str, int]:
 __all__ = [
     "AF3_RESIDUE_SWEEP",
     "ALPHAFOLD3",
+    "ALPHAFOLD3_2L",
     "AlphaFoldConfig",
     "LLAMA_3_8B",
     "LLAMA_REGIME_SPLIT",

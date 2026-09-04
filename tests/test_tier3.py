@@ -489,6 +489,23 @@ class TestCli(unittest.TestCase):
 
         self.assertEqual(_parser().parse_args([]).model, MODELS[0])
 
+    def test_every_workload_family_has_a_model_choice(self):
+        """The CLI reaches a workload only through --model, so each family's
+        configs must be listed: Llama's two, Qwen3's canonical, and
+        AlphaFold3's iteration and report configs."""
+        from evograd.bench.tier3_cli import MODELS
+
+        for name in ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b",
+                     "alphafold3_2l", "alphafold3"):
+            self.assertIn(name, MODELS)
+
+    def test_dtype_follows_the_model_unless_stated(self):
+        """AlphaFold3 trains fp32 (as MegaFold does) while the language models
+        train bf16; the parser leaves dtype unset so the workload decides."""
+        from evograd.bench.tier3_cli import _parser
+
+        self.assertIsNone(_parser().parse_args([]).dtype)
+
 
 if __name__ == "__main__":
     unittest.main()

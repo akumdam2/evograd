@@ -26,6 +26,10 @@ baselines = ["liger-kernel"]
 qwen3 = ["transformers>=4.51"]
 llama3 = ["transformers>=4.51"]
 workloads = ["transformers>=4.51"]
+# The level-4 AlphaFold3 training-step workload. alphafold3-pytorch is the
+# implementation MegaFold builds on, which is where the AF3 benchmark shapes
+# come from; without it the alphafold3 workload reports as uncovered.
+af3 = ["alphafold3-pytorch>=0.8.3,<0.9"]
 
 [project.scripts]
 evograd = "evograd.cli:main"
