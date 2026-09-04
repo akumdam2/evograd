@@ -55,10 +55,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-isolate",
         action="store_true",
-        help="run every shape in this process (faster; a hang takes the run down)",
+        help="run every provider in this process (faster; a hang takes the run "
+             "down, and one provider's allocator and Dynamo state reach the next)",
     )
     # Set by the parent when it re-invokes itself for one shape.
     parser.add_argument("--case-index", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--provider-name", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--result-json", default=None, help=argparse.SUPPRESS)
     return parser
 
@@ -75,7 +77,7 @@ def _specs(args, candidate_module):
     )
 
 
-def _run_one_case(args, op, workload):
+def _run_one_case(args, op, workload, only: str | None = None):
     from evograd.bench.tier2 import DEFAULT_REP_MS, DEFAULT_WARMUP_MS, run_case
 
     candidate_module = load_candidate(args.candidate) if args.candidate else None
@@ -87,11 +89,20 @@ def _run_one_case(args, op, workload):
         rep_ms=args.rep_ms or DEFAULT_REP_MS,
         warmup_ms=args.warmup_ms or DEFAULT_WARMUP_MS,
         check=not args.no_check,
+        only=only,
     )
 
 
-def _run_isolated(argv: list[str], index: int) -> dict:
-    """Re-invoke this module for one shape and read back its JSON."""
+def _run_isolated(argv: list[str], index: int, provider: str | None = None) -> dict:
+    """Re-invoke this module for one shape (and one provider) and read its JSON.
+
+    One provider per process, not one shape per process. Providers are not
+    inert neighbours: `torch.compile` leaves Dynamo caches and compiled artifacts
+    behind, Triton autotuning caches per process, and the caching allocator
+    keeps whatever the previous provider's peak reserved. Sharing a process
+    means the first provider measured is not measured under the same conditions
+    as the last.
+    """
     import tempfile
 
     handle, result_path = tempfile.mkstemp(prefix="evograd_tier2_", suffix=".json")
@@ -99,7 +110,8 @@ def _run_isolated(argv: list[str], index: int) -> dict:
     try:
         process = subprocess.run(
             [sys.executable, "-m", "evograd.bench.tier2_cli", *argv,
-             "--case-index", str(index), "--result-json", result_path],
+             "--case-index", str(index), "--result-json", result_path]
+            + (["--provider-name", provider] if provider else []),
             capture_output=True, text=True, timeout=ISOLATION_TIMEOUT,
         )
         try:
@@ -140,7 +152,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Worker mode: one shape, print/write JSON, exit.
     if args.case_index is not None:
-        case = _run_one_case(args, op, workloads[args.case_index])
+        case = _run_one_case(args, op, workloads[args.case_index],
+                             only=args.provider_name)
         if args.result_json:
             Path(args.result_json).write_text(json.dumps(case), encoding="utf-8")
         return 0
@@ -149,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.bench.tier2 import (
         DEFAULT_REP_MS,
         DEFAULT_WARMUP_MS,
+        REPETITIONS,
+        WARMUP_ITERS,
         _require_declared_split,
     )
 
@@ -164,7 +179,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.no_isolate:
             cases.append(_run_one_case(args, op, workload))
         else:
-            cases.append(_run_isolated(parent_argv, index))
+            # One child per provider; the parent stitches the case back together
+            # so the report shape is unchanged.
+            # The candidate module must be loaded to enumerate the spec list:
+            # without it `default_provider_specs` omits the candidate entirely
+            # and the parent never spawns a child for it.
+            names = [
+                spec.name for spec in _specs(
+                    args, load_candidate(args.candidate) if args.candidate else None
+                )
+            ]
+            merged: dict | None = None
+            for name in names:
+                part = _run_isolated(parent_argv, index, name)
+                if merged is None:
+                    merged = {k: v for k, v in part.items() if k != "providers"}
+                    merged["providers"] = {}
+                merged["providers"].update(part.get("providers", {}))
+            cases.append(merged or {"ok": False, "error": "no providers"})
 
     report = {
         "protocol": TIER2_PROTOCOL_VERSION,
@@ -176,7 +208,11 @@ def main(argv: list[str] | None = None) -> int:
             "quantiles": [0.5, 0.2, 0.8],
             "grad_to_none": "activations only, matching Liger; parameter .grad accumulates",
             "step": "y = model(*activations); torch.autograd.backward(y, output_grads)",
-            "isolation": "one process per shape" if not args.no_isolate else "single process",
+            "isolation": ("one process per provider per shape"
+                          if not args.no_isolate else "single process"),
+            "repetitions": REPETITIONS,
+            "warmup_iterations": WARMUP_ITERS,
+            "driver": "cuda events, fixed repetition count, L2 flushed between samples",
         },
         "environment": environment_fingerprint(),
         "cases": cases,

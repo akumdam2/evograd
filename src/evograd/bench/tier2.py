@@ -35,7 +35,9 @@ implementations on different data.
 
 from __future__ import annotations
 
+import hashlib
 import statistics
+import random
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -59,6 +61,83 @@ TIER2_PROTOCOL_VERSION = "evograd-tier2-operator-v1"
 DEFAULT_REP_MS = 500
 DEFAULT_WARMUP_MS = 25
 QUANTILES = (0.5, 0.2, 0.8)
+
+#: A fixed sample count, not a wall-clock budget. `do_bench`'s `rep` is a
+#: duration, so a fast provider is sampled many more times than a slow one and
+#: the two quantile estimates rest on different amounts of evidence. Every
+#: provider now contributes the same number of measurements.
+REPETITIONS = 500
+#: Untimed iterations before sampling. Enough to finish Triton autotuning and
+#: settle the allocator; compilation is already done by the correctness gate.
+WARMUP_ITERS = 10
+#: Evicts L2 between samples (GH200 has 60 MB), the discipline `do_bench`
+#: applies, so one sample does not read the previous sample's cache.
+L2_FLUSH_BYTES = 256 * 1024 * 1024
+
+
+def _timed_samples(fn, *, grad_to_none=None, reps=REPETITIONS,
+                   warmup=WARMUP_ITERS) -> list[float]:
+    """`warmup` untimed iterations, then exactly `reps` event-timed ones."""
+    flush = torch.empty(L2_FLUSH_BYTES // 4, dtype=torch.int32, device="cuda")
+    for _ in range(warmup):
+        fn()
+    torch.cuda.synchronize()
+    starts = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
+    ends = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
+    for index in range(reps):
+        if grad_to_none:
+            for tensor in grad_to_none:
+                tensor.grad = None
+        flush.zero_()
+        starts[index].record()
+        fn()
+        ends[index].record()
+    torch.cuda.synchronize()
+    return [s.elapsed_time(e) for s, e in zip(starts, ends)]
+
+
+def tensor_checksum(value) -> str:
+    """A content fingerprint, so "identical inputs" is checked, not assumed."""
+    if not torch.is_tensor(value):
+        return f"scalar:{value}"
+    payload = value.detach().to(torch.float32).cpu().numpy().tobytes()
+    return (f"{hashlib.sha256(payload).hexdigest()[:16]}:"
+            f"{tuple(value.shape)}:{value.dtype}:{value.stride()}")
+
+
+def install_call_template(
+    module: torch.nn.Module,
+    op: OpDecl,
+    values: dict[str, Any],
+    *,
+    parameter_names: tuple[str, ...],
+    activation_names: tuple[str, ...],
+) -> None:
+    """Register the inactive tensors and resolve the positional call template.
+
+    The declaration's argument order is the only thing that says where a value
+    goes. Concatenating activations, parameters and scalars gives the same list
+    only when the declaration happens to list them in that order and declares no
+    inactive tensors; where it does not — ``qwen3_qkv_norm_rope``'s ``cos`` and
+    ``sin`` sit between the parameters and ``eps`` — that shortcut drops them.
+
+    Resolved once, because ``forward`` runs inside the timed region for *every*
+    provider, eager included — and eager is the row every speedup is divided by —
+    so anything spent here inflates all of them and compresses the ratios toward
+    1. At 1024 rows the forward is 12 us, where a few microseconds of dict
+    building is not noise.
+    """
+    inactive = {arg.name for arg in op.tensor_inactive_args()}
+    for arg in op.tensor_inactive_args():
+        module.register_buffer(f"_inactive_{arg.name}", values[arg.name])
+    arg_names = [arg.name for arg in op.args]
+    module._template = [
+        getattr(module, f"_inactive_{arg.name}") if arg.name in inactive
+        else values.get(arg.name, getattr(arg, "default", None))
+        for arg in op.args
+    ]
+    module._activation_slots = [arg_names.index(n) for n in activation_names]
+    module._parameter_slots = [(arg_names.index(n), n) for n in parameter_names]
 
 
 class OperatorModule(torch.nn.Module):
@@ -92,26 +171,11 @@ class OperatorModule(torch.nn.Module):
             self.register_parameter(
                 name, torch.nn.Parameter(parameters[name].detach().clone())
             )
-        for arg in op.tensor_inactive_args():
-            self.register_buffer(f"_inactive_{arg.name}", parameters[arg.name])
-
-        # A positional call template, resolved once. `forward` runs inside the
-        # timed region for *every* provider, eager included — and eager is the
-        # row every speedup is divided by — so anything spent here inflates all
-        # of them and compresses the ratios toward 1. At 1024 rows the forward
-        # is 12 us, where a few microseconds of dict building is not noise.
-        # Positional also skips the keyword validation in `bind`'s wrapper.
-        arg_names = [arg.name for arg in op.args]
-        self._template: list[Any] = [
-            getattr(self, f"_inactive_{arg.name}")
-            if arg.name in {a.name for a in op.tensor_inactive_args()}
-            else parameters.get(arg.name, getattr(arg, "default", None))
-            for arg in op.args
-        ]
-        self._activation_slots = [arg_names.index(n) for n in self._activation_names]
-        self._parameter_slots = [
-            (arg_names.index(n), n) for n in self._parameter_names
-        ]
+        install_call_template(
+            self, op, parameters,
+            parameter_names=self._parameter_names,
+            activation_names=self._activation_names,
+        )
 
     def forward(self, *activations: torch.Tensor) -> Any:
         # Returns whatever the declaration says: a Tensor, or an ordered tuple
@@ -184,6 +248,26 @@ def eager_module(
     return module
 
 
+def candidate_module(op: OpDecl, candidate, *, values: dict[str, Any]):
+    """A generated candidate, through whichever route it declares.
+
+    An artifact that exports a deployment entry is benchmarked through its own
+    static ``torch.autograd.Function`` -- the same object tier 3 patches into
+    the model, so the two tiers measure one implementation. A pair-only
+    candidate predating the contract still works, through the binder, and says
+    so in its adapter kind.
+    """
+    from evograd.pipelines.shared.artifact import deployment_entry, validate_artifact
+
+    entry = deployment_entry(candidate)
+    if entry is not None:
+        validate_artifact(op, candidate)     # malformed never silently demotes
+        return native_module(op, entry, values=values,
+                             adapter_kind="evolved_direct_autograd_module")
+    return pair_module(op, candidate, adapter_kind="legacy_bind_pair_module",
+                       values=values)
+
+
 def pair_module(
     op: OpDecl,
     candidate,
@@ -201,6 +285,64 @@ def pair_module(
     """
     return OperatorModule(
         op, bind(op, candidate), parameters=values, adapter_kind=adapter_kind
+    )
+
+
+class NativeModule(torch.nn.Module):
+    """A provider that supplies its own autograd, with no binder in between.
+
+    ``OperatorModule`` exists to make an arbitrary generated pair trainable: it
+    reads the declaration, routes gradients by name, and validates arity on
+    every call. A provider that already ships a ``torch.autograd.Function``
+    needs none of that, and paying for it measures EvoGrad rather than the
+    kernel. This wrapper holds the parameters and forwards positionally; it
+    contains no logic of its own.
+    """
+
+    def __init__(self, op: OpDecl, call, *, parameters: dict[str, torch.Tensor],
+                 parameter_names: tuple[str, ...],
+                 activation_names: tuple[str, ...], adapter_kind: str):
+        super().__init__()
+        self._call = call
+        self.adapter_kind = adapter_kind
+        self._parameter_names = parameter_names
+        self._activation_names = activation_names
+        for name in parameter_names:
+            self.register_parameter(
+                name, torch.nn.Parameter(parameters[name].detach().clone())
+            )
+        install_call_template(
+            self, op, parameters,
+            parameter_names=parameter_names,
+            activation_names=activation_names,
+        )
+
+    def forward(self, *activations):
+        args = list(self._template)
+        for slot, activation in zip(self._activation_slots, activations):
+            args[slot] = activation
+        for slot, name in self._parameter_slots:
+            args[slot] = getattr(self, name)
+        return self._call(*args)
+
+    def activations(self, values: dict[str, Any]) -> list[torch.Tensor]:
+        return [values[name] for name in self._activation_names]
+
+
+def native_module(op: OpDecl, call, *, values: dict[str, Any],
+                  adapter_kind: str) -> NativeModule:
+    """Wrap a provider's own differentiable callable, keeping the declared split."""
+    parameter_names = tuple(op.parameter_args or ())
+    return NativeModule(
+        op,
+        call,
+        parameters=values,
+        parameter_names=parameter_names,
+        activation_names=tuple(
+            arg.name for arg in op.active_args()
+            if arg.name not in parameter_names
+        ),
+        adapter_kind=adapter_kind,
     )
 
 
@@ -325,6 +467,20 @@ def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
 # ── timing ───────────────────────────────────────────────────────────────────
 
 
+def _summarize_samples(samples: list[float]) -> dict[str, float]:
+    """Median and the 20/80 quantiles of a fixed-size sample."""
+    ordered = sorted(samples)
+
+    def quantile(fraction: float) -> float:
+        position = (len(ordered) - 1) * fraction
+        low = int(position)
+        high = min(low + 1, len(ordered) - 1)
+        return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+    return {"median_ms": quantile(0.5), "q20_ms": quantile(0.2),
+            "q80_ms": quantile(0.8), "samples": len(ordered)}
+
+
 def _summarize(samples) -> dict[str, float]:
     """do_bench's quantile triple, in the shape the canonical report reads."""
     median, low, high = (float(v) for v in samples)
@@ -338,6 +494,7 @@ def measure_module(
     *,
     rep_ms: int = DEFAULT_REP_MS,
     warmup_ms: int = DEFAULT_WARMUP_MS,
+    reps: int = REPETITIONS,
 ) -> dict[str, Any]:
     """Time one provider's forward and full training step.
 
@@ -377,16 +534,26 @@ def measure_module(
         # region; none can be left out of what is being measured.
         torch.autograd.backward(as_output_tuple(op, y), dys)
 
-    forward = do_bench(
+    # Ten explicit untimed iterations first: `do_bench`'s own warmup is a
+    # duration, and Triton autotuning must be finished before it starts
+    # estimating an iteration count from a timed sample.
+    for _ in range(WARMUP_ITERS):
+        full_step()
+    for activation in activations:
+        activation.grad = None
+    torch.cuda.synchronize()
+
+    # `do_bench` is the driver Liger's published benchmark uses, so the numbers
+    # are commensurable with theirs: `rep` is a *millisecond budget*, L2 is
+    # flushed between samples, and the reported statistic is the (0.5, 0.2, 0.8)
+    # quantile triple rather than a mean.
+    forward = _summarize(do_bench(
         forward_only, warmup=warmup_ms, rep=rep_ms, quantiles=list(QUANTILES)
-    )
-    step = do_bench(
-        full_step,
-        warmup=warmup_ms,
-        rep=rep_ms,
-        grad_to_none=activations,
-        quantiles=list(QUANTILES),
-    )
+    ))
+    step = _summarize(do_bench(
+        full_step, warmup=warmup_ms, rep=rep_ms,
+        grad_to_none=activations, quantiles=list(QUANTILES),
+    ))
 
     # Peak memory is measured outside the timed loops: the tier-1 saved-bytes
     # accounting does not exist here, because the saved state lives inside
@@ -403,8 +570,8 @@ def measure_module(
     peak_memory = int(torch.cuda.max_memory_allocated())
 
     return {
-        "forward": _summarize(forward),
-        "full_step": _summarize(step),
+        "forward": forward,
+        "full_step": step,
         "peak_memory_bytes": peak_memory,
         "adapter_kind": module.adapter_kind,
     }
@@ -480,12 +647,7 @@ def build_provider(
     if spec.kind == "baseline_pair":
         return baseline_pair_module(op, spec.baseline, values)
     if spec.kind == "candidate_pair":
-        return pair_module(
-            op,
-            spec.candidate_module,
-            adapter_kind="candidate_pair_module",
-            values=values,
-        )
+        return candidate_module(op, spec.candidate_module, values=values)
     raise ValueError(f"unknown provider kind {spec.kind!r}")
 
 
@@ -498,11 +660,22 @@ def run_case(
     rep_ms: int = DEFAULT_REP_MS,
     warmup_ms: int = DEFAULT_WARMUP_MS,
     check: bool = True,
+    order_seed: int = 0,
+    only: str | None = None,
 ) -> dict[str, Any]:
     """One shape, every provider, correctness before timing."""
     values = build_parameters(op, workload, device=device)
+    # Order is randomized and recorded. A fixed order lets slow drift -- clocks,
+    # thermals, allocator state -- land on whichever provider is always last,
+    # and the seed keeps the shuffle reproducible.
+    ordered = list(specs)
+    random.Random(order_seed).shuffle(ordered)
+    upstream = upstream_grad_values(op, values)
+    dys = upstream if isinstance(upstream, tuple) else (upstream,)
     providers: dict[str, Any] = {}
-    for spec in specs:
+    for spec in ordered:
+        if only is not None and spec.name != only:
+            continue
         entry: dict[str, Any] = {"kind": spec.kind}
         try:
             module = build_provider(op, spec, values)
@@ -526,6 +699,14 @@ def run_case(
     return {
         "dims": dict(workload.dims),
         "dtype": workload.dtype,
+        "provider_order": [spec.name for spec in ordered],
+        "order_seed": order_seed,
+        # Every provider is handed these same tensors; the fingerprints make
+        # that checkable from the report instead of trusted.
+        "input_checksums": {
+            name: tensor_checksum(value) for name, value in sorted(values.items())
+        },
+        "upstream_grad_checksums": [tensor_checksum(d) for d in dys],
         "providers": providers,
     }
 
