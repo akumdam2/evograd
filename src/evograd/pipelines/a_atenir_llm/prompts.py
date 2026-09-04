@@ -43,7 +43,59 @@ Triton pitfalls:
   killed and rejected."""
 
 
-def render_pair_rules(op: OpDecl) -> str:
+_NO_PRIMITIVES = """
+- Every arithmetic operation belongs in a Triton kernel. `torch.matmul`, `@`,
+  `torch.mm`, `F.linear`, SDPA and any eager RMSNorm/RoPE spelling are
+  forbidden anywhere in the evolvable block, and so are `torch.compile`,
+  `torch.autograd` and `.backward()`.
+"""
+
+
+def _render_primitive_rules(allowed) -> str:
+    """What Level-1 providers this run granted, spelled out for the generator."""
+    from evograd.pipelines.shared.primitives import REGISTRY, normalize
+
+    names = normalize(allowed)
+    if not names:
+        return _NO_PRIMITIVES
+    lines = [
+        "",
+        "## Trusted Level-1 primitives (granted for this run)",
+        "",
+        "You may call the following fixed functions from inside the evolvable",
+        "pair. EvoGrad defines them itself, below `EVOLVE-BLOCK-END`; do NOT",
+        "define, redefine or import them, and do NOT put them inside the block.",
+        "",
+    ]
+    for name in names:
+        spec = REGISTRY[name]
+        lines.append(f"```python\n{spec.source.strip()}\n```")
+        lines.append("")
+    lines += [
+        "How to use them well:",
+        "- Use the vendor GEMM for the large dense contractions -- the",
+        "  projections in the forward, and the input-gradient and",
+        "  weight-gradient contractions in the backward. Those are what cuBLAS",
+        "  is best at and what a hand-written Triton matmul loses to.",
+        "- Spend your Triton kernels on what cuBLAS cannot do: the per-head",
+        "  RMSNorm, RoPE, their fused backward, layout changes and reductions.",
+        "- Reshape to 2-D with `.reshape`/`.view` and pass a transposed weight",
+        "  as `w.t()`. `.t()` on a 2-D tensor is a metadata-only view and cuBLAS",
+        "  consumes it directly -- never materialise a transposed copy.",
+        "- Every GEMM must run inside the timed forward or backward. Do NOT",
+        "  pre-pack, pre-transpose or cache anything that depends on parameter",
+        "  values: the parameters change between calls and a cached product",
+        "  would be wrong as well as dishonest.",
+        "",
+        "Everything else stays forbidden: `torch.matmul`, `@`, `torch.mm` called",
+        "directly, `F.linear`, SDPA, eager RMSNorm/RoPE, `torch.compile`,",
+        "`torch.autograd`, `.backward()`, and any whole-operator fallback.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_pair_rules(op: OpDecl, allowed_primitives=()) -> str:
     no_grad_lines = ""
     no_grad_inputs = tuple(c.name for c in op.tensor_inactive_args())
     if no_grad_inputs:
@@ -54,6 +106,7 @@ def render_pair_rules(op: OpDecl) -> str:
             f"The AtenIR graph may include their gradients as outputs — discard them.\n"
         )
     extra = f"\n{op.extra_constraints}" if op.extra_constraints else ""
+    primitives = _render_primitive_rules(allowed_primitives)
     return f"""\
 ## Autograd-pair rules
 
@@ -70,7 +123,24 @@ def {op.backward_fn_name}({op.backward_parameters()}):
 Hard constraints:
 - Return only Python source, no Markdown.
 - Include imports for `torch`, `triton`, and `triton.language as tl`.
-- Include an `EVOLVE-BLOCK` around generated Triton kernels and launch helpers.
+- Put `# EVOLVE-BLOCK-START` before the kernels and `# EVOLVE-BLOCK-END`
+  **after the two public pair functions**, so the block spans the kernels,
+  the launch helpers AND the pair bodies. The pair bodies are the host
+  implementation now, so evolution has to be able to rewrite them together
+  with the kernels they launch; a block that stops before them freezes the
+  half that decides grids, allocations and saved state.
+- **The two functions above ARE the implementation.** Put the allocations,
+  shape dispatch, grid choice, kernel launches and the saved-state decision in
+  their bodies. Do NOT write a private `_..._impl` twin and forward to it: a
+  public function whose whole body is `return _x_impl(...)` will be rejected.
+- Do NOT write a `torch.autograd.Function`, a deployment entry point, or a
+  `DEPLOYMENT_ENTRY` constant. EvoGrad generates those from the declaration and
+  appends them; the argument order, output order, upstream-gradient order and
+  input-gradient order are fixed and not yours to choose.
+- Reject what the kernel cannot do by raising. An unsupported shape, dtype or
+  device must raise, never silently fall back to eager PyTorch, another
+  library, or a reference implementation -- a benchmark that measures a
+  fallback measures the wrong function.
 - `saved_tensors` may be a tensor or tuple/list mixing tensors with immutable
   Python scalar metadata. Only tensors count toward saved-memory usage.
 - {op.forward_semantics}
@@ -79,7 +149,7 @@ Hard constraints:
 {_SAVED_TENSOR_GUIDANCE}
 
 {_TRITON_PITFALLS}
-{extra}"""
+{primitives}{extra}"""
 
 
 def render_plan_prompt(
@@ -88,6 +158,7 @@ def render_plan_prompt(
     graph_summary: str,
     lowering_context: str = "",
     op: OpDecl,
+    allowed_primitives=(),
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -106,7 +177,7 @@ Declared public contract:
 
 ```python
 def {op.forward_fn_name}({op.forward_parameters()}):
-    return output, saved_tensors
+    return {op.forward_returns()}
 
 def {op.backward_fn_name}({op.backward_parameters()}):
     return {op.backward_returns()}
@@ -123,12 +194,16 @@ by saving forward intermediates.
 {graph_summary}
 {lowering_section}
 
+{_render_primitive_rules(allowed_primitives)}
+
 Return Markdown with:
 
 1. Initial saved tensor contract and which parts should remain evolvable.
-2. Triton kernels for forward and backward.
-3. Backward formula and reduction strategy.
-4. Expected memory overhead of saved tensors and why it is worth the latency tradeoff.
+2. Which contractions go to a granted vendor primitive and which arithmetic
+   stays in Triton kernels, with the reason for each.
+3. Triton kernels for forward and backward.
+4. Backward formula and reduction strategy.
+5. Expected memory overhead of saved tensors and why it is worth the latency tradeoff.
 """
 
 
@@ -138,6 +213,7 @@ def render_codegen_prompt(
     pair_plan: str,
     lowering_context: str = "",
     op: OpDecl,
+    allowed_primitives=(),
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -148,7 +224,7 @@ def render_codegen_prompt(
 
 Generate a complete Python module for an autograd pair for the provided forward reference.
 
-{render_pair_rules(op)}
+{render_pair_rules(op, allowed_primitives)}
 
 ## Plan
 
@@ -170,6 +246,7 @@ def render_repair_prompt(
     verifier_report: str,
     lowering_context: str = "",
     op: OpDecl,
+    allowed_primitives=(),
 ) -> str:
     lowering_section = (
         f"\nAdditional lowering context:\n\n```text\n{lowering_context}\n```\n"
@@ -186,7 +263,7 @@ Verifier report:
 {verifier_report}
 ```
 
-{render_pair_rules(op)}
+{render_pair_rules(op, allowed_primitives)}
 
 ## Plan
 

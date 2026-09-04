@@ -108,23 +108,30 @@ class TestWrapperCodegen(unittest.TestCase):
                 wrapper = render_autograd_pair_wrapper("m:f", op)
                 compile("def run_graph_program(*a): pass\n" + wrapper, f"<{name}>", "exec")
 
-    def test_a_multi_output_op_is_refused_rather_than_half_generated(self):
-        """Pipeline B's wrapper assumes one upstream gradient tensor.
+    def test_a_multi_output_op_is_generated_with_one_grad_per_output(self):
+        """Pipeline B used to refuse structured outputs; now it emits them.
 
-        Emitting a wrapper that looked right and passed a single gradient where
-        the contract requires a tuple would produce a seed that fails at its
-        first backward, in a place far from the cause. Failing here says so.
+        The wrapper takes one upstream gradient per declared output and returns
+        one input gradient per active argument, in declared order.
         """
-        from evograd.ops import OPS
+        import ast
 
-        multi = [op for op in OPS.values() if op.is_multi_output]
-        self.assertTrue(multi, "no multi-output operator to check")
-        for op in multi:
-            with self.subTest(op=op.name):
-                with self.assertRaises(NotImplementedError) as ctx:
-                    render_autograd_pair_wrapper("m:f", op)
-                self.assertIn(op.name, str(ctx.exception))
+        from evograd.ops import get_op
+        from evograd.pipelines.b_dispatch.wrapper_codegen import (
+            render_autograd_pair_wrapper,
+        )
 
+        for name in ("fused_add_rms_norm", "qwen3_qkv_norm_rope"):
+            with self.subTest(op=name):
+                op = get_op(name)
+                source = render_autograd_pair_wrapper("pkg.mod:fn", op)
+                ast.parse(source)
+                self.assertIn(op.forward_fn_name, source)
+                self.assertIn(op.backward_fn_name, source)
+                # one upstream gradient name per output, unpacked in backward
+                for upstream in op.upstream_grad_names:
+                    self.assertIn(upstream, source)
+                self.assertIn("DEPLOYMENT_ENTRY", source)
 
 class TestDispatchProgramCodegen(unittest.TestCase):
     def test_ordered_args_preserve_scalar_constants(self):

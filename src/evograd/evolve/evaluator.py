@@ -226,6 +226,45 @@ def _native_output_tail(path: str | None) -> dict[str, Any] | None:
             pass
 
 
+def _primitive_usage(program_path: str, module):
+    """What Level-1 providers this candidate used, or why it is rejected.
+
+    The grant lives in the artifact's own ``ARTIFACT_CONTRACT``, which sits
+    outside the evolve block and therefore travels with the candidate rather
+    than with whoever loaded it. ``EVOGRAD_ALLOWED_PRIMITIVES``, when set, is
+    the run's own ceiling: a candidate may not out-declare the run that made it.
+
+    Returns ``(usage, failure)`` with exactly one of the two set.
+    """
+    from evograd.pipelines.shared.primitives import (
+        PrimitiveViolation,
+        check_source,
+        normalize,
+    )
+
+    declared = getattr(module, "ARTIFACT_CONTRACT", None)
+    granted = tuple((declared or {}).get("allowed_primitives", ())) \
+        if isinstance(declared, dict) else ()
+    ceiling = os.environ.get("EVOGRAD_ALLOWED_PRIMITIVES")
+    try:
+        granted = normalize(granted)
+        if ceiling is not None:
+            permitted = normalize([n for n in ceiling.split(",") if n.strip()])
+            excess = sorted(set(granted) - set(permitted))
+            if excess:
+                raise PrimitiveViolation(
+                    f"the artifact declares {excess}, which this run did not grant"
+                )
+        usage = check_source(
+            pathlib.Path(program_path).read_text(encoding="utf-8"), allowed=granted
+        )
+    except PrimitiveViolation as exc:
+        return None, {"error_type": "PrimitiveViolation", "error_message": str(exc)}
+    except SyntaxError as exc:
+        return None, {"error_type": "SyntaxError", "error_message": str(exc)}
+    return usage, None
+
+
 def _load_module(program_path: str):
     module_name = f"evograd_candidate_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, program_path)
@@ -439,6 +478,10 @@ def build_evaluate(
         try:
             module = _load_module(program_path)
             lookup_pair(op, module)  # validate API before running anything
+            primitive_usage, primitive_failure = _primitive_usage(program_path, module)
+            if primitive_failure is not None:
+                return emit({"combined_score": -1e9, "correct": 0.0},
+                            {"failure": primitive_failure})
         except Exception as exc:
             return emit(
                 {"combined_score": -1e9, "correct": 0.0},
@@ -611,6 +654,10 @@ def build_evaluate(
         benchmark["worst_case_guard"] = policy.worst_case_guard
         benchmark["warmup"] = warmup
         benchmark["reps"] = reps
+        # Which trusted Level-1 providers this candidate actually called, so a
+        # hybrid run can be told apart from a Triton-only one in its own record
+        # rather than by reading the source afterwards.
+        benchmark["primitives"] = primitive_usage
         return emit(
             metrics,
             {"correctness": correctness, "benchmark": benchmark},

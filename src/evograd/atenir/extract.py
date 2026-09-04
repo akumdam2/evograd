@@ -444,15 +444,18 @@ def extract_autograd(
 
     with torch.no_grad():
         sample_out = forward_fn(*[t.detach() for t in fwd_in])
-    if isinstance(sample_out, (tuple, list)):
-        if len(sample_out) != 1:
-            raise NotImplementedError(
-                f"autograd mode currently supports single-output forwards; got {len(sample_out)}"
-            )
-        sample_out = sample_out[0]
-    grad_out = torch.randn_like(sample_out)
+    # A forward may return one tensor or several. Every output receives its own
+    # independent upstream gradient, because that is what the declared backward
+    # contract is handed: dropping all but the first would trace a graph for a
+    # different function than the one being implemented.
+    sample_outs = (
+        tuple(sample_out) if isinstance(sample_out, (tuple, list)) else (sample_out,)
+    )
+    grad_outs = tuple(torch.randn_like(t) for t in sample_outs)
+    arity = len(grad_outs)
 
-    def bwd(grad_out, *fwd_inputs):
+    def bwd(*args):
+        grads, fwd_inputs = args[:arity], args[arity:]
         # Integer/bool inputs such as class labels participate in the forward
         # but cannot require gradients and must not be passed to autograd.grad.
         ins = [
@@ -461,9 +464,8 @@ def extract_autograd(
         ]
         diff_ins = [t for t in ins if t.requires_grad]
         out = forward_fn(*ins)
-        if isinstance(out, (tuple, list)):
-            out = out[0]
-        return torch.autograd.grad(out, diff_ins, grad_outputs=grad_out)
+        outs = tuple(out) if isinstance(out, (tuple, list)) else (out,)
+        return torch.autograd.grad(outs, diff_ins, grad_outputs=grads)
 
     # tracing_mode="symbolic" keeps input dims as SymInts, so shape-derived
     # values appear as sym_size nodes / node refs in the graph instead of baked
@@ -475,8 +477,8 @@ def extract_autograd(
             bwd,
             decomposition_table=_decomposition_table(),
             tracing_mode="symbolic",
-        )(grad_out, *fwd_in)
-    return make_fx(bwd, decomposition_table=_decomposition_table())(grad_out, *fwd_in)
+        )(*grad_outs, *fwd_in)
+    return make_fx(bwd, decomposition_table=_decomposition_table())(*grad_outs, *fwd_in)
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────

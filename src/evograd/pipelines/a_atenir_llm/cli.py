@@ -29,6 +29,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_exec_args(parser)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--lowering-context-file", default=None)
+    parser.add_argument(
+        "--allow-primitive",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="grant one trusted Level-1 primitive to the generated pair "
+             "(repeatable; currently: vendor_gemm). Nothing is relaxed for an "
+             "operator that does not ask",
+    )
     return parser.parse_args(argv)
 
 
@@ -54,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
             python=args.python,
             eval_timeout=args.eval_timeout,
             lowering_context=lowering_context,
+            allowed_primitives=tuple(args.allow_primitive),
             dry_run=args.dry_run,
             skip_verify=args.skip_verify,
         )

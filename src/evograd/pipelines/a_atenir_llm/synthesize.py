@@ -15,6 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
+from evograd.pipelines.shared.artifact import (
+    ArtifactError,
+    render_deployment_layer,
+    validate_artifact,
+)
 from evograd.pipelines.a_atenir_llm.prompts import (
     SYSTEM_MESSAGE,
     render_codegen_prompt,
@@ -47,16 +52,50 @@ class AutogradPairConfig:
     python: str
     eval_timeout: int = 120
     lowering_context: str | None = None
+    #: Trusted Level-1 providers this run grants, by name. Empty means the
+    #: default Triton-only search space.
+    allowed_primitives: tuple[str, ...] = ()
     dry_run: bool = False
     # Skip oracle verification (accept the first attempt). Only useful on
     # machines without CUDA; verified runs are the default.
     skip_verify: bool = False
 
 
+def _check_contract(config: AutogradPairConfig, program_path: Path) -> dict:
+    """Does the artifact export the interface tier 2 and tier 3 will look for?
+
+    Run before the oracle: a program that computes the right numbers behind the
+    wrong interface is still not deployable, and finding that out after timing
+    wastes the attempt.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("evograd_artifact", program_path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        validate_artifact(config.op, module,
+                          source=program_path.read_text(encoding="utf-8"),
+                          allowed_primitives=config.allowed_primitives)
+    except ArtifactError as exc:
+        return {"ok": False, "error": f"artifact contract: {exc}"}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    from evograd.pipelines.shared.primitives import check_source
+
+    usage = check_source(program_path.read_text(encoding="utf-8"),
+                         allowed=config.allowed_primitives)
+    return {"ok": True, "contract": "satisfied", "primitives": usage}
+
+
 def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
+    contract = _check_contract(config, program_path)
+    if not contract["ok"]:
+        return {"metrics": {"correct": 0.0}, "artifact_contract": contract}
     if config.skip_verify:
-        return {"metrics": {"correct": 1.0}, "verification": "skipped"}
-    return verify_candidate(
+        return {"metrics": {"correct": 1.0}, "verification": "skipped",
+                "artifact_contract": contract}
+    report = verify_candidate(
         python=config.python,
         op_name=config.op.name,
         program_path=program_path,
@@ -65,6 +104,8 @@ def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
         declaration=config.op.declaration,
         timeout=config.eval_timeout,
     )
+    report["artifact_contract"] = contract
+    return report
 
 
 def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
@@ -89,6 +130,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         graph_summary=graph_summary,
         lowering_context=lowering_context,
         op=config.op,
+        allowed_primitives=config.allowed_primitives,
     )
     (config.output_dir / "autograd_pair_plan_prompt.md").write_text(plan_prompt, encoding="utf-8")
 
@@ -101,6 +143,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
                 pair_plan="{AUTOGRAD_PAIR_PLAN_FROM_LLM}",
                 lowering_context=lowering_context,
                 op=config.op,
+                allowed_primitives=config.allowed_primitives,
             ),
             encoding="utf-8",
         )
@@ -125,6 +168,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         pair_plan=pair_plan,
         lowering_context=lowering_context,
         op=config.op,
+        allowed_primitives=config.allowed_primitives,
     )
     previous_code = ""
     for attempt in range(1, config.max_attempts + 1):
@@ -144,6 +188,13 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         )
         code = strip_code_fence(response)
         program_path = attempt_dir / "program.py"
+        # The model writes layers 1-2 (kernels and the public pair). Layers 3-4
+        # -- the static autograd Function and the deployment entry -- are
+        # generated from the declaration and appended here, never asked for:
+        # the ABI is EvoGrad's, and a model that could restate it could also
+        # get it subtly wrong.
+        code = code.rstrip() + "\n" + render_deployment_layer(
+            config.op, allowed_primitives=config.allowed_primitives)
         program_path.write_text(code, encoding="utf-8")
         (attempt_dir / "response.txt").write_text(response, encoding="utf-8")
 
@@ -174,6 +225,7 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
             verifier_report=json.dumps(report, indent=2, sort_keys=True),
             lowering_context=lowering_context,
             op=config.op,
+            allowed_primitives=config.allowed_primitives,
         )
         (attempt_dir / "repair_prompt.md").write_text(repair_prompt, encoding="utf-8")
         prompt = repair_prompt

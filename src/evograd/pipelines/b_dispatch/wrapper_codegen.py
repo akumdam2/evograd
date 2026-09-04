@@ -17,6 +17,7 @@ a GPU.
 from __future__ import annotations
 
 from evograd.opdecl.activity import Active, Inactive, OpDecl, format_default
+from evograd.pipelines.shared.artifact import render_deployment_layer
 
 
 def _tensor_args(op: OpDecl) -> list[str]:
@@ -58,16 +59,14 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     )
     forward_sig = ", ".join(tensor_names) + scalar_sig
     fwd_call = ", ".join(tensor_names + [c.name for c in scalar_inactive])
-    if op.is_multi_output:
-        raise NotImplementedError(
-            f"Pipeline B cannot yet generate a seed for a multi-output "
-            f"declaration ({op.name} returns {op.output_names}); its wrapper "
-            "assumes one upstream gradient tensor"
-        )
-    backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"
-    backward_call = ", ".join(
-        [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalar_inactive]
-    )
+    # Structured outputs are the declaration's business, not the pipeline's:
+    # a multi-output op arrives with one upstream gradient per output, and the
+    # graph program returns the same input gradients either way.
+    upstream = tuple(op.upstream_grad_names)
+    grads_param = op.upstream_grad_parameter
+    backward_sig = f"{grads_param}, saved_tensors{scalar_sig}"
+    outs = tuple(op.output_names)
+    forward_capture = f"({', '.join(outs)})" if len(outs) > 1 else outs[0]
 
     saved = ", ".join(f"{n}.contiguous()" for n in tensor_names)
     saved_tuple = f"({saved},)" if len(tensor_names) == 1 else f"({saved})"
@@ -75,8 +74,10 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     # would bind the one-element slice itself, not the tensor).
     unpack_targets = ", ".join(tensor_names) + ("," if len(tensor_names) == 1 else "")
     unpack = f"{unpack_targets} = saved_tensors[:{len(tensor_names)}]"
+    unpack_grads = f"    {', '.join(upstream)} = {grads_param}\n"
     run_args = ",\n        ".join(
-        [f"{op.upstream_grad_name}.contiguous()"] + [f"{n}.contiguous()" for n in tensor_names]
+        [f"{name}.contiguous()" for name in upstream]
+        + [f"{n}.contiguous()" for n in tensor_names]
     )
     unused_scalars = "".join(f"    _ = {c.name}\n" for c in scalar_inactive)
 
@@ -95,12 +96,13 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
     ret += "," if len(indices) == 1 else ""
     backward_body = (
         f"{unused_scalars}"
+        f"{unpack_grads}"
         f"    {unpack}\n"
         f"    _grads = run_graph_program(\n        {run_args},\n    )\n"
         f"    return ({ret})"
     )
 
-    return f'''
+    body = f'''
 
 _FORWARD_SPEC = {forward!r}
 
@@ -111,21 +113,17 @@ def _load_forward_callable():
     return resolve_callable(_FORWARD_SPEC)
 
 
-def _forward_with_saved_impl({forward_sig}):
-    # Conservative seed: only save original forward inputs. OpenEvolve may
-    # replace this with saved intermediates.
-    y = _load_forward_callable()({fwd_call})
-    return y, {saved_tuple}
-
-
-def _backward_from_saved_impl({backward_sig}):
-{backward_body}
-
-
 def {op.forward_fn_name}({forward_sig}):
-    return _forward_with_saved_impl({fwd_call})
+    """Layer 2: this *is* the implementation, not a forwarder to a private twin.
+
+    Conservative seed -- only the original forward inputs are saved. Evolution
+    may replace the launch strategy and the saved state together.
+    """
+    {forward_capture} = _load_forward_callable()({fwd_call})
+    return {forward_capture}, {saved_tuple}
 
 
 def {op.backward_fn_name}({backward_sig}):
-    return _backward_from_saved_impl({backward_call})
+{backward_body}
 '''
+    return body + render_deployment_layer(op)
