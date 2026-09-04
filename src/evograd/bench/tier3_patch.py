@@ -378,6 +378,18 @@ def restrict(kernels: KernelSet, sites: tuple[str, ...]) -> KernelSet:
     return result
 
 
+from evograd.pipelines.shared.artifact import (  # noqa: E402
+    DEPLOYMENT_ENTRY_ATTR,
+    ArtifactError,
+    deployment_entry,
+    validate_artifact,
+)
+
+#: Provenance labels. A report must be able to say which route a candidate took.
+DIRECT_DEPLOYMENT = "direct_deployment"
+LEGACY_BIND = "legacy_bind"
+
+
 def patched_kernels(
     candidates: dict[str, Any],
     ops: dict[str, OpDecl],
@@ -397,12 +409,25 @@ def patched_kernels(
     for site, module in candidates.items():
         op_name = registry.require(site).op
         op = ops[op_name]
+        entry = deployment_entry(module)
+        if entry is not None:
+            # The artifact ships its own differentiable callable. Validate it
+            # rather than trusting it: an artifact that declares
+            # DEPLOYMENT_ENTRY and then fails the contract must be rejected,
+            # never quietly demoted to the binder -- a silent fallback would
+            # measure a different execution path than the one being reported.
+            validate_artifact(op, module)
+            kernel, kind = entry, f"{origin}:{DIRECT_DEPLOYMENT}"
+        else:
+            # Compatibility only: a pair-only candidate predating the artifact
+            # contract. Labelled so a report never confuses the two.
+            kernel, kind = kernel_from_pair(op, module), f"{origin}:{LEGACY_BIND}"
         kernels = patch(
             kernels,
             site,
-            kernel_from_pair(op, module),
+            kernel,
             source=KernelSource(
-                site=site, op_name=op_name, module=module, origin=origin
+                site=site, op_name=op_name, module=module, origin=kind
             ),
         )
     return kernels

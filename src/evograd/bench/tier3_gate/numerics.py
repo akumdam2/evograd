@@ -552,6 +552,32 @@ def derive_trajectory_policy(deltas: list[tuple[float, float]], *, horizon: int,
     )
 
 
+def combined_trajectory(hardware: TrajectoryPolicy,
+                        integration: TrajectoryPolicy | None) -> TrajectoryPolicy:
+    """The loss-curve bound, on the same footing as the tensor one.
+
+    :func:`combined_envelope` already argues this for tensors: a provider
+    reaching the eager model crosses the device's run-to-run drift *and* the
+    integration cost of going through ``bind`` and the declared runtime
+    spellings, so the bound is their sum. A loss curve is produced by the same
+    two things and had been held to the hardware half alone -- an oversight
+    that is invisible on the canonical workload, where E/E drift is nonzero,
+    and fatal on any configuration small enough to be deterministic. There the
+    E/E maximum is exactly 0.0, the derived limit is 0.0 * margin = 0.0, and a
+    correct provider is rejected for differing in the last bit of one loss.
+    """
+    if integration is None:
+        return hardware
+    return TrajectoryPolicy(
+        horizon=hardware.horizon,
+        optimizer=hardware.optimizer,
+        learning_rate=hardware.learning_rate,
+        max_abs_delta=hardware.max_abs_delta + integration.max_abs_delta,
+        max_rel_delta=hardware.max_rel_delta + integration.max_rel_delta,
+        margin=hardware.margin,
+    )
+
+
 # ── the stored policy ────────────────────────────────────────────────────────
 
 

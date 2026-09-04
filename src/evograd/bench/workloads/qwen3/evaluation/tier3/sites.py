@@ -51,6 +51,38 @@ SITE_ATTENTION = "attention"
 SITE_MLP = "swiglu_mlp"
 SITE_RESIDUAL = "residual_rmsnorm"
 
+#: Which sites share one installed adapter. Patching any member of a group
+#: installs that group's adapter, and the adapter runs *every* member's boundary
+#: on the same call -- the unpatched ones through their production spelling.
+#: ``qkv_norm_rope`` and ``attention`` are one Qwen3Attention adapter with two
+#: switches, so patching either makes both live. Anything reading counts has to
+#: know that, and this is the one place it is written down.
+ADAPTER_GROUPS: tuple[tuple[str, ...], ...] = (
+    (SITE_QKV, SITE_ATTENTION),
+    (SITE_MLP,),
+    (SITE_RESIDUAL,),
+)
+
+
+def live_sites(requested) -> tuple[str, ...]:
+    """Every site that becomes a live boundary when ``requested`` is patched.
+
+    A superset of ``requested``: the sites that merely come along because they
+    share an adapter with something that was asked for.
+    """
+    wanted = set(requested)
+    live: set[str] = set()
+    for group in ADAPTER_GROUPS:
+        if wanted.intersection(group):
+            live.update(group)
+    return tuple(sorted(live))
+
+
+def supporting_sites(requested) -> tuple[str, ...]:
+    """The live sites that were carried along rather than asked for."""
+    return tuple(sorted(set(live_sites(requested)) - set(requested)))
+
+
 #: Attribute prefix for everything an adapter attaches to a live module. Plain
 #: attributes, never parameters or buffers, so ``state_dict`` cannot see them.
 _TAG = "_evograd_qwen3_"
@@ -710,7 +742,8 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
         )
     paths: dict[str, tuple[str, ...]] = {}
 
-    attention_sites = [s for s in (SITE_QKV, SITE_ATTENTION) if s in selected]
+    attention_group = next(g for g in ADAPTER_GROUPS if SITE_QKV in g)
+    attention_sites = [s for s in attention_group if s in selected]
     if attention_sites:
         touched = []
         for index, layer in enumerate(model.model.layers):

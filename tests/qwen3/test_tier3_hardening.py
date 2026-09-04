@@ -469,18 +469,6 @@ class _Spy:
 class TestGateOrder(unittest.TestCase):
     """The order is the point: a stage only runs if every earlier one passed."""
 
-    def _verdict(self, **stages):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate
-
-        workload = _workload()
-        kernels = structural_identity_kernels(workload.site_registry)
-        policy = _fake_policy()
-        with _patched(gate, **stages):
-            return gate.check_model_correctness(
-                workload, kernels, policy=policy, check_trajectory=False,
-                preflight=stages.pop("_preflight", None),
-            )
-
     def test_the_declared_order_is_the_one_the_gate_runs(self):
         from evograd.bench.workloads.qwen3.evaluation.tier3.gate import STAGES
 
@@ -610,8 +598,10 @@ class _patched:
 
     def __init__(self, module, **attributes):
         self.module = module
-        self.attributes = {k: v for k, v in attributes.items()
-                           if not k.startswith("_")}
+        # No name filtering. `_step` is private and is precisely the attribute
+        # a stage-order test must replace; silently dropping it made a spy that
+        # could never fire and a test that passed without testing anything.
+        self.attributes = dict(attributes)
         self.saved = {}
 
     #: Modules the gate reaches with `from . import <name>`, which reads the
@@ -648,3 +638,302 @@ def _fake_policy():
                                     learning_rate=1e-4, max_abs_delta=1.0,
                                     max_rel_delta=1.0),
     )
+
+
+# ── 5. optimizer-update controls, and what bfloat16 can express ──────────────
+
+
+class TestUlpPerturbation(unittest.TestCase):
+    """A fault defined in units of the storage format cannot be rounded away."""
+
+    def test_every_element_moves_away_from_zero(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import perturb_ulps
+
+        clean = torch.tensor([1.0, -1.0, 0.013, -0.013, 0.0, -0.0],
+                             dtype=torch.bfloat16)
+        moved = perturb_ulps(clean, 2)
+        self.assertTrue(bool((clean.view(torch.int16) != moved.view(torch.int16)).all()))
+        for before, after in zip(clean.tolist(), moved.tolist()):
+            with self.subTest(value=before):
+                self.assertGreater(abs(after), abs(before))
+
+    def test_two_ulps_at_the_projection_scale_is_one_adamw_step(self):
+        # |p| ~ 1.3e-2 puts the bfloat16 ULP at 6.1e-5, and one AdamW step at
+        # lr=1e-4 moves the weight by 1.22e-4. The control is therefore a whole
+        # step's worth of error, not an arbitrary number.
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import perturb_ulps
+
+        value = torch.tensor([0.013], dtype=torch.bfloat16)
+        delta = float(perturb_ulps(value, 2)) - float(value)
+        self.assertAlmostEqual(delta, 1.22e-4, delta=1e-6)
+
+
+class TestObservability(unittest.TestCase):
+    """"Not detected" and "nothing happened" must never read alike."""
+
+    def _capture(self, values):
+        return {name: torch.tensor(v, dtype=torch.bfloat16)
+                for name, v in values.items()}
+
+    def test_a_sub_ulp_update_perturbation_changes_no_stored_bit(self):
+        # The measured root cause, in miniature: a norm weight sits at 1.0
+        # where the bfloat16 ULP is 7.8e-3, so an AdamW step of 1e-4 rounds
+        # away entirely and the realized update is exactly zero. Scaling zero
+        # by 1.02 is still zero.
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import observability
+
+        clean = self._capture({"model.norm.weight": [1.0, 1.0, 1.0]})
+        before = clean["model.norm.weight"].float()
+        stepped = (before + 1e-4 * 1.02).to(torch.bfloat16)
+        evidence = observability(clean, {"model.norm.weight": stepped})
+        self.assertFalse(evidence["observable"])
+        self.assertEqual(evidence["stored_elements_changed"], 0)
+
+    def test_a_ulp_perturbation_changes_every_stored_bit(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            observability,
+            perturb_ulps,
+        )
+
+        clean = self._capture({"model.layers.0.mlp.up_proj.weight": [0.013, -0.02, 1.0]})
+        damaged = {n: perturb_ulps(t, 2) for n, t in clean.items()}
+        evidence = observability(clean, damaged)
+        self.assertTrue(evidence["observable"])
+        self.assertEqual(evidence["stored_fraction_changed"], 1.0)
+        self.assertEqual(evidence["roles_with_no_stored_change"], [])
+
+    def test_the_classification_separates_the_two_failures_to_reject(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+            DETECTED,
+            MISSED,
+            UNOBSERVABLE,
+            classify,
+        )
+
+        nothing = {"observable": False, "roles_with_no_stored_change": ["final_norm"]}
+        everything = {"observable": True, "roles_with_no_stored_change": []}
+        self.assertEqual(classify(nothing, rejected=False), UNOBSERVABLE)
+        self.assertEqual(classify(everything, rejected=False), MISSED)
+        self.assertEqual(classify(everything, rejected=True), DETECTED)
+
+
+class TestUpdateControlPolicy(unittest.TestCase):
+    def test_the_ulp_control_is_required_and_wrong_update_is_a_diagnostic(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            diagnostic_catalogue,
+            state_catalogue,
+        )
+
+        required = {f.name for f in state_catalogue()}
+        diagnostic = {f.name for f in diagnostic_catalogue()}
+        self.assertIn("stored_param_ulp", required)
+        self.assertNotIn("wrong_update", required)
+        self.assertEqual(diagnostic, {"wrong_update"})
+
+    def test_the_ulp_fault_moves_the_update_by_what_it_moved_the_parameter(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+
+        fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
+        stored = torch.tensor([0.013, -0.013], dtype=torch.bfloat16)
+        captured = {"stored": {"w": stored},
+                    "updates": {"w": torch.zeros(2, dtype=torch.float32)}}
+        damaged = fault.apply(captured)
+        moved = damaged["stored"]["w"].float() - stored.float()
+        self.assertTrue(torch.equal(damaged["updates"]["w"], moved))
+        self.assertTrue(bool((moved != 0).all()))
+
+
+class TestObservableUpdateFaultIsRejected(unittest.TestCase):
+    """The end the gate is responsible for: an observable fault must fail."""
+
+    @classmethod
+    def setUpClass(cls):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import _compare, _step
+
+        cls.compare = staticmethod(_compare)
+        workload = _workload()
+        kernels = structural_identity_kernels(workload.site_registry)
+        cls.candidate = _step(workload, kernels, data_seed=0, learning_rate=1e-4)
+        cls.reference = _step(workload, kernels, data_seed=0, learning_rate=1e-4)
+        cls.envelopes = derive_envelope(_compare(cls.candidate, cls.reference))
+
+    def test_a_ulp_corrupted_update_is_rejected(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+
+        fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
+        verdict = check_against(
+            self.envelopes, self.compare(fault.apply(self.candidate), self.reference)
+        )
+        self.assertFalse(verdict["ok"])
+        self.assertEqual({e.get("kind") for e in verdict["exceeded"]},
+                         {KIND_UPDATE})
+
+    def test_it_is_observable_in_stored_state(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            observability,
+            state_catalogue,
+        )
+
+        fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
+        evidence = observability(self.candidate["stored"],
+                                 fault.apply(self.candidate)["stored"])
+        self.assertTrue(evidence["observable"])
+        self.assertEqual(evidence["stored_fraction_changed"], 1.0)
+
+    def test_the_gate_fails_at_numerical_envelopes(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate as gate_module
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+
+        fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
+        damaged = fault.apply(self.candidate)
+        policy = _fake_policy()
+        policy.envelopes.update(self.envelopes)
+        with _patched(gate_module,
+                      purity=_module(run_for=lambda *a, **k: {"ok": True}),
+                      boundary=_module(validate_all_invocations=lambda *a, **k: {
+                          "ok": True, "errors": [], "coverage_ok": True,
+                          "failure_count": 0, "checked_invocations": 10,
+                          "failures": []}),
+                      _step=lambda *a, **k: damaged):
+            verdict = gate_module.check_model_correctness(
+                _workload(), structural_identity_kernels(qwen3_sites()),
+                policy=policy, check_trajectory=False,
+                references={"eager": self.reference, "bound": self.reference},
+            )
+        self.assertFalse(verdict["ok"])
+        self.assertEqual(verdict["failed_at"], "numerical_envelopes")
+
+    def test_a_rejected_provider_never_reaches_timing(self):
+        from evograd.bench import tier3_runner
+
+        timer = _Spy()
+        with _patched(tier3_runner, measure_step=timer):
+            with self.assertRaises(tier3_runner.ModelCorrectnessFailure):
+                tier3_runner.model_correctness_check(
+                    _Fixture({"ok": False, "failed_at": "numerical_envelopes",
+                              "reason": "update:model.layers.0... outside envelope"}),
+                    structural_identity_kernels(qwen3_sites()),
+                    verify=True, device="cpu",
+                )
+        self.assertEqual(timer.calls, 0)
+
+
+class TestUpdateFaultReachesStoredState(unittest.TestCase):
+    """A wrong update is only wrong once it has been stored."""
+
+    def test_a_two_percent_update_fault_is_re_stored_before_it_is_measured(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            diagnostic_catalogue,
+            observability,
+        )
+
+        fault = diagnostic_catalogue(0.02)[0]
+        # A projection weight: |p| ~ 1.3e-2, bfloat16 ULP 6.1e-5, and an AdamW
+        # step of 1.22e-4 is exactly two of them. A norm weight sits at 1.0
+        # where the ULP is 7.8e-3 and the same step rounds away completely.
+        stored = torch.tensor([0.013] * 64 + [1.0] * 64, dtype=torch.bfloat16)
+        before = stored.float() - 1.22e-4
+        captured = {
+            "stored": {"model.layers.0.self_attn.q_proj.weight": stored},
+            "updates": {"model.layers.0.self_attn.q_proj.weight":
+                        stored.float() - before},
+        }
+        damaged = fault.apply(captured)
+        evidence = observability(captured["stored"], damaged["stored"])
+        # The point of re-storing: some elements move, most do not.
+        self.assertLess(evidence["stored_fraction_changed"], 1.0)
+
+    def test_a_sub_ulp_update_fault_stores_nothing_and_is_classified_so(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+            UNOBSERVABLE,
+            classify,
+        )
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            diagnostic_catalogue,
+            observability,
+        )
+
+        fault = diagnostic_catalogue(0.02)[0]
+        stored = torch.full((128,), 1.0, dtype=torch.bfloat16)
+        captured = {"stored": {"model.norm.weight": stored},
+                    "updates": {"model.norm.weight": torch.zeros(128)}}
+        damaged = fault.apply(captured)
+        evidence = observability(captured["stored"], damaged["stored"])
+        self.assertFalse(evidence["observable"])
+        self.assertEqual(classify(evidence, rejected=False), UNOBSERVABLE)
+
+    def test_an_optimizer_state_fault_is_not_called_unobservable(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+            OPTIMIZER_SCOPE,
+            classify,
+        )
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+
+        moment = next(f for f in state_catalogue() if f.name == "corrupt_exp_avg")
+        self.assertEqual(moment.scope, "optimizer_state")
+        verdict = classify({"observable": False, "roles_with_no_stored_change": []},
+                           rejected=True, scope=moment.scope)
+        self.assertIn(OPTIMIZER_SCOPE, verdict)
+        self.assertNotIn("unobservable", verdict)
+
+
+class TestTrajectoryLimitsCombine(unittest.TestCase):
+    """The loss curve is bounded the way the tensors are: drift plus drift."""
+
+    def _policy(self, ee, sb):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+            TrajectoryPolicy,
+        )
+
+        make = lambda a, r: TrajectoryPolicy(  # noqa: E731
+            horizon=5, optimizer="AdamW", learning_rate=1e-4,
+            max_abs_delta=a, max_rel_delta=r, margin=2.0,
+        )
+        return make(*ee), make(*sb)
+
+    def test_the_two_halves_are_summed(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+            combined_trajectory,
+        )
+
+        hardware, integration = self._policy((6.5e-4, 5.3e-5), (6.6e-4, 5.4e-5))
+        combined = combined_trajectory(hardware, integration)
+        self.assertAlmostEqual(combined.max_abs_delta, 1.31e-3, places=5)
+        self.assertAlmostEqual(combined.max_rel_delta, 1.07e-4, places=6)
+
+    def test_a_deterministic_configuration_does_not_demand_a_bitwise_loss_curve(self):
+        # The smoke config is small enough that eager-vs-eager is bitwise, so
+        # the E/E limit derives to exactly zero. Held to that alone, a correct
+        # provider is rejected for one ULP on one loss.
+        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+            combined_trajectory,
+        )
+
+        hardware, integration = self._policy((0.0, 0.0), (1.04e-3, 8.6e-5))
+        # A fresh Qwen3-0.6B starts near a loss of 11, which is what makes
+        # 4.6e-4 a relative deviation of 4e-5 rather than 2e-4.
+        curve = [11.5, 11.4, 11.3, 11.2, 11.1]
+        drifted = [11.5, 11.4 + 4.6e-4, 11.3, 11.2, 11.1]
+        self.assertFalse(hardware.check(curve, drifted)["ok"])
+        self.assertTrue(combined_trajectory(hardware, integration)
+                        .check(curve, drifted)["ok"])
+
+    def test_a_real_divergence_is_still_rejected(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+            combined_trajectory,
+        )
+
+        hardware, integration = self._policy((6.5e-4, 5.3e-5), (6.6e-4, 5.4e-5))
+        combined = combined_trajectory(hardware, integration)
+        self.assertFalse(
+            combined.check([11.5, 11.4, 11.3, 11.2, 11.1],
+                           [11.5, 11.35, 11.3, 11.2, 11.1])["ok"]
+        )
+
+    def test_a_policy_without_an_integration_half_is_unchanged(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+            combined_trajectory,
+        )
+
+        hardware, _ = self._policy((6.5e-4, 5.3e-5), (0.0, 0.0))
+        self.assertIs(combined_trajectory(hardware, None), hardware)

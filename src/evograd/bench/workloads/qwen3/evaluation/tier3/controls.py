@@ -26,7 +26,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .faults import catalogue, smallest_rejected, state_catalogue
+from .faults import (
+    catalogue,
+    diagnostic_catalogue,
+    observability,
+    smallest_rejected,
+    state_catalogue,
+)
 from .gate import (
     DEFAULT_ARTIFACT,
     build_references,
@@ -154,7 +160,12 @@ def run_state_fault(fault, *, seed: int, policy, workload, references
         captured = _step(workload, structural_identity_kernels(workload.site_registry),
                          data_seed=seed,
                          learning_rate=policy.trajectory.learning_rate)
-        samples = _compare(fault.apply(captured), references["eager"])
+        damaged = fault.apply(captured)
+        # Measured before the verdict, and reported whatever the verdict is.
+        # A control that changed no stored bit was not missed by the gate; it
+        # never reached the model, and the two must never read alike.
+        evidence = observability(captured["stored"], damaged["stored"])
+        samples = _compare(damaged, references["eager"])
         bound = combined_envelope(policy.envelopes, policy.bound_pair_envelopes)
         verdict = check_against(bound, samples)
     except Exception as exc:
@@ -166,10 +177,42 @@ def run_state_fault(fault, *, seed: int, policy, workload, references
         "failed_at": "numerical_envelopes" if not verdict["ok"] else None,
         "exceeded_groups": groups[:8],
         "exceeded": len(verdict["exceeded"]),
+        "observability": evidence,
+        "classification": classify(evidence, rejected=not verdict["ok"],
+                                   scope=getattr(fault, "scope", "stored_parameters")),
         "reason": (verdict["exceeded"][0].get("reason")
                    or f"{len(verdict['exceeded'])} samples outside "
                       f"{len(groups)} namespaces") if not verdict["ok"] else None,
     }
+
+
+#: What a control result means once observability is known.
+UNOBSERVABLE = "unobservable: the fault changed no stored bit"
+PARTLY_OBSERVABLE = "partly observable: quantization erased the fault on some roles"
+DETECTED = "observable and rejected"
+MISSED = "observable and NOT rejected: the gate or the envelope is at fault"
+OPTIMIZER_SCOPE = "optimizer-state fault: no stored-parameter footprint by design"
+
+
+def classify(evidence: dict[str, Any], *, rejected: bool,
+             scope: str = "stored_parameters") -> str:
+    """Separate "the gate missed it" from "there was nothing to miss".
+
+    Only a fault that is *supposed* to move a parameter can be judged by
+    whether it moved one. Corrupting Adam's second moment changes no weight and
+    is not thereby invisible -- it is visible in the moment, which is its own
+    envelope namespace.
+    """
+    if scope != "stored_parameters":
+        return (f"{DETECTED} ({OPTIMIZER_SCOPE})" if rejected
+                else f"{MISSED} ({OPTIMIZER_SCOPE})")
+    if not evidence["observable"]:
+        return UNOBSERVABLE
+    if rejected:
+        return DETECTED
+    if evidence["roles_with_no_stored_change"]:
+        return PARTLY_OBSERVABLE
+    return MISSED
 
 
 def run_positive_controls(*, seed: int, policy, workload, references
@@ -224,6 +267,12 @@ def main(argv: list[str] | None = None) -> int:
                             workload=workload, references=references)
             for fault in state_catalogue()
         ]
+        records += [
+            {**run_state_fault(fault, seed=args.seed, policy=policy,
+                               workload=workload, references=references),
+             "required": False}
+            for fault in diagnostic_catalogue()
+        ]
         records += run_positive_controls(seed=args.seed, policy=policy,
                                          workload=workload, references=references)
         if args.result_json:
@@ -248,6 +297,12 @@ def main(argv: list[str] | None = None) -> int:
                                 workload=workload, references=references)
                 for fault in state_catalogue()
             ]
+            results += [
+                {**run_state_fault(fault, seed=seed, policy=policy,
+                                   workload=workload, references=references),
+                 "required": False}
+                for fault in diagnostic_catalogue()
+            ]
             results += run_positive_controls(seed=seed, policy=policy,
                                              workload=workload, references=references)
         else:
@@ -261,7 +316,12 @@ def main(argv: list[str] | None = None) -> int:
             results += batch if isinstance(batch, list) else [batch]
 
     positives = [r for r in results if "provider" in r]
-    clean = [r for r in results if "error" not in r and "fault" in r]
+    every = [r for r in results if "error" not in r and "fault" in r]
+    # Required controls must be rejected. Diagnostics are run and reported and
+    # judged on their observability instead -- `wrong_update` is one, because
+    # bfloat16 erases it before it reaches model state.
+    clean = [r for r in every if r.get("required", True)]
+    diagnostics = [r for r in every if not r.get("required", True)]
     report = {
         "schema_version": "evograd-qwen3-t3-negative-controls/2",
         "positive_controls": positives,
@@ -281,8 +341,19 @@ def main(argv: list[str] | None = None) -> int:
         "sensitivity": smallest_rejected(clean),
         "all_rejected": all(r.get("rejected") for r in clean),
         "control_kinds": sorted({r["fault"]["name"] for r in clean}),
+        "diagnostics": diagnostics,
+        "diagnostic_kinds": sorted({r["fault"]["name"] for r in diagnostics}),
+        "observability_policy": (
+            "Every optimizer-state control records how many stored elements "
+            "its fault actually changed. A control that changed none was not "
+            "missed by the gate -- it never reached the model -- and is "
+            "classified `unobservable` rather than counted as a failure to "
+            "detect."
+        ),
         "survivors": [
-            {"fault": r["fault"], "seed": r["seed"], "reason": r.get("reason")}
+            {"fault": r["fault"], "seed": r["seed"], "reason": r.get("reason"),
+             "classification": r.get("classification"),
+             "observability": r.get("observability")}
             for r in clean if not r.get("rejected")
         ],
         "errors": [r["error"] for r in results if "error" in r],

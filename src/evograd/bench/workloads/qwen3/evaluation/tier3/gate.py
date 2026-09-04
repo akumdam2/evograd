@@ -134,7 +134,7 @@ def capture_step(model, optimizer, ids, labels) -> dict[str, Any]:
     missing = [n for n, p in model.named_parameters() if p.grad is None]
     optimizer.step()
 
-    updates, exp_avg, exp_avg_sq, steps = {}, {}, {}, {}
+    updates, exp_avg, exp_avg_sq, steps, stored = {}, {}, {}, {}, {}
     stateless = []
     for name, param in model.named_parameters():
         # Held on the host. Three float32 copies of every parameter is nine
@@ -149,6 +149,13 @@ def capture_step(model, optimizer, ids, labels) -> dict[str, Any]:
             continue
         exp_avg[name] = state["exp_avg"].detach().to("cpu", copy=True)
         exp_avg_sq[name] = state["exp_avg_sq"].detach().to("cpu", copy=True)
+        # The stored value itself, in the parameter's own dtype. The update is
+        # a float32 difference and cannot answer whether anything actually
+        # changed in memory: at bfloat16 an update smaller than half a ULP
+        # leaves the stored bits untouched, and a control that perturbs such an
+        # update perturbs nothing. Keeping the stored tensor is what lets a
+        # report say which of those happened.
+        stored[name] = param.detach().to("cpu", copy=True)
         step = state.get("step")
         steps[name] = float(step) if step is not None else None
     return {
@@ -162,6 +169,7 @@ def capture_step(model, optimizer, ids, labels) -> dict[str, Any]:
         "exp_avg": exp_avg,
         "exp_avg_sq": exp_avg_sq,
         "steps": steps,
+        "stored": stored,
         "missing_grads": missing,
         "stateless_parameters": stateless,
         "parameter_names": [n for n, _p in model.named_parameters()],
@@ -271,6 +279,8 @@ def check_model_correctness(
     check_trajectory: bool = True,
     references: dict[str, Any] | None = None,
     preflight: dict[str, Any] | None = None,
+    simple_policy: Any = None,
+    simple_primary: bool = False,
 ) -> dict[str, Any]:
     """One untimed step against both references, plus the loss curve.
 
@@ -338,7 +348,7 @@ def check_model_correctness(
     )
     versus_eager = _compare(candidate, references["eager"])
     versus_bound = _compare(candidate, references["bound"])
-    del candidate
+    candidate_capture = candidate
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
@@ -356,6 +366,16 @@ def check_model_correctness(
         "kinds": sorted({g.split("|", 1)[0] for g in bound}),
         "formula": "threshold = E/E threshold + S/B threshold, per group and metric",
     }
+    # The simplified gate, measured on the same captures: four questions about
+    # the whole model, against thresholds calibrated for this exact patch set.
+    # It needs no extra model build -- the trusted replacement was run at
+    # calibration time, and its drift is already inside the threshold.
+    if simple_policy is not None:
+        verdict["simplified"] = _simplified_verdict(
+            workload, kernels, simple_policy, candidate_capture, references["eager"]
+        )
+        verdict["simplified"]["role"] = "primary" if simple_primary else "shadow"
+
     verdict["vs_eager"] = check_against(bound, versus_eager)
     verdict["vs_bound_pair"] = check_against(bound, versus_bound)
     verdict["vs_eager"]["worst"] = _worst(versus_eager)
@@ -364,12 +384,29 @@ def check_model_correctness(
         verdict[label]["exceeded_groups"] = sorted(
             {e.get("group") for e in verdict[label]["exceeded"]}
         )
-    if not verdict["finite"]["ok"]:
-        return fail("numerical_envelopes",
-                    f"non-finite values in {len(non_finite)} results, "
-                    f"first {non_finite[0]}")
-    if not (verdict["vs_eager"]["ok"] and verdict["vs_bound_pair"]["ok"]):
-        return fail("numerical_envelopes", _reason(verdict))
+    del candidate, candidate_capture
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    if simple_primary:
+        # The simplified policy decides; the detailed one stays in the record as
+        # a diagnostic so a migration can be audited rather than trusted.
+        simplified = verdict.get("simplified") or {}
+        verdict["legacy_envelopes"] = {
+            "vs_eager_ok": verdict["vs_eager"]["ok"],
+            "vs_bound_pair_ok": verdict["vs_bound_pair"]["ok"],
+            "role": "diagnostic",
+        }
+        if not simplified.get("ok", False):
+            return fail("numerical_envelopes",
+                        str(simplified.get("reason") or "simplified gate failed"))
+    else:
+        if not verdict["finite"]["ok"]:
+            return fail("numerical_envelopes",
+                        f"non-finite values in {len(non_finite)} results, "
+                        f"first {non_finite[0]}")
+        if not (verdict["vs_eager"]["ok"] and verdict["vs_bound_pair"]["ok"]):
+            return fail("numerical_envelopes", _reason(verdict))
 
     # 5. Five steps of training: does the loss go where the reference's went?
     if check_trajectory:
@@ -383,13 +420,22 @@ def check_model_correctness(
             horizon=policy.trajectory.horizon,
             learning_rate=policy.trajectory.learning_rate,
         )
-        verdict["trajectory"] = policy.trajectory.check(reference_curve, candidate_curve)
+        limits = numerics.combined_trajectory(policy.trajectory,
+                                              policy.bound_pair_trajectory)
+        verdict["trajectory"] = limits.check(reference_curve, candidate_curve)
+        verdict["trajectory"]["limits_source"] = (
+            "E/E drift + S/B integration, matching the tensor envelope"
+        )
         verdict["trajectory"]["reference"] = reference_curve
         verdict["trajectory"]["candidate"] = candidate_curve
     else:
         verdict["trajectory"] = {"ok": True, "skipped": True}
-    if not verdict["trajectory"]["ok"]:
+    if not verdict["trajectory"]["ok"] and not simple_primary:
         return fail("loss_trajectory", _reason(verdict))
+    if simple_primary:
+        # A five-step loss delta is not evidence about long-horizon training
+        # quality, and the simplified gate does not pretend otherwise.
+        verdict["trajectory"]["role"] = "diagnostic"
 
     # 6. Was every site reached the declared number of times, by what it says?
     if verdict["count_problems"] or verdict["missing_grads"]:
@@ -397,6 +443,35 @@ def check_model_correctness(
 
     verdict["ok"] = True
     verdict["failed_at"] = None
+    return verdict
+
+
+def _simplified_verdict(workload, kernels, simple_policy, candidate, reference):
+    """The simplified gate's answer, or the reason it refused to answer.
+
+    The patch-set assertion is the load-bearing part: a policy calibrated for a
+    QKV-only replacement describes a QKV-only replacement, and applying it to
+    anything else would quote a threshold measured somewhere else.
+    """
+    from . import simple as simple_gate
+
+    try:
+        patch_set = simple_gate.PatchSet.of(
+            kernels, layers=workload.spec.arch["num_hidden_layers"]
+        )
+        simple_policy.require_binding(
+            workload_id=workload.spec.workload_id,
+            workload_hash=workload.spec.workload_hash,
+            dtype=str(workload.spec.dtype).replace("torch.", ""),
+            environment_hash=simple_policy.environment_hash,
+            patch_set=patch_set,
+        )
+    except simple_gate.PolicyMismatch as exc:
+        return {"ok": False, "failed_at": "policy_binding", "reason": str(exc),
+                "schema": simple_gate.SCHEMA_VERSION}
+    metrics = simple_gate.measure(candidate, reference)
+    verdict = simple_gate.check(simple_policy, metrics)
+    verdict["measured_patch_set"] = patch_set.to_dict()
     return verdict
 
 
@@ -429,9 +504,24 @@ def _boundary_reason(report: dict[str, Any]) -> str:
     if report.get("shared_parameter_boundaries"):
         return ("a parameter is shared across invocations, so its gradient "
                 f"cannot be attributed: {report['shared_parameter_boundaries'][0]}")
-    if not report.get("coverage_ok", True):
-        return (f"invocation coverage is wrong: expected "
-                f"{report['expected_counts']}, saw {report['observed_counts']}")
+    if report.get("unexpected_sites"):
+        return ("a boundary fired for a site no adapter was installed for: "
+                f"{report['unexpected_sites']}")
+    if report.get("duplicate_ids"):
+        return (f"an invocation was recorded twice: "
+                f"{report['duplicate_ids'][0]}")
+    missing = report.get("missing_or_extra") or {}
+    if missing:
+        # Per site, and say which role each is, so "the QKV kernel never ran"
+        # never again reads the same as "the carried attention boundary did not".
+        sites = report.get("sites") or {}
+        detail = ", ".join(
+            f"{site} ({sites.get(site, {}).get('role', '?')}): expected "
+            f"{sites.get(site, {}).get('expected')}, saw "
+            f"{sites.get(site, {}).get('observed')}"
+            for site in sorted(missing)
+        )
+        return f"invocation coverage is wrong per site: {detail}"
     failures = report.get("failures") or []
     if failures:
         first = failures[0]
@@ -439,6 +529,10 @@ def _boundary_reason(report: dict[str, Any]) -> str:
                 f"{report['checked_invocations']} invocations disagreed with the "
                 f"declaration; worst at {first['id']} on {first['result']} "
                 f"({first['max_abs_err']:.3g} > atol {first['atol']:.3g})")
+    if report.get("record_desync"):
+        return (f"{report['checked_invocations']} records were kept for "
+                f"{sum(report.get('observed_counts', {}).values())} counted "
+                "invocations; a boundary record was lost")
     return "the live-boundary validation failed"
 
 

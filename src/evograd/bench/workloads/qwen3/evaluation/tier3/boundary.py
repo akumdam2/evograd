@@ -35,7 +35,7 @@ from typing import Any
 
 import torch
 
-SCHEMA_VERSION = "evograd-qwen3-t3-boundary/1"
+SCHEMA_VERSION = "evograd-qwen3-t3-boundary/2"
 
 #: How many invocations of each site one canonical step must make.
 EXPECTED = {"qkv_norm_rope": 28, "attention": 28, "swiglu_mlp": 28,
@@ -47,6 +47,58 @@ def expected_counts(layers: int) -> dict[str, int]:
     from .sites import expected_counts as sites_expected
 
     return sites_expected(layers)
+
+
+@dataclass(frozen=True)
+class SitePlan:
+    """Which sites this run patched, which it carries, and how often each runs.
+
+    The distinction is load-bearing. Patching ``qkv_norm_rope`` installs the
+    composite Qwen3Attention adapter, which then runs the ``attention`` boundary
+    too -- through its production spelling, because no candidate was asked for
+    there. Both are real boundaries worth validating, and both must meet their
+    own declared count; what neither may be measured against is a total built
+    from the patched sites alone. That comparison is what a single aggregate
+    identity silently performed, failing a QKV-only patch on arithmetic rather
+    than on anything a kernel did.
+    """
+
+    patched: tuple[str, ...]
+    supporting: tuple[str, ...]
+    expected: dict[str, int]
+
+    @classmethod
+    def build(cls, requested, *, layers: int) -> SitePlan:
+        """Derive the plan from the adapter grouping and the declared counts."""
+        from .sites import live_sites, supporting_sites
+
+        patched = tuple(sorted(requested))
+        supporting = supporting_sites(patched)
+        declared = expected_counts(layers)
+        live = live_sites(patched)
+        missing_law = [site for site in live if site not in declared]
+        if missing_law:
+            raise ValueError(
+                f"sites {missing_law} become live boundaries but declare no "
+                "expected count; the registry and the adapter grouping disagree"
+            )
+        return cls(patched=patched, supporting=supporting,
+                   expected={site: declared[site] for site in live})
+
+    def role(self, site: str) -> str:
+        if site in self.patched:
+            return "patched"
+        if site in self.supporting:
+            return "supporting"
+        return "unexpected"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "patched": list(self.patched),
+            "supporting": list(self.supporting),
+            "expected_by_site": dict(self.expected),
+            "roles": {site: self.role(site) for site in self.expected},
+        }
 
 #: The three structurally different residual fusions, reported apart.
 RESIDUAL_CATEGORIES = ("post_attention", "mlp_to_next_input", "final_model_norm")
@@ -127,8 +179,13 @@ class BoundaryReport:
                         }
         return by_site
 
-    def to_dict(self, *, expected: dict[str, int] | None = None) -> dict[str, Any]:
-        expected = expected or EXPECTED
+    def to_dict(self, *, plan: SitePlan | None = None,
+                expected: dict[str, int] | None = None) -> dict[str, Any]:
+        if plan is None:
+            declared = expected or EXPECTED
+            plan = SitePlan(patched=tuple(sorted(declared)), supporting=(),
+                            expected=dict(declared))
+        expected = dict(plan.expected)
         residual = {
             category: sum(
                 1 for r in self.invocations if r.get("category") == category
@@ -143,18 +200,44 @@ class BoundaryReport:
             for e in r.get(kind, [])
             if not e["ok"]
         ]
+        # Accounting is per site, and every site the plan names is held to its
+        # own declared count -- carried ones included. There is deliberately no
+        # aggregate total: an expected sum built from the patched sites alone
+        # cannot describe a run whose adapter also drives a carried boundary.
+        observed = dict(self.counts)
         missing = {
-            site: expected[site] - self.counts.get(site, 0)
+            site: expected[site] - observed.get(site, 0)
             for site in expected
-            if self.counts.get(site, 0) != expected[site]
+            if observed.get(site, 0) != expected[site]
         }
+        unexpected = {
+            site: count for site, count in observed.items() if site not in expected
+        }
+        by_role: dict[str, dict[str, Any]] = {}
+        for site in sorted(set(expected) | set(observed)):
+            by_role[site] = {
+                "role": plan.role(site),
+                "expected": expected.get(site),
+                "observed": observed.get(site, 0),
+                "shortfall": missing.get(site),
+            }
+        # `counts` and `invocations` are written by the same listener, one skip
+        # apart on a duplicate. A disagreement means a record was lost rather
+        # than a boundary missed, which is a different defect and worth naming.
+        record_desync = len(self.invocations) != sum(observed.values())
         return {
             "schema_version": SCHEMA_VERSION,
+            "site_plan": plan.to_dict(),
+            "sites": by_role,
             "expected_counts": dict(expected),
-            "observed_counts": dict(self.counts),
-            "coverage_ok": not missing and not self.duplicates,
+            "observed_counts": observed,
+            "patched_sites": list(plan.patched),
+            "supporting_sites": list(plan.supporting),
+            "coverage_ok": not missing and not unexpected and not self.duplicates,
             "missing_or_extra": missing,
+            "unexpected_sites": unexpected,
             "duplicate_ids": self.duplicates[:16],
+            "record_desync": record_desync,
             "residual_categories": residual,
             "checked_invocations": len(self.invocations),
             "worst_per_site": self.worst(),
@@ -167,8 +250,9 @@ class BoundaryReport:
                 if r["site"] == "residual_rmsnorm"
             ),
             "ok": bool(
-                not missing and not self.duplicates and not failures
-                and not self.errors and not self.shared_parameters and len(self.invocations) == sum(expected.values())
+                not missing and not unexpected and not self.duplicates
+                and not failures and not self.errors
+                and not self.shared_parameters and not record_desync
             ),
         }
 
@@ -398,12 +482,8 @@ def validate_all_invocations(workload, kernels, *, data_seed: int = 0) -> dict[s
     set_tap(model, None)
     built = workload.last_build
     layers = workload.spec.arch["num_hidden_layers"]
-    expected = {
-        site: count
-        for site, count in expected_counts(layers).items()
-        if site in kernels.patched
-    }
-    summary = report.to_dict(expected=expected)
+    plan = SitePlan.build(kernels.patched, layers=layers)
+    summary = report.to_dict(plan=plan)
     summary["provenance"] = provenance.to_dict()
     summary["site_counters"] = built.observed() if built else {}
     summary["data_seed"] = data_seed

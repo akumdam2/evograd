@@ -49,11 +49,9 @@ import torch
 
 from evograd.bench.tier3_gate.faults import (  # noqa: F401  (re-export)
     GradScale as _GradScale,
-    StateFault,
     runtime_forward_for as _runtime,
     scale_grad as _scale_grad,
     smallest_rejected,
-    state_catalogue,
 )
 
 from .sites import (
@@ -209,3 +207,226 @@ def catalogue(magnitudes=(0.001, 0.005, 0.02)) -> list[Fault]:
               "2% high in one layer out of 28, exact everywhere else"),
     ]
     return faults
+
+
+# ── Qwen3's own optimizer-side faults ────────────────────────────────────────
+#
+# `StateFault` and `state_catalogue` are defined here rather than re-exported
+# from `tier3_gate.faults`, because both differ for this model.
+#
+# The shared `tier3_gate.faults.state_catalogue` is deliberately not re-exported
+# here. It lists `wrong_update` as a required control, and at this model's
+# magnitudes bfloat16 rounds that fault away: one AdamW step at lr=1e-4 moves a
+# projection weight by exactly two bfloat16 ULPs, so scaling the update by 1.02
+# leaves most stored values bit-identical and a norm weight entirely unchanged.
+# Qwen3 therefore requires a two-ULP perturbation of the *stored* parameter,
+# which changes every element by construction, and keeps `wrong_update` as a
+# diagnostic that reports how much of itself reached memory.
+
+
+
+# ── faults that are not in a kernel ──────────────────────────────────────────
+#
+# A kernel fault reaches the gate through the model. These do not: a wrong
+# parameter update with perfectly correct gradients, a corrupted Adam moment, a
+# step counter that has lost count. Nothing a kernel does can produce them, so
+# nothing a kernel-shaped control can prove the gate would catch them. They are
+# applied to a captured step instead, which is the only place they exist.
+
+
+_BITS = {torch.bfloat16: torch.int16, torch.float16: torch.int16,
+         torch.float32: torch.int32, torch.float64: torch.int64}
+
+
+def perturb_ulps(tensor: torch.Tensor, ulps: int) -> torch.Tensor:
+    """Move every element ``ulps`` representable steps away from zero.
+
+    Stepping the integer bit pattern is what makes this a *guaranteed* change:
+    adding a float quantity can round back to where it started, and at bfloat16
+    that is the normal case rather than the corner case. Incrementing the
+    pattern cannot -- the result is a different bit pattern by construction, and
+    the smallest change the format is able to represent.
+
+    Away from zero in both directions. IEEE floats are sign-magnitude, so the
+    raw pattern grows with |value| on each side independently -- one increment
+    serves both signs, and no branch on sign is needed or correct.
+    """
+    wide = _BITS[tensor.dtype]
+    bits = tensor.view(wide).clone()
+    return (bits + ulps).view(tensor.dtype)
+
+
+def observability(clean: dict[str, torch.Tensor],
+                  damaged: dict[str, torch.Tensor]) -> dict[str, Any]:
+    """How much of a fault actually reached stored model state.
+
+    Without this a control report cannot distinguish "the gate looked and saw
+    nothing" from "there was nothing to see". A fault whose stored footprint is
+    zero has not been missed; it has not happened.
+    """
+    from .numerics import role_of
+
+    changed = total = 0
+    by_role: dict[str, dict[str, int]] = {}
+    for name, before in clean.items():
+        after = damaged.get(name)
+        if after is None or after.shape != before.shape:
+            continue
+        wide = _BITS.get(before.dtype)
+        if wide is None:
+            continue
+        differing = int((before.view(wide) != after.view(wide)).sum())
+        changed += differing
+        total += before.numel()
+        entry = by_role.setdefault(role_of(name), {"changed": 0, "elements": 0})
+        entry["changed"] += differing
+        entry["elements"] += before.numel()
+    return {
+        "stored_elements": total,
+        "stored_elements_changed": changed,
+        "stored_fraction_changed": (changed / total) if total else 0.0,
+        "observable": changed > 0,
+        "roles_with_no_stored_change": sorted(
+            r for r, e in by_role.items() if e["changed"] == 0
+        ),
+        "per_role_fraction_changed": {
+            r: (e["changed"] / e["elements"] if e["elements"] else 0.0)
+            for r, e in sorted(by_role.items())
+        },
+    }
+
+
+@dataclass(frozen=True)
+class StateFault:
+    """A defect injected into the step's recorded state, not into a kernel."""
+
+    name: str
+    family: str
+    magnitude: float
+    describe: str
+
+    #: Which quantity this fault corrupts, for reading its evidence. A moment
+    #: or a step counter lives in the optimizer, not in the parameters, so its
+    #: stored-parameter footprint is zero by design and says nothing about
+    #: whether the fault happened.
+    @property
+    def scope(self) -> str:
+        return "stored_parameters" if self.family == "updates" else "optimizer_state"
+
+    def apply(self, captured: dict[str, Any]) -> dict[str, Any]:
+        damaged = dict(captured)
+        if self.family == "steps":
+            damaged["steps"] = {
+                name: (None if value is None else value + self.magnitude)
+                for name, value in captured["steps"].items()
+            }
+            return damaged
+        scaled = {
+            name: tensor * (1.0 + self.magnitude)
+            for name, tensor in captured[self.family].items()
+        }
+        damaged[self.family] = scaled
+        if self.family == "updates":
+            # A wrong update is only wrong once it is *stored*. Re-deriving the
+            # parameter from the corrupted update and casting it back is what
+            # makes the evidence real: at bfloat16 most of a 2% change does not
+            # survive that cast, and a control that skipped it would report a
+            # fault the model never saw.
+            stored = {}
+            for name, value in captured["stored"].items():
+                update = captured["updates"].get(name)
+                if update is None:
+                    stored[name] = value
+                    continue
+                before = value.float() - update
+                stored[name] = (before + scaled[name]).to(value.dtype)
+            damaged["stored"] = stored
+        return damaged
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "family": self.family, "scope": self.scope,
+                "magnitude": self.magnitude, "describes": self.describe}
+
+
+@dataclass(frozen=True)
+class StoredParameterFault:
+    """A wrong parameter value that bfloat16 cannot round away.
+
+    The multiplicative ``wrong_update`` control was written before it was
+    measured, and the measurement says it cannot work as a required control.
+    One AdamW step at lr=1e-4 moves a projection weight by 1.22e-4 -- exactly
+    two bfloat16 ULPs at |p| ~ 1.3e-2 -- so scaling that update by 1.02 changes
+    the stored value for about four percent of elements and leaves the rest
+    bit-identical. On a norm weight, where |p| = 1 and the ULP is 7.8e-3, the
+    whole update rounds away and the realized update is exactly zero; scaling
+    zero by anything is still zero.
+
+    This one is defined in units of the storage format instead. Stepping the
+    bit pattern is guaranteed to change every element it touches, whatever the
+    dtype and whatever the magnitude of the value, so "not detected" can only
+    ever mean the gate missed it.
+    """
+
+    name: str
+    ulps: int
+    describe: str
+    family: str = "stored"
+    magnitude: float = 0.0
+
+    def apply(self, captured: dict[str, Any]) -> dict[str, Any]:
+        damaged = dict(captured)
+        stored, updates = {}, dict(captured["updates"])
+        for name, value in captured["stored"].items():
+            moved = perturb_ulps(value, self.ulps)
+            stored[name] = moved
+            # The update is what the envelope judges, and it is the difference
+            # between stored endpoints -- so a wrong stored value *is* a wrong
+            # update, by exactly the amount the storage moved.
+            if name in updates:
+                updates[name] = updates[name] + (moved.float() - value.float())
+        damaged["stored"] = stored
+        damaged["updates"] = updates
+        return damaged
+
+    scope = "stored_parameters"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"name": self.name, "family": self.family, "scope": self.scope,
+                "ulps": self.ulps, "magnitude": float(self.ulps),
+                "describes": self.describe}
+
+
+def state_catalogue(magnitude: float = 0.02) -> list[StateFault | StoredParameterFault]:
+    """The optimizer-side defects a provider must not be able to hide.
+
+    ``wrong_update`` is deliberately absent: see :func:`diagnostic_catalogue`.
+    """
+    return [
+        StoredParameterFault(
+            "stored_param_ulp", 2,
+            "every stored parameter moved two ULPs away from zero",
+        ),
+        StateFault("corrupt_exp_avg", "exp_avg", magnitude,
+                   "Adam's first moment scaled by 1+m"),
+        StateFault("corrupt_exp_avg_sq", "exp_avg_sq", magnitude,
+                   "Adam's second moment scaled by 1+m"),
+        StateFault("wrong_step_count", "steps", 1.0,
+                   "the optimizer has taken one more step than the reference"),
+    ]
+
+
+def diagnostic_catalogue(magnitude: float = 0.02) -> list[StateFault]:
+    """Faults that are run and reported but not required to be rejected.
+
+    ``wrong_update`` at 2% is here because bfloat16 storage erases most of it
+    before it reaches model state -- entirely, on every norm role. Requiring
+    its rejection would be requiring the gate to detect something that did not
+    happen. It is still worth running: its observability evidence is the
+    standing measurement of how much of a small multiplicative update fault
+    this dtype can even express, and that number is what justifies the ULP
+    control replacing it.
+    """
+    return [
+        StateFault("wrong_update", "updates", magnitude,
+                   "correct gradients, an update scaled by 1+m"),
+    ]

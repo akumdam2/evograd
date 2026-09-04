@@ -499,21 +499,31 @@ class TestFaultCatalogue(unittest.TestCase):
     def test_the_catalogue_covers_every_required_kind(self):
         from evograd.bench.workloads.qwen3.evaluation.tier3.faults import catalogue
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+            diagnostic_catalogue,
+            state_catalogue,
+        )
 
-        kinds = {fault.name for fault in catalogue()}
-        kinds |= {fault.name for fault in state_catalogue()}
+        required = {fault.name for fault in catalogue()}
+        required |= {fault.name for fault in state_catalogue()}
         self.assertEqual(
-            kinds,
-            # Ten, and each is a different way for a wrong provider to look
-            # right: three magnitudes of numerical error, a structural one, a
-            # sparse one, one that only appears after enough calls, one that is
-            # not a number, and the four that live in the optimizer.
+            required,
+            # Each is a different way for a wrong provider to look right: three
+            # magnitudes of numerical error, a structural one, a sparse one,
+            # one that only appears after enough calls, one that is not a
+            # number, and the four that live in the optimizer.
             {"grad_scale", "output_scale", "one_role", "dropped_row",
              "stateful", "non_finite", "layer_subset", "single_layer",
-             "wrong_update", "corrupt_exp_avg", "corrupt_exp_avg_sq",
+             "stored_param_ulp", "corrupt_exp_avg", "corrupt_exp_avg_sq",
              "wrong_step_count"},
         )
+        # `wrong_update` is measured and reported, but not required to be
+        # rejected: at bfloat16 a 2% change to an AdamW update leaves most
+        # stored values bit-identical and every norm weight untouched, so
+        # requiring its rejection would require detecting a fault that never
+        # reached the model.
+        self.assertEqual({f.name for f in diagnostic_catalogue()}, {"wrong_update"})
+        self.assertNotIn("wrong_update", required)
 
     def test_the_smallest_always_rejected_magnitude_is_reported(self):
         from evograd.bench.workloads.qwen3.evaluation.tier3.faults import smallest_rejected
