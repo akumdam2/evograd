@@ -33,8 +33,6 @@ if HAVE_TORCH:
     from torch import nn
 
     from evograd.bench.tier3 import (
-        LLAMA_SITES,
-        LLAMA_SITE_OPS,
         KernelSet,
         KernelSource,
         ModulePatch,
@@ -61,6 +59,11 @@ if HAVE_TORCH:
     from evograd.bench.tier3_runner import _bootstrap_ratio
     from evograd.opdecl.inputs import make_case_inputs
     from evograd.ops import OPS, get_op
+
+    from tests._registry_fixture import (
+        SAMPLE_SITE_OPS,
+        SAMPLE_SITES,
+    )
 
 #: Not patch sites. Fixtures, chosen because they are the only declarations in
 #: the repository that return more than one tensor.
@@ -91,7 +94,7 @@ class _ToyWorkload:
     unit_name = "rows"
     #: It reaches for `rms_norm`, so it owns Llama's registry. Every workload
     #: must name one -- tier 3 refuses to guess which model's sites it has.
-    site_registry = LLAMA_SITES
+    site_registry = SAMPLE_SITES
 
     def __init__(self, *, blow_up: bool = False, threshold: float | None = None):
         self.name = "toy"
@@ -264,7 +267,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
     """A wrong kernel at this tier does not raise. It returns a throughput."""
 
     def test_the_control_passes_the_tier_one_gate(self):
-        kernels = identity_control_kernels(OPS, ("rms_norm", "swiglu"))
+        kernels = identity_control_kernels(OPS, ("rms_norm", "swiglu"), registry=SAMPLE_SITES)
         report = preflight(kernels, OPS, device="cpu")
         self.assertEqual([c["site"] for c in report["checked"]], ["rms_norm", "swiglu"])
         self.assertTrue(all(c["ok"] for c in report["checked"]))
@@ -281,7 +284,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
 
             rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
 
-        kernels = patched_kernels({"rms_norm": _Wrong}, OPS)
+        kernels = patched_kernels({"rms_norm": _Wrong}, OPS, registry=SAMPLE_SITES)
         with self.assertRaises(PreflightFailure) as caught:
             preflight(kernels, OPS, device="cpu")
         self.assertIn("rms_norm", str(caught.exception))
@@ -299,7 +302,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
             rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
 
         entry = measure_one(
-            _ToyWorkload(), "candidate", patched_kernels({"rms_norm": _Wrong}, OPS),
+            _ToyWorkload(), "candidate", patched_kernels({"rms_norm": _Wrong}, OPS, registry=SAMPLE_SITES),
             **_toy_options(),
         )
         self.assertFalse(entry["ok"])
@@ -307,7 +310,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
         self.assertNotIn("step_ms", entry)
 
     def test_a_raw_callable_is_reported_as_unverifiable_not_verified(self):
-        kernels = patch(KernelSet(), "rms_norm", lambda x, w, eps: x)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda x, w, eps: x)
         report = preflight(kernels, OPS, device="cpu")
         self.assertEqual(report["checked"], [])
         self.assertEqual([u["site"] for u in report["unverifiable"]], ["rms_norm"])
@@ -352,7 +355,7 @@ class TestFiniteLosses(unittest.TestCase):
 
     def test_the_trajectory_fails_on_the_step_that_diverged(self):
         workload = _ToyWorkload(blow_up=True)
-        model = workload.build(KernelSet())
+        model = workload.build(KernelSet(registry=SAMPLE_SITES))
         optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
         with self.assertRaises(NonFiniteLoss) as caught:
             loss_trajectory(workload, model, optimizer, steps=3, seed=0)
@@ -360,7 +363,7 @@ class TestFiniteLosses(unittest.TestCase):
 
     def test_a_diverging_provider_is_failed_rather_than_measured(self):
         entry = measure_one(
-            _ToyWorkload(blow_up=True), "candidate", KernelSet(), **_toy_options()
+            _ToyWorkload(blow_up=True), "candidate", KernelSet(registry=SAMPLE_SITES), **_toy_options()
         )
         self.assertFalse(entry["ok"])
         self.assertEqual(entry["failed_at"], "loss_finiteness")
@@ -379,7 +382,7 @@ class TestFiniteLosses(unittest.TestCase):
                 return value * float("nan") if self.calls > 8 else value
 
         entry = measure_one(
-            _LateDiverger(), "candidate", KernelSet(), **_toy_options()
+            _LateDiverger(), "candidate", KernelSet(registry=SAMPLE_SITES), **_toy_options()
         )
         self.assertFalse(entry["ok"])
         self.assertEqual(entry["failed_at"], "loss_finiteness")
@@ -407,7 +410,7 @@ class TestMeasurementIntegrity(unittest.TestCase):
 
     def test_the_report_records_the_order_that_ran(self):
         report = run_tier3(
-            _ToyWorkload(), {"eager": KernelSet(), "control": KernelSet()},
+            _ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES), "control": KernelSet(registry=SAMPLE_SITES)},
             **_toy_options(),
         )
         self.assertCountEqual(report["provider_order"], ["eager", "control"])
@@ -415,7 +418,7 @@ class TestMeasurementIntegrity(unittest.TestCase):
 
     def test_every_provider_gets_the_same_settings(self):
         report = run_tier3(
-            _ToyWorkload(), {"eager": KernelSet(), "control": KernelSet()},
+            _ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES), "control": KernelSet(registry=SAMPLE_SITES)},
             **_toy_options(),
         )
         protocol = report["timing_protocol"]
@@ -431,17 +434,17 @@ class TestMeasurementIntegrity(unittest.TestCase):
             self.assertEqual(entry["optimizer"]["name"], "AdamW")
 
     def test_l2_is_not_flushed_inside_a_step(self):
-        report = run_tier3(_ToyWorkload(), {"eager": KernelSet()}, **_toy_options())
+        report = run_tier3(_ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options())
         self.assertIn("never flushed", report["timing_protocol"]["l2_policy"])
 
     def test_cpu_bound_fraction_is_described_conservatively(self):
-        report = run_tier3(_ToyWorkload(), {"eager": KernelSet()}, **_toy_options())
+        report = run_tier3(_ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options())
         described = report["timing_protocol"]["cpu_bound_fraction"]
         self.assertIn("submission-and-blocking", described)
         self.assertIn("Not a dispatch-only measurement", described)
 
     def test_block_samples_and_latency_statistics_are_reported(self):
-        report = run_tier3(_ToyWorkload(), {"eager": KernelSet()}, **_toy_options())
+        report = run_tier3(_ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options())
         entry = report["providers"]["eager"]
         self.assertEqual(len(entry["per_block_ms"]), 2)
         self.assertEqual(entry["latency"]["count"], 2)
@@ -450,7 +453,7 @@ class TestMeasurementIntegrity(unittest.TestCase):
 
     def test_a_ratio_carries_a_bootstrap_interval(self):
         report = run_tier3(
-            _ToyWorkload(), {"eager": KernelSet(), "control": KernelSet()},
+            _ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES), "control": KernelSet(registry=SAMPLE_SITES)},
             **_toy_options(),
         )
         intervals = report["speedup_intervals"]
@@ -461,7 +464,7 @@ class TestMeasurementIntegrity(unittest.TestCase):
 
     def test_the_interval_serializes(self):
         report = run_tier3(
-            _ToyWorkload(), {"eager": KernelSet(), "control": KernelSet()},
+            _ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES), "control": KernelSet(registry=SAMPLE_SITES)},
             **_toy_options(),
         )
         decoded = json.loads(json.dumps(report, sort_keys=True))
@@ -505,7 +508,7 @@ class TestLossAgreementPolicy(unittest.TestCase):
 
     def test_the_runner_carries_the_workloads_threshold_into_the_report(self):
         report = run_tier3(
-            _ToyWorkload(threshold=0.5), {"eager": KernelSet()}, **_toy_options()
+            _ToyWorkload(threshold=0.5), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options()
         )
         self.assertEqual(report["verification_policy"]["loss_delta_threshold"], 0.5)
 
@@ -545,9 +548,9 @@ class TestPatchProvenance(unittest.TestCase):
 
     def test_each_provider_reports_its_own_sites(self):
         workload = self._module_workload()
-        eager = build_with_provenance(workload, KernelSet())[1]
+        eager = build_with_provenance(workload, KernelSet(registry=SAMPLE_SITES))[1]
         patched = build_with_provenance(
-            workload, patch(KernelSet(), "rms_norm", lambda *a: None)
+            workload, patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
         )[1]
         self.assertEqual(eager.actual_sites, ())
         self.assertEqual(patched.paths, {"rms_norm": ("a", "b")})
@@ -558,7 +561,7 @@ class TestPatchProvenance(unittest.TestCase):
     def test_the_counts_reach_the_report(self):
         workload = self._module_workload()
         _model, provenance = build_with_provenance(
-            workload, patch(KernelSet(), "rms_norm", lambda *a: None)
+            workload, patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
         )
         encoded = provenance.to_dict()
         self.assertEqual(encoded["method"], "module_surgery")
@@ -570,11 +573,11 @@ class TestPatchProvenance(unittest.TestCase):
         workload = self._module_workload(matcher=lambda m: False)
         with self.assertRaises(ValueError):
             build_with_provenance(
-                workload, patch(KernelSet(), "rms_norm", lambda *a: None)
+                workload, patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
             )
 
     def test_a_by_construction_workload_reports_the_kernel_sets_sites(self):
-        kernels = patch(KernelSet(), "swiglu", lambda g, u: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None)
         provenance = by_construction_provenance(kernels)
         self.assertEqual(provenance.method, "by_construction")
         self.assertEqual(provenance.actual_sites, ("swiglu",))
@@ -584,8 +587,8 @@ class TestPatchProvenance(unittest.TestCase):
         report = run_tier3(
             _ToyWorkload(),
             {
-                "eager": KernelSet(),
-                "control": identity_control_kernels(OPS, ("rms_norm",)),
+                "eager": KernelSet(registry=SAMPLE_SITES),
+                "control": identity_control_kernels(OPS, ("rms_norm",), registry=SAMPLE_SITES),
             },
             **_toy_options(),
         )
@@ -633,7 +636,7 @@ class TestIsolation(unittest.TestCase):
     def test_a_failing_provider_does_not_remove_the_others(self):
         report = run_tier3(
             _ToyWorkload(),
-            {"eager": KernelSet(), "broken": patch(KernelSet(), "rms_norm", None)},
+            {"eager": KernelSet(registry=SAMPLE_SITES), "broken": patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", None)},
             **_toy_options(),
         )
         self.assertTrue(report["providers"]["eager"]["ok"])
@@ -641,7 +644,7 @@ class TestIsolation(unittest.TestCase):
         self.assertEqual(len(report["providers"]), 2)
 
     def test_the_report_states_how_providers_were_executed(self):
-        report = run_tier3(_ToyWorkload(), {"eager": KernelSet()}, **_toy_options())
+        report = run_tier3(_ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options())
         self.assertIn("in-process", report["isolation"])
 
     def test_the_cli_defaults_to_isolation_with_a_budget(self):
@@ -729,7 +732,7 @@ class TestMultiOutputFixturesAreNotPatchSites(unittest.TestCase):
     """They exercise the adapters; they are not part of the model surface yet."""
 
     def test_no_multi_output_operator_is_a_patch_site(self):
-        for op_name in LLAMA_SITE_OPS.values():
+        for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
                 self.assertFalse(get_op(op_name).is_multi_output)
 

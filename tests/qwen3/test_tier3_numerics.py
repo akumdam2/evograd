@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
     HAVE_TORCH = False
 
 if HAVE_TORCH:
-    from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import (
+    from evograd.bench.tier3_gate.numerics import (
         BINDING_FIELDS,
         GATED_METRICS,
         SAFETY_MARGIN,
@@ -240,7 +240,7 @@ class TestCombinedEnvelope(unittest.TestCase):
     """A provider crosses hardware noise *and* the known integration drift."""
 
     def _envelope(self, role, rel, mar):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import GroupEnvelope
+        from evograd.bench.tier3_gate.numerics import GroupEnvelope
 
         return {role: GroupEnvelope(
             role=role, tensors=1, samples=1,
@@ -250,7 +250,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         )}
 
     def test_thresholds_add(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import combined_envelope
+        from evograd.bench.tier3_gate.numerics import combined_envelope
 
         merged = combined_envelope(self._envelope("q_proj", 0.01, 0.1),
                                    self._envelope("q_proj", 0.02, 0.3))
@@ -258,7 +258,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         self.assertAlmostEqual(merged["q_proj"].threshold["max_abs_over_rms"], 0.4)
 
     def test_a_role_present_in_only_one_half_survives(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import combined_envelope
+        from evograd.bench.tier3_gate.numerics import combined_envelope
 
         merged = combined_envelope(self._envelope("q_proj", 0.01, 0.1),
                                    self._envelope("k_proj", 0.02, 0.3))
@@ -266,7 +266,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         self.assertAlmostEqual(merged["q_proj"].threshold["rel_l2"], 0.01)
 
     def test_the_combined_bound_is_never_tighter_than_either_half(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.numerics import combined_envelope
+        from evograd.bench.tier3_gate.numerics import combined_envelope
 
         hardware = self._envelope("q_proj", 0.01, 0.1)
         integration = self._envelope("q_proj", 0.02, 0.3)

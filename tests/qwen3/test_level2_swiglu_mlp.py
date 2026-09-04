@@ -99,6 +99,11 @@ class TestSnapshot(unittest.TestCase):
         a declaration reads at import time must not pull in torch, Transformers,
         or anything from the capture machinery.
 
+        Both halves are checked. Reading a snapshot lives in the shared
+        ``workloads.common.snapshot``; deriving one from a harvest stays here.
+        A declaration reaches the first at import time, so a heavy import in
+        *either* would break every operator on a machine without a GPU.
+
         Checked by AST rather than by blocking the modules in a subprocess, since
         ``evograd/__init__.py`` imports ``evograd.api`` and therefore torch for
         any ``evograd.*`` import at all -- a repository-wide property that has
@@ -106,20 +111,30 @@ class TestSnapshot(unittest.TestCase):
         """
         import ast
 
-        source = Path(snapshot_module.__file__).read_text(encoding="utf-8")
-        imported = {
-            node.module.split(".")[0]
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.ImportFrom) and node.module
-        } | {
-            alias.name.split(".")[0]
-            for node in ast.walk(ast.parse(source))
-            for alias in getattr(node, "names", [])
-            if isinstance(node, ast.Import)
-        }
+        from evograd.bench.workloads.common import snapshot as common_snapshot
+
+        def toplevel_imports(module) -> set[str]:
+            tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
+            return {
+                node.module.split(".")[0]
+                for node in ast.walk(tree)
+                # `node.level` is the number of leading dots: a relative import
+                # names a sibling in this package, not a third-party dependency.
+                if isinstance(node, ast.ImportFrom) and node.module and not node.level
+            } | {
+                alias.name.split(".")[0]
+                for node in ast.walk(tree)
+                for alias in getattr(node, "names", [])
+                if isinstance(node, ast.Import)
+            }
+
         self.assertEqual(
-            imported,
+            toplevel_imports(snapshot_module),
             {"__future__", "argparse", "hashlib", "json", "sys", "pathlib", "typing"},
+        )
+        self.assertEqual(
+            toplevel_imports(common_snapshot),
+            {"__future__", "hashlib", "json", "re", "pathlib", "typing"},
         )
 
     def test_the_snapshot_loads_without_transformers(self):

@@ -207,7 +207,11 @@ class TestWorkloadIdentity(unittest.TestCase):
 
 class TestReportSerialization(unittest.TestCase):
     def _report(self) -> SmokeReport:
+        # The schema string is the workload's, not the report class's: the
+        # report shape is shared with every other Level-4 workload, and what
+        # distinguishes a Qwen3 report on disk is this field.
         return SmokeReport(
+            schema_version=SCHEMA_VERSION,
             workload={"workload_id": CANONICAL.workload_id, "canonical": True},
             environment={"torch": torch.__version__, "transformers": "5.16.1"},
             effective={"attn_implementation": "sdpa"},

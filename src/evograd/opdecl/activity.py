@@ -107,6 +107,22 @@ def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
 #: ``handpicked`` is an honest admission that a human chose the number.
 PROVENANCE_SOURCES = ("hf_config", "paper", "handpicked")
 
+#: How the operator's primary activation input is laid out in memory.
+#:
+#: ``contiguous``
+#:     A plain row-major tensor at the workload's shape.
+#: ``head_major_view``
+#:     What a decoder actually hands an attention or RoPE kernel: the model
+#:     projects into ``[B, T, heads, D]`` and transposes, so the tensor is a
+#:     *non-contiguous view* whose strides are ``[T*H*D, D, H*D, 1]``.
+#:
+#: This is a property of the tensor a real model produced, not of the model that
+#: produced it, which is why it lives here rather than being inferred from
+#: ``model``. Harvested workloads get it from the strides the harvest recorded;
+#: hand-derived grids keep the default, which is the layout they have always
+#: been measured at.
+PROVENANCE_LAYOUTS = ("contiguous", "head_major_view")
+
 #: Dtypes a reference computation may be promoted to. Only float types: the
 #: point is to make the reference more accurate than the candidate, and the
 #: integer/bool dtypes only ever appear on Inactive inputs (class labels, masks)
@@ -140,12 +156,23 @@ class Provenance:
     source: str = "hf_config"
     scaled: bool = False
     note: str = ""
+    #: Memory layout of the primary activation input; see
+    #: :data:`PROVENANCE_LAYOUTS`. An input generator branches on this rather
+    #: than on ``model``, so a second harvested architecture reproduces the
+    #: layout its own run recorded instead of falling back to a contiguous
+    #: substitute at the right shape.
+    layout: str = "contiguous"
 
     def __post_init__(self) -> None:
         if self.source not in PROVENANCE_SOURCES:
             raise ValueError(
                 f"provenance source must be one of {PROVENANCE_SOURCES}, "
                 f"got {self.source!r}"
+            )
+        if self.layout not in PROVENANCE_LAYOUTS:
+            raise ValueError(
+                f"provenance layout must be one of {PROVENANCE_LAYOUTS}, "
+                f"got {self.layout!r}"
             )
         if not self.model or not self.component:
             raise ValueError("provenance requires both a model and a component")

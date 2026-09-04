@@ -23,17 +23,22 @@ the manifest and the capture artifacts it was extracted from are local results
 that most machines will not have.
 """
 
-from evograd.bench.workloads.qwen3.harvest.snapshot import load as _load_snapshot
-from evograd.bench.workloads.qwen3.harvest.snapshot import task as _snapshot_task
+from evograd.bench.workloads import load_snapshot as _load_snapshot
+from evograd.bench.workloads import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
-_SNAPSHOT = _load_snapshot()
+#: The harvested workload these dims came from; also the ``Provenance``
+#: model key, so the declaration and the snapshot cannot disagree about
+#: which run they describe.
+_WORKLOAD = "qwen3_0_6b"
+
+_SNAPSHOT = _load_snapshot(_WORKLOAD)
 
 #: The harvested record this declaration is derived from. Structured, not prose:
 #: the configuration id it collapsed into, how many times it ran in one step, and
 #: which module produced each of those runs.
-HARVEST = _snapshot_task("qwen3_swiglu_mlp")
+HARVEST = _snapshot_task(_WORKLOAD, "qwen3_swiglu_mlp")
 
 #: 28 -- once per decoder layer. Every Qwen3-0.6B layer's MLP deduplicated into a
 #: single configuration, so one kernel serves all of them.

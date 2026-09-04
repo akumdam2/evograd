@@ -148,7 +148,7 @@ def run_state_fault(fault, *, seed: int, policy, workload, references
     the wrong scale.
     """
     from .gate import _compare, _step
-    from .numerics import check_against, combined_envelope
+    from evograd.bench.tier3_gate.numerics import check_against, combined_envelope
 
     try:
         captured = _step(workload, structural_identity_kernels(workload.site_registry),

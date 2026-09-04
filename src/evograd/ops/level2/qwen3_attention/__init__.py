@@ -30,16 +30,21 @@ substitutes that would benchmark a different access pattern.
 
 import math
 
-from evograd.bench.workloads.qwen3.harvest.snapshot import load as _load_snapshot
-from evograd.bench.workloads.qwen3.harvest.snapshot import task as _snapshot_task
+from evograd.bench.workloads import load_snapshot as _load_snapshot
+from evograd.bench.workloads import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
-_SNAPSHOT = _load_snapshot()
+#: The harvested workload these dims came from; also the ``Provenance``
+#: model key, so the declaration and the snapshot cannot disagree about
+#: which run they describe.
+_WORKLOAD = "qwen3_0_6b"
+
+_SNAPSHOT = _load_snapshot(_WORKLOAD)
 
 #: The harvested record this declaration is derived from: the SDPA
 #: configuration, plus the output projection that completes the boundary.
-HARVEST = _snapshot_task("qwen3_attention")
+HARVEST = _snapshot_task(_WORKLOAD, "qwen3_attention")
 
 #: 28 -- once per decoder layer, for both halves of the boundary.
 FREQUENCY = HARVEST["frequency"]

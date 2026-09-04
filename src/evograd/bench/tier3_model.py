@@ -12,9 +12,10 @@ you, how do I get a loss, how much work was that -- and measures whatever comes
 back. A Llama, a HuggingFace checkpoint, a vision model, someone's research
 code: if it can answer those, it can be measured.
 
-``bench.tier3_llama`` is the built-in architecture. :class:`ModuleWorkload` is
-the other door: hand it a factory for any ``nn.Module``, say how to feed it, and
-list which submodules a kernel replaces.
+Workloads live in ``bench/workloads/<name>/``: each declares its model, its
+site registry and its adapters. :class:`ModuleWorkload` is the shortcut for one
+you did not write -- hand it a factory for any ``nn.Module``, say how to feed
+it, and list which submodules a kernel replaces.
 """
 
 from __future__ import annotations
@@ -100,7 +101,7 @@ def site_registry_for(workload: TrainingWorkload) -> SiteRegistry:
             f"{getattr(workload, 'name', workload)!r}: the workload does not "
             "declare a site_registry, so tier 3 cannot say which sites it has "
             "or which operator each one implements. Set `site_registry` to a "
-            "SiteRegistry (see bench.tier3_patch.LLAMA_SITES)."
+            "SiteRegistry; a workload package owns its own."
         )
     return registry
 

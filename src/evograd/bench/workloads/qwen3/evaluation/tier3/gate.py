@@ -35,8 +35,8 @@ from typing import Any
 
 import torch
 
-from . import numerics
-from .numerics import (
+from evograd.bench.tier3_gate import numerics
+from evograd.bench.tier3_gate.numerics import (
     NumericsPolicy,
     check_against,
     combined_envelope,
@@ -186,7 +186,7 @@ def _compare(candidate: dict[str, Any], reference: dict[str, Any]) -> list[dict[
     gradient for a parameter the reference did, or whose optimizer never built
     a moment for one, is reported as an infinite deviation rather than skipped.
     """
-    from .numerics import compare_tensor
+    from evograd.bench.tier3_gate.numerics import compare_tensor
 
     samples = [
         compare_tensor(name, candidate[name], reference[name],

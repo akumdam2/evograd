@@ -1,7 +1,10 @@
-"""Model-tier benchmark: evolved kernels inside a Llama-3 training step.
+"""Model-tier benchmark: evolved kernels inside a real training step.
 
-    python -m evograd.bench.tier3_cli --model llama_3_8b_4l \
-        --candidate rms_norm=evolved_rmsnorm.py --out ~/tmp/tier3.json
+    python -m evograd.bench.tier3_cli --model <workload> \
+        --candidate <site>=evolved.py --out ~/tmp/tier3.json
+
+``--model`` lists the workloads that have tier-3 sites; ``--sites`` with an
+unknown name lists the selected one's.
 
 With no candidate it measures the reference line: eager against any declared
 pair baseline that covers a patchable site. Validate the harness that way first
@@ -25,7 +28,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-MODELS = ("llama_3_8b_4l", "llama_3_8b", "qwen3_0_6b", "alphafold3_2l", "alphafold3")
+from evograd.bench.workloads import tier3_model_names
+
+#: The workloads tier 3 can measure. Read from the registry rather than written
+#: here, so adding one is an entry in ``bench.workloads`` plus a package, not an
+#: edit to this file. Names only: the registry maps them to dotted paths and
+#: imports nothing until one is chosen, which matters because an adapter reaches
+#: torch and possibly Transformers.
+MODELS = tier3_model_names()
 
 #: Per-provider wall-clock budget. A tier-3 provider trains a model, so this is
 #: minutes rather than the seconds a tier-1 case takes.
@@ -43,7 +53,7 @@ def load_program(path: Path):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="llama_3_8b_4l", choices=MODELS)
+    parser.add_argument("--model", default=MODELS[0], choices=MODELS)
     parser.add_argument(
         "--candidate",
         action="append",
@@ -51,7 +61,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="SITE=PATH",
         help="patch one site with an evolved program, e.g. rms_norm=best.py. "
              "Repeatable; the valid sites are the selected workload's "
-             "(llama_3: rms_norm, swiglu, cross_entropy)",
+             "own; --sites with an unknown name lists them",
     )
     parser.add_argument(
         "--baseline",
@@ -73,30 +83,39 @@ def _parser() -> argparse.ArgumentParser:
         "--structural-identity",
         action="store_true",
         help=(
-            "qwen3 only: add a provider whose adapters call the exact "
-            "Transformers spellings through native autograd. It changes the "
-            "module structure and no arithmetic, so it must be BITWISE "
-            "identical to the unpatched model"
+            "add a provider whose adapters call the exact production spellings "
+            "through native autograd. It changes the module structure and no "
+            "arithmetic, so it must be BITWISE identical to the unpatched "
+            "model. Only workloads that declare it accept this"
         ),
     )
     parser.add_argument(
         "--sites",
         default=None,
         help=(
-            "restrict patching to these sites, comma separated "
-            "(rms_norm,swiglu,cross_entropy). One at a time turns a blended "
-            "number into an attribution"
+            "restrict patching to these sites, comma separated. One at a time "
+            "turns a blended number into an attribution; an unknown name lists "
+            "the workload's own sites"
         ),
     )
-    # No defaults: the Qwen workload's canonical batch and sequence are part of
-    # its identity, and a CLI default would silently replace them.
+    # No defaults: a workload's canonical batch and sequence can be part of its
+    # identity, and a CLI default would silently replace them. Each adapter
+    # supplies its own.
     parser.add_argument("--batch", type=int, default=None,
-                        help="llama default 4; qwen3 defaults to its canonical 2")
+                        help="override the workload's own batch size")
     parser.add_argument("--tokens", type=int, default=None,
-                        help="llama default 1024; qwen3 defaults to its canonical 2048")
+                        help="override the workload's own sequence length")
     parser.add_argument("--layers", type=int, default=None,
-                        help="qwen3 only: reduce the layer count for a smoke")
+                        help="reduce the layer count for a smoke, where the "
+                             "workload accepts it")
     parser.add_argument("--data-seed", type=int, default=0,
+                        help="move the token stream without changing the "
+                             "workload identity, where the workload accepts it")
+    parser.add_argument("--calibration", type=Path, default=None,
+                        help="the whole-model gate's calibration artifact, for "
+                             "workloads that have one. A calibration is bound "
+                             "to the workload it was measured for, so a shrunk "
+                             "run needs its own rather than the canonical one")
                         help="qwen3 only: move the token stream without changing "
                              "the workload identity")
     parser.add_argument("--residues", type=int, default=None,
@@ -142,9 +161,9 @@ def _parser() -> argparse.ArgumentParser:
 def _baseline_kernels(baseline: str, ops, registry):
     """A reviewed pair baseline patched into the sites it covers.
 
-    This is what makes the harness checkable before an evolved kernel exists:
-    Liger publishes end-to-end Llama numbers, so reproducing them here validates
-    the measurement rather than the kernel.
+    This is what makes the harness checkable before an evolved kernel exists: a
+    published baseline's end-to-end numbers, reproduced here, validate the
+    measurement rather than the kernel.
 
     Discovery walks *this workload's* registry, so a baseline is only offered
     for sites the model being measured actually has.
@@ -201,8 +220,8 @@ def build_providers(args, *, quiet: bool = False) -> dict:
     from evograd.ops import OPS
 
     # Every provider below is built against the registry the *workload* owns.
-    # Nothing here reads a module-level site namespace, which is what let the
-    # Llama identity control claim sites belonging to another model.
+    # Nothing here reads a module-level site namespace, which is what let one
+    # model's identity control claim sites belonging to another.
     registry = site_registry_for(build_workload(args))
     sites = _sites(args, registry)
 
@@ -211,16 +230,12 @@ def build_providers(args, *, quiet: bool = False) -> dict:
 
     providers = {"eager": KernelSet(registry=registry)}
 
-    if getattr(args, "structural_identity", False):
-        if args.model != "qwen3_0_6b":
-            _parser().error("--structural-identity is a qwen3_0_6b provider")
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
-            structural_identity_kernels,
-        )
-
-        providers["structural_identity"] = limited(
-            structural_identity_kernels(registry)
-        )
+    # Whatever the workload itself offers beyond the providers every workload
+    # has. Asked rather than branched on, so this file names no architecture.
+    adapter = tier3_adapter(args.model)
+    if adapter.providers is not None:
+        for name, kernels in adapter.providers(args, registry).items():
+            providers[name] = limited(kernels)
 
     if args.identity_control:
         providers["eager_through_bind"] = identity_control_kernels(
@@ -260,68 +275,50 @@ def build_providers(args, *, quiet: bool = False) -> dict:
     return providers
 
 
+def tier3_adapter(name):
+    """The selected workload's adapter, with an argparse-shaped error."""
+    from evograd.bench.workloads import UnknownWorkload
+    from evograd.bench.workloads import tier3_adapter as lookup
+
+    try:
+        return lookup(name)
+    except UnknownWorkload as exc:  # pragma: no cover - argparse checks choices
+        _parser().error(str(exc))
+
+
+def check_options(args) -> None:
+    """Refuse a flag the selected workload does not understand, by name.
+
+    ``--structural-identity`` is meaningless without adapters that can call a
+    production spelling; ``--layers`` is meaningless where the layer count comes
+    from a frozen config. Accepting either silently would report a number for a
+    run that ignored what was asked, so each workload declares what it takes and
+    anything else is an error here.
+    """
+    adapter = tier3_adapter(args.model)
+    #: Flag -> the value that means "not requested".
+    optional = {"structural_identity": False, "layers": None, "data_seed": 0,
+                "calibration": None}
+    for dest, unset in optional.items():
+        if dest in adapter.options:
+            continue
+        if getattr(args, dest, unset) != unset:
+            flag = "--" + dest.replace("_", "-")
+            accepted = sorted(adapter.options)
+            _parser().error(
+                f"{flag} is not a {args.model} option; that workload accepts "
+                + (f"{accepted}" if accepted else "no workload-specific flags")
+            )
+
+
 def build_workload(args):
     """The workload this invocation measures, rebuilt identically in each child.
 
-    Both branches take only values that came off the command line, which is what
-    lets a child process reconstruct the same workload from the same argv rather
-    than inheriting an object it cannot pickle.
+    Every adapter takes only values that came off the command line, which is
+    what lets a child process reconstruct the same workload from the same argv
+    rather than inheriting an object it cannot pickle.
     """
-    import torch
-
-    dtype = args.dtype or (
-        "float32" if args.model.startswith("alphafold3") else "bfloat16"
-    )
-
-    if args.model.startswith("alphafold3"):
-        from evograd.opdecl import models as model_registry
-        from evograd.opdecl.activity import Workload
-        from evograd.ops.level4.alphafold3.workload import make_workload
-
-        config = {
-            "alphafold3_2l": model_registry.ALPHAFOLD3_2L,
-            "alphafold3": model_registry.ALPHAFOLD3,
-        }[args.model]
-        case = Workload(
-            dims=config.train_step_dims(
-                batch=args.batch if args.batch is not None else 1,
-                residues=args.residues if args.residues is not None else 128,
-            ),
-            dtype=dtype,
-        )
-        return make_workload(case, device=args.device, seed=args.seed, config=config)
-
-    if args.model == "qwen3_0_6b":
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
-
-        config = {
-            "dtype": dtype,
-            "device": args.device,
-            "seed": args.seed,
-            "data_seed": args.data_seed,
-        }
-        # The canonical batch and sequence are the workload's, not the CLI's
-        # defaults; only an explicit flag overrides them.
-        if args.batch is not None:
-            config["batch_size"] = args.batch
-        if args.tokens is not None:
-            config["seq_len"] = args.tokens
-        if args.layers is not None:
-            config["arch_overrides"] = {"num_hidden_layers": args.layers}
-        return Qwen3Workload.from_config(config)
-
-    from evograd.bench.tier3_llama import LlamaWorkload
-    from evograd.opdecl import models as model_registry
-
-    config = {
-        "llama_3_8b_4l": model_registry.LLAMA_3_8B_4L,
-        "llama_3_8b": model_registry.LLAMA_3_8B,
-    }[args.model]
-    return LlamaWorkload(
-        config, batch=args.batch if args.batch is not None else 4,
-        tokens=args.tokens if args.tokens is not None else 1024,
-        device=args.device, dtype=getattr(torch, dtype), seed=args.seed,
-    )
+    return tier3_adapter(args.model).build(args)
 
 
 def _measure_options(args) -> dict:
@@ -406,6 +403,9 @@ def _run_isolated(argv: list[str], provider: str, timeout: int) -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     args = _parser().parse_args(argv)
+    # Before anything is built: a flag the selected workload does not
+    # understand is an error, not a silently ignored request.
+    check_options(args)
 
     # Worker mode: one provider, write JSON, exit.
     if args.provider is not None:

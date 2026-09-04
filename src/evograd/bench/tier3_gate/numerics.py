@@ -83,9 +83,18 @@ SCALE_FLOOR = 1e-30
 
 #: Which role each parameter plays, matched on its name. Grouping by role rather
 #: than per-tensor is what makes the envelope a policy instead of 310 constants:
-#: a role has one shape and one scale across all 28 layers, so its 28 samples
-#: describe one distribution. Roles whose scales differ -- the embedding is
-#: 151936x1024, a per-head norm is 128 -- are never pooled.
+#: a role has one shape and one scale across every layer, so its per-layer
+#: samples describe one distribution. Roles whose scales differ -- an embedding
+#: is 151936x1024, a per-head norm is 128 -- are never pooled.
+#:
+#: These are the HuggingFace decoder naming convention, not one model's: Llama,
+#: Mistral and Qwen all spell ``self_attn.q_proj`` and ``mlp.down_proj`` the same
+#: way. ``q_norm``/``k_norm`` are Qwen3's per-head normalizations, which simply
+#: do not appear in an architecture that lacks them. An architecture that names
+#: something else is not mis-pooled: :func:`role_of` falls through to
+#: ``other:<name>``, giving the parameter a group of its own, which is the safe
+#: direction -- an ungrouped tensor gets its own envelope rather than borrowing
+#: a threshold measured on a different scale.
 ROLE_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"embed_tokens\.weight$", "embedding"),
     (r"^lm_head\.weight$", "lm_head"),

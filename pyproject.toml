@@ -21,8 +21,11 @@ llm = ["openai"]
 dev = ["black"]
 baselines = ["liger-kernel"]
 # Level-4 model workloads. Qwen3 arrived in transformers 4.51.0;
-# the milestone was developed and measured against 5.16.1.
+# the milestone was developed and measured against 5.16.1. Llama predates
+# that, but 4.51 is the floor the rest of the harness targets.
 qwen3 = ["transformers>=4.51"]
+llama3 = ["transformers>=4.51"]
+workloads = ["transformers>=4.51"]
 # The level-4 AlphaFold3 training-step workload. alphafold3-pytorch is the
 # implementation MegaFold builds on, which is where the AF3 benchmark shapes
 # come from; without it the alphafold3 workload reports as uncovered.
@@ -35,7 +38,7 @@ evograd = "evograd.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-evograd = ["evolve/*.yaml", "bench/workloads/qwen3/harvest/*.json"]
+evograd = ["evolve/*.yaml", "bench/workloads/*/harvest/*.json"]
 
 [tool.black]
 line-length = 100

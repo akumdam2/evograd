@@ -687,12 +687,15 @@ src/evograd/
 │   ├── tier3_model.py         # tier 3 part 1: what is measured
 │   ├── tier3_patch.py         # tier 3 part 2: how a kernel gets into a model
 │   ├── tier3_runner.py        # tier 3 part 3: verify, build, step, time, report
-│   ├── tier3_llama.py         # tier 3: the built-in Llama-3 architecture
+│   ├── tier3_gate/            # tier 3 part 4: the whole-model gate, model-agnostic
 │   ├── report.py              # one canonical report shape for every protocol
-│   └── workloads/qwen3/       # the Qwen3-0.6B workload; see its own README.md
-│       ├── harvest/           #   the instrumented run and its tracked snapshot
-│       ├── levels/            #   level 4/3/2/1: step, layer, operators, primitives
-│       └── evaluation/tier3/  #   drop-in replacement, its gate and calibration
+│   └── workloads/             # one package per model; the harness holds none
+│       ├── common/            #   spec, builder, observer, manifest, snapshot
+│       ├── qwen3/             #   Qwen3-0.6B, harvested; see its own README.md
+│       │   ├── harvest/       #     the instrumented run and its tracked snapshot
+│       │   ├── levels/        #     level 4/3/2/1: step, layer, operators, primitives
+│       │   └── evaluation/    #     drop-in replacement, its gate and calibration
+│       └── llama3/            #   Meta-Llama-3-8B; level 4 + harvest
 ├── ncu/                       # NCU profiling, roofline triage, accepted refinement
 ├── scaffold.py                # forward -> external declare_op contract
 ├── dispatch.py                # measured generalist/specialist deployment

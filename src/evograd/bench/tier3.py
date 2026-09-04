@@ -24,7 +24,9 @@ be read and changed on its own:
     tier3_runner.py   **how it is measured** -- verify, build, step, time, memory,
                       loss agreement, report
 
-    tier3_llama.py    the built-in architecture, one implementation of part one
+A workload -- the model, and which of its places are patchable -- lives in
+``bench/workloads/<name>/``, never here. This half knows how to measure a
+kernel and nothing about what it is measured inside.
 
 The layering is acyclic and worth preserving: ``patch`` imports nothing from
 tier 3, ``model`` imports ``patch``, ``runner`` imports both. Anything that
@@ -44,8 +46,7 @@ from evograd.bench.tier3_model import (  # noqa: F401  (re-export)
     site_registry_for,
 )
 from evograd.bench.tier3_patch import (  # noqa: F401  (re-export)
-    LLAMA_SITE_OPS,
-    LLAMA_SITES,
+    NO_SITES,
     KernelSet,
     KernelSource,
     ModulePatch,
@@ -86,11 +87,10 @@ from evograd.bench.tier3_runner import (  # noqa: F401  (re-export)
 )
 
 __all__ = [
-    "LLAMA_SITES",
-    "LLAMA_SITE_OPS",
     "OPTIMIZER",
     "OPTIMIZER_DEFAULTS",
     "TIER3_PROTOCOL_VERSION",
+    "NO_SITES",
     "KernelSet",
     "KernelSource",
     "ModulePatch",

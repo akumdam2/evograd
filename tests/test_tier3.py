@@ -12,7 +12,6 @@ import unittest
 from pathlib import Path
 
 from evograd.bench.tier3 import (
-    LLAMA_SITE_OPS,
     KernelSet,
     KernelSource,
     ModulePatch,
@@ -26,6 +25,10 @@ from evograd.bench.tier3 import (
 )
 from evograd.opdecl.models import LLAMA_3_8B, LLAMA_3_8B_4L
 from evograd.ops import OPS, get_op
+
+from evograd.bench.tier3_cli import MODELS
+
+from tests._registry_fixture import SAMPLE_SITE_OPS, SAMPLE_SITES
 from evograd.ops.level3.llama3_decoder_layer import forward_ref as reference
 from torch import nn
 
@@ -34,38 +37,38 @@ class TestPatchSites(unittest.TestCase):
     def test_every_site_names_a_declared_operator(self):
         # A site whose operator does not exist would accept a candidate and then
         # fail at bind time, inside a run.
-        for site, op_name in LLAMA_SITE_OPS.items():
+        for site, op_name in SAMPLE_SITE_OPS.items():
             with self.subTest(site=site):
                 self.assertIn(op_name, OPS)
 
     def test_each_site_operator_declares_its_parameter_split(self):
         # bind() and the module wrapping both need it; an undeclared split would
         # surface only once a candidate was patched in.
-        for op_name in LLAMA_SITE_OPS.values():
+        for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
                 self.assertIsNotNone(get_op(op_name).parameter_args)
 
     def test_an_unknown_site_is_rejected(self):
         with self.assertRaises(ValueError) as caught:
-            patch(KernelSet(), "attention", lambda *a: None)
+            patch(KernelSet(registry=SAMPLE_SITES), "attention", lambda *a: None)
         self.assertIn("attention", str(caught.exception))
 
     def test_patching_records_what_was_replaced(self):
         # The report has to say which sites a provider actually replaced;
         # "candidate was 1.2x" means nothing without it.
-        kernels = patch(KernelSet(), "swiglu", lambda g, u: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None)
         self.assertEqual(kernels.patched, ("swiglu",))
         kernels = patch(kernels, "rms_norm", lambda *a: None)
         self.assertEqual(kernels.patched, ("rms_norm", "swiglu"))
 
     def test_an_unpatched_set_says_so(self):
-        self.assertEqual(KernelSet().patched, ())
+        self.assertEqual(KernelSet(registry=SAMPLE_SITES).patched, ())
 
     def test_the_default_kernels_are_the_declared_spellings(self):
         # The eager provider must be the production spelling, not the primitive
         # one: timing against the unfused reference inflates every ratio.
-        self.assertIs(KernelSet().rms_norm, reference._rms_norm_fused)
-        self.assertIs(KernelSet().swiglu, reference._default_swiglu)
+        self.assertIs(KernelSet(registry=SAMPLE_SITES).rms_norm, reference._rms_norm_fused)
+        self.assertIs(KernelSet(registry=SAMPLE_SITES).swiglu, reference._default_swiglu)
 
 
 class TestTheReferenceStillDescribesTheSameLayer(unittest.TestCase):
@@ -226,17 +229,21 @@ class TestTheHarnessIsModelAgnostic(unittest.TestCase):
             for alias in node.names
         }
         self.assertFalse(
-            [m for m in imported if "tier3_llama" in m],
-            f"harness imports the Llama workload: {sorted(imported)}",
+            [m for m in imported if "workloads." in m],
+            f"the harness imports a workload package: {sorted(imported)}",
         )
 
-    def test_the_llama_workload_satisfies_the_protocol(self):
-        from evograd.bench.tier3_llama import LlamaWorkload
+    def test_a_real_workload_satisfies_the_protocol(self):
+        """A workload lives in its own package now, so this reaches for one
+        rather than for a built-in the harness used to carry."""
+        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import (
+            Qwen3Workload,
+        )
 
         for method in ("units_per_step", "build", "batch_for", "loss", "describe"):
             with self.subTest(method=method):
-                self.assertTrue(callable(getattr(LlamaWorkload, method, None)))
-        self.assertEqual(LlamaWorkload.unit_name, "tokens")
+                self.assertTrue(callable(getattr(Qwen3Workload, method, None)))
+        self.assertEqual(Qwen3Workload.unit_name, "tokens")
 
     def test_a_module_workload_satisfies_it_too(self):
         workload = ModuleWorkload(
@@ -269,7 +276,7 @@ class TestModuleSurgery(unittest.TestCase):
         model, Leaf = self._tree()
         patches = (ModulePatch("rms_norm", lambda m: getattr(m, "tag", None) == "replace-me",
                                lambda original, kernel: Leaf("patched")),)
-        provenance = patch_modules(model, patches, KernelSet())
+        provenance = patch_modules(model, patches, KernelSet(registry=SAMPLE_SITES))
         self.assertEqual(provenance.actual_sites, ())
         self.assertEqual(provenance.paths, {})
         self.assertEqual(model.a.tag, "replace-me")
@@ -278,7 +285,7 @@ class TestModuleSurgery(unittest.TestCase):
         model, Leaf = self._tree()
         patches = (ModulePatch("rms_norm", lambda m: getattr(m, "tag", None) == "replace-me",
                                lambda original, kernel: Leaf("patched")),)
-        kernels = patch(KernelSet(), "rms_norm", lambda *a: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
         provenance = patch_modules(model, patches, kernels)
         self.assertEqual(provenance.paths, {"rms_norm": ("a",)})
         self.assertEqual(provenance.requested_sites, ("rms_norm",))
@@ -295,7 +302,7 @@ class TestModuleSurgery(unittest.TestCase):
         model, Leaf = self._tree()
         patches = (ModulePatch("rms_norm", lambda m: False,
                                lambda original, kernel: Leaf("patched")),)
-        kernels = patch(KernelSet(), "rms_norm", lambda *a: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
         with self.assertRaises(ValueError) as caught:
             patch_modules(model, patches, kernels)
         self.assertIn("matched no submodule", str(caught.exception))
@@ -307,7 +314,7 @@ class TestModuleSurgery(unittest.TestCase):
         seen = []
         patches = (ModulePatch("rms_norm", lambda m: getattr(m, "tag", None) == "replace-me",
                                lambda original, kernel: seen.append(original) or Leaf("p")),)
-        patch_modules(model, patches, patch(KernelSet(), "rms_norm", lambda *a: None))
+        patch_modules(model, patches, patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None))
         self.assertEqual([m.tag for m in seen], ["replace-me"])
 
 
@@ -322,17 +329,17 @@ class TestKernelProvenanceTravels(unittest.TestCase):
     def test_a_patched_site_carries_its_source(self):
         source = KernelSource(site="swiglu", op_name="swiglu", module=object(),
                               origin="candidate")
-        kernels = patch(KernelSet(), "swiglu", lambda g, u: None, source=source)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None, source=source)
         self.assertIs(kernels.source_for("swiglu"), source)
         self.assertTrue(source.verifiable)
 
     def test_a_raw_callable_is_recorded_as_unverifiable(self):
-        kernels = patch(KernelSet(), "swiglu", lambda g, u: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None)
         self.assertFalse(kernels.source_for("swiglu").verifiable)
 
     def test_restricting_keeps_the_sources_of_the_sites_it_keeps(self):
         source = KernelSource(site="swiglu", op_name="swiglu", module=object())
-        kernels = patch(KernelSet(), "swiglu", lambda g, u: None, source=source)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None, source=source)
         kernels = patch(kernels, "rms_norm", lambda *a: None)
         kept = restrict(kernels, ("swiglu",))
         self.assertEqual([s.site for s in kept.sources], ["swiglu"])
@@ -340,7 +347,7 @@ class TestKernelProvenanceTravels(unittest.TestCase):
 
     def test_a_source_naming_another_site_is_rejected(self):
         with self.assertRaises(ValueError):
-            patch(KernelSet(), "swiglu", lambda g, u: None,
+            patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None,
                   source=KernelSource(site="rms_norm"))
 
 
@@ -355,25 +362,25 @@ class TestIdentityControl(unittest.TestCase):
     """
 
     def test_it_patches_every_site_by_default(self):
-        kernels = identity_control_kernels(OPS)
-        self.assertEqual(set(kernels.patched), set(LLAMA_SITE_OPS))
+        kernels = identity_control_kernels(OPS, registry=SAMPLE_SITES)
+        self.assertEqual(set(kernels.patched), set(SAMPLE_SITE_OPS))
 
     def test_it_can_be_restricted_for_attribution(self):
-        kernels = identity_control_kernels(OPS, ("rms_norm",))
+        kernels = identity_control_kernels(OPS, ("rms_norm",), registry=SAMPLE_SITES)
         self.assertEqual(kernels.patched, ("rms_norm",))
 
     def test_the_control_is_not_the_eager_default(self):
         # If it were the same object the control would measure nothing: it has
         # to route through the patching machinery to price it.
-        control = identity_control_kernels(OPS)
-        self.assertIsNot(control.rms_norm, KernelSet().rms_norm)
-        self.assertIsNot(control.swiglu, KernelSet().swiglu)
+        control = identity_control_kernels(OPS, registry=SAMPLE_SITES)
+        self.assertIsNot(control.rms_norm, KernelSet(registry=SAMPLE_SITES).rms_norm)
+        self.assertIsNot(control.swiglu, KernelSet(registry=SAMPLE_SITES).swiglu)
 
     def test_the_eager_pair_exposes_the_candidate_interface(self):
         # It is fed to kernel_from_pair, which calls lookup_pair on it.
         from evograd.opdecl.bind import lookup_pair
 
-        for op_name in LLAMA_SITE_OPS.values():
+        for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
                 forward, backward = lookup_pair(
                     get_op(op_name), eager_pair_for(get_op(op_name))
@@ -383,20 +390,20 @@ class TestIdentityControl(unittest.TestCase):
 
 class TestSiteRestriction(unittest.TestCase):
     def test_restricting_keeps_only_the_named_sites(self):
-        kernels = KernelSet()
-        for site in LLAMA_SITE_OPS:
+        kernels = KernelSet(registry=SAMPLE_SITES)
+        for site in SAMPLE_SITE_OPS:
             kernels = patch(kernels, site, lambda *a: None)
         self.assertEqual(restrict(kernels, ("swiglu",)).patched, ("swiglu",))
 
     def test_reverted_sites_go_back_to_the_eager_default(self):
-        kernels = patch(KernelSet(), "rms_norm", lambda *a: None)
+        kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda *a: None)
         reverted = restrict(kernels, ("swiglu",))
         self.assertEqual(reverted.patched, ())
-        self.assertIs(reverted.rms_norm, KernelSet().rms_norm)
+        self.assertIs(reverted.rms_norm, KernelSet(registry=SAMPLE_SITES).rms_norm)
 
     def test_an_unknown_site_is_rejected(self):
         with self.assertRaises(ValueError):
-            restrict(KernelSet(), ("attention",))
+            restrict(KernelSet(registry=SAMPLE_SITES), ("attention",))
 
 
 class TestTheThreeParts(unittest.TestCase):
@@ -436,11 +443,26 @@ class TestTheThreeParts(unittest.TestCase):
             {"evograd.bench.tier3_patch", "evograd.bench.tier3_model"},
         )
 
-    def test_an_architecture_depends_only_on_the_patcher(self):
-        # A new model must not need the runner or the facade to exist.
-        self.assertLessEqual(
-            self._tier3_imports("tier3_llama"), {"evograd.bench.tier3_patch"}
-        )
+    def test_no_tier3_module_reaches_into_a_workload(self):
+        """The direction that matters. A workload imports the harness; the
+        harness must not import a workload, or the split is decorative."""
+        import importlib
+
+        for part in ("tier3_patch", "tier3_model", "tier3_runner", "tier3"):
+            with self.subTest(module=part):
+                module = importlib.import_module(f"evograd.bench.{part}")
+                tree = ast.parse(Path(module.__file__).read_text())
+                reached = {
+                    node.module for node in ast.walk(tree)
+                    if isinstance(node, ast.ImportFrom) and node.module
+                } | {
+                    alias.name for node in ast.walk(tree)
+                    if isinstance(node, ast.Import) for alias in node.names
+                }
+                self.assertFalse(
+                    [m for m in reached if "workloads." in m],
+                    f"{part} imports a workload package: {sorted(reached)}",
+                )
 
     def test_the_facade_re_exports_every_part(self):
         import evograd.bench.tier3 as facade
@@ -465,7 +487,7 @@ class TestCli(unittest.TestCase):
     def test_the_iteration_config_is_the_default(self):
         from evograd.bench.tier3_cli import _parser
 
-        self.assertEqual(_parser().parse_args([]).model, "llama_3_8b_4l")
+        self.assertEqual(_parser().parse_args([]).model, MODELS[0])
 
     def test_every_workload_family_has_a_model_choice(self):
         """The CLI reaches a workload only through --model, so each family's

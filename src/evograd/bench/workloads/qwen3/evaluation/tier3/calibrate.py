@@ -35,7 +35,7 @@ from typing import Any
 
 import torch
 
-from .numerics import (
+from evograd.bench.tier3_gate.numerics import (
     GATED_METRICS,
     SAFETY_MARGIN,
     SCHEMA_VERSION,

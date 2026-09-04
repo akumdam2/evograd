@@ -12,7 +12,7 @@ from evograd.ops._common import (
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
     regime_suites,
     workloads_2d,
 )
@@ -79,7 +79,7 @@ _CORRECTNESS = (
 #: logits are upcast and reshaped inside Transformers' causal-loss wrapper, and
 #: the snapshot records that wrapper as supporting provenance so the chain from
 #: the model's logits to this shape is traceable.
-_QWEN3_OBSERVED = qwen3_observed_workloads("cross_entropy", tolerances=_TOLERANCES)
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "cross_entropy", tolerances=_TOLERANCES)
 
 op = declare_op(
     name="cross_entropy",

@@ -1,61 +1,55 @@
-"""Is the provider a function, or does it remember?
+"""Qwen3's half of the purity gate: how many calls, and how to rebuild a provider.
 
-Site preflight calls a kernel a handful of times on a declared grid. A model
-calls it 28 times, or 56. A provider that is correct for the first eight calls
-and wrong afterwards passes the first and poisons the second, and no amount of
-whole-model statistics reliably catches it -- with eight of 28 layers still
-right, the model's aggregate error stays inside the hardware's own noise. That
-fault is not a numerical question at all. It is a question about whether the
-provider is a pure function of its arguments.
+    PYTHONPATH=src python -m evograd.bench.workloads.qwen3.evaluation.tier3.purity \
+        --provider structural
 
-So: call it, with **identical cloned inputs and identical upstream gradients**,
-more times than the model ever will, and compare every call against the first.
-Any difference is a state dependence, whatever its magnitude, and it is reported
-with the call index and the result name where it first appeared.
+The question the gate asks -- *is this provider a function of its arguments, or
+does it remember?* -- is not about Qwen3, and neither is the machinery that asks
+it. That lives in :mod:`evograd.bench.tier3_gate.purity`.
 
-Two properties this gate needs and gets:
+Three things are Qwen-specific, and they are all that is left here:
 
-* two thresholds, because purity is not one question. The declared per-result
-  tolerance is the hard gate: a repeat that lands outside it is wrong, full
-  stop. But a state-dependent kernel need not be *wrong* -- the control that
-  motivated this gate flips to a 2% error, and 2% sits comfortably inside a
-  bfloat16 operator's declared 8% rtol. So a second question is asked as well:
-  *does this kernel's answer depend on its history?*
+* **How many calls each site is worth.** Twice the canonical invocation count,
+  so a provider that only misbehaves after "more calls than preflight makes"
+  has nowhere to hide. Those counts come from Qwen3's 28 layers.
+* **Which benchmark suite carries the production shapes.** Purity is a question
+  about the provider at the width the model runs, not on the declaration's small
+  correctness grid.
+* **How to rebuild a named provider in a fresh interpreter.** ``structural`` and
+  ``bound`` mean something only once you know which registry and which adapters
+  they refer to, and only this package does.
 
-  Not "does it repeat bitwise". On this GPU it often does not: attention's
-  backward uses atomics, and two identical calls can differ in the last bits
-  while the kernel is a perfectly pure function. What separates noise from
-  state is not size but *shape*. Noise is stationary -- consecutive calls
-  disagree by about as much late in a run as early. State is a step: one call
-  differs sharply from the one before it, and every call after that keeps
-  differing from call 1 by roughly that much.
-
-  So the kernel's own noise is estimated from the **median** disagreement
-  between consecutive calls, which the single transition of a stateful kernel
-  cannot move, and drift is flagged when a call's distance from call 1 exceeds
-  a fixed multiple of it. Both numbers are reported, so what was applied is
-  visible rather than asserted.
-* the purity calls happen in a **disposable process**. Constructing a second
-  Python object does not reset module-level counters, CUDA graph caches, or an
-  autotuner's memo; only a fresh interpreter does. The provider the model later
-  runs is reconstructed there, so nothing this gate did can reach it.
+The child process is the point of the gate, not an implementation detail: a
+second Python object is not a reset -- module-level counters, lazily built
+caches and autotuner memos all survive one. So the provider the model
+validation later runs is constructed in a new interpreter, here.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
-import os
-import subprocess
 import sys
 from typing import Any
 
-import torch
+from evograd.bench.tier3_gate.purity import (  # noqa: F401  (re-export)
+    SCHEMA_VERSION,
+    checkpoints,
+    child_main,
+    child_parser,
+    run_isolated,
+    spec_for,
+)
+from evograd.bench.tier3_gate import purity as _gate
 
-SCHEMA_VERSION = "evograd-qwen3-t3-purity/1"
+#: This module, as ``python -m`` names it. The isolated run re-enters here.
+CHILD_MODULE = "evograd.bench.workloads.qwen3.evaluation.tier3.purity"
 
-#: Twice the canonical invocation count of each site, so a provider that only
-#: misbehaves after "more calls than preflight makes" has nowhere to hide.
+#: The benchmark suite carrying the shapes the canonical step actually runs.
+OBSERVED_SUITE = "qwen3_0_6b_observed"
+
+#: Twice the canonical invocation count of each site: 28 layers give 28
+#: invocations of the three per-layer sites and 56 residual fusions, so a
+#: provider is called about twice as often here as the model will call it.
 MIN_CALLS = {
     "qkv_norm_rope": 56,
     "attention": 56,
@@ -63,372 +57,49 @@ MIN_CALLS = {
     "residual_rmsnorm": 112,
 }
 
-#: Where the first call is compared. Around the canonical counts and at the end,
-#: because that is where a state-dependent provider changes behaviour, plus a
-#: dense early stretch to catch one that changes immediately.
-def checkpoints(total: int) -> list[int]:
-    marks = {1, 2, 3, 7, 8, 9, 27, 28, 29, 55, 56, 57, 111, 112, total - 1, total}
-    return sorted(i for i in marks if 1 <= i <= total)
 
+def check_site(site: str, op_name: str, kernel, *, registry=None,
+               suite: str = OBSERVED_SUITE, device: str = "cuda",
+               calls: int | None = None) -> dict[str, Any]:
+    """One Qwen3 site through the shared purity gate.
 
-CHILD_TIMEOUT = int(os.environ.get("EVOGRAD_QWEN3_PURITY_TIMEOUT", "1800"))
-
-#: How far past its own median consecutive-call disagreement a call may sit
-#: from call 1 before it is called state rather than noise. Predeclared, and
-#: applied identically to every provider.
-DETERMINISM_MARGIN = 16.0
-
-#: A deterministic kernel has a median consecutive spread of exactly zero, and
-#: a bound of zero would make one differing bit a state dependence. This is the
-#: smallest disagreement that is treated as real, relative to the declared
-#: tolerance the operator is judged by anyway.
-DETERMINISM_FLOOR_FRACTION = 1e-3
-
-
-def _clone(value):
-    if torch.is_tensor(value):
-        return value.detach().clone()
-    return value
-
-
-def _one_call(op, kernel, values: dict[str, Any]) -> dict[str, Any]:
-    """One invocation on freshly cloned inputs, returning outputs and gradients.
-
-    Every call gets its own clones, so a provider that mutates an input cannot
-    make the next call differ for that reason alone -- mutation is detected
-    separately and reported as itself.
+    The generic gate asks which registry and which suite; this fills in Qwen3's
+    answers so a caller inside this package does not repeat them. Both stay
+    overridable, because a test that wants a different registry should be able
+    to say so rather than monkey-patching one in.
     """
-    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
-
-    active = {arg.name for arg in op.active_args()}
-    by_grad = {arg.grad_name: arg.name for arg in op.active_args()}
-    leaves: dict[str, torch.Tensor] = {}
-    positional = []
-    snapshots: dict[str, torch.Tensor] = {}
-    for arg in op.args:
-        value = _clone(values.get(arg.name, getattr(arg, "default", None)))
-        if torch.is_tensor(value):
-            snapshots[arg.name] = value.detach().clone()
-            if arg.name in active:
-                value = value.requires_grad_(True)
-                leaves[arg.name] = value
-        positional.append(value)
-
-    result = kernel(*positional)
-    outputs = as_output_tuple(op, result)
-    upstream = upstream_grad_values(op, values)
-    douts = upstream if isinstance(upstream, tuple) else (upstream,)
-    grads = torch.autograd.grad(outputs, list(leaves.values()),
-                                tuple(_clone(d) for d in douts))
-    by_name = dict(zip(leaves.keys(), grads))
-
-    collected = {
-        f"out:{name}": tensor.detach().clone()
-        for name, tensor in zip(op.output_names, outputs)
-    }
-    for grad_name in op.grad_names():
-        collected[f"grad:{grad_name}"] = by_name[by_grad[grad_name]].detach().clone()
-    mutated = [
-        name for name, before in snapshots.items()
-        if not torch.equal(before, positional[[a.name for a in op.args].index(name)].detach())
-    ]
-    return {
-        "results": collected,
-        "mutated_inputs": mutated,
-        "finite": all(bool(torch.isfinite(t).all()) for t in collected.values()),
-        "saved_structure": sorted(collected),
-    }
-
-
-def _median(values: list[float]) -> float:
-    """The middle disagreement. One transition cannot move it; noise sets it."""
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    middle = len(ordered) // 2
-    if len(ordered) % 2:
-        return ordered[middle]
-    return 0.5 * (ordered[middle - 1] + ordered[middle])
-
-
-def _spread(first: dict[str, torch.Tensor], later: dict[str, torch.Tensor]):
-    """The largest disagreement between two calls, and where it was."""
-    worst, where = 0.0, None
-    for name, expected in first.items():
-        got = later.get(name)
-        if got is None or got.shape != expected.shape:
-            return {"worst": float("inf"), "where": name}
-        delta = float((got.float() - expected.float()).abs().max())
-        if delta > worst:
-            worst, where = delta, name
-    return {"worst": worst, "where": where}
-
-
-def is_production_default(site: str, kernel) -> bool:
-    """Is this the registry's own default rather than something to evaluate?"""
     from .sites import qwen3_sites
 
-    entry = qwen3_sites().get(site)
-    return entry is not None and kernel is entry.default
-
-
-def _tolerance(op, workload, name: str) -> tuple[float, float]:
-    """The declaration's own tolerance for this result, whatever kind it is."""
-    return op.tolerance_for(workload, name.split(":", 1)[1])
-
-
-def check_site(site: str, op_name: str, kernel, *, device: str = "cuda",
-               calls: int | None = None) -> dict[str, Any]:
-    """Call one provider ``calls`` times on identical inputs and compare."""
-    from evograd.opdecl.inputs import make_case_inputs
-    from evograd.ops import get_op
-
-    op = get_op(op_name)
-    if is_production_default(site, kernel):
-        # The registry's own production spelling is the model's code, not a
-        # provider under evaluation, and it is not even callable with the
-        # declared signature -- the adapter reaches it through the live module.
-        # Saying so is more honest than inventing a subject to test.
-        return {"site": site, "op": op_name, "ok": True, "calls": 0,
-                "skipped": "the registry's production default is not a provider"}
-    observed = op.benchmark_workloads(suite="qwen3_0_6b_observed")
-    if not observed:
-        return {"site": site, "op": op_name, "ok": False,
-                "reason": "the site declares no observed configuration to test on"}
-    workload = observed[0]
-    total = calls or MIN_CALLS.get(site, 56)
-    values = make_case_inputs(op, workload, device=device)
-
-    try:
-        first = _one_call(op, kernel, values)
-    except Exception as exc:
-        return {"site": site, "op": op_name, "ok": False, "calls": 1,
-                "reason": f"the provider raised on its first call: "
-                          f"{type(exc).__name__}: {exc}"}
-    marks = checkpoints(total)
-    compared: list[dict[str, Any]] = []
-    first_divergence: dict[str, Any] | None = None
-    mutations: list[dict[str, Any]] = []
-    if first["mutated_inputs"]:
-        mutations.append({"call": 1, "inputs": first["mutated_inputs"]})
-
-    previous = first
-    consecutive: list[float] = []
-    from_first: list[dict[str, Any]] = []
-    for index in range(2, total + 1):
-        try:
-            record = _one_call(op, kernel, values)
-        except Exception as exc:
-            first_divergence = first_divergence or {
-                "call": index, "result": "raised",
-                "reason": f"{type(exc).__name__}: {exc}",
-            }
-            break
-        spread = _spread(first["results"], record["results"])
-        consecutive.append(_spread(previous["results"], record["results"])["worst"])
-        from_first.append({"call": index, **spread})
-        if record["mutated_inputs"]:
-            mutations.append({"call": index, "inputs": record["mutated_inputs"]})
-        if record["saved_structure"] != first["saved_structure"]:
-            first_divergence = first_divergence or {
-                "call": index, "result": "saved_structure",
-                "reason": "the set of returned results changed",
-            }
-        for name, expected in first["results"].items():
-            got = record["results"].get(name)
-            atol, rtol = _tolerance(op, workload, name)
-            same = (
-                got is not None
-                and got.shape == expected.shape
-                and bool(torch.allclose(got.float(), expected.float(),
-                                        atol=atol, rtol=rtol))
-            )
-            if not same and first_divergence is None:
-                delta = (float((got.float() - expected.float()).abs().max())
-                         if got is not None and got.shape == expected.shape else None)
-                first_divergence = {
-                    "call": index, "result": name, "atol": atol, "rtol": rtol,
-                    "max_abs_err": delta,
-                }
-        if index in marks:
-            worst = max(
-                (
-                    float((record["results"][n].float()
-                           - first["results"][n].float()).abs().max())
-                    for n in first["results"]
-                    if n in record["results"]
-                    and record["results"][n].shape == first["results"][n].shape
-                ),
-                default=float("inf"),
-            )
-            compared.append({"call": index, "max_abs_err_vs_first": worst,
-                             "finite": record["finite"]})
-        del previous
-        previous = record
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    noise = _median(consecutive)
-    floor = DETERMINISM_FLOOR_FRACTION * max(
-        _tolerance(op, workload, name)[0] for name in first["results"]
-    )
-    bound = max(noise, floor) * DETERMINISM_MARGIN
-    drift = next(
-        ({"call": s["call"], "result": s["where"], "max_abs_err": s["worst"],
-          "median_consecutive_spread": noise, "floor": floor, "bound": bound,
-          "regime": "deterministic" if noise == 0.0 else "noisy"}
-         for s in from_first if s["worst"] > bound),
-        None,
+    return _gate.check_site(
+        site, op_name, kernel,
+        registry=qwen3_sites() if registry is None else registry,
+        suite=suite, device=device, calls=calls or MIN_CALLS.get(site),
     )
 
-    return {
-        "site": site,
-        "op": op_name,
-        "workload": {"dims": dict(workload.dims), "dtype": workload.dtype},
-        "calls": total,
-        "checkpoints": marks,
-        "compared": compared,
-        "results_checked": first["saved_structure"],
-        "mutated_inputs": mutations,
-        "finite": first["finite"],
-        "first_divergence": first_divergence,
-        "median_consecutive_spread": noise,
-        "max_spread_from_first": max((s["worst"] for s in from_first), default=0.0),
-        "determinism_regime": "deterministic" if noise == 0.0 else "noisy",
-        "determinism_floor": floor,
-        "determinism_bound": bound,
-        "first_drift": drift,
-        "ok": bool(first_divergence is None and drift is None and not mutations
-                   and first["finite"]),
-        "gate": "the operator's declared per-result tolerances for correctness, "
-                "and the provider's own opening spread for determinism",
-    }
 
-
-def check_kernels(kernels, *, device: str = "cuda",
+def check_kernels(kernels, *, suite: str = OBSERVED_SUITE, device: str = "cuda",
                   calls: dict[str, int] | None = None) -> dict[str, Any]:
-    """Every patched site of one kernel set, in this process."""
-    registry = kernels.registry
-    sites = []
-    for site in kernels.patched:
-        entry = registry.require(site)
-        sites.append(check_site(
-            site, entry.op, kernels.kernel_for(site), device=device,
-            calls=(calls or {}).get(site),
-        ))
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "sites": sites,
-        "checked_sites": [s["site"] for s in sites if not s.get("skipped")],
-        "skipped_sites": [s["site"] for s in sites if s.get("skipped")],
-        "ok": all(s["ok"] for s in sites),
-        "isolation": "in-process; use run_isolated for the disposable-process form",
-    }
-
-
-# ── the disposable process ───────────────────────────────────────────────────
-
-
-def run_isolated(provider: str, *, device: str = "cuda", sites: tuple[str, ...] | None = None,
-                 fault: dict[str, Any] | None = None,
-                 workload_config: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run the purity gate in a child, so nothing it touches can reach the model.
-
-    A second Python object is not a reset: module-level counters, lazily built
-    caches and autotuner memos all survive it. A new interpreter is the only
-    reset this repository can rely on, and the provider the model validation
-    later uses is constructed there rather than here.
-    """
-    import tempfile
-
-    handle, path = tempfile.mkstemp(prefix="evograd_qwen3_purity_", suffix=".json")
-    os.close(handle)
-    argv = ["--provider", provider, "--device", device, "--result-json", path]
-    if sites:
-        argv += ["--sites", ",".join(sites)]
-    if fault:
-        argv += ["--fault", json.dumps(fault)]
-    if workload_config:
-        argv += ["--workload", json.dumps(workload_config)]
-    try:
-        process = subprocess.run(
-            [sys.executable, "-m", "evograd.bench.workloads.qwen3.evaluation.tier3.purity", *argv],
-            capture_output=True, text=True, timeout=CHILD_TIMEOUT,
-        )
-        try:
-            with open(path, encoding="utf-8") as file:
-                return json.load(file)
-        except Exception:
-            return {"schema_version": SCHEMA_VERSION, "ok": False,
-                    "reason": f"purity child exited rc={process.returncode} "
-                              "without a result",
-                    "stderr_tail": process.stderr[-2000:]}
-    except subprocess.TimeoutExpired:
-        return {"schema_version": SCHEMA_VERSION, "ok": False,
-                "reason": f"purity child exceeded {CHILD_TIMEOUT}s"}
-    finally:
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
-
-
-#: Origins the child process knows how to rebuild from a name alone.
-REBUILDABLE = {"structural_identity": "structural", "bound_pair_identity": "bound"}
-
-
-def spec_for(kernels) -> dict[str, Any] | None:
-    """Can a fresh interpreter rebuild this provider? If so, how.
-
-    ``None`` means it cannot, and the caller must say so rather than quietly
-    running the gate in the process the model will also use.
-    """
-    origins = {getattr(src, "origin", None) for src in kernels.sources}
-    origins.discard(None)
-    faults = {o for o in origins if o.startswith("fault:")}
-    plain = origins - faults
-    if len(faults) > 1 or not plain <= set(REBUILDABLE):
-        return None
-    if not plain:
-        return None
-    spec: dict[str, Any] = {
-        "provider": REBUILDABLE[sorted(plain)[0]] if len(plain) == 1 else None,
-        "sites": tuple(kernels.patched),
-    }
-    if spec["provider"] is None:
-        return None
-    if faults:
-        name, _, magnitude = sorted(faults)[0][len("fault:"):].partition("@")
-        site = next(s.site for s in kernels.sources
-                    if getattr(s, "origin", "").startswith("fault:"))
-        spec["fault"] = {"name": name, "site": site,
-                         "magnitude": float(magnitude), "describes": ""}
-    return spec
+    """Every patched site of one Qwen3 kernel set, in this process."""
+    return _gate.check_kernels(
+        kernels, suite=suite, device=device, calls=MIN_CALLS if calls is None else calls,
+    )
 
 
 def run_for(kernels, workload, *, device: str = "cuda") -> dict[str, Any]:
-    """The purity gate for one kernel set, in a child process when it can be.
+    """The purity gate for one Qwen3 kernel set, isolated where it can be."""
+    return _gate.run_for(
+        kernels, workload, module=CHILD_MODULE, suite=OBSERVED_SUITE,
+        calls=MIN_CALLS, device=device,
+    )
 
-    A second Python object is not a reset -- module-level counters, lazily built
-    caches and autotuner memos all survive one. So the preference is always a
-    fresh interpreter; when a provider cannot be named to one, the in-process
-    run still happens and the report says which it was, because a gate that
-    silently downgrades its own isolation is worse than one that admits it.
+
+def kernels_for(provider: str, workload, fault: dict[str, Any] | None):
+    """Turn a provider name back into a :class:`KernelSet` in a fresh process.
+
+    This is the step that cannot be shared: ``structural`` and ``bound`` are
+    Qwen3's two identity controls, and reaching them means reaching Qwen3's
+    adapters.
     """
-    spec = spec_for(kernels)
-    if spec is None:
-        report = check_kernels(kernels, device=device)
-        report["isolation"] = "in-process: this provider has no reconstructible origin"
-        report["isolated"] = False
-        return report
-    report = run_isolated(spec["provider"], device=device, sites=spec["sites"],
-                          fault=spec.get("fault"),
-                          workload_config=workload.to_config())
-    report["isolated"] = True
-    return report
-
-
-def _kernels_for(provider: str, workload, fault: dict[str, Any] | None):
     from evograd.ops import OPS
 
     from .sites import bound_pair_identity_kernels, structural_identity_kernels
@@ -448,18 +119,7 @@ def _kernels_for(provider: str, workload, fault: dict[str, Any] | None):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="python -m evograd.bench.workloads.qwen3.evaluation.tier3.purity",
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--provider", default="structural",
-                        choices=("structural", "bound"))
-    parser.add_argument("--device", default="cuda")
-    parser.add_argument("--sites", default=None)
-    parser.add_argument("--fault", default=None)
-    parser.add_argument("--workload", default=None)
-    parser.add_argument("--result-json", default=None)
+    parser = child_parser(f"python -m {CHILD_MODULE}", __doc__)
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     from evograd.bench.tier3_patch import restrict
@@ -468,20 +128,11 @@ def main(argv: list[str] | None = None) -> int:
 
     config = json.loads(args.workload) if args.workload else {"device": args.device}
     workload = Qwen3Workload.from_config(config)
-    kernels = _kernels_for(args.provider, workload,
-                           json.loads(args.fault) if args.fault else None)
+    kernels = kernels_for(args.provider, workload,
+                          json.loads(args.fault) if args.fault else None)
     if args.sites:
         kernels = restrict(kernels, tuple(s.strip() for s in args.sites.split(",")))
-    report = check_kernels(kernels, device=args.device)
-    report["provider"] = args.provider
-    report["isolation"] = "disposable child process"
-    text = json.dumps(report, indent=2, sort_keys=True)
-    if args.result_json:
-        with open(args.result_json, "w", encoding="utf-8") as file:
-            file.write(text)
-    else:
-        print(text)
-    return 0 if report["ok"] else 1
+    return child_main(args, kernels, suite=OBSERVED_SUITE, calls=MIN_CALLS)
 
 
 if __name__ == "__main__":

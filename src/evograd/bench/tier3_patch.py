@@ -43,24 +43,8 @@ from evograd.opdecl.activity import OpDecl
 from evograd.opdecl.bind import bind
 from evograd.opdecl.inputs import as_output_tuple
 from evograd.opdecl.oracle import resolve_runtime_forward
-from evograd.ops.level3.llama3_decoder_layer.forward_ref import (
-    _default_swiglu,
-    _rms_norm_fused,
-)
 
 # ── the swappable surface ────────────────────────────────────────────────────
-
-
-def _eager_cross_entropy(hidden: torch.Tensor, weight: torch.Tensor, target: torch.Tensor):
-    """Logits materialized, then cross-entropy -- what an unfused head costs.
-
-    At Llama-3's 128256 vocabulary this tensor is the memory story: 2.1 GB at
-    8192 tokens in bfloat16, and the same again for its gradient. A fused loss
-    never materializes it, which is why it moves peak memory rather than
-    latency, and why peak memory is a reported metric here.
-    """
-    logits = F.linear(hidden, weight)
-    return F.cross_entropy(logits.float().flatten(0, -2), target.flatten())
 
 
 @dataclass(frozen=True)
@@ -144,20 +128,14 @@ class SiteRegistry:
         }
 
 
-#: Llama-3's three sites. The only registry that exists today, and named for its
-#: owner so a second model adds a registry rather than editing this one.
-LLAMA_SITES = SiteRegistry(
-    name="llama_3",
-    sites=(
-        Site("rms_norm", "rmsnorm", _rms_norm_fused),
-        Site("swiglu", "swiglu", _default_swiglu),
-        Site("cross_entropy", "fused_linear_cross_entropy", _eager_cross_entropy),
-    ),
-)
-
-#: ``{site: operator}`` for the Llama registry. The former module-global
-#: ``SITE_OPS`` under a name that says whose it is.
-LLAMA_SITE_OPS = LLAMA_SITES.site_ops
+#: The default registry, which deliberately has no sites.
+#:
+#: A registry names one model's patchable places, so it belongs to a workload
+#: package -- this module is the patcher and must not know any architecture.
+#: Defaulting to some model's registry is how a kernel set for one model ends up
+#: silently claiming another's sites, so the default here patches nothing and
+#: says why when asked to.
+NO_SITES = SiteRegistry(name="unspecified", sites=())
 
 
 @dataclass(frozen=True)
@@ -201,7 +179,7 @@ class KernelSet:
     which made a second model impossible to express.
     """
 
-    registry: SiteRegistry = LLAMA_SITES
+    registry: SiteRegistry = NO_SITES
     #: Site -> replacement callable. Absent sites use the registry's default.
     overrides: dict[str, Callable] = field(default_factory=dict)
     #: Names of the sites actually replaced, for the report.
@@ -404,7 +382,7 @@ def patched_kernels(
     candidates: dict[str, Any],
     ops: dict[str, OpDecl],
     *,
-    registry: SiteRegistry = LLAMA_SITES,
+    registry: SiteRegistry = NO_SITES,
     origin: str = "candidate",
 ) -> KernelSet:
     """Build a kernel set from ``{site: candidate module}``.
@@ -593,7 +571,7 @@ def identity_control_kernels(
     ops: dict[str, OpDecl],
     sites: tuple[str, ...] | None = None,
     *,
-    registry: SiteRegistry = LLAMA_SITES,
+    registry: SiteRegistry = NO_SITES,
 ) -> KernelSet:
     """Every site patched with the eager kernel it already had.
 

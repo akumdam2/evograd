@@ -442,6 +442,20 @@ def run_verify(
                     f"{record.get('required_t')}"
                 )
 
+    # The dims this run verified against. Unlike the cross-entropy check, which
+    # can be pointed at a shrunken debug run and compares against its own shape,
+    # this one derives from a layer artifact and ``load_canonical`` refuses any
+    # artifact whose identity does not match the tracked snapshot -- so the
+    # declared dims are the canonical ones by construction. What the capture
+    # actually presented is reported beside them; the layout check above has
+    # already compared it to the harvest entry by entry.
+    q_shape, k_shape = list(capture.q.shape), list(capture.k.shape)
+    observed_dims = {
+        "B": q_shape[0], "HQ": q_shape[1], "HK": k_shape[1],
+        "T": q_shape[2], "D": q_shape[3],
+    }
+    expected_dims = dict(case.dims)
+
     return {
         "schema_version": REPORT_SCHEMA,
         "status": "pass" if not failures else "fail",
@@ -454,6 +468,7 @@ def run_verify(
         "frequency": observed["frequency"],
         "declared_dims": expected_dims,
         "canonical_declared_dims": case.dims,
+        "observed_dims": observed_dims,
         "sdpa_attrs": capture.attrs,
         "tolerances": {
             "production": {"forward": FORWARD_TOL, "gradient": GRADIENT_TOL},

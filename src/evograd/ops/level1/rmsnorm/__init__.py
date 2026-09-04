@@ -13,7 +13,7 @@ from evograd.ops._common import (
     log_distance_weight,
     make_pair_baseline,
     model_workloads,
-    qwen3_observed_workloads,
+    observed_workloads,
     regime_suites,
 )
 
@@ -68,7 +68,7 @@ _BENCHMARK = model_workloads(
 #: Three deduplicated RMSNorm configurations per Qwen3-0.6B step: the
 #: residual-stream norm (4096 x 1024, 57 invocations) and the two per-head
 #: norms, which are many short rows rather than few long ones.
-_QWEN3_OBSERVED = qwen3_observed_workloads("rmsnorm")
+_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "rmsnorm")
 
 _COVERAGE = _QWEN3_OBSERVED + _BENCHMARK + tuple(
     Workload(dims=dict(rows=rows, hidden=hidden), dtype="bfloat16")
