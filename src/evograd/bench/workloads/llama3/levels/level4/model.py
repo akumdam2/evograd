@@ -1,20 +1,15 @@
-"""Which Transformers classes Qwen3 builds, bound to the shared builder.
+"""Which Transformers classes Llama-3 builds, bound to the shared builder.
 
 Building a model from a spec, and reading back what was actually built rather
 than what was asked for, is the same procedure for every decoder-only causal LM
-and lives in :mod:`....common.model`. Qwen3's contribution is two class names and
-a version floor.
+and lives in :mod:`....common.model`. Llama's contribution is two class names.
 
-Transformers is an optional dependency. Nothing here imports it at module import
-time, so ``import evograd.bench.workloads.qwen3`` works on a machine that has
-never installed it, and the failure -- when it comes -- names the extra.
+No Hub access is needed despite Llama-3 being a gated repository: the workload
+constructs from the written-out configuration with random weights, and fetches
+neither checkpoint nor tokenizer.
 """
 
 from __future__ import annotations
-
-from typing import Any
-
-import torch
 
 from ....common.model import (  # noqa: F401  (re-export)
     DTYPES,
@@ -28,18 +23,20 @@ from ....common.model import (  # noqa: F401  (re-export)
 from ....common import model as _common
 from .spec import WorkloadSpec
 
-#: Qwen3 landed in Transformers 4.51.0; earlier releases have no ``Qwen3Config``.
+#: Llama has been in Transformers since 4.28, but this is the floor the rest of
+#: the harness targets and the only range it has been exercised against; a lower
+#: bound this repository has not run is a claim, not a guarantee.
 MIN_TRANSFORMERS = (4, 51)
-#: The version this milestone was developed and measured against.
+#: The version this workload was developed against.
 TESTED_TRANSFORMERS = "5.16.1"
 
 CLASSES = ModelClasses(
-    config_class="transformers:Qwen3Config",
-    model_class="transformers:Qwen3ForCausalLM",
+    config_class="transformers:LlamaConfig",
+    model_class="transformers:LlamaForCausalLM",
     min_transformers=MIN_TRANSFORMERS,
     tested_transformers=TESTED_TRANSFORMERS,
-    extra="evograd[qwen3]",
-    label="Qwen3",
+    extra="evograd[llama3]",
+    label="Llama-3",
 )
 
 
@@ -49,7 +46,7 @@ def require_transformers():
 
 
 def build_config(spec: WorkloadSpec):
-    """A ``Qwen3Config`` carrying the spec's architecture and run settings."""
+    """A ``LlamaConfig`` carrying the spec's architecture and run settings."""
     return _common.build_config(spec, CLASSES)
 
 

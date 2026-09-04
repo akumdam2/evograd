@@ -194,10 +194,10 @@ class TestRegistryOwnership(unittest.TestCase):
                 self.assertEqual(site.preflight[0].dtype, "bfloat16")
 
     def test_llama_is_untouched_by_it(self):
-        from evograd.bench.tier3 import LLAMA_SITES
+        from tests._registry_fixture import SAMPLE_SITES
 
-        self.assertEqual(set(LLAMA_SITES.names) & set(qwen3_sites().names), set())
-        for site in LLAMA_SITES.sites:
+        self.assertEqual(set(SAMPLE_SITES.names) & set(qwen3_sites().names), set())
+        for site in SAMPLE_SITES.sites:
             with self.subTest(site=site.name):
                 self.assertEqual(site.preflight, ())
 

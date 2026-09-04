@@ -1,7 +1,10 @@
-"""Model-tier benchmark: evolved kernels inside a Llama-3 training step.
+"""Model-tier benchmark: evolved kernels inside a real training step.
 
-    python -m evograd.bench.tier3_cli --model llama_3_8b_4l \
-        --candidate rms_norm=evolved_rmsnorm.py --out ~/tmp/tier3.json
+    python -m evograd.bench.tier3_cli --model <workload> \
+        --candidate <site>=evolved.py --out ~/tmp/tier3.json
+
+``--model`` lists the workloads that have tier-3 sites; ``--sites`` with an
+unknown name lists the selected one's.
 
 With no candidate it measures the reference line: eager against any declared
 pair baseline that covers a patchable site. Validate the harness that way first
@@ -50,7 +53,7 @@ def load_program(path: Path):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="llama_3_8b_4l", choices=MODELS)
+    parser.add_argument("--model", default=MODELS[0], choices=MODELS)
     parser.add_argument(
         "--candidate",
         action="append",
@@ -58,7 +61,7 @@ def _parser() -> argparse.ArgumentParser:
         metavar="SITE=PATH",
         help="patch one site with an evolved program, e.g. rms_norm=best.py. "
              "Repeatable; the valid sites are the selected workload's "
-             "(llama_3: rms_norm, swiglu, cross_entropy)",
+             "own; --sites with an unknown name lists them",
     )
     parser.add_argument(
         "--baseline",
@@ -90,9 +93,9 @@ def _parser() -> argparse.ArgumentParser:
         "--sites",
         default=None,
         help=(
-            "restrict patching to these sites, comma separated "
-            "(rms_norm,swiglu,cross_entropy). One at a time turns a blended "
-            "number into an attribution"
+            "restrict patching to these sites, comma separated. One at a time "
+            "turns a blended number into an attribution; an unknown name lists "
+            "the workload's own sites"
         ),
     )
     # No defaults: a workload's canonical batch and sequence can be part of its
@@ -150,9 +153,9 @@ def _parser() -> argparse.ArgumentParser:
 def _baseline_kernels(baseline: str, ops, registry):
     """A reviewed pair baseline patched into the sites it covers.
 
-    This is what makes the harness checkable before an evolved kernel exists:
-    Liger publishes end-to-end Llama numbers, so reproducing them here validates
-    the measurement rather than the kernel.
+    This is what makes the harness checkable before an evolved kernel exists: a
+    published baseline's end-to-end numbers, reproduced here, validate the
+    measurement rather than the kernel.
 
     Discovery walks *this workload's* registry, so a baseline is only offered
     for sites the model being measured actually has.
@@ -209,8 +212,8 @@ def build_providers(args, *, quiet: bool = False) -> dict:
     from evograd.ops import OPS
 
     # Every provider below is built against the registry the *workload* owns.
-    # Nothing here reads a module-level site namespace, which is what let the
-    # Llama identity control claim sites belonging to another model.
+    # Nothing here reads a module-level site namespace, which is what let one
+    # model's identity control claim sites belonging to another.
     registry = site_registry_for(build_workload(args))
     sites = _sites(args, registry)
 

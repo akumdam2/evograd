@@ -34,16 +34,22 @@ from typing import Any, Callable
 #: The name is also the ``Provenance.model`` key and the ``--model`` argument, so
 #: adding a workload is one entry here plus the package it points at.
 #:
-#: Only *harvested* workloads appear here. A workload can be measurable at tier 3
-#: without having been harvested -- see :data:`TIER3_ADAPTERS`, which is a
-#: superset.
+#: A name here means the package exists, not that it has been harvested: a
+#: snapshot is *derived* from a run, so a newly added workload has a package and
+#: no ``snapshot.json`` until someone executes its harvest. :func:`has_snapshot`
+#: is the question to ask; :func:`load_snapshot` refuses with the command to run.
 WORKLOADS: dict[str, str] = {
     "qwen3_0_6b": "qwen3",
+    "llama_3_8b": "llama3",
 }
 
 
 class UnknownWorkload(KeyError):
     """A workload name with no package behind it."""
+
+
+class UnharvestedWorkload(RuntimeError):
+    """The package exists; nobody has run its harvest yet."""
 
 
 def snapshot_path(name: str) -> Path:
@@ -58,16 +64,35 @@ def snapshot_path(name: str) -> Path:
     return Path(__file__).parent / package / "harvest" / "snapshot.json"
 
 
+def has_snapshot(name: str) -> bool:
+    """Has this workload been harvested on some machine and the result tracked?"""
+    return snapshot_path(name).is_file()
+
+
 def load_snapshot(name: str) -> dict[str, Any]:
     """One workload's frozen snapshot, with its hash verified.
 
     The verification lives in :mod:`.common.snapshot`, which imports only the
     standard library -- the whole point of the snapshot is that a declaration
     can read it without torch, Transformers, or a GPU.
+
+    A workload whose harvest has never been run is refused with the command that
+    would produce one, rather than with a missing-file traceback: nothing here
+    can synthesise a snapshot, and a hand-written one would defeat its purpose.
     """
     from .common.snapshot import load
 
-    return load(snapshot_path(name))
+    path = snapshot_path(name)
+    if not path.is_file():
+        raise UnharvestedWorkload(
+            f"{name} has no tracked snapshot at {path}. A snapshot is derived "
+            f"from a harvest, not authored, so run one on a machine with a GPU:\n"
+            f"    python -m evograd.bench.workloads.{WORKLOADS[name]}.harvest.harvest "
+            f"--out results/{WORKLOADS[name]}-level4/harvest.json\n"
+            f"    python -m evograd.bench.workloads.{WORKLOADS[name]}.harvest.snapshot "
+            f"--harvest results/{WORKLOADS[name]}-level4/harvest.json --write"
+        )
+    return load(path)
 
 
 # ── tier-3 workload adapters ─────────────────────────────────────────────────
@@ -107,9 +132,10 @@ class Tier3Adapter:
 #: Resolved lazily, because an adapter reaches torch and possibly Transformers
 #: while this module is imported by every operator declaration at ``ops`` import
 #: time. Nothing here is imported until a name is actually looked up.
+#: A workload appears here once it has tier-3 *sites* -- adapters that swap a
+#: kernel into the live model. Being in :data:`WORKLOADS` is not enough: a
+#: harvested workload can describe its shapes long before anything can patch it.
 TIER3_ADAPTERS: dict[str, str] = {
-    "llama_3_8b_4l": "evograd.bench.tier3_llama:ADAPTER_4L",
-    "llama_3_8b": "evograd.bench.tier3_llama:ADAPTER",
     "qwen3_0_6b": "evograd.bench.workloads.qwen3.evaluation.tier3.adapter:ADAPTER",
 }
 

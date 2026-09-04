@@ -258,16 +258,38 @@ class TestObservedLayout(unittest.TestCase):
 class TestWorkloadRegistry(unittest.TestCase):
     """``ops`` reaches a snapshot by workload *name*, not by import path."""
 
-    def test_every_registered_workload_has_a_readable_snapshot(self):
-        from evograd.bench.workloads import WORKLOADS, load_snapshot, snapshot_path
+    def test_every_registered_workload_reads_or_refuses_actionably(self):
+        """A snapshot is derived from a harvest, so a workload package can exist
+        before any snapshot does. Both states are legitimate; silently returning
+        nothing is not."""
+        from evograd.bench.workloads import (
+            WORKLOADS, UnharvestedWorkload, has_snapshot, load_snapshot,
+            snapshot_path,
+        )
 
         self.assertTrue(WORKLOADS)
         for name in WORKLOADS:
             with self.subTest(workload=name):
-                self.assertTrue(snapshot_path(name).is_file())
-                payload = load_snapshot(name)
-                self.assertIn("level1", payload)
-                self.assertIn("tasks", payload)
+                if has_snapshot(name):
+                    self.assertTrue(snapshot_path(name).is_file())
+                    payload = load_snapshot(name)
+                    self.assertIn("level1", payload)
+                    self.assertIn("tasks", payload)
+                else:
+                    with self.assertRaises(UnharvestedWorkload) as caught:
+                        load_snapshot(name)
+                    message = str(caught.exception)
+                    # The refusal has to say what to run, not just that a file
+                    # is missing: nothing can synthesise a snapshot, and a
+                    # hand-written one would defeat its whole purpose.
+                    self.assertIn(name, message)
+                    self.assertIn("harvest", message)
+
+    def test_at_least_one_workload_is_actually_harvested(self):
+        """Otherwise the check above passes by having nothing to check."""
+        from evograd.bench.workloads import WORKLOADS, has_snapshot
+
+        self.assertTrue([n for n in WORKLOADS if has_snapshot(n)])
 
     def test_an_unregistered_workload_names_the_ones_that_exist(self):
         from evograd.bench.workloads import UnknownWorkload, load_snapshot

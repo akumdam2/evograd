@@ -21,14 +21,13 @@ bench/
   tier3_model.py   tier 3, part 1   -- what is measured
   tier3_patch.py   tier 3, part 2   -- how a kernel gets in
   tier3_runner.py  tier 3, part 3   -- how it is measured
-  tier3_llama.py   tier 3           -- the built-in architecture
   tier3.py         tier 3           -- facade
 
-  workloads/qwen3/                  -- the Qwen3-0.6B workload, organized by level
-    harvest/                        --   the instrumented run and its snapshot
-    levels/level4 3 2 1             --   step, captured layer, operators, primitives
-    evaluation/tier3/               --   drop-in replacement, gate, calibration
-                                    -- see workloads/qwen3/README.md
+  tier3_gate/      tier 3           -- the whole-model gate, model-agnostic
+
+  workloads/common/                 -- machinery every workload shares
+  workloads/qwen3/                  -- Qwen3-0.6B; see its own README.md
+  workloads/llama3/                 -- Meta-Llama-3-8B; see its own README.md
 ```
 
 ## Running the benchmark
@@ -348,7 +347,7 @@ backward comparison found.
 
 There was one module-level `SITE_OPS` dict mapping site names to declared
 operators, and it was correct exactly as long as there was one model. With two
-it is wrong in both directions: Llama's identity control would patch a site
+it is wrong in both directions: one model's identity control would patch a site
 belonging to another architecture, and a candidate would be accepted for
 `rms_norm` because that name happens to exist somewhere.
 
@@ -356,22 +355,28 @@ A `TrainingWorkload` therefore declares a `site_registry`, and tier 3 refuses to
 guess when it does not:
 
 ```python
-LLAMA_SITES = SiteRegistry(
-    name="llama_3",
-    sites=(
-        Site("rms_norm",      "rmsnorm",                     _rms_norm_fused),
-        Site("swiglu",        "swiglu",                      _default_swiglu),
-        Site("cross_entropy", "fused_linear_cross_entropy",  _eager_cross_entropy),
-    ),
-)
+# in the workload package, never in the patcher
+def qwen3_sites() -> SiteRegistry:
+    return SiteRegistry(
+        name="qwen3_0_6b",
+        sites=(
+            Site("qkv_norm_rope",    "qwen3_qkv_norm_rope",  production_qkv_norm_rope),
+            Site("attention",        "qwen3_attention",      production_attention),
+            Site("swiglu_mlp",       "qwen3_swiglu_mlp",     production_swiglu_mlp),
+            Site("residual_rmsnorm", "fused_add_rms_norm",   production_residual_rmsnorm),
+        ),
+    )
 ```
+
+`tier3_patch` ships `NO_SITES`, an empty registry, as its default. Defaulting to
+some model's sites is exactly how a kernel set for one model ends up silently
+claiming another's.
 
 Every tier-3 operation reads it from the kernel set it is handed — candidate
 loading, baseline discovery, preflight, the identity control, `restrict`,
 provenance, CLI validation, and the report, which serializes the exact mapping
 under `site_registry`. An unknown site names the active workload and its valid
-sites, so "wrong site" and "wrong model" are distinguishable. `LLAMA_SITE_OPS`
-is the former global under a name that says whose it is.
+sites, so "wrong site" and "wrong model" are distinguishable.
 
 A `Site` can also carry **preflight workloads**: model-derived shapes the
 operator's own declared grid does not contain. This is what decides whether an
