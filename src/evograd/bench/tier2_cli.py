@@ -70,9 +70,14 @@ def _specs(args, candidate_module):
 
     if args.identity_control:
         return identity_control_specs()
+    # ``--baseline none`` means no pair baseline, as it does in tier 3. Passing the
+    # literal string through built a provider named "none" that failed at run
+    # time with "declares no 'none' baseline" -- a failed row for an operator
+    # that simply has no Liger pair (qwen3_attention, qwen3_swiglu_mlp, ...).
+    baseline = args.baseline if args.baseline and args.baseline != "none" else None
     return default_provider_specs(
         candidate_module=candidate_module,
-        baseline=args.baseline or None,
+        baseline=baseline,
         compile_baseline=not args.no_compile,
     )
 
