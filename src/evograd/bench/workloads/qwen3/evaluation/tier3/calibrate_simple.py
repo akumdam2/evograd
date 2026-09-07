@@ -44,8 +44,8 @@ from .simple import (
     SCHEMA_VERSION,
     PatchSet,
     derive_simple_policy,
-    matched_trusted_kernels,
     measure,
+    trusted_kernels_for,
 )
 from .workload import Qwen3Workload
 
@@ -87,7 +87,8 @@ def _step(workload, kernels, *, data_seed: int) -> dict[str, Any]:
 
 
 def run_cell(seed: int, repeat: int, *, workload_config: dict[str, Any],
-             sites: tuple[str, ...]) -> dict[str, Any]:
+             sites: tuple[str, ...],
+             trusted_reference: str = "torch_compile") -> dict[str, Any]:
     """Reference noise and matched trusted drift for one (seed, repeat).
 
     Three independent builds. E/E genuinely needs two, because it is about what
@@ -106,8 +107,8 @@ def run_cell(seed: int, repeat: int, *, workload_config: dict[str, Any],
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    trusted_kernels = matched_trusted_kernels(dict(OPS), patch_set,
-                                              workload.site_registry)
+    trusted_kernels = trusted_kernels_for(trusted_reference, patch_set,
+                                          workload.site_registry, ops=dict(OPS))
     trusted = _step(workload, trusted_kernels, data_seed=seed)
     trusted_counts = trusted.get("counts", {})
     drift = measure(trusted, eager_a)
@@ -117,6 +118,7 @@ def run_cell(seed: int, repeat: int, *, workload_config: dict[str, Any],
 
     return {
         "seed": seed, "repeat": repeat,
+        "trusted_reference": trusted_reference,
         "patch_set": patch_set.to_dict(),
         "trusted_observed_counts": trusted_counts,
         "noise": {k: noise[k] for k in HARD_METRICS},
@@ -154,7 +156,8 @@ def _run_isolated(argv: list[str]) -> dict[str, Any]:
 
 
 def _cells(seeds, repeats, *, config_json: str, sites: tuple[str, ...],
-           isolate: bool, config: dict[str, Any]) -> list[dict[str, Any]]:
+           isolate: bool, config: dict[str, Any],
+           trusted_reference: str = "torch_compile") -> list[dict[str, Any]]:
     cells = []
     for seed in seeds:
         for repeat in range(repeats):
@@ -163,10 +166,12 @@ def _cells(seeds, repeats, *, config_json: str, sites: tuple[str, ...],
                     "cell", "--config-json", config_json,
                     "--sites", ",".join(sites),
                     "--seed", str(seed), "--repeat", str(repeat),
+                    "--trusted-reference", trusted_reference,
                     f"{seed}-{repeat}",
                 ])
             else:
-                cell = run_cell(seed, repeat, workload_config=config, sites=sites)
+                cell = run_cell(seed, repeat, workload_config=config, sites=sites,
+                                trusted_reference=trusted_reference)
             print(f"  seed {seed} repeat {repeat}: "
                   + " ".join(f"{k}={cell['noise'][k]:.3e}/{cell['drift'][k]:.3e}"
                              for k in HARD_METRICS), flush=True)
@@ -180,6 +185,7 @@ def _cells(seeds, repeats, *, config_json: str, sites: tuple[str, ...],
 def calibrate(*, config: dict[str, Any], sites: tuple[str, ...],
               calibration_seeds=CALIBRATION_SEEDS, holdout_seeds=HOLDOUT_SEEDS,
               repeats: int = REPEATS, margin: float = SAFETY_MARGIN,
+              trusted_reference: str = "torch_compile",
               isolate: bool = True) -> dict[str, Any]:
     workload = Qwen3Workload.from_config(config)
     patch_set = _patch_set(workload, sites)
@@ -188,7 +194,8 @@ def calibrate(*, config: dict[str, Any], sites: tuple[str, ...],
     print(f"calibration cells for patch set {patch_set.key!r} "
           f"(noise/drift per metric):", flush=True)
     cells = _cells(calibration_seeds, repeats, config_json=config_json,
-                   sites=sites, isolate=isolate, config=config)
+                   sites=sites, isolate=isolate, config=config,
+                   trusted_reference=trusted_reference)
     environment = environment_fingerprint()
     policy = derive_simple_policy(
         reference_noise=[c["noise"] for c in cells],
@@ -199,7 +206,9 @@ def calibrate(*, config: dict[str, Any], sites: tuple[str, ...],
         environment_hash=fingerprint_hash(environment),
         patch_set=patch_set,
         margin=margin,
+        trusted_reference=trusted_reference,
         notes={
+            "trusted_reference": trusted_reference,
             "calibration_seeds": list(calibration_seeds),
             "holdout_seeds": list(holdout_seeds),
             "repeats": repeats,
@@ -218,7 +227,8 @@ def calibrate(*, config: dict[str, Any], sites: tuple[str, ...],
 
     print(f"holdout cells for patch set {patch_set.key!r}:", flush=True)
     holdout = _cells(holdout_seeds, repeats, config_json=config_json,
-                     sites=sites, isolate=isolate, config=config)
+                     sites=sites, isolate=isolate, config=config,
+                     trusted_reference=trusted_reference)
 
     from .simple import check
 
@@ -241,6 +251,7 @@ def calibrate(*, config: dict[str, Any], sites: tuple[str, ...],
         "environment": environment,
         "workload_config": config,
         "sites_requested": list(sites),
+        "trusted_reference": trusted_reference,
         "calibration_cells": cells,
         "holdout_cells": holdout,
         "holdout_results": holdout_results,
@@ -265,6 +276,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--repeat", type=int, default=0)
         p.add_argument("--repeats", type=int, default=REPEATS)
         p.add_argument("--margin", type=float, default=SAFETY_MARGIN)
+        p.add_argument("--trusted-reference", default="torch_compile",
+                       choices=("torch_compile", "bound_pair"),
+                       help="which trusted replacement anchors the threshold")
         p.add_argument("--no-isolate", action="store_true")
         p.add_argument("--out", type=Path, default=None)
         p.add_argument("--result-json", default=None, help=argparse.SUPPRESS)
@@ -292,14 +306,16 @@ def main(argv: list[str] | None = None) -> int:
     config = _config(args)
 
     if args.command == "cell":
-        cell = run_cell(args.seed, args.repeat, workload_config=config, sites=sites)
+        cell = run_cell(args.seed, args.repeat, workload_config=config, sites=sites,
+                        trusted_reference=args.trusted_reference)
         if args.result_json:
             Path(args.result_json).write_text(json.dumps(cell, default=str),
                                               encoding="utf-8")
         return 0
 
     report = calibrate(config=config, sites=sites, repeats=args.repeats,
-                       margin=args.margin, isolate=not args.no_isolate)
+                       margin=args.margin, isolate=not args.no_isolate,
+                       trusted_reference=args.trusted_reference)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(report, indent=1, default=str),

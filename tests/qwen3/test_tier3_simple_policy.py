@@ -473,3 +473,183 @@ class TestTrustedProvidersAndNegativeControls(unittest.TestCase):
         self.assertAlmostEqual(qkv_grad, FLOORS["global_grad_rel_l2"] * SAFETY_MARGIN)
         residual_logits, _ = self.THRESHOLDS["residual_rmsnorm"]
         self.assertGreater(residual_logits, FLOORS["logits_rel_l2"] * SAFETY_MARGIN)
+
+
+class TestCompileAnchoredCalibration(unittest.TestCase):
+    """The trusted anchor is a site-matched ``torch.compile`` of the same spelling.
+
+    The bound-pair anchor could not do this job for three of the four sites: it
+    recomputes through the same ``runtime_forward`` the production spelling
+    calls, so its drift is identically zero, the threshold collapses onto the
+    metric floor, and the floor then rejects any real reimplementation --
+    including ``torch.compile`` of the reference itself. Compiling that same
+    function gives a *correct* independent implementation whose disagreement
+    with eager is the disagreement a correct kernel is entitled to.
+
+    Values below are the measured smoke (4-layer, 256-token) drifts, so these
+    tests regression-guard the policy's *decisions* on CPU.
+    """
+
+    #: measured eager-vs-compile drift, patch set -> (logits, global grad)
+    COMPILE_DRIFT = {
+        "qkv_norm_rope": (1.0971e-02, 1.5695e-02),
+        "residual_rmsnorm": (2.6259e-03, 8.4133e-03),
+    }
+    #: measured candidate drift for the byte-identical hybrid artifact
+    HYBRID_QKV = (1.0966e-02, 1.5601e-02)
+
+    def _policy_for(self, key, patch_set, *, noise=0.0, margin=SAFETY_MARGIN):
+        logits, grads = self.COMPILE_DRIFT[key]
+        return derive_simple_policy(
+            reference_noise=[{"logits_rel_l2": noise, "global_grad_rel_l2": noise}],
+            trusted_drift=[{"logits_rel_l2": logits, "global_grad_rel_l2": grads}],
+            workload_id="smoke", workload_hash="wh", dtype="bfloat16",
+            environment_hash="env", patch_set=patch_set, margin=margin,
+            trusted_reference="torch_compile",
+        )
+
+    def test_the_site_matched_compile_provider_passes_its_own_calibration(self):
+        for key, patch_set in (("qkv_norm_rope", QKV),
+                               ("residual_rmsnorm", RESIDUAL)):
+            with self.subTest(patch_set=key):
+                policy = self._policy_for(key, patch_set)
+                logits, grads = self.COMPILE_DRIFT[key]
+                verdict = check(policy, _metrics(logits=logits, grads=grads))
+                self.assertTrue(verdict["ok"], verdict.get("reason"))
+                # It sits exactly at 1/margin of the bound, by construction.
+                self.assertAlmostEqual(verdict["ratios"]["logits_rel_l2"],
+                                       1.0 / SAFETY_MARGIN, places=6)
+
+    def test_the_anchor_is_recorded_in_the_derivation(self):
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        for metric in HARD_METRICS:
+            self.assertEqual(policy.derivation[metric]["trusted_reference"],
+                             "torch_compile")
+            self.assertEqual(policy.derivation[metric]["binding_term"],
+                             "trusted_drift")
+
+    def test_a_candidate_inside_the_calibrated_bound_passes(self):
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        logits, grads = self.HYBRID_QKV
+        verdict = check(policy, _metrics(logits=logits, grads=grads))
+        self.assertTrue(verdict["ok"], verdict.get("reason"))
+        for metric in HARD_METRICS:
+            self.assertLess(verdict["ratios"][metric], 1.0)
+
+    #: Measured negative controls at this workload and patch set, with what the
+    #: compile-anchored gate actually does to each. Five of seven are rejected.
+    CONTROLS = {
+        "rope_sign":           (6.0482e-01, 8.7736e-01, False),
+        "wrong_output_once":   (1.2982e-01, 1.8303e-01, False),
+        "wrong_output_all":    (3.5038e-02, 5.0228e-02, False),
+        "dropped_gradient":    (0.0,        2.9991e-01, False),
+        "duplicated_gradient": (0.0,        3.6922e-01, False),
+        # Recorded limitation, not an aspiration. A 1% error in the per-head
+        # RMSNorm gain moves the logits by 1.4e-02, and the compile anchor puts
+        # the bound at 2.19e-02 -- so this passes. It also passes the *local*
+        # boundary, because 2.4e-02 on `q` is inside the declared atol of
+        # 3.54e-02. Anchoring on torch.compile buys the ability to accept a
+        # correct reimplementation and costs the ability to reject this; both
+        # halves of that trade are pinned here so a change to either is visible.
+        "q_norm_scale":        (1.4054e-02, 2.1482e-02, True),
+        "k_norm_scale":        (1.4151e-02, 2.1694e-02, True),
+    }
+
+    def test_a_deliberately_wrong_provider_still_fails(self):
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        rejected = [n for n, (_l, _g, ok) in self.CONTROLS.items() if not ok]
+        self.assertEqual(len(rejected), 5)
+        for name in rejected:
+            logits, grads, _ = self.CONTROLS[name]
+            with self.subTest(control=name):
+                verdict = check(policy, _metrics(logits=logits, grads=grads))
+                self.assertFalse(verdict["ok"], f"{name} was not rejected")
+
+    def test_the_norm_scale_controls_are_a_recorded_gap_not_a_pass(self):
+        """A 1% RMSNorm gain error survives this anchor. Pinned, with its size.
+
+        If a later change rejects these, this test fails and the report can be
+        updated to claim it -- which is the point of writing the gap down.
+        """
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        for name in ("q_norm_scale", "k_norm_scale"):
+            logits, grads, expected_pass = self.CONTROLS[name]
+            with self.subTest(control=name):
+                self.assertTrue(expected_pass)
+                verdict = check(policy, _metrics(logits=logits, grads=grads))
+                self.assertTrue(verdict["ok"])
+                # It is close to the bound, not comfortably inside it.
+                self.assertGreater(verdict["ratios"]["logits_rel_l2"], 0.6)
+        # A tighter margin does not recover them either, so this is a property
+        # of the anchor rather than of the margin.
+        tight = self._policy_for("qkv_norm_rope", QKV, margin=1.5)
+        logits, grads, _ = self.CONTROLS["q_norm_scale"]
+        self.assertTrue(check(tight, _metrics(logits=logits, grads=grads))["ok"])
+
+    def test_the_gradient_only_controls_are_caught_by_the_gradient_term(self):
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        for name, grads in (("dropped", 2.9991e-01), ("duplicated", 3.6922e-01)):
+            with self.subTest(control=name):
+                verdict = check(policy, _metrics(logits=0.0, grads=grads))
+                self.assertEqual(verdict["failed_at"], "global_grad_rel_l2")
+
+    def test_one_site_s_calibration_cannot_be_applied_to_another(self):
+        qkv_policy = self._policy_for("qkv_norm_rope", QKV)
+        residual_policy = self._policy_for("residual_rmsnorm", RESIDUAL)
+        # The thresholds genuinely differ, so a leak would change a verdict.
+        self.assertNotAlmostEqual(qkv_policy.thresholds["logits_rel_l2"],
+                                  residual_policy.thresholds["logits_rel_l2"])
+        # And the binding refuses the swap outright rather than quoting them.
+        for policy, wrong in ((qkv_policy, RESIDUAL), (residual_policy, QKV)):
+            with self.assertRaises(PolicyMismatch):
+                policy.require_binding(
+                    workload_id="smoke", workload_hash="wh", dtype="bfloat16",
+                    environment_hash="env", patch_set=wrong)
+
+    def test_the_trusted_provider_is_built_from_the_patch_set_alone(self):
+        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+            compiled_trusted_kernels,
+        )
+        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import build_registry
+
+        registry = build_registry()
+        for patch_set in (QKV, RESIDUAL):
+            kernels = compiled_trusted_kernels(patch_set, registry)
+            self.assertEqual(kernels.patched, patch_set.patched)
+            self.assertEqual([s.origin for s in kernels.sources],
+                             ["trusted_torch_compile"] * len(patch_set.patched))
+
+    def test_the_candidate_cannot_influence_its_own_threshold(self):
+        import inspect
+
+        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+            compiled_trusted_kernels, trusted_kernels_for,
+        )
+
+        # Neither the anchor builders nor the derivation can be handed a program.
+        for function in (compiled_trusted_kernels, trusted_kernels_for,
+                         derive_simple_policy):
+            parameters = set(inspect.signature(function).parameters)
+            for forbidden in ("candidate", "program", "program_path", "module",
+                              "artifact", "kernels"):
+                self.assertNotIn(forbidden, parameters, function.__name__)
+
+        # And the threshold is a pure function of the two reference sample sets:
+        # feeding a candidate-sized deviation in as a *measurement* changes the
+        # verdict, never the bound.
+        policy = self._policy_for("qkv_norm_rope", QKV)
+        before = dict(policy.thresholds)
+        for logits in (0.0, 1.0, 1e6):
+            check(policy, _metrics(logits=logits, grads=logits))
+        self.assertEqual(policy.thresholds, before)
+
+    def test_a_tighter_margin_is_reported_rather_than_assumed(self):
+        # SAFETY_MARGIN is the repository's documented constant and is what the
+        # policy uses; 1.5 is recorded here so a reviewer can see both bounds.
+        wide = self._policy_for("qkv_norm_rope", QKV, margin=SAFETY_MARGIN)
+        tight = self._policy_for("qkv_norm_rope", QKV, margin=1.5)
+        logits, grads = self.HYBRID_QKV
+        self.assertTrue(check(wide, _metrics(logits=logits, grads=grads))["ok"])
+        self.assertTrue(check(tight, _metrics(logits=logits, grads=grads))["ok"])
+        self.assertLess(tight.thresholds["logits_rel_l2"],
+                        wide.thresholds["logits_rel_l2"])

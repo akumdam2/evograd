@@ -24,7 +24,9 @@ and the workload hash come from ``spec.seed``, and only the token stream moves.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -47,8 +49,8 @@ def _spec_from_config(config: dict[str, Any]) -> WorkloadSpec:
     overrides = {
         key: config[key]
         for key in ("batch_size", "seq_len", "dtype", "device",
-                    "attn_implementation", "seed")
-        if key in config
+                    "attn_implementation", "seed", "weights", "data")
+        if key in config and config[key] is not None
     }
     arch = config.get("arch_overrides") or {}
     if arch:
@@ -80,6 +82,25 @@ class Qwen3Workload:
     arch_overrides: dict[str, Any] = field(default_factory=dict)
     #: Where the numerics calibration lives. ``None`` uses the default path.
     calibration_path: str | None = None
+    #: The compile-anchored simplified policy (schema evograd-qwen3-t3-numerics/3).
+    #: When set, it *decides* the model-level stage and the detailed 54-group
+    #: envelope is recorded beside it as a diagnostic. Absent, nothing changes:
+    #: the detailed policy decides, exactly as before.
+    simple_calibration_path: str | None = None
+    #: Parameter and token provenance. Defaults reproduce the synthetic canonical
+    #: workload byte-for-byte; a pinned checkpoint and real text give the
+    #: workload a distinct identity (WorkloadSpec.weights / .data) that no
+    #: synthetic calibration can bind to.
+    weights: str = "random"
+    data: str = "synthetic"
+    #: The four-part protocol (schema evograd-qwen3-t3-protocol/4). The
+    #: calibration supplies the frozen thresholds; the verdict file supplies
+    #: part D for the provider being timed, because a 1,000-step training run
+    #: does not belong inside a timing runner's gate.
+    protocol4_calibration_path: str | None = None
+    protocol4_verdict_path: str | None = None
+    #: Time a provider whose frozen screening FAILED, labelled diagnostic. Never a pass.
+    protocol4_diagnostic_timing: bool = False
 
     unit_name = "tokens"
 
@@ -106,6 +127,12 @@ class Qwen3Workload:
             "data_seed": self.data_seed,
             "arch_overrides": dict(self.arch_overrides),
             "calibration_path": self.calibration_path,
+            "simple_calibration_path": self.simple_calibration_path,
+            "weights": self.weights,
+            "data": self.data,
+            "protocol4_calibration_path": self.protocol4_calibration_path,
+            "protocol4_verdict_path": self.protocol4_verdict_path,
+            "protocol4_diagnostic_timing": self.protocol4_diagnostic_timing,
         }
 
     @classmethod
@@ -154,10 +181,73 @@ class Qwen3Workload:
 
         The tier passes a per-step seed; it is combined with this workload's
         ``data_seed`` so a run can move the token stream without changing the
-        workload's own identity or its weights.
+        workload's own identity or its weights. On real text the batch is the
+        *first training batch* of that data order -- the batch step 1 of a
+        training run would see -- so the single-step gates and the training run
+        look at the same tokens.
         """
+        if self.spec.real_text:
+            return self.train_batches(self.data_seed + seed).batch(0)
         spec = self.spec.replace(seed=self.data_seed + seed)
         return make_inputs(spec)
+
+    # ── real text ─────────────────────────────────────────────────────────
+
+    def _text(self):
+        """Tokenizer and packed splits, built once per workload instance."""
+        if not self.spec.real_text:
+            raise ValueError(f"{self.spec.workload_id} has synthetic data")
+        cached = getattr(self, "_text_cache", None)
+        if cached is None:
+            import os
+
+            from transformers import AutoTokenizer
+
+            from ...levels.level4.model import pretrained_snapshot
+            from . import textdata
+
+            snapshot = pretrained_snapshot(self.spec)
+            tokenizer = AutoTokenizer.from_pretrained(snapshot)
+            cache_dir = os.environ.get("EVOGRAD_HF_CACHE") or None
+            train = textdata.pack_split("train", tokenizer, block_len=self.seq_len,
+                                        cache_dir=cache_dir)
+            validation = textdata.pack_split("validation", tokenizer,
+                                             block_len=self.seq_len, cache_dir=cache_dir)
+            identity = textdata.data_identity(
+                train, validation, block_len=self.seq_len,
+                tokenizer_sha256=textdata.file_sha256(
+                    os.path.join(snapshot, "tokenizer.json")))
+            cached = {"tokenizer": tokenizer, "train": train, "validation": validation,
+                      "identity": identity, "snapshot": snapshot}
+            object.__setattr__(self, "_text_cache", cached)
+        return cached
+
+    def train_batches(self, seed: int):
+        from . import textdata
+
+        return textdata.TextBatches(self._text()["train"], batch_size=self.batch_size,
+                                    seed=seed, device=self.device)
+
+    def validation_batches(self):
+        """The held-out set in one fixed order -- the same for every provider."""
+        from . import textdata
+
+        return textdata.TextBatches(self._text()["validation"], batch_size=self.batch_size,
+                                    seed=0, device=self.device)
+
+    def eager_evaluator(self):
+        """A fresh unpatched model: the trusted evaluator for validation NLL."""
+        model = build_model(self.spec)
+        model.eval()
+        return model
+
+    def data_identity(self) -> dict[str, Any]:
+        return dict(self._text()["identity"])
+
+    def data_identity_digest(self) -> str:
+        from . import textdata
+
+        return textdata.identity_digest(self.data_identity())
 
     def loss(self, model, batch) -> torch.Tensor:
         input_ids, labels = batch
@@ -243,6 +333,13 @@ class Qwen3Workload:
         """
         from .gate import CalibrationUnavailable, check_model_correctness, load_policy
 
+        # The protocol-4 policy binds to its own workload identity (real text);
+        # the legacy canonical calibration below is synthetic-only and must not
+        # be consulted first, or every real-text provider is refused for a
+        # calibration it was never meant to use (found 2026-09-06).
+        if self.protocol4_calibration_path:
+            return self._protocol4_hook(kernels, device)
+
         try:
             policy = load_policy(self.calibration_path)
         except CalibrationUnavailable as exc:
@@ -256,18 +353,155 @@ class Qwen3Workload:
                     f"{self.spec.workload_id}"
                 ),
             }
+        simple_policy = None
+        if self.simple_calibration_path:
+            from . import simple as simple_gate
+
+            payload = json.loads(
+                Path(self.simple_calibration_path).read_text(encoding="utf-8"))
+            try:
+                simple_policy = simple_gate.SimplePolicy.from_dict(payload["policy"])
+            except simple_gate.PolicyMismatch as exc:
+                return {"gate": "qwen3_model_correctness", "ok": False,
+                        "reason": f"simplified calibration rejected: {exc}"}
+
         preflight = self.site_preflight(kernels, device=device)
         from .gate import summarize
 
         return summarize(check_model_correctness(
             self, kernels, policy=policy, data_seed=self.data_seed,
             preflight=preflight,
+            simple_policy=simple_policy,
+            simple_primary=simple_policy is not None,
         ))
+
+    def _protocol4_hook(self, kernels, device: str) -> dict[str, Any]:
+        """A, B and C in-process; D from the frozen holdout verdict for this provider.
+
+        Refuses -- and therefore the runner does not time -- when the policy does
+        not bind, when B or C exceed their thresholds, or when no protocol-4
+        holdout verdict exists for the provider being timed.
+        """
+        from . import boundary, protocol4, purity
+        from .gate import summarize
+        from evograd.bench.tier3_gate.numerics import environment_fingerprint, fingerprint_hash
+        from .simple import PatchSet
+
+        gate_name = "qwen3_protocol4"
+        try:
+            policy = protocol4.load_policy(self.protocol4_calibration_path)
+            plan = policy.training_plan
+            patch_set = PatchSet.of(kernels, layers=self.spec.arch["num_hidden_layers"])
+            policy.require_binding(
+                workload_id=self.spec.workload_id, workload_hash=self.spec.workload_hash,
+                dtype=str(self.spec.dtype).replace("torch.", ""),
+                environment_hash=fingerprint_hash(environment_fingerprint()),
+                patch_set=patch_set, data_identity_digest=self.data_identity_digest(),
+                training_plan=plan)
+        except Exception as exc:  # binding is the first gate
+            return {"gate": gate_name, "ok": False, "failed_at": "policy_binding",
+                    "reason": str(exc)}
+
+        preflight = self.site_preflight(kernels, device=device)
+        if not preflight.get("ok", True):
+            return {"gate": gate_name, "ok": False, "failed_at": "site_preflight",
+                    "reason": str(preflight.get("reason"))}
+        pure = purity.run_for(kernels, self, device=device)
+        if not pure.get("ok", False):
+            return {"gate": gate_name, "ok": False, "failed_at": "provider_purity",
+                    "reason": "provider is not a function of its arguments"}
+        local = boundary.validate_all_invocations(self, kernels, data_seed=self.data_seed)
+        if not local.get("ok", False):
+            from .gate import _boundary_reason
+            return {"gate": gate_name, "ok": False, "failed_at": "live_boundary",
+                    "reason": _boundary_reason(local), "live_boundary": local}
+
+        from evograd.bench.tier3_patch import KernelSet
+        ids, labels = self.batch_for(seed=0)
+        reference = protocol4.capture_first_step(self, KernelSet(registry=self.site_registry), ids, labels)
+        provider = protocol4.capture_first_step(self, kernels, ids, labels)
+        measured = protocol4.step_distances(provider, reference, labels, device=device)
+        del reference, provider
+
+        # Part D: the frozen holdout verdict for this provider, by kernel origin.
+        # A screening policy (SCREENING_PLAN) enforces A/B/C only; its holdout
+        # verdict is still required to exist for this provider, so nothing is
+        # timed that the frozen policy has not judged on independent seeds.
+        origin = tuple(sorted(s.origin for s in kernels.sources))
+        if protocol4.requires_training_part(policy):
+            d_part = _protocol4_training_part(self.protocol4_verdict_path, origin)
+            if d_part is None:
+                return {"gate": gate_name, "ok": False, "failed_at": "training_behaviour",
+                        "reason": (f"no protocol-4 holdout verdict for provider origin {origin} "
+                                   f"at {self.protocol4_verdict_path}; run protocol4_cli holdout"),
+                        "live_boundary": local, "step": measured}
+            measured.update(d_part)
+        else:
+            judged = _protocol4_screening_rows(self.protocol4_verdict_path, origin)
+            if not judged:
+                return {"gate": gate_name, "ok": False, "failed_at": "screening_holdout",
+                        "reason": (f"no A/B/C screening holdout verdict for provider origin "
+                                   f"{origin} at {self.protocol4_verdict_path}; run "
+                                   "protocol4_cli holdout --screening"),
+                        "live_boundary": local, "step": measured}
+            failed = [r for r in judged if not r["ok"]]
+            if failed and not self.protocol4_diagnostic_timing:
+                return {"gate": gate_name, "ok": False, "failed_at": "screening_holdout",
+                        "reason": (f"the frozen A/B/C screening FAILED for this provider on "
+                                   f"holdout seeds {sorted(r['seed'] for r in failed)}; "
+                                   "timing refused (pass --protocol4-diagnostic-timing to time "
+                                   "it anyway, labelled diagnostic)"),
+                        "live_boundary": local, "step": measured, "screening_holdout": judged}
+            measured["screening_holdout"] = judged
+            if failed:
+                measured["diagnostic_only"] = (
+                    f"screening FAILED on holdout seeds {sorted(r['seed'] for r in failed)}; "
+                    "timed only because --protocol4-diagnostic-timing was given")
+        verdict = protocol4.check(policy, measured)
+        return {
+            "gate": gate_name, "ok": verdict["ok"], "failed_at": verdict["failed_at"],
+            "reason": verdict["reason"], "protocol4": verdict,
+            "diagnostic_only": measured.get("diagnostic_only"),
+            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites")},
+            "provider_purity": {"ok": True}, "site_preflight": preflight,
+        }
 
     @property
     def last_build(self) -> PatchedModel | None:
         """Provenance and invocation counters from the most recent build."""
         return self._last
+
+
+def _protocol4_training_part(path: str | None, origin: tuple[str, ...]):
+    """Part-D distances for one provider from a frozen holdout verdict file.
+
+    Matched by kernel origin (``trusted_torch_compile``,
+    ``candidate:direct_deployment``); the worst holdout seed is what is judged.
+    """
+    if not path or not Path(path).is_file():
+        return None
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rows = [r for r in payload.get("results", [])
+            if tuple(sorted(r["measured"].get("kernel_origin", []))) == origin]
+    if not rows:
+        return None
+    keys = ("train_window_nll_max_abs_delta", "val_nll_max_abs_delta")
+    worst = {k: max(float(r["measured"][k]) for r in rows) for k in keys}
+    worst["non_finite_training_steps"] = [
+        s for r in rows for s in r["measured"].get("non_finite_training_steps", [])]
+    worst["training_seeds"] = sorted({r["seed"] for r in rows})
+    return worst
+
+
+def _protocol4_screening_rows(path: str | None, origin: tuple[str, ...]) -> list[dict[str, Any]]:
+    """The frozen screening verdicts (seed, ok, ratios) for one provider origin."""
+    if not path or not Path(path).is_file():
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return [{"seed": r["seed"], "ok": bool(r["verdict"].get("ok")),
+             "ratios": r["verdict"].get("ratios", {})}
+            for r in payload.get("results", [])
+            if tuple(sorted(r["measured"].get("kernel_origin", []))) == origin]
 
 
 def _empty_provenance():

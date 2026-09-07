@@ -72,6 +72,56 @@ class WorkloadSpec(_WorkloadSpec):
     dtype: str = "bfloat16"
     device: str = "cuda"
     attn_implementation: str = "sdpa"
+    #: Where the parameters come from. ``"random"`` is the synthetic canonical
+    #: workload: ``nn.init`` under ``seed``. ``"pretrained:<repo>@<revision>"``
+    #: loads a pinned checkpoint. Part of the identity, so a calibration taken on
+    #: random weights can never be applied to pretrained ones.
+    weights: str = "random"
+    #: Where the tokens come from. ``"synthetic"`` draws them from ``seed``;
+    #: ``"wikitext-2-raw:<revision>"`` is real text, tokenised and packed by
+    #: ``evaluation.tier3.textdata``. Also part of the identity.
+    data: str = "synthetic"
+
+    @property
+    def pretrained(self) -> bool:
+        return self.weights.startswith("pretrained:")
+
+    @property
+    def real_text(self) -> bool:
+        return self.data != "synthetic"
+
+    @property
+    def pretrained_repo(self) -> tuple[str, str]:
+        """``(repo, revision)`` of a pretrained checkpoint; raises otherwise."""
+        if not self.pretrained:
+            raise WorkloadSpecError(f"weights are {self.weights!r}, not pretrained")
+        repo, _, revision = self.weights[len("pretrained:"):].partition("@")
+        if not repo or not revision:
+            raise WorkloadSpecError(
+                f"pretrained weights must be 'pretrained:<repo>@<revision>', got "
+                f"{self.weights!r}")
+        return repo, revision
+
+    @property
+    def workload_id(self) -> str:
+        """The shared slug, with ``.pretrained.realtext`` before the hash when the
+        weights or data are not the synthetic canonical ones."""
+        base = super().workload_id
+        if not (self.pretrained or self.real_text):
+            return base
+        head, _, digest = base.rpartition(".")
+        return (f"{head}.{'pretrained' if self.pretrained else 'random'}."
+                f"{'realtext' if self.real_text else 'synthetic'}.{digest}")
+
+    def to_dict(self) -> dict[str, Any]:
+        # Only when non-default, so the canonical synthetic hash -- the binding of
+        # every stored calibration -- is unchanged by these two fields.
+        payload = super().to_dict()
+        if self.weights != "random":
+            payload["weights"] = self.weights
+        if self.data != "synthetic":
+            payload["data"] = self.data
+        return payload
 
 
 #: The reference execution. Every number this milestone reports comes from a run

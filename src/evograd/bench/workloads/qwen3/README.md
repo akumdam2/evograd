@@ -136,6 +136,54 @@ GPU numerical calibration is **environment-specific**: the tier-3 envelope
 measures one GPU, driver and library stack, is stamped with an environment hash,
 and is refused rather than reused when that hash does not match.
 
+## The four-part correctness protocol (schema `evograd-qwen3-t3-protocol/4`)
+
+`evaluation/tier3/protocol4.py`, `prediction.py`, `training.py`, `textdata.py`
+and the driver `protocol4_cli.py`. Four questions, each with its own metric,
+floor and threshold, calibrated on a **pretrained checkpoint and real text**
+(`Qwen/Qwen3-0.6B@c1899de2` on WikiText-2 raw `@b08601e0`), which has its own
+workload identity -- no synthetic calibration can bind to it.
+
+| part | metric | enforced? | where |
+|------|--------|-----------|-------|
+| A local computation | per-result atol/rtol on every live output, input gradient, weight gradient; structure; missing gradients; finiteness; purity; per-site invocation coverage | **enforced**, unchanged | `boundary.py`, `purity.py` |
+| B model prediction | mean valid-token **KL(P_eager ‖ P_provider)**, float32 log-softmax over the full vocabulary, temperature 1, float64 accumulation, causal shift, `ignore_index=-100`, chunked; raw-logit rel-L2 kept as a diagnostic | **enforced** | `prediction.mean_token_kl` |
+| C model gradients | global parameter-gradient vector relative L2, matched by name, before the first optimizer update; missing/extra/shape/non-finite fail | **enforced** | `simple.global_grad_rel_l2` |
+| D training behaviour | max abs Δ of 50-step token-weighted training NLL windows; max abs Δ of validation NLL at steps 0/100/500/1000 through one trusted eager evaluator on disjoint held-out text | **enforced** | `training.py` |
+
+Parameter updates, Adam moments, per-role errors, raw-logit error and perplexity
+remain **diagnostics**.
+
+```
+T_m = 2 * max( max compile-vs-eager distance over calibration seeds {0,1,2},
+               max repeated-eager distance over the same seeds,
+               FLOOR_m )
+FLOORS: KL 1e-6 nats · grad rel-L2 1e-4 · train-window NLL 1e-4 · validation NLL 1e-4
+```
+
+Floors are independent and justified in `protocol4.py`; the KL floor is *not*
+inherited from any logits floor. The policy binds to workload id and hash, patch
+set, environment, data identity (dataset revision, tokenizer, packing, masks),
+metric definitions and the training plan, and refuses anything else. Older
+schemas are refused rather than reinterpreted. Holdout seeds {11, 17} are judged
+against the frozen file -- trusted compile as well as the candidate -- and a
+candidate cannot reach the derivation.
+
+In the timing runner, `--real-text --protocol4-calibration P --protocol4-verdict V`
+makes this the enforced gate: A, B, C run in-process and D is read from the
+holdout verdict for the provider being timed; a provider without a verdict is
+not timed.
+
+**Provenance.** The local elementwise layer follows Liger-Kernel's and
+FlashAttention's correctness-test practice; comparing trained models rather than
+operators follows Cut Cross-Entropy and FlashMask. The KL anchor, the
+compile-vs-eager calibration and the automated trajectory thresholds are this
+project's design choices, not published standards.
+
+**Known limits.** Real text is WikiText-2 raw, ~2.5M train tokens: a 1,000-step
+run at batch 2 x 2048 cycles the split 1.6 times in a fixed order. Five-step or
+thousand-step agreement is a statement about that horizon only.
+
 ## The simplified numerical policy (shadow mode, NOT promoted)
 
 `evaluation/tier3/simple.py` implements a second, much smaller whole-model

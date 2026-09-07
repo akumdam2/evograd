@@ -118,6 +118,48 @@ def _parser() -> argparse.ArgumentParser:
                              "run needs its own rather than the canonical one")
     parser.add_argument("--residues", type=int, default=None,
                         help="crop length, where the workload accepts it")
+    parser.add_argument(
+        "--simple-calibration", type=Path, default=None,
+        help="compile-anchored simplified policy (schema evograd-qwen3-t3-numerics/3), "
+             "where the workload accepts it. When given it DECIDES the model-level "
+             "stage and the detailed envelope is recorded beside it as a diagnostic",
+    )
+    parser.add_argument(
+        "--real-text", action="store_true",
+        help="the pinned pretrained checkpoint on real text (Qwen3-0.6B on "
+             "WikiText-2 raw), where the workload accepts it. A distinct workload "
+             "identity; no synthetic calibration binds to it",
+    )
+    parser.add_argument(
+        "--protocol4-calibration", type=Path, default=None,
+        help="the four-part protocol's frozen calibration (schema "
+             "evograd-qwen3-t3-protocol/4). When given it is THE enforced "
+             "model-level gate: A, B, C in-process, D or the screening verdict from "
+             "--protocol4-verdict",
+    )
+    parser.add_argument(
+        "--protocol4-verdict", type=Path, default=None,
+        help="holdout verdict file from protocol4_cli for the provider being timed; "
+             "a provider with no verdict is not timed",
+    )
+    parser.add_argument(
+        "--protocol4-diagnostic-timing", action="store_true",
+        help="time a provider whose frozen A/B/C screening holdout FAILED, labelled "
+             "diagnostic_only in the report. Never turns a failure into a pass",
+    )
+    parser.add_argument(
+        "--compile-site", action="append", default=[], metavar="SITE",
+        help="add a provider that patches SITE with torch.compile of that site's "
+             "declared runtime_forward (dynamic=False, fullgraph=True), leaving every "
+             "other site native. Repeatable. A site-compiled baseline, not whole-model "
+             "torch.compile",
+    )
+    parser.add_argument(
+        "--patch-set", action="append", default=[], metavar="NAME:SITE=SPEC[,SITE=SPEC]",
+        help="add ONE provider that patches several sites at once, each by its real "
+             "route -- SPEC is 'compile', 'liger' (the declared Liger pair through the "
+             "bind wrapper) or a path to an evolved program. Repeatable",
+    )
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--blocks", type=int, default=3)
     parser.add_argument("--warmup", type=int, default=3)
@@ -297,7 +339,11 @@ def check_options(args) -> None:
     adapter = tier3_adapter(args.model)
     #: Flag -> the value that means "not requested".
     optional = {"structural_identity": False, "layers": None, "data_seed": 0,
-                "calibration": None, "residues": None}
+                "calibration": None, "residues": None,
+                "simple_calibration": None, "real_text": False,
+                "protocol4_calibration": None, "protocol4_verdict": None,
+                "protocol4_diagnostic_timing": False, "compile_site": [],
+                "patch_set": []}
     for dest, unset in optional.items():
         if dest in adapter.options:
             continue

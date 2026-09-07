@@ -109,6 +109,135 @@ class PatchSet:
                    expected_counts=dict(payload.get("expected_counts") or {}))
 
 
+def compiled_site_kernel(site: str, registry):
+    """The site's own declared production spelling, compiled.
+
+    ``torch.compile`` of the exact function the unpatched model already calls:
+    same mathematics, a different schedule and a different summation order. That
+    makes it the right anchor for a whole-model drift threshold -- it is a
+    *correct* implementation, independently produced, whose disagreement with
+    eager is the disagreement any correct reimplementation is entitled to.
+
+    The bound-pair alternative cannot do this job for three of the four sites.
+    It recomputes through the same ``runtime_forward`` the production spelling
+    calls, so its drift is identically zero and the threshold collapses onto the
+    metric floor -- which then rejects this very provider.
+    """
+    from evograd.opdecl.oracle import resolve_runtime_forward
+    from evograd.ops import get_op
+
+    reference = resolve_runtime_forward(get_op(registry.require(site).op))
+    return torch.compile(reference, dynamic=False, fullgraph=True)
+
+
+def compiled_trusted_kernels(patch_set: PatchSet, registry):
+    """A trusted provider patched at exactly the candidate's sites, compiled.
+
+    Site-matched by construction: it patches ``patch_set.patched`` and nothing
+    else, so one site's calibration can never be built from another's drift.
+    """
+    from evograd.bench.tier3_patch import KernelSet, KernelSource, patch
+
+    kernels = KernelSet(registry=registry)
+    for site in patch_set.patched:
+        kernels = patch(
+            kernels, site, compiled_site_kernel(site, registry),
+            source=KernelSource(site=site, op_name=registry.require(site).op,
+                                module=None, origin="trusted_torch_compile"),
+        )
+    return kernels
+
+
+PATCH_SPEC_KINDS = ("compile", "liger")
+
+
+def parse_patch_specs(entries) -> dict[str, str]:
+    """``["attention=compile", "residual_rmsnorm=liger", "qkv_norm_rope=path.py"]`` -> dict."""
+    patches: dict[str, str] = {}
+    for entry in entries or ():
+        site, _, spec = str(entry).partition("=")
+        if not site or not spec:
+            raise ValueError(f"--patch wants SITE=compile|liger|PATH, got {entry!r}")
+        if site in patches:
+            raise ValueError(f"site {site!r} patched twice")
+        patches[site] = spec
+    return patches
+
+
+def parse_patch_set_spec(text: str) -> tuple[str, dict[str, str]]:
+    """``"name:site=spec,site=spec"`` -> ``(name, patches)``."""
+    name, sep, rest = str(text).partition(":")
+    if not sep or not name or not rest:
+        raise ValueError(f"--patch-set wants NAME:SITE=SPEC[,SITE=SPEC...], got {text!r}")
+    return name, parse_patch_specs(rest.split(","))
+
+
+def kernels_from_patches(patches: dict[str, str], registry, ops=None, *, load_program=None):
+    """One kernel set holding several sites' replacements, each by its real route.
+
+    ``compile`` -> ``torch.compile`` of the site's declared runtime_forward (origin
+    ``trusted_torch_compile``); ``liger`` -> the declaration's reviewed Liger pair
+    through ``kernel_from_pair`` (origin ``baseline:liger``, a bind pair wrapper --
+    *not* Liger's own autograd Function); a path -> the evolved program through
+    ``patched_kernels`` (origin as that helper records it, e.g.
+    ``candidate:direct_deployment``). Every site is patched exactly once, so the
+    resulting patch set is the union and the adapters carry whatever comes along.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from evograd.bench.tier3_patch import (
+        KernelSet, KernelSource, kernel_from_pair, patch, patched_kernels)
+    from evograd.opdecl.baselines import baseline_candidate_module
+    from evograd.ops import OPS
+
+    ops = dict(ops or OPS)
+    kernels = KernelSet(registry=registry)
+    for site, spec in patches.items():
+        decl = registry.require(site)
+        if spec == "compile":
+            kernels = patch(kernels, site, compiled_site_kernel(site, registry),
+                            source=KernelSource(site=site, op_name=decl.op, module=None,
+                                                origin="trusted_torch_compile"))
+        elif spec == "liger":
+            op = ops[decl.op]
+            if "liger" not in op.performance_baselines:
+                raise ValueError(f"{decl.op} declares no liger baseline")
+            module = baseline_candidate_module(op, "liger")
+            kernels = patch(kernels, site, kernel_from_pair(op, module),
+                            source=KernelSource(site=site, op_name=decl.op, module=module,
+                                                origin="baseline:liger"))
+        else:
+            path = Path(spec)
+            if load_program is None:
+                s = importlib.util.spec_from_file_location(f"evograd_patch_{path.stem}", path)
+                module = importlib.util.module_from_spec(s)
+                s.loader.exec_module(module)
+            else:
+                module = load_program(path)
+            single = patched_kernels({site: module}, ops, registry=registry)
+            kernels = patch(kernels, site, single.kernel_for(site),
+                            source=single.source_for(site))
+    return kernels
+
+
+#: Which trusted replacement a calibration is anchored on. Recorded in the
+#: policy, because the two answer different questions and produce thresholds
+#: three orders of magnitude apart.
+TRUSTED_REFERENCES = ("torch_compile", "bound_pair")
+
+
+def trusted_kernels_for(reference: str, patch_set: PatchSet, registry, ops=None):
+    if reference == "torch_compile":
+        return compiled_trusted_kernels(patch_set, registry)
+    if reference == "bound_pair":
+        from evograd.ops import OPS
+
+        return matched_trusted_kernels(dict(ops or OPS), patch_set, registry)
+    raise ValueError(
+        f"unknown trusted reference {reference!r}; known: {TRUSTED_REFERENCES}")
+
+
 def matched_trusted_kernels(ops, patch_set: PatchSet, registry):
     """The trusted replacement for one patch set: the same sites, bound.
 
@@ -319,6 +448,7 @@ def derive_simple_policy(
     environment_hash: str,
     patch_set: PatchSet,
     margin: float = SAFETY_MARGIN,
+    trusted_reference: str = "torch_compile",
     notes: dict[str, Any] | None = None,
 ) -> SimplePolicy:
     """threshold = max(reference noise, trusted drift, floor) * margin.
@@ -346,6 +476,7 @@ def derive_simple_policy(
         thresholds[metric] = base * margin
         derivation[metric] = {
             "reference_noise_max": noise_max,
+            "trusted_reference": trusted_reference,
             "trusted_drift_max": drift_max,
             "floor": floor,
             "binding_term": ("trusted_drift" if base == drift_max else
