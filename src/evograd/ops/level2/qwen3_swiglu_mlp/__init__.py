@@ -26,6 +26,8 @@ that most machines will not have.
 from evograd.benchmark.topdown import load_snapshot as _load_snapshot
 from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
+from evograd.opdecl.models import LLAMA_3_8B
+from evograd.ops._common import model_workloads as _model_workloads
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
 #: The harvested workload these dims came from; also the ``Provenance``
@@ -86,6 +88,38 @@ _SHRUNK = Provenance(
         "correctness cases run on CPU in a normal test; the gate/up/down "
         "structure and the 3x hidden-to-intermediate ratio are preserved"
     ),
+)
+
+#: The second harvested architecture at this boundary. Llama-3-8B runs the gated MLP block
+#: at wider dims -- same computation, different widths -- so the declaration
+#: carries its observed configuration as its own suite rather than letting a
+#: Llama-derived task be timed at Qwen3's shape.
+#:
+#: Derived from the frozen model configuration, not from a snapshot: the shape
+#: is a property of the architecture, and ``tests/test_provenance`` re-derives
+#: it. Batch 2 x sequence 2048 is the canonical Level-4 step for both models.
+#: Measured at this shape, and only this shape. `out` accumulates over `I`,
+#: which is 14336 here against the anchor's 96, and `ReductionScaledAtol` does
+#: not model that: its `result_dims` count output *elements*, and `out` carries
+#: no `reduction_dims` entry. The two measurements available are
+#:
+#:     grid {B:2,T:16,H:32,I:96}      out required_t 4.630e-03
+#:     canonical Llama-3-8B           out required_t 3.208e-02   (6.93x)
+#:
+#: and the hook supplies 2.10x of that. Adding a sqrt(I) walk term would supply
+#: 12.2x, which is a hole rather than a gate -- the observed growth is roughly
+#: I**0.39, sub-square-root, as fp32-accumulating tensor cores produce. Two
+#: points do not justify a growth law, so the shortfall is carried as a
+#: multiplier on `out` alone (see `tolerance_multipliers` below) rather than
+#: as a wider base on this workload: a workload-level atol widens all five
+#: results, and the negative controls measured what that costs -- fault
+#: detection on the four gradients degraded from 2% to 5-10% for headroom
+#: none of them needed.
+_LLAMA_OBSERVED = _model_workloads(
+    LLAMA_3_8B,
+    "swiglu_mlp",
+    ({"batch": 2, "seq": 2048},),
+    ("bfloat16",),
 )
 
 _BENCHMARK = (
@@ -226,7 +260,11 @@ op = declare_op(
     correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
-    benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
+    benchmark_suites={
+        "qwen3_0_6b_observed": _BENCHMARK,
+        # The same boundary in Llama-3-8B, at its own observed width.
+        "llama_3_8b_observed": _LLAMA_OBSERVED,
+    },
     memory_inputs=("x", "gate_weight", "up_weight", "down_weight"),
     # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp calibrate`
     # compares the declared float32-accumulated forward against
@@ -251,10 +289,11 @@ op = declare_op(
         "bfloat16": (1e-2, 1e-2),
     },
     # Each multiplier is the measured minimum at base 1e-2, times a 1.5 safety
-    # margin, rounded up to one decimal. `out` needs none (measured 1.00), so it
-    # has none. The three weight gradients need the largest because they reduce
-    # over all B*T tokens and cancel; `dx` needs a small one for the same
-    # reason at a shorter contraction.
+    # margin, rounded up to one decimal. The three weight gradients need the
+    # largest because they reduce over all B*T tokens and cancel; `dx` needs a
+    # small one for the same reason at a shorter contraction. `out` needed none
+    # (measured 1.00) on the Qwen3 grid and got one only when the wider
+    # Llama-3-8B intermediate was measured -- see the note on its entry below.
     #
     #   result         measured min ma at t=1e-2   declared
     #   dx                         1.48              2.3
@@ -262,6 +301,15 @@ op = declare_op(
     #   dup_weight                 3.22              4.9
     #   ddown_weight               4.33              6.5
     tolerance_multipliers={
+        # `out` accumulates over `I`, which the reduction hook does not model
+        # (its `result_dims` count output elements and `out` has no
+        # `reduction_dims` entry). Measured at Llama-3-8B's 14336-wide
+        # intermediate: the harvested invocation needs atol 3.242e-02 against
+        # the 2.098e-02 the hook supplies, so 2.4x carries it with the 1.5x
+        # margin (0.0504 / 0.0324 = 1.55x). Scoped to this result because only
+        # this result needed it -- the four gradients require 5e-08..5e-07 at
+        # that shape and keep their measured, tighter gates.
+        "out": (2.4, 2.4),
         "dx": (2.3, 1.0),
         "dgate_weight": (3.7, 1.0),
         "dup_weight": (4.9, 1.0),

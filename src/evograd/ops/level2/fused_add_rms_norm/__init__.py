@@ -57,6 +57,19 @@ _QWEN3_OBSERVED = model_workloads(
     tolerances=STANDARD_TOLERANCES,
 )
 
+#: The Llama-3-8B configuration at the same fusion site, derived from the frozen
+#: config rather than from a snapshot: the shape is a property of the
+#: architecture, and `tests/test_provenance` re-derives it. Batch 2 x sequence
+#: 2048 is the canonical Level-4 step, so tokens is 4096 as it is for Qwen3;
+#: only the residual width differs (4096 against 1024).
+_LLAMA_OBSERVED = model_workloads(
+    LLAMA_3_8B,
+    "residual_rmsnorm",
+    ({"tokens": 4096},),
+    ("bfloat16",),
+    tolerances=STANDARD_TOLERANCES,
+)
+
 #: How often that configuration occurs in one Qwen3-0.6B step, derived from the
 #: architecture rather than counted by hand. 28 attention residual adds each
 #: followed by their layer's post_attention_layernorm, 27 MLP residual adds each
@@ -66,6 +79,13 @@ _QWEN3_OBSERVED = model_workloads(
 #: not the 57 residual-width RMSNorm invocations the harvest observed.
 QWEN3_FUSION_SITES = QWEN3_0_6B.residual_rmsnorm_fusion_sites()
 assert QWEN3_FUSION_SITES["total"] == 56, QWEN3_FUSION_SITES
+
+#: The same count for Llama-3-8B: 32 attention residual adds, 31 MLP adds into
+#: the next layer's input_layernorm, and one final MLP add into model.norm.
+#: 64, against Qwen3's 56 -- the arithmetic is the architecture's, not a
+#: constant either workload may borrow from the other.
+LLAMA_FUSION_SITES = LLAMA_3_8B.residual_rmsnorm_fusion_sites()
+assert LLAMA_FUSION_SITES["total"] == 64, LLAMA_FUSION_SITES
 
 _REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
 
@@ -170,6 +190,9 @@ op = declare_op(
         # The observed Qwen3-0.6B configuration, kept as its own suite so the
         # generic Llama-derived grid stays the default timed set.
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
+        # The same fusion site in Llama-3-8B. Two harvested architectures reach
+        # this declaration, and each times its own observed width.
+        "llama_3_8b_observed": _LLAMA_OBSERVED,
     },
     tolerances=STANDARD_TOLERANCES,
     # `summed` is a plain elementwise add, and every spelling measured requires

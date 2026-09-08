@@ -14,6 +14,7 @@ from evograd.ops._common import (
     make_pair_baseline,
     model_workloads,
     observed_workloads,
+    observed_workloads_if_harvested,
     regime_suites,
     standard_correctness,
     workloads_2d,
@@ -66,6 +67,14 @@ def _liger_factory():
 #: sits between are kept as supporting provenance in the snapshot.
 _QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "swiglu", tolerances=STANDARD_TOLERANCES)
 
+#: The same task as the canonical Llama-3-8B step ran it. Empty until that
+#: workload's harvest has been executed and its snapshot tracked; the suite
+#: then appears with no edit here. Deliberately not added to ``coverage``:
+#: Llama-3-8B's observed widths are several times Qwen3's, and making every
+#: candidate run them would charge a Qwen3-targeted kernel for shapes it does
+#: not claim. It is a benchmark suite, selectable by name.
+_LLAMA_OBSERVED = observed_workloads_if_harvested("llama_3_8b", "swiglu", tolerances=STANDARD_TOLERANCES)
+
 op = declare_op(
     name="swiglu",
     level=1,
@@ -85,6 +94,7 @@ op = declare_op(
     benchmark=_BENCHMARK,
     benchmark_suites={
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
+        **({"llama_3_8b_observed": _LLAMA_OBSERVED} if _LLAMA_OBSERVED else {}),
         **regime_suites(_BENCHMARK, _feature, _SPLIT),
         **fixed_shape_suites(_BENCHMARK),
         "legacy": _LEGACY_BENCHMARK,

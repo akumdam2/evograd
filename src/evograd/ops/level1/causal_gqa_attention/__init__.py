@@ -24,6 +24,7 @@ from evograd.ops._common import (
     log_distance_weight,
     model_workloads,
     observed_workloads,
+    observed_workloads_if_harvested,
     regime_suites,
 )
 
@@ -47,6 +48,14 @@ _BENCHMARK = model_workloads(
 #: The observed Qwen3-0.6B configuration: 16 query heads over 8 KV heads, batch
 #: 2 x sequence 2048, 28 invocations per step.
 _QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "causal_gqa_attention")
+
+#: The same task as the canonical Llama-3-8B step ran it. Empty until that
+#: workload's harvest has been executed and its snapshot tracked; the suite
+#: then appears with no edit here. Deliberately not added to ``coverage``:
+#: Llama-3-8B's observed widths are several times Qwen3's, and making every
+#: candidate run them would charge a Qwen3-targeted kernel for shapes it does
+#: not claim. It is a benchmark suite, selectable by name.
+_LLAMA_OBSERVED = observed_workloads_if_harvested("llama_3_8b", "causal_gqa_attention")
 
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, HQ=hq, HK=hk, T=t, D=d), dtype=dtype)
@@ -150,6 +159,7 @@ op = declare_op(
     benchmark=_BENCHMARK,
     benchmark_suites={
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
+        **({"llama_3_8b_observed": _LLAMA_OBSERVED} if _LLAMA_OBSERVED else {}),
         **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
         **fixed_shape_suites(_BENCHMARK),
     },

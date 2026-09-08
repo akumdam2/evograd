@@ -821,3 +821,57 @@ def check_mandatory_boundaries(observation: Observation,
             f"Observed: {counts}. The installed Transformers may have moved the "
             "call site; the manifest was not written."
         )
+
+
+class ObservedOperatorError(RuntimeError):
+    """The step ran, but not the operator the architecture describes."""
+
+
+def check_observed_attention(observation: Observation, arch: dict[str, Any]) -> None:
+    """A grouped-query model must be observed *calling* SDPA with grouped keys.
+
+    Transformers can reach SDPA two ways. When it can rely on ``is_causal=True``
+    it passes the key and value tensors as the model holds them -- one per KV
+    head -- and lets SDPA expand them. When it instead builds an explicit
+    attention mask, ``enable_gqa`` is unavailable, so ``repeat_kv`` materialises
+    the KV heads up to the query-head count *before* the call.
+
+    Both compute the same attention. They are not the same operator: the second
+    presents ``num_attention_heads`` keys rather than ``num_key_value_heads``,
+    which is a different shape, a different memory cost, and -- for a benchmark
+    whose whole premise is that its shapes come from a real step -- a different
+    task. A kernel evolved against it would target tensors four times larger
+    than the model actually holds.
+
+    Which path Transformers takes has changed between releases, so this is
+    checked against the observation rather than against a version number: the
+    fact that matters is what the model ran, not what the installed library is
+    expected to do.
+    """
+    heads = arch.get("num_attention_heads")
+    kv_heads = arch.get("num_key_value_heads")
+    if not heads or not kv_heads or heads == kv_heads:
+        return  # not a grouped-query architecture; nothing to check
+
+    for event in observation.ordered_events():
+        if event.task != "sdpa" or len(event.inputs) < 2:
+            continue
+        key = event.inputs[1]
+        if key.get("kind") != "tensor" or len(key.get("shape", ())) != 4:
+            continue
+        observed = key["shape"][1]
+        if observed == kv_heads:
+            continue
+        raise ObservedOperatorError(
+            f"this architecture has {kv_heads} key/value heads for "
+            f"{heads} query heads, but SDPA was called with {observed} key "
+            f"heads: Transformers materialised them with repeat_kv instead of "
+            f"using enable_gqa. The step is numerically fine; the *observed "
+            f"operator* is not the model's, so every shape derived from it "
+            f"would describe a tensor the model does not hold.\n"
+            f"    attn_mask_provided={event.attrs.get('attn_mask_provided')} "
+            f"is_causal={event.attrs.get('is_causal')} "
+            f"enable_gqa={event.attrs.get('enable_gqa')}\n"
+            f"This follows the installed Transformers' choice of attention "
+            f"path. The manifest was not written."
+        )

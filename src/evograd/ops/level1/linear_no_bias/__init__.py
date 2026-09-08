@@ -20,6 +20,7 @@ from evograd.ops._common import (
     fixed_shape_suites,
     model_workloads,
     observed_workloads,
+    observed_workloads_if_harvested,
 )
 
 #: The four Llama-3-8B projections, all of which are biasless in the published
@@ -42,6 +43,14 @@ _DERIVED = tuple(
 #: o_proj, gate/up_proj, down_proj and lm_head -- at the shapes and dtype the
 #: harvest observed. All six are biasless, which is why they are here.
 _QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "linear_no_bias")
+
+#: The same task as the canonical Llama-3-8B step ran it. Empty until that
+#: workload's harvest has been executed and its snapshot tracked; the suite
+#: then appears with no edit here. Deliberately not added to ``coverage``:
+#: Llama-3-8B's observed widths are several times Qwen3's, and making every
+#: candidate run them would charge a Qwen3-targeted kernel for shapes it does
+#: not claim. It is a benchmark suite, selectable by name.
+_LLAMA_OBSERVED = observed_workloads_if_harvested("llama_3_8b", "linear_no_bias")
 
 
 def make_linear_no_bias_inputs(torch, op, workload, device="cuda"):
@@ -121,6 +130,7 @@ op = declare_op(
     benchmark=_DERIVED,
     benchmark_suites={
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
+        **({"llama_3_8b_observed": _LLAMA_OBSERVED} if _LLAMA_OBSERVED else {}),
         **fixed_shape_suites(_DERIVED),
     },
     # Measured, not inherited. `benchmark.topdown.qwen3_0_6b.levels.level1.mapping calibrate --op

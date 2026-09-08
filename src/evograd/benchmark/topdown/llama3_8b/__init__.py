@@ -22,11 +22,14 @@ with the extra to install.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_8b --out report.json
 
-**State.** Level 4 and the harvest are implemented and shared with Qwen3's
-machinery. What does not exist yet is anything that must be *derived from a
-run*: there is no tracked ``harvest/snapshot.json``, because a snapshot comes
-out of a harvest and none has been executed. Levels 3-1 and the tier-3 sites
-follow from that snapshot; see ``README.md``.
+**State.** Levels 4 through 1 and the tier-3 evaluation half are implemented,
+and the shared machinery is Qwen3's. What does not exist is anything that must
+be *derived from a run*: there is no tracked ``harvest/snapshot.json``, no
+level-3 capture and no tier-3 numerics calibration, because each comes out of
+executing the canonical step on a GPU and none has been executed. Every stage
+that consumes one of those refuses by name rather than substituting a synthetic
+stand-in; ``README.md`` lists the three commands, in the order they unblock each
+other.
 """
 
 from .levels.level4.report import SmokeReport
@@ -40,7 +43,18 @@ from .levels.level4.spec import (
 __all__ = [
     "CANONICAL",
     "LLAMA_3_8B",
+    "Llama3Workload",
     "SmokeReport",
     "WorkloadSpec",
     "WorkloadSpecError",
 ]
+
+
+def __getattr__(name: str):
+    # Deferred: Llama3Workload reaches the tier-3 site adapters, which import
+    # torch. The spec and the report must stay importable without it.
+    if name == "Llama3Workload":
+        from evograd.evaluation.tier3.workloads.llama3_8b.workload import Llama3Workload
+
+        return Llama3Workload
+    raise AttributeError(name)

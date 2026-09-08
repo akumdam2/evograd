@@ -47,7 +47,7 @@ def __getattr__(name: str):
     # Deferred: Qwen3Workload reaches the tier-3 site adapters, which import
     # torch. The spec and the report must stay importable without it.
     if name == "Qwen3Workload":
-        from .evaluation.tier3.workload import Qwen3Workload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
 
         return Qwen3Workload
     raise AttributeError(name)

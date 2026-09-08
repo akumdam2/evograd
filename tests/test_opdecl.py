@@ -120,8 +120,9 @@ class TestDerivedNaming(unittest.TestCase):
                     "fused_moe_swiglu",
                     "gemm_leaky_relu",
                     "layernorm_linear",
-                    # Derived from the Qwen3-0.6B Level-4 harvest rather than
-                    # specified up front.
+                    # A harvested workload's own decoder boundaries, rather
+                    # than operators specified up front.
+                    "llama3_qkv_rope",
                     "qwen3_attention",
                     "qwen3_qkv_norm_rope",
                     "qwen3_swiglu_mlp",

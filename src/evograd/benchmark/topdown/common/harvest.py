@@ -27,7 +27,11 @@ import torch
 from .level4 import Level4Workload
 from .manifest import build_manifest, summarize, write_manifest
 from .model import check_effective_settings, effective_settings, training_step
-from .observe import check_mandatory_boundaries, observe
+from .observe import (
+    check_mandatory_boundaries,
+    check_observed_attention,
+    observe,
+)
 from .smoke import environment_info, gradient_coverage, workload_info
 from .spec import WorkloadSpec
 
@@ -73,6 +77,10 @@ def run_harvest(workload: Level4Workload,
     # Outside the context on purpose: whatever these read, they read from an
     # unobserved process, which is also what proves the observer let go.
     check_mandatory_boundaries(observation, workload.plan)
+    # A boundary that fired is not necessarily the boundary the architecture
+    # describes. This catches the case where the step is correct but the
+    # operator recorded is not the model's.
+    check_observed_attention(observation, spec.arch)
 
     loss = outputs.loss
     if spec.device.startswith("cuda"):

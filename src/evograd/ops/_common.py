@@ -247,6 +247,30 @@ def observed_workloads(
     return tuple(workloads)
 
 
+def observed_workloads_if_harvested(
+    workload_name: str,
+    task: str,
+    **kwargs,
+) -> tuple[Workload, ...]:
+    """:func:`observed_workloads`, or ``()`` when that workload has no snapshot.
+
+    A workload package can exist long before anyone has run its harvest -- the
+    snapshot is *derived* from a GPU run, not authored -- and a declaration must
+    stay importable in the meantime. This is the form to use for a second
+    architecture: the suite appears the moment the snapshot is tracked, and no
+    declaration needs editing to make that happen.
+
+    Distinct from a bare ``try/except`` at each call site, which would also
+    swallow a *corrupt* snapshot. Only "not harvested yet" is tolerated here;
+    a snapshot that exists and fails its hash check still raises.
+    """
+    from evograd.benchmark.topdown import has_snapshot
+
+    if not has_snapshot(workload_name):
+        return ()
+    return observed_workloads(workload_name, task, **kwargs)
+
+
 def is_head_major_view(workload: Workload) -> bool:
     """Whether this workload's primary input is the non-contiguous view a model
     hands its attention and RoPE kernels.

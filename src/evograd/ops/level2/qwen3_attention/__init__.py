@@ -33,6 +33,8 @@ import math
 from evograd.benchmark.topdown import load_snapshot as _load_snapshot
 from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
+from evograd.opdecl.models import LLAMA_3_8B
+from evograd.ops._common import model_workloads as _model_workloads
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
 #: The harvested workload these dims came from; also the ``Provenance``
@@ -105,6 +107,21 @@ _SHRUNK = Provenance(
         "mask, the absence of a bias and the head-major input layout are all "
         "preserved"
     ),
+)
+
+#: The second harvested architecture at this boundary. Llama-3-8B runs causal grouped-query attention and its output projection
+#: at wider dims -- same computation, different widths -- so the declaration
+#: carries its observed configuration as its own suite rather than letting a
+#: Llama-derived task be timed at Qwen3's shape.
+#:
+#: Derived from the frozen model configuration, not from a snapshot: the shape
+#: is a property of the architecture, and ``tests/test_provenance`` re-derives
+#: it. Batch 2 x sequence 2048 is the canonical Level-4 step for both models.
+_LLAMA_OBSERVED = _model_workloads(
+    LLAMA_3_8B,
+    "causal_gqa_attention",
+    ({"batch": 2, "seq": 2048},),
+    ("bfloat16",),
 )
 
 _BENCHMARK = (
@@ -260,7 +277,11 @@ op = declare_op(
     correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
-    benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
+    benchmark_suites={
+        "qwen3_0_6b_observed": _BENCHMARK,
+        # The same boundary in Llama-3-8B, at its own observed width.
+        "llama_3_8b_observed": _LLAMA_OBSERVED,
+    },
     memory_inputs=("q", "k", "v", "o_weight"),
     # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate`
     # compares the declared dense float32-softmax forward against

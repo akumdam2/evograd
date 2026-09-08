@@ -229,7 +229,11 @@ class TestSingleOutputRegression(unittest.TestCase):
 
     #: The registered operators with structured outputs. Listed explicitly so
     #: adding another cannot silently weaken the regression coverage below.
-    MULTI_OUTPUT = {"qwen3_qkv_norm_rope", "fused_add_rms_norm"}
+    #: The projection boundaries return (q, k, v) and the residual fusion
+    #: returns (out, summed). One entry per harvested architecture whose
+    #: attention prefix is its own operator: Qwen3 normalizes its heads,
+    #: Llama-3 does not, so the two are separate declarations.
+    MULTI_OUTPUT = {"qwen3_qkv_norm_rope", "llama3_qkv_rope", "fused_add_rms_norm"}
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):
         from evograd.ops import OPS
