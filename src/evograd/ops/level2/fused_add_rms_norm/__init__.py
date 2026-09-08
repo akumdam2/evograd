@@ -80,7 +80,7 @@ def _tolerance(workload, result_name, atol, rtol):
     ``dweight`` sums ``dnormalized * summed * rstd`` over every row, so its
     error grows with the number of terms while every other result's does not.
     Kept from the single-output declaration and re-measured for the two-output
-    contract by ``bench.workloads.qwen3.levels.level2.residual_rmsnorm calibrate``: at the canonical
+    contract by ``benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate``: at the canonical
     4096x1024 BF16 case the measured requirement is 4.6e-02 against the 2.5e-01
     this yields, and no other result needs a hook at all.
     """

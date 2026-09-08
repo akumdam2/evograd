@@ -16,8 +16,8 @@ from __future__ import annotations
 import json
 import unittest
 
-from evograd.bench.workloads.common.spec import analytic_parameter_count
-from evograd.bench.workloads.llama3.levels.level4.spec import (
+from evograd.benchmark.topdown.common.spec import analytic_parameter_count
+from evograd.benchmark.topdown.llama3_8b.levels.level4.spec import (
     CANONICAL,
     LLAMA_3_8B,
     MODEL_NAME,
@@ -117,7 +117,7 @@ class TestCanonicalSpec(unittest.TestCase):
     def test_it_does_not_collide_with_the_other_workload(self):
         """Two workloads sharing a hash would make every downstream artifact
         ambiguous about which model produced it."""
-        from evograd.bench.workloads.qwen3.levels.level4.spec import CANONICAL as QWEN
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import CANONICAL as QWEN
 
         self.assertNotEqual(CANONICAL.workload_id, QWEN.workload_id)
         self.assertNotEqual(CANONICAL.workload_hash, QWEN.workload_hash)
@@ -148,14 +148,14 @@ class TestDeclaration(unittest.TestCase):
     """The declaration is what every shared stage reads."""
 
     def setUp(self):
-        from evograd.bench.workloads.llama3.declaration import WORKLOAD
+        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
 
         self.workload = WORKLOAD
 
     def test_it_names_the_registry_key(self):
-        from evograd.bench.workloads import WORKLOADS
+        from evograd.benchmark.topdown import TOPDOWN_WORKLOADS
 
-        self.assertIn(self.workload.name, WORKLOADS)
+        self.assertIn(self.workload.name, TOPDOWN_WORKLOADS)
 
     def test_its_canonical_spec_is_the_modules(self):
         self.assertEqual(self.workload.canonical, CANONICAL)
@@ -185,7 +185,7 @@ class TestDeclaration(unittest.TestCase):
         self.assertTrue(rope[0].startswith(self.workload.plan.modeling_module))
 
     def test_its_schemas_are_its_own(self):
-        from evograd.bench.workloads.qwen3.declaration import WORKLOAD as QWEN
+        from evograd.benchmark.topdown.qwen3_0_6b.declaration import WORKLOAD as QWEN
 
         self.assertNotEqual(self.workload.smoke_schema, QWEN.smoke_schema)
         self.assertNotEqual(self.workload.manifest_schema, QWEN.manifest_schema)
@@ -199,7 +199,7 @@ class TestSnapshotState(unittest.TestCase):
     def test_the_level1_mapping_covers_every_role_llama_presents(self):
         """An unmapped role raises during extraction rather than being dropped,
         so this is what stands between a harvest and a silent gap."""
-        from evograd.bench.workloads.llama3.harvest.snapshot import LEVEL1_SOURCES
+        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import LEVEL1_SOURCES
 
         linear = LEVEL1_SOURCES["linear_no_bias"]["component_by_role"]
         for role in ("q_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "lm_head"):
@@ -230,7 +230,7 @@ class TestSnapshotState(unittest.TestCase):
         """A task pointing at an undeclared operator would produce a snapshot
         nothing can read."""
         from evograd.ops import OPS
-        from evograd.bench.workloads.llama3.harvest.snapshot import TASK_SOURCES
+        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import TASK_SOURCES
 
         for name in TASK_SOURCES:
             self.assertIn(name, OPS, f"{name} has no declaration")
@@ -247,8 +247,8 @@ class TestItActuallyBuilds(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.common.smoke import run_smoke
-        from evograd.bench.workloads.llama3.declaration import WORKLOAD
+        from evograd.benchmark.topdown.common.smoke import run_smoke
+        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
 
         cls.workload = WORKLOAD
         cls.report = run_smoke(WORKLOAD, tiny_spec())
@@ -280,8 +280,8 @@ class TestItActuallyHarvests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.common.harvest import run_harvest
-        from evograd.bench.workloads.llama3.declaration import WORKLOAD
+        from evograd.benchmark.topdown.common.harvest import run_harvest
+        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
 
         cls.workload = WORKLOAD
         cls.manifest = run_harvest(WORKLOAD, tiny_spec())
@@ -304,7 +304,7 @@ class TestItActuallyHarvests(unittest.TestCase):
         self.assertEqual(self.manifest["schema_version"], self.workload.manifest_schema)
 
     def test_the_manifest_hash_is_self_consistent(self):
-        from evograd.bench.workloads.common.manifest import semantic_hash
+        from evograd.benchmark.topdown.common.manifest import semantic_hash
 
         restored = json.loads(json.dumps(self.manifest))
         self.assertEqual(semantic_hash(restored), restored["manifest_hash"])
@@ -323,7 +323,7 @@ class TestItActuallyHarvests(unittest.TestCase):
     def test_the_snapshot_extraction_maps_every_observed_configuration(self):
         """The step that turns a run into task shapes. An unmapped role raises,
         so reaching the end is the assertion."""
-        from evograd.bench.workloads.llama3.harvest.snapshot import extract
+        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(
@@ -337,7 +337,7 @@ class TestItActuallyHarvests(unittest.TestCase):
                 self.assertTrue(config["provenance"]["component"])
 
     def test_the_extracted_snapshot_names_llama_not_qwen(self):
-        from evograd.bench.workloads.llama3.harvest.snapshot import extract
+        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(snapshot["model"]["name"], MODEL_NAME)

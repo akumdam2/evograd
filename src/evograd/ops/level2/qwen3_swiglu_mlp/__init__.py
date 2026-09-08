@@ -23,8 +23,8 @@ the manifest and the capture artifacts it was extracted from are local results
 that most machines will not have.
 """
 
-from evograd.bench.workloads import load_snapshot as _load_snapshot
-from evograd.bench.workloads import load_snapshot_task as _snapshot_task
+from evograd.benchmark.topdown import load_snapshot as _load_snapshot
+from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
@@ -228,7 +228,7 @@ op = declare_op(
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
     memory_inputs=("x", "gate_weight", "up_weight", "down_weight"),
-    # Measured, not chosen. `evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp calibrate`
+    # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp calibrate`
     # compares the declared float32-accumulated forward against
     # `runtime_forward` -- the spelling the model runs, and therefore the
     # smallest disagreement any correct implementation can have with the oracle

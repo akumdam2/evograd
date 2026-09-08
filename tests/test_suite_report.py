@@ -11,12 +11,12 @@ from __future__ import annotations
 import math
 import unittest
 
-from evograd.bench.suite import (
+from evograd.benchmark.core.report import (
     FULL_STEP_SPEEDUP_KEY,
     SuiteReport,
     TaskResult,
-    task_from_benchmark_report,
 )
+from evograd.evaluation.common.benchmark import task_from_benchmark_report
 
 
 def _case(speedup, ok=True, dims=None):
@@ -154,7 +154,7 @@ class TestAggregation(unittest.TestCase):
         levels = SuiteReport(tasks=tasks).to_dict()["levels"]
         self.assertEqual(set(levels), {"1", "2", "3"})
         self.assertEqual(levels["1"]["name"], "primitive")
-        self.assertEqual(levels["3"]["name"], "block")
+        self.assertEqual(levels["3"]["name"], "architectural-block integration")
         self.assertAlmostEqual(levels["2"]["speedup_full_step_macro"], 3.0)
 
     def test_within_operator_pooling_is_geometric(self):

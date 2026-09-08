@@ -215,7 +215,7 @@ def observed_workloads(
     A snapshot is a small tracked JSON file with no torch dependency, so this
     stays importable on a machine that has never run the workload.
     """
-    from evograd.bench.workloads import load_snapshot
+    from evograd.benchmark.topdown import load_snapshot
 
     entry = load_snapshot(workload_name)["level1"][task]
     tolerances = tolerances or {}

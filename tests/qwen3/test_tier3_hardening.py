@@ -14,10 +14,10 @@ import unittest
 
 import torch
 
-from evograd.bench.workloads.qwen3.evaluation.tier3 import boundary
-from evograd.bench.tier3_gate import numerics
-from evograd.bench.workloads.qwen3.evaluation.tier3 import purity
-from evograd.bench.tier3_gate.numerics import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b import boundary
+from evograd.evaluation.tier3.gate import numerics
+from evograd.evaluation.tier3.workloads.qwen3_0_6b import purity
+from evograd.evaluation.tier3.gate.numerics import (
     KIND_EXP_AVG,
     KIND_EXP_AVG_SQ,
     KIND_GRADIENT,
@@ -27,14 +27,14 @@ from evograd.bench.tier3_gate.numerics import (
     derive_envelope,
     group_key,
 )
-from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
     bound_pair_identity_kernels,
     expected_counts,
     qwen3_sites,
     set_tap,
     structural_identity_kernels,
 )
-from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
 from evograd.ops import OPS
 
 #: Two layers, 64 hidden. Small enough to run everywhere, structurally
@@ -169,7 +169,7 @@ class TestPurityIsolation(unittest.TestCase):
         self.assertEqual(set(spec["sites"]), set(purity.MIN_CALLS))
 
     def test_a_provider_with_no_reconstructible_origin_says_so(self):
-        from evograd.bench.tier3_patch import KernelSet, KernelSource, patch
+        from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
 
         registry = qwen3_sites()
         kernels = patch(
@@ -285,7 +285,7 @@ class TestBoundaryIsShadowOnly(unittest.TestCase):
 
 class TestBoundaryDetection(unittest.TestCase):
     def _reject(self, fault_name: str, magnitude: float = 0.02):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import catalogue
 
         workload = _workload()
         fault = next(f for f in catalogue(magnitudes=(magnitude,))
@@ -324,7 +324,7 @@ class TestBoundaryDetection(unittest.TestCase):
 def _step_pair():
     workload = _workload()
     kernels = structural_identity_kernels(workload.site_registry)
-    from evograd.bench.workloads.qwen3.evaluation.tier3.gate import _step
+    from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import _step
 
     return (_step(workload, kernels, data_seed=0, learning_rate=1e-4),
             _step(workload, kernels, data_seed=0, learning_rate=1e-4))
@@ -333,7 +333,7 @@ def _step_pair():
 class TestSeparatedEnvelopes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import _compare
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import _compare
 
         cls.compare = staticmethod(_compare)
         cls.candidate, cls.reference = _step_pair()
@@ -470,7 +470,7 @@ class TestGateOrder(unittest.TestCase):
     """The order is the point: a stage only runs if every earlier one passed."""
 
     def test_the_declared_order_is_the_one_the_gate_runs(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import STAGES
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import STAGES
 
         self.assertEqual(STAGES, (
             "site_preflight", "provider_purity", "live_boundary",
@@ -478,7 +478,7 @@ class TestGateOrder(unittest.TestCase):
         ))
 
     def test_a_failed_preflight_stops_before_the_provider_is_ever_called(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate
 
         purity = _Spy()
         boundary = _Spy()
@@ -494,7 +494,7 @@ class TestGateOrder(unittest.TestCase):
         self.assertEqual(boundary.calls, 0)
 
     def test_an_impure_provider_never_reaches_the_model_or_the_boundary(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate
 
         boundary = _Spy()
         impure = {"ok": False, "sites": [
@@ -515,7 +515,7 @@ class TestGateOrder(unittest.TestCase):
         self.assertEqual(boundary.calls, 0)
 
     def test_a_boundary_failure_stops_before_any_whole_model_step(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate
 
         step = _Spy()
         broken = {"ok": False, "errors": [], "coverage_ok": True,
@@ -539,7 +539,7 @@ class TestTimingIsGatedOnCorrectness(unittest.TestCase):
     """Whether a timer would have run. No timing is collected either way."""
 
     def _run(self, verdict):
-        from evograd.bench import tier3_runner
+        import evograd.evaluation.tier3.runner as tier3_runner
 
         timer = _Spy()
         workload = _Fixture(verdict)
@@ -567,7 +567,7 @@ class TestTimingIsGatedOnCorrectness(unittest.TestCase):
         self.assertEqual(timer.calls, 0)
 
     def test_the_failure_carries_the_stage_that_refused(self):
-        from evograd.bench import tier3_runner
+        import evograd.evaluation.tier3.runner as tier3_runner
 
         with self.assertRaises(tier3_runner.ModelCorrectnessFailure) as caught:
             tier3_runner.model_correctness_check(
@@ -610,7 +610,7 @@ class _patched:
     SIBLINGS = ("purity", "boundary")
 
     def __enter__(self):
-        import evograd.bench.workloads.qwen3.evaluation.tier3 as package
+        import evograd.evaluation.tier3.workloads.qwen3_0_6b as package
 
         for name, value in self.attributes.items():
             target = package if name in self.SIBLINGS else self.module
@@ -625,7 +625,7 @@ class _patched:
 
 
 def _fake_policy():
-    from evograd.bench.tier3_gate.numerics import (
+    from evograd.evaluation.tier3.gate.numerics import (
         NumericsPolicy,
         SCHEMA_VERSION,
         TrajectoryPolicy,
@@ -647,7 +647,7 @@ class TestUlpPerturbation(unittest.TestCase):
     """A fault defined in units of the storage format cannot be rounded away."""
 
     def test_every_element_moves_away_from_zero(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import perturb_ulps
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import perturb_ulps
 
         clean = torch.tensor([1.0, -1.0, 0.013, -0.013, 0.0, -0.0],
                              dtype=torch.bfloat16)
@@ -661,7 +661,7 @@ class TestUlpPerturbation(unittest.TestCase):
         # |p| ~ 1.3e-2 puts the bfloat16 ULP at 6.1e-5, and one AdamW step at
         # lr=1e-4 moves the weight by 1.22e-4. The control is therefore a whole
         # step's worth of error, not an arbitrary number.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import perturb_ulps
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import perturb_ulps
 
         value = torch.tensor([0.013], dtype=torch.bfloat16)
         delta = float(perturb_ulps(value, 2)) - float(value)
@@ -680,7 +680,7 @@ class TestObservability(unittest.TestCase):
         # where the bfloat16 ULP is 7.8e-3, so an AdamW step of 1e-4 rounds
         # away entirely and the realized update is exactly zero. Scaling zero
         # by 1.02 is still zero.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import observability
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import observability
 
         clean = self._capture({"model.norm.weight": [1.0, 1.0, 1.0]})
         before = clean["model.norm.weight"].float()
@@ -690,7 +690,7 @@ class TestObservability(unittest.TestCase):
         self.assertEqual(evidence["stored_elements_changed"], 0)
 
     def test_a_ulp_perturbation_changes_every_stored_bit(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             observability,
             perturb_ulps,
         )
@@ -703,7 +703,7 @@ class TestObservability(unittest.TestCase):
         self.assertEqual(evidence["roles_with_no_stored_change"], [])
 
     def test_the_classification_separates_the_two_failures_to_reject(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.controls import (
             DETECTED,
             MISSED,
             UNOBSERVABLE,
@@ -719,7 +719,7 @@ class TestObservability(unittest.TestCase):
 
 class TestUpdateControlPolicy(unittest.TestCase):
     def test_the_ulp_control_is_required_and_wrong_update_is_a_diagnostic(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             diagnostic_catalogue,
             state_catalogue,
         )
@@ -731,7 +731,7 @@ class TestUpdateControlPolicy(unittest.TestCase):
         self.assertEqual(diagnostic, {"wrong_update"})
 
     def test_the_ulp_fault_moves_the_update_by_what_it_moved_the_parameter(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import state_catalogue
 
         fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
         stored = torch.tensor([0.013, -0.013], dtype=torch.bfloat16)
@@ -748,7 +748,7 @@ class TestObservableUpdateFaultIsRejected(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import _compare, _step
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import _compare, _step
 
         cls.compare = staticmethod(_compare)
         workload = _workload()
@@ -758,7 +758,7 @@ class TestObservableUpdateFaultIsRejected(unittest.TestCase):
         cls.envelopes = derive_envelope(_compare(cls.candidate, cls.reference))
 
     def test_a_ulp_corrupted_update_is_rejected(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import state_catalogue
 
         fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
         verdict = check_against(
@@ -769,7 +769,7 @@ class TestObservableUpdateFaultIsRejected(unittest.TestCase):
                          {KIND_UPDATE})
 
     def test_it_is_observable_in_stored_state(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             observability,
             state_catalogue,
         )
@@ -781,8 +781,8 @@ class TestObservableUpdateFaultIsRejected(unittest.TestCase):
         self.assertEqual(evidence["stored_fraction_changed"], 1.0)
 
     def test_the_gate_fails_at_numerical_envelopes(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate as gate_module
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate as gate_module
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import state_catalogue
 
         fault = next(f for f in state_catalogue() if f.name == "stored_param_ulp")
         damaged = fault.apply(self.candidate)
@@ -804,7 +804,7 @@ class TestObservableUpdateFaultIsRejected(unittest.TestCase):
         self.assertEqual(verdict["failed_at"], "numerical_envelopes")
 
     def test_a_rejected_provider_never_reaches_timing(self):
-        from evograd.bench import tier3_runner
+        import evograd.evaluation.tier3.runner as tier3_runner
 
         timer = _Spy()
         with _patched(tier3_runner, measure_step=timer):
@@ -822,7 +822,7 @@ class TestUpdateFaultReachesStoredState(unittest.TestCase):
     """A wrong update is only wrong once it has been stored."""
 
     def test_a_two_percent_update_fault_is_re_stored_before_it_is_measured(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             diagnostic_catalogue,
             observability,
         )
@@ -844,11 +844,11 @@ class TestUpdateFaultReachesStoredState(unittest.TestCase):
         self.assertLess(evidence["stored_fraction_changed"], 1.0)
 
     def test_a_sub_ulp_update_fault_stores_nothing_and_is_classified_so(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.controls import (
             UNOBSERVABLE,
             classify,
         )
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             diagnostic_catalogue,
             observability,
         )
@@ -863,11 +863,11 @@ class TestUpdateFaultReachesStoredState(unittest.TestCase):
         self.assertEqual(classify(evidence, rejected=False), UNOBSERVABLE)
 
     def test_an_optimizer_state_fault_is_not_called_unobservable(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.controls import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.controls import (
             OPTIMIZER_SCOPE,
             classify,
         )
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import state_catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import state_catalogue
 
         moment = next(f for f in state_catalogue() if f.name == "corrupt_exp_avg")
         self.assertEqual(moment.scope, "optimizer_state")
@@ -881,7 +881,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
     """The loss curve is bounded the way the tensors are: drift plus drift."""
 
     def _policy(self, ee, sb):
-        from evograd.bench.tier3_gate.numerics import (
+        from evograd.evaluation.tier3.gate.numerics import (
             TrajectoryPolicy,
         )
 
@@ -892,7 +892,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         return make(*ee), make(*sb)
 
     def test_the_two_halves_are_summed(self):
-        from evograd.bench.tier3_gate.numerics import (
+        from evograd.evaluation.tier3.gate.numerics import (
             combined_trajectory,
         )
 
@@ -905,7 +905,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         # The smoke config is small enough that eager-vs-eager is bitwise, so
         # the E/E limit derives to exactly zero. Held to that alone, a correct
         # provider is rejected for one ULP on one loss.
-        from evograd.bench.tier3_gate.numerics import (
+        from evograd.evaluation.tier3.gate.numerics import (
             combined_trajectory,
         )
 
@@ -919,7 +919,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
                         .check(curve, drifted)["ok"])
 
     def test_a_real_divergence_is_still_rejected(self):
-        from evograd.bench.tier3_gate.numerics import (
+        from evograd.evaluation.tier3.gate.numerics import (
             combined_trajectory,
         )
 
@@ -931,7 +931,7 @@ class TestTrajectoryLimitsCombine(unittest.TestCase):
         )
 
     def test_a_policy_without_an_integration_half_is_unchanged(self):
-        from evograd.bench.tier3_gate.numerics import (
+        from evograd.evaluation.tier3.gate.numerics import (
             combined_trajectory,
         )
 

@@ -24,8 +24,8 @@ per step from position ids and shares them across all 28 layers, so within this
 boundary they are tables, not activations, and they receive no gradient.
 """
 
-from evograd.bench.workloads import load_snapshot as _load_snapshot
-from evograd.bench.workloads import load_snapshot_task as _snapshot_task
+from evograd.benchmark.topdown import load_snapshot as _load_snapshot
+from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
@@ -334,7 +334,7 @@ op = declare_op(
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
     memory_inputs=("x", "q_weight", "k_weight", "v_weight", "cos", "sin"),
-    # Measured, not chosen. `evograd.bench.workloads.qwen3.levels.level2.qkv_norm_rope calibrate`
+    # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope calibrate`
     # compares the declared float32 reference against `runtime_forward` -- the
     # spelling the model runs, and therefore the smallest disagreement any
     # correct implementation can have with the oracle -- on every correctness

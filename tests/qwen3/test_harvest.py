@@ -16,15 +16,15 @@ import torch
 from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
-    from evograd.bench.workloads.qwen3.harvest.harvest import run_harvest
-    from evograd.bench.workloads.qwen3.harvest.manifest import (
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import (
         SCHEMA_VERSION,
         deduplicate,
         semantic_hash,
         summarize,
     )
-    from evograd.bench.workloads.qwen3.levels.level4.model import build_model, make_inputs, training_step
-    from evograd.bench.workloads.qwen3.harvest.observe import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, make_inputs, training_step
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.observe import (
         MANDATORY_TASKS,
         MandatoryBoundaryError,
         ObserverError,
@@ -238,7 +238,7 @@ class TestDeduplication(HarvestFixture):
     def test_the_key_excludes_path_role_layer_and_ordinal(self):
         """Directly: two events that differ only in provenance produce one
         configuration."""
-        from evograd.bench.workloads.qwen3.harvest.observe import Event
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.observe import Event
 
         def make(ordinal, path, role, layer):
             return Event(
@@ -268,7 +268,7 @@ class TestDeduplication(HarvestFixture):
         self.assertEqual(records[0].layer_indices, [0, 7])
 
     def test_a_differing_attribute_splits_the_configuration(self):
-        from evograd.bench.workloads.qwen3.harvest.observe import Event
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.observe import Event
 
         def make(out_features):
             return Event(
@@ -445,7 +445,7 @@ class TestObserverIsolation(unittest.TestCase):
         self.assertEqual(counts[0], counts[1])
 
     def test_observation_changes_neither_loss_nor_gradients(self):
-        from evograd.bench.workloads.qwen3.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.smoke import run_smoke
 
         spec = tiny_spec()
         unobserved = run_smoke(spec)
@@ -461,7 +461,7 @@ class TestObserverIsolation(unittest.TestCase):
             self.assertEqual(observed["validation"][key], unobserved.result[key], key)
 
     def test_a_missing_mandatory_boundary_is_an_error(self):
-        from evograd.bench.workloads.qwen3.harvest.observe import (
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.observe import (
             Observation,
             check_mandatory_boundaries,
         )

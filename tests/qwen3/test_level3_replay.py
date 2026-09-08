@@ -18,25 +18,25 @@ import torch
 from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
-    from evograd.bench.workloads.qwen3.levels.level3.artifact import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import (
         SCHEMA_VERSION,
         ArtifactError,
         LayerArtifact,
         content_hash,
         describe,
     )
-    from evograd.bench.workloads.qwen3.levels.level3.capture import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture import (
         CaptureError,
         capture_decoder_layer,
         load_manifest,
         run_capture,
         select_layer_event,
     )
-    from evograd.bench.workloads.qwen3.harvest.harvest import run_harvest
-    from evograd.bench.workloads.qwen3.harvest.manifest import write_manifest
-    from evograd.bench.workloads.qwen3.levels.level4.model import build_model, make_inputs, training_step
-    from evograd.bench.workloads.qwen3.levels.level3.artifact import artifact_hash, load_canonical
-    from evograd.bench.workloads.qwen3.levels.level3.replay import (
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, make_inputs, training_step
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import artifact_hash, load_canonical
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay import (
         BF16_EPS,
         BF16_UNIT_ROUNDOFF,
         FORWARD_TOL,
@@ -508,7 +508,7 @@ class TestNoiseRepeatValidation(unittest.TestCase):
         import contextlib
         import io
 
-        from evograd.bench.workloads.qwen3.levels.level3.replay import main
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay import main
 
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:

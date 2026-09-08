@@ -10,7 +10,7 @@ import traceback
 
 import torch
 
-from evograd.bench.harness import run_benchmarks
+from evograd.evaluation.tier1.fast import run_benchmarks
 from evograd.evolve.evaluator import (
     _load_module,
     _run_correctness,

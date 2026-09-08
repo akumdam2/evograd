@@ -1,449 +1,84 @@
-# The evograd benchmark
+# EvoGrad benchmark specification
 
-A benchmark for generated **training** kernels: correctness, speed, and the
-memory a forward pass retains for its backward. Every level-1..3 task is a
-forward/backward pair, not a forward alone; the level-4 tasks are whole-model
-training steps the pairs get patched into; and every timed shape is traceable
-to a layer of a real model.
+This document defines the benchmark task space. See
+[`src/evograd/evaluation/README.md`](../src/evograd/evaluation/README.md) for the
+execution and validation protocol. Paper terminology takes precedence over
+historical code names.
 
-25 operators across three levels, 191 timed configurations, plus one
-whole-model workload at level 4.
+## Benchmark Levels
 
-## Task hierarchy
+The top-down benchmark has four integration scopes:
 
-| Level | What it is | Tasks |
-| ---: | --- | ---: |
-| 1 | **Primitive operators** — one mathematical operation, plus the saved state its backward needs | 18 |
-| 2 | **Fused operators** — compositions that occur in real training, evaluated on whether an implementation can optimize across the operator boundary while preserving autograd semantics | 5 |
-| 3 | **Architectural blocks** — a whole decoder layer or protein-model block, where the saved-state decision becomes a property of the block rather than of one kernel | 2 |
-| 4 | **Whole-model workloads** — a complete training step with evolved kernels patched into a real model, measuring whether local speedups survive integration | 1 |
+1. **L1 primitive** — one mathematical primitive and its forward/backward
+   contract.
+2. **L2 composite** — a boundary composed from adjacent primitives in a real
+   training workload.
+3. **L3 architectural-block integration** — cross-boundary integration inside
+   a decoder or protein-model block, including complete returns, saved state,
+   and model-derived activation coverage.
+4. **L4 whole-model workload** — a complete model training workload used to
+   determine whether local gains survive integration.
 
-Levels are declared, not inferred: `OpDecl.level` and `OpDecl.family` for
-levels 1–3, `WorkloadDecl` for level 4. Family exists for aggregation — see
-[Metrics](#metrics).
+Level answers “what scope is optimized.” Evaluation Tier answers “in which
+execution context is the candidate checked and measured.” They are independent.
 
-### Level 1 — primitives
+## Task sources
 
-`layernorm` `rmsnorm` `poly_norm` `dyt` (norm) · `softmax` `sparsemax`
-(reduction) · `swiglu` `geglu` `relu_squared` (activation) · `cross_entropy`
-`kl_div` `jsd` `tvd` (loss) · `matmul` `linear` (gemm) · `conv2d` (conv) ·
-`evoattention` (attention) · `rope` (positional)
+EvoGrad retains two benchmark lines:
 
-### Level 2 — fused
+- `benchmark/operator_suite/` is the implementation-neutral operator suite. It
+  selects tasks/configurations from `evograd.ops.OPS` and aggregates by family
+  and Level. Trusted Liger adapters remain in `ops/*/liger.py` for now.
+- `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
+  snapshots. It currently contains `qwen3_0_6b`, `llama3_8b`, and the
+  AlphaFold3 declaration.
 
-`fused_add_rms_norm` (residual add + RMSNorm) · `fused_linear_cross_entropy`
-(lm_head projection + loss) · `layernorm_linear` (LayerNorm + projection) ·
-`gemm_leaky_relu` (GEMM + activation epilogue) · `fused_moe_swiglu` (routing +
-grouped GEMM + SwiGLU + down projection)
+The existing `ops/level3` direct-block declarations are legacy tasks. They
+remain runnable for reproducibility, but do not demonstrate that the paper's
+new top-down L3 integration contract is complete.
 
-### Level 3 — blocks
+## Registries
 
-- **`llama3_decoder_layer`** — RMSNorm → Q/K/V → RoPE → causal GQA → output
-  projection → residual → RMSNorm → SwiGLU MLP → residual. Ten differentiable
-  inputs, ten gradients.
-- **`af3_single_repr_block`** — LayerNorm → Q/K/V → attention with a trainable
-  pair bias and residue mask → output projection → residual → LayerNorm →
-  SwiGLU transition → residual. Thirteen differentiable inputs.
+- Operators: `evograd.ops.OPS`
+- Whole-model benchmark declarations: `evograd.benchmark.WORKLOADS`
+- Top-down snapshot workloads: `evograd.benchmark.topdown.TOPDOWN_WORKLOADS`
+- Tier-3 adapters: `evograd.evaluation.tier3.workloads.TIER3_ADAPTERS`
 
-Both blocks state their exclusions in their declarations rather than leaving a
-reader to discover them. The Llama block models the **training** forward pass:
-no KV cache (per-step mutable state the declaration model does not express) and
-no attention-weight output. The AlphaFold3 block is the **single-representation
-update only** — a full pairformer block maps `(single, pair) → (single', pair')`
-and cannot be declared with one output. The pair path is still exercised in the
-backward, because `pair_bias` is a differentiable input and `d_pair_bias`
-reduces over the MSA axis; the triangle-multiplicative pair update is not.
+Task counts are derived from these registries rather than duplicated in prose.
 
-### Level 4 — whole-model workloads
+## Correctness, provenance, and coverage
 
-- **`alphafold3`** — one full AlphaFold3 training step: forward to the model's
-  own combined loss, backward, optimizer step. The model is
-  [alphafold3-pytorch](https://pypi.org/project/alphafold3-pytorch/) — the
-  implementation MegaFold builds on, and MegaFold is where every AF3 shape at
-  levels 1–3 came from, so the provenance chain closes at the top.
+An operator contract defines outputs, requested gradients, dtype/shape/layout,
+tolerances, permitted backward input overwrites, and saved state. Correctness
+is a hard gate before timing. A failed configuration still contributes to
+coverage and cannot improve performance by silently disappearing from an
+average.
 
-A level-4 task is not an operator pair, so it is not an `OpDecl`: it has no
-single output, no saved-state contract, and nothing in it is evolved. It is a
-`WorkloadDecl` (`evograd/opdecl/workloads.py`) naming the model configuration
-it trains, the **patch sites** — which submodules evolved level-1/2 kernels
-replace, and which declared operator each site accepts — and the benchmark
-cases, provenance-checked against the configuration like every other level.
-The AlphaFold3 sites are `layer_norm` (`layernorm`), `transition` (`swiglu`),
-and `pair_bias_attention`/`triangle_attention` (both `evoattention`) — the same
-surface MegaFold's hand-written kernels attack. Everything else in the model
-(triangle-multiplicative updates, outer-product mean, diffusion internals,
-confidence heads) runs stock eager inside the timed step; the resulting
-dilution of the speedup is the level-4 result, not a flaw.
+Top-down shapes retain their source: model configuration, harvest manifest,
+frozen snapshot, and concrete boundary. A handpicked or reduced configuration
+must say so in its provenance; it cannot masquerade as a shape observed in the
+model.
 
-Measurement is the tier-3 protocol (`evograd tier3-bench --model
-alphafold3_2l`, or `--model alphafold3` for the full 48-block report
-configuration): every provider trains from identical seeded weights on identical
-seeded synthetic batches, and the report carries step latency, throughput,
-peak memory, short-horizon loss agreement, and `cpu_bound_fraction`. The suite
-folds a finished tier-3 report in as the level-4 row (`evograd suite
---tier3-report alphafold3=<path>`); without one the task is reported
-uncovered, never skipped. The task requires the `af3` extra
-(`pip install 'evograd[af3]'`).
+## Performance and aggregation
 
-## Where the shapes come from
+Candidate and reference compare like-for-like full-step latency:
 
-Benchmark shapes are **derived from frozen model configurations**, not written
-by hand. `evograd/opdecl/models.py` holds the configurations; each timed
-workload carries a `Provenance` naming the model, the component, and the
-dimensions the configuration does not fix (batch, token count, crop length).
-
-```python
-Provenance(model="llama_3_8b", component="mlp_down", free={"tokens": 8192})
-# -> LLAMA_3_8B.mlp_down_dims(tokens=8192) == {"M": 8192, "K": 14336, "N": 4096}
+```text
+S_i = T_reference(forward + backward) / T_candidate(forward + backward)
 ```
 
-`tests/test_provenance.py` re-derives every `hf_config` workload and fails if a
-declared shape and the model it cites ever disagree. Provenance is an assertion,
-not a comment — 172 of the 191 timed configurations are checked this way.
+Geometric aggregation occurs within a task's configurations, then within a
+family, then across families. Coverage and retained-state memory are reported
+separately and never folded into speedup.
 
-Four operators carry a weaker claim, and say so rather than inventing a
-configuration to justify their numbers:
+## Result paths
 
-| Operator | Source | Why |
-| --- | --- | --- |
-| `conv2d` | `handpicked` | ResNet-style stage resolutions and channel widths, but the declared contract is stride 1 / padding 0, whereas ResNet's 3×3 convolutions pad by 1. These are not literal ResNet layers. |
-| `gemm_leaky_relu` | `handpicked` | From Triton's tutorial. No shipped architecture fuses Leaky-ReLU into a GEMM epilogue. |
-| `fused_moe_swiglu` | `paper` | Liger's own MoE benchmark grid; routing matches Mixtral-style top-2 over 8–16 experts, with the widths scaled down to fit one GPU. |
-| `sparsemax` | `handpicked` | No shipped architecture contains sparsemax at all. The v1 grid claimed Llama-3's 128256-wide logits — sparsemax substituted for softmax — which asserted more than the evidence supports: Triton implementations cap a row at 65536 columns, which is what you would expect if nobody runs it at vocabulary width. The timed grid uses 32768 (mid-sized-vocabulary scale) and the vocabulary widths stay in untimed `coverage`, so the point where implementations stop is still recorded. |
+Historical output remains in place. New runs use:
 
-The test suite requires those to explain themselves in a `note`; it does not
-require them to re-derive.
-
-## Fixed- and variable-shape evaluation
-
-**Variable shape** is the default: one deployable implementation is measured
-across a whole grid. Declarations that define shape regimes evolve a generalist
-plus a small-shape and a large-shape specialist, and `evograd dispatch` searches
-for the routing threshold that maximizes the geometric-mean speedup, then emits
-a dispatcher that routes at runtime.
-
-**Fixed shape** lets a candidate specialize hard for one configuration. Every
-operator exposes one single-case suite per timed workload:
-
-```bash
-evograd bench --op layernorm --candidate best.py \
-    --suite fixed/rows4096-hidden4096-bfloat16
+```text
+results/benchmark/operator_suite/...
+results/benchmark/topdown/<workload>/...
+results/evaluation/tier<N>/<workload>/...
 ```
 
-## Metrics
-
-### Correctness
-
-A candidate must match the reference forward output and every requested
-gradient, in value, shape, and dtype, within the declared per-dtype tolerances.
-Correctness is a hard gate: only candidates that pass every case are timed.
-
-**Level-3 tasks compute their reference in float32** (`reference_dtype`) while
-the candidate runs in bfloat16. Composing ten operators makes a same-dtype
-reference carry as much rounding error as the candidate, at which point the
-tolerance stops meaning "how wrong is the candidate" and becomes a fudge factor.
-The declared block tolerance is set from a measured noise floor, not chosen to
-make tests pass: the tightest margin over the measured bfloat16-vs-float32
-discrepancy is 2.1×.
-
-Blocks also gate on float32 cases at small dimensions. A bfloat16-only gate
-cannot separate a real algebra error — an RMSNorm that skips its float32 upcast,
-say — from ordinary rounding, because both land at the same magnitude.
-
-The promotion applies to the correctness path only. The eager-PyTorch
-*performance* baseline runs through the same reference function, and timing it
-at float32 against a bfloat16 candidate would not be a baseline at all.
-
-### Inputs a backward may overwrite
-
-Benchmark inputs are immutable by default, and the final-report protocol checks
-it: a candidate that rewrites its inputs both skews repeated timings and skips
-work the others do.
-
-Writing a gradient over the activation that produced it is the exception worth
-allowing. The gradient has the activation's exact shape, and under autograd the
-activation is dead once the backward has read it, so a SwiGLU backward can skip
-allocating two full tensors and write in place. Liger does this. Forbidding it
-outright would exclude a real optimization from the benchmark.
-
-A declaration therefore names the inputs its backward may overwrite:
-
-```python
-backward_may_overwrite=("a", "b")
-```
-
-Three properties make this an allowance rather than a loophole. It belongs to
-the **operator**, so every candidate for that operator has it — a baseline
-cannot enjoy it privately. It covers **contents only**: shape, strides, dtype
-and storage offset are still enforced, because a reused buffer is still the same
-buffer. And the suite report **lists every relaxation it ran under**, so a
-reader knows which numbers were measured with it.
-
-### Coverage
-
-The fraction of tasks and of configurations that build, run, and pass
-correctness. Reported separately at every level and never folded into the
-speedup: an operator that fails on one shape out of five has 80% coverage, not
-four shapes' worth of speedup.
-
-### Performance
-
-Full-step speedup — forward **and** backward:
-
-```
-S_i = T_reference_full_step,i / T_candidate_full_step,i
-```
-
-Aggregated geometrically: within an operator across its shapes, then within a
-family, then across families.
-
-Two choices worth stating.
-
-**Full step, never backward-only.** The eager baseline's backward timing runs
-through the oracle, which computes the forward *and* the backward, while the
-candidate's backward is timed from pre-saved state with its forward outside the
-timed region. For a single elementwise kernel the distortion is small; for a
-level-3 block the forward is roughly a third of the step, so a backward-only
-ratio is inflated by about half. The suite reads exactly one key,
-`speedup_vs_baseline_raw_full_step`.
-
-**Pooled by family.** Fourteen of the twenty-five operators are norms,
-activations, and losses. A flat mean over operators would let whichever family
-has the most declarations decide the headline number, so each family gets one
-vote.
-
-### Saved memory
-
-Bytes of intermediate state the forward retains for the backward, reported
-against the operator's declared memory inputs. This is the compute–memory
-trade-off the benchmark exists to expose: a candidate may recompute in the
-backward instead of saving, and at level 3 that choice spans a whole block.
-
-Inputs that are not model state — integer class labels, routing indices,
-attention masks, rotary tables — are excluded from the ratio via
-`memory_inputs`, though a candidate remains free to save them.
-
-## What the eager baseline runs
-
-Every operator declares a `forward` that spells its mathematics out in
-primitives. That is what the oracle differentiates and what AtenIR lowers into
-an unfused seed, and both need it to stay primitive. It is the wrong thing to
-**time** against: LayerNorm written as mean/sub/square/mean/rsqrt/mul/add
-launches a dozen kernels and re-reads the row from HBM each time, where
-`F.layer_norm` is one fused kernel. Timing a candidate against the primitive
-spelling reports how much faster it is than a strawman.
-
-Declarations therefore carry a second, optional reference:
-
-```python
-runtime_forward="...forward_ref:layernorm_runtime_ref"   # F.layer_norm
-```
-
-**The rule is: the eager baseline is the best implementation available in the
-PyTorch version being used.** Where a fused `F.xxx` exists, it is used. Where
-PyTorch has none — `dyt`, `poly_norm`, `sparsemax`, `jsd`, `tvd`, all recent
-enough that no fused equivalent exists — the primitive spelling *is* the best
-available, and timing against it is honest.
-
-`verify_runtime_forward` checks the two agree numerically before any timing is
-trusted. Without it the suite could time one function while checking the
-correctness of another, and a faster-but-different baseline is indistinguishable
-from a faster one.
-
-### Why not match what HuggingFace runs
-
-A tempting alternative is to baseline against the implementation a real training
-stack executes — for `rmsnorm` that would be HuggingFace's `LlamaRMSNorm`, which
-is still written in primitives today. Liger's own published numbers use that
-comparison, and for a library it is the right one: it answers "what do you gain
-by switching to us".
-
-A benchmark answers a different question and must not adopt that baseline.
-Measured on a GH200, the choice moves `rmsnorm` from **0.90x to 5.97x** — the
-same kernel, a six-fold difference in headline, decided entirely by which
-PyTorch spelling sits on the other side. Benchmarking against the weaker
-spelling would flatter every submission, including future generated kernels,
-and would not survive the first person who asks why `F.rms_norm` was not used.
-
-The consequence is worth stating plainly: under this rule Liger's RMSNorm and
-LayerNorm are **slower** than PyTorch's fused implementations on this hardware,
-while its SwiGLU, RoPE and TVD kernels — which have no fused PyTorch
-counterpart — remain genuinely faster. A benchmark exists to report that
-distinction, not to protect any implementation from it.
-
-## Baselines
-
-| Baseline | Availability | Notes |
-| --- | --- | --- |
-| `pytorch_autograd` | every operator | Eager PyTorch through the declared forward reference. Always available, so it is the fallback for `--baseline auto`. |
-| `liger` | 17 operators | Reviewed adapters around Liger-Kernel's shipped entry points. Selected by `auto` when available. |
-| `torch_compile`, `torch_compile_max_autotune` | every operator | Built in, needs no declaration support. Never selected by `auto`: each case compiles a shape specialist, which costs real wall time. |
-| `cublas_pair` | `matmul` | |
-| `triton_tutorial` | `gemm_leaky_relu` | |
-
-Every non-eager baseline is verified against the autograd oracle before its
-timings are trusted. A miscompile or a mis-wired adapter would otherwise show up
-only as a suspiciously good baseline.
-
-Known gap: `evoattention` and `af3_single_repr_block` should be compared against
-MegaFold's kernels and DeepSpeed's `DS4Sci_EvoformerAttention`, which is what
-MegaFold itself compares against. Neither package is installed here, so neither
-baseline is declared — shipping a baseline that has never been executed would be
-worse than declaring none.
-
-## Measurement protocol
-
-Two harnesses, deliberately separate.
-
-The **evolution harness** is low overhead: it is called thousands of times
-inside the search, caches baseline timings, and reports medians.
-
-The **final-report protocol** (`evograd fair-bench`, `evograd suite`,
-`evograd-final-runtime-v1`) re-measures both providers under conditions designed
-to make the comparison defensible:
-
-- L2 cache cleared before every timed region
-- batched CUDA events with a single synchronize, not one per sample
-- provider order randomized
-- inputs checked for mutation — content, shape, stride, dtype, and storage
-  offset — outside the timed regions
-- median of the retained samples
-- `--identity-control` runs the baseline against itself, which must report ~1.0×
-
-The first, second and last of those are exactly what `triton.testing.do_bench`
-does, and therefore what KernelBench, TritonBench and FastKernels measure with.
-The order randomization and the mutation check are additions; both are cheap.
-
-**Every published number comes from this protocol.** `evograd suite` uses it by
-default; `--protocol fast` selects the evolution harness for iteration only, and
-any report produced that way says so in its header. The difference is not
-cosmetic: measured on a GH200, the same operators re-run under the evolution
-harness moved by up to 17% between runs — the drift concentrates in small
-kernels, whose execution time approaches the timing overhead itself, while large
-ones stayed within 0.1%.
-
-`evograd fair-bench` additionally accepts `--blocks N` (default 3) and reports
-block-bootstrap 95% confidence intervals across those repeats. The suite runs a
-single block: the bootstrap resamples *blocks*, so with one block every interval
-collapses to zero width, and paying three times the measurement cost for a
-statistic the suite does not report would be waste. Use `fair-bench` when the
-question is how much a specific difference is supported by the samples.
-
-## Pitfalls that silently produce wrong numbers
-
-Every item here was measured, not theorised, and every one of them is silent:
-the run completes, the numbers look plausible, and they answer a different
-question than the one asked.
-
-### Build the upstream gradient outside the timed region
-
-A `full` step measured as
-
-```python
-def full():
-    y = model(x)
-    y.backward(torch.randn_like(y), retain_graph=True)   # WRONG
-```
-
-allocates and fills an activation-sized tensor inside every timed iteration.
-At 8 rows it is noise; at 131072 x 1024 it is a 268 MB `randn` per iteration,
-and the measurement is dominated by the random number generator. Build `dy`
-once, before timing:
-
-```python
-dy = torch.randn_like(x)          # once, outside
-
-def full():
-    y = model(x)
-    y.backward(dy, retain_graph=True)
-```
-
-Note that Liger's own published benchmark (`benchmark/scripts/utils.py`) uses
-the first form, so its published `full` numbers carry that cost and are not
-directly comparable to numbers taken the second way.
-
-### A per-shape `torch.compile` baseline needs three settings, or it is not one
-
-Compiling one model per shape is not enough. Dynamo's automatic dynamic-shape
-promotion turns later specializations into a shared dynamic graph, and
-`suppress_errors` hides a frame that fails to compile by falling back to eager.
-A sweep that looked like fifteen static specializations was measured producing
-**eight unique graphs from nine frames, one of which failed to compile** — while
-still being labelled "per-shape compile". Require all of:
-
-- one shape per process, and one compiled model in that process;
-- `torch._dynamo.config.automatic_dynamic_shapes = False`;
-- `torch._dynamo.config.suppress_errors = False`.
-
-Then record `frames`, `graph_breaks` and `recompiles` from
-`torch._dynamo.utils.counters` and assert they are 1/1, 0 and 0. Confirm with a
-profiler that Inductor kernels actually ran: classify by the generator's naming
-prefix (`triton_*`) rather than by what the kernel computes, since Inductor
-names its kernels after the ATen ops they fuse — `triton_per_fused_native_layer_norm_0`
-contains `layer_norm` and is not an eager fallback.
-
-### Direct-pair and integrated latency are different quantities
-
-The direct pair calls `forward_with_saved` then `backward_from_saved` by hand.
-The integrated path runs the same program as an `nn.Module` through the autograd
-engine, which is how it is deployed. On LayerNorm at hidden=1024 the GPU
-kernels account for **1-6% of an integrated training step**; the rest is
-dispatch. The two therefore rank implementations differently, and at small
-shapes they can disagree about the winner. State which one a number came from,
-and do not compare across them.
-
-`evograd.bench.integrated` defines the integrated region once so the evolution
-fitness and the final benchmark cannot drift apart. It is opt-in: set
-`EVOGRAD_INTEGRATED_METRIC=1` for the diagnostic, or `EVOGRAD_FITNESS=integrated`
-to drive the search with it. The default fitness remains the direct pair.
-
-### Do not rank differences inside the measured variance
-
-Re-running the *same* script on a different node reproduced its own recorded
-`torch.compile` latencies to within -14% at one shape and +22% at another, with
-one shape landing exactly. The drift is shape-dependent, not a uniform node
-offset, and is consistent with Inductor autotuning selecting different
-configurations between sessions. Across three sessions per cell, the median
-spread was around 9% with a tail past 50% on the smallest shapes.
-
-Consequences: run at least three independent sessions per cell and report the
-median across them; keep every per-session value; and treat differences below
-roughly 20% at a single shape as unresolved. Geometric means over many shapes
-are more robust than any single cell, but a gap of a few percent between two
-geomeans is still not a ranking.
-
-### Aggregate with geometric means of ratios, never sums of runtimes
-
-A sweep spanning a 16384x range in rows is decided entirely by its largest
-shape if latencies are summed. Take the per-shape ratio to the baseline and
-report its geometric mean.
-
-## Running it
-
-```bash
-# one operator
-evograd bench --op layernorm --candidate best.py --baseline liger
-evograd fair-bench --op layernorm --candidate best.py
-evograd fair-bench --op layernorm --candidate best.py \
-    --baseline torch_compile --suite tb_sweep_13_27
-
-# the whole suite, one candidate per operator under programs/
-evograd suite --candidates programs/ --out results/
-evograd suite --level 1 --level 2 --out results/     # restrict to a level
-
-# the reference line: a reviewed pair baseline as the candidate, so the suite
-# reports a number before anything has been generated for all 25 operators
-evograd suite --candidate-baseline liger --out results/liger/
-```
-
-`evograd suite` writes `suite_report.json` and `SUITE_RESULTS.md`, with
-per-operator, per-level, and overall speedup, coverage, and saved memory.
-
-Correctness runs without a GPU:
-
-```bash
-evograd verify --op rope --device cpu candidate.py
-```
-
-Timing does not: the harness measures with CUDA events, and the declared shapes
-are sized for a real device.
+See [`RESULTS_LAYOUT.md`](RESULTS_LAYOUT.md).

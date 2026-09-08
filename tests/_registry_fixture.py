@@ -1,6 +1,6 @@
 """A sample site registry, for tests that need *a* registry rather than a model's.
 
-``bench/tier3_patch.py`` used to ship ``LLAMA_SITES``, and much of the tier-3
+The old monolithic Tier-3 patch module shipped ``LLAMA_SITES``, and much of the tier-3
 suite reached for it as a convenient stand-in. That was the coupling those very
 tests exist to forbid: a registry names one model's patchable places, so it
 belongs to a workload package, and the patcher must not carry one.
@@ -20,7 +20,7 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
-from evograd.bench.tier3_patch import Site, SiteRegistry
+from evograd.evaluation.tier3.patch import Site, SiteRegistry
 from evograd.ops.level3.llama3_decoder_layer.forward_ref import (
     _default_swiglu,
     _rms_norm_fused,

@@ -13,7 +13,7 @@ little. ``torch_compile`` is the baseline that actually asks whether an evolved
 kernel is worth anything.
 
 Timing splits the same way the candidate is measured (see
-``evograd.bench.harness.benchmark_case``): the forward builds the autograd graph
+``evograd.evaluation.tier1.fast.benchmark_case``): the forward builds the autograd graph
 in the *untimed* setup, and only ``torch.autograd.grad`` sits in the timed
 region. The compiled backward is produced lazily on the first backward call, so
 it is compiled during warmup, not inside a measured rep.

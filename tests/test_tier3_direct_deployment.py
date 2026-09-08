@@ -14,7 +14,7 @@ import unittest
 
 import torch
 
-from evograd.bench.tier3_patch import (
+from evograd.evaluation.tier3.patch import (
     DEPLOYMENT_ENTRY_ATTR,
     deployment_entry,
     patched_kernels,
@@ -71,7 +71,7 @@ class TestDeploymentEntryDetection(unittest.TestCase):
 
 class TestPatchedKernelsRouting(unittest.TestCase):
     def _registry_and_ops(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import qwen3_sites
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import qwen3_sites
         from evograd.ops import OPS
 
         return qwen3_sites(), OPS

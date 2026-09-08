@@ -15,12 +15,12 @@ import unittest
 
 import torch
 
-from evograd.bench.workloads.qwen3.evaluation.tier3 import prediction as P
-from evograd.bench.workloads.qwen3.evaluation.tier3 import protocol4 as P4
-from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b import prediction as P
+from evograd.evaluation.tier3.workloads.qwen3_0_6b import protocol4 as P4
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
     PatchSet, PolicyMismatch, global_grad_rel_l2,
 )
-from evograd.bench.workloads.qwen3.evaluation.tier3.training import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.training import (
     TrainingPlan, training_distances,
 )
 
@@ -214,7 +214,7 @@ class TestPolicy(unittest.TestCase):
                 p.require_binding(**{**good, field: bad})
 
     def test_the_synthetic_calibration_cannot_bind_to_real_text(self):
-        from evograd.bench.workloads.qwen3.levels.level4.spec import CANONICAL, WorkloadSpec
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import CANONICAL, WorkloadSpec
 
         real = WorkloadSpec(weights=P4.__name__ and "pretrained:Qwen/Qwen3-0.6B@c1899de2",
                             data="wikitext-2-raw:b08601e0").validate()
@@ -262,7 +262,7 @@ class TestPolicy(unittest.TestCase):
         # The runner's contract: `model_correctness_hook` returns ok=False and
         # tier3 does not time. Exercised through the same summarize() path the
         # CLI uses, with a verdict whose only failure is the protocol-4 stage.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import summarize
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import summarize
         verdict = {"ok": False, "failed_at": "numerical_envelopes",
                    "reason": "kl_mean = 1.0e-02 > 4.0e-03 (2.50x)", "stages": []}
         summary = summarize(verdict)
@@ -322,7 +322,7 @@ class TestTrainingLoopIntegration(unittest.TestCase):
     """The loop itself, on a toy model: continuous state, windows, evaluator."""
 
     def _run(self, kernels="k", seed=0, evaluator_seed=99):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.training import run_training
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.training import run_training
 
         plan = TrainingPlan(steps=6, window=2, checkpoints=(0, 2, 6), learning_rate=1e-2)
         train = _ToyBatches(4, 2, 9, 37, seed=1)
@@ -356,7 +356,7 @@ class TestTrainingLoopIntegration(unittest.TestCase):
         # The evaluator started from a different init; if the trained weights
         # had not been loaded into it, checkpoint 0 could not equal a fresh
         # trained model's own validation loss. Recompute independently.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.training import evaluate_validation
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.training import evaluate_validation
         fresh = _ToyLM(seed=0)
         expected0 = evaluate_validation(fresh, _ToyBatches(3, 2, 9, 37, seed=2), steps=3)["nll_mean"]
         self.assertAlmostEqual(result["validation_nll"]["0"], expected0, places=5)
@@ -382,7 +382,7 @@ class TestHoldoutRecord(unittest.TestCase):
     """The holdout file must carry the eager reference curves, not only distances to them."""
 
     def test_the_payload_stores_every_seed_s_eager_curve_whole(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4_cli import holdout_payload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4_cli import holdout_payload
         ref = {"train_per_step_nll": [2.9, 2.8, 7.1], "train_window_nll": [2.85, 7.1],
                "validation_nll": {"0": 3.1, "2": 7.0}, "provider": "eager"}
         results = [{"seed": 17, "provider": "compile", "measured": {"train_window_deltas": [0.0, 5.0]},
@@ -395,7 +395,7 @@ class TestHoldoutRecord(unittest.TestCase):
 
     def test_the_holdout_command_writes_through_the_payload_builder(self):
         import inspect
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import protocol4_cli
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import protocol4_cli
         source = inspect.getsource(protocol4_cli.command_holdout)
         self.assertIn("references[seed] = ref_train", source)
         self.assertIn("holdout_payload(args.policy, results, references, diagnostics)", source)
@@ -403,8 +403,8 @@ class TestHoldoutRecord(unittest.TestCase):
 
     def test_part_d_reader_ignores_the_new_key(self):
         import json, tempfile
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4_cli import holdout_payload
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import _protocol4_training_part
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4_cli import holdout_payload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import _protocol4_training_part
         rows = [{"seed": 17, "provider": "compile",
                  "measured": {"kernel_origin": ["trusted_torch_compile"],
                               "train_window_nll_max_abs_delta": 6.0, "val_nll_max_abs_delta": 4.5}}]
@@ -421,9 +421,9 @@ class TestScreeningPolicy(unittest.TestCase):
         return [{"kl_mean": kl, "global_grad_rel_l2": grad}]
 
     def _derive(self, **kw):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4 import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4 import (
             SCREENING_METRICS, SCREENING_PLAN, derive_policy)
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import PatchSet
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import PatchSet
         base = dict(compile_distances=self._samples(1e-3, 3e-2),
                     repeat_distances=self._samples(0.0, 2e-3),
                     workload_id="w", workload_hash="h", dtype="bfloat16", environment_hash="e",
@@ -434,7 +434,7 @@ class TestScreeningPolicy(unittest.TestCase):
         return derive_policy(**base)
 
     def test_screening_thresholds_cover_exactly_b_and_c(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4 import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4 import (
             is_screening, requires_training_part)
         policy = self._derive()
         self.assertEqual(sorted(policy.thresholds), ["global_grad_rel_l2", "kl_mean"])
@@ -445,14 +445,14 @@ class TestScreeningPolicy(unittest.TestCase):
         self.assertEqual(policy.to_dict()["hard_metrics"], list(policy.thresholds))
 
     def test_screening_metrics_require_the_screening_plan_and_vice_versa(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4 import HARD_METRICS
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4 import HARD_METRICS
         with self.assertRaises(ValueError):
             self._derive(training_plan={"steps": 1000})
         with self.assertRaises(ValueError):
             self._derive(metrics=HARD_METRICS)
 
     def test_check_judges_only_the_metrics_the_policy_carries(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4 import check
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4 import check
         policy = self._derive()
         measured = {"kl_mean": 1.5e-3, "global_grad_rel_l2": 4e-2, "missing_grads": [],
                     "grad_presence": {"missing": [], "shape_mismatch": [], "extra": []},
@@ -465,9 +465,9 @@ class TestScreeningPolicy(unittest.TestCase):
         self.assertEqual(check(policy, measured)["failed_at"], "kl_mean")
 
     def test_a_four_part_policy_still_needs_all_four(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4 import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4 import (
             HARD_METRICS, check, derive_policy, requires_training_part)
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import PatchSet
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import PatchSet
         full = {m: 1e-3 for m in HARD_METRICS}
         policy = derive_policy(compile_distances=[full], repeat_distances=[dict(full)],
                                workload_id="w", workload_hash="h", dtype="bfloat16",
@@ -481,7 +481,7 @@ class TestScreeningPolicy(unittest.TestCase):
 
     def test_screening_rows_are_matched_by_origin(self):
         import json, tempfile
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import _protocol4_screening_rows
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import _protocol4_screening_rows
         rows = [{"seed": 11, "provider": "compile",
                  "measured": {"kernel_origin": ["trusted_torch_compile"]},
                  "verdict": {"ok": True, "ratios": {"kl_mean": 0.4}}},
@@ -499,7 +499,7 @@ class TestScreeningPolicy(unittest.TestCase):
 
 class TestPatchSpecs(unittest.TestCase):
     def test_patch_specs_parse_and_refuse_duplicates(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
             parse_patch_set_spec, parse_patch_specs)
         self.assertEqual(parse_patch_specs(["attention=compile", "residual_rmsnorm=liger",
                                             "qkv_norm_rope=examples/a.py"]),
@@ -517,7 +517,7 @@ class TestPatchSpecs(unittest.TestCase):
 
     def test_candidate_patch_set_must_equal_the_policy_sites(self):
         from types import SimpleNamespace
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4_cli import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4_cli import (
             build_kernels, patches_of, sites_of)
         args = SimpleNamespace(sites="attention,swiglu_mlp", patch=["attention=compile"],
                                candidate=None)
@@ -530,8 +530,8 @@ class TestPatchSpecs(unittest.TestCase):
         self.assertEqual(patches_of(legacy), {"qkv_norm_rope": "examples/h.py"})
 
     def test_liger_route_is_only_offered_where_declared(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import kernels_from_patches
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import qwen3_sites
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import kernels_from_patches
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import qwen3_sites
         with self.assertRaises(ValueError):
             kernels_from_patches({"attention": "liger"}, qwen3_sites())
         kernels = kernels_from_patches({"residual_rmsnorm": "liger"}, qwen3_sites())
@@ -543,8 +543,8 @@ class TestGateDispatch(unittest.TestCase):
     """With a protocol-4 policy the runner must not consult the synthetic canonical calibration."""
 
     def _workload(self, **extra):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.protocol4_cli import PRETRAINED, REAL_TEXT
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4_cli import PRETRAINED, REAL_TEXT
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         return Qwen3Workload.from_config({"dtype": "bfloat16", "device": "cpu", "seed": 0,
                                           "data_seed": 0, "weights": PRETRAINED, "data": REAL_TEXT,
                                           "calibration_path": "/nonexistent/canonical.json",
@@ -558,7 +558,7 @@ class TestGateDispatch(unittest.TestCase):
         self.assertIs(workload.model_correctness(object(), device="cpu"), sentinel)
 
     def test_diagnostic_timing_flag_threads_through_the_cli_config(self):
-        from evograd.bench import tier3_cli
+        import evograd.evaluation.tier3.cli as tier3_cli
         args = tier3_cli._parser().parse_args(
             ["--model", "qwen3_0_6b", "--real-text", "--device", "cpu",
              "--protocol4-calibration", "p.json", "--protocol4-verdict", "h.json",
@@ -571,7 +571,7 @@ class TestGateDispatch(unittest.TestCase):
 
     def test_the_hook_source_refuses_a_failed_screening_unless_diagnostic(self):
         import inspect
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         source = inspect.getsource(Qwen3Workload._protocol4_hook)
         self.assertIn("if failed and not self.protocol4_diagnostic_timing:", source)
         self.assertIn('"failed_at": "screening_holdout"', source)
@@ -583,7 +583,7 @@ class TestGateDispatch(unittest.TestCase):
 
 class TestRunnerWiring(unittest.TestCase):
     def test_the_hook_refuses_without_a_holdout_verdict_for_the_provider(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import (
             _protocol4_training_part,
         )
         self.assertIsNone(_protocol4_training_part(None, ("trusted_torch_compile",)))
@@ -592,7 +592,7 @@ class TestRunnerWiring(unittest.TestCase):
 
     def test_part_d_is_matched_by_kernel_origin_and_takes_the_worst_seed(self):
         import json, tempfile
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import (
             _protocol4_training_part,
         )
         rows = [
@@ -614,7 +614,7 @@ class TestRunnerWiring(unittest.TestCase):
         self.assertEqual(part["training_seeds"], [11, 17])
 
     def test_the_cli_builds_a_real_text_workload_that_carries_the_protocol_paths(self):
-        from evograd.bench.tier3_cli import _parser, build_workload
+        from evograd.evaluation.tier3.cli import _parser, build_workload
         args = _parser().parse_args([
             "--model", "qwen3_0_6b", "--real-text", "--device", "cpu",
             "--protocol4-calibration", "/p/policy.json",
@@ -625,13 +625,13 @@ class TestRunnerWiring(unittest.TestCase):
         self.assertEqual(w.protocol4_calibration_path, "/p/policy.json")
         self.assertEqual(w.protocol4_verdict_path, "/p/holdout.json")
         # and the child rebuilds the same thing from the serialized config
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         again = Qwen3Workload.from_config(w.to_config())
         self.assertEqual(again.spec.workload_id, w.spec.workload_id)
         self.assertEqual(again.protocol4_verdict_path, w.protocol4_verdict_path)
 
     def test_the_synthetic_canonical_identity_is_unchanged_by_the_new_fields(self):
-        from evograd.bench.workloads.qwen3.levels.level4.spec import CANONICAL
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import CANONICAL
         self.assertTrue(CANONICAL.workload_id.endswith("6e7919ad"))
         self.assertNotIn("weights", CANONICAL.to_dict())
         self.assertNotIn("data", CANONICAL.to_dict())
@@ -639,14 +639,14 @@ class TestRunnerWiring(unittest.TestCase):
 
 class TestPretrainedArchitectureGuard(unittest.TestCase):
     def test_the_two_rope_spellings_are_the_same_rotation(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import rope_settings
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import rope_settings
         old = {"rope_theta": 1000000.0, "rope_scaling": None}
         new = {"rope_theta": None, "rope_scaling": {"rope_theta": 1000000, "rope_type": "default"}}
         self.assertEqual(rope_settings(old), rope_settings(new))
         self.assertEqual(rope_settings(new), (1000000.0, "default"))
 
     def test_a_different_theta_or_type_is_still_a_disagreement(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import rope_settings
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import rope_settings
         base = {"rope_theta": 1000000.0, "rope_scaling": None}
         self.assertNotEqual(rope_settings(base), rope_settings({"rope_theta": 10000.0, "rope_scaling": None}))
         self.assertNotEqual(rope_settings(base), rope_settings(
@@ -654,8 +654,8 @@ class TestPretrainedArchitectureGuard(unittest.TestCase):
 
     def test_the_declared_qwen3_arch_matches_the_pinned_checkpoint_config(self):
         import json, os
-        from evograd.bench.workloads.qwen3.levels.level4.model import rope_settings
-        from evograd.bench.workloads.qwen3.levels.level4.spec import QWEN3_0_6B
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import rope_settings
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import QWEN3_0_6B
         snapshot = ("/u/wzhan/.cache/evograd-mF/hf/models--Qwen--Qwen3-0.6B/snapshots/"
                     "c1899de289a04d12100db370d81485cdf75e47ca/config.json")
         if not os.path.exists(snapshot):

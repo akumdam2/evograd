@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evograd.bench.workloads.qwen3.harvest import snapshot as snapshot_module
+from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.ops import OPS, get_op
 from evograd.ops.level2.qwen3_swiglu_mlp import (
@@ -31,11 +31,11 @@ from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 if HAVE_TRANSFORMERS:
-    from evograd.bench.workloads.qwen3.levels.level3.artifact import ArtifactError
-    from evograd.bench.workloads.qwen3.levels.level3.capture import run_capture
-    from evograd.bench.workloads.qwen3.harvest.harvest import run_harvest
-    from evograd.bench.workloads.qwen3.harvest.manifest import write_manifest
-    from evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import ArtifactError
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture import run_capture
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
+    from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import (
         CONTENT_KEYS,
         IDENTITY_KEYS,
         MlpExtractionError,
@@ -111,7 +111,7 @@ class TestSnapshot(unittest.TestCase):
         """
         import ast
 
-        from evograd.bench.workloads.common import snapshot as common_snapshot
+        from evograd.benchmark.topdown.common import snapshot as common_snapshot
 
         def toplevel_imports(module) -> set[str]:
             tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
@@ -140,7 +140,7 @@ class TestSnapshot(unittest.TestCase):
     def test_the_snapshot_loads_without_transformers(self):
         script = (
             "import sys; sys.modules['transformers'] = None;"
-            " from evograd.bench.workloads.qwen3.harvest.snapshot import load;"
+            " from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load;"
             " print(load()['tasks']['qwen3_swiglu_mlp']['frequency'])"
         )
         proc = subprocess.run(
@@ -173,7 +173,7 @@ class TestDeclaration(unittest.TestCase):
         self.assertEqual(case.dtype, "bfloat16")
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.bench.workloads.qwen3.levels.level2 import swiglu_mlp as mlp_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import swiglu_mlp as mlp_module
 
         self.assertEqual(mlp_module.declaration_problems(), [])
 
@@ -467,7 +467,7 @@ class TestExtractionAndVerification(unittest.TestCase):
         )
 
     def test_the_source_artifact_hashes_are_carried_forward(self):
-        from evograd.bench.workloads.qwen3.levels.level3.artifact import LayerArtifact
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import LayerArtifact
 
         source = LayerArtifact.load(self.layer_path)
         self.assertEqual(
@@ -584,10 +584,10 @@ class TestExtractionAndVerification(unittest.TestCase):
         self.assertIn("output", report["hf_spelling_comparisons"])
 
     def test_a_second_mlp_call_inside_one_extraction_is_refused(self):
-        from evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp import capture_mlp
-        from evograd.bench.workloads.qwen3.levels.level3.replay import build_single_layer
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import capture_mlp
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay import build_single_layer
 
-        from evograd.bench.workloads.qwen3.levels.level3.artifact import LayerArtifact
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import LayerArtifact
 
         layer_payload = LayerArtifact.load(self.layer_path).payload
         layer = build_single_layer(

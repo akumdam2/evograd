@@ -15,7 +15,7 @@ from pathlib import Path
 
 import torch
 
-from evograd.bench.workloads.qwen3.harvest import snapshot as snapshot_module
+from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
 from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 from evograd.opdecl.models import rederive_dims
 from evograd.opdecl.oracle import oracle
@@ -81,7 +81,7 @@ class TestDeclaration(unittest.TestCase):
         self.assertEqual(case.dims, rederive_dims(case.provenance))
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.bench.workloads.qwen3.levels.level2 import qkv_norm_rope as qkv_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import qkv_norm_rope as qkv_module
 
         self.assertEqual(qkv_module.declaration_problems(), [])
 

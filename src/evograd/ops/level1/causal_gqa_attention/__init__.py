@@ -153,7 +153,7 @@ op = declare_op(
         **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
         **fixed_shape_suites(_BENCHMARK),
     },
-    # Measured, not chosen. `bench.workloads.qwen3.levels.level1.mapping calibrate` compares the
+    # Measured, not chosen. `benchmark.topdown.qwen3_0_6b.levels.level1.mapping calibrate` compares the
     # declared dense forward against `runtime_forward` -- the fused SDPA the
     # model runs, and therefore the smallest disagreement any correct
     # implementation can have with the oracle -- on every correctness workload

@@ -12,7 +12,8 @@ import unittest
 
 from evograd.opdecl import Provenance, Workload, declare_workload
 from evograd.opdecl.models import ALPHAFOLD3, rederive_dims
-from evograd.ops import OPS, WORKLOADS, get_workload
+from evograd.benchmark import WORKLOADS, get_workload
+from evograd.ops import OPS
 
 
 def _case(dims=None, model="alphafold3", component="train_step", free=None):
@@ -28,7 +29,7 @@ def _case(dims=None, model="alphafold3", component="train_step", free=None):
 def _declare(**overrides):
     kwargs = dict(
         name="alphafold3",
-        factory="evograd.ops.level4.alphafold3.workload:make_workload",
+        factory="evograd.evaluation.tier3.workloads.alphafold3.workload:make_workload",
         family="protein",
         model="alphafold3",
         sites={"layer_norm": "layernorm"},

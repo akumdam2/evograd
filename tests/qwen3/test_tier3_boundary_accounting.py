@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import unittest
 
-from evograd.bench.workloads.qwen3.evaluation.tier3.boundary import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.boundary import (
     BoundaryReport,
     SitePlan,
     invocation_id,
 )
-from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
     ADAPTER_GROUPS,
     SITE_ATTENTION,
     SITE_MLP,
@@ -208,7 +208,7 @@ class TestStrictFailures(unittest.TestCase):
 
 class TestGateReasonNamesTheSite(unittest.TestCase):
     def test_a_coverage_failure_reports_site_role_expected_and_observed(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import (
             _boundary_reason,
         )
 
@@ -219,7 +219,7 @@ class TestGateReasonNamesTheSite(unittest.TestCase):
         self.assertNotEqual(reason, "the live-boundary validation failed")
 
     def test_an_unexpected_site_is_reported_as_such(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import (
             _boundary_reason,
         )
 

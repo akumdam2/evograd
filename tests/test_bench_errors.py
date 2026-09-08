@@ -11,7 +11,7 @@ import json
 import unittest
 from types import SimpleNamespace
 
-from evograd.bench.harness import run_benchmarks
+from evograd.evaluation.tier1.fast import run_benchmarks
 
 
 def _op():

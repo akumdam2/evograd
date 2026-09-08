@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
     HAVE_TORCH = False
 
 if HAVE_TORCH:
-    from evograd.bench.tier3_gate.numerics import (
+    from evograd.evaluation.tier3.gate.numerics import (
         BINDING_FIELDS,
         GATED_METRICS,
         SAFETY_MARGIN,
@@ -240,7 +240,7 @@ class TestCombinedEnvelope(unittest.TestCase):
     """A provider crosses hardware noise *and* the known integration drift."""
 
     def _envelope(self, role, rel, mar):
-        from evograd.bench.tier3_gate.numerics import GroupEnvelope
+        from evograd.evaluation.tier3.gate.numerics import GroupEnvelope
 
         return {role: GroupEnvelope(
             role=role, tensors=1, samples=1,
@@ -250,7 +250,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         )}
 
     def test_thresholds_add(self):
-        from evograd.bench.tier3_gate.numerics import combined_envelope
+        from evograd.evaluation.tier3.gate.numerics import combined_envelope
 
         merged = combined_envelope(self._envelope("q_proj", 0.01, 0.1),
                                    self._envelope("q_proj", 0.02, 0.3))
@@ -258,7 +258,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         self.assertAlmostEqual(merged["q_proj"].threshold["max_abs_over_rms"], 0.4)
 
     def test_a_role_present_in_only_one_half_survives(self):
-        from evograd.bench.tier3_gate.numerics import combined_envelope
+        from evograd.evaluation.tier3.gate.numerics import combined_envelope
 
         merged = combined_envelope(self._envelope("q_proj", 0.01, 0.1),
                                    self._envelope("k_proj", 0.02, 0.3))
@@ -266,7 +266,7 @@ class TestCombinedEnvelope(unittest.TestCase):
         self.assertAlmostEqual(merged["q_proj"].threshold["rel_l2"], 0.01)
 
     def test_the_combined_bound_is_never_tighter_than_either_half(self):
-        from evograd.bench.tier3_gate.numerics import combined_envelope
+        from evograd.evaluation.tier3.gate.numerics import combined_envelope
 
         hardware = self._envelope("q_proj", 0.01, 0.1)
         integration = self._envelope("q_proj", 0.02, 0.3)
@@ -413,7 +413,7 @@ class TestTheGateRefuses(unittest.TestCase):
     def test_a_missing_calibration_is_a_refusal_not_a_default(self):
         from pathlib import Path
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import (
             CalibrationUnavailable,
             load_policy,
         )
@@ -426,7 +426,7 @@ class TestTheGateRefuses(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3.gate import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.gate import (
             CalibrationUnavailable,
             load_policy,
         )
@@ -444,7 +444,7 @@ class TestTheGateRefuses(unittest.TestCase):
             self.assertTrue(loaded.applies_here())
 
     def test_the_runner_records_a_model_correctness_failure_without_timing(self):
-        from evograd.bench.tier3_runner import (
+        from evograd.evaluation.tier3.runner import (
             ModelCorrectnessFailure,
             _failure_stage,
             model_correctness_check,
@@ -466,7 +466,7 @@ class TestTheGateRefuses(unittest.TestCase):
         self.assertIn("envelope", str(caught.exception))
 
     def test_a_workload_without_a_gate_is_not_blocked_by_one(self):
-        from evograd.bench.tier3_runner import model_correctness_check
+        from evograd.evaluation.tier3.runner import model_correctness_check
 
         class _Bare:
             pass
@@ -479,7 +479,7 @@ class TestTheGateRefuses(unittest.TestCase):
         self.assertEqual(verdict["gate"], "none")
 
     def test_an_unpatched_provider_skips_the_gate(self):
-        from evograd.bench.tier3_runner import model_correctness_check
+        from evograd.evaluation.tier3.runner import model_correctness_check
 
         class _Workload:
             def model_correctness(self, kernels, *, device):
@@ -497,9 +497,9 @@ class TestTheGateRefuses(unittest.TestCase):
 @_skip
 class TestFaultCatalogue(unittest.TestCase):
     def test_the_catalogue_covers_every_required_kind(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import catalogue
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import catalogue
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import (
             diagnostic_catalogue,
             state_catalogue,
         )
@@ -526,7 +526,7 @@ class TestFaultCatalogue(unittest.TestCase):
         self.assertNotIn("wrong_update", required)
 
     def test_the_smallest_always_rejected_magnitude_is_reported(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import smallest_rejected
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import smallest_rejected
 
         results = [
             {"fault": {"name": "output_scale", "magnitude": 0.001}, "rejected": False},
@@ -538,7 +538,7 @@ class TestFaultCatalogue(unittest.TestCase):
         self.assertAlmostEqual(summary["output_scale"]["smallest_always_rejected"], 0.005)
 
     def test_a_fault_rejected_on_only_some_seeds_is_not_counted(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import smallest_rejected
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import smallest_rejected
 
         results = [
             {"fault": {"name": "one_role", "magnitude": 0.001}, "rejected": True},
@@ -549,7 +549,7 @@ class TestFaultCatalogue(unittest.TestCase):
         )
 
     def test_the_grad_scale_fault_leaves_the_forward_exact(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.faults import _GradScale
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.faults import _GradScale
 
         x = torch.randn(8, requires_grad=True)
         y = _GradScale.apply(x, 1.5)

@@ -9,7 +9,7 @@
     evograd bench --op rmsnorm --candidate best.py
     evograd tier1-bench --op layernorm --candidate best.py
     evograd tier2-bench --op layernorm --candidate best.py
-    evograd tier3-bench --model llama_3_8b_4l
+    evograd tier3-bench --model qwen3_0_6b
     evograd suite --candidates programs/ --out results/  # cross-operator report
 """
 
@@ -158,25 +158,25 @@ def _evolve(argv: list[str]) -> int:
 
 
 def _bench(argv: list[str]) -> int:
-    from evograd.bench.cli import main
+    from evograd.evaluation.tier1.legacy_cli import main
 
     return main(argv)
 
 
 def _tier1_bench(argv: list[str]) -> int:
-    from evograd.bench.tier1_cli import main
+    from evograd.evaluation.tier1.cli import main
 
     return main(argv)
 
 
 def _tier2_bench(argv: list[str]) -> int:
-    from evograd.bench.tier2_cli import main
+    from evograd.evaluation.tier2.cli import main
 
     return main(argv)
 
 
 def _tier3_bench(argv: list[str]) -> int:
-    from evograd.bench.tier3_cli import main
+    from evograd.evaluation.tier3.cli import main
 
     return main(argv)
 
@@ -251,7 +251,7 @@ def _run(argv: list[str]) -> int:
 
 
 def _suite(argv: list[str]) -> int:
-    from evograd.bench.suite_cli import main
+    from evograd.benchmark.operator_suite.cli import main
 
     return main(argv)
 

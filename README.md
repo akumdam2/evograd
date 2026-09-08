@@ -133,8 +133,8 @@ evograd tier1-bench --op layernorm --candidate /tmp/evolve_layernorm/evolved_bes
 evograd suite --candidates programs/ --out results/
 ```
 
-Three tiers, two protocols, correctness gates, submitting a kernel, and what the
-reports contain: [the evaluation guide](src/evograd/bench/README.md).
+Three evaluation tiers, the `fast`/`fair` measurement modes, correctness gates,
+and report semantics: [the evaluation guide](src/evograd/evaluation/README.md).
 
 ## One-call Python API
 
@@ -426,9 +426,9 @@ A kernel is measured at three tiers, and they answer different questions:
 | 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | what does it cost when PyTorch calls it |
 | 3 — model | a full training step with the kernel patched in | does any of it reach training throughput |
 
-Orthogonally, two protocols: `fast` for the evolutionary search, `fair` for
-anything anyone reads. **Every published number comes from `fair`**, and every
-report records which produced it.
+Orthogonally, `fast` and `fair` are measurement modes: `fast` serves the
+evolutionary search and `fair` serves direct-pair reporting. They are not extra
+tiers or benchmark levels, and each report records which mode produced it.
 
 ```bash
 evograd suite --candidate-baseline liger --out results/liger/   # the reference line
@@ -444,14 +444,13 @@ model, and requires every loss to be a finite scalar. Loss-trajectory agreement
 is reported on top of that, and gated only where a workload declares a
 threshold.
 
-A fourth stage sits above the tiers rather than inside them: **level 4** runs one
-real model the way training runs it and harvests what it invokes, which is where
-the Qwen3-0.6B operator shapes came from — see
-[docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
+The independent Benchmark axis has four Levels: L1 primitive, L2 composite, L3
+architectural-block integration, and L4 whole-model workload. Qwen3-0.6B's
+top-down path starts from a real L4 training execution and harvests the shapes
+used below it; see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
 
-Full detail — the protocols, the identity controls, submitting a kernel,
-bringing your own model, the level-4 workload, and the known gaps — is in
-[src/evograd/bench/README.md](src/evograd/bench/README.md).
+See [the benchmark specification](docs/BENCHMARK.md) for task scope and
+[the evaluation guide](src/evograd/evaluation/README.md) for execution context.
 
 One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
 `ops/level3/` and `OpDecl.level` are the **task** hierarchy — primitive, fused,
@@ -464,8 +463,8 @@ OpenEvolve mutates a seed program; evograd supplies the operator-specific
 environment around it — the correctness gate, the benchmark, and the single
 number the search maximizes.
 
-That number comes from the tier-1 `fast` protocol (see
-[the evaluation guide](src/evograd/bench/README.md)), collapsed to a scalar by a
+That number comes from the tier-1 `fast` measurement mode (see
+[the evaluation guide](src/evograd/evaluation/README.md)), collapsed to a scalar by a
 scoring policy. Correctness is a hard gate before it: only candidates that pass
 every declared workload are timed at all, and a failure scores far below any
 working kernel rather than being ranked among them.
@@ -533,7 +532,8 @@ retaining the fork’s private every-N worker patch.
 
 ## Supported operators
 
-Operators are organized into three benchmark levels. See
+Operators are organized into benchmark L1/L2 and legacy direct-block L3 tasks;
+whole-model workloads occupy L4. See
 [the benchmark specification](docs/BENCHMARK.md) for the metrics, the shape
 provenance rules, and how the levels are aggregated.
 
@@ -663,10 +663,19 @@ gradients, and stateful operators require declaration/API extensions.
 ```text
 src/evograd/
 ├── opdecl/                    # declaration types, oracle, binding, verification
-├── ops/                       # one self-contained package per operator,
-│   ├── level1/                #   grouped by benchmark level: 18 primitive,
-│   ├── level2/                #   5 fused, 2 architectural blocks. The grouping
-│   └── level3/                #   follows OpDecl.level, which stays the authority
+├── ops/                       # operator contracts, references, tolerances, shapes
+│   ├── level1/                # primitive declarations
+│   ├── level2/                # composite declarations
+│   └── level3/                # legacy direct-block declarations
+├── benchmark/                 # what is benchmarked
+│   ├── core/                  # task registry and result aggregation
+│   ├── operator_suite/        # operator task/config selection and suite CLI
+│   └── topdown/               # common + Qwen3-0.6B/Llama3/AlphaFold3 workloads
+├── evaluation/                # how a candidate is evaluated
+│   ├── common/                # providers and canonical reports
+│   ├── tier1/                 # direct pair: fast/fair modes
+│   ├── tier2/                 # operator/autograd runner
+│   └── tier3/                 # model runner, patching, gates and adapters
 ├── atenir/
 │   ├── extract.py             # PyTorch/autograd graph extraction
 │   ├── compose.py             # serialized graph execution
@@ -678,24 +687,6 @@ src/evograd/
 │   ├── d_inductor/           # LLM-free capture of Inductor's own kernels
 │   └── shared/
 ├── evolve/                    # OpenEvolve evaluator, scoring, and run wrapper
-├── bench/                     # generic latency and memory harness
-│   ├── README.md              # the evaluation guide: tiers, protocols, gates
-│   ├── provider.py            # the pair provider boundary and mutation guards
-│   ├── harness.py             # tier 1 x fast: the evolution search's benchmark
-│   ├── tier1.py               # tier 1 x fair: the direct pair, published numbers
-│   ├── tier2.py               # tier 2 x fair: the operator through autograd
-│   ├── tier3_model.py         # tier 3 part 1: what is measured
-│   ├── tier3_patch.py         # tier 3 part 2: how a kernel gets into a model
-│   ├── tier3_runner.py        # tier 3 part 3: verify, build, step, time, report
-│   ├── tier3_gate/            # tier 3 part 4: the whole-model gate, model-agnostic
-│   ├── report.py              # one canonical report shape for every protocol
-│   └── workloads/             # one package per model; the harness holds none
-│       ├── common/            #   spec, builder, observer, manifest, snapshot
-│       ├── qwen3/             #   Qwen3-0.6B, harvested; see its own README.md
-│       │   ├── harvest/       #     the instrumented run and its tracked snapshot
-│       │   ├── levels/        #     level 4/3/2/1: step, layer, operators, primitives
-│       │   └── evaluation/    #     drop-in replacement, its gate and calibration
-│       └── llama3/            #   Meta-Llama-3-8B; level 4 + harvest
 ├── ncu/                       # NCU profiling, roofline triage, accepted refinement
 ├── scaffold.py                # forward -> external declare_op contract
 ├── dispatch.py                # measured generalist/specialist deployment

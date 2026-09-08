@@ -47,7 +47,7 @@ not depend on what the Hub served that day, or on a node having network access.
 
 ```bash
 conda activate evograd
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3 \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b \
     --out results/qwen3-level4/canonical.json
 ```
 
@@ -87,7 +87,7 @@ claims to be this workload while executing a different graph.
 **Everything under `diagnostics` is diagnostic only.** It is a single unwarmed
 step with no repetition, no L2 flush and no median: a sanity check on the shape
 of the allocation, not a measurement. Level-4 timing, when it exists, will go
-through the fair protocol like every other number in this repository. See
+through the fair measurement mode like every other direct-pair number. See
 `docs/BENCHMARK.md`.
 
 ## Result on record
@@ -117,7 +117,7 @@ The second milestone attaches an observer to the same canonical execution and
 exports what it invokes.
 
 ```bash
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.harvest.harvest \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
     --out results/qwen3-level4/harvest.json \
     --summary-out results/qwen3-level4/harvest-summary.txt
 ```
@@ -311,7 +311,7 @@ capturing process would prove nothing about standing alone:
 
 ```bash
 # 1. capture, during the canonical full-model loss and backward
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level3.capture \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture \
     --layer 14 \
     --harvest results/qwen3-level4/harvest.json \
     --expect-workload-id qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad \
@@ -319,7 +319,7 @@ PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level3.capture \
     --out results/qwen3-level4/layer14.pt
 
 # 2. replay, in a fresh process, from the artifact alone
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level3.replay \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay \
     --artifact results/qwen3-level4/layer14.pt \
     --report results/qwen3-level4/layer14-replay.json
 ```
@@ -565,7 +565,7 @@ of local transcript on a machine that has run the workload, and declarations mus
 import on a laptop. But the whole point of this task is that its shape came from
 a real training step.
 
-`src/evograd/bench/workloads/qwen3/harvest/snapshot.json` is the reconciliation: small,
+`src/evograd/benchmark/topdown/qwen3_0_6b/harvest/snapshot.json` is the reconciliation: small,
 tracked, hashed, and carrying only what a task needs to state its provenance --
 workload id and config hash, source manifest hash, the harvested configuration
 ids, the `Qwen3MLP` frequency of 28, all 28 source module paths and layer
@@ -576,10 +576,10 @@ It is a frozen extract, not a second source of truth:
 
 ```bash
 # regenerate from a full harvest
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.harvest.snapshot --write
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --write
 
 # or check that the tracked file still agrees with one
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.harvest.snapshot --validate
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --validate
 ```
 
 `--validate` re-derives it and prints a field-by-field diff on disagreement.
@@ -597,12 +597,12 @@ the declaration carry the observed record itself as structured data.
 
 ```bash
 # capture one Qwen3MLP invocation from inside the standalone Layer-14 replay
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp extract \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp extract \
     --source results/qwen3-level4/layer14.pt \
     --out results/qwen3-level4/layer14-mlp.pt
 
 # check the declaration's reference against what the model computed
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp verify \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp verify \
     --artifact results/qwen3-level4/layer14-mlp.pt \
     --report results/qwen3-level4/layer14-mlp-verify.json
 ```
@@ -736,9 +736,9 @@ production spelling, over every correctness workload *and* the canonical
 invocation:
 
 ```bash
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp calibrate \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp calibrate \
     --report results/qwen3-level4/qwen3_swiglu_mlp-tolerance.json
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.attention calibrate \
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate \
     --report results/qwen3-level4/qwen3_attention-tolerance.json
 ```
 
@@ -781,8 +781,8 @@ from it by replaying the layer and hooking the boundary, on demand, in about a
 second; neither writes tensors.
 
 ```bash
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.swiglu_mlp derive --metadata-out ...
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level2.attention verify --report ...
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp derive --metadata-out ...
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention verify --report ...
 ```
 
 A derived `.pt` would be tens of MiB of numbers that already exist under a
@@ -822,7 +822,7 @@ Framework paths updated: declaration validation and shape binding, input and
 upstream-gradient generation, the autograd oracle, ``runtime_forward``
 verification, per-output correctness/dtype/shape/stride/finiteness checks,
 per-output tolerance lookup and reporting, ``bind`` and the integrated training
-step's ``autograd.Function``, the fair protocol's provider verification, warmup
+step's ``autograd.Function``, the fair mode's provider verification, warmup
 and timing, the compiled baselines, the NCU profile template, the evolution
 evaluator, and the candidate prompt and config templates.
 
@@ -1044,7 +1044,7 @@ carries the reason alongside the result.
 
 ### Calibrated tolerances
 
-Measured by `bench.workloads.qwen3.levels.level2.residual_rmsnorm calibrate`, comparing the declared
+Measured by `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate`, comparing the declared
 primitive forward against `runtime_forward` on every correctness workload and on
 the canonical invocation, under the declaration's own gate:
 
@@ -1082,7 +1082,7 @@ grouped-query attention -- did not, and was added generically rather than as a
 Qwen copy.
 
 ```bash
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level1.mapping mapping
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level1.mapping mapping
 ```
 
 | generic task | harvested config | roles | freq | dims |
@@ -1185,7 +1185,7 @@ wrong gradient, because it never looks at a gradient and never touches the
 model's tensors.
 
 ```bash
-PYTHONPATH=src python -m evograd.bench.workloads.qwen3.levels.level1.mapping cross-entropy
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level1.mapping cross-entropy
 ```
 
 The canonical Level-4 step is now run on demand with `fixed_cross_entropy`
@@ -1612,7 +1612,7 @@ pip install 'evograd[qwen3]'      # or: pip install 'transformers>=4.51'
 Qwen3 arrived in Transformers 4.51.0. This milestone was developed and measured
 against **5.16.1** with torch 2.11.0+cu128 on a GH200.
 
-Importing `evograd.bench.workloads.qwen3` never imports Transformers, so the core
+Importing `evograd.benchmark.topdown.qwen3_0_6b` never imports Transformers, so the core
 package still works on a machine without it; the failure surfaces at
 `require_transformers()` and names the extra to install.
 
@@ -1621,8 +1621,8 @@ package still works on a machine without it; the failure surfaces at
 The harvester this milestone is built for should call the pieces, not the script:
 
 ```python
-from evograd.bench.workloads.qwen3.levels.level4.spec import CANONICAL
-from evograd.bench.workloads.qwen3.levels.level4.model import build_model, make_inputs, training_step
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import CANONICAL
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, make_inputs, training_step
 
 spec = CANONICAL
 model = build_model(spec)

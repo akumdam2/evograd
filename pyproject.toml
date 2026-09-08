@@ -38,7 +38,7 @@ evograd = "evograd.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-evograd = ["evolve/*.yaml", "bench/workloads/*/harvest/*.json"]
+evograd = ["evolve/*.yaml", "benchmark/topdown/*/harvest/*.json"]
 
 [tool.black]
 line-length = 100

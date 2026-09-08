@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover
 if HAVE_TORCH:
     from torch import nn
 
-    from evograd.bench.tier3 import (
+    from evograd.evaluation.tier3 import (
         KernelSet,
         KernelSource,
         ModulePatch,
@@ -56,7 +56,7 @@ if HAVE_TORCH:
         speedup_intervals,
         verification_policy,
     )
-    from evograd.bench.tier3_runner import _bootstrap_ratio
+    from evograd.evaluation.tier3.runner import _bootstrap_ratio
     from evograd.opdecl.inputs import make_case_inputs
     from evograd.ops import OPS, get_op
 
@@ -611,7 +611,7 @@ class TestIsolation(unittest.TestCase):
         import subprocess
         from unittest import mock
 
-        from evograd.bench.tier3_cli import _run_isolated
+        from evograd.evaluation.tier3.cli import _run_isolated
 
         with mock.patch(
             "subprocess.run",
@@ -624,7 +624,7 @@ class TestIsolation(unittest.TestCase):
         self.assertIn("5s", entry["error"])
 
     def test_a_child_that_dies_is_recorded_with_its_stderr(self):
-        from evograd.bench.tier3_cli import _run_isolated
+        from evograd.evaluation.tier3.cli import _run_isolated
 
         # An unparsable flag makes argparse exit(2) before writing a result.
         entry = _run_isolated(["--not-a-flag"], "eager", timeout=120)
@@ -648,7 +648,7 @@ class TestIsolation(unittest.TestCase):
         self.assertIn("in-process", report["isolation"])
 
     def test_the_cli_defaults_to_isolation_with_a_budget(self):
-        from evograd.bench.tier3_cli import _parser
+        from evograd.evaluation.tier3.cli import _parser
 
         args = _parser().parse_args([])
         self.assertFalse(args.no_isolate)
@@ -663,14 +663,16 @@ class TestIdentityControlIsAnUpperBound(unittest.TestCase):
     """Its backward recomputes the forward; no candidate pays that."""
 
     def test_the_control_says_upper_bound_not_harness_tax(self):
-        from evograd.bench import tier3_patch
+        import importlib
+
+        tier3_patch = importlib.import_module("evograd.evaluation.tier3.patch")
 
         text = tier3_patch.eager_pair_for.__doc__
         self.assertIn("upper bound", text)
         self.assertNotIn("Whatever that costs is the harness tax", text)
 
     def test_the_cli_help_says_upper_bound(self):
-        from evograd.bench.tier3_cli import _parser
+        from evograd.evaluation.tier3.cli import _parser
 
         help_text = _parser().format_help()
         self.assertIn("UPPER BOUND", help_text)
@@ -692,7 +694,7 @@ class TestIdentityControlIsAnUpperBound(unittest.TestCase):
             return reference(*args, **kwargs)
 
         with mock.patch(
-            "evograd.bench.tier3_patch.resolve_runtime_forward",
+            "evograd.evaluation.tier3.patch.resolve_runtime_forward",
             return_value=counting,
         ):
             control = eager_pair_for(op)

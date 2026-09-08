@@ -15,11 +15,12 @@ import unittest
 
 import torch
 
-from evograd.bench.suite import task_from_tier3_report
-from evograd.bench.tier3_patch import KernelSet, identity_control_kernels
+from evograd.benchmark.core.report import task_from_tier3_report
+from evograd.benchmark import get_workload
+from evograd.evaluation.tier3.patch import KernelSet, identity_control_kernels
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.models import ALPHAFOLD3_2L
-from evograd.ops import OPS, get_workload
+from evograd.ops import OPS
 
 try:
     import alphafold3_pytorch  # noqa: F401
@@ -39,14 +40,14 @@ def _tiny_case() -> Workload:
 
 class TestRegistryAgreesWithTheDeclaration(unittest.TestCase):
     def test_sites_match(self):
-        from evograd.ops.level4.alphafold3.workload import AF3_SITES
+        from evograd.evaluation.tier3.workloads.alphafold3.workload import AF3_SITES
 
         self.assertEqual(AF3_SITES.site_ops, get_workload("alphafold3").sites)
 
     def test_surgery_defaults_refuse_to_compute(self):
         """An unpatched surgery site is the original module in the tree, so a
         call through the kernel set for it is a wiring bug and must say so."""
-        from evograd.ops.level4.alphafold3.workload import AF3_SITES
+        from evograd.evaluation.tier3.workloads.alphafold3.workload import AF3_SITES
 
         kernels = KernelSet(registry=AF3_SITES)
         with self.assertRaises(RuntimeError):
@@ -115,7 +116,7 @@ class TestIdentityControl(unittest.TestCase):
     """Same mathematics, all of the patching machinery, same loss."""
 
     def test_patched_and_unpatched_losses_agree(self):
-        from evograd.ops.level4.alphafold3.workload import AF3_SITES, make_workload
+        from evograd.evaluation.tier3.workloads.alphafold3.workload import AF3_SITES, make_workload
 
         case = _tiny_case()
 

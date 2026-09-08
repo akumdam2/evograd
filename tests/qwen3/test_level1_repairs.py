@@ -224,7 +224,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.qwen3.levels.level1.mapping import run_cross_entropy_check
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.mapping import run_cross_entropy_check
 
         from tests.qwen3.test_level4_workload import tiny_spec
 
@@ -260,7 +260,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
     def test_the_ln_vocab_check_is_a_sanity_test_not_the_proof(self):
         """It would pass for an implementation with the right scale and the
         wrong gradient, which is exactly what the comparison above rules out."""
-        from evograd.bench.workloads.qwen3.levels.level1 import mapping as level1
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level1 import mapping as level1
 
         proof = level1.run_cross_entropy_check.__doc__
         self.assertIn("not the equivalence proof", proof)
@@ -269,7 +269,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
 
 class TestComposition(unittest.TestCase):
     def test_the_biasless_projections_still_compose_into_level_two(self):
-        from evograd.bench.workloads.qwen3.harvest.snapshot import load
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load
 
         configs = {
             tuple(c["roles"]): c["dims"]

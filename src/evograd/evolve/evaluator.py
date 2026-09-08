@@ -36,7 +36,7 @@ from evograd.opdecl.inputs import (
     upstream_grad_values,
 )
 from evograd.opdecl.oracle import oracle
-from evograd.bench.harness import (
+from evograd.evaluation.tier1.fast import (
     DEFAULT_REPS,
     DEFAULT_WARMUP,
     describe_saved,
@@ -584,7 +584,7 @@ def build_evaluate(
         )
         if _want_integrated:
             try:
-                from evograd.bench.integrated import integrated_ratio_report
+                from evograd.evaluation.tier2.integrated import integrated_ratio_report
 
                 integrated = integrated_ratio_report(
                     op,

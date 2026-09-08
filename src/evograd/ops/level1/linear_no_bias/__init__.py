@@ -123,7 +123,7 @@ op = declare_op(
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
         **fixed_shape_suites(_DERIVED),
     },
-    # Measured, not inherited. `bench.workloads.qwen3.levels.level1.mapping calibrate --op
+    # Measured, not inherited. `benchmark.topdown.qwen3_0_6b.levels.level1.mapping calibrate --op
     # linear_no_bias` compares the float32-accumulated oracle against
     # `runtime_forward` -- the call a model makes, and therefore the smallest
     # disagreement any correct implementation can have with the oracle -- on

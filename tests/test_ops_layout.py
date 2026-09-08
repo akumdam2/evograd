@@ -11,10 +11,11 @@ quietly wrong.
 import unittest
 from pathlib import Path
 
-from evograd.ops import OPS, WORKLOADS
+from evograd.benchmark import WORKLOADS
+from evograd.ops import OPS
 
 OPS_ROOT = Path(__file__).resolve().parents[1] / "src" / "evograd" / "ops"
-GROUPS = ("level1", "level2", "level3", "level4")
+GROUPS = ("level1", "level2", "level3")
 
 
 class TestOpsLayout(unittest.TestCase):
@@ -27,10 +28,6 @@ class TestOpsLayout(unittest.TestCase):
                     f"{name} declares level {op.level} but "
                     f"{expected.relative_to(OPS_ROOT)} does not exist",
                 )
-        for name, workload in sorted(WORKLOADS.items()):
-            with self.subTest(workload=name):
-                expected = OPS_ROOT / f"level{workload.level}" / name
-                self.assertTrue(expected.is_dir())
 
     def test_no_operator_package_sits_directly_under_ops(self):
         """A package left at the top level would still be discovered, so a
@@ -67,7 +64,7 @@ class TestOpsLayout(unittest.TestCase):
             and (entry / "__init__.py").is_file()
             and not entry.name.startswith("_")
         }
-        self.assertEqual(on_disk, set(OPS) | set(WORKLOADS))
+        self.assertEqual(on_disk, set(OPS))
 
     def test_expected_counts_per_level(self):
         """The benchmark specification states 18 / 5 / 2, plus the operators

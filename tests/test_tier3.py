@@ -11,7 +11,7 @@ import ast
 import unittest
 from pathlib import Path
 
-from evograd.bench.tier3 import (
+from evograd.evaluation.tier3 import (
     KernelSet,
     KernelSource,
     ModulePatch,
@@ -26,7 +26,7 @@ from evograd.bench.tier3 import (
 from evograd.opdecl.models import LLAMA_3_8B, LLAMA_3_8B_4L
 from evograd.ops import OPS, get_op
 
-from evograd.bench.tier3_cli import MODELS
+from evograd.evaluation.tier3.cli import MODELS
 
 from tests._registry_fixture import SAMPLE_SITE_OPS, SAMPLE_SITES
 from evograd.ops.level3.llama3_decoder_layer import forward_ref as reference
@@ -143,7 +143,7 @@ class TestRankAdapter(unittest.TestCase):
     """
 
     def test_declared_rank_reads_the_shape_string(self):
-        from evograd.bench.tier3_patch import _declared_rank
+        from evograd.evaluation.tier3.patch import _declared_rank
 
         self.assertEqual(_declared_rank("[rows, hidden]"), 2)
         self.assertEqual(_declared_rank("[rows]"), 1)
@@ -153,7 +153,7 @@ class TestRankAdapter(unittest.TestCase):
     def test_the_three_patch_sites_are_all_row_shaped(self):
         # If a declaration ever became 3D the adapter would be a no-op for it,
         # which is correct but worth noticing rather than assuming.
-        from evograd.bench.tier3_patch import _declared_rank
+        from evograd.evaluation.tier3.patch import _declared_rank
 
         self.assertEqual(_declared_rank(get_op("rmsnorm").args[0].shape), 2)
         self.assertEqual(_declared_rank(get_op("swiglu").args[0].shape), 2)
@@ -165,14 +165,14 @@ class TestRankAdapter(unittest.TestCase):
         # fused_linear_cross_entropy returns a scalar loss. Restoring leading
         # dimensions onto it would be nonsense, and indexing shape[0] would
         # raise -- so rank 0 has to skip the restore rather than attempt it.
-        from evograd.bench.tier3_patch import _declared_rank
+        from evograd.evaluation.tier3.patch import _declared_rank
 
         self.assertEqual(
             _declared_rank(get_op("fused_linear_cross_entropy").output.shape), 0
         )
 
     def test_row_shaped_outputs_are_restored(self):
-        from evograd.bench.tier3_patch import _declared_rank
+        from evograd.evaluation.tier3.patch import _declared_rank
 
         for name in ("rmsnorm", "swiglu"):
             with self.subTest(op=name):
@@ -215,7 +215,7 @@ class TestTheHarnessIsModelAgnostic(unittest.TestCase):
     def test_the_harness_does_not_import_the_llama_workload(self):
         # Checked against the import statements, not the text: the module
         # docstring names the Llama workload as an example, which is fine.
-        import evograd.bench.tier3 as harness
+        import evograd.evaluation.tier3 as harness
 
         tree = ast.parse(Path(harness.__file__).read_text())
         imported = {
@@ -236,7 +236,7 @@ class TestTheHarnessIsModelAgnostic(unittest.TestCase):
     def test_a_real_workload_satisfies_the_protocol(self):
         """A workload lives in its own package now, so this reaches for one
         rather than for a built-in the harness used to carry."""
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import (
             Qwen3Workload,
         )
 
@@ -409,9 +409,9 @@ class TestSiteRestriction(unittest.TestCase):
 class TestTheThreeParts(unittest.TestCase):
     """Tier 3 is three modules with a one-way dependency, plus a facade.
 
-        tier3_model.py   what is measured — the workload protocol, bring-your-own
-        tier3_patch.py   how a kernel gets in — sites, bind wrapping, surgery
-        tier3_runner.py  how it is measured — build, step, time, report
+        model.py   what is measured — the workload protocol, bring-your-own
+        patch.py   how a kernel gets in — sites, bind wrapping, surgery
+        runner.py  how it is measured — build, step, time, report
 
     The direction matters more than the split: patch knows nothing about models
     or measurement, so it can be read and changed without either. A cycle here
@@ -421,7 +421,7 @@ class TestTheThreeParts(unittest.TestCase):
     def _tier3_imports(self, part):
         import importlib
 
-        module = importlib.import_module(f"evograd.bench.{part}")
+        module = importlib.import_module(f"evograd.evaluation.tier3.{part}")
         tree = ast.parse(Path(module.__file__).read_text())
         return {
             node.module
@@ -430,17 +430,17 @@ class TestTheThreeParts(unittest.TestCase):
         }
 
     def test_the_patcher_depends_on_neither_other_part(self):
-        self.assertEqual(self._tier3_imports("tier3_patch"), set())
+        self.assertEqual(self._tier3_imports("patch"), set())
 
     def test_the_model_layer_depends_only_on_the_patcher(self):
         self.assertLessEqual(
-            self._tier3_imports("tier3_model"), {"evograd.bench.tier3_patch"}
+            self._tier3_imports("model"), {"evograd.evaluation.tier3.patch"}
         )
 
     def test_the_runner_depends_on_both_and_nothing_else(self):
         self.assertLessEqual(
-            self._tier3_imports("tier3_runner"),
-            {"evograd.bench.tier3_patch", "evograd.bench.tier3_model"},
+            self._tier3_imports("runner"),
+            {"evograd.evaluation.tier3.patch", "evograd.evaluation.tier3.model"},
         )
 
     def test_no_tier3_module_reaches_into_a_workload(self):
@@ -448,9 +448,15 @@ class TestTheThreeParts(unittest.TestCase):
         harness must not import a workload, or the split is decorative."""
         import importlib
 
-        for part in ("tier3_patch", "tier3_model", "tier3_runner", "tier3"):
+        modules = {
+            "patch": "evograd.evaluation.tier3.patch",
+            "model": "evograd.evaluation.tier3.model",
+            "runner": "evograd.evaluation.tier3.runner",
+            "facade": "evograd.evaluation.tier3",
+        }
+        for part, module_name in modules.items():
             with self.subTest(module=part):
-                module = importlib.import_module(f"evograd.bench.{part}")
+                module = importlib.import_module(module_name)
                 tree = ast.parse(Path(module.__file__).read_text())
                 reached = {
                     node.module for node in ast.walk(tree)
@@ -465,7 +471,7 @@ class TestTheThreeParts(unittest.TestCase):
                 )
 
     def test_the_facade_re_exports_every_part(self):
-        import evograd.bench.tier3 as facade
+        import evograd.evaluation.tier3 as facade
 
         for name in ("KernelSet", "ModulePatch", "patch_modules",      # patch
                      "TrainingWorkload", "ModuleWorkload",             # model
@@ -477,7 +483,7 @@ class TestTheThreeParts(unittest.TestCase):
 
 class TestCli(unittest.TestCase):
     def test_site_equals_path_is_parsed(self):
-        from evograd.bench.tier3_cli import _parser
+        from evograd.evaluation.tier3.cli import _parser
 
         args = _parser().parse_args(
             ["--candidate", "rms_norm=a.py", "--candidate", "swiglu=b.py"]
@@ -485,7 +491,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(args.candidate, ["rms_norm=a.py", "swiglu=b.py"])
 
     def test_the_iteration_config_is_the_default(self):
-        from evograd.bench.tier3_cli import _parser
+        from evograd.evaluation.tier3.cli import _parser
 
         self.assertEqual(_parser().parse_args([]).model, MODELS[0])
 
@@ -499,8 +505,8 @@ class TestCli(unittest.TestCase):
         AlphaFold3 entries came to be absent from ``--model`` while the flags
         that serve them survived.
         """
-        from evograd.bench.tier3_cli import MODELS
-        from evograd.bench.workloads import TIER3_ADAPTERS, tier3_adapter
+        from evograd.evaluation.tier3.cli import MODELS
+        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS, tier3_adapter
 
         self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
         self.assertTrue(MODELS)
@@ -511,7 +517,7 @@ class TestCli(unittest.TestCase):
     def test_dtype_follows_the_model_unless_stated(self):
         """AlphaFold3 trains fp32 (as MegaFold does) while the language models
         train bf16; the parser leaves dtype unset so the workload decides."""
-        from evograd.bench.tier3_cli import _parser
+        from evograd.evaluation.tier3.cli import _parser
 
         self.assertIsNone(_parser().parse_args([]).dtype)
 

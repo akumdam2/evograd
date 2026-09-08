@@ -6,7 +6,7 @@ import unittest
 
 import torch
 
-from evograd.bench.tier2 import (
+from evograd.evaluation.tier2.runner import (
     REPETITIONS,
     WARMUP_ITERS,
     _summarize_samples,
@@ -56,7 +56,7 @@ class TestProviderOrderAndSelection(unittest.TestCase):
     def test_run_case_accepts_a_seed_and_a_single_provider(self):
         import inspect
 
-        from evograd.bench.tier2 import run_case
+        from evograd.evaluation.tier2.runner import run_case
 
         params = inspect.signature(run_case).parameters
         # `only` is what lets the CLI put one provider in one process.
@@ -88,7 +88,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
     """
 
     def _spy_module(self, op_name: str):
-        from evograd.bench.tier2 import native_module
+        from evograd.evaluation.tier2.runner import native_module
         from evograd.opdecl.inputs import make_case_inputs
         from evograd.ops import get_op
 
@@ -125,7 +125,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
                             for a in args))
 
     def test_parameters_arrive_from_the_module_not_the_input_dict(self):
-        from evograd.bench.tier2 import native_module
+        from evograd.evaluation.tier2.runner import native_module
         from evograd.opdecl.inputs import make_case_inputs
         from evograd.ops import get_op
 

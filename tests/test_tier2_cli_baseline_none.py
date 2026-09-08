@@ -4,7 +4,7 @@ import unittest
 
 class TestBaselineNone(unittest.TestCase):
     def _names(self, argv):
-        from evograd.bench import tier2_cli
+        import evograd.evaluation.tier2.cli as tier2_cli
         args = tier2_cli._parser().parse_args(["--op", "qwen3_attention", *argv])
         return [spec.name for spec in tier2_cli._specs(args, None)]
 

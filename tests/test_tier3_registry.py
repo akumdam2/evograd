@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover
 if HAVE_TORCH:
     from torch import nn
 
-    from evograd.bench.tier3 import (
+    from evograd.evaluation.tier3 import (
         KernelSet,
         KernelSource,
         ModulePatch,
@@ -86,9 +86,9 @@ def _stub_adapter(**overrides):
     shaped that way -- that is how a guarantee quietly lapses when the registry
     changes. So the shape under test is built here.
     """
-    from evograd.bench.workloads import Tier3Adapter, TIER3_ADAPTERS
-    import evograd.bench.workloads as registry
-    import evograd.bench.tier3_cli as cli
+    from evograd.evaluation.tier3.workloads import Tier3Adapter, TIER3_ADAPTERS
+    import evograd.evaluation.tier3.workloads as registry
+    import evograd.evaluation.tier3.cli as cli
 
     name = "stub_workload"
     # `build` has to return something with a `site_registry`: the CLI asks the
@@ -214,14 +214,14 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
             )
 
     def test_baseline_discovery_walks_the_workloads_registry(self):
-        from evograd.bench.tier3_cli import _baseline_kernels
+        from evograd.evaluation.tier3.cli import _baseline_kernels
 
         kernels, covered = _baseline_kernels("liger", OPS, SAMPLE_SITES)
         self.assertIsNotNone(kernels)
         self.assertTrue(set(covered) <= set(SAMPLE_SITES.names))
 
     def test_a_registry_whose_ops_have_no_such_baseline_finds_nothing(self):
-        from evograd.bench.tier3_cli import _baseline_kernels
+        from evograd.evaluation.tier3.cli import _baseline_kernels
 
         registry = SiteRegistry(
             name="toy", sites=(Site("only", "qwen3_attention", print),)
@@ -236,8 +236,8 @@ class TestWorkloadOwnsItsRegistry(unittest.TestCase):
     def test_a_workload_declares_its_own_registry(self):
         """The live example. The registry a workload is measured against comes
         from the workload, never from a module-level default."""
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import qwen3_sites
-        from evograd.bench.workloads.qwen3.evaluation.tier3.workload import Qwen3Workload
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import qwen3_sites
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
 
         workload = Qwen3Workload.from_config({"device": "cpu"})
         self.assertIs(workload.site_registry, qwen3_sites())
@@ -245,7 +245,7 @@ class TestWorkloadOwnsItsRegistry(unittest.TestCase):
     def test_the_patcher_ships_no_registry_of_its_own(self):
         """The property the deleted built-in violated: a default registry means
         a kernel set for one model silently claims another's sites."""
-        from evograd.bench.tier3_patch import NO_SITES
+        from evograd.evaluation.tier3.patch import NO_SITES
 
         self.assertEqual(NO_SITES.sites, ())
         with self.assertRaises(ValueError) as caught:
@@ -500,7 +500,7 @@ class TestLlamaBehaviourUnchanged(unittest.TestCase):
             KernelSet(registry=SAMPLE_SITES).not_a_site
 
     def test_the_cli_rejects_an_unknown_site_naming_the_workload(self):
-        from evograd.bench.tier3_cli import _parser, _sites
+        from evograd.evaluation.tier3.cli import _parser, _sites
 
         import contextlib, io
 
@@ -511,15 +511,18 @@ class TestLlamaBehaviourUnchanged(unittest.TestCase):
         self.assertIn(SAMPLE_SITES.name, stderr.getvalue())
 
     def test_the_cli_default_providers_are_unchanged(self):
-        from evograd.bench.tier3_cli import _parser, build_providers
+        from evograd.evaluation.tier3.cli import _parser, build_providers
 
-        args = _parser().parse_args(["--identity-control", "--baseline", "liger"])
-        providers = build_providers(args, quiet=True)
-        self.assertEqual(
-            sorted(providers), ["eager", "eager_through_bind", "liger"]
-        )
-        for kernels in providers.values():
-            self.assertIs(kernels.registry, SAMPLE_SITES)
+        with _stub_adapter() as name:
+            args = _parser().parse_args(
+                ["--model", name, "--identity-control", "--baseline", "liger"]
+            )
+            providers = build_providers(args, quiet=True)
+            self.assertEqual(
+                sorted(providers), ["eager", "eager_through_bind", "liger"]
+            )
+            for kernels in providers.values():
+                self.assertIs(kernels.registry, SAMPLE_SITES)
 
 
 class TestTier3WorkloadRegistry(unittest.TestCase):
@@ -533,23 +536,33 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
     """
 
     def test_the_cli_model_choices_come_from_the_registry(self):
-        from evograd.bench.tier3_cli import MODELS
-        from evograd.bench.workloads import TIER3_ADAPTERS
+        from evograd.evaluation.tier3.cli import MODELS
+        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS
 
         self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
 
     def test_the_cli_source_names_no_architecture(self):
-        """The load-bearing one: evaluation must not know what a Qwen is."""
+        """The generic CLI must not import a workload implementation."""
+        import ast
         import pathlib
 
-        import evograd.bench.tier3_cli as cli
+        import evograd.evaluation.tier3.cli as cli
 
         source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
-        for architecture in ("qwen3", "Qwen3", "Qwen"):
-            self.assertNotIn(architecture, source, architecture)
+        tree = ast.parse(source)
+        imports = {
+            node.module for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+        } | {
+            alias.name for node in ast.walk(tree)
+            if isinstance(node, ast.Import) for alias in node.names
+        }
+        self.assertFalse(
+            [name for name in imports if ".workloads." in name], imports
+        )
 
     def test_every_registered_adapter_resolves_and_is_well_formed(self):
-        from evograd.bench.workloads import (
+        from evograd.evaluation.tier3.workloads import (
             Tier3Adapter, TIER3_ADAPTERS, tier3_adapter,
         )
 
@@ -568,7 +581,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         and its ``--residues`` flag all landed, but nothing added it to
         ``TIER3_ADAPTERS`` -- so ``--model alphafold3_2l`` was an invalid choice
         while the flags that serve it sat in the parser looking supported."""
-        from evograd.bench.tier3_cli import _parser, build_workload, check_options
+        from evograd.evaluation.tier3.cli import _parser, build_workload, check_options
 
         for name in ("alphafold3_2l", "alphafold3"):
             with self.subTest(model=name):
@@ -585,7 +598,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         """``--dtype`` has no parser default, so an unset flag must reach each
         workload's own value -- not ``None``. This broke Qwen3 outright when the
         default was removed for AlphaFold3's sake."""
-        from evograd.bench.tier3_cli import _parser, build_workload
+        from evograd.evaluation.tier3.cli import _parser, build_workload
 
         expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32"}
         for name, dtype in expected.items():
@@ -597,7 +610,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 self.assertEqual(build_workload(args).describe()["dtype"], dtype)
 
     def test_an_explicit_dtype_still_overrides_the_workloads_own(self):
-        from evograd.bench.tier3_cli import _parser, build_workload
+        from evograd.evaluation.tier3.cli import _parser, build_workload
 
         args = _parser().parse_args(
             ["--model", "alphafold3_2l", "--device", "cpu",
@@ -606,7 +619,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         self.assertEqual(build_workload(args).describe()["dtype"], "bfloat16")
 
     def test_an_unknown_workload_names_the_ones_that_exist(self):
-        from evograd.bench.workloads import UnknownWorkload, tier3_adapter
+        from evograd.evaluation.tier3.workloads import UnknownWorkload, tier3_adapter
 
         with self.assertRaises(UnknownWorkload) as caught:
             tier3_adapter("gpt_9")
@@ -619,7 +632,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         import ast
         import pathlib
 
-        import evograd.bench.workloads as registry
+        import evograd.evaluation.tier3.workloads as registry
 
         tree = ast.parse(pathlib.Path(registry.__file__).read_text(encoding="utf-8"))
         toplevel = {
@@ -632,14 +645,12 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
             if isinstance(node, ast.Import)
             for alias in node.names
         }
-        self.assertEqual(
-            toplevel, {"__future__", "importlib", "dataclasses", "pathlib", "typing"}
-        )
+        self.assertEqual(toplevel, {"__future__", "importlib", "dataclasses", "typing"})
 
     def test_a_workload_gets_only_the_providers_it_declares(self):
         """Qwen3 offers a structural-identity control; a workload that declares
         none gets the providers every workload has and nothing more."""
-        from evograd.bench.tier3_cli import _parser, build_providers
+        from evograd.evaluation.tier3.cli import _parser, build_providers
 
         qwen = _parser().parse_args([
             "--model", "qwen3_0_6b", "--baseline", "none",
@@ -661,7 +672,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         the guarantee does not lapse when the registry changes."""
         import contextlib, io
 
-        from evograd.bench.tier3_cli import _parser, check_options
+        from evograd.evaluation.tier3.cli import _parser, check_options
 
         for flag, value in (("--structural-identity", None),
                             ("--layers", "2"),
@@ -679,7 +690,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 self.assertIn(name, message)
 
     def test_the_declaring_workload_accepts_those_same_flags(self):
-        from evograd.bench.tier3_cli import _parser, check_options
+        from evograd.evaluation.tier3.cli import _parser, check_options
 
         args = _parser().parse_args([
             "--model", "qwen3_0_6b", "--structural-identity",
@@ -688,8 +699,8 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         check_options(args)  # must not raise
 
     def test_unset_optional_flags_are_never_refused(self):
-        from evograd.bench.tier3_cli import _parser, check_options
-        from evograd.bench.workloads import TIER3_ADAPTERS
+        from evograd.evaluation.tier3.cli import _parser, check_options
+        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS
 
         for model in TIER3_ADAPTERS:
             with self.subTest(model=model):

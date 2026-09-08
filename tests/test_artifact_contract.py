@@ -253,7 +253,7 @@ class TestNoBindInTheDirectStack(unittest.TestCase):
     def test_tier2_routes_a_direct_artifact_away_from_the_binder(self):
         import inspect
 
-        from evograd.bench.tier2 import candidate_module
+        from evograd.evaluation.tier2.runner import candidate_module
 
         source = inspect.getsource(candidate_module)
         self.assertIn("deployment_entry", source)

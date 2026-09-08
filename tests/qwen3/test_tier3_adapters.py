@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover
 HAVE_TRANSFORMERS = False
 if HAVE_TORCH:
     try:
-        from evograd.bench.workloads.qwen3.levels.level4.model import require_transformers
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import require_transformers
 
         require_transformers()
         HAVE_TRANSFORMERS = True
@@ -35,8 +35,8 @@ if HAVE_TORCH:
         HAVE_TRANSFORMERS = False
 
 if HAVE_TRANSFORMERS:
-    from evograd.bench.tier3_patch import KernelSet, restrict
-    from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
+    from evograd.evaluation.tier3.patch import KernelSet, restrict
+    from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
         SITE_ATTENTION,
         SITE_MLP,
         SITE_QKV,
@@ -48,7 +48,7 @@ if HAVE_TRANSFORMERS:
         qwen3_sites,
         structural_identity_kernels,
     )
-    from evograd.bench.workloads.qwen3.evaluation.tier3.workload import MODEL_KEY, Qwen3Workload
+    from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import MODEL_KEY, Qwen3Workload
 
 #: Two layers, narrow, tiny vocabulary. Everything a CPU test needs and nothing
 #: it does not: the architecture's *shape* is what the adapters wire into.
@@ -149,13 +149,13 @@ class TestWorkloadIdentityAndSerialization(unittest.TestCase):
         json.dumps(described)
 
     def test_cache_enabled_execution_is_refused(self):
-        from evograd.bench.workloads.qwen3.levels.level4.spec import WorkloadSpecError
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import WorkloadSpecError
 
         with self.assertRaises(WorkloadSpecError):
             _workload().spec.replace(use_cache=True)
 
     def test_the_cli_knows_the_model_and_rebuilds_it_from_argv(self):
-        from evograd.bench.tier3_cli import MODELS, _parser, build_workload
+        from evograd.evaluation.tier3.cli import MODELS, _parser, build_workload
 
         self.assertIn(MODEL_KEY, MODELS)
         args = _parser().parse_args(
@@ -205,7 +205,7 @@ class TestRegistryOwnership(unittest.TestCase):
         self.assertIs(_workload().site_registry, qwen3_sites())
 
     def test_a_llama_site_is_unknown_here(self):
-        from evograd.bench.tier3_patch import patch
+        from evograd.evaluation.tier3.patch import patch
 
         with self.assertRaises(ValueError) as caught:
             patch(KernelSet(registry=qwen3_sites()), "rms_norm", lambda *a: None)
@@ -218,7 +218,7 @@ class TestStructuralIdentity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.validate import compare_full_model
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.validate import compare_full_model
 
         workload = _workload()
         cls.report = compare_full_model(
@@ -394,7 +394,7 @@ class TestPartialAndFailedPatching(unittest.TestCase):
         model.model.layers = torch.nn.ModuleList([model.model.layers[0]])
         with self.assertRaises(ValueError):
             # The registry still describes a 2-layer model; one layer is partial.
-            from evograd.bench.workloads.qwen3.evaluation.tier3.sites import _require
+            from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import _require
 
             _require(1, 2, [SITE_MLP], "Qwen3MLP")
 
@@ -428,7 +428,7 @@ class TestStructuredOutputsThroughTheSites(unittest.TestCase):
         # `summed` is the residual stream and `out` continues into the next
         # sublayer. A wiring that dropped `summed` and recomputed the add would
         # still run and would still be wrong.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
             production_residual_rmsnorm,
         )
 
@@ -449,7 +449,7 @@ class TestStructuredOutputsThroughTheSites(unittest.TestCase):
         model, _p = workload.build_patched(
             structural_identity_kernels(workload.site_registry)
         )
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import set_tap
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import set_tap
 
         def tap(site, key, inputs, outputs):
             seen.setdefault(site, []).append((inputs, outputs))

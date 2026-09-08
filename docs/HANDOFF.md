@@ -5,7 +5,7 @@ code-complete and CPU-verified; every remaining item needs a GPU, which is why
 it moved.
 
 Branch: `benchmark-v1`. Base: `origin/main` plus two pre-existing commits that
-were never pushed (`e442610` fair-bench protocol, `4c29270` codegen test dtype).
+were never pushed (`e442610` fair-bench mode, `4c29270` codegen test dtype).
 
 ## Why this branch exists
 
@@ -41,8 +41,8 @@ Read `docs/BENCHMARK.md` first — it is the specification, written to be
 published. This file only covers what a successor needs that the spec does not
 say.
 
-25 operators across three levels (18 primitive / 5 fused / 2 block), 191 timed
-configurations. The four substantive changes:
+The current task and configuration counts are derived from the registries and
+must not be copied into this handoff. The four substantive changes:
 
 1. **Shapes are derived, not typed.** `src/evograd/opdecl/models.py` holds frozen
    Llama-3-8B and AlphaFold3 configurations; declarations call
@@ -51,8 +51,8 @@ configurations. The four substantive changes:
    `hf_config` workloads and fails on drift.
 2. **Tasks carry a level and a family.** Both are validated. Provenance is
    required for any operator that declares a level.
-3. **`reference_dtype`.** Level-3 tasks compute the correctness reference in
-   float32 against a bfloat16 candidate.
+3. **`reference_dtype`.** The legacy direct-block tasks compute the correctness
+   reference in float32 against a bfloat16 candidate.
 4. **`evograd suite`** produces the cross-operator report — the thing that makes
    this a benchmark rather than a pile of kernels.
 
@@ -61,7 +61,7 @@ configurations. The four substantive changes:
 These are all decisions with a reason. Changing them without reading the reason
 will produce numbers that look fine and are wrong.
 
-**Never let `reference_dtype` reach the timing path.** `bench/harness.py` times
+**Never let `reference_dtype` reach the timing path.** `evaluation/tier1/fast.py` times
 the eager PyTorch baseline by calling `oracle()`. If that promotes to float32
 while the candidate runs bfloat16, the "baseline" is a slower computation and
 every speedup is inflated. The call site passes `use_reference_dtype=False`
@@ -70,14 +70,13 @@ explicitly; keep it.
 **The suite reads full-step speedup only.** `speedup_vs_baseline_backward`
 compares asymmetric things — the eager baseline's backward timing runs the
 oracle, which computes the forward *and* backward, while the candidate's
-backward is timed from pre-saved state. For a level-3 block that inflates the
-ratio by roughly half. `bench/suite.py` names the key once, in
+backward is timed from pre-saved state. For a legacy direct-block task that inflates the
+ratio by roughly half. `benchmark/core/report.py` names the key once, in
 `FULL_STEP_SPEEDUP_KEY`, and `tests/test_suite_report.py` plants a decoy
 backward value ten times larger so a regression fails loudly.
 
-**Speedups pool per family before pooling across families.** Fourteen of the
-twenty-five operators are norms, activations and losses. A flat mean would let
-declaration count decide the headline. There is a test for this too.
+**Speedups pool per family before pooling across families.** A flat mean would
+let declaration count decide the headline. There is a test for this too.
 
 **`Inactive` tensors default to zeros.** `opdecl/inputs.py` fills them with
 `torch.zeros`. For RoPE's `cos`/`sin` that turns the operator into the zero map
@@ -118,7 +117,7 @@ Verified on GPU (an A100-40GB, before the allocation ran out):
 Verified on CPU only:
 
 - 170 tests.
-- Both level-3 blocks: complete forward and backward, gradient counts and dtypes
+- Both legacy direct-block tasks: complete forward and backward, gradient counts and dtypes
   correct, no non-finite values.
 - `rope` end-to-end through `evograd verify` with a hand-written candidate, all
   9 correctness workloads.
@@ -145,7 +144,7 @@ Verified on CPU only:
        verify_performance_baseline(get_op(name), 'liger'); print(name, 'ok')"
    ```
 
-2. Both level-3 blocks have never run on a GPU at their benchmark dimensions.
+2. Both legacy direct-block tasks have never run on a GPU at their benchmark dimensions.
    Watch memory: the reference builds an autograd graph for the whole layer at
    float32. The timed grid stops at 4096 tokens for that reason and 8192 lives
    in untimed `coverage`. If the machine has more than 40 GB, the timed ceiling
@@ -158,7 +157,7 @@ Verified on CPU only:
 
 ## Known gaps, deliberately left open
 
-**Level-3 baselines are not wired.** Both blocks currently get only
+**Legacy direct-block baselines are not wired.** Both tasks currently get only
 `pytorch_autograd` and the built-in `torch_compile`. They should also have:
 
 - `llama3_decoder_layer`: a Liger-patched layer built from `LigerRMSNorm`
@@ -168,7 +167,7 @@ Verified on CPU only:
 
 Follow `ops/_common.py::make_pair_baseline`. The pattern that keeps it fair is
 to build the autograd graph in the untimed forward and time only
-`torch.autograd.grad` — `bench/fair.py::pytorch_autograd_provider` does exactly
+`torch.autograd.grad` — `evaluation/tier1/fair.py::pytorch_autograd_provider` does exactly
 that.
 
 **No DeepSpeed baseline for `evoattention`.** MegaFold compares against
@@ -181,7 +180,7 @@ while every real convolutional network pads. Tying it to a real backbone
 requires extending the declaration with stride and padding, which touches
 Pipeline B's handwritten Triton lowerings for forward, dX, dWeight and dBias.
 There is a second obstacle: a ResNet bottleneck block contains BatchNorm, whose
-running statistics mutate during training — the fair-bench protocol rejects
+running statistics mutate during training — the fair measurement mode rejects
 input mutation, so such a block would have to declare training-mode statistics
 only and say that the running-stat update is out of scope.
 

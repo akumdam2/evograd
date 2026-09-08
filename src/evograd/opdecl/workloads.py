@@ -16,7 +16,7 @@ model, making the batch, running the step — lives behind the ``factory``
 reference, imported only when a run actually needs it, which keeps this module
 importable on machines without torch like every other declaration.
 
-Measurement is the tier-3 protocol (``bench/tier3_runner``): a full training
+Measurement is the Tier-3 protocol (:mod:`evograd.evaluation.tier3.runner`): a full training
 step, every provider on identical weights and batches. Tier and level stay
 orthogonal — this module says *what* the task is, never how carefully it is
 timed.
@@ -38,7 +38,7 @@ class WorkloadDecl:
     #: ``module.path:callable`` building the torch-side training workload.
     #: The callable receives one benchmark :class:`Workload` (its ``dims`` are
     #: the shape of the run) plus ``device`` and ``seed`` keyword arguments, and
-    #: returns an object satisfying ``bench.tier3_model.TrainingWorkload``.
+    #: returns an object satisfying :class:`evograd.evaluation.tier3.model.TrainingWorkload`.
     factory: str
     #: Aggregation group for the suite report, as on ``OpDecl``.
     family: str

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import torch
 
-from evograd.bench.workloads.qwen3.levels.level4.report import SCHEMA_VERSION, SmokeReport
-from evograd.bench.workloads.qwen3.levels.level4.spec import (
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.report import SCHEMA_VERSION, SmokeReport
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import (
     CANONICAL,
     QWEN3_0_6B,
     WorkloadSpec,
@@ -276,8 +276,8 @@ class TestOptionalDependency(unittest.TestCase):
     SCRIPT = """
 import sys
 sys.modules["transformers"] = None          # any import of it now raises
-import evograd.bench.workloads.qwen3 as pkg
-from evograd.bench.workloads.qwen3.levels.level4.model import MissingDependencyError, require_transformers
+import evograd.benchmark.topdown.qwen3_0_6b as pkg
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import MissingDependencyError, require_transformers
 assert pkg.CANONICAL.workload_id
 try:
     require_transformers()
@@ -313,7 +313,7 @@ else:
     def test_importing_the_package_does_not_import_transformers(self):
         """Import-time cost and import-time failure both belong to the caller."""
         script = (
-            "import sys; import evograd.bench.workloads.qwen3;"
+            "import sys; import evograd.benchmark.topdown.qwen3_0_6b;"
             " print('transformers' in sys.modules)"
         )
         proc = subprocess.run(
@@ -338,7 +338,7 @@ class TestTinyQwen3Step(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.bench.workloads.qwen3.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.smoke import run_smoke
 
         cls.spec = tiny_spec()
         cls.report = run_smoke(cls.spec)
@@ -387,7 +387,7 @@ class TestTinyQwen3Step(unittest.TestCase):
         self.assertTrue(self.report.effective["labels_match_input_ids"])
 
     def test_inputs_are_deterministic(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import make_inputs
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import make_inputs
 
         first, _ = make_inputs(self.spec)
         second, _ = make_inputs(self.spec)
@@ -399,7 +399,7 @@ class TestTinyQwen3Step(unittest.TestCase):
         )
 
     def test_the_whole_step_is_reproducible(self):
-        from evograd.bench.workloads.qwen3.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.smoke import run_smoke
 
         again = run_smoke(self.spec)
         self.assertEqual(again.result["loss"], self.report.result["loss"])
@@ -411,14 +411,14 @@ class TestSettingsAreEnforcedOnTheBuiltModel(unittest.TestCase):
     apart -- otherwise every verification field would be a tautology."""
 
     def test_an_alternative_backend_is_reported_as_itself(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import build_model, effective_settings
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, effective_settings
 
         spec = tiny_spec(attn_implementation="eager")
         model = build_model(spec)
         self.assertEqual(effective_settings(model, spec)["attn_implementation"], "eager")
 
     def test_a_mismatch_between_request_and_reality_is_detected(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import (
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import (
             build_model,
             check_effective_settings,
             effective_settings,
@@ -435,7 +435,7 @@ class TestSettingsAreEnforcedOnTheBuiltModel(unittest.TestCase):
         self.assertTrue(any("checkpointing" in p for p in problems), problems)
 
     def test_the_model_is_built_in_train_mode_with_the_cache_off(self):
-        from evograd.bench.workloads.qwen3.levels.level4.model import build_model
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model
 
         model = build_model(tiny_spec())
         self.assertTrue(model.training)

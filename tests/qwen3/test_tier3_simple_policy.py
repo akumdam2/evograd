@@ -16,7 +16,7 @@ import unittest
 
 import torch
 
-from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
     FLOORS,
     HARD_METRICS,
     SAFETY_MARGIN,
@@ -59,7 +59,7 @@ def _metrics(logits=0.0, grads=0.0, **overrides):
 
 class TestMatchedPatchSets(unittest.TestCase):
     def test_the_trusted_reference_patches_the_candidate_s_sites_only(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import build_registry
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import build_registry
         from evograd.ops import OPS
 
         registry = build_registry()
@@ -68,7 +68,7 @@ class TestMatchedPatchSets(unittest.TestCase):
 
     def test_the_all_sites_reference_is_a_different_object(self):
         # The exact substitution this work replaces: `sites=None` is every site.
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
             bound_pair_identity_kernels, build_registry,
         )
         from evograd.ops import OPS
@@ -79,7 +79,7 @@ class TestMatchedPatchSets(unittest.TestCase):
         self.assertEqual(len(matched_trusted_kernels(dict(OPS), QKV, registry).patched), 1)
 
     def test_a_residual_patch_set_carries_nothing(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import build_registry
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import build_registry
         from evograd.ops import OPS
 
         trusted = matched_trusted_kernels(dict(OPS), RESIDUAL, build_registry())
@@ -197,7 +197,7 @@ class TestCalibrationIsCandidateFree(unittest.TestCase):
     def test_the_calibration_driver_takes_a_patch_set_not_a_program(self):
         import inspect
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import calibrate_simple
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import calibrate_simple
 
         parameters = set(inspect.signature(calibrate_simple.calibrate).parameters)
         self.assertIn("sites", parameters)
@@ -205,7 +205,7 @@ class TestCalibrationIsCandidateFree(unittest.TestCase):
             self.assertNotIn(forbidden, parameters)
 
     def test_holdout_seeds_do_not_overlap_the_calibration_seeds(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import calibrate_simple
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import calibrate_simple
 
         self.assertFalse(set(calibrate_simple.CALIBRATION_SEEDS)
                          & set(calibrate_simple.HOLDOUT_SEEDS))
@@ -347,7 +347,7 @@ class TestSchemaAndLegacy(unittest.TestCase):
             SimplePolicy.from_dict(payload)
 
     def test_the_detailed_policy_still_loads_and_is_unchanged(self):
-        from evograd.bench.tier3_gate import numerics
+        from evograd.evaluation.tier3.gate import numerics
 
         self.assertEqual(numerics.SAFETY_MARGIN, 2.0)
         self.assertEqual(numerics.GATED_METRICS, ("rel_l2", "max_abs_over_rms"))
@@ -355,7 +355,7 @@ class TestSchemaAndLegacy(unittest.TestCase):
     def test_the_gate_accepts_a_simple_policy_in_either_role(self):
         import inspect
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import gate
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate
 
         parameters = inspect.signature(gate.check_model_correctness).parameters
         self.assertIn("simple_policy", parameters)
@@ -365,7 +365,7 @@ class TestSchemaAndLegacy(unittest.TestCase):
 
     def test_the_local_boundary_gate_is_untouched(self):
         # Part 5: the elementwise layer must not be weakened by any of this.
-        from evograd.bench.workloads.qwen3.evaluation.tier3 import boundary
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import boundary
 
         self.assertEqual(boundary.SCHEMA_VERSION, "evograd-qwen3-t3-boundary/2")
         source = inspect_source(boundary.BoundaryReport.to_dict)
@@ -607,10 +607,10 @@ class TestCompileAnchoredCalibration(unittest.TestCase):
                     environment_hash="env", patch_set=wrong)
 
     def test_the_trusted_provider_is_built_from_the_patch_set_alone(self):
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
             compiled_trusted_kernels,
         )
-        from evograd.bench.workloads.qwen3.evaluation.tier3.sites import build_registry
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import build_registry
 
         registry = build_registry()
         for patch_set in (QKV, RESIDUAL):
@@ -622,7 +622,7 @@ class TestCompileAnchoredCalibration(unittest.TestCase):
     def test_the_candidate_cannot_influence_its_own_threshold(self):
         import inspect
 
-        from evograd.bench.workloads.qwen3.evaluation.tier3.simple import (
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
             compiled_trusted_kernels, trusted_kernels_for,
         )
 

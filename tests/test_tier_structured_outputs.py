@@ -25,8 +25,8 @@ except Exception:  # pragma: no cover
     HAVE_TORCH = False
 
 if HAVE_TORCH:
-    from evograd.bench.integrated import activation_and_parameter_args
-    from evograd.bench.provider import (
+    from evograd.evaluation.tier2.integrated import activation_and_parameter_args
+    from evograd.evaluation.common.provider import (
         PairProvider,
         _grad_outputs,
         assert_tensors_unchanged,
@@ -35,8 +35,8 @@ if HAVE_TORCH:
         snapshot_tensors,
         verify_pair_provider,
     )
-    from evograd.bench.report import from_tier2_report
-    from evograd.bench.tier2 import (
+    from evograd.evaluation.common.report import from_tier2_report
+    from evograd.evaluation.tier2.runner import (
         OperatorModule,
         build_parameters,
         check_module,
@@ -372,14 +372,14 @@ class TestTheDeclarationRefusesAmbiguity(unittest.TestCase):
 class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
     """One operator-through-autograd wrapper, two protocols on top of it.
 
-    ``bench.integrated`` measures a training step -- gradient reset inside the
+    ``evaluation.tier2.integrated`` measures a training step -- gradient reset inside the
     timed region, many steps under one event pair -- and tier 2 measures the
     forward and the step with ``do_bench``. Those are different protocols. The
     module they both wrap is not, and keeping two of it is how the two drift.
     """
 
     def test_the_integrated_wrapper_is_the_tier_two_module(self):
-        from evograd.bench import integrated
+        import evograd.evaluation.tier2.integrated as integrated
 
         op, workload, _values = _case("layernorm")
         _activations, _dy, values = integrated.case_tensors(
@@ -392,7 +392,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
         # rope's cos/sin and cross_entropy's target are tensor `Inactive` args.
         # They are neither activations nor parameters, and a wrapper that knew
         # only about those two raised KeyError here.
-        from evograd.bench import integrated
+        import evograd.evaluation.tier2.integrated as integrated
 
         for name in ("rope", "cross_entropy"):
             with self.subTest(op=name):
@@ -407,7 +407,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
                     self.assertIsNotNone(activation.grad)
 
     def test_the_timed_step_backpropagates_every_output(self):
-        from evograd.bench import integrated
+        import evograd.evaluation.tier2.integrated as integrated
 
         op = get_op("fused_add_rms_norm")
         workload = op.correctness[0]
@@ -423,7 +423,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
             self.assertIsNotNone(activation.grad)
 
     def test_a_candidate_pair_goes_through_bind(self):
-        from evograd.bench import integrated
+        import evograd.evaluation.tier2.integrated as integrated
         from evograd.ops.level1.swiglu import forward_ref  # noqa: F401
 
         op = get_op("swiglu")

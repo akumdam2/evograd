@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=None, help="write all reports here")
     args = parser.parse_args(argv)
 
-    from evograd.bench.harness import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
+    from evograd.evaluation.tier1.fast import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
     from evograd.ops import get_op, load_op
 
     op = load_op(args.declaration) if args.declaration else get_op(args.op)

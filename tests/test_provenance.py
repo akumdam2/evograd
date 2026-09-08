@@ -239,7 +239,7 @@ class TestObservedLayout(unittest.TestCase):
 
         # And the declared layout is genuinely re-derived from the snapshot,
         # not a constant that happens to agree with it.
-        from evograd.bench.workloads import load_snapshot
+        from evograd.benchmark.topdown import load_snapshot
 
         level1 = load_snapshot("qwen3_0_6b")["level1"]
         for name, layout in expected.items():
@@ -262,13 +262,13 @@ class TestWorkloadRegistry(unittest.TestCase):
         """A snapshot is derived from a harvest, so a workload package can exist
         before any snapshot does. Both states are legitimate; silently returning
         nothing is not."""
-        from evograd.bench.workloads import (
-            WORKLOADS, UnharvestedWorkload, has_snapshot, load_snapshot,
+        from evograd.benchmark.topdown import (
+            TOPDOWN_WORKLOADS, UnharvestedWorkload, has_snapshot, load_snapshot,
             snapshot_path,
         )
 
-        self.assertTrue(WORKLOADS)
-        for name in WORKLOADS:
+        self.assertTrue(TOPDOWN_WORKLOADS)
+        for name in TOPDOWN_WORKLOADS:
             with self.subTest(workload=name):
                 if has_snapshot(name):
                     self.assertTrue(snapshot_path(name).is_file())
@@ -287,12 +287,12 @@ class TestWorkloadRegistry(unittest.TestCase):
 
     def test_at_least_one_workload_is_actually_harvested(self):
         """Otherwise the check above passes by having nothing to check."""
-        from evograd.bench.workloads import WORKLOADS, has_snapshot
+        from evograd.benchmark.topdown import TOPDOWN_WORKLOADS, has_snapshot
 
-        self.assertTrue([n for n in WORKLOADS if has_snapshot(n)])
+        self.assertTrue([n for n in TOPDOWN_WORKLOADS if has_snapshot(n)])
 
     def test_an_unregistered_workload_names_the_ones_that_exist(self):
-        from evograd.bench.workloads import UnknownWorkload, load_snapshot
+        from evograd.benchmark.topdown import UnknownWorkload, load_snapshot
 
         with self.assertRaises(UnknownWorkload) as caught:
             load_snapshot("gpt_9")
@@ -305,7 +305,7 @@ class TestWorkloadRegistry(unittest.TestCase):
         import ast
         import pathlib
 
-        import evograd.bench.workloads as registry
+        import evograd.benchmark.topdown as registry
 
         tree = ast.parse(
             pathlib.Path(registry.__file__).read_text(encoding="utf-8")

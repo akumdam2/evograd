@@ -230,7 +230,7 @@ class TestQwenProvenance(unittest.TestCase):
         """28 input_layernorm + 28 post_attention_layernorm + 1 model.norm = 57
         residual-width RMSNorms; layer 0's input_layernorm has no preceding
         decoder residual add, so 56 are fusion sites."""
-        from evograd.bench.workloads.qwen3.harvest.snapshot import load
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load
 
         entry = load()["tasks"]["fused_add_rms_norm"]
         sites = entry["fusion_sites"]
@@ -239,7 +239,7 @@ class TestQwenProvenance(unittest.TestCase):
         self.assertEqual(sites["total"] + sites["excluded_layer0_input_layernorm"], 57)
 
     def test_the_directly_verified_count_is_distinguished_from_the_frequency(self):
-        from evograd.bench.workloads.qwen3.harvest.snapshot import load
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load
 
         sites = load()["tasks"]["fused_add_rms_norm"]["fusion_sites"]
         self.assertEqual(sites["directly_verified_invocations"], 1)
@@ -247,7 +247,7 @@ class TestQwenProvenance(unittest.TestCase):
         self.assertIn("layer 14", sites["directly_verified_note"])
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.bench.workloads.qwen3.levels.level2 import residual_rmsnorm as residual_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import residual_rmsnorm as residual_module
 
         self.assertEqual(residual_module.declaration_problems(), [])
 

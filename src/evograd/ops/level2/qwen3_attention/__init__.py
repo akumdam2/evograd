@@ -30,8 +30,8 @@ substitutes that would benchmark a different access pattern.
 
 import math
 
-from evograd.bench.workloads import load_snapshot as _load_snapshot
-from evograd.bench.workloads import load_snapshot_task as _snapshot_task
+from evograd.benchmark.topdown import load_snapshot as _load_snapshot
+from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
 from evograd.opdecl.tolerance import ReductionScaledAtol
 
@@ -262,7 +262,7 @@ op = declare_op(
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
     memory_inputs=("q", "k", "v", "o_weight"),
-    # Measured, not chosen. `evograd.bench.workloads.qwen3.levels.level2.attention calibrate`
+    # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate`
     # compares the declared dense float32-softmax forward against
     # `runtime_forward` -- the SDPA branch the model runs -- on every
     # correctness workload and on the canonical [2, 16, 2048, 128] invocation,

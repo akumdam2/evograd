@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from evograd.bench.report import (
+from evograd.evaluation.common.report import (
     PROTOCOL_FAIR,
     PROTOCOL_FAST,
     TIER_OPERATOR,
@@ -22,7 +22,7 @@ from evograd.bench.report import (
     from_harness_report,
     from_tier2_report,
 )
-from evograd.bench.suite import task_from_report
+from evograd.benchmark.core.report import task_from_report
 
 
 def _harness_case(*, full=2.0, backward=10.0, saved=100.0, inputs=200.0):

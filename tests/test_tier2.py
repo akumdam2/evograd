@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import unittest
 
-from evograd.bench.tier2 import (
+from evograd.evaluation.tier2.runner import (
     ProviderSpec,
     _require_declared_split,
     default_provider_specs,
@@ -143,7 +143,7 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
     """
 
     def test_the_split_matches_parameter_args_for_every_operator(self):
-        from evograd.bench.integrated import activation_and_parameter_args
+        from evograd.evaluation.tier2.integrated import activation_and_parameter_args
         from evograd.ops import OPS
 
         for name, op in OPS.items():
@@ -162,14 +162,14 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
                 )
 
     def test_a_parameter_free_operator_keeps_both_activations(self):
-        from evograd.bench.integrated import activation_and_parameter_args
+        from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
         activations, parameters = activation_and_parameter_args(get_op("geglu"))
         self.assertEqual([a.name for a in activations], ["a", "b"])
         self.assertEqual(parameters, ())
 
     def test_the_residual_is_an_activation_not_a_parameter(self):
-        from evograd.bench.integrated import activation_and_parameter_args
+        from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
         activations, parameters = activation_and_parameter_args(
             get_op("fused_add_rms_norm")
@@ -178,7 +178,7 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
         self.assertEqual([a.name for a in parameters], ["weight"])
 
     def test_an_undeclared_split_raises(self):
-        from evograd.bench.integrated import activation_and_parameter_args
+        from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
         with self.assertRaises(ValueError) as caught:
             activation_and_parameter_args(_decl())

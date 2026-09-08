@@ -13,8 +13,8 @@ import unittest
 
 import torch
 
-from evograd.bench.workloads.qwen3.harvest import snapshot as snapshot_module
-from evograd.bench.workloads.qwen3.levels.level1.mapping import COMPOSES_INTO, mapping
+from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.mapping import COMPOSES_INTO, mapping
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.models import QWEN3_0_6B, rederive_dims
 from evograd.ops import OPS, get_op
