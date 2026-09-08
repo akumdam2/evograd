@@ -13,40 +13,13 @@ exactly where this one's output becomes that one's input.
 """
 
 from evograd.opdecl import Active, Workload, declare_op
-from evograd.opdecl.models import (
-    LLAMA_3_8B,
-    LLAMA_REGIME_SPLIT,
-    LLAMA_TOKEN_SWEEP,
-)
-from evograd.ops._common import (
-    fixed_shape_suites,
-    is_head_major_view,
-    log_distance_weight,
-    model_workloads,
-    observed_workloads,
-    regime_suites,
-)
+from evograd.ops._common import is_head_major_view
 
 _DIMS = ("B", "HQ", "HK", "T", "D")
 
 
-def _regime_feature(workload: Workload) -> float:
-    return float(workload.dims["T"])
-
-
-#: Llama-3-8B's own GQA layer, swept over the standard token grid. Derived from
-#: the published configuration, so the 32:8 head ratio and 128-wide heads cannot
-#: quietly stop being Llama's.
-_BENCHMARK = model_workloads(
-    LLAMA_3_8B,
-    "causal_gqa_sdpa",
-    tuple({"batch": 1, "seq": tokens} for tokens in LLAMA_TOKEN_SWEEP),
-    ("bfloat16",),
-)
-
 #: The observed Qwen3-0.6B configuration: 16 query heads over 8 KV heads, batch
 #: 2 x sequence 2048, 28 invocations per step.
-_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "causal_gqa_attention")
 
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, HQ=hq, HK=hk, T=t, D=d), dtype=dtype)
@@ -146,14 +119,7 @@ op = declare_op(
     ),
     grad_order=("dq", "dk", "dv"),
     correctness=_CORRECTNESS,
-    coverage=_BENCHMARK + _QWEN3_OBSERVED,
-    benchmark=_BENCHMARK,
-    benchmark_suites={
-        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
-        **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
-        **fixed_shape_suites(_BENCHMARK),
-    },
-    # Measured, not chosen. `benchmark.topdown.qwen3_0_6b.levels.level1.mapping calibrate` compares the
+    # Measured, not chosen. `evaluation.workloads.qwen3_0_6b.level1.cli calibrate` compares the
     # declared dense forward against `runtime_forward` -- the fused SDPA the
     # model runs, and therefore the smallest disagreement any correct
     # implementation can have with the oracle -- on every correctness workload
@@ -179,8 +145,5 @@ op = declare_op(
     #   dk                 1.48                2.3
     tolerance_multipliers={"dq": (2.2, 1.0), "dk": (2.3, 1.0)},
     memory_inputs=("q", "k", "v"),
-    regime_feature=_regime_feature,
-    regime_split=LLAMA_REGIME_SPLIT,
-    case_weight=log_distance_weight(_regime_feature, LLAMA_REGIME_SPLIT),
     make_inputs=make_causal_gqa_attention_inputs,
 )

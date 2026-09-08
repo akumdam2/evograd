@@ -58,7 +58,7 @@ if HAVE_TORCH:
     )
     from evograd.evaluation.tier3.runner import _bootstrap_ratio
     from evograd.opdecl.inputs import make_case_inputs
-    from evograd.ops import OPS, get_op
+    from evograd.benchmark import TASKS, get_task
 
     from tests._registry_fixture import (
         SAMPLE_SITE_OPS,
@@ -123,7 +123,7 @@ class _ToyWorkload:
 def _toy_options(**overrides):
     options = {
         "warmup": 1, "steps": 2, "blocks": 2, "loss_steps": 3,
-        "seed": 0, "device": "cpu", "ops": OPS,
+        "seed": 0, "device": "cpu", "ops": TASKS,
     }
     options.update(overrides)
     return options
@@ -140,7 +140,7 @@ class TestRankAdaptation(unittest.TestCase):
     """
 
     def _control(self, name):
-        op = get_op(name)
+        op = get_task(name)
         return op, kernel_from_pair(op, eager_pair_for(op))
 
     def test_a_single_output_stays_a_bare_tensor(self):
@@ -165,7 +165,7 @@ class TestRankAdaptation(unittest.TestCase):
     def test_three_outputs_with_a_rank_three_declaration(self):
         # x is declared [B, T, H]; handing it a fourth leading dimension is what
         # exercises the adapter on an operator that is already batched.
-        op = get_op("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_qkv_norm_rope")
         values = make_case_inputs(op, op.correctness[0], device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = values["x"].detach().unsqueeze(0).repeat(2, 1, 1, 1).requires_grad_(True)
@@ -191,7 +191,7 @@ class TestRankAdaptation(unittest.TestCase):
     def test_the_adapter_matches_calling_the_declaration_directly(self):
         # Flatten-and-restore must be a no-op on the mathematics, or the patched
         # provider is computing something the unpatched one is not.
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         from evograd.opdecl.oracle import resolve_runtime_forward
 
@@ -210,7 +210,7 @@ class TestGradientRouting(unittest.TestCase):
     """Every output's gradient has to reach every input it depends on."""
 
     def test_one_output_reaches_every_active_input(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = torch.randn(2, 5, 8, requires_grad=True)
         weight = torch.randn(8, requires_grad=True)
@@ -221,7 +221,7 @@ class TestGradientRouting(unittest.TestCase):
     def test_both_outputs_contribute_to_the_input_gradients(self):
         # `summed` feeds the residual stream. A backward that dropped it would
         # produce a strictly smaller dr and no error at all.
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         kernel = kernel_from_pair(op, eager_pair_for(op))
 
         def dr_for(use_summed: bool):
@@ -237,7 +237,7 @@ class TestGradientRouting(unittest.TestCase):
         self.assertFalse(torch.allclose(dr_for(True), dr_for(False)))
 
     def test_three_outputs_all_route_back(self):
-        op = get_op("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_qkv_norm_rope")
         values = make_case_inputs(op, op.correctness[0], device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = values["x"].detach().requires_grad_(True)
@@ -251,7 +251,7 @@ class TestGradientRouting(unittest.TestCase):
                 self.assertIsNotNone(weight.grad)
 
     def test_the_control_refuses_a_mismatched_gradient_count(self):
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         _forward, backward = (
             eager_pair_for(op).forward_with_saved,
             eager_pair_for(op).backward_from_saved,
@@ -267,13 +267,13 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
     """A wrong kernel at this tier does not raise. It returns a throughput."""
 
     def test_the_control_passes_the_tier_one_gate(self):
-        kernels = identity_control_kernels(OPS, ("rms_norm", "swiglu"), registry=SAMPLE_SITES)
-        report = preflight(kernels, OPS, device="cpu")
+        kernels = identity_control_kernels(TASKS, ("rms_norm", "swiglu"), registry=SAMPLE_SITES)
+        report = preflight(kernels, TASKS, device="cpu")
         self.assertEqual([c["site"] for c in report["checked"]], ["rms_norm", "swiglu"])
         self.assertTrue(all(c["ok"] for c in report["checked"]))
 
     def test_a_wrong_kernel_is_rejected_before_any_timing(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         honest = eager_pair_for(op)
 
         class _Wrong:
@@ -284,13 +284,13 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
 
             rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
 
-        kernels = patched_kernels({"rms_norm": _Wrong}, OPS, registry=SAMPLE_SITES)
+        kernels = patched_kernels({"rms_norm": _Wrong}, TASKS, registry=SAMPLE_SITES)
         with self.assertRaises(PreflightFailure) as caught:
-            preflight(kernels, OPS, device="cpu")
+            preflight(kernels, TASKS, device="cpu")
         self.assertIn("rms_norm", str(caught.exception))
 
     def test_a_provider_that_fails_preflight_is_not_timed(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         honest = eager_pair_for(op)
 
         class _Wrong:
@@ -302,7 +302,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
             rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
 
         entry = measure_one(
-            _ToyWorkload(), "candidate", patched_kernels({"rms_norm": _Wrong}, OPS, registry=SAMPLE_SITES),
+            _ToyWorkload(), "candidate", patched_kernels({"rms_norm": _Wrong}, TASKS, registry=SAMPLE_SITES),
             **_toy_options(),
         )
         self.assertFalse(entry["ok"])
@@ -311,7 +311,7 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
 
     def test_a_raw_callable_is_reported_as_unverifiable_not_verified(self):
         kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda x, w, eps: x)
-        report = preflight(kernels, OPS, device="cpu")
+        report = preflight(kernels, TASKS, device="cpu")
         self.assertEqual(report["checked"], [])
         self.assertEqual([u["site"] for u in report["unverifiable"]], ["rms_norm"])
 
@@ -588,7 +588,7 @@ class TestPatchProvenance(unittest.TestCase):
             _ToyWorkload(),
             {
                 "eager": KernelSet(registry=SAMPLE_SITES),
-                "control": identity_control_kernels(OPS, ("rms_norm",), registry=SAMPLE_SITES),
+                "control": identity_control_kernels(TASKS, ("rms_norm",), registry=SAMPLE_SITES),
             },
             **_toy_options(),
         )
@@ -685,7 +685,7 @@ class TestIdentityControlIsAnUpperBound(unittest.TestCase):
 
         from evograd.opdecl.oracle import resolve_runtime_forward
 
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         reference = resolve_runtime_forward(op)
         calls = []
 
@@ -710,7 +710,7 @@ class TestIdentityControlIsAnUpperBound(unittest.TestCase):
     def test_the_controls_gradients_still_match_autograd(self):
         # A ceiling on cost, not on correctness: the control must produce the
         # same gradients eager does, or the provider it defines is meaningless.
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         control = eager_pair_for(op)
         from evograd.opdecl.oracle import resolve_runtime_forward
 
@@ -736,12 +736,12 @@ class TestMultiOutputFixturesAreNotPatchSites(unittest.TestCase):
     def test_no_multi_output_operator_is_a_patch_site(self):
         for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
-                self.assertFalse(get_op(op_name).is_multi_output)
+                self.assertFalse(get_task(op_name).is_multi_output)
 
     def test_the_fixtures_really_do_have_several_outputs(self):
         for name in MULTI_OUTPUT:
             with self.subTest(op=name):
-                self.assertTrue(get_op(name).is_multi_output)
+                self.assertTrue(get_task(name).is_multi_output)
 
     def test_a_multi_output_kernel_set_can_still_be_described(self):
         # `KernelSource` does not care how many outputs a site's op has, so a

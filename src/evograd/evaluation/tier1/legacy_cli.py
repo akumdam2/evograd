@@ -58,14 +58,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--reps must be >= 1")
 
     from evograd.evaluation.tier1.fast import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
     # Everything up to run_benchmarks can fail too — an unknown op, a candidate
     # that raises on import, a --dtype the declared benchmark suite has no cases
     # for. Those used to escape as a bare traceback on stderr, leaving no report
     # behind; capture them in the same shape run_benchmarks uses for setup errors.
     try:
-        op = load_op(args.declaration) if args.declaration else get_op(args.op)
+        op = load_task(args.declaration) if args.declaration else get_task(args.op)
         if op.name != args.op:
             parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
         if args.forward:

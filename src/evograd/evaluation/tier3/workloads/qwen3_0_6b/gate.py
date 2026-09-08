@@ -257,7 +257,7 @@ def build_references(workload, *, policy: NumericsPolicy, data_seed: int = 0):
     check that builds its own references is the same computation.
     """
     from evograd.evaluation.tier3.patch import KernelSet
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     from .sites import bound_pair_identity_kernels
 
@@ -265,7 +265,7 @@ def build_references(workload, *, policy: NumericsPolicy, data_seed: int = 0):
     eager = _step(workload, KernelSet(registry=workload.site_registry),
                   data_seed=data_seed, learning_rate=learning_rate)
     bound = _step(workload,
-                  bound_pair_identity_kernels(OPS, None, workload.site_registry),
+                  bound_pair_identity_kernels(TASKS, None, workload.site_registry),
                   data_seed=data_seed, learning_rate=learning_rate)
     return {"eager": eager, "bound": bound, "data_seed": data_seed}
 

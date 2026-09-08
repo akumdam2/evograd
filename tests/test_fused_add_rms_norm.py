@@ -19,14 +19,14 @@ from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 from evograd.opdecl.models import QWEN3_0_6B, rederive_dims
 from evograd.opdecl.oracle import oracle
 from evograd.opdecl.verify import verify
-from evograd.ops import get_op
-from evograd.ops.level2.fused_add_rms_norm import QWEN3_FUSION_SITES
-from evograd.ops.level2.fused_add_rms_norm.forward_ref import (
+from evograd.benchmark import get_task
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.task import QWEN3_FUSION_SITES
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.reference import (
     fused_add_rms_norm_forward_ref,
     fused_add_rms_norm_runtime_ref,
 )
 
-OP = get_op("fused_add_rms_norm")
+OP = get_task("fused_add_rms_norm")
 
 
 class _Module:
@@ -247,7 +247,7 @@ class TestQwenProvenance(unittest.TestCase):
         self.assertIn("layer 14", sites["directly_verified_note"])
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import residual_rmsnorm as residual_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm import capture as residual_module
 
         self.assertEqual(residual_module.declaration_problems(), [])
 
@@ -259,8 +259,7 @@ class TestLigerProvider(unittest.TestCase):
     def test_the_adapter_returns_both_outputs_and_consumes_dsummed(self):
         import inspect
 
-        from evograd.ops.level2.fused_add_rms_norm import liger
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm import liger
         source = inspect.getsource(liger.make_liger_fused_add_rms_norm_autograd_pair_fns)
         self.assertIn("return (output, summed)", source)
         self.assertIn("dout, dsummed = output_grads", source)

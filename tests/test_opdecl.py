@@ -2,13 +2,13 @@
 
 import unittest
 
-from evograd.opdecl import Active, Inactive, declare_op
-from evograd.ops import OPS, get_op
+from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
+from evograd.benchmark import TASKS, get_task
 
 
 class TestNativeContractRendering(unittest.TestCase):
     def test_layernorm_signatures_come_directly_from_declaration(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         self.assertEqual(op.forward_fn_name, "layernorm_forward_with_saved")
         self.assertEqual(op.forward_parameters(), "x, weight, bias, eps=1e-5")
         self.assertEqual(op.backward_fn_name, "layernorm_backward_from_saved")
@@ -16,50 +16,50 @@ class TestNativeContractRendering(unittest.TestCase):
         self.assertEqual(op.backward_returns(), "dx, dweight, dbias")
 
     def test_per_output_tolerance_multipliers(self):
-        evo = get_op("evoattention")
+        evo = get_task("evoattention")
         case = evo.correctness[0]
         self.assertEqual(evo.tolerance_for(case), (2e-2, 2e-2))
         self.assertEqual(evo.tolerance_for(case, "d_pair_bias"), (4e-2, 2e-2))
 
-        fused = get_op("layernorm_linear")
+        fused = get_task("layernorm_linear")
         case = fused.correctness[0]
         self.assertEqual(fused.tolerance_for(case, "dweight"), (1.6e-1, 2e-2))
 
     def test_layernorm_declares_all_legacy_shape_suites(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         for suite in ("mixed", "small", "large", "tb_sweep", "tb_i27"):
             self.assertTrue(op.benchmark_workloads(suite))
 
     def test_dense_compute_benchmarks_use_explicit_baseline_provenance(self):
         self.assertEqual(
-            {case.dtype for case in get_op("matmul").benchmark},
+            {case.dtype for case in get_task("matmul").benchmark},
             {"bfloat16"},
         )
-        large_matmul = get_op("matmul").benchmark_workloads("large_bf16")
+        large_matmul = get_task("matmul").benchmark_workloads("large_bf16")
         self.assertEqual(len(large_matmul), 4)
         self.assertTrue(all(case.dims["K"] == 4096 for case in large_matmul))
-        extreme_matmul = get_op("matmul").benchmark_workloads("extreme_bf16")
+        extreme_matmul = get_task("matmul").benchmark_workloads("extreme_bf16")
         self.assertEqual(len(extreme_matmul), 1)
         self.assertEqual(
             extreme_matmul[0].dims,
             {"M": 8192, "K": 4096, "N": 14336},
         )
         self.assertEqual(
-            set(get_op("matmul").performance_baselines),
+            set(get_task("matmul").performance_baselines),
             {"cublas_pair"},
         )
-        self.assertFalse(get_op("conv2d").performance_baselines)
+        self.assertFalse(get_task("conv2d").performance_baselines)
         self.assertEqual(
-            set(get_op("gemm_leaky_relu").performance_baselines),
+            set(get_task("gemm_leaky_relu").performance_baselines),
             {"triton_tutorial"},
         )
         self.assertIn(
             "liger",
-            get_op("fused_moe_swiglu").performance_baselines,
+            get_task("fused_moe_swiglu").performance_baselines,
         )
 
     def test_conv2d_pipeline_b_contract_is_scalar_specialized(self):
-        op = get_op("conv2d")
+        op = get_task("conv2d")
         self.assertEqual(op.forward_parameters(), "x, weight, bias")
         for case in (*op.correctness, *op.benchmark):
             dims = case.dims
@@ -69,22 +69,22 @@ class TestNativeContractRendering(unittest.TestCase):
 
 class TestDerivedNaming(unittest.TestCase):
     def test_grad_name_override(self):
-        op = get_op("evoattention")
+        op = get_task("evoattention")
         self.assertEqual(op.grad_names(), ("dq", "dk", "dv", "d_pair_bias"))
         self.assertEqual(op.upstream_grad_name, "do")
 
     def test_grad_order_override(self):
-        op = get_op("layernorm_linear")
+        op = get_task("layernorm_linear")
         self.assertEqual(op.grad_names(), ("dx", "dlinear_weight", "dweight", "dbias"))
         self.assertEqual(op.upstream_grad_name, "dout")
 
     def test_inactive_tensor_is_no_grad_input(self):
-        op = get_op("evoattention")
+        op = get_task("evoattention")
         self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
 
     def test_registry_is_grouped_by_benchmark_level(self):
         by_level = {}
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             by_level.setdefault(op.level, []).append(name)
         self.assertEqual(
             {level: sorted(names) for level, names in sorted(by_level.items())},
@@ -126,24 +126,24 @@ class TestDerivedNaming(unittest.TestCase):
                     "qwen3_qkv_norm_rope",
                     "qwen3_swiglu_mlp",
                 ],
-                3: [
-                    "af3_single_repr_block",
-                    "llama3_decoder_layer",
-                ],
             },
         )
 
-    def test_level_three_blocks_use_a_widened_reference(self):
+    def test_a_deep_task_must_widen_its_reference(self):
         """A block composes ~10 operators, so a same-dtype reference is useless.
 
         At that depth a bfloat16 reference carries as much rounding error as the
         candidate does, and the tolerance stops meaning "how wrong is the
-        candidate". Every level-3 task therefore computes its reference in
-        float32 and gates bfloat16 candidates against it.
+        candidate". A task at level 3 or deeper therefore computes its reference
+        in float32 and gates bfloat16 candidates against it.
+
+        No task declares level 3 today -- the two legacy direct-block
+        declarations were deleted -- so the rule is asserted twice: over the
+        registry, which keeps it armed for the next one, and over a synthetic
+        declaration, which keeps the behaviour itself covered.
         """
-        for name, op in OPS.items():
-            if op.level != 3:
-                continue
+        deep = {name: op for name, op in TASKS.items() if (op.level or 0) >= 3}
+        for name, op in deep.items():
             with self.subTest(op=name):
                 self.assertEqual(op.reference_dtype, "float32")
                 self.assertIn(
@@ -152,6 +152,19 @@ class TestDerivedNaming(unittest.TestCase):
                     f"{name}: a bfloat16-only gate cannot separate a real "
                     "algebra bug from ordinary rounding",
                 )
+
+        widened = _minimal(
+            level=3,
+            family="synthetic_block",
+            reference_dtype="float32",
+            correctness=(
+                Workload(dims=dict(M=4, N=8), dtype="float32"),
+                Workload(dims=dict(M=4, N=8), dtype="bfloat16"),
+            ),
+            tolerances={"float32": (1e-5, 1e-5), "bfloat16": (8e-2, 8e-2)},
+        )
+        self.assertEqual(widened.reference_dtype, "float32")
+        self.assertIn("float32", {case.dtype for case in widened.correctness})
 
     def test_liger_paper_kernels_are_all_declared(self):
         """The seven kernels the Liger paper reports must each have a task.
@@ -171,7 +184,7 @@ class TestDerivedNaming(unittest.TestCase):
             "fused_linear_cross_entropy",
         ):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 self.assertIn(
                     "liger",
                     op.performance_baselines,
@@ -187,21 +200,55 @@ class TestDerivedNaming(unittest.TestCase):
         self.assertIn("module_info.ispkg", source)
         self.assertNotIn("from evograd.ops import", source)
 
-    def test_every_operator_is_a_self_contained_package(self):
-        from pathlib import Path
-        from evograd import ops as ops_module
+    def test_every_task_is_a_self_contained_package(self):
+        """A task's package holds its contract and its reference, and its
+        ``forward`` names that package.
 
-        ops_root = Path(ops_module.__file__).parent
-        for name, op in OPS.items():
+        Where the package lives depends on what the task is: a primitive under
+        ``ops/level1``, a generic fusion under the operator suite, a
+        model-specific one under that model's top-down package. The
+        declaration's ``forward`` is what ties the three cases together, so the
+        check is written against it rather than against a directory guess.
+        """
+        from pathlib import Path
+
+        import evograd
+
+        src_root = Path(evograd.__file__).parent
+        for name, op in TASKS.items():
             with self.subTest(op=name):
-                # Operators are grouped by level; the group comes from the
-                # declaration rather than being written down again here.
-                package = ops_root / f"level{op.level}" / name
-                self.assertTrue((package / "__init__.py").is_file())
-                self.assertTrue((package / "forward_ref.py").is_file())
+                module_path, _, _symbol = op.forward.partition(":")
                 self.assertTrue(
-                    op.forward.startswith(f"evograd.ops.level{op.level}.{name}.")
+                    module_path.startswith("evograd."),
+                    f"{name}: forward must name an evograd module, got {op.forward!r}",
                 )
+                reference = src_root.joinpath(
+                    *module_path.split(".")[1:]
+                ).with_suffix(".py")
+                self.assertTrue(
+                    reference.is_file(), f"{name}: no reference at {reference}"
+                )
+                self.assertTrue(
+                    (reference.parent / "__init__.py").is_file(),
+                    f"{name}: {reference.parent} is not a package",
+                )
+
+    def test_a_task_lives_where_its_kind_says_it_does(self):
+        """Primitives under ops, fusions under benchmark. The registry is the
+        authority on the kind; this pins the directory to it."""
+        for name, op in TASKS.items():
+            with self.subTest(op=name):
+                if op.level == 1:
+                    self.assertTrue(
+                        op.forward.startswith(f"evograd.ops.level1.{name}."),
+                        f"{name} is a primitive but its reference is {op.forward!r}",
+                    )
+                else:
+                    self.assertTrue(
+                        op.forward.startswith("evograd.benchmark."),
+                        f"{name} is a level-{op.level} task but its reference is "
+                        f"{op.forward!r}; fused tasks belong to evograd.benchmark",
+                    )
 
 
 def _minimal(**overrides):
@@ -254,7 +301,7 @@ class TestValidation(unittest.TestCase):
     def test_a_tolerance_multiplier_may_name_an_output(self):
         """Two results of one operator can need genuinely different tolerances
         -- ``fused_add_rms_norm``'s plain sum against its normalized output."""
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         case = op.benchmark_workloads("qwen3_0_6b_observed")[0]
         self.assertIn("summed", op.output_names)
         self.assertLess(
@@ -286,7 +333,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
     def test_final_fork_workload_counts_are_preserved_as_ablation_suites(self):
         for name, (correctness, benchmark) in self._FORK_COUNTS.items():
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 self.assertEqual(len(op.correctness), correctness)
                 self.assertEqual(
                     len(op.benchmark_workloads("legacy")),
@@ -297,7 +344,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
     def test_fused_moe_keeps_its_liger_grid_as_the_timed_suite(self):
         # The one Liger-derived operator whose grid is not model-derived: it is
         # quoted from Liger's own MoE sweep, so there is nothing to migrate.
-        op = get_op("fused_moe_swiglu")
+        op = get_task("fused_moe_swiglu")
         self.assertEqual((len(op.correctness), len(op.benchmark)), (2, 6))
         self.assertEqual(op.benchmark[0].provenance.source, "paper")
 
@@ -314,7 +361,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
             if name in self._NOT_MODEL_DERIVED:
                 continue
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 sources = {case.provenance.source for case in op.benchmark}
                 self.assertEqual(sources, {"hf_config"}, name)
 
@@ -328,7 +375,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
         """
         for name, reason in self._NOT_MODEL_DERIVED.items():
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 for case in op.benchmark:
                     self.assertNotEqual(
                         case.provenance.source,
@@ -356,7 +403,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
             "tvd",
         ):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 full = op.benchmark_workloads("full")
                 small = op.benchmark_workloads("small")
                 large = op.benchmark_workloads("large")
@@ -365,9 +412,9 @@ class TestLigerSuiteMigration(unittest.TestCase):
                 self.assertTrue(large)
 
     def test_inactive_targets_do_not_count_toward_memory_budget(self):
-        self.assertEqual(get_op("cross_entropy").memory_input_names(), ("logits",))
-        self.assertEqual(get_op("kl_div").memory_input_names(), ("y_pred",))
-        self.assertEqual(get_op("jsd").memory_input_names(), ("log_q",))
+        self.assertEqual(get_task("cross_entropy").memory_input_names(), ("logits",))
+        self.assertEqual(get_task("kl_div").memory_input_names(), ("y_pred",))
+        self.assertEqual(get_task("jsd").memory_input_names(), ("log_q",))
 
     def test_liger_hooks_keep_the_reviewed_pair_for_the_runtime_gate(self):
         names = (
@@ -388,7 +435,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
         )
         for name in names:
             with self.subTest(op=name):
-                hook = get_op(name).performance_baselines["liger"]
+                hook = get_task(name).performance_baselines["liger"]
                 self.assertTrue(callable(getattr(hook, "pair_factory", None)))
                 self.assertIsInstance(hook.forward_args, tuple)
 

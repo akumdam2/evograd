@@ -16,7 +16,7 @@ from evograd.evaluation.tier2.runner import (
     default_provider_specs,
 )
 from evograd.opdecl.activity import Active, Inactive, Workload, declare_op
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 def _decl(**overrides):
@@ -80,7 +80,7 @@ class TestParameterArgs(unittest.TestCase):
 
 class TestDeclaredOperators(unittest.TestCase):
     def test_layernorm_splits_activations_from_parameters(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         self.assertEqual(op.parameter_args, ("weight", "bias"))
         activations = [
             a.name for a in op.active_args() if a.name not in op.parameter_args
@@ -88,18 +88,18 @@ class TestDeclaredOperators(unittest.TestCase):
         self.assertEqual(activations, ["x"])
 
     def test_rmsnorm_has_one_parameter(self):
-        self.assertEqual(get_op("rmsnorm").parameter_args, ("weight",))
+        self.assertEqual(get_task("rmsnorm").parameter_args, ("weight",))
 
     def test_every_operator_declares_the_split(self):
         # A missing declaration is not a latent bug here, it is an operator the
         # tier cannot measure — so the registry is the right place to enforce it.
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        undeclared = sorted(n for n, op in OPS.items() if op.parameter_args is None)
+        undeclared = sorted(n for n, op in TASKS.items() if op.parameter_args is None)
         self.assertEqual(undeclared, [])
 
     def test_a_parameter_free_operator_keeps_all_its_args_as_activations(self):
-        op = get_op("geglu")
+        op = get_task("geglu")
         self.assertEqual(op.parameter_args, ())
         self.assertEqual([a.name for a in op.active_args()], ["a", "b"])
 
@@ -144,9 +144,9 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
 
     def test_the_split_matches_parameter_args_for_every_operator(self):
         from evograd.evaluation.tier2.integrated import activation_and_parameter_args
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             with self.subTest(op=name):
                 activations, parameters = activation_and_parameter_args(op)
                 self.assertEqual(
@@ -164,7 +164,7 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
     def test_a_parameter_free_operator_keeps_both_activations(self):
         from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
-        activations, parameters = activation_and_parameter_args(get_op("geglu"))
+        activations, parameters = activation_and_parameter_args(get_task("geglu"))
         self.assertEqual([a.name for a in activations], ["a", "b"])
         self.assertEqual(parameters, ())
 
@@ -172,7 +172,7 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
         from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
         activations, parameters = activation_and_parameter_args(
-            get_op("fused_add_rms_norm")
+            get_task("fused_add_rms_norm")
         )
         self.assertEqual([a.name for a in activations], ["x", "r"])
         self.assertEqual([a.name for a in parameters], ["weight"])

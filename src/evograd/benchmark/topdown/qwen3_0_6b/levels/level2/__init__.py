@@ -1,25 +1,20 @@
-"""The four fused operators one Qwen3 decoder layer decomposes into.
+"""The four fused tasks one Qwen3-0.6B decoder layer decomposes into.
 
-The declarations live in :mod:`evograd.ops.level2` (and, for the residual
-fusion, in ``ops.level2.fused_add_rms_norm``), which own the contracts and the
-reference implementations. What this package owns is everything Qwen-specific
-about them: the shapes the canonical workload actually calls them at, how often,
-the tolerance those shapes justify, and the negative controls that show the
-tolerance still rejects a wrong kernel.
+Each site package owns its contract, its reference, and the capture that
+derives its case from the canonical layer artifact. :mod:`manifest` is the one
+place the site names, task keys, frequencies and module paths are written down;
+everything else reads them from there or from the frozen harvest snapshot.
 
-``DECLARATIONS`` maps each module here to the ``OPS`` name it calibrates, so the
-correspondence can be looked up rather than inferred from filenames.
+Judging an implementation of one of these contracts is not done here -- that
+belongs to :mod:`evograd.evaluation.workloads.qwen3_0_6b.level2`.
 """
 
-#: Module in this package -> the operator declaration it calibrates.
-DECLARATIONS = {
-    "qkv_norm_rope": "qwen3_qkv_norm_rope",
-    "attention": "qwen3_attention",
-    "swiglu_mlp": "qwen3_swiglu_mlp",
-    "residual_rmsnorm": "fused_add_rms_norm",
-}
+from .manifest import SITES, SITE_TASKS, TASKS, task_key
 
-#: The level-2 declarations this workload exercises, by their ``OPS`` names.
-OPERATORS = tuple(DECLARATIONS.values())
+#: Site -> task key. Kept as the historical name for the same table.
+DECLARATIONS = SITE_TASKS
 
-__all__ = ["DECLARATIONS", "OPERATORS"]
+#: The Level-2 task keys this workload exercises.
+OPERATORS = TASKS
+
+__all__ = ["DECLARATIONS", "OPERATORS", "SITES", "SITE_TASKS", "TASKS", "task_key"]

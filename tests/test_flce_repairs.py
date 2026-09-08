@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 class TestGenericFallbackArity(unittest.TestCase):
@@ -87,7 +87,7 @@ class TestLossDtypeContract(unittest.TestCase):
     """
 
     def setUp(self):
-        self.op = get_op("fused_linear_cross_entropy")
+        self.op = get_task("fused_linear_cross_entropy")
 
     @staticmethod
     def _inputs(op, workload):

@@ -275,9 +275,9 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
         from evograd.evaluation.tier1.fair import pytorch_autograd_provider
         from evograd.opdecl.inputs import make_case_inputs
         from evograd.opdecl.oracle import oracle
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
 
-        op = get_op("matmul")
+        op = get_task("matmul")
         workload = op.correctness[0]
         values = make_case_inputs(op, workload, device="cpu")
         expected_output, expected_grads = oracle(

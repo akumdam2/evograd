@@ -73,9 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     from evograd.opdecl.verify import verify
     from evograd.opdecl.compiled import BUILTIN_MODES
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(args.op)
+    op = get_task(args.op)
     workloads = op.benchmark_workloads(
         suite=args.suite,
         dtypes=tuple(args.dtypes) if args.dtypes else None,

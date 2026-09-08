@@ -229,10 +229,10 @@ def production_residual_rmsnorm(norm_call, branch, residual):
 
 def _observed(op_name: str):
     """The calibrated observed configurations for one operator, if it has any."""
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
     try:
-        return tuple(get_op(op_name).benchmark_workloads(suite="qwen3_0_6b_observed"))
+        return tuple(get_task(op_name).benchmark_workloads(suite="qwen3_0_6b_observed"))
     except Exception:  # pragma: no cover - a declaration without the suite
         return ()
 

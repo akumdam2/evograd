@@ -16,7 +16,7 @@ from typing import Callable
 
 from evograd.dispatch import dispatch
 from evograd.opdecl.activity import OpDecl, example_input_spec
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 _SNAPSHOT_HEADER = "import math\n\nimport torch\nimport torch.nn.functional as F\n"
 _SNAPSHOT_GLOBALS = {"math", "torch", "F"}
@@ -248,11 +248,11 @@ def _evolve_group(
     from evograd.evolve.run import run_evolve
 
     if declaration:
-        from evograd.ops import load_op
+        from evograd.benchmark import load_task
 
-        op = load_op(declaration)
+        op = load_task(declaration)
     else:
-        op = get_op(op_name)
+        op = get_task(op_name)
     op = replace(op, forward=forward)
     target = Path(group_dir) / "evolved_best_program.py"
     extra_env = {"CUDA_VISIBLE_DEVICES": str(gpu)} if gpu is not None else None
@@ -320,13 +320,13 @@ def evograd(
     ).resolve()
     root.mkdir(parents=True, exist_ok=True)
     try:
-        base_op = get_op(op)
+        base_op = get_task(op)
     except KeyError:
         base_op = None
     forward_spec = _resolve_forward_input(forward, base_op, root)
     if base_op is None:
         from evograd.scaffold import synthesize_declaration
-        from evograd.ops import load_op
+        from evograd.benchmark import load_task
 
         scaffold = synthesize_declaration(
             op,
@@ -337,7 +337,7 @@ def evograd(
             api_key=api_key,
             max_attempts=max_attempts,
         )
-        declared = load_op(f"{scaffold.declaration}:op")
+        declared = load_task(f"{scaffold.declaration}:op")
     else:
         declared = replace(base_op, forward=forward_spec)
     declared.validate()

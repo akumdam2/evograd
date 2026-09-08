@@ -143,9 +143,9 @@ def main(argv=None) -> int:
     parser.add_argument("--optimizer-timeout", type=int, default=360)
     parser.add_argument("--skip-at-roofline-pct", type=float, default=95.0)
     args = parser.parse_args(argv)
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     if op.name != args.op:
         parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
     record = refine_candidate(

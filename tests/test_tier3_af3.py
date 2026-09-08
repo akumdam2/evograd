@@ -20,7 +20,7 @@ from evograd.benchmark import get_workload
 from evograd.evaluation.tier3.patch import KernelSet, identity_control_kernels
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.models import ALPHAFOLD3_2L
-from evograd.ops import OPS
+from evograd.benchmark import TASKS
 
 try:
     import alphafold3_pytorch  # noqa: F401
@@ -126,7 +126,7 @@ class TestIdentityControl(unittest.TestCase):
         loss_eager = workload.loss(model, batch)
 
         patched = make_workload(case, device="cpu", seed=0)
-        control = identity_control_kernels(OPS, registry=AF3_SITES)
+        control = identity_control_kernels(TASKS, registry=AF3_SITES)
         patched_model, provenance = patched.build_patched(control)
         self.assertEqual(provenance.method, "module_surgery")
         self.assertEqual(

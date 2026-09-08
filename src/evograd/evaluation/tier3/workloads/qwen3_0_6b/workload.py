@@ -321,10 +321,10 @@ class Qwen3Workload:
         would have failed at.
         """
         from evograd.evaluation.tier3.runner import preflight as run_preflight
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         try:
-            run_preflight(kernels, OPS, device=device)
+            run_preflight(kernels, TASKS, device=device)
         except Exception as exc:
             return {"ok": False, "sites": list(kernels.patched),
                     "reason": f"{type(exc).__name__}: {exc}"}

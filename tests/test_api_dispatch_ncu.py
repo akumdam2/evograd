@@ -13,7 +13,7 @@ from evograd.api import _file_forward_spec
 from evograd.dispatch import _emit_dispatcher
 from evograd.ncu.profile import _parse_csv, _script
 from evograd.ncu.roofline import analyze
-from evograd.ops import get_op, load_op
+from evograd.benchmark import get_task, load_task
 from evograd.scaffold import _source, _validate_spec
 
 
@@ -79,18 +79,18 @@ class TestExternalDeclaration(unittest.TestCase):
         with TemporaryDirectory() as td:
             path = Path(td) / "declaration.py"
             path.write_text(source, encoding="utf-8")
-            op = load_op(f"{path}:op")
+            op = load_task(f"{path}:op")
             self.assertEqual(op.name, "external_identity")
             self.assertEqual(op.declaration, f"{path}:op")
             with mock.patch.dict(
                 os.environ, {"EVOGRAD_DECLARATION": f"{path}:op"}
             ):
-                self.assertEqual(get_op("external_identity").name, op.name)
+                self.assertEqual(get_task("external_identity").name, op.name)
 
 
 class TestShapeDispatch(unittest.TestCase):
     def test_emitted_dispatcher_compiles_and_uses_plain_route_tag(self):
-        op = get_op("softmax")
+        op = get_task("softmax")
         with TemporaryDirectory() as td:
             root = Path(td)
             programs = {}
@@ -108,7 +108,7 @@ class TestShapeDispatch(unittest.TestCase):
 
 class TestNCUHelpers(unittest.TestCase):
     def test_profile_scripts_compile(self):
-        op = get_op("softmax")
+        op = get_task("softmax")
         for warmup in (5, None):
             source = _script(
                 op,

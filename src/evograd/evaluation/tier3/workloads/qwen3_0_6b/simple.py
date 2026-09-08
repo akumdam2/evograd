@@ -124,9 +124,9 @@ def compiled_site_kernel(site: str, registry):
     metric floor -- which then rejects this very provider.
     """
     from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    reference = resolve_runtime_forward(get_op(registry.require(site).op))
+    reference = resolve_runtime_forward(get_task(registry.require(site).op))
     return torch.compile(reference, dynamic=False, fullgraph=True)
 
 
@@ -189,9 +189,9 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *, load_pr
     from evograd.evaluation.tier3.patch import (
         KernelSet, KernelSource, kernel_from_pair, patch, patched_kernels)
     from evograd.opdecl.baselines import baseline_candidate_module
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
-    ops = dict(ops or OPS)
+    ops = dict(ops or TASKS)
     kernels = KernelSet(registry=registry)
     for site, spec in patches.items():
         decl = registry.require(site)
@@ -231,9 +231,9 @@ def trusted_kernels_for(reference: str, patch_set: PatchSet, registry, ops=None)
     if reference == "torch_compile":
         return compiled_trusted_kernels(patch_set, registry)
     if reference == "bound_pair":
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        return matched_trusted_kernels(dict(ops or OPS), patch_set, registry)
+        return matched_trusted_kernels(dict(ops or TASKS), patch_set, registry)
     raise ValueError(
         f"unknown trusted reference {reference!r}; known: {TRUSTED_REFERENCES}")
 

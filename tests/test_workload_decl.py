@@ -13,7 +13,7 @@ import unittest
 from evograd.opdecl import Provenance, Workload, declare_workload
 from evograd.opdecl.models import ALPHAFOLD3, rederive_dims
 from evograd.benchmark import WORKLOADS, get_workload
-from evograd.ops import OPS
+from evograd.benchmark import TASKS
 
 
 def _case(dims=None, model="alphafold3", component="train_step", free=None):
@@ -80,7 +80,7 @@ class TestTheAlphafold3Declaration(unittest.TestCase):
     def test_every_site_names_a_declared_operator(self):
         for site, op_name in get_workload("alphafold3").sites.items():
             with self.subTest(site=site):
-                self.assertIn(op_name, OPS)
+                self.assertIn(op_name, TASKS)
 
     def test_every_benchmark_case_rederives_from_the_config(self):
         """The provenance assertion, extended to level 4: the stored dims and

@@ -12,7 +12,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 def _hash(path: Path) -> str:
@@ -35,7 +35,7 @@ def main() -> int:
         source = repo / "authoritative_shapes.py"
         shutil.copy2(args.harness, harness)
         shutil.copy2(args.candidate, candidate)
-        workloads = get_op("layernorm").benchmark_workloads(suite="industrial_mixed")
+        workloads = get_task("layernorm").benchmark_workloads(suite="industrial_mixed")
         shape_rows = [
             {"dims": dict(workload.dims), "dtype": workload.dtype}
             for workload in workloads

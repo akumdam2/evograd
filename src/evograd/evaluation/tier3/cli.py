@@ -258,7 +258,7 @@ def build_providers(args, *, quiet: bool = False) -> dict:
         KernelSet, identity_control_kernels, patched_kernels, restrict,
         site_registry_for,
     )
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     # Every provider below is built against the registry the *workload* owns.
     # Nothing here reads a module-level site namespace, which is what let one
@@ -280,11 +280,11 @@ def build_providers(args, *, quiet: bool = False) -> dict:
 
     if args.identity_control:
         providers["eager_through_bind"] = identity_control_kernels(
-            OPS, sites, registry=registry
+            TASKS, sites, registry=registry
         )
 
     if args.baseline and args.baseline != "none":
-        kernels, covered = _baseline_kernels(args.baseline, OPS, registry)
+        kernels, covered = _baseline_kernels(args.baseline, TASKS, registry)
         if kernels is not None:
             providers[args.baseline] = limited(kernels)
             if not quiet:
@@ -308,7 +308,7 @@ def build_providers(args, *, quiet: bool = False) -> dict:
                 )
             selected[site] = load_program(Path(path))
         providers["candidate"] = limited(
-            patched_kernels(selected, OPS, registry=registry)
+            patched_kernels(selected, TASKS, registry=registry)
         )
         if not quiet:
             print(f"[tier3] candidate patches {sorted(selected)}", file=sys.stderr)
@@ -382,7 +382,7 @@ def _measure_options(args) -> dict:
 def _run_one_provider(args) -> dict:
     """Worker mode: build one provider, measure it, hand back its entry."""
     from evograd.evaluation.tier3 import measure_one
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     providers = build_providers(args, quiet=True)
     if args.provider not in providers:
@@ -394,7 +394,7 @@ def _run_one_provider(args) -> dict:
         }
     return measure_one(
         build_workload(args), args.provider, providers[args.provider],
-        ops=OPS, **_measure_options(args),
+        ops=TASKS, **_measure_options(args),
     )
 
 
@@ -462,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.evaluation.tier3 import (
         assemble_report, loss_agreement, measure_one, provider_order,
     )
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     providers = build_providers(args)
     order = provider_order(providers, seed=args.seed)
@@ -476,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.no_isolate:
             results[name] = measure_one(
-                workload, name, providers[name], ops=OPS, **_measure_options(args)
+                workload, name, providers[name], ops=TASKS, **_measure_options(args)
             )
         else:
             results[name] = _run_isolated(parent_argv, name, args.timeout)

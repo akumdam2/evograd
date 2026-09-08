@@ -11,7 +11,7 @@ import ast
 import unittest
 from dataclasses import replace
 
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 from evograd.opdecl.activity import Workload
 from evograd.pipelines.d_inductor.capture import CapturedPair, SavedTensor
 from evograd.pipelines.d_inductor.seed_codegen import (
@@ -175,7 +175,7 @@ class TestSplitModule(unittest.TestCase):
 
 class TestSeedAssembly(unittest.TestCase):
     def setUp(self):
-        self.op = get_op("layernorm")
+        self.op = get_task("layernorm")
 
     def test_colliding_kernel_names_are_prefixed_apart(self):
         seed = generate_inductor_seed(self.op, "float32", capture_for(self.op))
@@ -232,7 +232,7 @@ class TestSeedAssembly(unittest.TestCase):
         self.assertIn("*_build_backward_args(", seed)
 
     def test_gradient_selection_follows_the_declared_contract(self):
-        op = get_op("evoattention")
+        op = get_task("evoattention")
         # res_mask is tensor arg 3 and gets a None slot; the contract skips it.
         seed = generate_inductor_seed(
             op, "float16", capture_for(op, grad_indices=(0, 1, 2, 4))
@@ -244,7 +244,7 @@ class TestTritonInlining(unittest.TestCase):
     """On CUDA the kernels must land as real code, not quoted blobs."""
 
     def setUp(self):
-        self.op = get_op("layernorm")
+        self.op = get_task("layernorm")
         self.seed = generate_inductor_seed(
             self.op, "float32", capture_for(self.op, triton=True)
         )
@@ -337,7 +337,7 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
         self.assertEqual(list(out.dims.values()), [8, 9, 10])
 
     def test_prefers_a_declared_workload_with_distinct_dims(self):
-        op = get_op("matmul")
+        op = get_task("matmul")
         selected = select_capture_workloads(op, ("float32", "float16"))
         for dtype, workload in selected.items():
             values = list(workload.dims.values())
@@ -345,7 +345,7 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
 
     def test_rejects_undeclared_dtype(self):
         with self.assertRaisesRegex(ValueError, "no declared workload"):
-            select_capture_workloads(get_op("rmsnorm"), ("float64",))
+            select_capture_workloads(get_task("rmsnorm"), ("float64",))
 
 
 class TestDtypeTag(unittest.TestCase):

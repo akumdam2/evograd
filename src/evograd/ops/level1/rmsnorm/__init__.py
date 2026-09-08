@@ -3,19 +3,7 @@
 import math
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.opdecl.models import (
-    LLAMA_3_8B,
-    LLAMA_REGIME_SPLIT,
-    LLAMA_TOKEN_SWEEP,
-)
-from evograd.ops._common import (
-    fixed_shape_suites,
-    log_distance_weight,
-    make_pair_baseline,
-    model_workloads,
-    observed_workloads,
-    regime_suites,
-)
+from evograd.ops._common import make_pair_baseline
 
 
 def make_rmsnorm_inputs(torch, op, workload, device="cuda"):
@@ -31,10 +19,6 @@ def make_rmsnorm_inputs(torch, op, workload, device="cuda"):
     )
     dy = torch.randn((rows, hidden), device=device, dtype=dtype)
     return {"x": x, "weight": weight, "eps": 1e-5, "dy": dy}
-
-
-def _regime_feature(workload: Workload) -> float:
-    return float(workload.dims["rows"])
 
 
 def rmsnorm_tolerance(workload, result_name, atol, rtol):
@@ -56,24 +40,13 @@ def _liger_factory():
     return make_liger_rmsnorm_autograd_pair_fns()
 
 
-_BENCHMARK = model_workloads(
-    LLAMA_3_8B,
-    "rmsnorm",
-    tuple({"tokens": tokens} for tokens in LLAMA_TOKEN_SWEEP),
-    ("bfloat16",),
-)
 # Untimed compile/runtime coverage: the non-power-of-two hidden width and the
 # small row counts the pre-v1 grid used to time, which are worth running but are
 # not part of the performance objective.
 #: Three deduplicated RMSNorm configurations per Qwen3-0.6B step: the
 #: residual-stream norm (4096 x 1024, 57 invocations) and the two per-head
 #: norms, which are many short rows rather than few long ones.
-_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "rmsnorm")
 
-_COVERAGE = _QWEN3_OBSERVED + _BENCHMARK + tuple(
-    Workload(dims=dict(rows=rows, hidden=hidden), dtype="bfloat16")
-    for rows, hidden in ((1, 4096), (17, 4096), (128, 4096), (4096, 8192))
-)
 
 op = declare_op(
     name="rmsnorm",
@@ -104,24 +77,6 @@ op = declare_op(
         Workload(dims=dict(rows=64, hidden=512), dtype="bfloat16"),
         Workload(dims=dict(rows=128, hidden=4096), dtype="bfloat16"),
     ),
-    coverage=_COVERAGE,
-    benchmark=_BENCHMARK,
-    benchmark_suites={
-        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
-        **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
-        **fixed_shape_suites(_BENCHMARK),
-        "coverage": _COVERAGE,
-        # Pre-v1 grid: max row width 8192 elements, fp32/fp16 only. Kept as an
-        # ablation control, not as the measured objective.
-        "legacy": tuple(
-            Workload(dims=dict(rows=r, hidden=h), dtype=dtype)
-            for (r, h) in (
-                (1, 768), (8, 1024), (32, 1536), (8, 4096), (1, 8192),
-                (17, 127), (17, 513), (17, 1000),
-            )
-            for dtype in ("float32", "float16")
-        ),
-    },
     performance_baselines={
         "liger": make_pair_baseline(_liger_factory, ("x", "weight", "eps"))
     },
@@ -131,8 +86,5 @@ op = declare_op(
         "bfloat16": (8e-2, 8e-2),
     },
     tolerance_hook=rmsnorm_tolerance,
-    regime_feature=_regime_feature,
-    regime_split=LLAMA_REGIME_SPLIT,
-    case_weight=log_distance_weight(_regime_feature, LLAMA_REGIME_SPLIT),
     make_inputs=make_rmsnorm_inputs,
 )

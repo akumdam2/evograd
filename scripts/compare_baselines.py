@@ -51,9 +51,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from evograd.evaluation.tier1.fast import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     module = _load_module(args.candidate)
     workloads = op.benchmark_workloads(
         suite=args.suite, dtypes=tuple(args.dtypes) if args.dtypes else None

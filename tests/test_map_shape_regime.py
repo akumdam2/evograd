@@ -10,12 +10,12 @@ from pathlib import Path
 from evograd.evolve.map_harvest import harvest_regime_elites
 from evograd.evolve.scoring import regime_speedup_metrics
 from evograd.opdecl.activity import Workload
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 class TestRegimeSpeedupMetrics(unittest.TestCase):
     def test_partitions_cases_by_regime_feature(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
 
         def feature(workload: Workload) -> float:
             return float(workload.dims["rows"])

@@ -41,9 +41,9 @@ def _fair_bench(op_name: str, candidate: Path, suite: str, out: Path) -> dict:
     )
     from evograd.opdecl.baselines import verify_performance_baseline
     from evograd.opdecl.verify import verify
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(op_name)
+    op = get_task(op_name)
     verify_performance_baseline(op, "liger")
     module = _load_module(candidate)
     correctness = verify(op, module)
@@ -100,9 +100,9 @@ def _paired_fair_bench(
         run_fair_benchmarks,
     )
     from evograd.opdecl.verify import verify
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(op_name)
+    op = get_task(op_name)
     map_module = _load_module(map_candidate)
     explicit_module = _load_module(explicit_candidate)
     for label, module in (("map", map_module), ("explicit", explicit_module)):
@@ -372,9 +372,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: seed not found: {args.seed}", file=sys.stderr)
         return 2
 
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(args.op)
+    op = get_task(args.op)
     if op.regime_feature is None:
         print(f"ERROR: op {args.op} lacks regime_feature", file=sys.stderr)
         return 2

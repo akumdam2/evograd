@@ -36,15 +36,63 @@ workload shapes. `operator_suite` selects those declarations; it does not copy
 `OpDecl`. Whole-model declarations are registered in
 `evograd.benchmark.WORKLOADS`.
 
-There is one explicit data-provenance bridge: model-derived operator
-declarations read frozen JSON only through the workload-neutral
-`evograd.benchmark.topdown` snapshot registry. They may not import a concrete
-workload package or any evaluation module. Keeping this narrow bridge avoids a
-second copy of observed shapes while the AST layering test enforces its scope.
+Performance cases are bound onto primitive contracts here rather than written
+into them. `evograd.benchmark.cases` is the binder and it applies two layers,
+in this order:
 
-The declarations under `ops/level3` are legacy direct-block tasks retained for
-reproducibility. They do not constitute a completed implementation of the
-paper's new top-down L3 architectural-block integration.
+1. `operator_suite/cases/<primitive>.py` — the suite's timed grid, its untimed
+   benchmark coverage, its named suites, the shape-regime split and the case
+   weighting. Grids whose dimensions were computed from a published Llama-3 or
+   AlphaFold3 configuration live here: the dimensions came from a model, but
+   the case belongs to the suite, and calling it top-down coverage would claim
+   evidence that does not exist.
+2. `topdown/<model>/` — cases *observed* in that model's captured run, read
+   from its frozen snapshot. Which primitives a model binds, under which suite
+   name, whether the cases precede or follow the primitive's own coverage and
+   which suite mirrors that coverage are all that model's decisions, and live
+   in its own manifest — for Qwen3-0.6B, `OBSERVED_BINDINGS` in
+   `topdown/qwen3_0_6b/levels/level1/manifest.py`.
+
+`benchmark/cases.py` is the mechanism and only the mechanism: it names no
+model, holds no task list, and takes the configuration as an argument.
+`benchmark/core/registry.py` is the assembly point — the one place that says
+which models exist, importing each one's table and handing it to the binder.
+Adding a second harvested architecture means writing a table in its manifest
+and naming it there; no primitive package and no shared module changes.
+
+Both return a new `OpDecl`; the primitive is never mutated, and a primitive
+that declared its own grid would be refused rather than silently merged, so a
+case collection has exactly one owner. That is why `evograd.ops` reaches
+neither a snapshot nor a model configuration table, and why importing it in a
+fresh interpreter loads no benchmark module at all.
+
+The suite *command* is not here either. `evograd suite` asks the benchmark what
+to run and evaluation to run it, which is composition rather than definition,
+so it lives at the root in `evograd.suite_cli`. Nothing under `benchmark`
+imports `evaluation`, and the dependency-direction test carries no exemption.
+
+Reviewed pair baselines (`liger.py`, `cublas.py`, `triton_tutorial.py`) stay
+beside the task or primitive whose contract they implement. That is deliberate:
+an adapter is an implementation of one declaration, discovered through the
+declaration that names it, not a case collection.
+
+### The one remaining exception, stated
+
+`ops/level1/rope` still imports `evograd.opdecl.models`. It is not a case list:
+RoPE's input generator reads `rope_theta` from *each workload's own
+provenance*, because Llama-3's 500000 and Qwen3's 1000000 produce different
+rotations and a hard-coded constant would let a kernel be self-consistent and
+wrong. Resolving a workload's model key to its published configuration needs
+that table. The rule the generator implements is generic; only the fallback
+used when a case carries no provenance names a model, and changing it would
+change the inputs generated for the provenance-free correctness cases. It is
+declaration infrastructure rather than a benchmark manifest, so importing the
+primitives still loads no benchmark package and no frozen snapshot.
+
+The legacy direct-block declarations that used to live under `ops/level3` have
+been deleted. They did not constitute a completed implementation of the
+top-down L3 architectural-block integration, and no task declares level 3
+today.
 
 ## Two benchmark families
 
@@ -55,8 +103,8 @@ paper's new top-down L3 architectural-block integration.
   harvest and frozen snapshot to L3/L2/L1. The current Qwen instance is named
   `qwen3_0_6b`; it must not be confused with the planned Qwen3-Next workload.
 
-Registry counts must be queried from `evograd.ops.OPS`,
-`evograd.benchmark.WORKLOADS`, and
+Registry counts must be queried from `evograd.ops.PRIMITIVES`,
+`evograd.benchmark.TASKS`, `evograd.benchmark.WORKLOADS`, and
 `evograd.benchmark.topdown.TOPDOWN_WORKLOADS`; documentation does not duplicate
 counts that can drift.
 

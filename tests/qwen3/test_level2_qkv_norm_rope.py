@@ -19,25 +19,25 @@ from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_mo
 from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 from evograd.opdecl.models import rederive_dims
 from evograd.opdecl.oracle import oracle
-from evograd.ops import OPS, get_op
-from evograd.ops.level2.qwen3_qkv_norm_rope import (
+from evograd.benchmark import TASKS, get_task
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.task import (
     FREQUENCY,
     HARVEST,
     OBSERVED_STRIDES,
     PROVENANCE_CHAIN,
 )
-from evograd.ops.level2.qwen3_qkv_norm_rope.forward_ref import (
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference import (
     qwen3_qkv_norm_rope_forward_production,
     qwen3_qkv_norm_rope_forward_ref,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OP = get_op("qwen3_qkv_norm_rope")
+OP = get_task("qwen3_qkv_norm_rope")
 
 
 class TestDeclaration(unittest.TestCase):
     def test_registered_at_level_two_with_three_outputs(self):
-        self.assertIn("qwen3_qkv_norm_rope", OPS)
+        self.assertIn("qwen3_qkv_norm_rope", TASKS)
         self.assertEqual((OP.level, OP.family), (2, "attention"))
         self.assertTrue(OP.is_multi_output)
         self.assertEqual(OP.output_names, ("q", "k", "v"))
@@ -81,7 +81,7 @@ class TestDeclaration(unittest.TestCase):
         self.assertEqual(case.dims, rederive_dims(case.provenance))
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import qkv_norm_rope as qkv_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope import capture as qkv_module
 
         self.assertEqual(qkv_module.declaration_problems(), [])
 
@@ -113,7 +113,7 @@ class TestDeclaration(unittest.TestCase):
 
     def test_the_two_attention_tasks_meet_exactly(self):
         """This task's outputs are the other task's inputs, shape for shape."""
-        other = get_op("qwen3_attention").benchmark[0].dims
+        other = get_task("qwen3_attention").benchmark[0].dims
         mine = OP.benchmark[0].dims
         for dim in ("B", "T", "HQ", "HK", "D"):
             self.assertEqual(mine[dim], other[dim], dim)
@@ -122,8 +122,8 @@ class TestDeclaration(unittest.TestCase):
     def test_the_declaration_imports_without_transformers_or_results(self):
         script = (
             "import sys; sys.modules['transformers'] = None;"
-            " from evograd.ops import get_op;"
-            " op = get_op('qwen3_qkv_norm_rope');"
+            " from evograd.benchmark import get_task;"
+            " op = get_task('qwen3_qkv_norm_rope');"
             " print(len(op.outputs), op.benchmark[0].dims['KVO'])"
         )
         proc = subprocess.run(
@@ -266,8 +266,7 @@ class TestForwardReference(unittest.TestCase):
 class TestTimedBaselineAndGate(unittest.TestCase):
     def test_runtime_forward_resolves_to_the_hf_spelling(self):
         from evograd.opdecl.oracle import resolve_forward, resolve_runtime_forward
-        from evograd.ops.level2.qwen3_qkv_norm_rope import forward_ref
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope import reference as forward_ref
         self.assertIs(
             resolve_runtime_forward(OP), forward_ref.qwen3_qkv_norm_rope_forward_production
         )
@@ -333,8 +332,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
 
     def test_a_perturbed_production_spelling_is_rejected_per_output(self):
         from evograd.opdecl import baselines
-        from evograd.ops.level2.qwen3_qkv_norm_rope import forward_ref
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope import reference as forward_ref
         original = forward_ref.qwen3_qkv_norm_rope_forward_production
 
         def perturbed(*args, **kwargs):

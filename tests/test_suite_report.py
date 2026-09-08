@@ -149,7 +149,7 @@ class TestAggregation(unittest.TestCase):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
             _task("flce", 2, "loss", [3.0]),
-            _task("llama3_decoder_layer", 3, "llm_block", [1.5]),
+            _task("synthetic_block", 3, "llm_block", [1.5]),
         ]
         levels = SuiteReport(tasks=tasks).to_dict()["levels"]
         self.assertEqual(set(levels), {"1", "2", "3"})
@@ -175,7 +175,7 @@ class TestMarkdown(unittest.TestCase):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
             _task("conv2d", 1, "conv", [], cases_total=4),
-            _task("llama3_decoder_layer", 3, "llm_block", [1.5]),
+            _task("synthetic_block", 3, "llm_block", [1.5]),
         ]
         text = SuiteReport(tasks=tasks).to_markdown()
         self.assertIn("full-step", text)
@@ -189,16 +189,22 @@ class TestMarkdown(unittest.TestCase):
 
 class TestAgainstTheRealRegistry(unittest.TestCase):
     def test_every_declared_operator_can_be_placed_in_the_report(self):
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         tasks = [
             _task(name, op.level, op.family, [1.0])
-            for name, op in OPS.items()
+            for name, op in TASKS.items()
             if op.level is not None
         ]
         data = SuiteReport(tasks=tasks).to_dict()
         self.assertEqual(data["overall"]["operators"], len(tasks))
-        self.assertEqual(set(data["levels"]), {"1", "2", "3"})
+        # Read from the registry rather than written down: the levels the
+        # report contains are whatever the registered tasks declare, and the
+        # legacy direct-block tasks that made level 3 non-empty are gone.
+        self.assertEqual(
+            set(data["levels"]),
+            {str(op.level) for op in TASKS.values() if op.level is not None},
+        )
         self.assertAlmostEqual(data["overall"]["speedup_full_step_macro"], 1.0)
 
 

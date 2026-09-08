@@ -72,9 +72,9 @@ def runtime_forward_for(op_name: str) -> Callable:
     signature would be rejected by a TypeError. That is not the gate working.
     """
     from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    return resolve_runtime_forward(get_op(op_name))
+    return resolve_runtime_forward(get_task(op_name))
 
 
 def smallest_rejected(results: list[dict[str, Any]]) -> dict[str, Any]:

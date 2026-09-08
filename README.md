@@ -452,10 +452,48 @@ used below it; see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
 See [the benchmark specification](docs/BENCHMARK.md) for task scope and
 [the evaluation guide](src/evograd/evaluation/README.md) for execution context.
 
-One naming collision to keep straight: `ops/level1/`, `ops/level2/`,
-`ops/level3/` and `OpDecl.level` are the **task** hierarchy — primitive, fused,
-architectural block — and have nothing to do with evaluation tiers. A level-1
-primitive measured at tier 2 is an ordinary thing to want.
+One naming collision to keep straight: `OpDecl.level` is the **task**
+hierarchy — primitive, fused, architectural block — and has nothing to do with
+evaluation tiers. A level-1 primitive measured at tier 2 is an ordinary thing
+to want.
+
+Where a declaration lives follows what kind of thing it is, not what level it
+claims:
+
+| package | owns |
+| --- | --- |
+| `evograd.opdecl` | declaration infrastructure and shared types |
+| `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
+| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership |
+| `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
+| `evograd.cli` / `evograd.suite_cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
+
+The dependency runs in that order and never back. `ops` imports neither
+benchmark nor evaluation, and `benchmark` imports no evaluation — both are
+enforced by AST tests with no exemptions, and by a runtime test that imports
+`evograd.ops` in a fresh interpreter and asserts nothing from the other two
+packages was loaded.
+
+A primitive therefore declares no timed grid, no benchmark coverage, no named
+suite, no shape-regime split and no case weighting. Those are attached when the
+task registry is built, from two places that mean different things:
+
+- `evograd.benchmark.operator_suite.cases` — the suite's performance grids. A
+  grid computed from a published Llama-3 or AlphaFold3 configuration is one of
+  these: the numbers came from a model, but the case is the suite's.
+- a model's own manifest under `evograd.benchmark.topdown` — cases *observed*
+  in a real captured run, which is a different kind of evidence and is never
+  relabelled as the first kind. The manifest owns the choice; the shared binder
+  in `evograd.benchmark.cases` owns only the mechanics and names no model, with
+  `evograd.benchmark.core.registry` as the single assembly point that connects
+  the two.
+
+Executable tasks resolve through `evograd.benchmark.get_task`;
+`evograd.ops.get_primitive` resolves the mathematics alone. Liger and other
+reviewed pair baselines stay co-located with the task or primitive they
+implement — an intentional arrangement, not a leftover: an adapter is an
+implementation of that contract, and it is discovered through the declaration
+that names it.
 
 ## Evolution
 
@@ -572,17 +610,28 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 3 — architectural blocks
 
-| Operator                | Family        | Forward                                                | Gradients |
-| ----------------------- | ------------- | ------------------------------------------------------ | --------: |
-| `llama3_decoder_layer`  | llm_block     | one Llama-3-8B decoder layer (training forward pass)    | 10        |
-| `af3_single_repr_block` | protein_block | AlphaFold3 single-representation update with pair bias  | 13        |
+**No task declares level 3.** The two legacy direct-block declarations that
+used to — `llama3_decoder_layer` and `af3_single_repr_block` — have been
+deleted. They were whole-block pair benchmarks that never satisfied the
+top-down L3 contract, which also requires model-derived activation coverage,
+a complete return contract, and a layer-level saved-state contract. Keeping
+them registered would have presented an unfinished level as a finished one.
 
-Both blocks compute their correctness reference in float32 while the candidate
-runs in bfloat16 (`reference_dtype`). Composing ten operators makes a
-same-dtype reference carry as much rounding error as the candidate, at which
-point the tolerance stops bounding the candidate's own error. Their declarations
-also state what they exclude — the Llama block has no KV cache, and the
-AlphaFold3 block is the single-representation update rather than a full
+What replaces them is not another block declaration but the top-down path:
+Qwen3-0.6B's captured layer artifact and its replay live under
+`benchmark/topdown/qwen3_0_6b/levels/level3/`, and their judgment under
+`evaluation/workloads/qwen3_0_6b/level3/`. That path is deliberately still
+described as incomplete — see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
+
+AlphaFold3's whole-model declaration and its Tier-3 adapters are unaffected and
+remain registered, as does Llama-3-8B's Level-4 workload and harvest. What a
+level-3 declaration would still have to do, whenever one is written: compute
+its correctness reference in float32 while the candidate runs in bfloat16
+(`reference_dtype`), because composing ten operators makes a same-dtype
+reference carry as much rounding error as the candidate, at which point the
+tolerance stops bounding the candidate's own error. It would also have to state
+what it excludes — as the deleted Llama block did for the KV cache, and the
+AlphaFold3 block did by being the single-representation update rather than a full
 pairformer block, which would need two outputs.
 
 Timed grids are derived from frozen model configurations in

@@ -10,18 +10,36 @@ qwen3_0_6b/
 ├── declaration.py       L4 facts shared by top-down tools
 ├── levels/
 │   ├── level4/          model spec, build, smoke, and report
-│   ├── level3/          captured decoder-layer artifact and replay
-│   ├── level2/          QKV, attention, SwiGLU, residual/RMSNorm boundaries
-│   └── level1/          primitive-to-composite mapping
+│   ├── level3/          artifact.py, capture.py, prepare.py -- the captured
+│   │                    decoder layer and what it takes to replay it
+│   ├── level2/          manifest.py plus one package per site:
+│   │                    <site>/{task,reference,capture}.py
+│   └── level1/          manifest.py -- which primitives this model runs
 └── harvest/             observation, manifest, and frozen snapshot
 ```
 
-Model patching and the local/KL/gradient/training-behavior checks are evaluation
-concerns and live under:
+Everything above describes *the cases*: where a boundary sits, which tensors
+cross it, in which layout, how often, and whether what was captured still
+matches the frozen harvest. `levels/level2/manifest.py` is the single source
+for the site names, task keys, frequencies and module paths -- it reads the
+snapshot rather than restating it.
+
+Deciding whether an implementation of one of those cases is acceptable is a
+separate concern with a separate owner:
 
 ```text
-evograd.evaluation.tier3.workloads.qwen3_0_6b
+evograd.evaluation.workloads.qwen3_0_6b       verification, calibration,
+│                                             negative controls, replay verdicts
+├── level1/{verify,calibrate,cli}.py
+├── level2/{<site>,calibrate,negative_controls}.py
+└── level3/replay.py
+
+evograd.evaluation.tier3.workloads.qwen3_0_6b model patching and the
+                                              local/KL/gradient checks
 ```
+
+The split is what keeps a threshold from being derived by the same module that
+defines the case it gates.
 
 ## Current scope
 

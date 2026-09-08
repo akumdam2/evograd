@@ -229,11 +229,11 @@ class TestSnapshotState(unittest.TestCase):
     def test_level2_tasks_only_name_operators_that_exist(self):
         """A task pointing at an undeclared operator would produce a snapshot
         nothing can read."""
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
         from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import TASK_SOURCES
 
         for name in TASK_SOURCES:
-            self.assertIn(name, OPS, f"{name} has no declaration")
+            self.assertIn(name, TASKS, f"{name} has no declaration")
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")

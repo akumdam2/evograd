@@ -56,10 +56,10 @@ def main(argv: list[str] | None = None) -> int:
         _capture_native_output,
         _native_output_tail,
     )
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
     try:
-        op = load_op(args.declaration) if args.declaration else get_op(args.op)
+        op = load_task(args.declaration) if args.declaration else get_task(args.op)
         if op.name != args.op:
             raise ValueError(
                 f"declaration name {op.name!r} does not match --op {args.op!r}"

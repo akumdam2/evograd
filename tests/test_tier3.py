@@ -24,12 +24,12 @@ from evograd.evaluation.tier3 import (
     restrict,
 )
 from evograd.opdecl.models import LLAMA_3_8B, LLAMA_3_8B_4L
-from evograd.ops import OPS, get_op
+from evograd.benchmark import TASKS, get_task
 
 from evograd.evaluation.tier3.cli import MODELS
 
 from tests._registry_fixture import SAMPLE_SITE_OPS, SAMPLE_SITES
-from evograd.ops.level3.llama3_decoder_layer import forward_ref as reference
+from tests import _registry_fixture
 from torch import nn
 
 
@@ -39,14 +39,14 @@ class TestPatchSites(unittest.TestCase):
         # fail at bind time, inside a run.
         for site, op_name in SAMPLE_SITE_OPS.items():
             with self.subTest(site=site):
-                self.assertIn(op_name, OPS)
+                self.assertIn(op_name, TASKS)
 
     def test_each_site_operator_declares_its_parameter_split(self):
         # bind() and the module wrapping both need it; an undeclared split would
         # surface only once a candidate was patched in.
         for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
-                self.assertIsNotNone(get_op(op_name).parameter_args)
+                self.assertIsNotNone(get_task(op_name).parameter_args)
 
     def test_an_unknown_site_is_rejected(self):
         with self.assertRaises(ValueError) as caught:
@@ -67,22 +67,27 @@ class TestPatchSites(unittest.TestCase):
     def test_the_default_kernels_are_the_declared_spellings(self):
         # The eager provider must be the production spelling, not the primitive
         # one: timing against the unfused reference inflates every ratio.
-        self.assertIs(KernelSet(registry=SAMPLE_SITES).rms_norm, reference._rms_norm_fused)
-        self.assertIs(KernelSet(registry=SAMPLE_SITES).swiglu, reference._default_swiglu)
+        self.assertIs(KernelSet(registry=SAMPLE_SITES).rms_norm, _registry_fixture.fused_rms_norm)
+        self.assertIs(KernelSet(registry=SAMPLE_SITES).swiglu, _registry_fixture.float32_swiglu)
 
 
-class TestTheReferenceStillDescribesTheSameLayer(unittest.TestCase):
-    """Making the activation injectable must not change what the oracle sees."""
+class TestAnInjectableReferenceKeepsItsDeclaredArguments(unittest.TestCase):
+    """Injecting a spelling must not change what the oracle sees.
+
+    The legacy decoder-layer declaration this once asserted against has been
+    deleted; the property is generic, so it is asserted against a synthetic
+    declaration owned by the tests (``tests/_registry_fixture.py``).
+    """
 
     def test_the_declaration_still_calls_the_reference_positionally(self):
-        op = get_op("llama3_decoder_layer")
+        op = _registry_fixture.synthetic_block_op()
         tree = ast.parse(
-            Path(reference.__file__).read_text()
+            Path(_registry_fixture.__file__).read_text()
         )
         params = next(
             [a.arg for a in node.args.args]
             for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_llama3_decoder_layer"
+            if isinstance(node, ast.FunctionDef) and node.name == "_synthetic_block"
         )
         # rms_norm is injected ahead of the declared args; swiglu is appended
         # behind a default, so a positional call with the declared args alone
@@ -92,10 +97,10 @@ class TestTheReferenceStillDescribesTheSameLayer(unittest.TestCase):
         self.assertEqual(params[-1], "swiglu")
 
     def test_swiglu_has_a_default_so_existing_callers_are_unaffected(self):
-        tree = ast.parse(Path(reference.__file__).read_text())
+        tree = ast.parse(Path(_registry_fixture.__file__).read_text())
         node = next(
             n for n in tree.body
-            if isinstance(n, ast.FunctionDef) and n.name == "_llama3_decoder_layer"
+            if isinstance(n, ast.FunctionDef) and n.name == "_synthetic_block"
         )
         defaulted = [a.arg for a in node.args.args[-len(node.args.defaults):]]
         self.assertIn("swiglu", defaulted)
@@ -106,8 +111,8 @@ class TestTheReferenceStillDescribesTheSameLayer(unittest.TestCase):
         # without changing any test that only checks shapes.
         source = ast.unparse(
             next(
-                n for n in ast.parse(Path(reference.__file__).read_text()).body
-                if isinstance(n, ast.FunctionDef) and n.name == "_default_swiglu"
+                n for n in ast.parse(Path(_registry_fixture.__file__).read_text()).body
+                if isinstance(n, ast.FunctionDef) and n.name == "float32_swiglu"
             )
         )
         self.assertIn("float()", source)
@@ -155,9 +160,9 @@ class TestRankAdapter(unittest.TestCase):
         # which is correct but worth noticing rather than assuming.
         from evograd.evaluation.tier3.patch import _declared_rank
 
-        self.assertEqual(_declared_rank(get_op("rmsnorm").args[0].shape), 2)
-        self.assertEqual(_declared_rank(get_op("swiglu").args[0].shape), 2)
-        flce = get_op("fused_linear_cross_entropy")
+        self.assertEqual(_declared_rank(get_task("rmsnorm").args[0].shape), 2)
+        self.assertEqual(_declared_rank(get_task("swiglu").args[0].shape), 2)
+        flce = get_task("fused_linear_cross_entropy")
         self.assertEqual(_declared_rank(flce.args[0].shape), 2)   # x
         self.assertEqual(_declared_rank(flce.args[2].shape), 1)   # target
 
@@ -168,7 +173,7 @@ class TestRankAdapter(unittest.TestCase):
         from evograd.evaluation.tier3.patch import _declared_rank
 
         self.assertEqual(
-            _declared_rank(get_op("fused_linear_cross_entropy").output.shape), 0
+            _declared_rank(get_task("fused_linear_cross_entropy").output.shape), 0
         )
 
     def test_row_shaped_outputs_are_restored(self):
@@ -176,7 +181,7 @@ class TestRankAdapter(unittest.TestCase):
 
         for name in ("rmsnorm", "swiglu"):
             with self.subTest(op=name):
-                self.assertEqual(_declared_rank(get_op(name).output.shape), 2)
+                self.assertEqual(_declared_rank(get_task(name).output.shape), 2)
 
 
 class TestLossAgreement(unittest.TestCase):
@@ -362,17 +367,17 @@ class TestIdentityControl(unittest.TestCase):
     """
 
     def test_it_patches_every_site_by_default(self):
-        kernels = identity_control_kernels(OPS, registry=SAMPLE_SITES)
+        kernels = identity_control_kernels(TASKS, registry=SAMPLE_SITES)
         self.assertEqual(set(kernels.patched), set(SAMPLE_SITE_OPS))
 
     def test_it_can_be_restricted_for_attribution(self):
-        kernels = identity_control_kernels(OPS, ("rms_norm",), registry=SAMPLE_SITES)
+        kernels = identity_control_kernels(TASKS, ("rms_norm",), registry=SAMPLE_SITES)
         self.assertEqual(kernels.patched, ("rms_norm",))
 
     def test_the_control_is_not_the_eager_default(self):
         # If it were the same object the control would measure nothing: it has
         # to route through the patching machinery to price it.
-        control = identity_control_kernels(OPS, registry=SAMPLE_SITES)
+        control = identity_control_kernels(TASKS, registry=SAMPLE_SITES)
         self.assertIsNot(control.rms_norm, KernelSet(registry=SAMPLE_SITES).rms_norm)
         self.assertIsNot(control.swiglu, KernelSet(registry=SAMPLE_SITES).swiglu)
 
@@ -383,7 +388,7 @@ class TestIdentityControl(unittest.TestCase):
         for op_name in SAMPLE_SITE_OPS.values():
             with self.subTest(op=op_name):
                 forward, backward = lookup_pair(
-                    get_op(op_name), eager_pair_for(get_op(op_name))
+                    get_task(op_name), eager_pair_for(get_task(op_name))
                 )
                 self.assertTrue(callable(forward) and callable(backward))
 

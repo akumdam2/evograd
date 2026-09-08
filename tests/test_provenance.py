@@ -21,7 +21,7 @@ from evograd.opdecl.models import (
     config_for,
     rederive_dims,
 )
-from evograd.ops import OPS
+from evograd.benchmark import TASKS
 
 
 class TestModelRegistry(unittest.TestCase):
@@ -96,7 +96,7 @@ class TestDeclaredProvenance(unittest.TestCase):
     """The load-bearing test: declared shapes must match the models they cite."""
 
     def _benchmark_tasks(self):
-        return [(name, op) for name, op in OPS.items() if op.level is not None]
+        return [(name, op) for name, op in TASKS.items() if op.level is not None]
 
     def test_every_benchmark_workload_declares_provenance(self):
         # declare_op already enforces this at construction; assert it here too so
@@ -161,7 +161,7 @@ class TestDeclaredProvenance(unittest.TestCase):
                     )
 
     def test_every_benchmark_task_declares_a_level_and_family(self):
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             self.assertIsNotNone(op.level, f"{name}: no benchmark level")
             self.assertIsNotNone(op.family, f"{name}: no benchmark family")
             self.assertIn(op.level, (1, 2, 3), name)
@@ -232,7 +232,7 @@ class TestObservedLayout(unittest.TestCase):
         }
         for name, layout in expected.items():
             with self.subTest(op=name):
-                workloads = OPS[name].benchmark_workloads(suite="qwen3_0_6b_observed")
+                workloads = TASKS[name].benchmark_workloads(suite="qwen3_0_6b_observed")
                 self.assertTrue(workloads, f"{name} has no observed suite")
                 for workload in workloads:
                     self.assertEqual(workload.provenance.layout, layout)

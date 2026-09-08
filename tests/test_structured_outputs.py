@@ -19,7 +19,7 @@ from evograd.opdecl.bind import bind
 from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
 from evograd.opdecl.oracle import oracle
 from evograd.opdecl.verify import verify
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 from tests import _structured_fixture as fixture
 
@@ -118,7 +118,7 @@ class TestInputsAndOracle(unittest.TestCase):
             as_output_tuple(OP, torch.zeros(4, 8))
         with self.assertRaises(ValueError):
             as_output_tuple(OP, (torch.zeros(4, 8),))
-        single = get_op("layernorm")
+        single = get_task("layernorm")
         with self.assertRaises(ValueError):
             as_output_tuple(single, (torch.zeros(2),))
 
@@ -232,16 +232,16 @@ class TestSingleOutputRegression(unittest.TestCase):
     MULTI_OUTPUT = {"qwen3_qkv_norm_rope", "fused_add_rms_norm"}
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         self.assertEqual(
-            {name for name, op in OPS.items() if op.is_multi_output}, self.MULTI_OUTPUT
+            {name for name, op in TASKS.items() if op.is_multi_output}, self.MULTI_OUTPUT
         )
 
     def test_every_registered_operator_is_single_output_and_unchanged(self):
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             if name in self.MULTI_OUTPUT:
                 continue
             with self.subTest(op=name):
@@ -254,7 +254,7 @@ class TestSingleOutputRegression(unittest.TestCase):
                 self.assertEqual(op.forward_returns(), f"{op.output.name}, saved_tensors")
 
     def test_single_output_inputs_and_oracle_are_unchanged(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         case = op.correctness[0]
         values = make_case_inputs(op, case, device="cpu")
         self.assertIn(op.upstream_grad_name, values)
@@ -265,7 +265,7 @@ class TestSingleOutputRegression(unittest.TestCase):
         self.assertEqual(sorted(ref), sorted(op.grad_names()))
 
     def test_single_output_backward_parameters_keep_the_gradient_name(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         self.assertTrue(op.backward_parameters().startswith("dy, saved_tensors"))
         self.assertNotIn("output_grads", op.backward_parameters())
 

@@ -35,7 +35,7 @@ from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
     structural_identity_kernels,
 )
 from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
-from evograd.ops import OPS
+from evograd.benchmark import TASKS
 
 #: Two layers, 64 hidden. Small enough to run everywhere, structurally
 #: complete: two of every site and four residual fusions across all three
@@ -56,7 +56,7 @@ def _workload():
 
 def _residual_kernel():
     registry = qwen3_sites()
-    kernels = bound_pair_identity_kernels(OPS, None, registry)
+    kernels = bound_pair_identity_kernels(TASKS, None, registry)
     return registry.require("residual_rmsnorm").op, kernels.kernel_for("residual_rmsnorm")
 
 
@@ -256,11 +256,11 @@ class TestBoundaryIsShadowOnly(unittest.TestCase):
             kernels = structural_identity_kernels(workload.site_registry)
             model, _ = workload.build_patched(kernels)
             if with_tap:
-                from evograd.ops import get_op
+                from evograd.benchmark import get_task
 
                 registry = workload.site_registry
                 set_tap(model, boundary.make_validator(
-                    lambda site: get_op(registry.require(site).op),
+                    lambda site: get_task(registry.require(site).op),
                     workload_case=lambda op: (
                         op.benchmark_workloads(suite="qwen3_0_6b_observed")
                         or op.benchmark

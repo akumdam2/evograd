@@ -109,9 +109,9 @@ class OutputShapeReporting(unittest.TestCase):
 
     def test_registry_structured_operators_report_all_their_outputs(self):
         """The real declarations that exposed the defect, without an oracle run."""
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        structured = {n: op for n, op in OPS.items() if op.is_multi_output}
+        structured = {n: op for n, op in TASKS.items() if op.is_multi_output}
         self.assertTrue(structured, "registry declares no structured-output operator")
         for name, op in sorted(structured.items()):
             with self.subTest(op=name):

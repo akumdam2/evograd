@@ -19,14 +19,14 @@ import torch
 from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.models import rederive_dims
-from evograd.ops import OPS, get_op
-from evograd.ops.level2.qwen3_attention import (
+from evograd.benchmark import TASKS, get_task
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.task import (
     FREQUENCY,
     HARVEST,
     OBSERVED_STRIDES,
     PROVENANCE_CHAIN,
 )
-from evograd.ops.level2.qwen3_attention.forward_ref import (
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference import (
     qwen3_attention_forward_production,
     qwen3_attention_forward_ref,
 )
@@ -36,12 +36,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 class TestDeclaration(unittest.TestCase):
     def test_registered_at_level_two(self):
-        self.assertIn("qwen3_attention", OPS)
-        op = get_op("qwen3_attention")
+        self.assertIn("qwen3_attention", TASKS)
+        op = get_task("qwen3_attention")
         self.assertEqual((op.level, op.family), (2, "attention"))
 
     def test_the_canonical_shape_is_the_observed_one(self):
-        case = get_op("qwen3_attention").benchmark[0]
+        case = get_task("qwen3_attention").benchmark[0]
         self.assertEqual(
             case.dims,
             {"B": 2, "T": 2048, "HQ": 16, "HK": 8, "D": 128, "QO": 2048, "H": 1024},
@@ -49,13 +49,13 @@ class TestDeclaration(unittest.TestCase):
         self.assertEqual(case.dtype, "bfloat16")
 
     def test_provenance_is_recomputable_from_the_published_config(self):
-        case = get_op("qwen3_attention").benchmark[0]
+        case = get_task("qwen3_attention").benchmark[0]
         self.assertEqual(case.provenance.source, "hf_config")
         self.assertEqual(case.provenance.model, "qwen3_0_6b")
         self.assertEqual(case.dims, rederive_dims(case.provenance))
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import attention as attention_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention import capture as attention_module
 
         self.assertEqual(attention_module.declaration_problems(), [])
 
@@ -80,7 +80,7 @@ class TestDeclaration(unittest.TestCase):
 
     def test_the_boundary_excludes_the_projections_norms_and_rope(self):
         """Stated in the declaration, not left to be inferred from the arg list."""
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         self.assertEqual([a.name for a in op.args], ["q", "k", "v", "o_weight"])
         text = op.extra_constraints + op.forward_semantics
         for excluded in ("q_proj", "k_proj", "v_proj", "RMSNorm", "rotary"):
@@ -89,11 +89,11 @@ class TestDeclaration(unittest.TestCase):
 
     def test_gradient_order(self):
         self.assertEqual(
-            get_op("qwen3_attention").grad_names(), ("dq", "dk", "dv", "do_weight")
+            get_task("qwen3_attention").grad_names(), ("dq", "dk", "dv", "do_weight")
         )
 
     def test_runtime_forward_is_the_sdpa_spelling(self):
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         self.assertTrue(op.runtime_forward.endswith("qwen3_attention_forward_production"))
         self.assertTrue(op.forward.endswith("qwen3_attention_forward_ref"))
 
@@ -112,8 +112,8 @@ class TestDeclaration(unittest.TestCase):
     def test_the_declaration_imports_without_transformers_or_results(self):
         script = (
             "import sys; sys.modules['transformers'] = None;"
-            " from evograd.ops import get_op;"
-            " print(get_op('qwen3_attention').benchmark[0].dims['HK'])"
+            " from evograd.benchmark import get_task;"
+            " print(get_task('qwen3_attention').benchmark[0].dims['HK'])"
         )
         proc = subprocess.run(
             [sys.executable, "-c", script],
@@ -131,12 +131,12 @@ class TestInputGeneration(unittest.TestCase):
     contiguous substitute that would benchmark a different access pattern."""
 
     def _inputs(self, index: int):
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         workload = op.correctness[index]
         return workload, make_case_inputs(op, workload, device="cpu")
 
     def test_q_k_v_are_non_contiguous_head_major(self):
-        for index in range(len(get_op("qwen3_attention").correctness)):
+        for index in range(len(get_task("qwen3_attention").correctness)):
             workload, values = self._inputs(index)
             dims = workload.dims
             with self.subTest(dims=dims):
@@ -169,7 +169,7 @@ class TestInputGeneration(unittest.TestCase):
         self.assertEqual(observed_q[3], 1)
 
     def test_every_correctness_case_preserves_grouped_query_attention(self):
-        for workload in get_op("qwen3_attention").correctness:
+        for workload in get_task("qwen3_attention").correctness:
             dims = workload.dims
             with self.subTest(dims=dims):
                 self.assertGreater(dims["HQ"], dims["HK"])
@@ -178,12 +178,12 @@ class TestInputGeneration(unittest.TestCase):
 
     def test_both_group_ratios_are_covered(self):
         ratios = {
-            w.dims["HQ"] // w.dims["HK"] for w in get_op("qwen3_attention").correctness
+            w.dims["HQ"] // w.dims["HK"] for w in get_task("qwen3_attention").correctness
         }
         self.assertEqual(ratios, {2, 4})
 
     def test_both_dtypes_are_covered(self):
-        dtypes = {w.dtype for w in get_op("qwen3_attention").correctness}
+        dtypes = {w.dtype for w in get_task("qwen3_attention").correctness}
         self.assertEqual(dtypes, {"float32", "bfloat16"})
 
 
@@ -266,9 +266,8 @@ class TestForwardReference(unittest.TestCase):
 class TestTimedBaselineAndGate(unittest.TestCase):
     def test_runtime_forward_resolves_to_the_sdpa_spelling(self):
         from evograd.opdecl.oracle import resolve_forward, resolve_runtime_forward
-        from evograd.ops.level2.qwen3_attention import forward_ref
-
-        op = get_op("qwen3_attention")
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention import reference as forward_ref
+        op = get_task("qwen3_attention")
         self.assertIs(
             resolve_runtime_forward(op), forward_ref.qwen3_attention_forward_production
         )
@@ -278,8 +277,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         """The declared oracle does; the timed spelling must not."""
         import inspect
 
-        from evograd.ops.level2.qwen3_attention import forward_ref
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention import reference as forward_ref
         dense = inspect.getsource(forward_ref.qwen3_attention_forward_ref)
         timed = inspect.getsource(forward_ref.qwen3_attention_forward_production)
         self.assertIn("masked_fill", dense)
@@ -289,7 +287,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         self.assertIn("scaled_dot_product_attention", timed)
 
     def test_the_declared_tolerances_are_the_calibrated_ones(self):
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         self.assertEqual(op.tolerances["bfloat16"], (1e-2, 1e-2))
         self.assertEqual(op.tolerances["float32"], (2e-5, 2e-5))
         # do_weight went 5.4 -> 6.5 when the observed shape was measured; see
@@ -302,7 +300,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         # 3072, so it picks up 1.04x of the element-count term -- measured, and
         # bounded here so a future anchor change cannot quietly loosen the grid.
         # Its measured margin at that case is 1.74x, so 1.04x costs nothing.
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         for workload in op.correctness:
             for name in (*op.output_names, *op.grad_names()):
                 with self.subTest(dims=workload.dims, result=name):
@@ -317,9 +315,9 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         # Attention declares no reduction term: the measured exponent of its
         # required atol against reduction length is 0.032, because a softmax
         # -weighted average does not grow with the number of terms.
-        from evograd.ops.level2.qwen3_attention import _REDUCTION_SCALED
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.task import _REDUCTION_SCALED
 
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         self.assertEqual(_REDUCTION_SCALED.reduction_dims, {})
         observed = op.benchmark_workloads(suite="qwen3_0_6b_observed")[0]
         atol, rtol = op.tolerance_for(observed, "do_weight")
@@ -331,12 +329,11 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         from evograd.opdecl import baselines
 
         baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_attention")
-        baselines.verify_runtime_forward(get_op("qwen3_attention"), device="cpu")
+        baselines.verify_runtime_forward(get_task("qwen3_attention"), device="cpu")
 
     def test_a_materially_perturbed_implementation_is_rejected(self):
         from evograd.opdecl import baselines
-        from evograd.ops.level2.qwen3_attention import forward_ref
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention import reference as forward_ref
         original = forward_ref.qwen3_attention_forward_production
 
         def perturbed(q, k, v, o_weight):
@@ -348,7 +345,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         try:
             baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_attention")
             with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(get_op("qwen3_attention"), device="cpu")
+                baselines.verify_runtime_forward(get_task("qwen3_attention"), device="cpu")
             self.assertIn("disagrees with forward", str(ctx.exception))
         finally:
             forward_ref.qwen3_attention_forward_production = original

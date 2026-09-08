@@ -90,9 +90,9 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
     def _spy_module(self, op_name: str):
         from evograd.evaluation.tier2.runner import native_module
         from evograd.opdecl.inputs import make_case_inputs
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
 
-        op = get_op(op_name)
+        op = get_task(op_name)
         values = make_case_inputs(op, op.correctness[0], device="cpu")
         seen: dict[str, tuple] = {}
 
@@ -127,9 +127,9 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
     def test_parameters_arrive_from_the_module_not_the_input_dict(self):
         from evograd.evaluation.tier2.runner import native_module
         from evograd.opdecl.inputs import make_case_inputs
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
 
-        op = get_op("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_qkv_norm_rope")
         values = make_case_inputs(op, op.correctness[0], device="cpu")
         seen: dict[str, tuple] = {}
 

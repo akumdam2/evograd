@@ -186,9 +186,9 @@ def check_site(site: str, op_name: str, kernel, *, registry, suite: str,
     width, not on the declaration's small correctness grid.
     """
     from evograd.opdecl.inputs import make_case_inputs
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(op_name)
+    op = get_task(op_name)
     if is_production_default(site, kernel, registry):
         # The registry's own production spelling is the model's code, not a
         # provider under evaluation, and it is not even callable with the

@@ -47,14 +47,14 @@ def output_shapes(op, y) -> dict[str, tuple[int, ...]]:
 
 def oracle_smoke(device: str, declaration: str | None = None) -> int:
     from evograd.opdecl import make_case_inputs, oracle
-    from evograd.ops import OPS, load_op
+    from evograd.benchmark import TASKS, load_task
 
     failed = []
     if declaration:
-        external = load_op(declaration)
+        external = load_task(declaration)
         selected = {external.name: external}
     else:
-        selected = OPS
+        selected = TASKS
     for name, op in sorted(selected.items()):
         if not op.correctness:
             print(f"[skip] {name}: no correctness workloads declared yet")
@@ -79,13 +79,13 @@ def verify_candidate(
     declaration: str | None = None,
 ) -> int:
     from evograd.opdecl import verify
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
     if declaration:
-        op = load_op(declaration)
+        op = load_task(declaration)
     else:
         assert op_name is not None
-        op = get_op(op_name)
+        op = get_task(op_name)
     report = verify(op, load_module(candidate), device=device)
     print(json.dumps(report.to_dict(), indent=2))
     return 0 if report.ok else 1
@@ -93,7 +93,7 @@ def verify_candidate(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--op", help="operator name (see evograd.ops.OPS)")
+    parser.add_argument("--op", help="operator name (see evograd.ops.TASKS)")
     parser.add_argument(
         "--declaration",
         help="external declaration as path.py:op (instead of a built-in --op)",

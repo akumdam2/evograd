@@ -72,9 +72,9 @@ class TestDeploymentEntryDetection(unittest.TestCase):
 class TestPatchedKernelsRouting(unittest.TestCase):
     def _registry_and_ops(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import qwen3_sites
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        return qwen3_sites(), OPS
+        return qwen3_sites(), TASKS
 
     def test_a_direct_candidate_is_patched_as_itself(self):
         registry, ops = self._registry_and_ops()

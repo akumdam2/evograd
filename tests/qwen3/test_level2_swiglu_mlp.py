@@ -19,8 +19,8 @@ from pathlib import Path
 
 from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
 from evograd.opdecl.inputs import make_case_inputs
-from evograd.ops import OPS, get_op
-from evograd.ops.level2.qwen3_swiglu_mlp import (
+from evograd.benchmark import TASKS, get_task
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.task import (
     FREQUENCY,
     HARVEST,
     PROVENANCE_CHAIN,
@@ -35,15 +35,15 @@ if HAVE_TRANSFORMERS:
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture import run_capture
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.capture import (
         CONTENT_KEYS,
         IDENTITY_KEYS,
         MlpExtractionError,
         check_provenance,
         declaration_problems,
         derive_mlp_invocation,
-        run_verify,
     )
+    from evograd.evaluation.workloads.qwen3_0_6b.level2.swiglu_mlp import run_verify
 
 
 class TestSnapshot(unittest.TestCase):
@@ -160,27 +160,27 @@ class TestSnapshot(unittest.TestCase):
 
 class TestDeclaration(unittest.TestCase):
     def test_the_operator_is_registered_at_level_two(self):
-        self.assertIn("qwen3_swiglu_mlp", OPS)
-        op = get_op("qwen3_swiglu_mlp")
+        self.assertIn("qwen3_swiglu_mlp", TASKS)
+        op = get_task("qwen3_swiglu_mlp")
         self.assertEqual(op.level, 2)
         self.assertEqual(op.family, "mlp")
 
     def test_the_canonical_benchmark_shape_is_the_observed_one(self):
-        op = get_op("qwen3_swiglu_mlp")
+        op = get_task("qwen3_swiglu_mlp")
         self.assertEqual(len(op.benchmark), 1)
         case = op.benchmark[0]
         self.assertEqual(case.dims, {"B": 2, "T": 2048, "H": 1024, "I": 3072})
         self.assertEqual(case.dtype, "bfloat16")
 
     def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import swiglu_mlp as mlp_module
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import capture as mlp_module
 
         self.assertEqual(mlp_module.declaration_problems(), [])
 
     def test_provenance_is_recomputable_from_the_published_config(self):
         from evograd.opdecl.models import rederive_dims
 
-        case = get_op("qwen3_swiglu_mlp").benchmark[0]
+        case = get_task("qwen3_swiglu_mlp").benchmark[0]
         self.assertEqual(case.provenance.source, "hf_config")
         self.assertEqual(case.provenance.model, "qwen3_0_6b")
         self.assertEqual(case.dims, rederive_dims(case.provenance))
@@ -216,8 +216,8 @@ class TestDeclaration(unittest.TestCase):
     def test_the_declaration_imports_without_transformers_or_results(self):
         script = (
             "import sys; sys.modules['transformers'] = None;"
-            " from evograd.ops import get_op;"
-            " op = get_op('qwen3_swiglu_mlp');"
+            " from evograd.benchmark import get_task;"
+            " op = get_task('qwen3_swiglu_mlp');"
             " print(op.benchmark[0].dims['H'], op.level)"
         )
         proc = subprocess.run(
@@ -238,7 +238,7 @@ class TestForwardReference(unittest.TestCase):
         import torch
         import torch.nn.functional as F
 
-        from evograd.ops.level2.qwen3_swiglu_mlp.forward_ref import (
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference import (
             qwen3_swiglu_mlp_forward_ref,
         )
 
@@ -259,7 +259,7 @@ class TestForwardReference(unittest.TestCase):
     def test_mismatched_weights_are_rejected(self):
         import torch
 
-        from evograd.ops.level2.qwen3_swiglu_mlp.forward_ref import (
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference import (
             qwen3_swiglu_mlp_forward_ref,
         )
 
@@ -272,7 +272,7 @@ class TestForwardReference(unittest.TestCase):
     def test_backward_produces_all_four_gradients(self):
         import torch
 
-        from evograd.ops.level2.qwen3_swiglu_mlp.forward_ref import (
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference import (
             qwen3_swiglu_mlp_forward_ref,
         )
 
@@ -296,7 +296,7 @@ class TestForwardReference(unittest.TestCase):
         The difference is real and small, and is reported rather than hidden."""
         import torch
 
-        from evograd.ops.level2.qwen3_swiglu_mlp.forward_ref import (
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference import (
             qwen3_swiglu_mlp_forward_hf,
             qwen3_swiglu_mlp_forward_ref,
         )
@@ -321,15 +321,14 @@ class TestTimedBaselineAndGate(unittest.TestCase):
 
     def test_runtime_forward_resolves_to_the_hf_spelling(self):
         from evograd.opdecl.oracle import resolve_forward, resolve_runtime_forward
-        from evograd.ops.level2.qwen3_swiglu_mlp import forward_ref
-
-        op = get_op("qwen3_swiglu_mlp")
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import reference as forward_ref
+        op = get_task("qwen3_swiglu_mlp")
         self.assertIs(resolve_runtime_forward(op), forward_ref.qwen3_swiglu_mlp_forward_hf)
         self.assertIs(resolve_forward(op), forward_ref.qwen3_swiglu_mlp_forward_ref)
         self.assertIsNot(resolve_runtime_forward(op), resolve_forward(op))
 
     def test_the_declared_tolerances_are_the_calibrated_ones(self):
-        op = get_op("qwen3_swiglu_mlp")
+        op = get_task("qwen3_swiglu_mlp")
         self.assertEqual(op.tolerances["bfloat16"], (1e-2, 1e-2))
         self.assertEqual(op.tolerances["float32"], (2e-5, 2e-5))
         self.assertEqual(
@@ -346,7 +345,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         from evograd.opdecl import baselines
 
         baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_swiglu_mlp")
-        baselines.verify_runtime_forward(get_op("qwen3_swiglu_mlp"), device="cpu")
+        baselines.verify_runtime_forward(get_task("qwen3_swiglu_mlp"), device="cpu")
 
     def test_a_materially_perturbed_implementation_is_rejected(self):
         """The negative control for the tightened gate.
@@ -358,8 +357,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         import torch
 
         from evograd.opdecl import baselines
-        from evograd.ops.level2.qwen3_swiglu_mlp import forward_ref
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import reference as forward_ref
         def perturbed(x, gate_weight, up_weight, down_weight):
             gate = torch.nn.functional.linear(x, gate_weight)
             up = torch.nn.functional.linear(x, up_weight)
@@ -371,11 +369,11 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         try:
             baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_swiglu_mlp")
             with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(get_op("qwen3_swiglu_mlp"), device="cpu")
+                baselines.verify_runtime_forward(get_task("qwen3_swiglu_mlp"), device="cpu")
             self.assertIn("disagrees with forward", str(ctx.exception))
 
             # And the tolerance this replaced would have let it through.
-            op = get_op("qwen3_swiglu_mlp")
+            op = get_task("qwen3_swiglu_mlp")
             case = next(w for w in op.correctness if w.dtype == "bfloat16")
             values = make_case_inputs(op, case, device="cpu")
             args = (
@@ -584,9 +582,8 @@ class TestExtractionAndVerification(unittest.TestCase):
         self.assertIn("output", report["hf_spelling_comparisons"])
 
     def test_a_second_mlp_call_inside_one_extraction_is_refused(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import capture_mlp
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay import build_single_layer
-
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.capture import capture_mlp
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import build_single_layer
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import LayerArtifact
 
         layer_payload = LayerArtifact.load(self.layer_path).payload

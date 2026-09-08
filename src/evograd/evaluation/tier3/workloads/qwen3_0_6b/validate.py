@@ -248,7 +248,7 @@ def validate_boundaries(workload: Qwen3Workload, *, layer: int | None = None) ->
     global REPRESENTATIVE_LAYER
     from evograd.evaluation.tier3.patch import KernelSet  # noqa: F401
     from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
     if layer is not None:
         REPRESENTATIVE_LAYER = layer
@@ -259,7 +259,7 @@ def validate_boundaries(workload: Qwen3Workload, *, layer: int | None = None) ->
     def listener(site, key, inputs, outputs):
         if not _wanted(key):
             return
-        op = get_op(_OPS_FOR_SITE[site])
+        op = get_task(_OPS_FOR_SITE[site])
         reference = resolve_runtime_forward(op)
         args = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
         with torch.no_grad():
@@ -380,7 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     from evograd.evaluation.tier3.patch import restrict
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     workload = _workload(args)
     sites = tuple(s.strip() for s in args.sites.split(",")) if args.sites else None
@@ -407,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("boundaries", "all"):
         report["boundaries"] = validate_boundaries(workload, layer=args.layer)
     if args.command in ("bound", "all"):
-        kernels = bound_pair_identity_kernels(OPS, sites, workload.site_registry)
+        kernels = bound_pair_identity_kernels(TASKS, sites, workload.site_registry)
         # Gated by the declared tolerances of every patched site, taken at the
         # loosest of them so one report covers the whole model. The per-site
         # gate that actually decides whether tier 3 will time this is the
@@ -455,11 +455,11 @@ def _model_tolerance(workload: Qwen3Workload, kernels) -> tuple[float, float]:
     upper bound for what a composition of them can drift, and the per-site
     gate that decides admission is the preflight, not this.
     """
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
     atol = rtol = 0.0
     for site in kernels.patched:
-        op = get_op(_OPS_FOR_SITE[site])
+        op = get_task(_OPS_FOR_SITE[site])
         for name in op.output_names:
             a, r = op.tolerance_for(op.benchmark_workloads(
                 suite="qwen3_0_6b_observed")[0], name)
@@ -469,10 +469,10 @@ def _model_tolerance(workload: Qwen3Workload, kernels) -> tuple[float, float]:
 
 def _preflight(kernels, device: str) -> dict[str, Any]:
     from evograd.evaluation.tier3.runner import PreflightFailure, preflight
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     try:
-        return {"ok": True, **preflight(kernels, OPS, device=device)}
+        return {"ok": True, **preflight(kernels, TASKS, device=device)}
     except PreflightFailure as exc:
         return {"ok": False, "error": str(exc)}
 

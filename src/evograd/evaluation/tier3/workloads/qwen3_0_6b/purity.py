@@ -100,14 +100,14 @@ def kernels_for(provider: str, workload, fault: dict[str, Any] | None):
     Qwen3's two identity controls, and reaching them means reaching Qwen3's
     adapters.
     """
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     from .sites import bound_pair_identity_kernels, structural_identity_kernels
 
     if provider == "structural":
         kernels = structural_identity_kernels(workload.site_registry)
     elif provider == "bound":
-        kernels = bound_pair_identity_kernels(OPS, None, workload.site_registry)
+        kernels = bound_pair_identity_kernels(TASKS, None, workload.site_registry)
     else:
         raise ValueError(f"unknown provider {provider!r}")
     if fault:

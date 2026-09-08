@@ -11,14 +11,14 @@ import sys
 from dataclasses import replace
 
 from evograd.opdecl.activity import OpDecl, example_input_spec
-from evograd.ops import OPS, get_op, load_op
+from evograd.benchmark import TASKS, get_task, load_task
 
 
 def add_op_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--op",
         required=True,
-        help=f"target operator (built-ins: {', '.join(sorted(OPS))})",
+        help=f"target operator (built-ins: {', '.join(sorted(TASKS))})",
     )
     parser.add_argument(
         "--declaration",
@@ -65,7 +65,7 @@ def add_exec_args(parser: argparse.ArgumentParser) -> None:
 
 def resolve_op(args: argparse.Namespace) -> tuple[OpDecl, str, str]:
     """Return (op, forward, example_input) with derived defaults applied."""
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     if op.name != args.op:
         raise ValueError(
             f"external declaration name {op.name!r} does not match --op {args.op!r}"

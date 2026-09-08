@@ -1,6 +1,6 @@
 """Workload declaration: AlphaFold3 training step (level 4).
 
-The whole-model counterpart of the level-3 ``af3_single_repr_block``: one full
+The whole-model AlphaFold3 workload: one full
 AlphaFold3 training step — forward to the model's own combined loss, backward,
 optimizer step — with evolved kernels patched into the module tree by surgery.
 

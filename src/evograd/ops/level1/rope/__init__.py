@@ -7,27 +7,10 @@ unmeasured.
 """
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.opdecl.models import (
-    LLAMA_3_8B,
-    LLAMA_REGIME_SPLIT,
-    LLAMA_TOKEN_SWEEP,
-    MODELS,
-)
-from evograd.ops._common import (
-    fixed_shape_suites,
-    is_head_major_view,
-    log_distance_weight,
-    make_pair_baseline,
-    model_workloads,
-    observed_workloads,
-    regime_suites,
-)
+from evograd.opdecl.models import LLAMA_3_8B, MODELS
+from evograd.ops._common import is_head_major_view, make_pair_baseline
 
 _DIMS = ("B", "n_heads", "T", "head_dim")
-
-
-def _regime_feature(workload: Workload) -> float:
-    return float(workload.dims["T"])
 
 
 def make_rope_inputs(torch, op, workload, device="cuda"):
@@ -90,25 +73,9 @@ def _liger_factory():
     return make_liger_rope_autograd_pair_fns()
 
 
-# Both head counts a GQA layer rotates: the 32-head query tensor and the 8-head
-# key tensor. They run the same kernel at different occupancy, so both belong in
-# the timed grid.
-_BENCHMARK = model_workloads(
-    LLAMA_3_8B,
-    "rope",
-    tuple({"batch": 1, "seq": tokens} for tokens in LLAMA_TOKEN_SWEEP),
-    ("bfloat16",),
-) + model_workloads(
-    LLAMA_3_8B,
-    "rope_kv",
-    tuple({"batch": 1, "seq": tokens} for tokens in LLAMA_TOKEN_SWEEP),
-    ("bfloat16",),
-)
-
 #: Both tensors one Qwen3-0.6B layer rotates: 16 query heads and 8 key heads,
 #: at batch 2 x sequence 2048 x head_dim 128, 28 times per step. They come from
 #: one harvested `apply_rotary_pos_emb` record, which rotates q and k together.
-_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "rope")
 
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, n_heads=h, T=t, head_dim=d), dtype=dtype)
@@ -170,13 +137,6 @@ op = declare_op(
         "the point."
     ),
     correctness=_CORRECTNESS,
-    coverage=_BENCHMARK + _QWEN3_OBSERVED,
-    benchmark=_BENCHMARK,
-    benchmark_suites={
-        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
-        **regime_suites(_BENCHMARK, _regime_feature, LLAMA_REGIME_SPLIT),
-        **fixed_shape_suites(_BENCHMARK),
-    },
     performance_baselines={
         "liger": make_pair_baseline(_liger_factory, ("x", "cos", "sin"))
     },
@@ -195,8 +155,5 @@ op = declare_op(
     # cos/sin are recomputed per step by the model, not stored activations, so
     # they do not belong in the saved-memory budget.
     memory_inputs=("x",),
-    regime_feature=_regime_feature,
-    regime_split=LLAMA_REGIME_SPLIT,
-    case_weight=log_distance_weight(_regime_feature, LLAMA_REGIME_SPLIT),
     make_inputs=make_rope_inputs,
 )

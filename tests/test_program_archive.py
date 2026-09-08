@@ -89,7 +89,7 @@ class TestArchiveProgram(unittest.TestCase):
 class TestRunEvolveWiring(unittest.TestCase):
     def _run(self, **kwargs):
         from evograd.evolve.run import run_evolve
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
 
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -103,7 +103,7 @@ class TestRunEvolveWiring(unittest.TestCase):
 
             with mock.patch("openevolve.run_evolution", side_effect=fake_run_evolution):
                 run_evolve(
-                    get_op("layernorm"),
+                    get_task("layernorm"),
                     seed_path=seed,
                     output_dir=root / "out",
                     **kwargs,

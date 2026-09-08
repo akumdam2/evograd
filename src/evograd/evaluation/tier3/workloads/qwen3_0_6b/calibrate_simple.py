@@ -95,7 +95,7 @@ def run_cell(seed: int, repeat: int, *, workload_config: dict[str, Any],
     the device does across runs; the trusted replacement gets its own so its
     patching cannot be confused with a restored one.
     """
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     workload = Qwen3Workload.from_config(workload_config)
     patch_set = _patch_set(workload, sites)
@@ -108,7 +108,7 @@ def run_cell(seed: int, repeat: int, *, workload_config: dict[str, Any],
         torch.cuda.empty_cache()
 
     trusted_kernels = trusted_kernels_for(trusted_reference, patch_set,
-                                          workload.site_registry, ops=dict(OPS))
+                                          workload.site_registry, ops=dict(TASKS))
     trusted = _step(workload, trusted_kernels, data_seed=seed)
     trusted_counts = trusted.get("counts", {})
     drift = measure(trusted, eager_a)

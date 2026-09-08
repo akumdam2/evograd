@@ -144,9 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
 
     from evograd.evaluation.tier2.runner import TIER2_PROTOCOL_VERSION
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
-    op = get_op(args.op)
+    op = get_task(args.op)
     aliases = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
     dtypes = (
         tuple(aliases.get(d.lower(), d.lower()) for d in args.dtypes)

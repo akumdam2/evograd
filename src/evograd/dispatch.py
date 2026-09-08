@@ -113,9 +113,9 @@ integer route tag, which contributes no tensor-memory bytes.
 import importlib.util as _ilu
 from types import SimpleNamespace as _Namespace
 
-from evograd.ops import get_op as _get_op
+from evograd.benchmark import get_task as _get_task
 
-_OP = _get_op({op.name!r})
+_OP = _get_task({op.name!r})
 _THRESHOLD = {threshold!r}
 _SMALL_PATH = {small_path!r}
 _LARGE_PATH = {large_path!r}
@@ -362,9 +362,9 @@ def main(argv=None) -> int:
             parser.error(f"--program must be tag=path, got {value!r}")
         tag, raw_path = value.split("=", 1)
         programs[tag] = Path(raw_path)
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     if op.name != args.op:
         parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
     report = dispatch(

@@ -52,7 +52,7 @@ if HAVE_TORCH:
         site_registry_for,
     )
     from evograd.opdecl.activity import Workload
-    from evograd.ops import OPS, get_op
+    from evograd.benchmark import TASKS, get_task
 
     from tests._registry_fixture import (
         SAMPLE_SITE_OPS,
@@ -138,7 +138,7 @@ class TestTwoIndependentRegistries(unittest.TestCase):
         for registry in (SAMPLE_SITES, _qwen_like_registry()):
             with self.subTest(registry=registry.name):
                 for site, op_name in registry.site_ops.items():
-                    self.assertIn(op_name, OPS, f"{registry.name}.{site}")
+                    self.assertIn(op_name, TASKS, f"{registry.name}.{site}")
 
     def test_the_site_ops_alias_matches_the_registry(self):
         self.assertEqual(SAMPLE_SITE_OPS, SAMPLE_SITES.site_ops)
@@ -168,13 +168,13 @@ class TestTwoIndependentRegistries(unittest.TestCase):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
     def test_a_control_claims_only_its_own_registrys_sites(self):
-        kernels = identity_control_kernels(OPS, registry=SAMPLE_SITES)
+        kernels = identity_control_kernels(TASKS, registry=SAMPLE_SITES)
         self.assertEqual(set(kernels.patched), set(SAMPLE_SITES.names))
         self.assertNotIn("swiglu_mlp", kernels.patched)
 
     def test_a_second_registry_gets_its_own_control(self):
         qwen = _qwen_like_registry()
-        kernels = identity_control_kernels(OPS, registry=qwen)
+        kernels = identity_control_kernels(TASKS, registry=qwen)
         self.assertEqual(set(kernels.patched), set(qwen.names))
         self.assertEqual(
             {s.op_name for s in kernels.sources},
@@ -183,7 +183,7 @@ class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
 
     def test_the_control_can_be_restricted_within_its_registry(self):
         qwen = _qwen_like_registry()
-        kernels = identity_control_kernels(OPS, ("swiglu_mlp",), registry=qwen)
+        kernels = identity_control_kernels(TASKS, ("swiglu_mlp",), registry=qwen)
         self.assertEqual(kernels.patched, ("swiglu_mlp",))
 
     def test_a_multi_output_site_gets_a_working_control(self):
@@ -191,18 +191,18 @@ class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
         # same way whatever the arity, which is what makes a future site a
         # registry entry rather than an adapter change.
         qwen = _qwen_like_registry()
-        kernels = identity_control_kernels(OPS, ("qkv_norm_rope",), registry=qwen)
+        kernels = identity_control_kernels(TASKS, ("qkv_norm_rope",), registry=qwen)
         self.assertTrue(callable(kernels.kernel_for("qkv_norm_rope")))
-        self.assertTrue(get_op("qwen3_qkv_norm_rope").is_multi_output)
+        self.assertTrue(get_task("qwen3_qkv_norm_rope").is_multi_output)
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestBaselineAndCandidateSelection(unittest.TestCase):
     def test_candidates_are_bound_against_the_named_registry(self):
         qwen = _qwen_like_registry()
-        op = get_op("qwen3_swiglu_mlp")
+        op = get_task("qwen3_swiglu_mlp")
         kernels = patched_kernels(
-            {"swiglu_mlp": eager_pair_for(op)}, OPS, registry=qwen
+            {"swiglu_mlp": eager_pair_for(op)}, TASKS, registry=qwen
         )
         self.assertEqual(kernels.patched, ("swiglu_mlp",))
         self.assertEqual(kernels.source_for("swiglu_mlp").op_name, "qwen3_swiglu_mlp")
@@ -210,13 +210,13 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
     def test_a_candidate_for_another_models_site_is_refused(self):
         with self.assertRaises(ValueError):
             patched_kernels(
-                {"swiglu_mlp": object()}, OPS, registry=SAMPLE_SITES
+                {"swiglu_mlp": object()}, TASKS, registry=SAMPLE_SITES
             )
 
     def test_baseline_discovery_walks_the_workloads_registry(self):
         from evograd.evaluation.tier3.cli import _baseline_kernels
 
-        kernels, covered = _baseline_kernels("liger", OPS, SAMPLE_SITES)
+        kernels, covered = _baseline_kernels("liger", TASKS, SAMPLE_SITES)
         self.assertIsNotNone(kernels)
         self.assertTrue(set(covered) <= set(SAMPLE_SITES.names))
 
@@ -226,7 +226,7 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
         registry = SiteRegistry(
             name="toy", sites=(Site("only", "qwen3_attention", print),)
         )
-        kernels, covered = _baseline_kernels("liger", OPS, registry)
+        kernels, covered = _baseline_kernels("liger", TASKS, registry)
         self.assertIsNone(kernels)
         self.assertEqual(covered, [])
 
@@ -313,9 +313,7 @@ class TestWorkloadSuppliedPreflightShapes(unittest.TestCase):
         return _Sneaky
 
     def _registry(self, extra):
-        from evograd.ops.level3.llama3_decoder_layer.forward_ref import (
-            _rms_norm_fused,
-        )
+        from tests._registry_fixture import fused_rms_norm as _rms_norm_fused
 
         return SiteRegistry(
             name="fixture",
@@ -323,40 +321,40 @@ class TestWorkloadSuppliedPreflightShapes(unittest.TestCase):
         )
 
     def test_the_default_grid_alone_lets_the_sneaky_pair_through(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         biggest = max(w.dims["rows"] for w in op.correctness)
         kernels = patched_kernels(
             {"rms_norm": self._wrong_beyond(op, biggest + 1)},
-            OPS,
+            TASKS,
             registry=self._registry(()),
         )
-        report = preflight(kernels, OPS, device="cpu")
+        report = preflight(kernels, TASKS, device="cpu")
         self.assertTrue(all(c["ok"] for c in report["checked"]))
         self.assertEqual(report["checked"][0]["workload_supplied_cases"], 0)
 
     def test_a_workload_supplied_shape_catches_it(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         biggest = max(w.dims["rows"] for w in op.correctness)
         observed = Workload(
             dims={"rows": biggest * 4, "hidden": 64}, dtype="float32"
         )
         kernels = patched_kernels(
             {"rms_norm": self._wrong_beyond(op, biggest + 1)},
-            OPS,
+            TASKS,
             registry=self._registry((observed,)),
         )
         with self.assertRaises(PreflightFailure) as caught:
-            preflight(kernels, OPS, device="cpu")
+            preflight(kernels, TASKS, device="cpu")
         self.assertIn("rms_norm", str(caught.exception))
         self.assertIn("fixture", str(caught.exception))
 
     def test_the_supplied_shape_is_really_run_and_reported(self):
-        op = get_op("rmsnorm")
+        op = get_task("rmsnorm")
         observed = Workload(dims={"rows": 512, "hidden": 64}, dtype="float32")
         kernels = patched_kernels(
-            {"rms_norm": eager_pair_for(op)}, OPS, registry=self._registry((observed,))
+            {"rms_norm": eager_pair_for(op)}, TASKS, registry=self._registry((observed,))
         )
-        report = preflight(kernels, OPS, device="cpu")
+        report = preflight(kernels, TASKS, device="cpu")
         entry = report["checked"][0]
         self.assertEqual(entry["declared_cases"], len(op.correctness))
         self.assertEqual(entry["workload_supplied_cases"], 1)
@@ -374,8 +372,8 @@ class TestWorkloadSuppliedPreflightShapes(unittest.TestCase):
                 self.assertEqual(site.preflight, ())
 
     def test_the_report_names_the_family_and_the_mapping(self):
-        kernels = identity_control_kernels(OPS, ("rms_norm",), registry=SAMPLE_SITES)
-        report = preflight(kernels, OPS, device="cpu")
+        kernels = identity_control_kernels(TASKS, ("rms_norm",), registry=SAMPLE_SITES)
+        report = preflight(kernels, TASKS, device="cpu")
         self.assertEqual(report["workload_family"], SAMPLE_SITES.name)
         self.assertEqual(report["site_ops"], SAMPLE_SITE_OPS)
 
@@ -419,9 +417,7 @@ class TestProvenanceAndReporting(unittest.TestCase):
             return {"workload": "toy", "name": self.name}
 
     def test_the_report_serializes_the_exact_site_to_operator_mapping(self):
-        from evograd.ops.level3.llama3_decoder_layer.forward_ref import (
-            _rms_norm_fused,
-        )
+        from tests._registry_fixture import fused_rms_norm as _rms_norm_fused
 
         registry = SiteRegistry(
             name="toy_family",
@@ -432,7 +428,7 @@ class TestProvenanceAndReporting(unittest.TestCase):
             workload,
             {"eager": KernelSet(registry=registry)},
             warmup=1, steps=2, blocks=2, loss_steps=2, seed=0,
-            device="cpu", ops=OPS,
+            device="cpu", ops=TASKS,
         )
         self.assertEqual(
             report["site_registry"],
@@ -444,21 +440,19 @@ class TestProvenanceAndReporting(unittest.TestCase):
         )
 
     def test_provenance_still_travels_per_provider(self):
-        from evograd.ops.level3.llama3_decoder_layer.forward_ref import (
-            _rms_norm_fused,
-        )
+        from tests._registry_fixture import fused_rms_norm as _rms_norm_fused
 
         registry = SiteRegistry(
             name="toy_family",
             sites=(Site("rms_norm", "rmsnorm", _rms_norm_fused),),
         )
         workload = self._Toy(registry)
-        control = identity_control_kernels(OPS, ("rms_norm",), registry=registry)
+        control = identity_control_kernels(TASKS, ("rms_norm",), registry=registry)
         report = run_tier3(
             workload,
             {"eager": KernelSet(registry=registry), "control": control},
             warmup=1, steps=2, blocks=2, loss_steps=2, seed=0,
-            device="cpu", ops=OPS,
+            device="cpu", ops=TASKS,
         )
         providers = report["providers"]
         self.assertEqual(providers["eager"]["patch_provenance"]["actual_sites"], [])
@@ -480,15 +474,15 @@ class TestProvenanceAndReporting(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
-class TestLlamaBehaviourUnchanged(unittest.TestCase):
-    """The three sites, their defaults, and the CLI's validation."""
+class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
+    """The three sample sites, their defaults, and the CLI's validation."""
 
     def test_the_defaults_are_still_the_declared_spellings(self):
-        from evograd.ops.level3.llama3_decoder_layer import forward_ref
+        from tests import _registry_fixture
 
         kernels = KernelSet(registry=SAMPLE_SITES)
-        self.assertIs(kernels.rms_norm, forward_ref._rms_norm_fused)
-        self.assertIs(kernels.swiglu, forward_ref._default_swiglu)
+        self.assertIs(kernels.rms_norm, _registry_fixture.fused_rms_norm)
+        self.assertIs(kernels.swiglu, _registry_fixture.float32_swiglu)
 
     def test_attribute_access_still_reaches_a_patched_site(self):
         kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda a, b: "patched")

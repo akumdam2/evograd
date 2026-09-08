@@ -121,9 +121,9 @@ def _evolve(argv: list[str]) -> int:
 
     from evograd.evolve.run import run_evolve
     from dataclasses import replace
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     if op.name != args.op:
         parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
     if args.forward:
@@ -251,7 +251,7 @@ def _run(argv: list[str]) -> int:
 
 
 def _suite(argv: list[str]) -> int:
-    from evograd.benchmark.operator_suite.cli import main
+    from evograd.suite_cli import main
 
     return main(argv)
 
@@ -275,12 +275,12 @@ def _scaffold(argv: list[str]) -> int:
 
 
 def _ops(argv: list[str]) -> int:
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     # Sort by benchmark level so the task hierarchy is what you see first;
     # unclassified declarations (scaffolded or user-supplied) sort last.
     for name, op in sorted(
-        OPS.items(), key=lambda item: (item[1].level or 99, item[1].family or "", item[0])
+        TASKS.items(), key=lambda item: (item[1].level or 99, item[1].family or "", item[0])
     ):
         level = f"L{op.level}" if op.level else "-"
         print(

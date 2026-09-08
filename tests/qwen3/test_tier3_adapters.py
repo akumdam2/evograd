@@ -417,12 +417,12 @@ class TestPartialAndFailedPatching(unittest.TestCase):
 @_skip
 class TestStructuredOutputsThroughTheSites(unittest.TestCase):
     def test_the_two_multi_output_sites_are_wired_as_tuples(self):
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
 
-        self.assertTrue(get_op("qwen3_qkv_norm_rope").is_multi_output)
-        self.assertTrue(get_op("fused_add_rms_norm").is_multi_output)
-        self.assertEqual(get_op("qwen3_qkv_norm_rope").output_names, ("q", "k", "v"))
-        self.assertEqual(get_op("fused_add_rms_norm").output_names, ("out", "summed"))
+        self.assertTrue(get_task("qwen3_qkv_norm_rope").is_multi_output)
+        self.assertTrue(get_task("fused_add_rms_norm").is_multi_output)
+        self.assertEqual(get_task("qwen3_qkv_norm_rope").output_names, ("q", "k", "v"))
+        self.assertEqual(get_task("fused_add_rms_norm").output_names, ("out", "summed"))
 
     def test_both_residual_outputs_are_used(self):
         # `summed` is the residual stream and `out` continues into the next

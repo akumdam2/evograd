@@ -102,9 +102,9 @@ from evograd.opdecl.activity import Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import upstream_grad_values
 from evograd.opdecl.inputs import make_case_inputs
-from evograd.ops import get_op, load_op
+from evograd.benchmark import get_task, load_task
 
-op = load_op({op.declaration!r}) if {bool(op.declaration)!r} else get_op({op.name!r})
+op = load_task({op.declaration!r}) if {bool(op.declaration)!r} else get_task({op.name!r})
 op = replace(op, forward={op.forward!r})
 workload = Workload(dims={workload.dims!r}, dtype={workload.dtype!r})
 spec = importlib.util.spec_from_file_location("evograd_ncu_candidate", {str(candidate)!r})
@@ -303,9 +303,9 @@ def main(argv=None) -> int:
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=120)
     args = parser.parse_args(argv)
-    from evograd.ops import get_op, load_op
+    from evograd.benchmark import get_task, load_task
 
-    op = load_op(args.declaration) if args.declaration else get_op(args.op)
+    op = load_task(args.declaration) if args.declaration else get_task(args.op)
     if op.name != args.op:
         parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
     result = run_ncu_profile(

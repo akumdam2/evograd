@@ -15,33 +15,11 @@ transpose the model does not perform.
 """
 
 from evograd.opdecl import Active, Workload, declare_op
-from evograd.opdecl.models import LLAMA_3_8B
-from evograd.ops._common import (
-    fixed_shape_suites,
-    model_workloads,
-    observed_workloads,
-)
 
-#: The four Llama-3-8B projections, all of which are biasless in the published
-#: configuration. Derived from it, so the widths cannot quietly stop being
-#: Llama's.
-_GEMM_COMPONENTS = ("attn_qkv", "mlp_up", "mlp_down", "lm_head")
-_GEMM_TOKENS = (2048, 8192)
-_DERIVED = tuple(
-    workload
-    for component in _GEMM_COMPONENTS
-    for workload in model_workloads(
-        LLAMA_3_8B,
-        component,
-        tuple({"tokens": tokens} for tokens in _GEMM_TOKENS),
-        ("bfloat16",),
-    )
-)
 
 #: The six deduplicated GEMMs one Qwen3-0.6B step runs -- q_proj, k/v_proj,
 #: o_proj, gate/up_proj, down_proj and lm_head -- at the shapes and dtype the
 #: harvest observed. All six are biasless, which is why they are here.
-_QWEN3_OBSERVED = observed_workloads("qwen3_0_6b", "linear_no_bias")
 
 
 def make_linear_no_bias_inputs(torch, op, workload, device="cuda"):
@@ -117,13 +95,7 @@ op = declare_op(
         Workload(dims=dict(M=128, K=128, N=256), dtype="bfloat16"),
         Workload(dims=dict(M=257, K=129, N=127), dtype="bfloat16"),
     ),
-    coverage=_DERIVED + _QWEN3_OBSERVED,
-    benchmark=_DERIVED,
-    benchmark_suites={
-        "qwen3_0_6b_observed": _QWEN3_OBSERVED,
-        **fixed_shape_suites(_DERIVED),
-    },
-    # Measured, not inherited. `benchmark.topdown.qwen3_0_6b.levels.level1.mapping calibrate --op
+    # Measured, not inherited. `evaluation.workloads.qwen3_0_6b.level1.cli calibrate --op
     # linear_no_bias` compares the float32-accumulated oracle against
     # `runtime_forward` -- the call a model makes, and therefore the smallest
     # disagreement any correct implementation can have with the oracle -- on

@@ -17,7 +17,7 @@ import torch
 
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle, resolve_forward, resolve_runtime_forward
-from evograd.ops import OPS, get_op
+from evograd.benchmark import TASKS, get_task
 
 try:
     from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
@@ -29,7 +29,7 @@ except Exception:  # pragma: no cover - depends on the machine
 
 class TestBiaslessLinear(unittest.TestCase):
     def test_the_task_exists_and_has_no_bias_anywhere(self):
-        op = get_op("linear_no_bias")
+        op = get_task("linear_no_bias")
         self.assertEqual((op.level, op.family), (1, "gemm"))
         self.assertEqual([a.name for a in op.args], ["x", "weight"])
         self.assertEqual(op.output_names, ("y",))
@@ -38,12 +38,12 @@ class TestBiaslessLinear(unittest.TestCase):
             self.assertNotIn("dbias", text.replace("no dbias", ""))
 
     def test_the_backward_contract_says_two_gradients(self):
-        op = get_op("linear_no_bias")
+        op = get_task("linear_no_bias")
         self.assertIn("(dx, dweight)", op.backward_semantics)
         self.assertIn("no dbias", op.backward_semantics)
 
     def test_inputs_carry_no_bias_and_the_weight_is_out_by_in(self):
-        op = get_op("linear_no_bias")
+        op = get_task("linear_no_bias")
         for workload in op.correctness + op.benchmark_workloads("qwen3_0_6b_observed")[:1]:
             with self.subTest(dims=workload.dims):
                 values = make_case_inputs(op, workload, device="cpu")
@@ -57,8 +57,8 @@ class TestBiaslessLinear(unittest.TestCase):
         """``matmul`` takes ``[K, N]``; ``nn.Linear`` stores ``[N, K]``. Mapping
         the observed projections onto ``matmul`` would benchmark a transpose the
         model does not perform."""
-        no_bias = get_op("linear_no_bias")
-        matmul = get_op("matmul")
+        no_bias = get_task("linear_no_bias")
+        matmul = get_task("matmul")
         self.assertEqual([a.shape for a in no_bias.args], ["[M, K]", "[N, K]"])
         self.assertIn("[K, N]", [a.shape for a in matmul.args])
         self.assertTrue(
@@ -73,7 +73,7 @@ class TestBiaslessLinear(unittest.TestCase):
 
         from evograd.ops.level1.linear_no_bias import forward_ref
 
-        op = get_op("linear_no_bias")
+        op = get_task("linear_no_bias")
         self.assertIs(resolve_runtime_forward(op), forward_ref.linear_no_bias_runtime_ref)
         source = inspect.getsource(forward_ref.linear_no_bias_runtime_ref)
         # Body only: the docstring mentions the zero-bias spelling to say why it
@@ -101,7 +101,7 @@ class TestBiaslessLinear(unittest.TestCase):
         )
 
     def test_backward_returns_two_gradients(self):
-        op = get_op("linear_no_bias")
+        op = get_task("linear_no_bias")
         values = make_case_inputs(op, op.correctness[0], device="cpu")
         y, grads = oracle(op, values)
         self.assertEqual(sorted(grads), ["dweight", "dx"])
@@ -121,7 +121,7 @@ class TestNoQwenBiasContract(unittest.TestCase):
     """Negative tests: nothing Qwen-mapped may carry a bias contract."""
 
     def test_no_qwen_workload_belongs_to_a_task_with_a_bias_argument(self):
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             observed = [
                 w
                 for w in op.coverage
@@ -134,7 +134,7 @@ class TestNoQwenBiasContract(unittest.TestCase):
                 self.assertNotIn("dbias", op.grad_names(), name)
 
     def test_the_biased_linear_task_has_no_qwen_workloads_at_all(self):
-        op = get_op("linear")
+        op = get_task("linear")
         for group in (op.correctness, op.coverage, op.benchmark):
             for workload in group:
                 if workload.provenance is not None:
@@ -142,7 +142,7 @@ class TestNoQwenBiasContract(unittest.TestCase):
         self.assertNotIn("qwen3_0_6b_observed", op.benchmark_suites)
 
     def test_the_biased_grid_no_longer_claims_to_model_llama_faithfully(self):
-        op = get_op("linear")
+        op = get_task("linear")
         for workload in op.benchmark:
             self.assertTrue(workload.provenance.scaled)
             self.assertIn("no projection biases", workload.provenance.note)
@@ -153,7 +153,7 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
     def test_the_task_declares_both_spellings(self):
         from evograd.ops.level1.rope import forward_ref
 
-        op = get_op("rope")
+        op = get_task("rope")
         self.assertIs(resolve_forward(op), forward_ref.rope_forward_ref)
         self.assertIs(resolve_runtime_forward(op), forward_ref.rope_runtime_ref)
 
@@ -188,7 +188,7 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
         """If they agreed, the runtime_forward would be pointless."""
         from evograd.ops.level1.rope.forward_ref import rope_forward_ref, rope_runtime_ref
 
-        op = get_op("rope")
+        op = get_task("rope")
         workload = next(w for w in op.correctness if w.dtype == "bfloat16")
         values = make_case_inputs(op, workload, device="cpu")
         a = rope_forward_ref(values["x"], values["cos"], values["sin"]).float()
@@ -199,7 +199,7 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
     def test_both_layouts_survive_the_timed_spelling(self):
         from evograd.ops.level1.rope.forward_ref import rope_runtime_ref
 
-        op = get_op("rope")
+        op = get_task("rope")
         for workload in (op.benchmark[0], op.benchmark_workloads("qwen3_0_6b_observed")[0]):
             values = make_case_inputs(op, workload, device="cpu")
             out = rope_runtime_ref(values["x"], values["cos"], values["sin"])
@@ -210,7 +210,7 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
         from evograd.opdecl import baselines
 
         baselines._RUNTIME_FORWARD_VERIFIED.discard("rope")
-        baselines.verify_runtime_forward(get_op("rope"), device="cpu")
+        baselines.verify_runtime_forward(get_task("rope"), device="cpu")
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
@@ -224,7 +224,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.mapping import run_cross_entropy_check
+        from evograd.evaluation.workloads.qwen3_0_6b.level1.verify import run_cross_entropy_check
 
         from tests.qwen3.test_level4_workload import tiny_spec
 
@@ -260,7 +260,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
     def test_the_ln_vocab_check_is_a_sanity_test_not_the_proof(self):
         """It would pass for an implementation with the right scale and the
         wrong gradient, which is exactly what the comparison above rules out."""
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level1 import mapping as level1
+        from evograd.evaluation.workloads.qwen3_0_6b.level1 import verify as level1
 
         proof = level1.run_cross_entropy_check.__doc__
         self.assertIn("not the equivalence proof", proof)
@@ -275,9 +275,9 @@ class TestComposition(unittest.TestCase):
             tuple(c["roles"]): c["dims"]
             for c in load()["level1"]["linear_no_bias"]["configurations"]
         }
-        qkv = get_op("qwen3_qkv_norm_rope").benchmark[0].dims
-        mlp = get_op("qwen3_swiglu_mlp").benchmark[0].dims
-        attention = get_op("qwen3_attention").benchmark[0].dims
+        qkv = get_task("qwen3_qkv_norm_rope").benchmark[0].dims
+        mlp = get_task("qwen3_swiglu_mlp").benchmark[0].dims
+        attention = get_task("qwen3_attention").benchmark[0].dims
         self.assertEqual(configs[("q_proj",)]["N"], qkv["QO"])
         self.assertEqual(configs[("k_proj", "v_proj")]["N"], qkv["KVO"])
         self.assertEqual(configs[("gate_proj", "up_proj")]["N"], mlp["I"])

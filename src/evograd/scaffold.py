@@ -295,9 +295,9 @@ def synthesize_declaration(
             spec = _json_object(response)
             _validate_spec(name, signature, spec)
             declaration.write_text(_source(name, forward, spec), encoding="utf-8")
-            from evograd.ops import load_op
+            from evograd.benchmark import load_task
 
-            op = load_op(f"{declaration}:op")
+            op = load_task(f"{declaration}:op")
             if op.name != name:
                 raise ValueError(f"generated name {op.name!r} != {name!r}")
             try:

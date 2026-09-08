@@ -444,13 +444,13 @@ def _arm_gradient_shadow(op, workload, reference, record, inputs, outputs,
 
 def validate_all_invocations(workload, kernels, *, data_seed: int = 0) -> dict[str, Any]:
     """One canonical step with the shadow on. Untimed, and never near a timer."""
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
     report = BoundaryReport()
     registry = workload.site_registry
 
     def op_lookup(site: str):
-        return get_op(registry.require(site).op)
+        return get_task(registry.require(site).op)
 
     live_dtype = workload.spec.dtype
 

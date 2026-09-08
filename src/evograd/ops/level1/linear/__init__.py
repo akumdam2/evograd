@@ -14,29 +14,6 @@ declaration no longer claims it does.
 """
 
 from evograd.opdecl import Active, Workload, declare_op
-from evograd.opdecl.models import LLAMA_3_8B
-from evograd.ops._common import fixed_shape_suites, model_workloads
-
-_GEMM_COMPONENTS = ("attn_qkv", "mlp_up", "mlp_down", "lm_head")
-_GEMM_TOKENS = (2048, 8192)
-_BIAS_ABLATION_NOTE = (
-    "Llama-3-8B's projection widths measured through a bias-carrying Linear "
-    "contract. Llama-3 has no projection biases, so the bias, its broadcast add "
-    "and the dbias reduction are an ablation on top of the real configuration; "
-    "the faithful grid is in linear_no_bias."
-)
-_DERIVED = tuple(
-    workload
-    for component in _GEMM_COMPONENTS
-    for workload in model_workloads(
-        LLAMA_3_8B,
-        component,
-        tuple({"tokens": tokens} for tokens in _GEMM_TOKENS),
-        ("bfloat16",),
-        scaled=True,
-        note=_BIAS_ABLATION_NOTE,
-    )
-)
 
 
 def make_linear_inputs(torch, op, workload, device="cuda"):
@@ -74,20 +51,6 @@ op = declare_op(
         Workload(dims=dict(M=128, K=128, N=256), dtype="float16"),
         Workload(dims=dict(M=512, K=256, N=512), dtype="float16"),
     ),
-    coverage=_DERIVED,
-    benchmark=_DERIVED,
-    benchmark_suites={
-        **fixed_shape_suites(_DERIVED),
-        # Pre-v1 square grid, retained as an ablation control.
-        "legacy": tuple(
-            Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
-            for (m, n, k) in (
-                (512, 512, 512), (1024, 1024, 1024), (2048, 1024, 1024),
-                (1024, 2048, 1024), (2048, 2048, 1024), (4096, 1024, 1024),
-            )
-            for dtype in ("float32", "float16")
-        ),
-    },
     # bfloat16 added for the derived grid: Llama-3 trains in bf16, and a GEMM
     # benchmark that only measures fp32/fp16 is not measuring the training path.
     tolerances={

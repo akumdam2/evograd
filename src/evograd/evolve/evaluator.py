@@ -738,7 +738,7 @@ def main(argv: list[str]) -> int:
     import argparse
 
     from evograd.evolve.scoring import get_policy
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--op", required=True)
@@ -752,7 +752,7 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     evaluate = build_evaluate(
-        get_op(args.op),
+        get_task(args.op),
         get_policy(args.scoring),
         performance_baseline=args.baseline,
     )

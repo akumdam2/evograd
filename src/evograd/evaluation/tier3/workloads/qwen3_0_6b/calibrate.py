@@ -71,14 +71,14 @@ CHILD_TIMEOUT = int(os.environ.get("EVOGRAD_QWEN3_CAL_TIMEOUT", "3600"))
 
 def _kernels(workload, kind: str):
     from evograd.evaluation.tier3.patch import KernelSet
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     if kind == "eager":
         return KernelSet(registry=workload.site_registry)
     if kind == "structural":
         return structural_identity_kernels(workload.site_registry)
     if kind == "bound":
-        return bound_pair_identity_kernels(OPS, None, workload.site_registry)
+        return bound_pair_identity_kernels(TASKS, None, workload.site_registry)
     raise ValueError(f"unknown provider kind {kind!r}")
 
 

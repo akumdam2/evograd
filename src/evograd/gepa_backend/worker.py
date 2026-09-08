@@ -18,7 +18,7 @@ from evograd.evolve.evaluator import (
 )
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.bind import lookup_pair
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 def _failure(shape_ids: list[str], kind: str, message: str, **extra) -> dict:
@@ -65,7 +65,7 @@ def run(request: dict) -> dict:
         candidate_path = Path(temporary) / "candidate.py"
         candidate_path.write_text(request["source"], encoding="utf-8")
         try:
-            op = get_op(request["op"])
+            op = get_task(request["op"])
             module = _load_module(str(candidate_path))
             lookup_pair(op, module)
         except Exception as exc:

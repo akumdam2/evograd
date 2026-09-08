@@ -8,7 +8,7 @@ from evograd.opdecl import Active, Provenance, Workload, declare_op
 # convolutions use padding 1. Recorded as handpicked rather than derived,
 # because inventing a model config to justify these numbers would be exactly
 # the pretence provenance exists to prevent.
-_PROVENANCE = Provenance(
+CASE_PROVENANCE = Provenance(
     model="resnet_style",
     component="conv_stage",
     source="handpicked",
@@ -19,26 +19,19 @@ _PROVENANCE = Provenance(
 )
 
 
-_DIMS = ("B", "C", "H", "W", "O", "KH", "KW", "OH", "OW")
-_BENCHMARK_CASES = (
-    # B, C, H, W, O, KH, KW, OH, OW (stride=1, padding=0)
-    (32, 64, 56, 56, 64, 3, 3, 54, 54),
-    (32, 64, 56, 56, 128, 3, 3, 54, 54),
-    (16, 256, 28, 28, 256, 3, 3, 26, 26),
-    (16, 256, 28, 28, 512, 1, 1, 28, 28),
-    (8, 512, 14, 14, 512, 3, 3, 12, 12),
-    (8, 512, 14, 14, 1024, 1, 1, 14, 14),
-)
+CASE_DIMS = ("B", "C", "H", "W", "O", "KH", "KW", "OH", "OW")
 
 
-def _workload(values, dtype):
+def workload_case(values, dtype):
+    """One conv2d case from a ``(B, C, H, W, O, KH, KW, OH, OW)`` tuple.
+
+    Public because the operator suite's performance grid is built from the same
+    constructor: the shapes it times are this primitive's shapes, and rebuilding
+    the constructor there would be a second definition of the same thing.
+    """
     return Workload(
-        dims=dict(zip(_DIMS, values)), dtype=dtype, provenance=_PROVENANCE
+        dims=dict(zip(CASE_DIMS, values)), dtype=dtype, provenance=CASE_PROVENANCE
     )
-
-
-def _benchmark_workloads():
-    return tuple(_workload(values, "bfloat16") for values in _BENCHMARK_CASES)
 
 
 def make_conv2d_inputs(torch, op, workload, device="cuda"):
@@ -48,7 +41,7 @@ def make_conv2d_inputs(torch, op, workload, device="cuda"):
     if (dims["OH"], dims["OW"]) != (expected_h, expected_w):
         raise ValueError("declared OH/OW do not match conv2d output formula")
     dtype = getattr(torch, workload.dtype)
-    seed = sum((index + 1) * dims[name] for index, name in enumerate(_DIMS))
+    seed = sum((index + 1) * dims[name] for index, name in enumerate(CASE_DIMS))
     torch.manual_seed(seed)
     x = torch.randn(
         (dims["B"], dims["C"], dims["H"], dims["W"]),
@@ -82,7 +75,7 @@ op = declare_op(
     level=1,
     family="conv",
     forward="evograd.ops.level1.conv2d.forward_ref:conv2d_forward_ref",
-    dims=_DIMS,
+    dims=CASE_DIMS,
     args=(
         Active("x", "[B, C, H, W]"),
         Active("weight", "[O, C, KH, KW]"),
@@ -109,16 +102,13 @@ op = declare_op(
         "forward, dX, dWeight, and dBias primitives."
     ),
     correctness=(
-        _workload((2, 3, 8, 8, 4, 3, 3, 6, 6), "float32"),
-        _workload((1, 4, 9, 7, 6, 3, 3, 7, 5), "float32"),
-        _workload((2, 8, 16, 16, 8, 3, 3, 14, 14), "float16"),
-        _workload((2, 8, 15, 15, 16, 3, 3, 13, 13), "float16"),
-        _workload((2, 8, 16, 16, 8, 3, 3, 14, 14), "bfloat16"),
-        _workload((2, 8, 15, 15, 16, 3, 3, 13, 13), "bfloat16"),
+        workload_case((2, 3, 8, 8, 4, 3, 3, 6, 6), "float32"),
+        workload_case((1, 4, 9, 7, 6, 3, 3, 7, 5), "float32"),
+        workload_case((2, 8, 16, 16, 8, 3, 3, 14, 14), "float16"),
+        workload_case((2, 8, 15, 15, 16, 3, 3, 13, 13), "float16"),
+        workload_case((2, 8, 16, 16, 8, 3, 3, 14, 14), "bfloat16"),
+        workload_case((2, 8, 15, 15, 16, 3, 3, 13, 13), "bfloat16"),
     ),
-    coverage=_benchmark_workloads(),
-    benchmark=_benchmark_workloads(),
-    benchmark_suites={"cnn_bf16": _benchmark_workloads()},
     tolerances={
         "float32": (5e-4, 5e-4),
         "float16": (1e-1, 5e-2),

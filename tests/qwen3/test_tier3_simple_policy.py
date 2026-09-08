@@ -60,10 +60,10 @@ def _metrics(logits=0.0, grads=0.0, **overrides):
 class TestMatchedPatchSets(unittest.TestCase):
     def test_the_trusted_reference_patches_the_candidate_s_sites_only(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import build_registry
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         registry = build_registry()
-        trusted = matched_trusted_kernels(dict(OPS), QKV, registry)
+        trusted = matched_trusted_kernels(dict(TASKS), QKV, registry)
         self.assertEqual(trusted.patched, ("qkv_norm_rope",))
 
     def test_the_all_sites_reference_is_a_different_object(self):
@@ -71,18 +71,18 @@ class TestMatchedPatchSets(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
             bound_pair_identity_kernels, build_registry,
         )
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         registry = build_registry()
-        every = bound_pair_identity_kernels(dict(OPS), None, registry=registry)
+        every = bound_pair_identity_kernels(dict(TASKS), None, registry=registry)
         self.assertEqual(len(every.patched), 4)
-        self.assertEqual(len(matched_trusted_kernels(dict(OPS), QKV, registry).patched), 1)
+        self.assertEqual(len(matched_trusted_kernels(dict(TASKS), QKV, registry).patched), 1)
 
     def test_a_residual_patch_set_carries_nothing(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import build_registry
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        trusted = matched_trusted_kernels(dict(OPS), RESIDUAL, build_registry())
+        trusted = matched_trusted_kernels(dict(TASKS), RESIDUAL, build_registry())
         self.assertEqual(trusted.patched, ("residual_rmsnorm",))
         self.assertEqual(RESIDUAL.supporting, ())
 

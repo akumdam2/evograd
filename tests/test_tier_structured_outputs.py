@@ -44,7 +44,7 @@ if HAVE_TORCH:
         identity_control_specs,
     )
     from evograd.opdecl.inputs import upstream_grad_values
-    from evograd.ops import get_op
+    from evograd.benchmark import get_task
 
 #: (op, declared outputs). One single-output operator of each interesting shape,
 #: and every multi-output operator there is.
@@ -54,7 +54,7 @@ MULTI_OUTPUT = ("qwen3_qkv_norm_rope", "fused_add_rms_norm")
 
 def _case(name):
     """An operator, its smallest declared correctness shape, and CPU inputs."""
-    op = get_op(name)
+    op = get_task(name)
     workload = op.correctness[0]
     return op, workload, build_parameters(op, workload, device="cpu")
 
@@ -337,7 +337,7 @@ class TestTierTwoOperatorProtocol(unittest.TestCase):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestTheDeclarationRefusesAmbiguity(unittest.TestCase):
     def test_the_single_output_accessor_refuses_a_multi_output_declaration(self):
-        op = get_op("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_qkv_norm_rope")
         with self.assertRaises(ValueError) as caught:
             op.upstream_grad_name
         self.assertIn("upstream_grad_names", str(caught.exception))
@@ -363,7 +363,7 @@ class TestTheDeclarationRefusesAmbiguity(unittest.TestCase):
         self.assertIn("repeats", str(caught.exception))
 
     def test_a_multi_output_operator_can_still_declare_parameters(self):
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         self.assertTrue(op.is_multi_output)
         self.assertEqual(op.parameter_args, ("weight",))
 
@@ -396,7 +396,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
 
         for name in ("rope", "cross_entropy"):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 workload = op.correctness[0]
                 activations, dy, values = integrated.case_tensors(
                     op, workload, device="cpu"
@@ -409,7 +409,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
     def test_the_timed_step_backpropagates_every_output(self):
         import evograd.evaluation.tier2.integrated as integrated
 
-        op = get_op("fused_add_rms_norm")
+        op = get_task("fused_add_rms_norm")
         workload = op.correctness[0]
         activations, dy, values = integrated.case_tensors(op, workload, device="cpu")
         self.assertIsInstance(dy, tuple)
@@ -426,7 +426,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
         import evograd.evaluation.tier2.integrated as integrated
         from evograd.ops.level1.swiglu import forward_ref  # noqa: F401
 
-        op = get_op("swiglu")
+        op = get_task("swiglu")
         workload = op.correctness[0]
         activations, dy, values = integrated.case_tensors(op, workload, device="cpu")
 

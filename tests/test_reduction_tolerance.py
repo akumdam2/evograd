@@ -124,7 +124,7 @@ class TestWhatItRefusesToTouch(unittest.TestCase):
 class TestTheQwenDeclarationsUseIt(unittest.TestCase):
     def test_each_declaration_names_its_anchor_and_its_reductions(self):
         try:
-            from evograd.ops import get_op
+            from evograd.benchmark import get_task
         except Exception:  # pragma: no cover
             self.skipTest("torch not installed")
 
@@ -138,7 +138,7 @@ class TestTheQwenDeclarationsUseIt(unittest.TestCase):
         }
         for name, reductions in expected.items():
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 hook = op.tolerance_hook
                 self.assertIsInstance(hook, ReductionScaledAtol)
                 self.assertEqual(set(hook.reduction_dims), reductions)
@@ -151,25 +151,25 @@ class TestTheQwenDeclarationsUseIt(unittest.TestCase):
 
     def test_every_declared_result_is_covered_by_the_shape_map(self):
         try:
-            from evograd.ops import get_op
+            from evograd.benchmark import get_task
         except Exception:  # pragma: no cover
             self.skipTest("torch not installed")
 
         for name in ("qwen3_swiglu_mlp", "qwen3_qkv_norm_rope", "qwen3_attention"):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 declared = {*op.output_names, *op.grad_names()}
                 self.assertEqual(set(op.tolerance_hook.result_dims), declared)
 
     def test_the_hook_is_serializable_for_the_artifact(self):
         try:
-            from evograd.ops import get_op
+            from evograd.benchmark import get_task
         except Exception:  # pragma: no cover
             self.skipTest("torch not installed")
 
         import json
 
-        described = get_op("qwen3_swiglu_mlp").tolerance_hook.describe()
+        described = get_task("qwen3_swiglu_mlp").tolerance_hook.describe()
         self.assertEqual(described["kind"], "reduction_scaled_atol")
         self.assertIn("sqrt(N/N_a)", described["formula"])
         json.dumps(described)  # must round-trip into the calibration artifact

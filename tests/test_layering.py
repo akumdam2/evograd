@@ -73,34 +73,147 @@ class TestDependencyDirection(unittest.TestCase):
                 ]
                 self.assertEqual(offenders, [], f"{path}: {offenders}")
 
-    def test_benchmark_definitions_do_not_import_evaluation(self):
-        """Core and top-down declarations stay below evaluation runners.
+    def test_benchmark_imports_no_evaluation_anywhere(self):
+        """The whole benchmark package stays below the evaluation runners.
 
-        ``operator_suite/cli.py`` is the composition root that invokes an
-        evaluation mode, so it is intentionally outside this rule.
+        There is no exemption. ``operator_suite/cli.py`` used to be one: it was
+        the composition root that asked evaluation to run what the benchmark
+        selected. That coordination now lives at the root, in
+        :mod:`evograd.suite_cli`, so the rule holds for every file here.
         """
-        roots = (
-            EVOGRAD / "benchmark" / "core",
-            EVOGRAD / "benchmark" / "topdown",
-        )
-        for path in [file for root in roots for file in _python_files(root)]:
+        for path in _python_files(EVOGRAD / "benchmark"):
             offenders = [
                 name for name in _resolved_imports(path)
                 if name.startswith("evograd.evaluation")
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
 
-    def test_ops_snapshot_bridge_names_no_workload_package(self):
-        """Model-derived shapes use only the neutral top-down registry."""
+    def test_no_suite_cli_is_left_inside_benchmark(self):
+        """No forwarding module: one canonical entry point, at the root."""
+        self.assertFalse((EVOGRAD / "benchmark" / "operator_suite" / "cli.py").exists())
+        self.assertTrue((EVOGRAD / "suite_cli.py").is_file())
+
+    def test_ops_imports_no_benchmark_at_all(self):
+        """The primitive layer sits below the benchmark, with no bridge back.
+
+        ``ops`` used to reach into ``benchmark.topdown`` for a frozen snapshot,
+        so a package that owns mathematics depended on one model's captured
+        run. The observed cases are bound on the benchmark side now
+        (:mod:`evograd.benchmark.cases`), and this is what stops the bridge
+        being rebuilt.
+        """
+        for path in _python_files(EVOGRAD / "ops"):
+            offenders = [
+                name for name in _resolved_imports(path)
+                if name.startswith("evograd.benchmark")
+            ]
+            self.assertEqual(offenders, [], f"{path}: {offenders}")
+
+    def test_ops_imports_no_workload_package(self):
         for path in _python_files(EVOGRAD / "ops"):
             for imported in _resolved_imports(path):
-                if not imported.startswith("evograd.benchmark"):
-                    continue
-                self.assertEqual(
-                    imported,
-                    "evograd.benchmark.topdown",
-                    f"{path} bypasses the neutral snapshot registry: {imported}",
+                self.assertFalse(
+                    any(marker in imported for marker in WORKLOAD_MARKERS),
+                    f"{path} imports workload-specific module {imported}",
                 )
+
+    def test_the_deleted_ops_level_directories_are_gone(self):
+        for group in ("level2", "level3"):
+            with self.subTest(group=group):
+                self.assertFalse((EVOGRAD / "ops" / group).exists())
+
+    def test_no_active_import_names_the_deleted_ops_levels(self):
+        """No compatibility shim, no alias, no tombstone -- one canonical path.
+
+        Scanned by source text across the whole repository rather than by
+        resolved import, because ``tests/`` and ``scripts/`` sit outside the
+        package root that relative names resolve against.
+        """
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        # Assembled rather than written out, so this file does not match itself.
+        pattern = tuple("evograd.ops." + group for group in ("level2", "level3"))
+        for root in (EVOGRAD, repo / "tests", repo / "scripts", repo / "tools"):
+            if not root.exists():
+                continue
+            for path in _python_files(root):
+                source = path.read_text(encoding="utf-8")
+                for name in pattern:
+                    self.assertNotIn(name, source, f"{path} names {name}")
+
+
+class TestQwenOwnershipSplit(unittest.TestCase):
+    """Capture describes the case; evaluation decides the verdict."""
+
+    QWEN_BENCH = EVOGRAD / "benchmark" / "topdown" / "qwen3_0_6b"
+    QWEN_EVAL = EVOGRAD / "evaluation" / "workloads" / "qwen3_0_6b"
+
+    def test_qwen_benchmark_side_imports_no_evaluation(self):
+        for path in _python_files(self.QWEN_BENCH):
+            offenders = [
+                name for name in _resolved_imports(path)
+                if name.startswith("evograd.evaluation")
+            ]
+            self.assertEqual(offenders, [], f"{path}: {offenders}")
+
+    def test_the_evaluation_side_exists_and_owns_the_verdicts(self):
+        for relative in ("level1/verify.py", "level1/calibrate.py", "level1/cli.py",
+                         "level2/qkv_norm_rope.py", "level2/attention.py",
+                         "level2/swiglu_mlp.py", "level2/residual_rmsnorm.py",
+                         "level2/calibrate.py", "level2/negative_controls.py",
+                         "level3/replay.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.QWEN_EVAL / relative).is_file())
+
+    def test_the_benchmark_side_keeps_capture_and_artifact(self):
+        for relative in ("levels/level1/manifest.py",
+                         "levels/level2/manifest.py",
+                         "levels/level3/artifact.py",
+                         "levels/level3/capture.py",
+                         "levels/level3/prepare.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.QWEN_BENCH / relative).is_file())
+
+    def test_no_verdict_function_is_left_on_the_benchmark_side(self):
+        """``run_verify``/``run_calibration`` decide whether something passes."""
+        for path in _python_files(self.QWEN_BENCH):
+            source = path.read_text(encoding="utf-8")
+            for marker in ("def run_verify(", "def run_calibration(",
+                           "def declared_gate(", "def required_tolerance("):
+                self.assertNotIn(
+                    marker, source,
+                    f"{path} defines {marker.strip('def (')}; judgment belongs to "
+                    f"evograd.evaluation",
+                )
+
+
+class TestTaskNamesAreUnique(unittest.TestCase):
+    """Aggregating three sources is where a name collision would first bite."""
+
+    def test_no_task_name_is_claimed_twice(self):
+        from evograd.benchmark import TASKS
+        from evograd.benchmark.core.registry import _discover
+
+        self.assertEqual(len(TASKS), len(set(TASKS)))
+        self.assertEqual(set(_discover()), set(TASKS))
+
+    def test_a_duplicate_name_fails_loudly(self):
+        from evograd.benchmark.core.registry import DuplicateTask, _register
+        from evograd.ops import PRIMITIVES
+
+        primitive = PRIMITIVES["rmsnorm"]
+        discovered: dict = {}
+        _register(discovered, primitive, "owner.one")
+        with self.assertRaises(DuplicateTask):
+            _register(discovered, primitive, "owner.two")
+
+    def test_every_primitive_reaches_the_task_registry_exactly_once(self):
+        from evograd.benchmark import TASKS
+        from evograd.ops import PRIMITIVES
+
+        for name in PRIMITIVES:
+            with self.subTest(op=name):
+                self.assertIn(name, TASKS)
+                self.assertEqual(TASKS[name].level, 1)
 
 
 if __name__ == "__main__":

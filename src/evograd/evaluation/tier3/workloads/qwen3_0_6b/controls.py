@@ -223,7 +223,7 @@ def run_positive_controls(*, seed: int, policy, workload, references
     yes. These are the same two references the calibration was taken on, so a
     failure here is a defect in the gate rather than in a provider.
     """
-    from evograd.ops import OPS
+    from evograd.benchmark import TASKS
 
     from .sites import bound_pair_identity_kernels
 
@@ -231,7 +231,7 @@ def run_positive_controls(*, seed: int, policy, workload, references
     for label, kernels in (
         ("structural_identity", structural_identity_kernels(workload.site_registry)),
         ("bound_pair_identity", bound_pair_identity_kernels(
-            OPS, None, workload.site_registry)),
+            TASKS, None, workload.site_registry)),
     ):
         try:
             verdict = check_model_correctness(

@@ -14,7 +14,7 @@ import unittest
 import torch
 
 from evograd.opdecl.activity import Active, Inactive, Workload, declare_op
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 from evograd.pipelines.shared.artifact import (
     ArtifactContract,
     ArtifactError,
@@ -57,7 +57,7 @@ def build(op, *, forward_body=None):
 
 class TestContractShape(unittest.TestCase):
     def test_a_single_output_declaration_generates_one_upstream_gradient(self):
-        op = get_op(SINGLE)
+        op = get_task(SINGLE)
         c = ArtifactContract(op)
         self.assertEqual(c.output_names, ("y",))
         self.assertEqual(c.upstream_names, ("dy",))
@@ -68,7 +68,7 @@ class TestContractShape(unittest.TestCase):
         )
 
     def test_a_structured_declaration_generates_one_gradient_per_output(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         c = ArtifactContract(op)
         self.assertEqual(c.output_names, ("out", "summed"))
         self.assertEqual(c.upstream_names, ("dout", "dsummed"))
@@ -79,7 +79,7 @@ class TestContractShape(unittest.TestCase):
     def test_forward_arguments_follow_the_declared_order_exactly(self):
         for name in (SINGLE, STRUCTURED):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 module = build(op)
                 entry = deployment_entry(module)
                 import inspect
@@ -90,13 +90,13 @@ class TestContractShape(unittest.TestCase):
                 )
 
     def test_one_gradient_slot_per_forward_argument_with_none_for_inactive(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         order = ArtifactContract(op).gradient_return_order()
         # x, r, weight are active; eps is a scalar Inactive and takes None.
         self.assertEqual(order, ["dx", "dr", "dweight", None])
 
     def test_the_metadata_records_every_pinned_order(self):
-        meta = ArtifactContract(get_op(STRUCTURED)).metadata()
+        meta = ArtifactContract(get_task(STRUCTURED)).metadata()
         self.assertEqual(meta["arguments"], ["x", "r", "weight", "eps"])
         self.assertEqual(meta["outputs"], ["out", "summed"])
         self.assertEqual(meta["upstream_grads"], ["dout", "dsummed"])
@@ -106,7 +106,7 @@ class TestContractShape(unittest.TestCase):
 
 class TestGeneratedBehaviour(unittest.TestCase):
     def test_both_outputs_reach_backward_independently(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         # A forward whose second output depends on `r` alone isolates dsummed:
         # if the wrapper dropped it, r's gradient would come back zero.
         module = build(op, forward_body=(
@@ -126,7 +126,7 @@ class TestGeneratedBehaviour(unittest.TestCase):
         self.assertTrue(torch.allclose(r.grad, torch.full_like(r, 7.0)))
 
     def test_the_scalar_argument_is_stored_on_ctx_and_returns_no_gradient(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         seen = {}
         original = module.fused_add_rms_norm_backward_from_saved
@@ -145,7 +145,7 @@ class TestGeneratedBehaviour(unittest.TestCase):
         self.assertEqual(seen["eps"], 4.25e-3)     # carried on ctx, not saved
 
     def test_saved_tensors_go_through_save_for_backward(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         source = module.__source__
         self.assertIn("ctx.save_for_backward(*saved)", source)
@@ -168,7 +168,7 @@ class TestNoForwardingAliases(unittest.TestCase):
 
         for name in (SINGLE, STRUCTURED):
             with self.subTest(op=name):
-                source = render_autograd_pair_wrapper("pkg.mod:fn", get_op(name))
+                source = render_autograd_pair_wrapper("pkg.mod:fn", get_task(name))
                 self.assertEqual(find_forwarding_aliases(source), [])
                 self.assertNotIn("_impl", source)
 
@@ -183,7 +183,7 @@ class TestPipelineParity(unittest.TestCase):
 
         for name in (SINGLE, STRUCTURED):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 layer = render_deployment_layer(op)          # what A appends
                 b_source = render_autograd_pair_wrapper("pkg.mod:fn", op)
                 # Containment, not suffix: both pipelines embed this text
@@ -200,7 +200,7 @@ class TestPipelineParity(unittest.TestCase):
 
         for name in (SINGLE, STRUCTURED):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 source = render_autograd_pair_wrapper("pkg.mod:fn", op)
                 ast.parse(source)
                 for symbol in ArtifactContract(op).required_symbols():
@@ -209,7 +209,7 @@ class TestPipelineParity(unittest.TestCase):
 
 class TestValidationRejectsMalformed(unittest.TestCase):
     def test_a_missing_symbol_is_reported_by_name(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         del module.FusedAddRmsNormModule
         with self.assertRaises(ArtifactError) as caught:
@@ -217,7 +217,7 @@ class TestValidationRejectsMalformed(unittest.TestCase):
         self.assertIn("FusedAddRmsNormModule", str(caught.exception))
 
     def test_a_wrong_argument_order_is_rejected(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         module.fused_add_rms_norm_deployment = lambda weight, x, r, eps: None
         with self.assertRaises(ArtifactError) as caught:
@@ -225,14 +225,14 @@ class TestValidationRejectsMalformed(unittest.TestCase):
         self.assertIn("argument order", str(caught.exception))
 
     def test_a_non_string_deployment_entry_is_rejected(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         module.DEPLOYMENT_ENTRY = lambda: None
         with self.assertRaises(ArtifactError):
             validate_artifact(op, module)
 
     def test_a_forwarding_alias_in_the_source_is_rejected(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         bad = module.__source__ + (
             "\ndef public_thing(x):\n    return _public_thing_impl(x)\n"
@@ -246,7 +246,7 @@ class TestNoBindInTheDirectStack(unittest.TestCase):
     def test_the_generated_deployment_layer_never_mentions_the_binder(self):
         for name in (SINGLE, STRUCTURED):
             with self.subTest(op=name):
-                layer = render_deployment_layer(get_op(name))
+                layer = render_deployment_layer(get_task(name))
                 for token in ("opdecl", "bind(", "lookup_pair", "OperatorModule"):
                     self.assertNotIn(token, layer)
 
@@ -270,7 +270,7 @@ class TestEvolvableRegionCoversPair(unittest.TestCase):
     """The pair bodies are the implementation, so they must be evolvable."""
 
     def _source(self, start_line, end_line):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         body = [
             "import torch",
             "# EVOLVE-BLOCK-START" if start_line else "# nothing",
@@ -287,7 +287,7 @@ class TestEvolvableRegionCoversPair(unittest.TestCase):
     def test_a_block_that_stops_before_the_pair_is_rejected(self):
         from evograd.pipelines.shared.artifact import evolvable_region_covers_pair
 
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         self.assertFalse(
             evolvable_region_covers_pair(op, self._source(True, "early"))
         )
@@ -295,17 +295,17 @@ class TestEvolvableRegionCoversPair(unittest.TestCase):
     def test_a_block_spanning_kernels_and_pair_is_accepted(self):
         from evograd.pipelines.shared.artifact import evolvable_region_covers_pair
 
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         self.assertTrue(evolvable_region_covers_pair(op, self._source(True, "late")))
 
     def test_missing_markers_are_rejected(self):
         from evograd.pipelines.shared.artifact import evolvable_region_covers_pair
 
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         self.assertFalse(evolvable_region_covers_pair(op, self._source(False, "late")))
 
     def test_validate_artifact_enforces_it_when_given_source(self):
-        op = get_op(STRUCTURED)
+        op = get_task(STRUCTURED)
         module = build(op)
         with self.assertRaises(ArtifactError) as caught:
             validate_artifact(op, module, source=self._source(True, "early"))
@@ -314,7 +314,7 @@ class TestEvolvableRegionCoversPair(unittest.TestCase):
     def test_the_prompt_asks_for_the_wider_block(self):
         from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
 
-        text = render_pair_rules(get_op(STRUCTURED))
+        text = render_pair_rules(get_task(STRUCTURED))
         self.assertIn("EVOLVE-BLOCK-END", text)
         self.assertIn("after the two public pair functions", text)
 
@@ -323,7 +323,7 @@ class TestRankAdaptationCases(unittest.TestCase):
     """Which declarations get leading-dimension adaptation, and which cannot."""
 
     def _layer(self, name):
-        return render_deployment_layer(get_op(name))
+        return render_deployment_layer(get_task(name))
 
     def test_a_batched_declaration_restores_leading_dimensions(self):
         # rmsnorm: x [rows, cols] -> y [rows, cols]. Inputs and outputs share
@@ -351,19 +351,19 @@ class TestRankAdaptationCases(unittest.TestCase):
         # one would silently reshape a result.
         from evograd.pipelines.shared.artifact import batched_names
 
-        op = get_op("qwen3_attention")
+        op = get_task("qwen3_attention")
         args, outs, rank = batched_names(op)
         self.assertEqual(rank, 4)
         self.assertEqual(outs, ())          # no output shares the argument rank
         self.assertNotIn("_leading", self._layer("qwen3_attention"))
 
     def test_every_declaration_generates_parseable_code(self):
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
         adapting = []
-        for name in sorted(OPS):
+        for name in sorted(TASKS):
             with self.subTest(op=name):
-                layer = render_deployment_layer(get_op(name))
+                layer = render_deployment_layer(get_task(name))
                 ast.parse("import torch\n" + layer)
                 if "_leading" in layer:
                     adapting.append(name)

@@ -11,7 +11,7 @@ from typing import Any
 from evograd.ncu.profile import ProfileResult, run_ncu_profile
 from evograd.ncu.roofline import analyze
 from evograd.opdecl.activity import Workload
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 _FRIENDLY = {
     "sm__throughput.avg.pct_of_peak_sustained_elapsed": "sm_throughput_pct",
@@ -184,7 +184,7 @@ def profile_for_geak(
     candidate = Path(candidate).resolve()
     workload = Workload(dims={"rows": rows, "hidden": hidden}, dtype=dtype)
     result = run_ncu_profile(
-        get_op("layernorm"),
+        get_task("layernorm"),
         candidate,
         workload=workload,
         warmup=warmup,

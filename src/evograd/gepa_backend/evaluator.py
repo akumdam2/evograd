@@ -12,7 +12,7 @@ import tempfile
 from typing import Any, Iterable
 
 from evograd.gepa_backend.candidate import EvolveBlockTemplate
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ def examples_for_suite(
     *,
     dtypes: tuple[str, ...] = ("bfloat16",),
 ) -> list[dict[str, Any]]:
-    op = get_op(op_name)
+    op = get_task(op_name)
     return [
         ShapeExample(
             id=_shape_id(workload.dims, workload.dtype),

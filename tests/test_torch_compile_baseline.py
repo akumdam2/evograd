@@ -18,7 +18,7 @@ from evograd.opdecl.baselines import (
     resolve_performance_baseline,
 )
 from evograd.opdecl.compiled import BUILTIN_MODES, _leaf_args, make_compiled_baseline
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 
 
 class _FakeTensor:
@@ -44,7 +44,7 @@ class _FakeTensor:
 
 class TestResolution(unittest.TestCase):
     def setUp(self):
-        self.op = get_op("layernorm")
+        self.op = get_task("layernorm")
 
     def test_builtin_names_resolve_without_declaration_support(self):
         self.assertNotIn("torch_compile", self.op.performance_baselines)
@@ -77,7 +77,7 @@ class TestResolution(unittest.TestCase):
 
 class TestLeafArgs(unittest.TestCase):
     def test_active_args_become_fresh_leaves_inactive_pass_through(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         inputs = {arg.name: _FakeTensor(arg.name) for arg in op.args}
         positional, leaves = _leaf_args(op, inputs)
 
@@ -91,7 +91,7 @@ class TestLeafArgs(unittest.TestCase):
                 self.assertFalse(getattr(value, "requires_grad", False), arg.name)
 
     def test_each_call_gets_its_own_leaves(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         inputs = {arg.name: _FakeTensor(arg.name) for arg in op.args}
         _p1, first = _leaf_args(op, inputs)
         _p2, second = _leaf_args(op, inputs)
@@ -102,7 +102,7 @@ class TestLeafArgs(unittest.TestCase):
 
 class TestTimingSplit(unittest.TestCase):
     def test_forward_runs_in_setup_only_backward_is_timed(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         inputs = {arg.name: _FakeTensor(arg.name) for arg in op.args}
         inputs[op.upstream_grad_name] = _FakeTensor("dout")
         calls = []
@@ -157,7 +157,7 @@ class TestTimingSplit(unittest.TestCase):
 
         from evograd.opdecl.compiled import compile_forward
 
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         with mock.patch.object(torch, "compile") as compile_call:
             compile_forward(op, "max-autotune", False)
         _args, kwargs = compile_call.call_args
@@ -171,7 +171,7 @@ class TestFairProvider(unittest.TestCase):
 
         from evograd.evaluation.tier1.fair import torch_compile_provider
 
-        op = get_op("layernorm")
+        op = get_task("layernorm")
 
         def fake_compiled(x, weight, bias, eps):
             return x * weight + bias + eps
@@ -206,7 +206,7 @@ class TestFairProvider(unittest.TestCase):
         from evograd.evaluation.tier1.fair import PairProvider, verify_pair_provider
         from evograd.opdecl.activity import Workload
 
-        op = get_op("layernorm")
+        op = get_task("layernorm")
 
         def forward(values):
             x = values["x"].detach().requires_grad_(True)

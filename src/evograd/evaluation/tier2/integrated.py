@@ -112,7 +112,7 @@ def candidate_module(op: OpDecl, program_module, *, values: dict[str, Any]):
     the returned gradient count against ``op.grad_names()``, and places each
     gradient in its declared argument slot. That last part is what a positional
     wrapper cannot do -- once an operator's activations are not its leading
-    arguments (``af3_single_repr_block`` has ``pair_bias`` in the middle),
+    arguments (a block task may have an inactive tensor in the middle),
     gradient order and call order diverge.
     """
     lookup_pair(op, program_module)  # fail here, not inside a timed region

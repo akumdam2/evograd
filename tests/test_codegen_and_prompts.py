@@ -12,7 +12,7 @@ from unittest import mock
 
 from evograd.opdecl.activity import example_input_spec
 from evograd.atenir.primitive_triton.dispatch import make_kernel
-from evograd.ops import get_op
+from evograd.benchmark import get_task
 from evograd.pipelines.b_dispatch.program_codegen import (
     _ProgramBuilder,
     _ordered_arg_exprs,
@@ -25,7 +25,7 @@ from evograd.pipelines.b_dispatch.wrapper_codegen import (
 
 class TestWrapperCodegen(unittest.TestCase):
     def test_layernorm_identity_order_returns_directly(self):
-        op = get_op("layernorm")
+        op = get_task("layernorm")
         self.assertEqual(grad_indices(op), [0, 1, 2])
         wrapper = render_autograd_pair_wrapper("m:f", op)
         self.assertIn("def layernorm_forward_with_saved(x, weight, bias, eps=1e-5):", wrapper)
@@ -41,7 +41,7 @@ class TestWrapperCodegen(unittest.TestCase):
         # `x = saved_tensors[:1]` is a plain assignment, so a one-tensor op
         # would bind the whole tuple and fail on the first `.contiguous()`.
         for name in ("softmax", "relu_squared", "sparsemax"):
-            op = get_op(name)
+            op = get_task(name)
             wrapper = render_autograd_pair_wrapper("m:f", op)
             self.assertIn("x, = saved_tensors[:1]", wrapper, name)
 
@@ -49,7 +49,7 @@ class TestWrapperCodegen(unittest.TestCase):
         import torch
 
         for name in ("softmax", "layernorm"):
-            op = get_op(name)
+            op = get_task(name)
             source = (
                 "def run_graph_program(*a):\n"
                 "    return tuple(torch.zeros_like(t) for t in a[1:])\n"
@@ -65,7 +65,7 @@ class TestWrapperCodegen(unittest.TestCase):
             self.assertEqual(len(grads), len(op.grad_names()), name)
 
     def test_evoattention_drops_inactive_gradient(self):
-        op = get_op("evoattention")
+        op = get_task("evoattention")
         # res_mask is tensor arg index 3; its graph gradient is skipped.
         self.assertEqual(grad_indices(op), [0, 1, 2, 4])
         wrapper = render_autograd_pair_wrapper("m:f", op)
@@ -78,7 +78,7 @@ class TestWrapperCodegen(unittest.TestCase):
         self.assertNotIn("eps", wrapper)  # no scalar consts on this op
 
     def test_layernorm_linear_honors_grad_order(self):
-        op = get_op("layernorm_linear")
+        op = get_task("layernorm_linear")
         # contract order: dx, dlinear_weight, dweight, dbias
         self.assertEqual(grad_indices(op), [0, 3, 1, 2])
         wrapper = render_autograd_pair_wrapper("m:f", op)
@@ -89,19 +89,19 @@ class TestWrapperCodegen(unittest.TestCase):
         )
 
     def test_inactive_tensor_does_not_create_graph_gradient_slot(self):
-        op = get_op("fused_moe_swiglu")
+        op = get_task("fused_moe_swiglu")
         self.assertEqual(grad_indices(op), [0, 1, 2, 3])
         wrapper = render_autograd_pair_wrapper(
-            "evograd.ops.level2.fused_moe_swiglu.forward_ref:"
+            "evograd.benchmark.operator_suite.tasks.level2.fused_moe_swiglu.forward_ref:"
             "fused_moe_swiglu_forward_ref",
             op,
         )
         self.assertNotIn("_grads[4]", wrapper)
 
     def test_wrapper_compiles_for_every_single_output_op(self):
-        from evograd.ops import OPS
+        from evograd.benchmark import TASKS
 
-        for name, op in OPS.items():
+        for name, op in TASKS.items():
             if op.is_multi_output:
                 continue
             with self.subTest(op=name):
@@ -116,14 +116,14 @@ class TestWrapperCodegen(unittest.TestCase):
         """
         import ast
 
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
         from evograd.pipelines.b_dispatch.wrapper_codegen import (
             render_autograd_pair_wrapper,
         )
 
         for name in ("fused_add_rms_norm", "qwen3_qkv_norm_rope"):
             with self.subTest(op=name):
-                op = get_op(name)
+                op = get_task(name)
                 source = render_autograd_pair_wrapper("pkg.mod:fn", op)
                 ast.parse(source)
                 self.assertIn(op.forward_fn_name, source)
@@ -242,13 +242,13 @@ class TestDispatchProgramCodegen(unittest.TestCase):
 class TestExampleInputSpec(unittest.TestCase):
     def test_layernorm_matches_legacy_readme_string(self):
         self.assertEqual(
-            example_input_spec(get_op("layernorm")),
+            example_input_spec(get_task("layernorm")),
             "[(8,64) f32, (64) f32, (64) f32]",
         )
 
     def test_rmsnorm_matches_legacy_readme_string(self):
         self.assertEqual(
-            example_input_spec(get_op("rmsnorm")),
+            example_input_spec(get_task("rmsnorm")),
             "[(8,64) f32, (64) f32]",
         )
 
@@ -256,14 +256,14 @@ class TestExampleInputSpec(unittest.TestCase):
         # First correctness workload with every dim >= 2 (so no symbolic dim
         # specializes to 1 during extraction): B=2 S=2 H=4 N=128 D=64, bfloat16.
         self.assertEqual(
-            example_input_spec(get_op("evoattention")),
+            example_input_spec(get_task("evoattention")),
             "[(2,2,128,4,64) bf16, (2,2,128,4,64) bf16, (2,2,128,4,64) bf16, "
             "(2,2,1,1,128) f32, (2,1,4,128,128) f32]",
         )
 
     def test_cross_entropy_includes_integer_labels_and_scalar_output(self):
         self.assertEqual(
-            example_input_spec(get_op("cross_entropy")),
+            example_input_spec(get_task("cross_entropy")),
             "[(8,512) f32, (8) i64]",
         )
 
@@ -272,7 +272,7 @@ class TestPromptRendering(unittest.TestCase):
     def test_pipeline_a_rules_include_contract_and_no_grad(self):
         from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
 
-        rules = render_pair_rules(get_op("evoattention"))
+        rules = render_pair_rules(get_task("evoattention"))
         self.assertIn("def evoattention_forward_with_saved(q, k, v, res_mask, pair_bias):", rules)
         self.assertIn("return dq, dk, dv, d_pair_bias", rules)
         self.assertIn("`res_mask`", rules)  # no-grad warning present
@@ -280,7 +280,7 @@ class TestPromptRendering(unittest.TestCase):
     def test_pipeline_c_rules_include_contract(self):
         from evograd.pipelines.c_forward_only.prompts import render_pair_rules
 
-        rules = render_pair_rules(get_op("layernorm_linear"))
+        rules = render_pair_rules(get_task("layernorm_linear"))
         self.assertIn("return dx, dlinear_weight, dweight, dbias", rules)
 
 
@@ -290,17 +290,17 @@ class TestEvolveConfigRendering(unittest.TestCase):
 
         for name in ("layernorm", "evoattention"):
             with self.subTest(op=name):
-                config = render_config(get_op(name), iterations=7)
+                config = render_config(get_task(name), iterations=7)
                 self.assertNotIn("__", config)
                 self.assertIn("max_iterations: 7", config)
-                self.assertIn(get_op(name).forward_fn_name, config)
+                self.assertIn(get_task(name).forward_fn_name, config)
                 self.assertIn("models:", config)
                 self.assertNotIn("primary_model:", config)
 
     def test_default_map_elites_feature_dimensions(self):
         from evograd.evolve.run import render_config
 
-        config = render_config(get_op("layernorm"))
+        config = render_config(get_task("layernorm"))
         self.assertIn(
             'feature_dimensions: ["complexity", "saved_memory_ratio"]', config
         )
@@ -310,27 +310,27 @@ class TestEvolveConfigRendering(unittest.TestCase):
         from evograd.evolve.run import render_config
 
         config = render_config(
-            get_op("layernorm"),
+            get_task("layernorm"),
             feature_dimensions=("diversity", "speedup"),
             feature_bins=6,
         )
         self.assertIn('feature_dimensions: ["diversity", "speedup"]', config)
         self.assertIn("feature_bins: 6", config)
         with self.assertRaises(ValueError):
-            render_config(get_op("layernorm"), feature_dimensions=("not_a_metric",))
+            render_config(get_task("layernorm"), feature_dimensions=("not_a_metric",))
         with self.assertRaises(ValueError):
-            render_config(get_op("layernorm"), feature_dimensions=())
+            render_config(get_task("layernorm"), feature_dimensions=())
         with self.assertRaises(ValueError):
-            render_config(get_op("layernorm"), feature_bins=0)
+            render_config(get_task("layernorm"), feature_bins=0)
 
     def test_grid_density_controls_render_and_validate(self):
         from evograd.evolve.run import render_config
 
-        config = render_config(get_op("layernorm"))
+        config = render_config(get_task("layernorm"))
         self.assertIn("num_islands: 2", config)
         self.assertIn("archive_size: 20", config)
         dense = render_config(
-            get_op("layernorm"),
+            get_task("layernorm"),
             feature_dimensions=("saved_memory_ratio", "shape_specialization"),
             feature_bins=3,
             num_islands=1,
@@ -343,7 +343,7 @@ class TestEvolveConfigRendering(unittest.TestCase):
         # bigger than the grid would silently undo the coarse-bin request.
         with self.assertRaises(ValueError):
             render_config(
-                get_op("layernorm"),
+                get_task("layernorm"),
                 feature_dimensions=("saved_memory_ratio", "shape_specialization"),
                 feature_bins=3,
                 archive_size=10,
@@ -359,7 +359,7 @@ class TestEvolveConfigRendering(unittest.TestCase):
         from evograd.evolve.evaluator import build_evaluate
         from evograd.evolve.scoring import CUSTOM_FEATURE_DIMENSION_DEFAULTS, get_policy
 
-        evaluate = build_evaluate(get_op("layernorm"), get_policy("speed_memory"))
+        evaluate = build_evaluate(get_task("layernorm"), get_policy("speed_memory"))
         with mock.patch("torch.cuda.is_available", return_value=False):
             result = evaluate("/nonexistent/candidate.py")
         for dim, default in CUSTOM_FEATURE_DIMENSION_DEFAULTS.items():
@@ -386,7 +386,7 @@ class TestEvolveConfigRendering(unittest.TestCase):
                 ),
             ):
                 code = run_evolve(
-                    get_op("layernorm"),
+                    get_task("layernorm"),
                     seed_path=seed,
                     output_dir=root / "out",
                     benchmark_suite="tb_i12",

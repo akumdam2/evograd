@@ -155,7 +155,7 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
 
     def test_reference_and_library_imports(self):
         self._rejects("import transformers\nreturn x, (x,)", "transformers")
-        self._rejects("from evograd.ops import get_op\nreturn x, (x,)", "evograd")
+        self._rejects("from evograd.benchmark import get_task\nreturn x, (x,)", "evograd")
 
     def test_an_aliased_import_does_not_launder_the_call(self):
         self._rejects("from torch import matmul\nreturn matmul(x, w), (x,)",
@@ -179,10 +179,10 @@ class TestExistingArtifactsAreUnaffected(unittest.TestCase):
         self.assertIn("def vendor_gemm", render_primitive_layer(("vendor_gemm",)))
 
     def test_the_deployment_layer_records_the_grant_either_way(self):
-        from evograd.ops import get_op
+        from evograd.benchmark import get_task
         from evograd.pipelines.shared.artifact import render_deployment_layer
 
-        op = get_op("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_qkv_norm_rope")
         plain = render_deployment_layer(op)
         hybrid = render_deployment_layer(op, allowed_primitives=("vendor_gemm",))
         self.assertIn("'allowed_primitives': []", plain)
