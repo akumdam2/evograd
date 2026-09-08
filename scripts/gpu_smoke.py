@@ -27,6 +27,24 @@ def load_module(path: Path):
     return module
 
 
+def output_shapes(op, y) -> dict[str, tuple[int, ...]]:
+    """Declared output name -> shape, for one-output and structured operators.
+
+    ``oracle`` returns a Tensor for a one-output declaration and a tuple for a
+    structured one, so a single ``y.shape`` only ever described half of the
+    registry. ``as_output_tuple`` is the declaration contract that normalizes
+    the two and refuses a result whose arity disagrees with the declaration,
+    which keeps that disagreement a reported failure rather than a formatting
+    accident.
+    """
+    from evograd.opdecl.inputs import as_output_tuple
+
+    return {
+        name: tuple(tensor.shape)
+        for name, tensor in zip(op.output_names, as_output_tuple(op, y), strict=True)
+    }
+
+
 def oracle_smoke(device: str, declaration: str | None = None) -> int:
     from evograd.opdecl import make_case_inputs, oracle
     from evograd.ops import OPS, load_op
@@ -45,8 +63,9 @@ def oracle_smoke(device: str, declaration: str | None = None) -> int:
         try:
             inputs = make_case_inputs(op, workload, device=device)
             y, grads = oracle(op, inputs)
+            outputs = output_shapes(op, y)
             shapes = {g: tuple(t.shape) for g, t in grads.items()}
-            print(f"[ok]   {name}: y{tuple(y.shape)} grads {shapes}")
+            print(f"[ok]   {name}: outputs {outputs} grads {shapes}")
         except Exception as exc:  # noqa: BLE001 — smoke test reports and moves on
             failed.append(name)
             print(f"[FAIL] {name}: {exc}")
