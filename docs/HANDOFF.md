@@ -139,9 +139,9 @@ Verified on CPU only:
    ```bash
    PYTHONPATH=src python -c "
    from evograd.opdecl.baselines import verify_performance_baseline
-   from evograd.ops import get_op
+   from evograd.benchmark import get_task
    for name in ('rope', 'fused_linear_cross_entropy'):
-       verify_performance_baseline(get_op(name), 'liger'); print(name, 'ok')"
+       verify_performance_baseline(get_task(name), 'liger'); print(name, 'ok')"
    ```
 
 2. Both legacy direct-block tasks have never run on a GPU at their benchmark dimensions.

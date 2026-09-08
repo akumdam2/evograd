@@ -135,6 +135,7 @@ class TestTheQwenDeclarationsUseIt(unittest.TestCase):
                 "dq_norm_weight", "dk_norm_weight",
             },
             "qwen3_attention": set(),
+            "llama3_qkv_rope": {"dq_weight", "dk_weight", "dv_weight"},
         }
         for name, reductions in expected.items():
             with self.subTest(op=name):
@@ -155,7 +156,12 @@ class TestTheQwenDeclarationsUseIt(unittest.TestCase):
         except Exception:  # pragma: no cover
             self.skipTest("torch not installed")
 
-        for name in ("qwen3_swiglu_mlp", "qwen3_qkv_norm_rope", "qwen3_attention"):
+        for name in (
+            "qwen3_swiglu_mlp",
+            "qwen3_qkv_norm_rope",
+            "qwen3_attention",
+            "llama3_qkv_rope",
+        ):
             with self.subTest(op=name):
                 op = get_task(name)
                 declared = {*op.output_names, *op.grad_names()}

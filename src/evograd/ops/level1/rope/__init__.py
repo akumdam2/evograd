@@ -77,6 +77,7 @@ def _liger_factory():
 #: at batch 2 x sequence 2048 x head_dim 128, 28 times per step. They come from
 #: one harvested `apply_rotary_pos_emb` record, which rotates q and k together.
 
+
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, n_heads=h, T=t, head_dim=d), dtype=dtype)
     for b, h, t, d in (

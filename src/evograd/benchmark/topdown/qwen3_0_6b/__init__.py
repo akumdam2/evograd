@@ -36,18 +36,15 @@ from .levels.level4.spec import (
 __all__ = [
     "CANONICAL",
     "QWEN3_0_6B",
-    "Qwen3Workload",
     "SmokeReport",
     "WorkloadSpec",
     "WorkloadSpecError",
 ]
 
 
-def __getattr__(name: str):
-    # Deferred: Qwen3Workload reaches the tier-3 site adapters, which import
-    # torch. The spec and the report must stay importable without it.
-    if name == "Qwen3Workload":
-        from .evaluation.tier3.workload import Qwen3Workload
-
-        return Qwen3Workload
-    raise AttributeError(name)
+# There is deliberately no ``Workload`` accessor here. Patching a model and
+# judging what comes back is evaluation's, and a convenience re-export would
+# make this package import it -- the dependency the layering test forbids, and
+# not one that becomes acceptable by being deferred, dynamic or string-based.
+# The canonical import is
+# ``evograd.evaluation.tier3.workloads.qwen3_0_6b.workload``.

@@ -17,8 +17,6 @@ import torch
 from evograd.benchmark import get_task
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import Level1Error
 from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import required_tolerance
-
-
 def _active_names(op) -> tuple[str, ...]:
     from evograd.opdecl.activity import Active
 

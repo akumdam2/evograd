@@ -21,6 +21,7 @@ _DIMS = ("B", "HQ", "HK", "T", "D")
 #: The observed Qwen3-0.6B configuration: 16 query heads over 8 KV heads, batch
 #: 2 x sequence 2048, 28 invocations per step.
 
+
 _CORRECTNESS = tuple(
     Workload(dims=dict(B=b, HQ=hq, HK=hk, T=t, D=d), dtype=dtype)
     for b, hq, hk, t, d in (

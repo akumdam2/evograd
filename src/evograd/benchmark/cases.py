@@ -92,6 +92,31 @@ def observed_workloads(
     return tuple(workloads)
 
 
+def observed_workloads_if_harvested(
+    workload_name: str,
+    task: str,
+    **kwargs,
+) -> tuple[Workload, ...]:
+    """:func:`observed_workloads`, or ``()`` when that workload has no snapshot.
+
+    A workload package can exist long before anyone has run its harvest -- the
+    snapshot is *derived* from a GPU run, not authored -- and a registry must
+    stay importable in the meantime. This is the form a second architecture
+    uses: its suite appears the moment the snapshot is tracked, and no
+    declaration needs editing to make that happen.
+
+    Distinct from a bare ``try/except`` at each call site, which would also
+    swallow a *corrupt* snapshot. Only "not harvested yet" is tolerated here; a
+    snapshot that exists and fails its hash check still raises, because a
+    silently-empty suite and a broken one are different problems.
+    """
+    from evograd.benchmark.topdown import has_snapshot
+
+    if not has_snapshot(workload_name):
+        return ()
+    return observed_workloads(workload_name, task, **kwargs)
+
+
 @dataclasses.dataclass(frozen=True)
 class ObservedBinding:
     """One model's observed cases for one primitive.
@@ -125,35 +150,51 @@ class ObservedBinding:
     def workloads(self, primitive: OpDecl) -> tuple[Workload, ...]:
         """The cases this binding contributes, read from the frozen snapshot.
 
+        Empty when that workload has not been harvested yet, so a model package
+        can exist before its snapshot does. A snapshot that exists and fails its
+        hash check still raises.
+
         Overridable, which is the seam a test uses to exercise the binder with
         supplied cases rather than a registered workload.
         """
-        return observed_workloads(
+        return observed_workloads_if_harvested(
             self.workload,
             self.task,
             tolerances=primitive.tolerances if self.declared_tolerances else None,
         )
 
 
-def index_bindings(bindings: Iterable[ObservedBinding]) -> dict[str, ObservedBinding]:
-    """``{primitive: binding}``, refusing two workloads claiming one primitive.
+def index_bindings(
+    bindings: Iterable[ObservedBinding],
+) -> dict[str, tuple[ObservedBinding, ...]]:
+    """``{primitive: bindings}``, in the order the configurations were supplied.
 
-    A primitive can only serve one suite of observed cases under one name, so
-    two workloads binding to it is a configuration error rather than something
-    to merge -- and it has to be caught where the configurations meet, not in
-    whichever one happened to be read second.
+    Two models binding the same primitive is the ordinary case, not a
+    collision: two architectures may both run the same mathematics, and each
+    contributes its own observed suite under its own name. What is refused is a
+    real collision --
+    two bindings claiming the same primitive *and* the same suite name, which
+    would make the suite ambiguous about whose widths it holds.
+
+    Ordering is by supply order, so a caller that always passes the same
+    configurations in the same order always gets the same suites in the same
+    place. The registry supplies them in a fixed order for exactly that reason.
     """
-    indexed: dict[str, ObservedBinding] = {}
+    indexed: dict[str, list[ObservedBinding]] = {}
+    seen: dict[tuple[str, str], ObservedBinding] = {}
     for binding in bindings:
-        existing = indexed.get(binding.task)
-        if existing is not None:
+        identity = (binding.task, binding.suite)
+        clash = seen.get(identity)
+        if clash is not None:
             raise ValueError(
-                f"workloads {existing.workload!r} and {binding.workload!r} both bind "
-                f"observed cases to primitive {binding.task!r}; a suite name must "
-                f"identify which model observed them"
+                f"workloads {clash.workload!r} and {binding.workload!r} both bind "
+                f"observed cases to primitive {binding.task!r} under the suite name "
+                f"{binding.suite!r}; a suite name must identify which model observed "
+                f"the cases in it"
             )
-        indexed[binding.task] = binding
-    return indexed
+        seen[identity] = binding
+        indexed.setdefault(binding.task, []).append(binding)
+    return {task: tuple(items) for task, items in indexed.items()}
 
 
 def bind_suite_cases(primitive: OpDecl) -> OpDecl:
@@ -218,34 +259,61 @@ def bind_observed_cases(
 ) -> OpDecl:
     """Return the executable task for one primitive, with its observed cases.
 
-    A primitive none of ``bindings`` names is returned unchanged, which is what
-    makes this safe to apply across the whole registry.
+    Every binding that names this primitive is applied, in supply order, so two
+    architectures can each contribute a suite to the same contract. A primitive
+    none of ``bindings`` names is returned unchanged, which is what makes this
+    safe to apply across the whole registry.
+
+    A binding whose workload has no tracked snapshot contributes nothing and is
+    skipped: a workload package exists before its harvest has been run, and the
+    suite appears the moment the snapshot is tracked. That is not the same as
+    tolerating a broken snapshot -- one that exists and fails its hash check
+    still raises, from :func:`observed_workloads_if_harvested`.
     """
-    binding = index_bindings(bindings).get(primitive.name)
-    if binding is None:
+    applicable = index_bindings(bindings).get(primitive.name)
+    if not applicable:
         return primitive
-    observed = binding.workloads(primitive)
-    if not observed:
-        return primitive
-    coverage = (
-        observed + primitive.coverage
-        if binding.coverage == "prepend"
-        else primitive.coverage + observed
-    )
+
+    coverage = primitive.coverage
     suites = dict(primitive.benchmark_suites)
-    if binding.suite in suites:
-        raise ValueError(
-            f"{primitive.name}: suite {binding.suite!r} is already declared on the "
-            f"primitive; observed cases must be bound in exactly one place"
+    mirrors: list[str] = []
+    contributed = False
+
+    for binding in applicable:
+        observed = binding.workloads(primitive)
+        if not observed:
+            continue
+        contributed = True
+        coverage = (
+            observed + coverage
+            if binding.coverage == "prepend"
+            else coverage + observed
         )
-    suites[binding.suite] = observed
-    if binding.mirrors_coverage is not None:
-        if binding.mirrors_coverage not in suites:
+        if binding.suite in suites:
             raise ValueError(
-                f"{primitive.name}: no suite named {binding.mirrors_coverage!r} to "
-                f"follow the coverage it mirrors"
+                f"{primitive.name}: suite {binding.suite!r} is already declared on the "
+                f"primitive; observed cases must be bound in exactly one place"
             )
-        suites[binding.mirrors_coverage] = coverage
+        suites[binding.suite] = observed
+        if binding.mirrors_coverage is not None:
+            mirrors.append(binding.mirrors_coverage)
+
+    if not contributed:
+        return primitive
+
+    # The mirror is applied once, after every binding has joined, so a suite
+    # that serves the coverage under a name holds the *final* coverage. Doing
+    # it inside the loop would leave it holding whatever the coverage was when
+    # the binding that declared it was applied -- stale the moment a second
+    # model contributes.
+    for mirrored in mirrors:
+        if mirrored not in suites:
+            raise ValueError(
+                f"{primitive.name}: no suite named {mirrored!r} to follow the "
+                f"coverage it mirrors"
+            )
+        suites[mirrored] = coverage
+
     task = dataclasses.replace(primitive, coverage=coverage, benchmark_suites=suites)
     task.validate()
     return task
@@ -258,4 +326,5 @@ __all__ = [
     "bind_suite_cases",
     "index_bindings",
     "observed_workloads",
+    "observed_workloads_if_harvested",
 ]

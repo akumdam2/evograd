@@ -186,6 +186,68 @@ class TestQwenOwnershipSplit(unittest.TestCase):
                 )
 
 
+class TestLlamaOwnershipSplit(unittest.TestCase):
+    """The same split, applied to the second harvested architecture.
+
+    The Qwen3 class above pins one model's boundary. Repeating it here is not
+    duplication for its own sake: the split is a property of *each* workload
+    package, and a second architecture integrated without it would leave the
+    layering test passing on the model that was checked while the new one drifts.
+    """
+
+    LLAMA_BENCH = EVOGRAD / "benchmark" / "topdown" / "llama3_8b"
+    LLAMA_EVAL = EVOGRAD / "evaluation" / "workloads" / "llama3_8b"
+
+    def test_llama_benchmark_side_imports_no_evaluation(self):
+        for path in _python_files(self.LLAMA_BENCH):
+            offenders = [
+                name for name in _resolved_imports(path)
+                if name.startswith("evograd.evaluation")
+            ]
+            self.assertEqual(offenders, [], f"{path}: {offenders}")
+
+    def test_the_evaluation_side_exists_and_owns_the_verdicts(self):
+        for relative in ("level1/verify.py", "level1/calibrate.py", "level1/cli.py",
+                         "level2/qkv_rope.py", "level2/attention.py",
+                         "level2/swiglu_mlp.py", "level2/residual_rmsnorm.py",
+                         "level2/calibrate.py", "level2/negative_controls.py",
+                         "level3/replay.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.LLAMA_EVAL / relative).is_file())
+
+    def test_the_benchmark_side_keeps_capture_and_artifact(self):
+        for relative in ("levels/level1/manifest.py",
+                         "levels/level2/manifest.py",
+                         "levels/level3/artifact.py",
+                         "levels/level3/capture.py",
+                         "levels/level3/prepare.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.LLAMA_BENCH / relative).is_file())
+
+    def test_each_site_package_owns_its_contract_reference_and_capture(self):
+        """Four site packages, as Qwen3 has, rather than four flat modules."""
+        from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest
+
+        for site in manifest.SITES:
+            for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
+                with self.subTest(site=site, part=part):
+                    self.assertTrue(
+                        (self.LLAMA_BENCH / "levels" / "level2" / site / part).is_file(),
+                        f"{site}/{part} missing",
+                    )
+
+    def test_no_verdict_function_is_left_on_the_benchmark_side(self):
+        for path in _python_files(self.LLAMA_BENCH):
+            source = path.read_text(encoding="utf-8")
+            for marker in ("def run_verify(", "def run_calibration(",
+                           "def declared_gate(", "def required_tolerance("):
+                self.assertNotIn(
+                    marker, source,
+                    f"{path} defines {marker.strip('def (')}; judgment belongs to "
+                    f"evograd.evaluation",
+                )
+
+
 class TestTaskNamesAreUnique(unittest.TestCase):
     """Aggregating three sources is where a name collision would first bite."""
 

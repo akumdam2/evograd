@@ -531,7 +531,7 @@ def summarize(report: dict[str, Any]) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level3.replay",
+        prog="python -m evograd.evaluation.workloads.qwen3_0_6b.level3.replay",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

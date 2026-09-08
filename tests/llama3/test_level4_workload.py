@@ -336,6 +336,30 @@ class TestItActuallyHarvests(unittest.TestCase):
             for config in entry["configurations"]:
                 self.assertTrue(config["provenance"]["component"])
 
+    def test_the_snapshot_carries_all_four_level2_boundaries(self):
+        """A Level-2 entry names a declared operator and resolves its supporting
+        configurations out of the harvest. All four resolve; the one that could
+        not before is the projection prefix, which needed ``llama3_qkv_rope`` to
+        exist because Llama has no per-head q/k norm to point a shared entry at.
+        """
+        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
+
+        snapshot = extract(self.manifest, layer_index=1)
+        self.assertEqual(
+            sorted(snapshot["tasks"]),
+            # Alphabetical, and all four this model's own: a snapshot records
+            # what one captured step observed, so it is keyed by the tasks
+            # those observations belong to and never by another model's.
+            ["llama3_attention", "llama3_qkv_rope", "llama3_residual_rmsnorm",
+             "llama3_swiglu_mlp"],
+        )
+        # Two supporting roles fewer than Qwen3's projection task: there is no
+        # `q_norm` and no `k_norm` in this model to observe.
+        self.assertEqual(
+            sorted(snapshot["tasks"]["llama3_qkv_rope"]["supporting"]),
+            ["consumer", "enclosing_attention", "kv_projection", "q_projection"],
+        )
+
     def test_the_extracted_snapshot_names_llama_not_qwen(self):
         from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
 
@@ -346,3 +370,84 @@ class TestItActuallyHarvests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestObservedAttentionMatchesTheArchitecture(unittest.TestCase):
+    """The harvest must record the operator the model has, not a rewriting of it.
+
+    Transformers reaches SDPA two ways. With ``is_causal=True`` it passes keys
+    as the model holds them -- one per KV head. With an explicit attention mask
+    it cannot use ``enable_gqa``, so ``repeat_kv`` materialises the KV heads up
+    to the query-head count first. Both compute the same attention; only one
+    presents the model's own shapes.
+
+    Which path is taken has changed between Transformers releases -- 4.57.6
+    builds the mask, 5.16.1 does not -- so this is asserted against the
+    observation, not against a version. A harvest that silently recorded 32 key
+    heads for an 8-KV-head model would put a shape in the snapshot that the
+    model never holds, and every kernel evolved against it would target tensors
+    four times too large.
+    """
+
+    @staticmethod
+    def _observation(key_heads: int):
+        """A minimal observation carrying one SDPA event."""
+        from evograd.benchmark.topdown.common.observe import Event, Observation
+
+        def tensor(shape):
+            return {"kind": "tensor", "shape": list(shape), "dtype": "torch.bfloat16",
+                    "device": "cuda", "requires_grad": True,
+                    "stride": [0, 0, 0, 0], "contiguous": False, "numel": 1}
+
+        observation = Observation(workload_id="test", config_hash="test")
+        observation.events.append(Event(
+            ordinal=0, phase="forward", task="sdpa", module_path="m",
+            module_class=None, role="scaled_dot_product_attention", layer_index=0,
+            inputs=[tensor((2, 32, 2048, 128)),
+                    tensor((2, key_heads, 2048, 128)),
+                    tensor((2, key_heads, 2048, 128))],
+            input_kwargs={}, outputs=[tensor((2, 32, 2048, 128))], params={},
+            attrs={"is_causal": key_heads == 8, "enable_gqa": key_heads == 8,
+                   "attn_mask_provided": key_heads != 8},
+            provenance={},
+        ))
+        return observation
+
+    def test_grouped_keys_are_accepted(self):
+        from evograd.benchmark.topdown.common.observe import check_observed_attention
+
+        check_observed_attention(self._observation(8), dict(LLAMA_3_8B))
+
+    def test_materialised_keys_are_refused_and_the_message_says_why(self):
+        from evograd.benchmark.topdown.common.observe import (
+            ObservedOperatorError,
+            check_observed_attention,
+        )
+
+        with self.assertRaises(ObservedOperatorError) as caught:
+            check_observed_attention(self._observation(32), dict(LLAMA_3_8B))
+        message = str(caught.exception)
+        for expected in ("8 key/value heads", "32 key heads", "repeat_kv",
+                         "enable_gqa", "not written"):
+            self.assertIn(expected, message)
+
+    def test_a_model_without_grouped_query_attention_is_not_checked(self):
+        """MHA is not a violation -- there is nothing to group."""
+        from evograd.benchmark.topdown.common.observe import check_observed_attention
+
+        mha = {**LLAMA_3_8B, "num_key_value_heads": LLAMA_3_8B["num_attention_heads"]}
+        check_observed_attention(self._observation(32), mha)
+
+    def test_the_real_harvest_records_the_models_own_key_heads(self):
+        """End to end on this machine, at whatever Transformers is installed."""
+        if not HAVE_TRANSFORMERS:
+            self.skipTest("transformers is not installed")
+        from evograd.benchmark.topdown.common.harvest import run_harvest
+        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
+
+        manifest = run_harvest(WORKLOAD, tiny_spec(seq_len=128))
+        sdpa = [c for c in manifest["configurations"] if c["task"] == "sdpa"]
+        self.assertEqual(len(sdpa), 1)
+        self.assertEqual(
+            sdpa[0]["inputs"][1]["shape"][1], LLAMA_3_8B["num_key_value_heads"]
+        )

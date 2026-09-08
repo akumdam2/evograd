@@ -23,6 +23,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from evograd.benchmark import TASKS, get_task
 from evograd.benchmark.cases import (
@@ -293,22 +294,29 @@ class TestSuiteCommandOwnership(unittest.TestCase):
 
     def test_a_run_without_a_device_is_refused_before_any_work(self):
         """The suite times with CUDA events, so it refuses early rather than
-        failing per operator. Same message, same exit code, new owner."""
+        failing per operator. Same message, same exit code, new owner.
+
+        The absent device is stated rather than inherited from the host: this
+        asserts what the command does when there is no CUDA device, and on a
+        GPU machine the real answer is that there is one. Reading the host
+        would make the test assert something different depending on where it
+        ran, which is the opposite of pinning a behaviour.
+        """
+        import torch
+
         from evograd import suite_cli
 
         stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            with self.assertRaises(SystemExit) as raised:
-                suite_cli.main(
-                    ["--candidate-baseline", "liger", "--out", "/tmp",
-                     "--op", "not_an_operator"]
-                )
+        with mock.patch.object(torch.cuda, "is_available", return_value=False):
+            with contextlib.redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as raised:
+                    suite_cli.main(
+                        ["--candidate-baseline", "liger", "--out", "/tmp",
+                         "--op", "not_an_operator"]
+                    )
         self.assertEqual(raised.exception.code, 2)
         self.assertIn("needs a CUDA device", stderr.getvalue())
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestObservedBindingOwnership(unittest.TestCase):
@@ -339,9 +347,13 @@ class TestObservedBindingOwnership(unittest.TestCase):
         """The manifest is the only place the table is written down."""
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level1 import manifest
 
+        owners = {
+            self.MANIFEST,
+            REPO / "src/evograd/benchmark/topdown/llama3_8b/levels/level1/manifest.py",
+        }
         declaring = []
         for path in (REPO / "src/evograd").rglob("*.py"):
-            if "__pycache__" in path.parts or path == self.MANIFEST:
+            if "__pycache__" in path.parts or path in owners:
                 continue
             if "ObservedBinding(" in path.read_text():
                 declaring.append(str(path.relative_to(REPO)))
@@ -432,14 +444,125 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
                 [self._Supplied("w", "rmsnorm", "legacy")],
             )
 
-    def test_two_workloads_claiming_one_primitive_are_refused(self):
-        with self.assertRaisesRegex(ValueError, "both bind"):
+    def test_two_workloads_may_bind_one_primitive_under_distinct_suites(self):
+        """The supported case: one contract, two architectures, two suites."""
+        indexed = index_bindings([
+            ObservedBinding("model_a", "rmsnorm", "a_observed"),
+            ObservedBinding("model_b", "rmsnorm", "b_observed"),
+        ])
+        self.assertEqual(len(indexed["rmsnorm"]), 2)
+        self.assertEqual([b.suite for b in indexed["rmsnorm"]],
+                         ["a_observed", "b_observed"])
+
+    def test_the_same_primitive_and_suite_twice_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "under the suite name"):
             index_bindings([
-                ObservedBinding("model_a", "rmsnorm", "a_observed"),
-                ObservedBinding("model_b", "rmsnorm", "b_observed"),
+                ObservedBinding("model_a", "rmsnorm", "shared_observed"),
+                ObservedBinding("model_b", "rmsnorm", "shared_observed"),
             ])
 
     def test_no_bindings_at_all_is_a_no_op(self):
         base = self._primitive()
         self.assertIs(bind_observed_cases(base), base)
         self.assertIs(bind_observed_cases(base, []), base)
+
+
+class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
+    """Qwen3 and Llama-3 both run RMSNorm; each contributes its own suite.
+
+    Synthetic bindings supply their own cases, so this exercises the binder's
+    rules -- distinct suites coexisting, ordering, coverage mirroring, refusal
+    of a real collision, and no mutation -- without needing either model's
+    harvest to have been run.
+    """
+
+    class _Supplied(ObservedBinding):
+        """A binding whose cases are handed over rather than read."""
+
+        def workloads(self, primitive):
+            from evograd.opdecl import Workload
+
+            tag = len(self.workload)
+            return (
+                Workload(dims=dict(rows=tag, hidden=5), dtype="float32"),
+                Workload(dims=dict(rows=tag + 1, hidden=9), dtype="float32"),
+            )
+
+    def _base(self):
+        return bind_suite_cases(PRIMITIVES["rmsnorm"])
+
+    def _both(self, **kwargs):
+        return (
+            self._Supplied("model_one", "rmsnorm", "one_observed", **kwargs),
+            self._Supplied("model_twoo", "rmsnorm", "two_observed"),
+        )
+
+    def test_distinct_suites_coexist_on_one_primitive(self):
+        task = bind_observed_cases(self._base(), self._both())
+        self.assertIn("one_observed", task.benchmark_suites)
+        self.assertIn("two_observed", task.benchmark_suites)
+        self.assertNotEqual(
+            task.benchmark_suites["one_observed"],
+            task.benchmark_suites["two_observed"],
+        )
+
+    def test_the_same_primitive_and_suite_twice_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "under the suite name"):
+            index_bindings([
+                ObservedBinding("model_a", "rmsnorm", "shared_observed"),
+                ObservedBinding("model_b", "rmsnorm", "shared_observed"),
+            ])
+
+    def test_ordering_follows_the_supplied_order(self):
+        first, second = self._both()
+        forward = bind_observed_cases(self._base(), (first, second))
+        backward = bind_observed_cases(self._base(), (second, first))
+        base_len = len(self._base().coverage)
+        self.assertEqual(
+            forward.coverage[base_len:],
+            forward.benchmark_suites["one_observed"]
+            + forward.benchmark_suites["two_observed"],
+        )
+        self.assertEqual(
+            backward.coverage[base_len:],
+            backward.benchmark_suites["two_observed"]
+            + backward.benchmark_suites["one_observed"],
+        )
+
+    def test_the_coverage_mirror_follows_both_contributions(self):
+        task = bind_observed_cases(
+            self._base(), self._both(mirrors_coverage="coverage")
+        )
+        self.assertEqual(task.benchmark_suites["coverage"], task.coverage)
+        for suite in ("one_observed", "two_observed"):
+            for case in task.benchmark_suites[suite]:
+                self.assertIn(case, task.coverage)
+
+    def test_neither_binding_mutates_the_primitive(self):
+        primitive = PRIMITIVES["rmsnorm"]
+        bind_observed_cases(self._base(), self._both())
+        self.assertEqual(primitive.benchmark_suites, {})
+        self.assertEqual(primitive.coverage, ())
+
+    def test_an_unharvested_workload_contributes_nothing(self):
+        """Llama-3-8B's snapshot does not exist yet, so its suites are empty
+        and no declaration had to be edited to say so."""
+        from evograd.benchmark.topdown import has_snapshot
+        from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+            OBSERVED_BINDINGS,
+        )
+
+        self.assertFalse(has_snapshot("llama_3_8b"))
+        base = self._base()
+        self.assertIs(bind_observed_cases(base, OBSERVED_BINDINGS), base)
+        self.assertNotIn("llama_3_8b_observed", TASKS["rmsnorm"].benchmark_suites)
+
+    def test_the_registry_supplies_both_models(self):
+        from evograd.benchmark.core.registry import _observed_bindings
+
+        workloads = {b.workload for b in _observed_bindings()}
+        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_8b"})
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -16,6 +16,7 @@ from __future__ import annotations
 import unittest
 
 from evograd.benchmark import TASKS, get_task, load_task, tasks_at_level
+from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest as llama_manifest
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.ops import PRIMITIVES, get_primitive
 
@@ -31,6 +32,16 @@ QWEN_LEVEL2 = (
     "qwen3_qkv_norm_rope",
     "qwen3_swiglu_mlp",
 )
+#: Llama-3-8B's four. A harvested architecture owns its Level-2 identities
+#: rather than borrowing another's, so these are four more tasks and not four
+#: more suites on Qwen3's.
+LLAMA_LEVEL2 = (
+    "llama3_attention",
+    "llama3_qkv_rope",
+    "llama3_residual_rmsnorm",
+    "llama3_swiglu_mlp",
+)
+MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2
 DELETED_LEGACY = ("af3_single_repr_block", "llama3_decoder_layer")
 
 
@@ -52,7 +63,7 @@ class TestPrimitiveRegistry(unittest.TestCase):
         )
 
     def test_no_fused_or_model_specific_task_appears(self):
-        for name in GENERIC_LEVEL2 + QWEN_LEVEL2 + DELETED_LEGACY:
+        for name in GENERIC_LEVEL2 + MODEL_LEVEL2 + DELETED_LEGACY:
             with self.subTest(op=name):
                 self.assertNotIn(name, PRIMITIVES)
 
@@ -72,12 +83,15 @@ class TestPrimitiveRegistry(unittest.TestCase):
             with self.subTest(op=name):
                 for suite in op.benchmark_suites:
                     self.assertNotIn("qwen3_0_6b", suite)
+                    self.assertNotIn("llama_3_8b", suite)
 
 
 class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
-        self.assertEqual(len(TASKS), len(PRIMITIVES) + len(GENERIC_LEVEL2) + len(QWEN_LEVEL2))
+        self.assertEqual(
+            len(TASKS), len(PRIMITIVES) + len(GENERIC_LEVEL2) + len(MODEL_LEVEL2)
+        )
 
     def test_contains_the_generic_level_two_tasks(self):
         for name in GENERIC_LEVEL2:
@@ -90,6 +104,26 @@ class TestTaskRegistry(unittest.TestCase):
             with self.subTest(op=name):
                 self.assertIn(name, TASKS)
                 self.assertEqual(TASKS[name].level, 2)
+
+    def test_contains_the_llama_level_two_tasks(self):
+        for name in LLAMA_LEVEL2:
+            with self.subTest(op=name):
+                self.assertIn(name, TASKS)
+                self.assertEqual(TASKS[name].level, 2)
+
+    def test_the_two_models_share_no_level_two_task(self):
+        """Each architecture's four boundaries are its own.
+
+        Three of Llama-3's four compute the same mathematics as Qwen3's, and
+        the implementation is shared. The *task* is not: a report row, a
+        candidate program and a calibration file all key off the name, so one
+        key serving two models' widths would make each of them ambiguous.
+        """
+        self.assertEqual(set(QWEN_LEVEL2) & set(LLAMA_LEVEL2), set())
+        self.assertEqual(
+            sorted(llama_manifest.SITE_TASKS.values()), sorted(LLAMA_LEVEL2)
+        )
+        self.assertEqual(sorted(manifest.SITE_TASKS.values()), sorted(QWEN_LEVEL2))
 
     def test_the_deleted_legacy_blocks_are_absent(self):
         for name in DELETED_LEGACY:

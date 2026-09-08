@@ -47,7 +47,13 @@ in this order:
    the case belongs to the suite, and calling it top-down coverage would claim
    evidence that does not exist.
 2. `topdown/<model>/` — cases *observed* in that model's captured run, read
-   from its frozen snapshot. Which primitives a model binds, under which suite
+   from its frozen snapshot. Two models may bind the same primitive: each
+   contributes its own named suite (`qwen3_0_6b_observed`,
+   `llama_3_8b_observed`) and the binder keeps both, in the order the registry
+   supplies them. Only a real collision — the same primitive under the same
+   suite name — is refused. A workload whose harvest has not been run
+   contributes nothing and blocks no import; a snapshot that exists and fails
+   its hash check still raises. Which primitives a model binds, under which suite
    name, whether the cases precede or follow the primitive's own coverage and
    which suite mirrors that coverage are all that model's decisions, and live
    in its own manifest — for Qwen3-0.6B, `OBSERVED_BINDINGS` in

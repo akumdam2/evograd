@@ -341,6 +341,28 @@ class TestTimedBaselineAndGate(unittest.TestCase):
             },
         )
 
+    def test_out_has_no_multiplier_and_was_not_widened_for_another_model(self):
+        """`out` measured 1.00 on this operator's 3072-wide intermediate.
+
+        Llama-3-8B's 14336-wide intermediate needs 2.4x, and carrying that here
+        would loosen a measured gate for a shape this model never runs -- it
+        would widen `out` on every Qwen3 case, correctness grid included, to pay
+        for another architecture. Llama-3 has its own task, `llama3_swiglu_mlp`,
+        and the multiplier lives there. This pins the separation.
+        """
+        op = get_task("qwen3_swiglu_mlp")
+        self.assertNotIn("out", op.tolerance_multipliers)
+        for case in op.correctness:
+            with self.subTest(dtype=case.dtype, dims=tuple(sorted(case.dims.items()))):
+                atol, rtol = op.tolerance_for(case, "out")
+                base_atol, base_rtol = op.tolerances[case.dtype]
+                self.assertEqual((atol, rtol), (base_atol, base_rtol))
+        observed = op.benchmark_workloads(suite="qwen3_0_6b_observed")[0]
+        self.assertEqual(observed.dims["I"], 3072)
+        self.assertNotIn("llama_3_8b_observed", op.benchmark_suites)
+
+
+
     def test_the_real_pair_passes_verify_runtime_forward(self):
         from evograd.opdecl import baselines
 

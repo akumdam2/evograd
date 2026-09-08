@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 gpu = ["triton"]
 llm = ["openai"]
-dev = ["black"]
+dev = ["black", "pytest>=7"]
 baselines = ["liger-kernel"]
 # Level-4 model workloads. Qwen3 arrived in transformers 4.51.0;
 # the milestone was developed and measured against 5.16.1. Llama predates
@@ -42,3 +42,11 @@ evograd = ["evolve/*.yaml", "benchmark/topdown/*/harvest/*.json"]
 
 [tool.black]
 line-length = 100
+
+[tool.pytest.ini_options]
+# `tests` is a real package (tests/__init__.py) so the cross-module fixture
+# imports (`from tests._registry_fixture import ...`) resolve to this repo.
+# Without the repo root ahead of site-packages, an unrelated installed
+# top-level `tests` package shadows it and collection fails.
+pythonpath = [".", "src"]
+testpaths = ["tests"]

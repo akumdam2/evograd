@@ -115,13 +115,23 @@ class TestDerivedNaming(unittest.TestCase):
                     "tvd",
                 ],
                 2: [
+                    # Qwen3-0.6B's residual fusion, under the generic key it
+                    # was declared with before a second architecture existed.
                     "fused_add_rms_norm",
                     "fused_linear_cross_entropy",
                     "fused_moe_swiglu",
                     "gemm_leaky_relu",
                     "layernorm_linear",
-                    # Derived from the Qwen3-0.6B Level-4 harvest rather than
-                    # specified up front.
+                    # Each harvested workload's own four decoder boundaries,
+                    # rather than operators specified up front. Three of the
+                    # four compute the same mathematics in both models and
+                    # share one implementation; the tasks stay distinct because
+                    # the cases, widths, provenance and tolerances are the
+                    # model's, and a report row keys off the name.
+                    "llama3_attention",
+                    "llama3_qkv_rope",
+                    "llama3_residual_rmsnorm",
+                    "llama3_swiglu_mlp",
                     "qwen3_attention",
                     "qwen3_qkv_norm_rope",
                     "qwen3_swiglu_mlp",

@@ -77,16 +77,25 @@ def _register(discovered: dict[str, tuple[str, OpDecl]], op: OpDecl, owner: str)
 def _observed_bindings() -> tuple:
     """Every model's observed-case configuration, from its own manifest.
 
+    Two models may bind the same primitive; each contributes its own named
+    suite and the binder keeps both.
+
     This is the assembly point, and the concrete-model import belongs here
     rather than inside the binder: :mod:`evograd.benchmark.cases` knows how to
     apply a configuration, each model owns which primitives it binds, and this
     function is the one place that says which models there are.
     """
+    from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+        OBSERVED_BINDINGS as LLAMA_3_8B,
+    )
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import (
         OBSERVED_BINDINGS as QWEN3_0_6B,
     )
 
-    return QWEN3_0_6B
+    # Order is fixed and part of the contract: a primitive both models bind
+    # receives Qwen3's suite first and Llama-3's second, so the suites a task
+    # serves are in the same place on every import.
+    return QWEN3_0_6B + LLAMA_3_8B
 
 
 def _discover() -> dict[str, OpDecl]:
@@ -127,7 +136,10 @@ def _model_task_packages() -> tuple[str, ...]:
     that is not an executable pair contract, so "everything under topdown" would
     be the wrong rule.
     """
-    return ("evograd.benchmark.topdown.qwen3_0_6b.levels.level2",)
+    return (
+        "evograd.benchmark.topdown.qwen3_0_6b.levels.level2",
+        "evograd.benchmark.topdown.llama3_8b.levels.level2",
+    )
 
 
 #: Every executable task, by the name a report, a candidate and a CLI all use.

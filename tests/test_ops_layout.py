@@ -136,19 +136,31 @@ class TestFusedTasksLiveInBenchmark(unittest.TestCase):
 
 class TestRegistryComposition(unittest.TestCase):
     def test_expected_counts_per_level(self):
-        """20 reusable primitives, 4 generic fusions, 4 Qwen-specific ones.
+        """20 reusable primitives, 4 generic fusions, 4 Qwen and 4 Llama ones.
 
         The legacy direct-block tasks -- ``llama3_decoder_layer`` and
         ``af3_single_repr_block`` -- have been deleted, so no task declares
         level 3. Whole-model tasks are WorkloadDecls, not pair contracts, and
         are counted on their own registry.
+
+        Each harvested architecture owns its four Level-2 identities rather
+        than sharing another model's. ``llama3_qkv_rope`` is a separate
+        declaration for a separate reason as well: ``LlamaAttention`` has no
+        per-head query/key RMSNorm, so it is the same three projections and the
+        same rotation with two fewer weights and two fewer gradients -- a
+        different computation, not a second suite on Qwen's.
         """
         counts: dict[int, int] = {}
         for op in TASKS.values():
             counts[op.level] = counts.get(op.level, 0) + 1
-        self.assertEqual(counts, {1: 20, 2: 8})
+        self.assertEqual(counts, {1: 20, 2: 12})
         self.assertEqual(len(PRIMITIVES), 20)
-        self.assertEqual(len(TASKS), 28)
+        self.assertEqual(len(TASKS), 32)
+        for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope",
+                     "llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp",
+                     "llama3_residual_rmsnorm"):
+            self.assertIn(name, TASKS)
+            self.assertEqual(TASKS[name].level, 2)
         self.assertEqual(
             {name: decl.level for name, decl in WORKLOADS.items()},
             {"alphafold3": 4},

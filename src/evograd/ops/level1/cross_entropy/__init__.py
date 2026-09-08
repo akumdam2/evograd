@@ -44,6 +44,7 @@ _CORRECTNESS = (
 #: the snapshot records that wrapper as supporting provenance so the chain from
 #: the model's logits to this shape is traceable.
 
+
 op = declare_op(
     name="cross_entropy",
     level=1,

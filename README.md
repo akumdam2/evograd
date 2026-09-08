@@ -464,7 +464,7 @@ claims:
 | --- | --- |
 | `evograd.opdecl` | declaration infrastructure and shared types |
 | `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
-| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership |
+| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3-8B have four each, and neither borrows the other's key |
 | `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
 | `evograd.cli` / `evograd.suite_cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
 
