@@ -15,6 +15,8 @@ from evograd.atenir.primitive_triton.dispatch import make_kernel
 from evograd.benchmark import get_task
 from evograd.pipelines.b_dispatch.program_codegen import (
     _ProgramBuilder,
+    _forward_subgraph,
+    _node_refs,
     _ordered_arg_exprs,
 )
 from evograd.pipelines.b_dispatch.wrapper_codegen import (
@@ -401,3 +403,79 @@ class TestEvolveConfigRendering(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForwardSubgraphSplit(unittest.TestCase):
+    """Splitting the joint trace into its forward cone.
+
+    The extractor returns forward outputs ahead of the gradients; the codegen
+    has to emit a forward entry point over the forward placeholders alone.
+    """
+
+    # x -> sq -> mean -> y   (forward)      dy, mean -> gsq -> gx   (backward)
+    NODES = [
+        {"name": "sq", "args_ordered": [{"kind": "node", "name": "x"}]},
+        {"name": "mean", "args_ordered": [
+            {"kind": "node", "name": "sq"},
+            {"kind": "shape_list", "items": [{"kind": "scalar", "value": -1}]},
+        ]},
+        {"name": "y", "args_ordered": [
+            {"kind": "node", "name": "x"}, {"kind": "node", "name": "mean"}]},
+        {"name": "gsq", "args_ordered": [
+            {"kind": "node", "name": "dy"}, {"kind": "node", "name": "mean"}]},
+        {"name": "gx", "args_ordered": [
+            {"kind": "node", "name": "gsq"}, {"kind": "node", "name": "x"}]},
+    ]
+
+    def test_the_cone_excludes_backward_nodes_and_stays_topological(self):
+        self.assertEqual(
+            _forward_subgraph(self.NODES, ["y"], {"dy"}), ["sq", "mean", "y"]
+        )
+
+    def test_a_cone_reaching_an_upstream_gradient_refuses(self):
+        # Not separable: emitting a forward from it would silently require a
+        # gradient the forward is never given. Refuse rather than emit.
+        self.assertIsNone(_forward_subgraph(self.NODES, ["gx"], {"dy"}))
+
+    def test_node_refs_reads_shape_list_members(self):
+        self.assertEqual(_node_refs(self.NODES[1]), ["sq"])
+
+    def test_node_refs_falls_back_to_the_pre_args_ordered_schema(self):
+        self.assertEqual(
+            _node_refs({"name": "z", "input_nodes": [{"name": "a"}, {"name": "b"}]}),
+            ["a", "b"],
+        )
+
+
+class TestGeneratedForwardWrapper(unittest.TestCase):
+    """Pipeline B's forward must come from the graph, not the eager reference."""
+
+    def test_the_forward_calls_the_generated_program(self):
+        op = get_task("rmsnorm")
+        wrapper = render_autograd_pair_wrapper("m:f", op, has_generated_forward=True)
+        self.assertIn("_outs = run_forward_program(x, weight)", wrapper)
+        self.assertNotIn("_load_forward_callable", wrapper)
+
+    def test_without_a_generated_forward_it_still_falls_back_to_eager(self):
+        op = get_task("rmsnorm")
+        wrapper = render_autograd_pair_wrapper("m:f", op, has_generated_forward=False)
+        self.assertIn("_load_forward_callable", wrapper)
+        self.assertNotIn("run_forward_program", wrapper)
+
+    def test_the_generated_forward_wrapper_executes(self):
+        import torch
+
+        op = get_task("rmsnorm")
+        source = (
+            "def run_forward_program(*a):\n"
+            "    return (a[0] * 2.0,)\n"
+            "def run_graph_program(*a):\n"
+            "    return tuple(torch.zeros_like(t) for t in a[1:])\n"
+            + render_autograd_pair_wrapper("m:f", op, has_generated_forward=True)
+        )
+        namespace = {"torch": torch}
+        exec(compile(source, "<generated>", "exec"), namespace)
+        x, weight = torch.randn(4, 8), torch.randn(8)
+        y, saved = namespace[op.forward_fn_name](x, weight)
+        self.assertTrue(torch.equal(y, x * 2.0))
+        self.assertEqual(len(saved), 2)

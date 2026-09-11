@@ -48,7 +48,9 @@ def grad_indices(op: OpDecl) -> list[int]:
     return [graph_grad_names.index(by_grad[g]) for g in op.grad_names()]
 
 
-def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
+def render_autograd_pair_wrapper(
+    forward: str, op: OpDecl, *, has_generated_forward: bool = False
+) -> str:
     tensor_names = _tensor_args(op)
     scalar_inactive = _scalar_inactive(op)
     indices = grad_indices(op)
@@ -102,28 +104,73 @@ def render_autograd_pair_wrapper(forward: str, op: OpDecl) -> str:
         f"    return ({ret})"
     )
 
-    body = f'''
+    q = "\"\"\""
+    eager_preamble = "\n".join([
+        "",
+        f"_FORWARD_SPEC = {forward!r}",
+        "",
+        "",
+        "def _load_forward_callable():",
+        "    from evograd.opdecl.importing import resolve_callable",
+        "",
+        "    return resolve_callable(_FORWARD_SPEC)",
+        "",
+        "",
+    ])
 
-_FORWARD_SPEC = {forward!r}
+    if has_generated_forward:
+        # Both halves now come from the same extracted graph. `run_forward_program`
+        # takes the forward placeholders only; scalar inactive args were baked into
+        # the trace as literals, exactly as they already are in the backward, so
+        # they are accepted and unused here for the same reason.
+        bind = (
+            f"    {forward_capture} = _outs"
+            if len(outs) > 1
+            else f"    {forward_capture} = _outs[0]"
+        )
+        forward_def = "\n".join([
+            f"def {op.forward_fn_name}({forward_sig}):",
+            f"    {q}Layer 2: this *is* the implementation, not a forwarder to a private twin.",
+            "",
+            "    Both halves are derived from the same AtenIR graph: this calls",
+            "    `run_forward_program`, the backward calls `run_graph_program`.",
+            "",
+            "    Conservative seed -- only the original forward inputs are saved, so",
+            "    the backward recomputes what it needs. Evolution may replace the",
+            "    launch strategy and the saved state together.",
+            f"    {q}",
+            unused_scalars.rstrip("\n"),
+            f"    _outs = run_forward_program({', '.join(tensor_names)})",
+            bind,
+            f"    return {forward_capture}, {saved_tuple}",
+            "",
+        ])
+        preamble = ""
+    else:
+        # A gradients-only graph, or a trace whose forward cone could not be
+        # separated from the upstream gradients. Fall back to the eager
+        # reference -- what this seed did unconditionally before the extractor
+        # started returning forward outputs.
+        forward_def = "\n".join([
+            f"def {op.forward_fn_name}({forward_sig}):",
+            f"    {q}Layer 2: forwards to the eager reference.",
+            "",
+            "    This graph carries no forward outputs, so there is no generated",
+            "    forward to call and only the backward is derived from AtenIR.",
+            f"    {q}",
+            f"    {forward_capture} = _load_forward_callable()({fwd_call})",
+            f"    return {forward_capture}, {saved_tuple}",
+            "",
+        ])
+        preamble = eager_preamble
 
-
-def _load_forward_callable():
-    from evograd.opdecl.importing import resolve_callable
-
-    return resolve_callable(_FORWARD_SPEC)
-
-
-def {op.forward_fn_name}({forward_sig}):
-    """Layer 2: this *is* the implementation, not a forwarder to a private twin.
-
-    Conservative seed -- only the original forward inputs are saved. Evolution
-    may replace the launch strategy and the saved state together.
-    """
-    {forward_capture} = _load_forward_callable()({fwd_call})
-    return {forward_capture}, {saved_tuple}
-
-
-def {op.backward_fn_name}({backward_sig}):
-{backward_body}
-'''
+    body = "\n".join([
+        "",
+        preamble,
+        forward_def,
+        "",
+        f"def {op.backward_fn_name}({backward_sig}):",
+        backward_body,
+        "",
+    ])
     return body + render_deployment_layer(op)

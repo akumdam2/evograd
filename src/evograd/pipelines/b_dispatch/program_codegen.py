@@ -436,6 +436,58 @@ def _ordered_arg_exprs(args_ordered: list[dict]) -> list[str]:
     return arg_exprs
 
 
+def _node_refs(node: dict) -> list[str]:
+    """Every node this one reads, by name.
+
+    ``args_ordered`` is authoritative when present (it carries scalars and
+    shape lists too); ``predecessor_ids`` / ``input_nodes`` are the fallbacks
+    for graphs serialized before it existed.
+    """
+    refs: list[str] = []
+    args_ordered = node.get("args_ordered")
+    if args_ordered is not None:
+        for entry in args_ordered:
+            kind = entry.get("kind")
+            if kind in ("node", "sym_node"):
+                refs.append(entry["name"])
+            elif kind == "shape_list":
+                refs += [
+                    it["name"] for it in entry["items"]
+                    if it.get("kind") in ("node", "sym_node")
+                ]
+        return refs
+    refs += list(node.get("predecessor_ids") or [])
+    refs += [n["name"] for n in (node.get("input_nodes") or []) if "name" in n]
+    return refs
+
+
+def _forward_subgraph(
+    call_nodes: list[dict], forward_outputs: list[str], grad_placeholders: set[str]
+) -> list[str] | None:
+    """Node names needed to compute ``forward_outputs``, in topological order.
+
+    Returns ``None`` if the cone reaches an upstream-gradient placeholder,
+    which would mean the trace is not separable and no forward can be emitted
+    from it. Callers fall back to the previous behaviour in that case rather
+    than emitting something wrong.
+    """
+    produced = {n["name"]: n for n in call_nodes}
+    needed: set[str] = set()
+    stack = list(forward_outputs)
+    while stack:
+        name = stack.pop()
+        if name in needed:
+            continue
+        if name in grad_placeholders:
+            return None
+        node = produced.get(name)
+        if node is None:  # a placeholder or a constant: nothing to emit
+            continue
+        needed.add(name)
+        stack.extend(_node_refs(node))
+    return [n["name"] for n in call_nodes if n["name"] in needed]
+
+
 def generate_dispatch_program(graph: dict) -> str:
     """Build the full dispatch_program.py source text for an AtenIR graph dict."""
     from evograd.atenir.primitive_triton.dispatch import make_kernel
@@ -448,6 +500,7 @@ def generate_dispatch_program(graph: dict) -> str:
 
     builder = _ProgramBuilder()
     call_lines: list[str] = []
+    line_by_name: dict[str, str] = {}
     layout_used: set[str] = set()
 
     def _tuple_expr(entry) -> str:
@@ -565,13 +618,51 @@ def generate_dispatch_program(graph: dict) -> str:
             arg_exprs = [_pyname(a) for a in (node.get("predecessor_ids") or [])]
         kernel = make_kernel(node)
         call_expr = builder.call_expr_for_node(node, kernel, arg_exprs)
-        call_lines.append(f"    {_pyname(name)} = {call_expr}  # {name}: {target}")
+        _line = f"    {_pyname(name)} = {call_expr}  # {name}: {target}"
+        call_lines.append(_line)
+        line_by_name[name] = _line
 
-    output_names = out_node["args"][0]
-    trailing_comma = "," if len(output_names) == 1 else ""
+    output_names = list(out_node["args"][0])
+    # An autograd-mode graph now returns the forward outputs ahead of the
+    # gradients. Slice them off here so `run_graph_program` keeps returning
+    # exactly the gradients it always did -- a graph without the key (every
+    # previously extracted JSON) slices nothing and is unchanged.
+    n_forward = int(graph.get("num_forward_outputs", 0) or 0)
+    n_grad_placeholders = int(graph.get("num_grad_placeholders", 0) or 0)
+    forward_outputs = output_names[:n_forward]
+    grad_outputs = output_names[n_forward:]
+    trailing_comma = "," if len(grad_outputs) == 1 else ""
     call_lines.append(
-        f"    return ({', '.join(_pyname(n) for n in output_names)}{trailing_comma})"
+        f"    return ({', '.join(_pyname(n) for n in grad_outputs)}{trailing_comma})"
     )
+
+    # The forward half of the same trace, emitted as its own entry point: the
+    # cone of nodes feeding the forward outputs, over the forward placeholders
+    # alone. Without this a consumer has no generated forward to call and has
+    # to fall back to the eager reference.
+    forward_lines: list[str] = []
+    if forward_outputs:
+        grad_placeholder_names = {
+            p["name"] for p in placeholders[:n_grad_placeholders]
+        }
+        needed = _forward_subgraph(call_nodes, forward_outputs, grad_placeholder_names)
+        if needed is not None:
+            fwd_placeholders = [_pyname(p["name"]) for p in placeholders[n_grad_placeholders:]]
+            fwd_trailing = "," if len(forward_outputs) == 1 else ""
+            forward_lines = [
+                "",
+                "",
+                f"def run_forward_program({', '.join(fwd_placeholders)}):",
+                '    """The forward half of the same extracted graph.',
+                "",
+                "    Same provenance as `run_graph_program`: one statement per AtenIR",
+                "    call_function node, in topological order. Recomputes rather than",
+                "    shares intermediates with the backward, matching the seed's",
+                "    conservative saved-state policy.",
+                '    """',
+                *[line_by_name[name] for name in needed],
+                f"    return ({', '.join(_pyname(n) for n in forward_outputs)}{fwd_trailing})",
+            ]
 
     placeholder_names = [_pyname(p["name"]) for p in placeholders]
     kernel_library = builder.render_kernel_library()
@@ -612,6 +703,7 @@ import triton.language.extra.cuda.libdevice as libdevice
         "",
         f"def run_graph_program({', '.join(placeholder_names)}):",
         *call_lines,
+        *forward_lines,
     ]
     return "\n".join(lines) + "\n"
 
@@ -629,7 +721,13 @@ def generate_autograd_pair_program(graph: dict, *, forward: str, op) -> str:
     from evograd.pipelines.b_dispatch.wrapper_codegen import render_autograd_pair_wrapper
 
     source = generate_dispatch_program(graph)
-    wrapper = render_autograd_pair_wrapper(forward, op)
+    # Ask the emitted source, not the graph: `generate_dispatch_program` also
+    # declines to emit a forward when the cone is not separable, and the
+    # wrapper must agree with what is actually in the file.
+    has_generated_forward = "def run_forward_program(" in source
+    wrapper = render_autograd_pair_wrapper(
+        forward, op, has_generated_forward=has_generated_forward
+    )
     marker = "# EVOLVE-BLOCK-END"
     if marker not in source:
         return source + wrapper
