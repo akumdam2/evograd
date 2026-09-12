@@ -18,7 +18,7 @@ SMOKE_SCHEMA = "evograd-llama3-smoke/1"
 
 WORKLOAD = Level4Workload(
     name="llama_3_8b",
-    label="Meta-Llama-3-8B",
+    label="Llama-3.2-1B",
     spec_type=WorkloadSpec,
     classes=CLASSES,
     plan=PLAN,

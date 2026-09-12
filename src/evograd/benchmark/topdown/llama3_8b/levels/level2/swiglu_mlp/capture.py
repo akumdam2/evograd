@@ -10,17 +10,17 @@ Extract and verify ``llama3_swiglu_mlp`` from the verified Layer-16 replay.
 
     # describe the derived invocation (metadata only -- no tensors are written)
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.swiglu_mlp derive \
-        --source results/llama3-level4/layer16.pt \
-        --metadata-out results/llama3-level4/layer16-mlp.json
+        --source results/llama3-level4/layer8.pt \
+        --metadata-out results/llama3-level4/layer8-mlp.json
 
     # check the Level-2 declaration's reference against what the model computed
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.swiglu_mlp verify \
-        --source results/llama3-level4/layer16.pt \
-        --report results/llama3-level4/layer16-mlp-verify.json
+        --source results/llama3-level4/layer8.pt \
+        --report results/llama3-level4/layer8-mlp-verify.json
 
     # measure what tolerance a correct BF16 implementation actually needs
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.swiglu_mlp calibrate \
-        --source results/llama3-level4/layer16.pt \
+        --source results/llama3-level4/layer8.pt \
         --report results/llama3-level4/llama3_swiglu_mlp-tolerance.json
 
 The source is deliberately the *replay*, not the full model. The Layer-16
@@ -32,7 +32,7 @@ in between.
 
 **Nothing here writes a second tensor file.** The MLP's input, output, upstream
 gradient and all three weights and their gradients already live inside
-``layer16.pt``; a derived ``.pt`` would be 68 MiB of the same numbers under a
+``layer8.pt``; a derived ``.pt`` would be 68 MiB of the same numbers under a
 different name, and the moment one of the two is regenerated they disagree
 silently. The invocation is re-derived by replaying the layer artifact whenever
 it is needed, which takes about a second, and only JSON metadata and reports are
@@ -201,7 +201,7 @@ def derive_mlp_invocation(
     """Replay Layer 14 and capture the MLP invocation inside it.
 
     Returns the tensors in memory and a JSON-safe description of them. Nothing
-    is written: ``layer16.pt`` is the authoritative tensor store, and this is a
+    is written: ``layer8.pt`` is the authoritative tensor store, and this is a
     view of part of it.
     """
     from evograd.benchmark.topdown.llama3_8b.levels.level3.prepare import prepare_layer

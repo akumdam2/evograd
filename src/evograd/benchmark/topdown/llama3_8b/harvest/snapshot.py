@@ -194,8 +194,11 @@ def extract(manifest: dict[str, Any], *, layer_index: int) -> dict[str, Any]:
 
 
 #: The layer a snapshot describes. Mid-stack, like Qwen3's 14 of 28: the first
-#: and last layers of a decoder see distributions the rest do not.
-REPRESENTATIVE_LAYER = 16
+#: and last layers of a decoder see distributions the rest do not. Eight of 16
+#: since this workload moved to Llama-3.2-1B; the old 16 was mid-stack of the
+#: 8B's 32 and is one past the end here, which would have matched no layer at
+#: all.
+REPRESENTATIVE_LAYER = 8
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,9 +1,9 @@
-"""Run the canonical Llama-3-8B training smoke and write its JSON report.
+"""Run the canonical Llama-3.2-1B training smoke and write its JSON report.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_8b \
         --out results/llama3-smoke/canonical.json
 
-With no arguments the canonical workload runs: Meta-Llama-3-8B, batch 2,
+With no arguments the canonical workload runs: Llama-3.2-1B, batch 2,
 sequence 2048, BF16, CUDA, SDPA, ``model.train()``, no cache, no gradient
 checkpointing. Weights are randomly initialised from the written-out
 configuration -- nothing is fetched, so the gated repository is not a

@@ -45,8 +45,11 @@ from .sites import (
 from .workload import Llama3Workload
 
 #: Which layer's boundaries are compared tensor by tensor. Any layer would do;
-#: naming one keeps the report a fixed size.
-REPRESENTATIVE_LAYER = 16
+#: naming one keeps the report a fixed size. Eight, not sixteen: this model has
+#: 16 layers indexed 0..15, and a representative layer past the end matches
+#: nothing -- the report then compares only the layer-independent
+#: ``final_model_norm`` category and looks like it passed.
+REPRESENTATIVE_LAYER = 8
 
 
 def _meta(tensor: torch.Tensor) -> dict[str, Any]:

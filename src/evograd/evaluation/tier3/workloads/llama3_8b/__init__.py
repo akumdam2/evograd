@@ -8,7 +8,7 @@ fails it:
 
 1. :mod:`.validate` -- the sites hold at the shapes this model supplies;
 2. purity -- the provider is a function of its arguments;
-3. :mod:`.boundary` -- all 160 invocations match their declaration;
+3. :mod:`.boundary` -- all 80 invocations match their declaration;
 4. numerics -- the whole model stays inside a calibrated envelope;
 5. the calibrated loss trajectory;
 6. invocation counts and patch provenance.
@@ -25,7 +25,7 @@ here is what only Llama-3 can answer:
     workload.py   building the canonical step, feeding it, its loss
     adapter.py    what the tier-3 CLI needs to know, so the CLI need not
     validate.py   preflight at this model's shapes
-    boundary.py   160 invocations, because this model has 32 layers
+    boundary.py   80 invocations, because this model has 16 layers
     calibrate.py  the envelope, measured on this model on this machine
     faults.py     the kernel-fault catalogue: which site, which output, how deep
     purity.py     how many calls a site is worth, and how to rebuild a provider
@@ -51,7 +51,7 @@ weights.
 
 The four-part real-text protocol (``protocol4.py``, ``prediction.py``,
 ``training.py``, ``textdata.py``) needs a pinned pretrained checkpoint and
-tokenizer. Meta-Llama-3-8B is a gated repository, so adopting it would forfeit
+tokenizer. The Llama repositories are gated, so adopting it would forfeit
 the "no Hub token" property this workload is built around. A design decision,
 not a port.
 

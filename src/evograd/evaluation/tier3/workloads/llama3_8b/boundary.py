@@ -1,11 +1,11 @@
-"""Every one of the 160 invocations, checked against its own contract.
+"""Every one of the 80 invocations, checked against its own contract.
 
 The earlier boundary check compared one representative layer. That is enough to
 show the wiring is right and not enough to show the *provider* is: a kernel that
 is correct in layer 16 and wrong in layer 3 passes it, and so does one that is
 correct for its first eight calls.
 
-This validates all 160 invocations of one canonical step -- 32 `qkv_rope`,
+This validates all 80 invocations of one canonical step -- 16 `qkv_rope`,
 32 `attention`, 32 `swiglu_mlp`, 64 `residual_rmsnorm` -- each with a stable
 identity, each against the declaration's own ``runtime_forward`` on the same
 live inputs, and each against the same live upstream gradient the model actually

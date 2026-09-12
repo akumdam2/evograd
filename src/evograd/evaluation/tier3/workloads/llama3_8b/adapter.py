@@ -87,7 +87,7 @@ ADAPTER = Tier3Adapter(
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        "compile_site", "patch_set"}),
     summary=(
-        "Meta-Llama-3-8B, 32 layers, the canonical training step "
-        "(--layers shrinks it; ~15 GiB host RAM to build in full)"
+        "Llama-3.2-1B, 16 layers, the canonical training step "
+        "(~9 GiB of weights, grads and AdamW moments; fits at full depth)"
     ),
 )

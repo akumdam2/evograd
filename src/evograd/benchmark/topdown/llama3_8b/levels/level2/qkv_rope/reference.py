@@ -23,7 +23,7 @@ baseline is timed through what a real step runs.
 with ``(q, k, v)`` in head-major layout, ready for
 ``F.scaled_dot_product_attention``. SDPA and ``o_proj`` are *not* part of it;
 they are ``llama3_attention``. ``cos`` and ``sin`` are inactive tables computed
-once per step by ``LlamaRotaryEmbedding`` and shared by all 32 layers, so they
+once per step by ``LlamaRotaryEmbedding`` and shared by all 16 layers, so they
 are inputs here and receive no gradient.
 
 The output layout is part of the contract. ``q`` is ``[B, HQ, T, D]`` with

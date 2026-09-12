@@ -21,7 +21,7 @@ drawing those from the workload seed would change the canonical identity. So the
 model, the weights and the workload hash come from ``spec.seed``, and only the
 token stream moves.
 
-**Size.** This is a 8.03B-parameter model. ``build_model`` initialises on the
+**Size.** This is a 1.24B-parameter model. ``build_model`` initialises on the
 CPU and then moves, so a canonical build needs roughly 15 GiB of *host* RAM
 before it needs any device memory, and the gate holds three captured steps at
 once. ``--layers`` exists for that reason: every per-layer effect scales

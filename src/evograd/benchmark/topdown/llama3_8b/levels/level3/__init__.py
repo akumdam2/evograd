@@ -7,7 +7,7 @@ model produced, rather than against synthetic ones.
 **Nothing here is tracked.** A capture is a several-hundred-megabyte tensor
 file, and it is a *result*: it is produced by running the canonical Llama-3-8B
 step on a GPU, and it is reproducible from the spec plus the seed. No such run
-has been executed, so ``results/llama3-level4/layer16.pt`` does not exist and
+has been executed, so ``results/llama3-level4/layer8.pt`` does not exist and
 every level-2 derivation that consumes it refuses by name rather than
 substituting synthetic tensors.
 """

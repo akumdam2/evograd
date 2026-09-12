@@ -1,4 +1,4 @@
-"""The Meta-Llama-3-8B benchmark workload, organized by level and by tier.
+"""The Llama-3.2-1B benchmark workload, organized by level and by tier.
 
 One canonical execution -- Llama-3-8B, batch 2, sequence 2048, BF16, CUDA, SDPA,
 ``model.train()``, ``use_cache=False``, no gradient checkpointing, deterministic

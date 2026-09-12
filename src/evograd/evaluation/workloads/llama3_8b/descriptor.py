@@ -12,7 +12,7 @@ WORKLOAD = EvalWorkload(
     results_dir=Path("results/llama3-level4"),
     schema_prefix="evograd-llama3",
     # Mid-stack of 32, as Qwen3 uses 14 of 28.
-    representative_layer=16,
+    representative_layer=8,
     # `llama3_qkv_rope` is Llama's own: LlamaAttention has no per-head
     # query/key RMSNorm, so Qwen3's `qwen3_qkv_norm_rope` describes a
     # different computation. The other two are dimension-parameterized and

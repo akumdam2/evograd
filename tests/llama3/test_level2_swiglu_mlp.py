@@ -4,7 +4,7 @@ These assertions came from the upstream Llama-3 work, where they were written
 against ``qwen3_swiglu_mlp`` because that task then served Llama's MLP site.
 Llama now owns ``llama3_swiglu_mlp``, so they moved here with the multiplier
 they describe. The numbers are unchanged: the measured shortfall at the
-14336-wide intermediate, the bounds on the multiplier that covers it, and what
+8192-wide intermediate, the bounds on the multiplier that covers it, and what
 that widening costs the correctness grid.
 
 ``tests/qwen3/test_level2_swiglu_mlp`` holds the other half of the separation:
@@ -55,7 +55,7 @@ def test_the_out_multiplier_is_the_measured_shortfall_at_the_wide_shape(self):
 
         self.assertNotIn("out", _REDUCTION_SCALED.reduction_dims)
         observed = op.benchmark_workloads(suite="llama_3_8b_observed")[0]
-        self.assertEqual(observed.dims["I"], 14336)
+        self.assertEqual(observed.dims["I"], 8192)
 
         # What the hook alone supplies, before the multiplier: 2.098e-02.
         hook_only = _REDUCTION_SCALED.factor("out", dict(observed.dims))

@@ -130,7 +130,7 @@ def capture_step(model, optimizer, ids, labels) -> dict[str, Any]:
     """The five quantities one training step produces, each kept apart.
 
     **Host memory is the binding constraint at Llama-3-8B's size.** Three
-    float32 host copies of every parameter is roughly 96 GiB for 8.03B
+    float32 host copies of every parameter is roughly 15 GiB for 1.24B
     parameters, and the comparison holds more than one capture live. Iterate
     with ``--layers``; the per-layer families shrink linearly with it and the
     embedding and lm_head do not.

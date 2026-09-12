@@ -9,18 +9,18 @@ implementation is good enough -- that is
 Derive and verify ``llama3_residual_rmsnorm`` from the canonical Layer-16 artifact.
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.residual_rmsnorm derive \
-        --source results/llama3-level4/layer16.pt \
-        --metadata-out results/llama3-level4/layer16-residual.json
+        --source results/llama3-level4/layer8.pt \
+        --metadata-out results/llama3-level4/layer8-residual.json
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.residual_rmsnorm verify \
-        --source results/llama3-level4/layer16.pt \
-        --report results/llama3-level4/layer16-residual-verify.json
+        --source results/llama3-level4/layer8.pt \
+        --report results/llama3-level4/layer8-residual-verify.json
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.residual_rmsnorm calibrate \
-        --source results/llama3-level4/layer16.pt \
+        --source results/llama3-level4/layer8.pt \
         --report results/llama3-level4/llama3_residual_rmsnorm-tolerance.json
 
-``layer16.pt`` stays the only tensor artifact; the boundary is re-derived by
+``layer8.pt`` stays the only tensor artifact; the boundary is re-derived by
 replaying the layer and hooking it, and only JSON is written.
 
 **The representative boundary inside layer 14** is the attention residual add

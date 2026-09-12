@@ -10,20 +10,20 @@ Derive and verify ``llama3_attention`` from the canonical Layer-16 artifact.
 
     # describe the derived invocation (metadata only -- no tensors are written)
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.attention derive \
-        --source results/llama3-level4/layer16.pt \
-        --metadata-out results/llama3-level4/layer16-attention.json
+        --source results/llama3-level4/layer8.pt \
+        --metadata-out results/llama3-level4/layer8-attention.json
 
     # check both spellings against what Transformers computed
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.attention verify \
-        --source results/llama3-level4/layer16.pt \
-        --report results/llama3-level4/layer16-attention-verify.json
+        --source results/llama3-level4/layer8.pt \
+        --report results/llama3-level4/layer8-attention-verify.json
 
     # measure what tolerance a correct implementation actually needs
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.attention calibrate \
-        --source results/llama3-level4/layer16.pt \
+        --source results/llama3-level4/layer8.pt \
         --report results/llama3-level4/llama3_attention-tolerance.json
 
-Like the MLP task, nothing here writes a second tensor file. ``layer16.pt``
+Like the MLP task, nothing here writes a second tensor file. ``layer8.pt``
 already holds every number this boundary needs; the invocation is re-derived by
 replaying that artifact, which takes about a second, and only JSON is written.
 

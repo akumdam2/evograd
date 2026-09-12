@@ -22,7 +22,7 @@ outputs become that one's inputs. The residual RMSNorm that produces ``x`` is
 also outside it.
 
 ``cos`` and ``sin`` are Inactive: ``LlamaRotaryEmbedding`` computes them once per
-step from position ids and shares them across all 32 layers, so within this
+step from position ids and shares them across all 16 layers, so within this
 boundary they are tables, not activations, and they receive no gradient.
 
 **A note on ``QO``.** For Llama-3, ``n_heads * head_dim == hidden``, so ``QO``
@@ -32,7 +32,7 @@ dims because they are separate concepts -- Qwen3's ``QO`` is 2048 against a
 there.
 
 **Provenance.** Every shape below is derived from ``LLAMA_3_8B`` in
-:mod:`evograd.opdecl.models`, which is Meta-Llama-3-8B's published
+:mod:`evograd.opdecl.models`, which is this workload's published
 configuration. That is weaker than Qwen3's chain, which reads its dims out of a
 harvest, and it is weaker on purpose rather than by oversight: the shapes here
 are what the architecture *will* run, derived from the config, and they do not
@@ -98,7 +98,7 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 #: Reproduced by::
 #:
 #:     python -m evograd.benchmark.topdown.llama3_8b.levels.level2.qkv_rope \
-#:         calibrate --source results/llama3-level4/layer16.pt --device cuda
+#:         calibrate --source results/llama3-level4/layer8.pt --device cuda
 CALIBRATED = True
 
 #: Have the correctness-grid tolerances been measured rather than inherited?

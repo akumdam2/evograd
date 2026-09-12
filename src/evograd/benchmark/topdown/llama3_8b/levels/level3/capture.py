@@ -3,7 +3,7 @@
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_8b.levels.level3.capture \
         --layer 14 \
         --harvest results/llama3-level4/harvest.json \
-        --out results/llama3-level4/layer16.pt
+        --out results/llama3-level4/layer8.pt
 
 The layer is selected *from the harvest manifest*, not by index alone: the
 manifest is checked for self-consistency, checked against the workload the

@@ -11,7 +11,7 @@ Three things are Llama-specific, and they are all that is left here:
 
 * **How many calls each site is worth.** Twice the canonical invocation count,
   so a provider that only misbehaves after "more calls than preflight makes"
-  has nowhere to hide. Those counts come from Llama-3-8B's 32 layers.
+  has nowhere to hide. Those counts come from this model's 16 layers.
 * **Which benchmark suite carries the production shapes.** Purity is a question
   about the provider at the width the model runs, not on the declaration's small
   correctness grid. That suite does not exist until a harvest has been run, and
@@ -57,7 +57,7 @@ _LAYERS = LLAMA_3_8B["num_hidden_layers"]
 #: This module, as ``python -m`` names it. The isolated run re-enters here.
 CHILD_MODULE = "evograd.evaluation.tier3.workloads.llama3_8b.purity"
 
-#: Twice the canonical invocation count of each site: 32 layers give 32
+#: Twice the canonical invocation count of each site: 16 layers give 16
 #: invocations of the three per-layer sites and 64 residual fusions, so a
 #: provider is called about twice as often here as the model will call it.
 #: Derived rather than written out, so a reduced-layer spec cannot make the

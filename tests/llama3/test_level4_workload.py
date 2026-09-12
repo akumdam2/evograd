@@ -50,18 +50,35 @@ class TestPublishedArchitecture(unittest.TestCase):
     """The architecture is written out, so it can be wrong. These re-derive it."""
 
     def test_the_parameter_count_matches_the_published_model(self):
-        """8.03B total is the number on the model card. It is a function of the
-        config alone, so reproducing it checks every width at once -- and no
-        network or checkpoint is needed to do it."""
+        """1.24B total is the number on the Llama-3.2-1B model card. It is a
+        function of the config alone, so reproducing it checks every width at
+        once -- and no network or checkpoint is needed to do it."""
         counts = analytic_parameter_count(LLAMA_3_8B)
-        self.assertAlmostEqual(counts["total"] / 1e9, 8.03, places=2)
+        self.assertAlmostEqual(counts["total"] / 1e9, 1.24, places=2)
 
-    def test_the_embedding_is_not_tied(self):
-        """Unlike Qwen3-0.6B. If this were wrong the lm_head would vanish from
-        the parameter count and from every gradient check."""
-        self.assertFalse(LLAMA_3_8B["tie_word_embeddings"])
+    def test_the_embedding_is_tied(self):
+        """Like Qwen3-0.6B, and unlike the Meta-Llama-3-8B this package was
+        written around. If this were wrong an extra 128256x2048 matrix would
+        appear in the parameter count, and `embed_tokens.weight` would stop
+        accumulating gradient from the head as well as the lookup."""
+        self.assertTrue(LLAMA_3_8B["tie_word_embeddings"])
         counts = analytic_parameter_count(LLAMA_3_8B)
-        self.assertEqual(counts["lm_head"], LLAMA_3_8B["vocab_size"] * LLAMA_3_8B["hidden_size"])
+        self.assertEqual(counts["lm_head"], 0)
+
+    def test_rope_is_scaled_the_way_llama_3_2_scales_it(self):
+        """Llama-3.2 scales RoPE where Llama-3 did not. It changes the values in
+        the cos/sin tables and no kernel's contract -- they reach the qkv_rope
+        boundary as Inactive inputs -- but a missing scaling would put different
+        numbers through every rotary kernel."""
+        scaling = LLAMA_3_8B["rope_scaling"]
+        self.assertEqual(scaling["rope_type"], "llama3")
+        self.assertEqual(scaling["factor"], 32.0)
+        self.assertEqual(scaling["original_max_position_embeddings"], 8192)
+
+    def test_the_head_dimension_is_not_hidden_over_heads_by_accident(self):
+        """64, and stated. It happens to equal hidden_size // heads here, so a
+        derived value would agree today and diverge silently if either moved."""
+        self.assertEqual(LLAMA_3_8B["head_dim"], 64)
 
     def test_the_rope_base_is_llama_3s_and_not_llama_2s(self):
         """500000, not 10000. Getting this wrong produces a RoPE kernel that is
@@ -111,7 +128,8 @@ class TestCanonicalSpec(unittest.TestCase):
         self.assertLessEqual(CANONICAL.seq_len, LLAMA_3_8B["max_position_embeddings"])
 
     def test_the_workload_id_is_stable_and_names_the_model(self):
-        self.assertTrue(CANONICAL.workload_id.startswith("meta-llama-3-8b.train.bs2.seq2048.bf16.cuda.sdpa."))
+        self.assertTrue(CANONICAL.workload_id.startswith(
+            "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa."))
         self.assertEqual(CANONICAL.workload_id, WorkloadSpec().workload_id)
 
     def test_it_does_not_collide_with_the_other_workload(self):

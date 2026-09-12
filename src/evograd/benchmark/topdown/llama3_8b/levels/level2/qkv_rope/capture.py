@@ -9,18 +9,18 @@ implementation is good enough -- that is
 Derive and verify ``llama3_qkv_rope`` from the canonical Layer-16 artifact.
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.qkv_rope derive \
-        --source results/llama3-level4/layer16.pt \
-        --metadata-out results/llama3-level4/layer16-qkv.json
+        --source results/llama3-level4/layer8.pt \
+        --metadata-out results/llama3-level4/layer8-qkv.json
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.qkv_rope verify \
-        --source results/llama3-level4/layer16.pt \
-        --report results/llama3-level4/layer16-qkv-verify.json
+        --source results/llama3-level4/layer8.pt \
+        --report results/llama3-level4/layer8-qkv-verify.json
 
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_8b.level2.qkv_rope calibrate \
-        --source results/llama3-level4/layer16.pt \
+        --source results/llama3-level4/layer8.pt \
         --report results/llama3-level4/llama3_qkv_rope-tolerance.json
 
-``layer16.pt`` stays the only tensor artifact. This boundary's inputs and
+``layer8.pt`` stays the only tensor artifact. This boundary's inputs and
 outputs already live inside it, so they are re-derived by replaying the layer
 and hooking two points, and only JSON is written.
 

@@ -68,7 +68,7 @@ class EvalWorkload:
 
     @property
     def artifact_path(self) -> Path:
-        """Default Level-3 capture, e.g. ``results/llama3-level4/layer16.pt``."""
+        """Default Level-3 capture, e.g. ``results/llama3-level4/layer8.pt``."""
         return self.results_dir / f"layer{self.representative_layer}.pt"
 
     def schema(self, suffix: str) -> str:
