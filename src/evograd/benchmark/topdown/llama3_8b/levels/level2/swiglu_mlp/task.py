@@ -19,7 +19,9 @@ from evograd.benchmark.topdown.common.level2_references import (
     gated_mlp_forward_ref as _definition,
 )
 from evograd.opdecl import Active, Provenance, Workload, declare_op
-from evograd.opdecl.models import LLAMA_3_8B
+# The workload pins Llama-3.2-1B; `LLAMA_3_8B` in `opdecl.models` is the
+# 8B config the operator suite's vocabulary-regime cases still use.
+from evograd.opdecl.models import LLAMA_3_2_1B as LLAMA_3_8B
 from evograd.opdecl.tolerance import ReductionScaledAtol
 from evograd.ops._common import model_workloads as _model_workloads
 

@@ -60,16 +60,21 @@ from ...levels.level4.model import (
 from ...levels.level4.smoke import environment_info, gradient_coverage, workload_info
 from ...levels.level4.spec import CANONICAL, WorkloadSpec
 
+# One source for the layer index, shared with the harvest: a capture that
+# names a different layer than the snapshot describes cannot be reconciled
+# with it, and at 16 layers the old literal 16 was one past the end.
+from ...harvest.snapshot import REPRESENTATIVE_LAYER as _REPRESENTATIVE_LAYER
+
 #: The representative layer. Deep enough that its inputs are a fully mixed
 #: residual stream rather than the first block's near-embedding activations, and
 #: far enough from the last layer that its upstream gradient has passed through
 #: a realistic amount of the backward chain.
 #:
-#: 16 of 32, where Qwen3 picks 14 of 28 -- the same half-depth position, not a
+#: 8 of 16, where Qwen3 picks 14 of 28 -- the same half-depth position, not a
 #: different judgement. Any layer would serve; naming one is what makes two
 #: captures comparable, and the choice belongs to the architecture rather than
 #: to whoever runs the capture.
-CANONICAL_LAYER_INDEX = 16
+CANONICAL_LAYER_INDEX = _REPRESENTATIVE_LAYER
 
 
 class CaptureError(RuntimeError):

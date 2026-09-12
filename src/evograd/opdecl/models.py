@@ -421,6 +421,33 @@ LLAMA_3_8B = ModelConfig(
     source="meta-llama/Meta-Llama-3-8B; Liger benchmark/scripts/benchmark_model_configs.py",
 )
 
+#: Llama-3.2-1B, as ``meta-llama/Llama-3.2-1B``'s ``config.json`` publishes it.
+#: This is the configuration the ``topdown.llama3_8b`` workload actually pins --
+#: :data:`LLAMA_3_8B` above stays at the 8B numbers because the operator suite's
+#: vocabulary-regime cases (``kl_div``, ``fused_linear_cross_entropy``) were
+#: chosen to represent a *large* LLM's loss shapes, and shrinking them would
+#: change what those tasks are for.
+#:
+#: Unlike Meta-Llama-3-8B: ``head_dim`` is 64 rather than 128, and the
+#: embeddings are tied, so there is no second ``vocab x hidden`` matrix.
+LLAMA_3_2_1B = ModelConfig(
+    name="llama_3_8b",
+    hidden=2048,
+    intermediate=8192,
+    n_heads=32,
+    n_kv_heads=8,
+    head_dim=64,
+    vocab=128256,
+    layers=16,
+    # 500000, not the 10000 Llama-2 uses. Getting this wrong produces a RoPE
+    # kernel that is self-consistent and completely wrong. Llama-3.2 also
+    # *scales* RoPE, which moves the values in the cos/sin tables but not any
+    # kernel's contract -- the boundary receives them as Inactive inputs.
+    rope_theta=500000.0,
+    dtype="bfloat16",
+    source="meta-llama/Llama-3.2-1B config.json",
+)
+
 #: Qwen3-0.6B, as ``Qwen/Qwen3-0.6B``'s ``config.json`` publishes it. Unlike
 #: Llama-3, ``n_heads * head_dim`` (2048) is *not* ``hidden`` (1024): Qwen3's
 #: query projection fans out and ``o_proj`` brings it back, which is why the

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from evograd.evaluation.workloads.common import replay as _common
 from evograd.evaluation.workloads.common.replay import (  # noqa: F401  (re-export)
+    BF16_EPS,
+    BF16_UNIT_ROUNDOFF,
     ELEMENTWISE_FLOOR_FRACTION,
     FORWARD_TOL,
     GRADIENT_TOL,
