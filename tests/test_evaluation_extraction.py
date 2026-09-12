@@ -62,7 +62,7 @@ class TestSharedEvaluationModules(unittest.TestCase):
         """
         import re
 
-        pattern = re.compile(r"evograd-(llama3|qwen3)|topdown\.(llama3_8b|qwen3_0_6b)")
+        pattern = re.compile(r"evograd-(llama3|qwen3)|topdown\.(llama3_2_1b|qwen3_0_6b)")
         for path in SHARED.glob("*.py"):
             if path.name in ("__init__.py", "descriptor.py"):
                 continue

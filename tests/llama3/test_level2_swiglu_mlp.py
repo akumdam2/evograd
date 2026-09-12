@@ -51,10 +51,10 @@ def test_the_out_multiplier_is_the_measured_shortfall_at_the_wide_shape(self):
         that covers its measurement by 10x is a hole rather than a gate.
         """
         op = get_task("llama3_swiglu_mlp")
-        from evograd.benchmark.topdown.llama3_8b.levels.level2.swiglu_mlp.task import _REDUCTION_SCALED
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.swiglu_mlp.task import _REDUCTION_SCALED
 
         self.assertNotIn("out", _REDUCTION_SCALED.reduction_dims)
-        observed = op.benchmark_workloads(suite="llama_3_8b_observed")[0]
+        observed = op.benchmark_workloads(suite="llama_3_2_1b_observed")[0]
         self.assertEqual(observed.dims["I"], 8192)
 
         # What the hook alone supplies, before the multiplier: 2.098e-02.
@@ -94,7 +94,7 @@ def test_what_the_out_multiplier_costs_the_correctness_grid(self):
         """
         import torch
 
-        from evograd.benchmark.topdown.llama3_8b.levels.level2.swiglu_mlp import reference as forward_ref
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.swiglu_mlp import reference as forward_ref
 
         op = get_task("llama3_swiglu_mlp")
         case = next(w for w in op.correctness if w.dtype == "bfloat16")

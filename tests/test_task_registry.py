@@ -16,7 +16,7 @@ from __future__ import annotations
 import unittest
 
 from evograd.benchmark import TASKS, get_task, load_task, tasks_at_level
-from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest as llama_manifest
+from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest as llama_manifest
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.ops import PRIMITIVES, get_primitive
 
@@ -83,7 +83,7 @@ class TestPrimitiveRegistry(unittest.TestCase):
             with self.subTest(op=name):
                 for suite in op.benchmark_suites:
                     self.assertNotIn("qwen3_0_6b", suite)
-                    self.assertNotIn("llama_3_8b", suite)
+                    self.assertNotIn("llama_3_2_1b", suite)
 
 
 class TestTaskRegistry(unittest.TestCase):

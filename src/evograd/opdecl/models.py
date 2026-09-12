@@ -406,7 +406,7 @@ class AlphaFoldConfig:
 
 
 LLAMA_3_8B = ModelConfig(
-    name="llama_3_8b",
+    name="llama_3_2_1b",
     hidden=4096,
     intermediate=14336,
     n_heads=32,
@@ -422,7 +422,7 @@ LLAMA_3_8B = ModelConfig(
 )
 
 #: Llama-3.2-1B, as ``meta-llama/Llama-3.2-1B``'s ``config.json`` publishes it.
-#: This is the configuration the ``topdown.llama3_8b`` workload actually pins --
+#: This is the configuration the ``topdown.llama3_2_1b`` workload actually pins --
 #: :data:`LLAMA_3_8B` above stays at the 8B numbers because the operator suite's
 #: vocabulary-regime cases (``kl_div``, ``fused_linear_cross_entropy``) were
 #: chosen to represent a *large* LLM's loss shapes, and shrinking them would
@@ -431,7 +431,7 @@ LLAMA_3_8B = ModelConfig(
 #: Unlike Meta-Llama-3-8B: ``head_dim`` is 64 rather than 128, and the
 #: embeddings are tied, so there is no second ``vocab x hidden`` matrix.
 LLAMA_3_2_1B = ModelConfig(
-    name="llama_3_8b",
+    name="llama_3_2_1b",
     hidden=2048,
     intermediate=8192,
     n_heads=32,
@@ -476,7 +476,7 @@ QWEN3_0_6B = ModelConfig(
 #:
 #: Use it to iterate. Report from ``LLAMA_3_8B``.
 LLAMA_3_8B_4L = ModelConfig(
-    name="llama_3_8b_4l",
+    name="llama_3_2_1b_4l",
     hidden=LLAMA_3_8B.hidden,
     intermediate=LLAMA_3_8B.intermediate,
     n_heads=LLAMA_3_8B.n_heads,

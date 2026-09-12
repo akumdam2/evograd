@@ -65,7 +65,7 @@ class TestValidation(unittest.TestCase):
 
     def test_provenance_must_cite_the_declared_model(self):
         with self.assertRaises(ValueError):
-            _declare(benchmark=(_case(model="llama_3_8b", component="rmsnorm"),))
+            _declare(benchmark=(_case(model="llama_3_2_1b", component="rmsnorm"),))
 
     def test_factory_must_be_a_module_reference(self):
         with self.assertRaises(ValueError):

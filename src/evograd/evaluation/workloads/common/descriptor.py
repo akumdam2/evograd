@@ -29,7 +29,7 @@ from typing import Any
 class EvalWorkload:
     """One model, as the evaluation modules need to refer to it."""
 
-    #: Registry key, e.g. ``"llama_3_8b"``. Matches ``Level4Workload.name``.
+    #: Registry key, e.g. ``"llama_3_2_1b"``. Matches ``Level4Workload.name``.
     name: str
     #: Dotted path of the benchmark package that owns this model's cases.
     topdown_package: str
