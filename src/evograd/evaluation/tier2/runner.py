@@ -437,7 +437,8 @@ def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
     is recorded because a layout change is worth seeing when it happens.
     """
     if not torch.is_tensor(actual):
-        return {"ok": False, "reason": "no gradient produced"}
+        return {"ok": False, "reason": "no gradient produced",
+                "atol": atol, "rtol": rtol}
     if actual.shape != expected.shape or actual.dtype != expected.dtype:
         return {
             "ok": False,
@@ -448,15 +449,42 @@ def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
             "stride": list(actual.stride()),
             "expected_stride": list(expected.stride()),
             "stride_match": tuple(actual.stride()) == tuple(expected.stride()),
+            "atol": atol,
+            "rtol": rtol,
         }
     difference = (actual.detach().float() - expected.detach().float()).abs()
     finite = bool(torch.isfinite(actual.detach()).all())
+    # The threshold travels with the measurement. A recorded `max_abs_error`
+    # alone cannot say how close a result came to being rejected, and comparing
+    # it against `atol` is off by orders of magnitude wherever the `rtol` term
+    # dominates.
+    #
+    # `allclose` is *elementwise*: every element is allowed
+    # `atol + rtol * |expected_i|`, computed from its own reference value. So
+    # the allowance has to be built elementwise too. Dividing the largest error
+    # by the largest element's allowance compares two different elements --
+    # the one that fails typically has a large error and a *small* |expected|,
+    # hence a small allowance -- and reports a comfortable fraction for a
+    # result the gate rejected.
+    #
+    # Taking the elementwise maximum makes `headroom` exact: it is <= 1 for
+    # precisely the results `allclose` accepts, so it never disagrees with
+    # `ok`.
+    reference = expected.detach().float().abs()
+    reference_absmax = float(reference.max())
+    allowance = (atol + rtol * reference).clamp_min(torch.finfo(torch.float32).tiny)
+    max_abs_error = float(difference.max())
+    headroom = float((difference / allowance).max()) if finite else None
     return {
         "ok": bool(
             finite
             and torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
         ),
-        "max_abs_error": float(difference.max()),
+        "max_abs_error": max_abs_error,
+        "atol": atol,
+        "rtol": rtol,
+        "ref_absmax": reference_absmax,
+        "headroom": headroom,
         "finite": finite,
         "stride": list(actual.stride()),
         "expected_stride": list(expected.stride()),
@@ -624,6 +652,44 @@ def default_provider_specs(
     return tuple(specs)
 
 
+#: Dynamo's per-code-object compiled-variant budget, raised once per process.
+#:
+#: `dynamic=False` specializes on shape, so each shape in a sweep is another
+#: compiled variant of the same code object. Past the default limit of eight,
+#: Dynamo stops compiling and falls back to eager -- and under `fullgraph=True`
+#: it raises `FailOnRecompileLimitHit` instead, which reads as a failed provider
+#: when nothing is wrong with the operator. `--no-isolate` is what makes this
+#: reachable: isolated runs put one shape in each process and never count past
+#: one.
+#:
+#: Raised process-wide rather than with a context manager around each call.
+#: `torch.compile` is lazy -- compilation happens on first invocation, not at
+#: construction -- so a patch scoped to the `torch.compile(...)` line does
+#: nothing at all, and one scoped to the call sits inside the region this tier
+#: times. A benchmark process exists only to run this sweep; its Dynamo budget
+#: is ours to set.
+#:
+#: Both spellings are written. Torch renamed `cache_size_limit` to
+#: `recompile_limit`, 2.14 carries both, and whether one aliases the other is
+#: version-dependent -- so set whichever exist rather than guess which is live.
+_RECOMPILE_LIMIT = 64
+_LIMIT_NAMES = ("cache_size_limit", "recompile_limit")
+_limit_raised = False
+
+
+def _raise_recompile_limit() -> None:
+    global _limit_raised
+    if _limit_raised:
+        return
+    import torch._dynamo.config as dynamo_config
+
+    for name in _LIMIT_NAMES:
+        current = getattr(dynamo_config, name, None)
+        if current is not None and current < _RECOMPILE_LIMIT:
+            setattr(dynamo_config, name, _RECOMPILE_LIMIT)
+    _limit_raised = True
+
+
 def build_provider(
     op: OpDecl, spec: ProviderSpec, values: dict[str, Any]
 ) -> OperatorModule:
@@ -642,6 +708,7 @@ def build_provider(
         # would look like a plausible compiled result. With it, a break raises
         # and `run_case` records the provider as failed, which is the honest
         # outcome.
+        _raise_recompile_limit()
         module._call = torch.compile(module._call, dynamic=False, fullgraph=True)
         return module
     if spec.kind == "baseline_pair":

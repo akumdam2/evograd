@@ -27,7 +27,7 @@ benchmark/
 └── topdown/
     ├── common/           harvest, snapshot, smoke, and workload facilities
     ├── qwen3_0_6b/       the current Qwen3-0.6B L4-to-L1 path
-    ├── llama3_8b/        the Llama-3-8B workload and harvest
+    ├── llama3_2_1b/        the Llama-3-8B workload and harvest
     └── alphafold3/       the AlphaFold3 whole-model declaration
 ```
 
@@ -49,7 +49,7 @@ in this order:
 2. `topdown/<model>/` — cases *observed* in that model's captured run, read
    from its frozen snapshot. Two models may bind the same primitive: each
    contributes its own named suite (`qwen3_0_6b_observed`,
-   `llama_3_8b_observed`) and the binder keeps both, in the order the registry
+   `llama_3_2_1b_observed`) and the binder keeps both, in the order the registry
    supplies them. Only a real collision — the same primitive under the same
    suite name — is refused. A workload whose harvest has not been run
    contributes nothing and blocks no import; a snapshot that exists and fails

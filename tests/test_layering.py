@@ -11,7 +11,7 @@ SHARED = (
     EVOGRAD / "benchmark" / "topdown" / "common",
     EVOGRAD / "evaluation" / "tier3" / "gate",
 )
-WORKLOAD_MARKERS = ("qwen3_0_6b", "llama3_8b", "alphafold3")
+WORKLOAD_MARKERS = ("qwen3_0_6b", "llama3_2_1b", "alphafold3")
 
 
 def _resolved_imports(path: pathlib.Path) -> set[str]:
@@ -195,8 +195,8 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
     layering test passing on the model that was checked while the new one drifts.
     """
 
-    LLAMA_BENCH = EVOGRAD / "benchmark" / "topdown" / "llama3_8b"
-    LLAMA_EVAL = EVOGRAD / "evaluation" / "workloads" / "llama3_8b"
+    LLAMA_BENCH = EVOGRAD / "benchmark" / "topdown" / "llama3_2_1b"
+    LLAMA_EVAL = EVOGRAD / "evaluation" / "workloads" / "llama3_2_1b"
 
     def test_llama_benchmark_side_imports_no_evaluation(self):
         for path in _python_files(self.LLAMA_BENCH):
@@ -226,7 +226,7 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
 
     def test_each_site_package_owns_its_contract_reference_and_capture(self):
         """Four site packages, as Qwen3 has, rather than four flat modules."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
         for site in manifest.SITES:
             for part in ("__init__.py", "task.py", "reference.py", "capture.py"):

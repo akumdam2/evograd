@@ -109,116 +109,31 @@ class PatchSet:
                    expected_counts=dict(payload.get("expected_counts") or {}))
 
 
-def compiled_site_kernel(site: str, registry):
-    """The site's own declared production spelling, compiled.
+# ── provider construction ────────────────────────────────────────────────────
+#
+# These moved to `evograd.evaluation.tier3.providers`. Nothing in them ever
+# knew which model it was patching -- a site name and a registry were the whole
+# input -- and keeping them here meant no other workload could offer the same
+# providers. Re-exported so this module's surface is unchanged.
 
-    ``torch.compile`` of the exact function the unpatched model already calls:
-    same mathematics, a different schedule and a different summation order. That
-    makes it the right anchor for a whole-model drift threshold -- it is a
-    *correct* implementation, independently produced, whose disagreement with
-    eager is the disagreement any correct reimplementation is entitled to.
-
-    The bound-pair alternative cannot do this job for three of the four sites.
-    It recomputes through the same ``runtime_forward`` the production spelling
-    calls, so its drift is identically zero and the threshold collapses onto the
-    metric floor -- which then rejects this very provider.
-    """
-    from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.benchmark import get_task
-
-    reference = resolve_runtime_forward(get_task(registry.require(site).op))
-    return torch.compile(reference, dynamic=False, fullgraph=True)
+from evograd.evaluation.tier3.providers import (  # noqa: E402,F401  (re-export)
+    PATCH_SPEC_KINDS,
+    compiled_kernels,
+    compiled_site_kernel,
+    kernels_from_patches,
+    parse_patch_set_spec,
+    parse_patch_specs,
+)
 
 
 def compiled_trusted_kernels(patch_set: PatchSet, registry):
     """A trusted provider patched at exactly the candidate's sites, compiled.
 
-    Site-matched by construction: it patches ``patch_set.patched`` and nothing
-    else, so one site's calibration can never be built from another's drift.
+    The :class:`PatchSet` form, which is what the simplified policy binds
+    against; :func:`evograd.evaluation.tier3.providers.compiled_kernels` is the
+    same thing taking plain site names.
     """
-    from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
-
-    kernels = KernelSet(registry=registry)
-    for site in patch_set.patched:
-        kernels = patch(
-            kernels, site, compiled_site_kernel(site, registry),
-            source=KernelSource(site=site, op_name=registry.require(site).op,
-                                module=None, origin="trusted_torch_compile"),
-        )
-    return kernels
-
-
-PATCH_SPEC_KINDS = ("compile", "liger")
-
-
-def parse_patch_specs(entries) -> dict[str, str]:
-    """``["attention=compile", "residual_rmsnorm=liger", "qkv_norm_rope=path.py"]`` -> dict."""
-    patches: dict[str, str] = {}
-    for entry in entries or ():
-        site, _, spec = str(entry).partition("=")
-        if not site or not spec:
-            raise ValueError(f"--patch wants SITE=compile|liger|PATH, got {entry!r}")
-        if site in patches:
-            raise ValueError(f"site {site!r} patched twice")
-        patches[site] = spec
-    return patches
-
-
-def parse_patch_set_spec(text: str) -> tuple[str, dict[str, str]]:
-    """``"name:site=spec,site=spec"`` -> ``(name, patches)``."""
-    name, sep, rest = str(text).partition(":")
-    if not sep or not name or not rest:
-        raise ValueError(f"--patch-set wants NAME:SITE=SPEC[,SITE=SPEC...], got {text!r}")
-    return name, parse_patch_specs(rest.split(","))
-
-
-def kernels_from_patches(patches: dict[str, str], registry, ops=None, *, load_program=None):
-    """One kernel set holding several sites' replacements, each by its real route.
-
-    ``compile`` -> ``torch.compile`` of the site's declared runtime_forward (origin
-    ``trusted_torch_compile``); ``liger`` -> the declaration's reviewed Liger pair
-    through ``kernel_from_pair`` (origin ``baseline:liger``, a bind pair wrapper --
-    *not* Liger's own autograd Function); a path -> the evolved program through
-    ``patched_kernels`` (origin as that helper records it, e.g.
-    ``candidate:direct_deployment``). Every site is patched exactly once, so the
-    resulting patch set is the union and the adapters carry whatever comes along.
-    """
-    import importlib.util
-    from pathlib import Path
-
-    from evograd.evaluation.tier3.patch import (
-        KernelSet, KernelSource, kernel_from_pair, patch, patched_kernels)
-    from evograd.opdecl.baselines import baseline_candidate_module
-    from evograd.benchmark import TASKS
-
-    ops = dict(ops or TASKS)
-    kernels = KernelSet(registry=registry)
-    for site, spec in patches.items():
-        decl = registry.require(site)
-        if spec == "compile":
-            kernels = patch(kernels, site, compiled_site_kernel(site, registry),
-                            source=KernelSource(site=site, op_name=decl.op, module=None,
-                                                origin="trusted_torch_compile"))
-        elif spec == "liger":
-            op = ops[decl.op]
-            if "liger" not in op.performance_baselines:
-                raise ValueError(f"{decl.op} declares no liger baseline")
-            module = baseline_candidate_module(op, "liger")
-            kernels = patch(kernels, site, kernel_from_pair(op, module),
-                            source=KernelSource(site=site, op_name=decl.op, module=module,
-                                                origin="baseline:liger"))
-        else:
-            path = Path(spec)
-            if load_program is None:
-                s = importlib.util.spec_from_file_location(f"evograd_patch_{path.stem}", path)
-                module = importlib.util.module_from_spec(s)
-                s.loader.exec_module(module)
-            else:
-                module = load_program(path)
-            single = patched_kernels({site: module}, ops, registry=registry)
-            kernels = patch(kernels, site, single.kernel_for(site),
-                            source=single.source_for(site))
-    return kernels
+    return compiled_kernels(patch_set.patched, registry)
 
 
 #: Which trusted replacement a calibration is anchored on. Recorded in the

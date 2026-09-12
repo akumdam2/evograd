@@ -219,11 +219,11 @@ class TestDefaultsPreserved(unittest.TestCase):
         for task in ("linear_no_bias", "rmsnorm", "rope", "swiglu", "cross_entropy"):
             with self.subTest(task=task):
                 models = {w.provenance.model for w in get_task(task).benchmark}
-                self.assertEqual(models, {"llama_3_8b"})
+                self.assertEqual(models, {"llama_3_2_1b"})
 
     def test_the_new_task_also_has_a_llama_default(self):
         models = {w.provenance.model for w in get_task("causal_gqa_attention").benchmark}
-        self.assertEqual(models, {"llama_3_8b"})
+        self.assertEqual(models, {"llama_3_2_1b"})
 
     def test_legacy_ablation_suites_survive(self):
         self.assertEqual(len(get_task("swiglu").benchmark_workloads("legacy")), 42)

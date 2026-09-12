@@ -28,16 +28,16 @@ from __future__ import annotations
 
 import unittest
 
-from evograd.evaluation.tier3.workloads.llama3_8b.boundary import (
+from evograd.evaluation.tier3.workloads.llama3_2_1b.boundary import (
     EXPECTED,
     BoundaryReport,
     SitePlan,
     invocation_id,
 )
-from evograd.evaluation.tier3.workloads.llama3_8b.boundary import (
+from evograd.evaluation.tier3.workloads.llama3_2_1b.boundary import (
     expected_counts as boundary_expected_counts,
 )
-from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
     ADAPTER_GROUPS,
     SITE_ATTENTION,
     SITE_MLP,
@@ -46,7 +46,7 @@ from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
     expected_counts,
     live_sites,
 )
-from evograd.benchmark.topdown.llama3_8b.levels.level4.spec import LLAMA_3_8B
+from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
 
 #: Small enough to enumerate by hand, large enough that a per-layer count and a
 #: per-model count cannot be confused for each other.
@@ -99,7 +99,7 @@ class TestTheTwoCountTablesAreOne(unittest.TestCase):
     """``boundary`` restates the registry's law; it must not re-author it."""
 
     def test_the_boundary_module_delegates_rather_than_declaring(self):
-        for layers in (1, 2, LAYERS, LLAMA_3_8B["num_hidden_layers"]):
+        for layers in (1, 2, LAYERS, LLAMA_3_2_1B["num_hidden_layers"]):
             with self.subTest(layers=layers):
                 self.assertEqual(
                     boundary_expected_counts(layers),
@@ -111,7 +111,7 @@ class TestTheTwoCountTablesAreOne(unittest.TestCase):
         supplied, so a literal drifting from the architecture would silently
         judge a canonical run against the wrong counts."""
         self.assertEqual(
-            EXPECTED, expected_counts(LLAMA_3_8B["num_hidden_layers"])
+            EXPECTED, expected_counts(LLAMA_3_2_1B["num_hidden_layers"])
         )
 
 
@@ -140,7 +140,7 @@ class TestSitePlanRoles(unittest.TestCase):
                 self.assertEqual(set(plan.expected), {site})
 
     def test_the_plan_takes_its_counts_from_the_registry(self):
-        for layers in (2, LAYERS, LLAMA_3_8B["num_hidden_layers"]):
+        for layers in (2, LAYERS, LLAMA_3_2_1B["num_hidden_layers"]):
             with self.subTest(layers=layers):
                 plan = SitePlan.build((SITE_QKV,), layers=layers)
                 self.assertEqual(plan.expected, {
@@ -257,7 +257,7 @@ class TestStrictFailures(unittest.TestCase):
 
 class TestGateReasonNamesTheSite(unittest.TestCase):
     def test_a_coverage_failure_reports_site_role_expected_and_observed(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b.gate import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.gate import (
             _boundary_reason,
         )
 
@@ -271,7 +271,7 @@ class TestGateReasonNamesTheSite(unittest.TestCase):
         """"the QKV kernel never ran" and "the carried attention boundary did
         not" are different diagnoses, and the reason string has to separate
         them -- the site whose kernel is under test is the patched one."""
-        from evograd.evaluation.tier3.workloads.llama3_8b.gate import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.gate import (
             _boundary_reason,
         )
 
@@ -282,7 +282,7 @@ class TestGateReasonNamesTheSite(unittest.TestCase):
         self.assertIn("supporting", reason)
 
     def test_an_unexpected_site_is_reported_as_such(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b.gate import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.gate import (
             _boundary_reason,
         )
 

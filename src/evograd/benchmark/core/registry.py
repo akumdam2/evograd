@@ -85,7 +85,7 @@ def _observed_bindings() -> tuple:
     apply a configuration, each model owns which primitives it binds, and this
     function is the one place that says which models there are.
     """
-    from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+    from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
         OBSERVED_BINDINGS as LLAMA_3_8B,
     )
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import (
@@ -138,7 +138,7 @@ def _model_task_packages() -> tuple[str, ...]:
     """
     return (
         "evograd.benchmark.topdown.qwen3_0_6b.levels.level2",
-        "evograd.benchmark.topdown.llama3_8b.levels.level2",
+        "evograd.benchmark.topdown.llama3_2_1b.levels.level2",
     )
 
 

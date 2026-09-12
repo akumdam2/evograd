@@ -214,7 +214,7 @@ class TestQwenProvenance(unittest.TestCase):
         """The Qwen suite is added, not substituted."""
         full = OP.benchmark_workloads("full")
         self.assertTrue(full)
-        self.assertTrue(all(w.provenance.model == "llama_3_8b" for w in full))
+        self.assertTrue(all(w.provenance.model == "llama_3_2_1b" for w in full))
         self.assertEqual(len(OP.benchmark_workloads("legacy")), 16)
 
     def test_fifty_six_fusion_sites_derived_not_counted(self):

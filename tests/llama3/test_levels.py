@@ -51,13 +51,13 @@ class TestQkvRopeDeclaration(unittest.TestCase):
     def test_it_returns_q_k_and_v_in_that_order(self):
         self.assertEqual(self.op.output_names, ("q", "k", "v"))
 
-    def test_the_benchmark_shape_is_llama_3_8bs(self):
+    def test_the_benchmark_shape_is_llama_3_2_1bs(self):
         """Derived from the published configuration, not written out."""
-        from evograd.opdecl.models import LLAMA_3_8B
+        from evograd.opdecl.models import LLAMA_3_2_1B
 
         self.assertEqual(
             self.op.benchmark[0].dims,
-            LLAMA_3_8B.qkv_norm_rope_dims(batch=2, seq=2048),
+            LLAMA_3_2_1B.qkv_norm_rope_dims(batch=2, seq=2048),
         )
 
     def test_the_declared_layout_is_the_head_major_view(self):
@@ -70,11 +70,11 @@ class TestQkvRopeDeclaration(unittest.TestCase):
     def test_the_observed_suite_appears_only_once_harvested(self):
         """A suite named ``observed`` must come from an observation. It is wired
         and inert; the harvest is what turns it on, with no edit here."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level2.qkv_rope import task as decl
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope import task as decl
 
-        self.assertEqual(decl.HARVESTED, has_snapshot("llama_3_8b"))
+        self.assertEqual(decl.HARVESTED, has_snapshot("llama_3_2_1b"))
         self.assertEqual(
-            "llama_3_8b_observed" in self.op.benchmark_suites, decl.HARVESTED
+            "llama_3_2_1b_observed" in self.op.benchmark_suites, decl.HARVESTED
         )
 
     def test_both_tolerance_questions_are_answered_by_measurement(self):
@@ -86,7 +86,7 @@ class TestQkvRopeDeclaration(unittest.TestCase):
         grid's longest is 64, and what that costs in bfloat16 is what the hook
         encodes; its sufficiency was measured on a GH200 at the model's widths,
         which is what ``CALIBRATED`` now records."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level2.qkv_rope import task as decl
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope import task as decl
 
         self.assertTrue(decl.GRID_CALIBRATED)
         self.assertEqual(
@@ -263,7 +263,7 @@ COMPOSES_INTO_EXPECTED = {
 class TestLevel1Mapping(unittest.TestCase):
     def test_rmsnorm_reaches_only_the_residual_fusion(self):
         """One edge, not Qwen3's two: Llama-3's only RMSNorm is the decoder's."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
             COMPOSES_INTO,
         )
 
@@ -272,7 +272,7 @@ class TestLevel1Mapping(unittest.TestCase):
 
     def test_every_named_operator_exists(self):
         from evograd.benchmark import TASKS
-        from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
             COMPOSES_INTO,
             OBSERVED_BINDINGS,
             OPERATORS,
@@ -313,7 +313,7 @@ class TestLevel1Mapping(unittest.TestCase):
         for module in ("verify", "calibrate", "cli"):
             with self.subTest(module=module):
                 importlib.import_module(
-                    f"evograd.evaluation.workloads.llama3_8b.level1.{module}"
+                    f"evograd.evaluation.workloads.llama3_2_1b.level1.{module}"
                 )
 
     def test_the_mapping_refuses_by_name_until_the_harvest_is_run(self):
@@ -322,10 +322,10 @@ class TestLevel1Mapping(unittest.TestCase):
         An unrun harvest and an empty harvest are different answers, and the
         one thing a workload package must never do is fabricate the second.
         """
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import SnapshotError
-        from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import mapping
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import SnapshotError
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import mapping
 
-        if has_snapshot("llama_3_8b"):
+        if has_snapshot("llama_3_2_1b"):
             report = mapping()
             self.assertIn("snapshot_hash", report)
             self.assertEqual(report["composes_into"], COMPOSES_INTO_EXPECTED)
@@ -337,14 +337,14 @@ class TestLevel1Mapping(unittest.TestCase):
 
 class TestLevel2Package(unittest.TestCase):
     def test_the_projection_boundary_is_llamas_own_declaration(self):
-        from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
         self.assertEqual(manifest.SITE_TASKS["qkv_rope"], "llama3_qkv_rope")
         self.assertEqual(manifest.task_key("qkv_rope"), "llama3_qkv_rope")
 
     def test_every_calibrated_operator_exists(self):
         from evograd.benchmark import TASKS
-        from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
         for name in manifest.SITE_TASKS.values():
             self.assertIn(name, TASKS)
@@ -353,19 +353,19 @@ class TestLevel2Package(unittest.TestCase):
     def test_each_module_names_the_operator_it_calibrates(self):
         import importlib
 
-        from evograd.benchmark.topdown.llama3_8b.levels.level2 import manifest
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
         for module_name, op_name in manifest.SITE_TASKS.items():
             with self.subTest(module=module_name):
                 module = importlib.import_module(
-                    f"evograd.benchmark.topdown.llama3_8b.levels.level2.{module_name}"
+                    f"evograd.benchmark.topdown.llama3_2_1b.levels.level2.{module_name}"
                 )
                 # The site package serves the declaration itself, so this
                 # compares what the registry will register rather than a
                 # second string that could drift away from it.
                 self.assertEqual(module.op.name, op_name)
                 capture = importlib.import_module(
-                    f"evograd.benchmark.topdown.llama3_8b.levels.level2."
+                    f"evograd.benchmark.topdown.llama3_2_1b.levels.level2."
                     f"{module_name}.capture"
                 )
                 self.assertEqual(capture.TASK_NAME, op_name)
@@ -375,27 +375,27 @@ class TestLevel3Package(unittest.TestCase):
     def test_the_representative_layer_is_this_architectures(self):
         """Half depth, as Qwen3 picks half of 28. Naming one is what makes two
         captures comparable."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level3 import capture
-        from evograd.benchmark.topdown.llama3_8b.levels.level4.spec import LLAMA_3_8B
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3 import capture
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
 
         self.assertEqual(
-            capture.CANONICAL_LAYER_INDEX, LLAMA_3_8B["num_hidden_layers"] // 2
+            capture.CANONICAL_LAYER_INDEX, LLAMA_3_2_1B["num_hidden_layers"] // 2
         )
 
     def test_the_schemas_are_llamas_own(self):
         """A Qwen3 capture relabelled as a Llama one would otherwise load."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level3 import artifact
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3 import artifact
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level3 import (
             artifact as qwen_artifact,
         )
-        from evograd.evaluation.workloads.llama3_8b.level3 import replay
+        from evograd.evaluation.workloads.llama3_2_1b.level3 import replay
 
         self.assertIn("llama3", artifact.SCHEMA_VERSION)
         self.assertIn("llama3", replay.REPORT_SCHEMA)
         self.assertNotEqual(artifact.SCHEMA_VERSION, qwen_artifact.SCHEMA_VERSION)
 
     def test_replay_builds_one_decoder_layer_and_nothing_above_it(self):
-        from evograd.evaluation.workloads.llama3_8b.level3 import replay
+        from evograd.evaluation.workloads.llama3_2_1b.level3 import replay
 
         live = replay.live_model_instances()
         self.assertIn("LlamaForCausalLM", live)
@@ -410,18 +410,18 @@ class TestUnharvestedStagesRefuseByName(unittest.TestCase):
     measurement of Llama-3 and is not.
     """
 
-    @unittest.skipIf(has_snapshot("llama_3_8b"), "a snapshot now exists")
+    @unittest.skipIf(has_snapshot("llama_3_2_1b"), "a snapshot now exists")
     def test_loading_the_snapshot_names_the_harvest_command(self):
         from evograd.benchmark.topdown import load_snapshot
 
         with self.assertRaises(UnharvestedWorkload) as caught:
-            load_snapshot("llama_3_8b")
+            load_snapshot("llama_3_2_1b")
         message = str(caught.exception)
         self.assertIn("harvest.harvest", message)
         self.assertIn("harvest.snapshot", message)
 
     def test_the_tier3_gate_names_the_calibration_command(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b import gate
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import gate
 
         with self.assertRaises(gate.CalibrationUnavailable) as caught:
             gate.load_policy()

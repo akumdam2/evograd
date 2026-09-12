@@ -17,9 +17,9 @@ import json
 import unittest
 
 from evograd.benchmark.topdown.common.spec import analytic_parameter_count
-from evograd.benchmark.topdown.llama3_8b.levels.level4.spec import (
+from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import (
     CANONICAL,
-    LLAMA_3_8B,
+    LLAMA_3_2_1B,
     MODEL_NAME,
     WorkloadSpec,
     WorkloadSpecError,
@@ -50,44 +50,61 @@ class TestPublishedArchitecture(unittest.TestCase):
     """The architecture is written out, so it can be wrong. These re-derive it."""
 
     def test_the_parameter_count_matches_the_published_model(self):
-        """8.03B total is the number on the model card. It is a function of the
-        config alone, so reproducing it checks every width at once -- and no
-        network or checkpoint is needed to do it."""
-        counts = analytic_parameter_count(LLAMA_3_8B)
-        self.assertAlmostEqual(counts["total"] / 1e9, 8.03, places=2)
+        """1.24B total is the number on the Llama-3.2-1B model card. It is a
+        function of the config alone, so reproducing it checks every width at
+        once -- and no network or checkpoint is needed to do it."""
+        counts = analytic_parameter_count(LLAMA_3_2_1B)
+        self.assertAlmostEqual(counts["total"] / 1e9, 1.24, places=2)
 
-    def test_the_embedding_is_not_tied(self):
-        """Unlike Qwen3-0.6B. If this were wrong the lm_head would vanish from
-        the parameter count and from every gradient check."""
-        self.assertFalse(LLAMA_3_8B["tie_word_embeddings"])
-        counts = analytic_parameter_count(LLAMA_3_8B)
-        self.assertEqual(counts["lm_head"], LLAMA_3_8B["vocab_size"] * LLAMA_3_8B["hidden_size"])
+    def test_the_embedding_is_tied(self):
+        """Like Qwen3-0.6B, and unlike the Meta-Llama-3-8B this package was
+        written around. If this were wrong an extra 128256x2048 matrix would
+        appear in the parameter count, and `embed_tokens.weight` would stop
+        accumulating gradient from the head as well as the lookup."""
+        self.assertTrue(LLAMA_3_2_1B["tie_word_embeddings"])
+        counts = analytic_parameter_count(LLAMA_3_2_1B)
+        self.assertEqual(counts["lm_head"], 0)
+
+    def test_rope_is_scaled_the_way_llama_3_2_scales_it(self):
+        """Llama-3.2 scales RoPE where Llama-3 did not. It changes the values in
+        the cos/sin tables and no kernel's contract -- they reach the qkv_rope
+        boundary as Inactive inputs -- but a missing scaling would put different
+        numbers through every rotary kernel."""
+        scaling = LLAMA_3_2_1B["rope_scaling"]
+        self.assertEqual(scaling["rope_type"], "llama3")
+        self.assertEqual(scaling["factor"], 32.0)
+        self.assertEqual(scaling["original_max_position_embeddings"], 8192)
+
+    def test_the_head_dimension_is_not_hidden_over_heads_by_accident(self):
+        """64, and stated. It happens to equal hidden_size // heads here, so a
+        derived value would agree today and diverge silently if either moved."""
+        self.assertEqual(LLAMA_3_2_1B["head_dim"], 64)
 
     def test_the_rope_base_is_llama_3s_and_not_llama_2s(self):
         """500000, not 10000. Getting this wrong produces a RoPE kernel that is
         self-consistent and completely wrong."""
-        self.assertEqual(LLAMA_3_8B["rope_theta"], 500000.0)
+        self.assertEqual(LLAMA_3_2_1B["rope_theta"], 500000.0)
 
     def test_grouped_query_attention_is_declared(self):
-        self.assertEqual(LLAMA_3_8B["num_attention_heads"], 32)
-        self.assertEqual(LLAMA_3_8B["num_key_value_heads"], 8)
+        self.assertEqual(LLAMA_3_2_1B["num_attention_heads"], 32)
+        self.assertEqual(LLAMA_3_2_1B["num_key_value_heads"], 8)
         self.assertEqual(
-            LLAMA_3_8B["num_attention_heads"] % LLAMA_3_8B["num_key_value_heads"], 0
+            LLAMA_3_2_1B["num_attention_heads"] % LLAMA_3_2_1B["num_key_value_heads"], 0
         )
 
     def test_head_dim_times_heads_equals_hidden(self):
         """True for Llama-3-8B and *not* for Qwen3-0.6B, which fans out. It is
         why this model's q_proj and o_proj deduplicate into one configuration."""
         self.assertEqual(
-            LLAMA_3_8B["num_attention_heads"] * LLAMA_3_8B["head_dim"],
-            LLAMA_3_8B["hidden_size"],
+            LLAMA_3_2_1B["num_attention_heads"] * LLAMA_3_2_1B["head_dim"],
+            LLAMA_3_2_1B["hidden_size"],
         )
 
     def test_there_is_no_per_head_qk_normalization(self):
         """Qwen3's distinguishing feature, which Llama-3 does not have. The
         observer, the level-1 mapping and any future level-2 task all depend on
         this being true."""
-        self.assertNotIn("qk_norm", LLAMA_3_8B)
+        self.assertNotIn("qk_norm", LLAMA_3_2_1B)
 
 
 class TestCanonicalSpec(unittest.TestCase):
@@ -108,10 +125,11 @@ class TestCanonicalSpec(unittest.TestCase):
         self.assertEqual(WorkloadSpec(), CANONICAL)
 
     def test_the_sequence_fits_the_architecture(self):
-        self.assertLessEqual(CANONICAL.seq_len, LLAMA_3_8B["max_position_embeddings"])
+        self.assertLessEqual(CANONICAL.seq_len, LLAMA_3_2_1B["max_position_embeddings"])
 
     def test_the_workload_id_is_stable_and_names_the_model(self):
-        self.assertTrue(CANONICAL.workload_id.startswith("meta-llama-3-8b.train.bs2.seq2048.bf16.cuda.sdpa."))
+        self.assertTrue(CANONICAL.workload_id.startswith(
+            "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa."))
         self.assertEqual(CANONICAL.workload_id, WorkloadSpec().workload_id)
 
     def test_it_does_not_collide_with_the_other_workload(self):
@@ -132,7 +150,7 @@ class TestCanonicalSpec(unittest.TestCase):
 
     def test_a_sequence_past_the_context_window_is_refused(self):
         with self.assertRaises(WorkloadSpecError):
-            CANONICAL.replace(seq_len=LLAMA_3_8B["max_position_embeddings"] + 1)
+            CANONICAL.replace(seq_len=LLAMA_3_2_1B["max_position_embeddings"] + 1)
 
     def test_any_override_makes_the_run_non_canonical(self):
         for override in ({"batch_size": 1}, {"seq_len": 512},
@@ -148,7 +166,7 @@ class TestDeclaration(unittest.TestCase):
     """The declaration is what every shared stage reads."""
 
     def setUp(self):
-        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
+        from evograd.benchmark.topdown.llama3_2_1b.declaration import WORKLOAD
 
         self.workload = WORKLOAD
 
@@ -199,7 +217,7 @@ class TestSnapshotState(unittest.TestCase):
     def test_the_level1_mapping_covers_every_role_llama_presents(self):
         """An unmapped role raises during extraction rather than being dropped,
         so this is what stands between a harvest and a silent gap."""
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import LEVEL1_SOURCES
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import LEVEL1_SOURCES
 
         linear = LEVEL1_SOURCES["linear_no_bias"]["component_by_role"]
         for role in ("q_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "lm_head"):
@@ -209,7 +227,7 @@ class TestSnapshotState(unittest.TestCase):
     def test_every_level1_component_re_derives_from_the_published_config(self):
         """The provenance claim is mechanical: the component named must
         reproduce the dims the harvest will record."""
-        from evograd.opdecl.models import LLAMA_3_8B as CONFIG
+        from evograd.opdecl.models import LLAMA_3_2_1B as CONFIG
 
         for component in ("attn_qkv", "attn_out_proj", "attn_kv_proj",
                           "mlp_up", "mlp_down", "lm_head", "rmsnorm"):
@@ -221,7 +239,7 @@ class TestSnapshotState(unittest.TestCase):
         """At Llama-3-8B's widths q_proj and o_proj are both 4096->4096, so the
         harvest deduplicates them into one configuration and the extraction has
         to pick one component. This checks the choice cannot matter."""
-        from evograd.opdecl.models import LLAMA_3_8B as CONFIG
+        from evograd.opdecl.models import LLAMA_3_2_1B as CONFIG
 
         self.assertEqual(CONFIG.attn_qkv_dims(tokens=64),
                          CONFIG.attn_out_proj_dims(tokens=64))
@@ -230,7 +248,7 @@ class TestSnapshotState(unittest.TestCase):
         """A task pointing at an undeclared operator would produce a snapshot
         nothing can read."""
         from evograd.benchmark import TASKS
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import TASK_SOURCES
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import TASK_SOURCES
 
         for name in TASK_SOURCES:
             self.assertIn(name, TASKS, f"{name} has no declaration")
@@ -248,7 +266,7 @@ class TestItActuallyBuilds(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from evograd.benchmark.topdown.common.smoke import run_smoke
-        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
+        from evograd.benchmark.topdown.llama3_2_1b.declaration import WORKLOAD
 
         cls.workload = WORKLOAD
         cls.report = run_smoke(WORKLOAD, tiny_spec())
@@ -281,7 +299,7 @@ class TestItActuallyHarvests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from evograd.benchmark.topdown.common.harvest import run_harvest
-        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
+        from evograd.benchmark.topdown.llama3_2_1b.declaration import WORKLOAD
 
         cls.workload = WORKLOAD
         cls.manifest = run_harvest(WORKLOAD, tiny_spec())
@@ -323,7 +341,7 @@ class TestItActuallyHarvests(unittest.TestCase):
     def test_the_snapshot_extraction_maps_every_observed_configuration(self):
         """The step that turns a run into task shapes. An unmapped role raises,
         so reaching the end is the assertion."""
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(
@@ -342,7 +360,7 @@ class TestItActuallyHarvests(unittest.TestCase):
         not before is the projection prefix, which needed ``llama3_qkv_rope`` to
         exist because Llama has no per-head q/k norm to point a shared entry at.
         """
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(
@@ -361,7 +379,7 @@ class TestItActuallyHarvests(unittest.TestCase):
         )
 
     def test_the_extracted_snapshot_names_llama_not_qwen(self):
-        from evograd.benchmark.topdown.llama3_8b.harvest.snapshot import extract
+        from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(snapshot["model"]["name"], MODEL_NAME)
@@ -416,7 +434,7 @@ class TestObservedAttentionMatchesTheArchitecture(unittest.TestCase):
     def test_grouped_keys_are_accepted(self):
         from evograd.benchmark.topdown.common.observe import check_observed_attention
 
-        check_observed_attention(self._observation(8), dict(LLAMA_3_8B))
+        check_observed_attention(self._observation(8), dict(LLAMA_3_2_1B))
 
     def test_materialised_keys_are_refused_and_the_message_says_why(self):
         from evograd.benchmark.topdown.common.observe import (
@@ -425,7 +443,7 @@ class TestObservedAttentionMatchesTheArchitecture(unittest.TestCase):
         )
 
         with self.assertRaises(ObservedOperatorError) as caught:
-            check_observed_attention(self._observation(32), dict(LLAMA_3_8B))
+            check_observed_attention(self._observation(32), dict(LLAMA_3_2_1B))
         message = str(caught.exception)
         for expected in ("8 key/value heads", "32 key heads", "repeat_kv",
                          "enable_gqa", "not written"):
@@ -435,7 +453,7 @@ class TestObservedAttentionMatchesTheArchitecture(unittest.TestCase):
         """MHA is not a violation -- there is nothing to group."""
         from evograd.benchmark.topdown.common.observe import check_observed_attention
 
-        mha = {**LLAMA_3_8B, "num_key_value_heads": LLAMA_3_8B["num_attention_heads"]}
+        mha = {**LLAMA_3_2_1B, "num_key_value_heads": LLAMA_3_2_1B["num_attention_heads"]}
         check_observed_attention(self._observation(32), mha)
 
     def test_the_real_harvest_records_the_models_own_key_heads(self):
@@ -443,11 +461,11 @@ class TestObservedAttentionMatchesTheArchitecture(unittest.TestCase):
         if not HAVE_TRANSFORMERS:
             self.skipTest("transformers is not installed")
         from evograd.benchmark.topdown.common.harvest import run_harvest
-        from evograd.benchmark.topdown.llama3_8b.declaration import WORKLOAD
+        from evograd.benchmark.topdown.llama3_2_1b.declaration import WORKLOAD
 
         manifest = run_harvest(WORKLOAD, tiny_spec(seq_len=128))
         sdpa = [c for c in manifest["configurations"] if c["task"] == "sdpa"]
         self.assertEqual(len(sdpa), 1)
         self.assertEqual(
-            sdpa[0]["inputs"][1]["shape"][1], LLAMA_3_8B["num_key_value_heads"]
+            sdpa[0]["inputs"][1]["shape"][1], LLAMA_3_2_1B["num_key_value_heads"]
         )

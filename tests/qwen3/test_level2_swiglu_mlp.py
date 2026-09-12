@@ -359,7 +359,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
                 self.assertEqual((atol, rtol), (base_atol, base_rtol))
         observed = op.benchmark_workloads(suite="qwen3_0_6b_observed")[0]
         self.assertEqual(observed.dims["I"], 3072)
-        self.assertNotIn("llama_3_8b_observed", op.benchmark_suites)
+        self.assertNotIn("llama_3_2_1b_observed", op.benchmark_suites)
 
 
 

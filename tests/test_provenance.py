@@ -79,13 +79,13 @@ class TestModelRegistry(unittest.TestCase):
             self.assertEqual(dims["S"], dims["N"], residues)
 
     def test_rederive_reports_an_unknown_component_clearly(self):
-        bogus = Provenance(model="llama_3_8b", component="not_a_layer", free={})
+        bogus = Provenance(model="llama_3_2_1b", component="not_a_layer", free={})
         with self.assertRaises(AttributeError) as caught:
             rederive_dims(bogus)
         self.assertIn("not_a_layer", str(caught.exception))
 
     def test_rederive_reports_an_unknown_model_clearly(self):
-        bogus = Provenance(model="llama_3_8b", component="rmsnorm", free={})
+        bogus = Provenance(model="llama_3_2_1b", component="rmsnorm", free={})
         object.__setattr__(bogus, "model", "gpt_9")
         with self.assertRaises(KeyError) as caught:
             config_for(bogus)
@@ -251,7 +251,7 @@ class TestObservedLayout(unittest.TestCase):
 
     def test_an_unknown_layout_is_refused(self):
         with self.assertRaises(ValueError) as caught:
-            Provenance(model="llama_3_8b", component="rmsnorm", layout="column_major")
+            Provenance(model="llama_3_2_1b", component="rmsnorm", layout="column_major")
         self.assertIn("column_major", str(caught.exception))
 
 

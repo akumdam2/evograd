@@ -349,7 +349,7 @@ class TestObservedBindingOwnership(unittest.TestCase):
 
         owners = {
             self.MANIFEST,
-            REPO / "src/evograd/benchmark/topdown/llama3_8b/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/llama3_2_1b/levels/level1/manifest.py",
         }
         declaring = []
         for path in (REPO / "src/evograd").rglob("*.py"):
@@ -548,20 +548,20 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
         """Llama-3-8B's snapshot does not exist yet, so its suites are empty
         and no declaration had to be edited to say so."""
         from evograd.benchmark.topdown import has_snapshot
-        from evograd.benchmark.topdown.llama3_8b.levels.level1.manifest import (
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
             OBSERVED_BINDINGS,
         )
 
-        self.assertFalse(has_snapshot("llama_3_8b"))
+        self.assertFalse(has_snapshot("llama_3_2_1b"))
         base = self._base()
         self.assertIs(bind_observed_cases(base, OBSERVED_BINDINGS), base)
-        self.assertNotIn("llama_3_8b_observed", TASKS["rmsnorm"].benchmark_suites)
+        self.assertNotIn("llama_3_2_1b_observed", TASKS["rmsnorm"].benchmark_suites)
 
     def test_the_registry_supplies_both_models(self):
         from evograd.benchmark.core.registry import _observed_bindings
 
         workloads = {b.workload for b in _observed_bindings()}
-        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_8b"})
+        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b"})
 
 
 if __name__ == "__main__":

@@ -145,7 +145,7 @@ class Provenance:
     scaled and why in ``note``.
     """
 
-    model: str  # registry key in evograd.opdecl.models, e.g. "llama_3_8b"
+    model: str  # registry key in evograd.opdecl.models, e.g. "llama_3_2_1b"
     component: str  # "mlp_down_proj", "decoder_layer", "pair_bias_attention"
     #: The dims a model configuration does *not* fix — batch, token count, crop
     #: length. Everything else is derived. This is what makes the claim
