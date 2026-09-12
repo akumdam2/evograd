@@ -26,7 +26,7 @@ step from position ids and shares them across all 16 layers, so within this
 boundary they are tables, not activations, and they receive no gradient.
 
 **A note on ``QO``.** For Llama-3, ``n_heads * head_dim == hidden``, so ``QO``
-and ``H`` are both 4096 and ``q_proj`` is square. They remain separate declared
+and ``H`` are both 2048 and ``q_proj`` is square. They remain separate declared
 dims because they are separate concepts -- Qwen3's ``QO`` is 2048 against a
 1024 hidden -- and a kernel that fuses them would be correct here and wrong
 there.
@@ -59,7 +59,7 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 
 #: Has the tolerance been measured at the shape the *model* runs?
 #:
-#: **Yes**, on a GH200, at ``[2, 2048, 4096]`` with the full 4096-token
+#: **Yes**, on a GH200, at ``[2, 2048, 2048]`` with the full 4096-token
 #: contraction. Measured with synthetic inputs at the model's widths, because
 #: the harvested capture cannot answer this question: its gradients arrive at
 #: ``ref_absmax`` 0.0 with errors near 1e-07, so it exercises the forward

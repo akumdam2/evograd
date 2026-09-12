@@ -126,7 +126,7 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
     # output projection is the second half of the same boundary and is carried
     # as a supporting configuration rather than a separate task.
     #
-    # For Llama-3-8B `q_proj` and `o_proj` are both 4096 -> 4096, so the harvest
+    # Here `q_proj` and `o_proj` are both 2048 -> 2048, so the harvest
     # deduplicates them into one configuration and this role and the projection
     # task's `q_projection` resolve to the same record. That is correct rather
     # than a collision: they really are the same shape, and both components

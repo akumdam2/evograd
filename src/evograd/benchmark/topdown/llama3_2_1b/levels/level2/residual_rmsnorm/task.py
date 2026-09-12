@@ -38,13 +38,17 @@ _BENCHMARK = model_workloads(
     tolerances=STANDARD_TOLERANCES,
 )
 
-#: How often the fusion occurs in one Llama-3-8B step, derived from the
-#: architecture rather than counted by hand: 32 attention residual adds, 31 MLP
-#: adds into the next layer's input_layernorm, and one final MLP add into
-#: model.norm. 64, against Qwen3-0.6B's 56 -- the arithmetic is each
-#: architecture's own, and neither may borrow the other's.
+#: How often the fusion occurs in one step, derived from the architecture rather
+#: than counted by hand: 16 attention residual adds, 15 MLP adds into the next
+#: layer's input_layernorm, and one final MLP add into model.norm. 32, against
+#: Qwen3-0.6B's 56 -- the arithmetic is each architecture's own, and neither may
+#: borrow the other's.
 LLAMA_FUSION_SITES = LLAMA_3_2_1B.residual_rmsnorm_fusion_sites()
-assert LLAMA_FUSION_SITES["total"] == 64, LLAMA_FUSION_SITES
+#: The law, not the number. `layers + (layers - 1) + 1` collapses to `2 * layers`
+#: for any depth, so this still catches a change to the fusion accounting while
+#: surviving a change to the model. A literal here was `64` for the 8B's 32
+#: layers and made the whole task registry unimportable at 16.
+assert LLAMA_FUSION_SITES["total"] == 2 * LLAMA_3_2_1B.layers, LLAMA_FUSION_SITES
 
 _REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
 
