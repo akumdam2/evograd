@@ -11,6 +11,7 @@ Three things are declared here:
   explicit flag overrides them;
 * the ``structural_identity`` provider, which exists because Llama's adapters
   can call the exact Transformers spellings through native autograd;
+* the ``torch.compile`` providers, which are generic and only need declaring;
 * which optional flags mean anything here, so the parser can refuse the rest by
   name instead of accepting them silently.
 """
@@ -57,24 +58,34 @@ def build(args) -> Any:
 
 
 def providers(args, registry) -> dict[str, Any]:
-    """Llama's own extra provider: the structural-identity control.
+    """Llama's extra providers: the structural-identity control, and compiled ones.
 
     Patching every site with an adapter that calls the exact Transformers
     spelling changes the module structure and no arithmetic, so the result must
     be *bitwise* identical to the unmodified model.
-    """
-    if not getattr(args, "structural_identity", False):
-        return {}
-    from .sites import structural_identity_kernels
 
-    return {"structural_identity": structural_identity_kernels(registry)}
+    ``--compile-site`` and ``--patch-set`` are not Llama's -- they mean the same
+    thing for any workload with a site registry -- so they are built by
+    :func:`evograd.evaluation.tier3.providers.compile_and_patch_set_providers`
+    and this only has to say that Llama offers them.
+    """
+    from evograd.evaluation.tier3.providers import compile_and_patch_set_providers
+
+    providers: dict[str, Any] = {}
+    if getattr(args, "structural_identity", False):
+        from .sites import structural_identity_kernels
+
+        providers["structural_identity"] = structural_identity_kernels(registry)
+    providers.update(compile_and_patch_set_providers(args, registry))
+    return providers
 
 
 ADAPTER = Tier3Adapter(
     name="llama_3_8b",
     build=build,
     providers=providers,
-    options=frozenset({"structural_identity", "layers", "data_seed", "calibration"}),
+    options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
+                       "compile_site", "patch_set"}),
     summary=(
         "Meta-Llama-3-8B, 32 layers, the canonical training step "
         "(--layers shrinks it; ~15 GiB host RAM to build in full)"
