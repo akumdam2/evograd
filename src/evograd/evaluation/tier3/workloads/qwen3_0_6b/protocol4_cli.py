@@ -43,7 +43,11 @@ from .protocol4 import (
     load_policy,
     step_distances,
 )
-from .simple import PatchSet, compiled_trusted_kernels, kernels_from_patches, parse_patch_specs
+# The provider routes (compile | liger | a program path) are the shared
+# tier-3 ones; only the PatchSet-shaped trusted provider is this policy's own.
+from evograd.evaluation.tier3.providers import kernels_from_patches, parse_patch_specs
+
+from .simple import PatchSet, compiled_trusted_kernels
 from .training import TrainingPlan, run_training, training_distances
 
 CALIBRATION_SEEDS = (0, 1, 2)
@@ -113,20 +117,45 @@ def build_kernels(workload, provider: str, candidate: str | None, *,
     raise ValueError(f"unknown provider {provider!r}")
 
 
-def local_checks(workload, kernels, *, device: str, data_seed: int) -> dict[str, Any]:
-    """Part A for one provider: site preflight, purity, every live boundary, counts."""
+def local_checks(workload, kernels, *, device: str, data_seed: int,
+                 envelope: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Part A for one provider: site preflight, purity, every live boundary, counts.
+
+    ``envelope`` is the frozen reference-calibrated local envelope stored beside
+    the policy (``boundary.derive_local_envelope``); absent, the declared
+    tolerance alone judges, exactly as before.
+    """
     from . import boundary, purity
     from .gate import _boundary_reason
 
     preflight = workload.site_preflight(kernels, device=device)
     pure = purity.run_for(kernels, workload, device=device)
-    local = boundary.validate_all_invocations(workload, kernels, data_seed=data_seed)
+    local = boundary.validate_all_invocations(workload, kernels, data_seed=data_seed,
+                                              envelope=envelope)
     ok = bool(preflight.get("ok", True)) and bool(pure.get("ok", False)) and bool(local.get("ok", False))
     return {"ok": ok,
             "site_preflight": preflight,
-            "provider_purity": {"ok": bool(pure.get("ok", False))},
-            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites")},
+            # The purity report's own summary travels with the verdict, so a
+            # purity failure names its call, result and drift instead of only
+            # saying "False" (a residual-site failure on 2026-09-11 could not be
+            # diagnosed from the boolean alone).
+            "provider_purity": {"ok": bool(pure.get("ok", False)),
+                                "isolation": pure.get("isolation"),
+                                "sites": [{k: v for k, v in site.items()
+                                           if k not in ("compared", "checkpoints", "workload", "gate")}
+                                          for site in pure.get("sites", [])]},
+            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites",
+                                                        "local_check_mode", "envelope_admitted")},
+            "per_result_worst": local.get("per_result_worst"),
             "live_boundary_reason": None if local.get("ok") else _boundary_reason(local)}
+
+
+def load_envelope(policy_file) -> dict[str, Any] | None:
+    """The local envelope frozen beside a policy, if the calibration derived one."""
+    if not policy_file:
+        return None
+    payload = json.loads(Path(policy_file).read_text(encoding="utf-8"))
+    return payload.get("local_envelope") or None
 
 
 # ── child jobs ───────────────────────────────────────────────────────────────
@@ -158,7 +187,8 @@ def job_step(args) -> dict[str, Any]:
     })
     if getattr(args, "with_local", False) and kernels.patched:
         distances["local"] = local_checks(workload, kernels, device=args.device,
-                                          data_seed=args.data_seed)
+                                          data_seed=args.data_seed,
+                                          envelope=load_envelope(getattr(args, "envelope_from", None)))
     return distances
 
 
@@ -187,7 +217,8 @@ def job_train(args) -> dict[str, Any]:
 def _isolated(kind: str, *, config_json: str, provider: str, data_seed: int,
               plan: TrainingPlan, candidate: str | None, device: str,
               tag: str, sites: tuple[str, ...] = DEFAULT_SITES,
-              patches: dict[str, str] | None = None, with_local: bool = False) -> dict[str, Any]:
+              patches: dict[str, str] | None = None, with_local: bool = False,
+              envelope_from: str | None = None) -> dict[str, Any]:
     from evograd.pipelines.shared.runner import evograd_env
 
     out = Path(os.environ.get("TMPDIR", "/tmp")) / f"p4-{os.getpid()}-{tag}.json"
@@ -203,6 +234,8 @@ def _isolated(kind: str, *, config_json: str, provider: str, data_seed: int,
         command += ["--patch", f"{site}={spec}"]
     if with_local:
         command += ["--with-local"]
+    if envelope_from:
+        command += ["--envelope-from", str(envelope_from)]
     if candidate:
         command += ["--candidate", candidate]
     started = time.time()
@@ -222,7 +255,7 @@ def measure_provider(provider: str, *, config_json: str, data_seed: int,
                      reference_train: dict[str, Any] | None,
                      log, sites: tuple[str, ...] = DEFAULT_SITES,
                      patches: dict[str, str] | None = None, screening: bool = False,
-                     with_local: bool = False) -> dict[str, Any]:
+                     with_local: bool = False, envelope_from: str | None = None) -> dict[str, Any]:
     """B, C and D for one provider at one seed. D needs the eager curve.
 
     ``screening=True``: A (when ``with_local``), B and C only -- no training run.
@@ -231,7 +264,8 @@ def measure_provider(provider: str, *, config_json: str, data_seed: int,
     step = _isolated("step", config_json=config_json, provider=provider,
                      data_seed=data_seed, plan=plan, candidate=candidate,
                      device=device, tag=f"step-{provider}-{data_seed}",
-                     sites=sites, patches=patches, with_local=with_local)
+                     sites=sites, patches=patches, with_local=with_local,
+                     envelope_from=envelope_from)
     log(f"     kl={step['kl_mean']:.4e} grad={step['global_grad_rel_l2']:.4e} "
         f"counts_ok={step.get('counts_ok')} local_ok={(step.get('local') or {}).get('ok')} "
         f"({step['child_seconds']:.0f}s)")
@@ -275,6 +309,13 @@ def command_calibrate(args) -> int:
         f"{workload.spec.workload_id}, sites {list(sites)}")
     log(f"plan {SCREENING_PLAN if screening else plan.to_dict()}")
     reused = _reusable_cells(getattr(args, "reuse_cells", None), sites=sites, log=log)
+    local_envelope = bool(getattr(args, "local_envelope", False))
+    if local_envelope:
+        # The envelope needs the compile provider's per-invocation boundary
+        # report on every calibration seed, so compile cells are measured here
+        # (with part A) rather than reused; repeated-eager cells may still be.
+        reused = {k: v for k, v in reused.items() if k[0] != "compile"}
+        log("local envelope requested: compile cells measured with part A, not reused")
     cells = []
     for seed in seeds:
         ref_train = None
@@ -299,7 +340,7 @@ def command_calibrate(args) -> int:
             compiled = measure_provider("compile", config_json=config_json, data_seed=seed,
                                         plan=plan, candidate=None, device=args.device,
                                         reference_train=ref_train, log=log, sites=sites,
-                                        screening=screening)
+                                        screening=screening, with_local=local_envelope)
         else:
             log(f"  [compile seed {seed}] compile step reused from --reuse-cells")
         cells.append({"seed": seed, "eager_reference_train": ref_train,
@@ -327,9 +368,25 @@ def command_calibrate(args) -> int:
                               "FlashMask; KL anchor and trajectory thresholds are this "
                               "project's design choices")},
     )
-    _save(out, {"schema": SCHEMA_VERSION, "policy": policy.to_dict(),
-                "workload_config": config, "data_identity": workload.data_identity(),
-                "cells": cells, "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+    payload = {"schema": SCHEMA_VERSION, "policy": policy.to_dict(),
+               "workload_config": config, "data_identity": workload.data_identity(),
+               "cells": cells, "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    if local_envelope:
+        from .boundary import derive_local_envelope
+
+        reports = [c["compile"]["local"]["per_result_worst"] for c in cells
+                   if (c["compile"].get("local") or {}).get("per_result_worst")]
+        payload["local_envelope"] = derive_local_envelope(
+            reports, sources=[f"trusted_torch_compile@seed{c['seed']}" for c in cells])
+        policy.notes["local_envelope"] = ("part A judged by declared tolerance OR the "
+                                          "reference-calibrated envelope stored in this file")
+        payload["policy"] = policy.to_dict()
+        for site, results in payload["local_envelope"]["sites"].items():
+            for name, e in results.items():
+                if e["binding_abs"] == "reference" or e["binding_rel"] == "reference":
+                    log(f"  envelope {site}.{name}: max_abs {e['max_abs']:.4g} ({e['binding_abs']}) "
+                        f"rel_l2 {e['rel_l2']:.3e} ({e['binding_rel']})")
+    _save(out, payload)
     log("frozen thresholds: " + " ".join(f"{k}={v:.4e}" for k, v in policy.thresholds.items()))
     log("binding terms   : " + " ".join(f"{k}={v['binding_term']}" for k, v in policy.derivation.items()))
     log(f"wrote {out}")
@@ -370,6 +427,8 @@ def command_holdout(args) -> int:
     )
     log(("screening " if screening else "") + "policy bound: "
         + " ".join(f"{k}={v:.4e}" for k, v in policy.thresholds.items()))
+    log("part A mode: " + ("declared tolerance OR reference-calibrated envelope"
+                           if payload.get("local_envelope") else "declared tolerance only"))
 
     results = []
     references: dict[int, dict[str, Any]] = {}
@@ -389,7 +448,8 @@ def command_holdout(args) -> int:
                                         plan=plan, candidate=args.candidate,
                                         device=args.device, reference_train=ref_train, log=log,
                                         sites=sites, patches=patches, screening=screening,
-                                        with_local=True)
+                                        with_local=True,
+                                        envelope_from=(args.policy if payload.get("local_envelope") else None))
             verdict = check(policy, measured)
             local = measured.get("local") or {}
             if screening and not local.get("ok", False):
@@ -503,6 +563,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--diagnostic-steps", type=int, default=0,
                        help="holdout --screening: record a short loss trajectory (diagnostic)")
         p.add_argument("--with-local", action="store_true", help=argparse.SUPPRESS)
+        p.add_argument("--local-envelope", action="store_true",
+                       help="calibrate: also derive part A's reference-calibrated local envelope "
+                            "from the compile provider's boundary reports and freeze it in --out")
+        p.add_argument("--envelope-from", default=None, help=argparse.SUPPRESS)
         p.add_argument("--out", default=None)
         p.add_argument("--seeds", default=None)
         p.add_argument("--providers", default="compile,candidate")

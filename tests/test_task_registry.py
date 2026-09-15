@@ -83,6 +83,7 @@ class TestPrimitiveRegistry(unittest.TestCase):
             with self.subTest(op=name):
                 for suite in op.benchmark_suites:
                     self.assertNotIn("qwen3_0_6b", suite)
+                    self.assertNotIn("llama_3_8b", suite)
                     self.assertNotIn("llama_3_2_1b", suite)
 
 

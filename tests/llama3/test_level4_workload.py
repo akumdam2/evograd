@@ -282,7 +282,10 @@ class TestItActuallyBuilds(unittest.TestCase):
         an untied lm_head. Qwen3 at two layers has 24, because it adds q_norm
         and k_norm per layer and ties the lm_head -- the count is a fingerprint
         of the architecture."""
-        self.assertEqual(self.report.result["trainable_params"], 2 * 9 + 3)
+        # Embedding, final norm, and the lm_head only when it is its own matrix:
+        # Llama-3.2-1B ties it to the embedding, so the head adds no parameter.
+        top_level = 2 + (0 if LLAMA_3_2_1B["tie_word_embeddings"] else 1)
+        self.assertEqual(self.report.result["trainable_params"], 2 * 9 + top_level)
 
     def test_the_report_carries_llamas_schema_and_says_it_is_not_canonical(self):
         self.assertEqual(self.report.schema_version, self.workload.smoke_schema)

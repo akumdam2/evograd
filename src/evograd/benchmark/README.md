@@ -27,7 +27,7 @@ benchmark/
 └── topdown/
     ├── common/           harvest, snapshot, smoke, and workload facilities
     ├── qwen3_0_6b/       the current Qwen3-0.6B L4-to-L1 path
-    ├── llama3_2_1b/        the Llama-3-8B workload and harvest
+    ├── llama3_2_1b/        the Llama-3.2-1B workload and harvest
     └── alphafold3/       the AlphaFold3 whole-model declaration
 ```
 
@@ -95,10 +95,9 @@ change the inputs generated for the provenance-free correctness cases. It is
 declaration infrastructure rather than a benchmark manifest, so importing the
 primitives still loads no benchmark package and no frozen snapshot.
 
-The legacy direct-block declarations that used to live under `ops/level3` have
-been deleted. They did not constitute a completed implementation of the
-top-down L3 architectural-block integration, and no task declares level 3
-today.
+L3 blocks are evaluated through Tier-3 workload adapters with `--scope block`.
+Qwen3-0.6B and Llama-3.2-1B support captured and config-derived decoder layers.
+These are integration workloads rather than standalone `OpDecl` kernels.
 
 ## Two benchmark families
 

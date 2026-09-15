@@ -82,6 +82,31 @@ DETERMINISM_MARGIN = 16.0
 DETERMINISM_FLOOR_FRACTION = 1e-3
 
 
+def _ulp_at_max(tensor) -> float:
+    """One unit in the last place of ``tensor``'s dtype at its largest magnitude.
+
+    A reduction that accumulates in float32 through atomics and rounds to
+    bfloat16 once can, on a rare call, land on the other side of a rounding
+    boundary: a single element then differs from call 1 by one bfloat16 ULP at
+    its own scale while every other call agrees to ~1e-4. The median-based
+    drift bound (16x a median spread of 2.4e-4 = 3.9e-3) reads that as state.
+    Found 2026-09-11 on the residual fusion candidate: 3 of 6 in-context runs
+    were refused on ``grad:dweight`` differing by 0.125 (half a ULP at |dweight|
+    in [32, 64)) against a declared tolerance of 1.6. One ULP at the result's
+    own scale is the resolution of the dtype, not a memory of earlier calls, so
+    the drift bound is floored there; the correctness clause (declared
+    tolerance against call 1) is untouched.
+    """
+    import math
+
+    if not torch.is_tensor(tensor) or not torch.is_floating_point(tensor):
+        return 0.0
+    peak = float(tensor.detach().abs().max())
+    if peak == 0.0:
+        return 0.0
+    return torch.finfo(tensor.dtype).eps * 2.0 ** math.floor(math.log2(peak))
+
+
 def _clone(value):
     if torch.is_tensor(value):
         return value.detach().clone()
@@ -278,11 +303,14 @@ def check_site(site: str, op_name: str, kernel, *, registry, suite: str,
         _tolerance(op, workload, name)[0] for name in first["results"]
     )
     bound = max(noise, floor) * DETERMINISM_MARGIN
+    ulp_floor = {name: _ulp_at_max(value) for name, value in first["results"].items()}
     drift = next(
         ({"call": s["call"], "result": s["where"], "max_abs_err": s["worst"],
           "median_consecutive_spread": noise, "floor": floor, "bound": bound,
+          "ulp_at_scale": ulp_floor.get(s["where"], 0.0),
           "regime": "deterministic" if noise == 0.0 else "noisy"}
-         for s in from_first if s["worst"] > bound),
+         for s in from_first
+         if s["worst"] > max(bound, ulp_floor.get(s["where"], 0.0))),
         None,
     )
 
@@ -302,6 +330,8 @@ def check_site(site: str, op_name: str, kernel, *, registry, suite: str,
         "determinism_regime": "deterministic" if noise == 0.0 else "noisy",
         "determinism_floor": floor,
         "determinism_bound": bound,
+        "determinism_ulp_floor": ulp_floor,
+        "drift_rule": "spread from call 1 > max(bound, one ULP of the result at its own scale)",
         "first_drift": drift,
         "ok": bool(first_divergence is None and drift is None and not mutations
                    and first["finite"]),

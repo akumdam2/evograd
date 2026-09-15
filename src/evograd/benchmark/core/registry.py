@@ -86,7 +86,7 @@ def _observed_bindings() -> tuple:
     function is the one place that says which models there are.
     """
     from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
-        OBSERVED_BINDINGS as LLAMA_3_8B,
+        OBSERVED_BINDINGS as LLAMA_3_2_1B,
     )
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import (
         OBSERVED_BINDINGS as QWEN3_0_6B,
@@ -95,7 +95,7 @@ def _observed_bindings() -> tuple:
     # Order is fixed and part of the contract: a primitive both models bind
     # receives Qwen3's suite first and Llama-3's second, so the suites a task
     # serves are in the same place on every import.
-    return QWEN3_0_6B + LLAMA_3_8B
+    return QWEN3_0_6B + LLAMA_3_2_1B
 
 
 def _discover() -> dict[str, OpDecl]:

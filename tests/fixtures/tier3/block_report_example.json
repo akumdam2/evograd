@@ -1,0 +1,202 @@
+{
+  "protocol": "evograd-tier3-block-v1",
+  "evaluation_tier": 3,
+  "execution_scope": "block",
+  "benchmark_level": 3,
+  "candidate_task_levels": [2],
+  "case": {
+    "architecture": "qwen3_0_6b",
+    "architecture_revision": "Qwen/Qwen3-0.6B config.json as pinned by benchmark.topdown.qwen3_0_6b.levels.level4.spec; transformers 5.16.1",
+    "block_kind": "decoder_layer",
+    "block_index": 14,
+    "case_id": "qwen3_0_6b/decoder_layer@14/captured/bs2.seq2048.bf16",
+    "case_hash": "5d1c0f0e9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d",
+    "source_mode": "captured",
+    "source": {
+      "artifact": "results/qwen3-level4/layer14.pt",
+      "artifact_schema": "evograd-qwen3-layer-replay/2",
+      "artifact_hash": "d0d5f1f8c1f3c1b2b6f2f9c7a1e0d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2",
+      "content_hash": "0d0d1c1c2b2b3a3a4f4f5e5e6d6d7c7c8b8b9a9a0f0f1e1e2d2d3c3c4b4b5a5a",
+      "workload_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad",
+      "manifest_hash": "3ab24571b6d5860859eb5c947daef94f30dfee4d949ec3cf0dea518ad9c7fabc",
+      "layer_index": 14,
+      "module_path": "model.layers.14"
+    },
+    "weights_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdefabcdef",
+    "inputs_hash": "b2c3d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdefabcdef01",
+    "cotangents_hash": "c3d4e5f60718293a4b5c6d7e8f9012345678901234567890abcdefabcdef0123",
+    "dims": {"B": 2, "T": 2048, "H": 1024, "HQ": 16, "HK": 8, "D": 128, "I": 3072},
+    "dtype": "bfloat16",
+    "boundary": "decoder_layer: input hidden_states -> output hidden_states (final residual add inside)",
+    "sites": {
+      "qkv_norm_rope": "qwen3_qkv_norm_rope",
+      "attention": "qwen3_attention",
+      "swiglu_mlp": "qwen3_swiglu_mlp",
+      "residual_rmsnorm": "fused_add_rms_norm"
+    },
+    "expected_invocations": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1},
+    "excluded": [
+      "residual_rmsnorm(mlp_to_next_input): cross-layer, covered by model scope or a two-layer case",
+      "residual_rmsnorm(final_model_norm): not in this block"
+    ],
+    "state_contract": {
+      "use_cache": false,
+      "gradient_checkpointing": false,
+      "carried_state": [],
+      "reset": "zero_grad(set_to_none=True); fresh leaf inputs per sample; RNG state restored"
+    },
+    "gradient_presence": {"expected_parameters": 9, "rule": "every parameter of a dense block receives a gradient"}
+  },
+  "policy": {
+    "gate": "evograd-t3-block-gate/1",
+    "policy_hash": "9378d154b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+    "calibrated_from": "native repeatability on seeds [0, 1, 2] + structural and bound controls, patch set matched",
+    "margin": 2.0,
+    "gated_metrics": ["rel_l2", "max_abs_over_rms"],
+    "per_tensor_floor": {"rel_l2": 0.0001, "max_abs_over_rms": 0.01}
+  },
+  "timing_protocol": {
+    "boundary": "forward + vjp",
+    "step": "out = block(*args, **kwargs); torch.autograd.backward(select(out), cotangents)",
+    "cotangent_source": "captured",
+    "warmup": 3,
+    "samples_per_block": 10,
+    "blocks": 3,
+    "reset": "parameter and leaf gradients cleared outside the timed region; inputs rebuilt per the state contract",
+    "l2_policy": "never flushed inside a sample",
+    "backend": {"attention": "sdpa", "sdpa_backend": "flash", "recompute": "off"},
+    "compile": "candidate warmup outside steady-state timing; a compiled whole-block baseline is reported as its own provider"
+  },
+  "seed": 0,
+  "provider_order": ["candidate:best3", "native", "structural_identity", "candidate:attention"],
+  "isolation": "one child process per provider, 1800s budget",
+  "environment": {"gpu_name": "NVIDIA GH200 120GB", "torch": "2.11.0+cu128", "cuda": "12.8"},
+  "providers": {
+    "native": {
+      "ok": true,
+      "provider": "native",
+      "role": "reference",
+      "patched": [],
+      "patch_coverage": {
+        "requested": [], "actual": [], "supporting_native": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"],
+        "invocations": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1},
+        "provenance": {"method": "module_surgery", "requested_sites": [], "actual_sites": [], "paths": {}, "counts": {}, "modules_replaced": 0}
+      },
+      "correctness": {
+        "ok": true,
+        "gate": "capture_agreement+repeatability",
+        "vs_capture": {"hidden_states": {"ok": true, "rel_l2": 0.0, "max_abs_over_rms": 0.0}, "grad_hidden_states": {"ok": true, "rel_l2": 0.0021, "max_abs_over_rms": 0.0087}},
+        "repeatability": {"repeats": 4, "output_rel_l2_max": 0.0, "grad_input_rel_l2_max": 0.0019, "param_grads_rel_l2_max": 0.0024},
+        "gradient_presence": {"expected": 9, "present": 9, "missing": []},
+        "input_mutation": {"ok": true, "mutated": []}
+      },
+      "latency": {"forward_backward_ms": 11.42, "forward_ms": null, "backward_ms": null, "per_block_ms": [11.40, 11.42, 11.47], "samples": 10, "blocks": 3},
+      "memory": {"saved_state_bytes": 1006632960, "execution_peak_bytes": 3221225472, "validation_peak_bytes": 6442450944},
+      "kernel_sources": []
+    },
+    "structural_identity": {
+      "ok": true,
+      "provider": "structural_identity",
+      "role": "control",
+      "patched": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"],
+      "patch_coverage": {
+        "requested": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"],
+        "actual": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"],
+        "supporting_native": [],
+        "invocations": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1},
+        "provenance": {"method": "module_surgery", "requested_sites": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"], "actual_sites": ["qkv_norm_rope", "attention", "swiglu_mlp", "residual_rmsnorm"], "paths": {"qkv_norm_rope": ["self_attn"], "attention": ["self_attn"], "swiglu_mlp": ["mlp"], "residual_rmsnorm": ["post_attention_layernorm"]}, "counts": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1}, "modules_replaced": 3}
+      },
+      "correctness": {
+        "ok": true,
+        "gate": "bitwise_vs_native",
+        "outputs": {"hidden_states": {"ok": true, "bitwise": true}},
+        "input_gradients": {"hidden_states": {"ok": true, "bitwise": true}},
+        "parameter_gradients": {"all": {"ok": true, "bitwise": true, "count": 9}},
+        "gradient_presence": {"expected": 9, "present": 9, "missing": []},
+        "purity": {"ok": true},
+        "input_mutation": {"ok": true, "mutated": []}
+      },
+      "latency": {"forward_backward_ms": 11.45, "forward_ms": null, "backward_ms": null, "per_block_ms": [11.44, 11.45, 11.49], "samples": 10, "blocks": 3},
+      "memory": {"saved_state_bytes": 1006632960, "execution_peak_bytes": 3221225472, "validation_peak_bytes": 6442450944},
+      "kernel_sources": []
+    },
+    "candidate:best3": {
+      "ok": true,
+      "provider": "candidate:best3",
+      "role": "candidate",
+      "patched": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"],
+      "patch_coverage": {
+        "requested": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"],
+        "actual": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"],
+        "supporting_native": ["attention"],
+        "invocations": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1},
+        "provenance": {"method": "module_surgery", "requested_sites": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"], "actual_sites": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"], "paths": {"qkv_norm_rope": ["self_attn"], "swiglu_mlp": ["mlp"], "residual_rmsnorm": ["post_attention_layernorm"]}, "counts": {"qkv_norm_rope": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1}, "modules_replaced": 3}
+      },
+      "correctness": {
+        "ok": true,
+        "gate": "evograd-t3-block-gate/1",
+        "site_preflight": {"ok": true, "checked": ["qwen3_qkv_norm_rope", "qwen3_swiglu_mlp", "fused_add_rms_norm"]},
+        "outputs": {"hidden_states": {"ok": true, "rel_l2": 0.0031, "max_abs_over_rms": 0.012, "threshold": {"rel_l2": 0.0084, "max_abs_over_rms": 0.036}}},
+        "input_gradients": {"hidden_states": {"ok": true, "rel_l2": 0.0044, "max_abs_over_rms": 0.019, "threshold": {"rel_l2": 0.0096, "max_abs_over_rms": 0.041}}},
+        "parameter_gradients": {
+          "self_attn.q_proj.weight": {"ok": true, "rel_l2": 0.0027, "max_abs_over_rms": 0.011},
+          "self_attn.k_proj.weight": {"ok": true, "rel_l2": 0.0029, "max_abs_over_rms": 0.012},
+          "self_attn.v_proj.weight": {"ok": true, "rel_l2": 0.0018, "max_abs_over_rms": 0.009},
+          "self_attn.o_proj.weight": {"ok": true, "rel_l2": 0.0020, "max_abs_over_rms": 0.010},
+          "self_attn.q_norm.weight": {"ok": true, "rel_l2": 0.0035, "max_abs_over_rms": 0.014},
+          "self_attn.k_norm.weight": {"ok": true, "rel_l2": 0.0033, "max_abs_over_rms": 0.013},
+          "mlp.gate_proj.weight": {"ok": true, "rel_l2": 0.0030, "max_abs_over_rms": 0.012},
+          "mlp.up_proj.weight": {"ok": true, "rel_l2": 0.0028, "max_abs_over_rms": 0.011},
+          "mlp.down_proj.weight": {"ok": true, "rel_l2": 0.0036, "max_abs_over_rms": 0.015},
+          "input_layernorm.weight": {"ok": true, "rel_l2": 0.0041, "max_abs_over_rms": 0.017},
+          "post_attention_layernorm.weight": {"ok": true, "rel_l2": 0.0039, "max_abs_over_rms": 0.016}
+        },
+        "gradient_presence": {"expected": 11, "present": 11, "missing": []},
+        "purity": {"ok": true, "sites": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"]},
+        "input_mutation": {"ok": true, "mutated": []},
+        "aliases": {"ok": true, "shared_parameters": []}
+      },
+      "latency": {"forward_backward_ms": 9.88, "forward_ms": null, "backward_ms": null, "per_block_ms": [9.85, 9.88, 9.93], "samples": 10, "blocks": 3},
+      "memory": {"saved_state_bytes": 872415232, "execution_peak_bytes": 3087007744, "validation_peak_bytes": null},
+      "kernel_sources": [
+        {"site": "qkv_norm_rope", "op": "qwen3_qkv_norm_rope", "origin": "candidate:direct_deployment", "task_level": 2, "source_hash": "1f2e3d4c5b6a79880716253443526170ffeeddccbbaa99887766554433221100"},
+        {"site": "swiglu_mlp", "op": "qwen3_swiglu_mlp", "origin": "candidate:direct_deployment", "task_level": 2, "source_hash": "2e3d4c5b6a79880716253443526170ffeeddccbbaa998877665544332211001f"},
+        {"site": "residual_rmsnorm", "op": "fused_add_rms_norm", "origin": "candidate:direct_deployment", "task_level": 2, "source_hash": "3d4c5b6a79880716253443526170ffeeddccbbaa998877665544332211001f2e"}
+      ]
+    },
+    "candidate:attention": {
+      "ok": false,
+      "provider": "candidate:attention",
+      "role": "candidate",
+      "patched": ["attention"],
+      "failed_at": "block_correctness",
+      "error": "BlockCorrectnessFailure: input_gradients.hidden_states rel_l2 0.41 exceeds 0.0096 (backward-only fault; forward agreed)",
+      "patch_coverage": {
+        "requested": ["attention"], "actual": ["attention"], "supporting_native": ["qkv_norm_rope", "swiglu_mlp", "residual_rmsnorm"],
+        "invocations": {"qkv_norm_rope": 1, "attention": 1, "swiglu_mlp": 1, "residual_rmsnorm": 1},
+        "provenance": {"method": "module_surgery", "requested_sites": ["attention"], "actual_sites": ["attention"], "paths": {"attention": ["self_attn"]}, "counts": {"attention": 1}, "modules_replaced": 1}
+      },
+      "correctness": {
+        "ok": false,
+        "gate": "evograd-t3-block-gate/1",
+        "site_preflight": {"ok": true, "checked": ["qwen3_attention"]},
+        "outputs": {"hidden_states": {"ok": true, "rel_l2": 0.0012, "max_abs_over_rms": 0.006}},
+        "input_gradients": {"hidden_states": {"ok": false, "rel_l2": 0.41, "max_abs_over_rms": 1.9, "threshold": {"rel_l2": 0.0096, "max_abs_over_rms": 0.041}}},
+        "parameter_gradients": {"self_attn.o_proj.weight": {"ok": false, "rel_l2": 0.38, "max_abs_over_rms": 1.7}},
+        "gradient_presence": {"expected": 11, "present": 11, "missing": []},
+        "purity": {"ok": true, "sites": ["attention"]},
+        "input_mutation": {"ok": true, "mutated": []}
+      },
+      "latency": null,
+      "memory": null,
+      "kernel_sources": [
+        {"site": "attention", "op": "qwen3_attention", "origin": "candidate:direct_deployment", "task_level": 2, "source_hash": "4c5b6a79880716253443526170ffeeddccbbaa998877665544332211001f2e3d"}
+      ]
+    }
+  },
+  "speedup_intervals": {
+    "reference": "native",
+    "candidate:best3": {"ratio": 1.156, "ci95": [1.149, 1.163], "blocks": 3},
+    "structural_identity": {"ratio": 0.997, "ci95": [0.993, 1.002], "blocks": 3}
+  }
+}

@@ -1,102 +1,55 @@
-# EvoGrad benchmark specification
+# Benchmark
 
-This document defines the benchmark task space. See
-[`src/evograd/evaluation/README.md`](../src/evograd/evaluation/README.md) for the
-execution and validation protocol. Paper terminology takes precedence over
-historical code names.
+Benchmark levels describe the computation being evaluated. Evaluation tiers
+describe how an implementation is executed.
 
-## Benchmark Levels
+| Level | Scope | Example |
+| --- | --- | --- |
+| L1 | Primitive operator | RMSNorm, linear projection, RoPE |
+| L2 | Composite operator | QKV + normalization + RoPE, SwiGLU MLP |
+| L3 | Architectural block | One decoder layer with selected L2 providers |
+| L4 | Whole model | Model forward, loss and backward |
 
-The top-down benchmark has four integration scopes:
+L3 uses Tier 3 with `--scope block`; L4 uses `--scope model`. Block timing
+covers forward and backward from supplied output gradients. Model timing
+includes loss, backward, AdamW and gradient reset. Results from these scopes
+are reported separately.
 
-1. **L1 primitive** — one mathematical primitive and its forward/backward
-   contract.
-2. **L2 composite** — a boundary composed from adjacent primitives in a real
-   training workload.
-3. **L3 architectural-block integration** — cross-boundary integration inside
-   a decoder or protein-model block, including complete returns, saved state,
-   and model-derived activation coverage.
-4. **L4 whole-model workload** — a complete model training workload used to
-   determine whether local gains survive integration.
+## Cases and ownership
 
-Level answers “what scope is optimized.” Evaluation Tier answers “in which
-execution context is the candidate checked and measured.” They are independent.
+- `evograd.ops` owns reusable primitive contracts and correctness cases.
+- `benchmark/operator_suite` owns operator performance grids and aggregation.
+- `benchmark/topdown/<model>` owns model configurations, harvested cases and
+  captured blocks. Current families are Qwen3-0.6B, Llama-3.2-1B and AlphaFold3.
+- `evograd.evaluation` owns execution, numerical checks, calibration and timing.
 
-## Task sources
+Qwen and Llama each declare their own four L2 tasks. Attention with output
+projection, SwiGLU MLP and residual RMSNorm share reference computations but
+have different model dimensions. Qwen's QKV task additionally includes Q/K
+normalization.
 
-EvoGrad retains two benchmark lines:
+The L3 adapters construct native decoder layers and install providers at their
+declared sites. They are registered through `TIER3_ADAPTERS`; they are not
+monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
-- `benchmark/operator_suite/` is the implementation-neutral operator suite. It
-  owns the fused tasks that belong to no single model, under
-  `operator_suite/tasks/level2/`, and aggregates by family and Level. Trusted
-  Liger adapters remain co-located with the task that uses them for now.
-- `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
-  snapshots. It currently contains `qwen3_0_6b`, `llama3_8b`, and the
-  AlphaFold3 declaration, and owns the Level-2 tasks whose identity comes from
-  a captured model.
+## Provenance
 
-Reusable Level-1 primitives stay in `evograd.ops`, which owns the mathematics,
-the reference, and the generic correctness cases — and nothing about any
-model. Every performance case is bound onto those contracts on the benchmark
-side by `evograd.benchmark.cases`: the suite's grids from
-`benchmark/operator_suite/cases/`, a model's observed cases from its top-down
-manifest. A primitive declares no timed grid, no benchmark coverage, no named
-suite, no regime split and no case weighting, and imports neither a snapshot
-nor a model configuration table.
+Captured cases identify the model execution, layer, weights, inputs and incoming
+gradients through verified artifacts. Config-derived cases specify their
+architecture and seeds and can run without a full-model capture. Reports retain
+this distinction. Changing dimensions, dtype, data or backend changes the case.
 
-`evograd suite` is parsed and coordinated by `evograd.suite_cli` at the root,
-not by the benchmark package: selecting what to run is the benchmark's, running
-it is evaluation's, and putting the two together is neither.
+The `llama_3_8b` configuration remains registered for existing operator-suite
+grids. It is distinct from the Llama-3.2-1B model workload. Select named suites
+explicitly when an operator has both generic and model-observed grids.
 
-The legacy `ops/level3` direct-block declarations have been **deleted**. They
-were whole-block pair benchmarks and never demonstrated the top-down L3
-integration contract, which also requires model-derived activation coverage, a
-complete return contract, and a layer-level saved-state contract. No task
-declares level 3 today.
+## Measurement
 
-## Registries
+Correctness gates run before timing. Speedup is reference latency divided by
+candidate latency for the same case and execution boundary. Failed providers
+remain in coverage reports and have no valid timing result. Memory is reported
+separately from speedup.
 
-- Reusable Level-1 primitives: `evograd.ops.PRIMITIVES`
-- Executable benchmark tasks (L1 and L2): `evograd.benchmark.TASKS`
-- Whole-model benchmark declarations: `evograd.benchmark.WORKLOADS`
-- Top-down snapshot workloads: `evograd.benchmark.topdown.TOPDOWN_WORKLOADS`
-- Tier-3 adapters: `evograd.evaluation.tier3.workloads.TIER3_ADAPTERS`
-
-Task counts are derived from these registries rather than duplicated in prose.
-
-## Correctness, provenance, and coverage
-
-An operator contract defines outputs, requested gradients, dtype/shape/layout,
-tolerances, permitted backward input overwrites, and saved state. Correctness
-is a hard gate before timing. A failed configuration still contributes to
-coverage and cannot improve performance by silently disappearing from an
-average.
-
-Top-down shapes retain their source: model configuration, harvest manifest,
-frozen snapshot, and concrete boundary. A handpicked or reduced configuration
-must say so in its provenance; it cannot masquerade as a shape observed in the
-model.
-
-## Performance and aggregation
-
-Candidate and reference compare like-for-like full-step latency:
-
-```text
-S_i = T_reference(forward + backward) / T_candidate(forward + backward)
-```
-
-Geometric aggregation occurs within a task's configurations, then within a
-family, then across families. Coverage and retained-state memory are reported
-separately and never folded into speedup.
-
-## Result paths
-
-Historical output remains in place. New runs use:
-
-```text
-results/benchmark/operator_suite/...
-results/benchmark/topdown/<workload>/...
-results/evaluation/tier<N>/<workload>/...
-```
-
-See [`RESULTS_LAYOUT.md`](RESULTS_LAYOUT.md).
+See [block correctness](L3_CORRECTNESS_CHECKS.md),
+[Qwen usage](QWEN3_LEVEL4.md), the [evaluation guide](../src/evograd/evaluation/README.md)
+and [result paths](RESULTS_LAYOUT.md).

@@ -137,9 +137,13 @@ def capture_first_step(workload, kernels, ids, labels) -> dict[str, Any]:
         shifted.reshape(-1, shifted.shape[-1]), targets.reshape(-1),
         ignore_index=IGNORE_INDEX, reduction="sum") / int(mask.sum())
     loss.backward()
-    grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()
-             if p.grad is not None}
-    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    # A torch.compile'd model reports its parameters as ``_orig_mod.<name>``;
+    # the gradient comparison matches by name, so read them off the original
+    # module (found 2026-09-11: the whole-model compile baseline compared zero
+    # parameters and reported a relative L2 of exactly 0.0).
+    named = getattr(model, "_orig_mod", model).named_parameters
+    grads = {n: p.grad.detach().clone() for n, p in named() if p.grad is not None}
+    missing = [n for n, p in named() if p.grad is None]
     built = workload.last_build
     capture = {
         "logits": logits.detach().to("cpu"),      # bfloat16 on the host

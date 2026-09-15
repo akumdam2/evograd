@@ -43,6 +43,11 @@ from evograd.evaluation.tier3.patch import KernelSet
 
 TIER3_PROTOCOL_VERSION = "evograd-tier3-model-v2"
 
+#: What this runner executes: a whole model's training step. The block scope
+#: (one architectural block, forward + VJP) is a different protocol and never
+#: reuses this runner's timing loop; the two share the report reader.
+EXECUTION_SCOPE_MODEL = "model"
+
 #: What the optimizer is, spelled out rather than implied by "AdamW". Every
 #: provider gets exactly this, and the report carries it, because a comparison
 #: across two runs with different weight decay is not a comparison.
@@ -635,11 +640,21 @@ def assemble_report(
     """
     report = {
         "protocol": TIER3_PROTOCOL_VERSION,
+        # Stated, not implied by the protocol string: this runner measures a
+        # whole model's training step (benchmark level 4). A block-scope report
+        # (level 3, forward + VJP) carries its own protocol and says so here;
+        # see ``evograd.evaluation.tier3.report`` for how both are read. Reports
+        # written before these three fields existed are model-scope by
+        # construction and the reader treats them so.
+        "evaluation_tier": 3,
+        "execution_scope": EXECUTION_SCOPE_MODEL,
+        "benchmark_level": 4,
         **workload.describe(),
         "seed": seed,
         "provider_order": list(order),
         "isolation": isolation,
         "timing_protocol": {
+            "boundary": "loss.backward() + optimizer step",
             "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
             "optimizer": OPTIMIZER,
             "optimizer_config": {

@@ -418,39 +418,33 @@ started from a program that could not run.
 
 ## Evaluation
 
-A kernel is measured at three tiers, and they answer different questions:
+| Tier | Execution |
+| --- | --- |
+| 1 — pair | Call forward and backward directly. |
+| 2 — operator | Run an operator through PyTorch autograd. |
+| 3 — integrated | Install providers in a real block or whole model. |
 
-| Tier | What runs | Answers |
-| ---- | --------- | ------- |
-| 1 — pair | `fwd(x, ...)` then `bwd(dy, saved)`, called directly | how fast is the kernel |
-| 2 — operator | `y = model(x)` then `y.backward(dy)`, through the autograd engine | what does it cost when PyTorch calls it |
-| 3 — model | a full training step with the kernel patched in | does any of it reach training throughput |
-
-Orthogonally, `fast` and `fair` are measurement modes: `fast` serves the
-evolutionary search and `fair` serves direct-pair reporting. They are not extra
-tiers or benchmark levels, and each report records which mode produced it.
+Tier 3 has two scopes. `--scope block` measures block forward plus backward
+from supplied cotangents; `--scope model` (the default) measures loss,
+backward, AdamW and gradient reset. Block and model results are kept separate.
+`fast` and `fair` select measurement protocols, independently of tier.
 
 ```bash
-evograd suite --candidate-baseline liger --out results/liger/   # the reference line
-evograd tier1-bench --op layernorm --candidate best.py          # one kernel
-evograd tier2-bench --op layernorm --candidate best.py          # through autograd
-evograd tier3-bench --candidate rms_norm=best.py                # in a model
+evograd tier1-bench --op layernorm --candidate best.py
+evograd tier2-bench --op layernorm --candidate best.py
+evograd tier3-bench --scope block --model qwen3_0_6b \
+  --baseline none --candidate swiglu_mlp=best.py
 ```
 
-Correctness is a hard gate at every tier. Candidates are checked against an
-autograd oracle derived from the declaration, and only correct ones are timed —
-tier 3 puts each patched kernel through the tier-1 pair gate before it builds a
-model, and requires every loss to be a finite scalar. Loss-trajectory agreement
-is reported on top of that, and gated only where a workload declares a
-threshold.
+By default, correctness checks precede timing. Block checks cover provider
+preflight, local results, patch counts and complete block outputs/gradients.
+Calibration uses trusted controls; failed controls cannot authorize timing.
+Model scope retains its workload-specific gates and loss checks.
 
-The independent Benchmark axis has four Levels: L1 primitive, L2 composite, L3
-architectural-block integration, and L4 whole-model workload. Qwen3-0.6B's
-top-down path starts from a real L4 training execution and harvests the shapes
-used below it; see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
-
-See [the benchmark specification](docs/BENCHMARK.md) for task scope and
-[the evaluation guide](src/evograd/evaluation/README.md) for execution context.
+See [benchmark levels](docs/BENCHMARK.md),
+[block correctness](docs/L3_CORRECTNESS_CHECKS.md),
+[Qwen usage](docs/QWEN3_LEVEL4.md) and
+[the 2026-09-15 benchmark report](docs/experiments/benchmark_run_20260915.md).
 
 One naming collision to keep straight: `OpDecl.level` is the **task**
 hierarchy — primitive, fused, architectural block — and has nothing to do with
@@ -464,7 +458,7 @@ claims:
 | --- | --- |
 | `evograd.opdecl` | declaration infrastructure and shared types |
 | `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
-| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3-8B have four each, and neither borrows the other's key |
+| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
 | `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
 | `evograd.cli` / `evograd.suite_cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
 
@@ -610,29 +604,14 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 3 — architectural blocks
 
-**No task declares level 3.** The two legacy direct-block declarations that
-used to — `llama3_decoder_layer` and `af3_single_repr_block` — have been
-deleted. They were whole-block pair benchmarks that never satisfied the
-top-down L3 contract, which also requires model-derived activation coverage,
-a complete return contract, and a layer-level saved-state contract. Keeping
-them registered would have presented an unfinished level as a finished one.
+Qwen3-0.6B and Llama-3.2-1B support `tier3-bench --scope block`. Their
+adapters construct one native decoder layer and install selected L2 providers.
+Inputs may come from verified captures or a seeded configuration; the latter
+does not require a full-model run. Reports identify the source and block scope.
 
-What replaces them is not another block declaration but the top-down path:
-Qwen3-0.6B's captured layer artifact and its replay live under
-`benchmark/topdown/qwen3_0_6b/levels/level3/`, and their judgment under
-`evaluation/workloads/qwen3_0_6b/level3/`. That path is deliberately still
-described as incomplete — see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
-
-AlphaFold3's whole-model declaration and its Tier-3 adapters are unaffected and
-remain registered, as does Llama-3-8B's Level-4 workload and harvest. What a
-level-3 declaration would still have to do, whenever one is written: compute
-its correctness reference in float32 while the candidate runs in bfloat16
-(`reference_dtype`), because composing ten operators makes a same-dtype
-reference carry as much rounding error as the candidate, at which point the
-tolerance stops bounding the candidate's own error. It would also have to state
-what it excludes — as the deleted Llama block did for the KV cache, and the
-AlphaFold3 block did by being the single-representation update rather than a full
-pairformer block, which would need two outputs.
+The single-layer boundary includes the original final residual addition.
+Cross-layer residual fusion is covered by model scope. See
+[block usage and boundaries](docs/QWEN3_LEVEL4.md).
 
 Timed grids are derived from frozen model configurations in
 `src/evograd/opdecl/models.py` rather than written by hand, and each workload
@@ -713,9 +692,7 @@ gradients, and stateful operators require declaration/API extensions.
 src/evograd/
 ├── opdecl/                    # declaration types, oracle, binding, verification
 ├── ops/                       # operator contracts, references, tolerances, shapes
-│   ├── level1/                # primitive declarations
-│   ├── level2/                # composite declarations
-│   └── level3/                # legacy direct-block declarations
+│   └── level1/                # reusable primitive declarations
 ├── benchmark/                 # what is benchmarked
 │   ├── core/                  # task registry and result aggregation
 │   ├── operator_suite/        # operator task/config selection and suite CLI
@@ -724,7 +701,7 @@ src/evograd/
 │   ├── common/                # providers and canonical reports
 │   ├── tier1/                 # direct pair: fast/fair modes
 │   ├── tier2/                 # operator/autograd runner
-│   └── tier3/                 # model runner, patching, gates and adapters
+│   └── tier3/                 # block/model runners, patching and gates
 ├── atenir/
 │   ├── extract.py             # PyTorch/autograd graph extraction
 │   ├── compose.py             # serialized graph execution
@@ -748,42 +725,15 @@ Evograd supplies the initial program, evaluator, generated configuration, and
 operator-specific environment; OpenEvolve supplies the evolutionary search,
 program database, LLM orchestration, and checkpointing.
 
-See [the final migration audit](docs/MIGRATION_AUDIT.md) for the commit-by-commit
-comparison with fork `origin/main` at `e7e1e3a`.
-
 ## Project status
 
-Evograd is the declaration-driven successor to the AtenIR, pipeline, and Triton
-backward-benchmark work previously developed in an OpenEvolve fork.
+Operator declarations, seed pipelines and OpenEvolve integration are available.
+Tier 3 supports Qwen3-0.6B and Llama-3.2-1B decoder blocks as well as the
+existing model workloads. Hardware-specific results and their limitations are
+recorded in [benchmark reports](docs/experiments/benchmark_run_20260915.md).
 
-Locally validated:
-
-- 63 unit tests pass.
-- Eight torch-facing unit tests are present but skip on machines without
-  PyTorch.
-- All 18 declarations match the final-fork correctness cases, benchmark cases,
-  per-output tolerances, input distributions, and seed recipes.
-- AtenIR preserves the migrated implementation and includes final-main support
-  for inactive integer/bool inputs such as class labels.
-- The rendered configuration and `run_evolution` call shape load against
-  upstream OpenEvolve 0.3.2.
-- Source compilation, wheel build, clean wheel installation, automatic operator
-  discovery, and package-data checks pass.
-
-Still required on a CUDA machine before relying on experimental results:
-
-```bash
-PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only
-PYTHONPATH=src python -m unittest discover tests
-
-PYTHONPATH=src python scripts/gpu_parity.py \
-    --op layernorm \
-    --old-repo /path/to/openevolve-fork \
-    --candidate /path/to/legacy/layernorm/candidate.py
-```
-
-Repeat parity for EvoAttention, then run one end-to-end Pipeline B seed and a
-short LayerNorm evolution.
+Generated candidates, raw measurements and internal design notes stay local.
+See [result paths](docs/RESULTS_LAYOUT.md) for the storage conventions.
 
 ## Testing
 

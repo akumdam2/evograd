@@ -28,3 +28,13 @@ def run_loss_check(**kwargs):
 
 def run_cross_entropy_check(**kwargs):
     return _common.run_cross_entropy_check(descriptor=WORKLOAD, **kwargs)
+
+
+# Each shared function documents what its check proves and, as importantly,
+# what it does not (the loss check is a sanity test, not the equivalence
+# proof). A binding that dropped that text would let a caller mistake one for
+# the other, so the bound names carry the shared documentation.
+for _name in ("summarize_mapping", "derive_sdpa_invocation", "run_verify",
+              "run_loss_check", "run_cross_entropy_check"):
+    globals()[_name].__doc__ = getattr(_common, _name).__doc__
+del _name

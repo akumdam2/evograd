@@ -51,6 +51,31 @@ from .sites import (
 #: The name the tier-3 CLI selects this workload by.
 MODEL_KEY = "qwen3_0_6b"
 
+#: Whole-model ``torch.compile`` of the unpatched model: a *baseline*, not a
+#: site provider. It replaces no site, so part A has nothing to validate and the
+#: runner's site gates are skipped for it; B/C are measured against eager by
+#: ``audit`` scripts rather than gated. The settings are recorded in the
+#: provenance of every build so a report can say exactly what was compiled.
+WHOLE_MODEL_COMPILE_ORIGIN = "whole_model_torch_compile"
+WHOLE_MODEL_COMPILE_SITE = "__whole_model__"
+WHOLE_MODEL_COMPILE_SETTINGS: dict[str, Any] = {
+    "backend": "inductor", "mode": None, "dynamic": False, "fullgraph": False,
+}
+
+
+def whole_model_compile_kernels(registry):
+    """A kernel set that patches nothing and asks for the whole model compiled."""
+    from evograd.evaluation.tier3.patch import KernelSet, KernelSource
+
+    return KernelSet(registry=registry, sources=(KernelSource(
+        site=WHOLE_MODEL_COMPILE_SITE, op_name=None, module=None,
+        origin=WHOLE_MODEL_COMPILE_ORIGIN),))
+
+
+def whole_model_compile_requested(kernels) -> bool:
+    return any(getattr(s, "origin", None) == WHOLE_MODEL_COMPILE_ORIGIN
+               for s in getattr(kernels, "sources", ()))
+
 
 def _spec_from_config(config: dict[str, Any]) -> WorkloadSpec:
     overrides = {
@@ -164,6 +189,21 @@ class Qwen3Workload:
         touches no parameter, so rebuilding is how a run is reverted.
         """
         model = build_model(self.spec)
+        if whole_model_compile_requested(kernels):
+            if kernels.patched:
+                raise ValueError(
+                    "whole-model torch.compile is a baseline of the unpatched model; "
+                    f"it cannot be combined with site patches {list(kernels.patched)}")
+            from evograd.evaluation.tier3.patch import PatchProvenance
+
+            model = torch.compile(model, **WHOLE_MODEL_COMPILE_SETTINGS)
+            provenance = PatchProvenance(
+                method="whole_model_torch_compile", requested_sites=(), actual_sites=(),
+                paths={WHOLE_MODEL_COMPILE_SITE: ("model",)})
+            self._last = PatchedModel(
+                model=model, provenance=provenance, counters=SiteCounters(), carrier=None,
+                expected=expected_counts(self.spec.arch["num_hidden_layers"]))
+            return model, provenance
         if not kernels.patched:
             self._last = PatchedModel(
                 model=model,
@@ -308,7 +348,11 @@ class Qwen3Workload:
 
     def runtime_report(self, model) -> dict[str, Any]:
         """What the built model actually reports, as distinct from the request."""
-        return effective_settings(model, self.spec)
+        inner = getattr(model, "_orig_mod", model)  # a torch.compile'd model wraps the original
+        report = effective_settings(inner, self.spec)
+        if inner is not model:
+            report["whole_model_torch_compile"] = dict(WHOLE_MODEL_COMPILE_SETTINGS)
+        return report
 
     # ── the whole-model gate ─────────────────────────────────────────────
 
@@ -398,9 +442,10 @@ class Qwen3Workload:
 
         gate_name = "qwen3_protocol4"
         try:
-            policy = protocol4.load_policy(self.protocol4_calibration_path)
-            plan = policy.training_plan
             patch_set = PatchSet.of(kernels, layers=self.spec.arch["num_hidden_layers"])
+            calibration_path, verdict_path = self._protocol4_files_for(patch_set)
+            policy = protocol4.load_policy(calibration_path)
+            plan = policy.training_plan
             policy.require_binding(
                 workload_id=self.spec.workload_id, workload_hash=self.spec.workload_hash,
                 dtype=str(self.spec.dtype).replace("torch.", ""),
@@ -419,7 +464,13 @@ class Qwen3Workload:
         if not pure.get("ok", False):
             return {"gate": gate_name, "ok": False, "failed_at": "provider_purity",
                     "reason": "provider is not a function of its arguments"}
-        local = boundary.validate_all_invocations(self, kernels, data_seed=self.data_seed)
+        # The reference-calibrated local envelope, when the frozen calibration
+        # derived one (protocol4_cli calibrate --local-envelope). Read from the
+        # same file the policy binds from, so the two cannot come apart.
+        envelope = json.loads(Path(calibration_path).read_text(
+            encoding="utf-8")).get("local_envelope") or None
+        local = boundary.validate_all_invocations(self, kernels, data_seed=self.data_seed,
+                                                  envelope=envelope)
         if not local.get("ok", False):
             from .gate import _boundary_reason
             return {"gate": gate_name, "ok": False, "failed_at": "live_boundary",
@@ -438,19 +489,19 @@ class Qwen3Workload:
         # timed that the frozen policy has not judged on independent seeds.
         origin = tuple(sorted(s.origin for s in kernels.sources))
         if protocol4.requires_training_part(policy):
-            d_part = _protocol4_training_part(self.protocol4_verdict_path, origin)
+            d_part = _protocol4_training_part(verdict_path, origin)
             if d_part is None:
                 return {"gate": gate_name, "ok": False, "failed_at": "training_behaviour",
                         "reason": (f"no protocol-4 holdout verdict for provider origin {origin} "
-                                   f"at {self.protocol4_verdict_path}; run protocol4_cli holdout"),
+                                   f"at {verdict_path}; run protocol4_cli holdout"),
                         "live_boundary": local, "step": measured}
             measured.update(d_part)
         else:
-            judged = _protocol4_screening_rows(self.protocol4_verdict_path, origin)
+            judged = _protocol4_screening_rows(verdict_path, origin)
             if not judged:
                 return {"gate": gate_name, "ok": False, "failed_at": "screening_holdout",
                         "reason": (f"no A/B/C screening holdout verdict for provider origin "
-                                   f"{origin} at {self.protocol4_verdict_path}; run "
+                                   f"{origin} at {verdict_path}; run "
                                    "protocol4_cli holdout --screening"),
                         "live_boundary": local, "step": measured}
             failed = [r for r in judged if not r["ok"]]
@@ -470,10 +521,45 @@ class Qwen3Workload:
         return {
             "gate": gate_name, "ok": verdict["ok"], "failed_at": verdict["failed_at"],
             "reason": verdict["reason"], "protocol4": verdict,
+            "policy_file": str(calibration_path), "verdict_file": str(verdict_path),
+            "local_check_mode": local.get("local_check_mode"),
             "diagnostic_only": measured.get("diagnostic_only"),
-            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites")},
+            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites",
+                                                        "local_check_mode", "envelope_admitted")},
             "provider_purity": {"ok": True}, "site_preflight": preflight,
         }
+
+    def _protocol4_files_for(self, patch_set) -> tuple[str, str | None]:
+        """The frozen policy and verdict files that describe this patch set.
+
+        ``protocol4_calibration_path`` is either one policy file (bound below
+        to whatever patch set the provider has, exactly as before) or a *policy
+        index*: ``{"policy_index": [{"calibration": ..., "verdict": ...}, ...]}``,
+        from which the entry whose frozen patch set matches the provider's is
+        selected. One timing run can then hold providers with different patch
+        sets -- four single sites and their composition -- in one randomized
+        order against one eager baseline, each judged by its own calibration.
+        A provider whose patch set no entry describes is refused, never judged
+        by a neighbour's thresholds.
+        """
+        from . import protocol4
+
+        payload = json.loads(Path(self.protocol4_calibration_path).read_text(encoding="utf-8"))
+        if "policy_index" not in payload:
+            return self.protocol4_calibration_path, self.protocol4_verdict_path
+        base = Path(self.protocol4_calibration_path).parent
+        for entry in payload["policy_index"]:
+            calibration = Path(entry["calibration"])
+            calibration = calibration if calibration.is_absolute() else base / calibration
+            candidate = protocol4.load_policy(calibration)
+            if patch_set.matches(candidate.patch_set):
+                verdict = entry.get("verdict")
+                if verdict is not None:
+                    verdict = Path(verdict)
+                    verdict = str(verdict if verdict.is_absolute() else base / verdict)
+                return str(calibration), verdict
+        raise protocol4.PolicyMismatch(
+            f"no entry of the policy index describes patch set {patch_set.to_dict()}")
 
     @property
     def last_build(self) -> PatchedModel | None:

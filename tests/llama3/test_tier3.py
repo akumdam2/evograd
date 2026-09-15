@@ -75,7 +75,10 @@ class TestRegistration(unittest.TestCase):
         # than accepted and ignored.
         self.assertEqual(
             adapter.options,
-            frozenset({"structural_identity", "layers", "data_seed", "calibration"}),
+            frozenset({"structural_identity", "layers", "data_seed", "calibration",
+                       # generic providers built by tier3.providers; declaring
+                       # them is how a workload says it offers them
+                       "compile_site", "patch_set"}),
         )
 
     def test_the_registry_entry_is_a_dotted_path_not_an_import(self):
@@ -353,7 +356,9 @@ class TestPurityCallCounts(unittest.TestCase):
         makes" has nowhere to hide."""
         from evograd.evaluation.tier3.workloads.llama3_2_1b import purity, sites
 
-        canonical = sites.expected_counts(32)
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+
+        canonical = sites.expected_counts(LLAMA_3_2_1B["num_hidden_layers"])
         self.assertEqual(
             purity.MIN_CALLS, {site: 2 * n for site, n in canonical.items()}
         )

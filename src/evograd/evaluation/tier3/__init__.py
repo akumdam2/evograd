@@ -62,7 +62,19 @@ from evograd.evaluation.tier3.patch import (  # noqa: F401  (re-export)
     patched_kernels,
     restrict,
 )
+from evograd.evaluation.tier3.report import (  # noqa: F401  (re-export)
+    SCOPE_BLOCK,
+    SCOPE_MODEL,
+    TIER3_BLOCK_PROTOCOL_VERSION,
+    ProviderRow,
+    Tier3Identity,
+    UnknownTier3Report,
+    group_reports,
+    identify_report,
+    provider_rows,
+)
 from evograd.evaluation.tier3.runner import (  # noqa: F401  (re-export)
+    EXECUTION_SCOPE_MODEL,
     OPTIMIZER,
     OPTIMIZER_DEFAULTS,
     TIER3_PROTOCOL_VERSION,
@@ -87,6 +99,16 @@ from evograd.evaluation.tier3.runner import (  # noqa: F401  (re-export)
 )
 
 __all__ = [
+    "EXECUTION_SCOPE_MODEL",
+    "SCOPE_BLOCK",
+    "SCOPE_MODEL",
+    "TIER3_BLOCK_PROTOCOL_VERSION",
+    "ProviderRow",
+    "Tier3Identity",
+    "UnknownTier3Report",
+    "group_reports",
+    "identify_report",
+    "provider_rows",
     "OPTIMIZER",
     "OPTIMIZER_DEFAULTS",
     "TIER3_PROTOCOL_VERSION",

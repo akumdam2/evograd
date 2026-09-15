@@ -59,20 +59,27 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 
 #: Has the tolerance been measured at the shape the *model* runs?
 #:
-#: **Yes**, on a GH200, at ``[2, 2048, 2048]`` with the full 4096-token
-#: contraction. Measured with synthetic inputs at the model's widths, because
-#: the harvested capture cannot answer this question: its gradients arrive at
-#: ``ref_absmax`` 0.0 with errors near 1e-07, so it exercises the forward
-#: tolerances and nothing else. Required base ``t`` there, against the 2e-2 the
-#: declaration carries:
+#: **Yes, at Llama-3.2-1B's own width.** Measured on a GH200 (torch 2.11.0+cu128)
+#: at ``[2, 2048, 2048]`` (32 query heads of 64, 8 key/value heads) with the
+#: full 4096-token contraction, on 2026-09-15, from the canonical layer-8
+#: artifact of run ``results/experiments/llama3_2_1b_l2_l3/20260915``
+#: (``calibration/llama3_qkv_rope-tolerance.json``). An earlier table taken at
+#: Meta-Llama-3-8B's ``[2, 2048, 4096]`` (32 heads of 128) is superseded by
+#: this one and is kept only in that run's history; it is not relabelled here.
+#: Measured with synthetic inputs at the model's widths, because the harvested
+#: capture cannot answer this question: its gradients arrive at ``ref_absmax``
+#: 0.0 with errors near 1e-07, so it exercises the forward tolerances and
+#: nothing else (the harvested invocation itself needs ``q`` 7.72e-03 and
+#: ``k`` 7.33e-03). Required base ``t`` at the synthetic model-width case,
+#: against the 2e-2 the declaration carries:
 #:
 #:     result       required_t   declared atol   supplied / required
-#:     q             1.039e-02      3.657e-02          3.5x
-#:     k             1.004e-02      3.933e-02          3.9x
+#:     q             1.001e-02      3.657e-02          3.7x
+#:     k             7.916e-03      3.933e-02          5.0x
 #:     v             0                3.933e-02        --
-#:     dx            2.415e-02      4.388e-02          1.5x
-#:     dq_weight     1.795e-01      1.687e+00          ~1.9x
-#:     dk_weight     1.437e-01      2.182e+00          ~2.4x
+#:     dx            2.358e-02      4.245e-02          1.5x
+#:     dq_weight     1.684e-01      1.687e+00          ~1.9x
+#:     dk_weight     1.626e-01      2.182e+00          ~2.5x
 #:     dv_weight     0                4.546e-01        --
 #:
 #: The two weight-gradient ratios are approximate because ``required_t`` couples
@@ -82,9 +89,11 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 #: number. Both are above the 1.5x the multipliers were declared with -- the
 #: hook's ``gain=2.0`` is deliberately conservative past the anchor -- and
 #: `levels.level2.negative_controls` says that headroom costs nothing
-#: measurable: every result's scaled-fault floor is 2.0%, matching
+#: measurable: every result's scaled-fault floor is 2.0% (``v`` 5%), matching
 #: ``llama3_attention`` and ``llama3_swiglu_mlp``, because ``rtol`` is what
-#: catches a scaled fault and the hook never touches it.
+#: catches a scaled fault and the hook never touches it. ``dx`` sits exactly on
+#: the 1.5x policy (1.500x), as it did at the 8B width; the declaration was not
+#: loosened to buy it more.
 #:
 #: ``v`` and ``dv_weight`` measure exactly 0.0 at every shape -- the value path
 #: has no rotation, so the two *spellings* are the same computation there. That
@@ -100,8 +109,8 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 #:
 #: Reproduced by::
 #:
-#:     python -m evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope \
-#:         calibrate --source results/llama3-level4/layer8.pt --device cuda
+#:     python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope \
+#:         calibrate --source <run>/capture/layer8.pt --device cuda
 CALIBRATED = True
 
 #: Have the correctness-grid tolerances been measured rather than inherited?

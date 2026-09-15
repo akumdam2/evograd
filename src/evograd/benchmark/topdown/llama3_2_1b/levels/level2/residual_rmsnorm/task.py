@@ -7,7 +7,15 @@ different case, its own task key.
 The timed case is derived from the frozen Llama-3-8B configuration rather than
 from a harvest snapshot: the shape is a property of the architecture, and
 ``tests/test_provenance`` re-derives it. Batch 2 x sequence 2048 gives 4096
-tokens, as it does for Qwen3; only the width differs.
+tokens, as it does for Qwen3; the width differs, and so does ``eps``.
+
+**Two input recipes, two epsilons.** The generic correctness grid (shared with
+every RMSNorm-family task) runs at the declaration's default ``eps=1e-6``. The
+*model* case does not: Llama-3.2-1B's ``rms_norm_eps`` is ``1e-5``, which is
+what ``LlamaRMSNorm.variance_epsilon`` carries and what the tier-3 site hands a
+kernel. ``_inputs`` reads the value off the published configuration for any
+workload whose provenance names this model, so the timed and purity cases use
+the epsilon the model runs while the grid keeps the repository default.
 """
 
 from evograd.benchmark.topdown.common.level2_references import (
@@ -22,12 +30,22 @@ from evograd.opdecl.models import LLAMA_3_2_1B
 from evograd.ops._common import (
     STANDARD_TOLERANCES,
     dtype_for,
+    make_pair_baseline,
     model_workloads,
     standard_correctness,
 )
+from ...level4.spec import LLAMA_3_2_1B as _SPEC
 
 #: The workload these cases belong to; also the ``Provenance`` model key.
 WORKLOAD = "llama_3_2_1b"
+
+#: The epsilon the model's RMSNorms run: ``rms_norm_eps`` from the published
+#: ``config.json``, read off the same frozen spec the Level-4 model is built
+#: from so the two cannot disagree. Qwen3-0.6B's is ``1e-6`` and matched the
+#: declaration default by coincidence; Llama-3.2-1B's does not.
+MODEL_EPS = float(_SPEC["rms_norm_eps"])
+#: The declaration's generic default, used by the shared correctness grid.
+GRID_EPS = 1e-6
 
 #: The observed configuration, computed from the published model config.
 _BENCHMARK = model_workloads(
@@ -67,6 +85,29 @@ def _tolerance(workload, result_name, atol, rtol):
         atol = base * max(1.0, (workload.dims["rows"] / 64.0) ** 0.5)
     return atol, rtol
 
+def is_model_case(workload) -> bool:
+    """Does this workload describe the model, rather than the generic grid?"""
+    provenance = getattr(workload, "provenance", None)
+    return provenance is not None and provenance.model == WORKLOAD
+
+
+def eps_for(workload) -> float:
+    """The model's own epsilon for a model case; the grid default otherwise."""
+    return MODEL_EPS if is_model_case(workload) else GRID_EPS
+
+
+def _liger_factory():
+    # The reviewed Liger adapter is dimension-free and takes ``eps`` as an
+    # argument, so it serves this model's residual width and epsilon unchanged.
+    # Imported lazily from the workload that first reviewed it; it is not a
+    # dependency on that model's shapes.
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.liger import (
+        make_liger_fused_add_rms_norm_autograd_pair_fns,
+    )
+
+    return make_liger_fused_add_rms_norm_autograd_pair_fns()
+
+
 def _inputs(torch, op, workload, device="cuda"):
     rows, cols = workload.dims["rows"], workload.dims["cols"]
     dtype = dtype_for(torch, workload.dtype)
@@ -75,7 +116,7 @@ def _inputs(torch, op, workload, device="cuda"):
         "x": torch.randn((rows, cols), device=device, dtype=dtype),
         "r": torch.randn((rows, cols), device=device, dtype=dtype),
         "weight": torch.randn((cols,), device=device, dtype=dtype),
-        "eps": 1e-6,
+        "eps": eps_for(workload),
         # Two independent upstream gradients, both non-zero. Drawn separately on
         # purpose: a backward that ignored `dsummed`, or that assumed the two
         # were equal, would pass against a shared tensor.
@@ -131,6 +172,14 @@ op = declare_op(
     tolerances=STANDARD_TOLERANCES,
     tolerance_multipliers={"summed": (0.01, 0.01)},
     tolerance_hook=_tolerance,
+    # The reviewed Liger fused add+RMSNorm pair, the same trusted baseline the
+    # Qwen3 task declares. Liger's backward returns fresh tensors here, so no
+    # overwrite allowance is needed.
+    performance_baselines={
+        "liger": make_pair_baseline(
+            _liger_factory, ("x", "r", "weight", "eps"), ("eps",)
+        )
+    },
     make_inputs=_inputs,
     backward_may_overwrite=(),
 )

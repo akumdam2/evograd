@@ -449,6 +449,35 @@ def _arm_gradient_shadow(op, workload, reference, record, inputs, outputs,
     report.pending.append(settle)
 
 
+def declared_case_for(op, live_dtype: str):
+    """The declared workload whose tolerances apply to live tensors of ``live_dtype``.
+
+    The observed configuration is the canonical answer and the only one a
+    real run meets. A reduced test model runs a different dtype and width,
+    and quoting the observed bfloat16 tolerance at it would be applying a
+    threshold measured somewhere else -- so a same-dtype declared case is
+    preferred when the live run is not the canonical one.
+
+    The observed suite may not exist at all: it comes from a harvest. That is
+    a *weaker* gate, not a broken one -- the declaration's own correctness
+    grid still applies -- so it falls back rather than refusing, and the
+    model-scope report's ``suite_used`` says which. Shared by the model scope
+    and the block scope, so both judge a live tensor by the same case.
+    """
+    from .sites import OBSERVED_SUITE
+
+    try:
+        observed = op.benchmark_workloads(suite=OBSERVED_SUITE)
+    except KeyError:
+        observed = ()
+    if observed and observed[0].dtype == live_dtype:
+        return observed[0]
+    matching = [w for w in op.correctness if w.dtype == live_dtype]
+    if matching:
+        return max(matching, key=lambda w: sum(w.dims.values()))
+    return observed[0] if observed else op.benchmark[0]
+
+
 def validate_all_invocations(workload, kernels, *, data_seed: int = 0) -> dict[str, Any]:
     """One canonical step with the shadow on. Untimed, and never near a timer."""
     from evograd.benchmark import get_task
@@ -471,26 +500,7 @@ def validate_all_invocations(workload, kernels, *, data_seed: int = 0) -> dict[s
     live_dtype = workload.spec.dtype
 
     def workload_case(op):
-        """The declared workload whose tolerances apply to these live tensors.
-
-        The observed configuration is the canonical answer and the only one a
-        real run meets. A reduced test model runs a different dtype and width,
-        and quoting the observed bfloat16 tolerance at it would be applying a
-        threshold measured somewhere else -- so a same-dtype declared case is
-        preferred when the live run is not the canonical one.
-
-        The observed suite may not exist at all: it comes from a harvest, and no
-        Llama harvest has been run. That is a *weaker* gate, not a broken one --
-        the declaration's own correctness grid still applies -- so it falls back
-        rather than refusing, and ``suite_used`` in the report says which.
-        """
-        observed = observed_cases(op)
-        if observed and observed[0].dtype == live_dtype:
-            return observed[0]
-        matching = [w for w in op.correctness if w.dtype == live_dtype]
-        if matching:
-            return max(matching, key=lambda w: sum(w.dims.values()))
-        return observed[0] if observed else op.benchmark[0]
+        return declared_case_for(op, live_dtype)
 
     from .sites import OBSERVED_SUITE, set_tap
 

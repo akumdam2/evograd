@@ -545,17 +545,40 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
         self.assertEqual(primitive.coverage, ())
 
     def test_an_unharvested_workload_contributes_nothing(self):
-        """Llama-3-8B's snapshot does not exist yet, so its suites are empty
-        and no declaration had to be edited to say so."""
+        """A model package can exist before its harvest does: a binding whose
+        workload has no tracked snapshot adds no suite and no declaration had
+        to be edited to say so. Llama-3.2-1B's snapshot is tracked now, so the
+        unharvested state is produced by hiding it rather than assumed."""
+        from unittest import mock
+
+        from evograd.benchmark import cases as cases_module
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
+            OBSERVED_BINDINGS,
+        )
+
+        base = self._base()
+        with mock.patch.object(cases_module, "has_snapshot", return_value=False) \
+                if hasattr(cases_module, "has_snapshot") else \
+                mock.patch("evograd.benchmark.topdown.has_snapshot", return_value=False):
+            self.assertIs(bind_observed_cases(base, OBSERVED_BINDINGS), base)
+
+    def test_a_harvested_workload_contributes_its_observed_suite(self):
+        """The Llama-3.2-1B snapshot (df3e806) is tracked, so the same binding
+        now yields a suite whose shapes are the harvested model's -- 2048 wide,
+        not Llama-3-8B's 4096 -- and the registry serves it on the primitive."""
         from evograd.benchmark.topdown import has_snapshot
         from evograd.benchmark.topdown.llama3_2_1b.levels.level1.manifest import (
             OBSERVED_BINDINGS,
         )
 
-        self.assertFalse(has_snapshot("llama_3_2_1b"))
-        base = self._base()
-        self.assertIs(bind_observed_cases(base, OBSERVED_BINDINGS), base)
-        self.assertNotIn("llama_3_2_1b_observed", TASKS["rmsnorm"].benchmark_suites)
+        self.assertTrue(has_snapshot("llama_3_2_1b"))
+        bound = bind_observed_cases(self._base(), OBSERVED_BINDINGS)
+        observed = bound.benchmark_suites["llama_3_2_1b_observed"]
+        self.assertTrue(observed)
+        for workload in observed:
+            self.assertEqual(workload.dims["hidden"], 2048, workload.dims)
+            self.assertEqual(workload.provenance.model, "llama_3_2_1b")
+        self.assertIn("llama_3_2_1b_observed", TASKS["rmsnorm"].benchmark_suites)
 
     def test_the_registry_supplies_both_models(self):
         from evograd.benchmark.core.registry import _observed_bindings

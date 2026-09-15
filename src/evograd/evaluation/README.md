@@ -1,74 +1,41 @@
 # Evaluation
 
-`evograd.evaluation` defines **how a candidate is evaluated**: how providers
-run, which execution context checks correctness and timing, and how stable
-reports are produced. Benchmark Level and Evaluation Tier are orthogonal axes.
+The evaluation package executes providers, checks correctness and measures
+performance. Benchmark declarations own cases, shapes and provenance.
 
-What it does not define is *what* to run. The tasks, their cases, the grids and
-the provenance belong to `evograd.benchmark`; this package consumes them. The
-two are put together one level up, in `evograd.cli` and `evograd.suite_cli`, so
-that neither package has to import the other to run a command.
+| Tier | Execution context |
+| --- | --- |
+| T1 | Direct forward/backward pair |
+| T2 | Operator module through PyTorch autograd |
+| T3 | Providers installed in an architectural block or whole model |
 
-## Three-Tier Evaluation Protocol
+`fast` and `fair` are measurement modes, separate from benchmark levels and tiers.
 
-| Tier | Execution context | Purpose |
-| ---: | --- | --- |
-| T1 | direct pair | Call the candidate forward/backward pair directly |
-| T2 | operator/autograd | Compare providers through a common `nn.Module` and autograd path |
-| T3 | end-to-end model training | Patch the candidate into a real model training step |
+## Tier 3 scopes
 
-`fast` and `fair` are measurement modes, not another Tier or a Benchmark
-Level. `fast` supplies evolution fitness; `fair` supplies publishable direct-pair
-measurements.
+`--scope block` evaluates an L3 block using supplied output gradients, without
+an optimizer. Qwen3-0.6B and Llama-3.2-1B adapters support captured and
+config-derived inputs. `block.py` drives execution, `gate/block.py` validates
+results and policies, and `block_cli.py` handles the CLI and provider workers.
 
-## Package layout
+`--scope model` retains the existing L4 training-step behavior: task loss,
+backward, AdamW and gradient reset. Each workload supplies its model-specific
+gates. Qwen supports local output/gradient checks, model prediction and gradient
+comparisons, and training/validation diagnostics according to the selected policy.
 
-```text
-evaluation/
-├── common/       providers, canonical reports, benchmark-report adapters
-├── tier1/        fast.py, fair.py, cli.py
-├── tier2/        runner.py, integrated.py, cli.py
-├── tier3/
-│   ├── model.py, patch.py, runner.py, cli.py
-│   ├── gate/     workload-neutral gate primitives
-│   └── workloads/
-│       ├── qwen3_0_6b/
-│       └── alphafold3/
-└── workloads/    per-workload checks that are not tier-specific
-    └── qwen3_0_6b/
-        ├── level1/  verify.py, calibrate.py, cli.py
-        ├── level2/  one module per site, plus calibrate.py,
-        │            negative_controls.py
-        └── level3/  replay.py
-```
+The report reader distinguishes `evograd-tier3-block-v1` from
+`evograd-tier3-model-v2`; these timing boundaries are not pooled. Block numerical
+policies use `evograd-t3-block-policy/2` and bind to the case and environment.
+Old block policies require recalibration.
 
-`workloads/` and `tier3/workloads/` answer different questions and are not a
-duplication. `tier3/workloads/` is how a candidate is *patched into a live
-model* and gated there. `workloads/` is how one model's captured cases are
-judged at all — reference-versus-production comparison, the tolerance each
-result is held to, the repeated-noise measurement that tolerance is calibrated
-from, and the negative controls that show it still rejects a wrong kernel.
+## Workload adapters
 
-The cases those checks read belong to the benchmark
-(`evograd.benchmark.topdown.<model>`), which captures and describes them but
-never decides whether an implementation passes. That is the boundary this
-package exists to hold: a threshold is not derived by the module that defines
-the case it gates.
+Shared execution and timing live in `tier3/`. Model construction, patch sites,
+input preparation and local semantics live in `tier3/workloads/<model>/`.
+`workloads/<model>/` contains checks for cases extracted from model captures.
+Adding an architecture should reuse the shared runner and provide an adapter.
 
-The Qwen3-0.6B T3 checks cover local outputs and input/weight gradients,
-valid-token KL, whole-model gradient-vector relative L2, and consecutive
-training/validation loss behavior. The first three may screen a provider after
-their thresholds have been calibrated and frozen; training behavior remains
-diagnostic until the evidence justifies a gate. An internal legacy filename
-does not define an additional public protocol.
-
-This reorganization changes module ownership and imports only. It does not
-change T3 thresholds, gates, report schemas, default measurement behavior, or
-exit codes.
-
-## Stable CLI
-
-The command names and their arguments remain compatible:
+## Commands
 
 ```bash
 evograd tier1-bench --help
@@ -77,6 +44,6 @@ evograd tier3-bench --help
 evograd suite --help
 ```
 
-New evaluation output belongs under
-`results/evaluation/tier<N>/<workload>/...`; historical output is not moved.
-See [`docs/RESULTS_LAYOUT.md`](../../../docs/RESULTS_LAYOUT.md).
+See [Qwen usage](../../../docs/QWEN3_LEVEL4.md),
+[block correctness](../../../docs/L3_CORRECTNESS_CHECKS.md) and
+[result paths](../../../docs/RESULTS_LAYOUT.md).

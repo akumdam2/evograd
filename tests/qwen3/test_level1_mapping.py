@@ -215,15 +215,18 @@ class TestProvenance(unittest.TestCase):
 class TestDefaultsPreserved(unittest.TestCase):
     """The Qwen cases are added; the Llama-derived defaults are not replaced."""
 
+    # The default grids are derived from Meta-Llama-3-8B's widths (hidden 4096,
+    # vocab 128256) and every historical suite report records them under that
+    # key. The top-down workload moved to Llama-3.2-1B; these grids did not.
     def test_default_benchmark_grids_stay_llama_derived(self):
         for task in ("linear_no_bias", "rmsnorm", "rope", "swiglu", "cross_entropy"):
             with self.subTest(task=task):
                 models = {w.provenance.model for w in get_task(task).benchmark}
-                self.assertEqual(models, {"llama_3_2_1b"})
+                self.assertEqual(models, {"llama_3_8b"})
 
     def test_the_new_task_also_has_a_llama_default(self):
         models = {w.provenance.model for w in get_task("causal_gqa_attention").benchmark}
-        self.assertEqual(models, {"llama_3_2_1b"})
+        self.assertEqual(models, {"llama_3_8b"})
 
     def test_legacy_ablation_suites_survive(self):
         self.assertEqual(len(get_task("swiglu").benchmark_workloads("legacy")), 42)

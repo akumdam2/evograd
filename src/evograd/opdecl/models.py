@@ -405,8 +405,15 @@ class AlphaFoldConfig:
         }
 
 
+#: Meta-Llama-3-8B. The operator suite's timed grids (``rmsnorm``, ``swiglu``,
+#: the vocabulary-regime loss kernels, ...) are derived from *these* widths, and
+#: every historical suite report records them under the key ``llama_3_8b``.
+#: The key therefore stays ``llama_3_8b`` even though the top-down workload
+#: moved to :data:`LLAMA_3_2_1B`: relabelling 4096-wide shapes as a 2048-wide
+#: model would make ``Provenance.model`` say something false about every
+#: operator-suite case and about every result already on record.
 LLAMA_3_8B = ModelConfig(
-    name="llama_3_2_1b",
+    name="llama_3_8b",
     hidden=4096,
     intermediate=14336,
     n_heads=32,
@@ -422,11 +429,13 @@ LLAMA_3_8B = ModelConfig(
 )
 
 #: Llama-3.2-1B, as ``meta-llama/Llama-3.2-1B``'s ``config.json`` publishes it.
-#: This is the configuration the ``topdown.llama3_2_1b`` workload actually pins --
-#: :data:`LLAMA_3_8B` above stays at the 8B numbers because the operator suite's
-#: vocabulary-regime cases (``kl_div``, ``fused_linear_cross_entropy``) were
-#: chosen to represent a *large* LLM's loss shapes, and shrinking them would
-#: change what those tasks are for.
+#: This is the configuration the ``topdown.llama3_2_1b`` workload actually pins,
+#: and the key its Level-2 tasks cite in their ``Provenance`` -- so it is
+#: registered in :data:`MODELS` under ``llama_3_2_1b`` and ``rederive_dims`` can
+#: check them. :data:`LLAMA_3_8B` above stays at the 8B numbers, under its own
+#: key, because the operator suite's vocabulary-regime cases (``kl_div``,
+#: ``fused_linear_cross_entropy``) were chosen to represent a *large* LLM's loss
+#: shapes, and shrinking them would change what those tasks are for.
 #:
 #: Unlike Meta-Llama-3-8B: ``head_dim`` is 64 rather than 128, and the
 #: embeddings are tied, so there is no second ``vocab x hidden`` matrix.
@@ -476,7 +485,7 @@ QWEN3_0_6B = ModelConfig(
 #:
 #: Use it to iterate. Report from ``LLAMA_3_8B``.
 LLAMA_3_8B_4L = ModelConfig(
-    name="llama_3_2_1b_4l",
+    name="llama_3_8b_4l",
     hidden=LLAMA_3_8B.hidden,
     intermediate=LLAMA_3_8B.intermediate,
     n_heads=LLAMA_3_8B.n_heads,
@@ -556,8 +565,12 @@ LLAMA_VOCAB_REGIME_SPLIT = 2048
 AF3_RESIDUE_SWEEP = (128, 256, 384)
 
 MODELS: dict[str, ModelConfig | AlphaFoldConfig] = {
-    config.name: config for config in (LLAMA_3_8B, QWEN3_0_6B, ALPHAFOLD3)
+    config.name: config
+    for config in (LLAMA_3_8B, LLAMA_3_2_1B, QWEN3_0_6B, ALPHAFOLD3)
 }
+# Two keys, two models: a name collision here would let one configuration
+# silently answer for the other's provenance.
+assert len(MODELS) == 4, sorted(MODELS)
 
 
 def config_for(provenance) -> ModelConfig | AlphaFoldConfig:

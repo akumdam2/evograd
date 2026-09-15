@@ -90,6 +90,15 @@ def providers(args, registry) -> dict[str, Any]:
 
         providers["structural_identity"] = structural_identity_kernels(registry)
 
+    # Whole-model torch.compile of the unpatched model: the compiler baseline a
+    # kernel has to beat end to end. Not a site provider -- nothing is patched,
+    # so it carries no site gate -- and never combined with one. Qwen's own,
+    # because only this workload knows how to compile and gate its whole model.
+    if getattr(args, "whole_model_compile", False):
+        from .workload import whole_model_compile_kernels
+
+        providers["torch_compile_model"] = whole_model_compile_kernels(registry)
+
     # `--compile-site` and `--patch-set` mean the same thing for every
     # architecture, so they are built once in `tier3.providers`. Declaring the
     # options and calling this is the whole cost of offering them.
@@ -99,13 +108,21 @@ def providers(args, registry) -> dict[str, Any]:
     return providers
 
 
+def block(args):
+    """The block-scope adapter: one decoder layer, captured or config-derived."""
+    from .block import from_args
+
+    return from_args(args)
+
+
 ADAPTER = Tier3Adapter(
     name="qwen3_0_6b",
     build=build,
     providers=providers,
+    block=block,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        "simple_calibration", "real_text", "protocol4_calibration",
                        "protocol4_verdict", "protocol4_diagnostic_timing",
-                       "compile_site", "patch_set"}),
+                       "compile_site", "patch_set", "whole_model_compile"}),
     summary="Qwen3-0.6B, 28 layers, the harvested canonical training step",
 )

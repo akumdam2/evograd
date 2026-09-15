@@ -21,6 +21,14 @@ class Tier3Adapter:
     providers: Callable[[Any, Any], dict[str, Any]] | None = None
     options: frozenset[str] = field(default_factory=frozenset)
     summary: str = ""
+    #: Block scope: parsed arguments -> a ``BlockAdapter`` for one case, or
+    #: ``None`` when this workload offers no block-scope evaluation. Model
+    #: scope is what every adapter has; block scope is declared by having this.
+    block: Callable[[Any], Any] | None = None
+
+    @property
+    def scopes(self) -> frozenset[str]:
+        return frozenset({"model", "block"} if self.block is not None else {"model"})
 
 
 TIER3_ADAPTERS: dict[str, str] = {

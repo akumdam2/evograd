@@ -32,6 +32,17 @@ def run_replay(artifact, **kwargs):
     return _common.run_replay(artifact, workload=WORKLOAD, **kwargs)
 
 
+def live_model_instances():
+    """Count live full-model objects: the standalone claim's evidence.
+
+    The scan itself is the benchmark package's (``levels.level3.prepare``),
+    because which classes count as "the full model" is a fact about the
+    model. Exposed here so a consumer of the replay can ask the same question
+    the replay asks of itself, without importing the model package by name.
+    """
+    return WORKLOAD.module("levels.level3.prepare").live_model_instances()
+
+
 def build_parser():
     return _common.build_parser(WORKLOAD)
 
