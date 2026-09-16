@@ -55,10 +55,11 @@ class TestPrimitiveRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(PRIMITIVES),
             [
-                "causal_gqa_attention", "conv2d", "cross_entropy", "dyt",
-                "evoattention", "geglu", "jsd", "kl_div", "layernorm", "linear",
-                "linear_no_bias", "matmul", "poly_norm", "relu_squared",
-                "rmsnorm", "rope", "softmax", "sparsemax", "swiglu", "tvd",
+                "causal_gqa_attention", "causal_softmax", "conv2d", "cross_entropy",
+                "dyt", "evoattention", "geglu", "gqa_pv", "gqa_scaled_scores",
+                "jsd", "kl_div", "layernorm", "linear", "linear_no_bias", "matmul",
+                "poly_norm", "relu_squared", "rmsnorm", "rope", "softmax",
+                "sparsemax", "swiglu", "tvd",
             ],
         )
 

@@ -98,7 +98,7 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, loaded = result.stdout.strip().splitlines()
-        self.assertEqual(count, "20")
+        self.assertEqual(count, "23")
         self.assertEqual(loaded, "[]", f"importing primitives loaded {loaded}")
 
 

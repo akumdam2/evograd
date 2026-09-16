@@ -228,6 +228,13 @@ class ModelConfig:
             "D": self.head_dim,
         }
 
+    def causal_softmax_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The causal softmax inside ``causal_gqa_sdpa_dims``: one [T, T] row
+        block per (batch, query head). The scores and the value product on
+        either side of it carry the full ``causal_gqa_sdpa`` dims; this one has
+        no KV-head or head-dim axis because the softmax never sees them."""
+        return {"B": batch, "HQ": self.n_heads, "T": seq}
+
     def rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """RoPE applied to one projected tensor, in [B, T, heads, head_dim]."""
         return {

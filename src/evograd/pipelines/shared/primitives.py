@@ -39,6 +39,10 @@ _TORCH_DENIED = frozenset({
     "dot", "inner", "outer", "chain_matmul", "matrix_power", "kron",
     "scaled_dot_product_attention", "compile", "rms_norm", "layer_norm",
     "group_norm", "batch_norm",
+    # Opaque softmax spellings: an attention decomposition whose softmax stage
+    # is ``torch.softmax`` has been wrapped, not evolved, and the same holds
+    # for the row-wise softmax primitive itself.
+    "softmax", "log_softmax",
 })
 
 #: Namespaces no generated pair math may reach into at all.
@@ -49,6 +53,7 @@ _DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_
 #: arithmetic, not an escape from it.
 _DENIED_METHODS = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "linear", "backward",
+    "softmax", "log_softmax",
 })
 
 #: Attribute paths under ``torch`` that are denied by prefix rather than leaf.
