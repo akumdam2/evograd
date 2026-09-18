@@ -749,9 +749,19 @@ def measure_block_provider(
         )
         stage("block", verdict)
         if not verdict["ok"]:
-            if verdict.get("failed_at") == "no_policy":
-                raise NoPolicyForProvider(str(verdict.get("reason")))
-            raise BlockCorrectnessFailure(str(verdict.get("reason")))
+            from evograd.evaluation.tier3.gate import enforcement as enf
+
+            kind = block_gate.finding_kind(verdict)
+            verdict["enforcement"] = {"mode": enf.active_mode(), "finding_kind": kind}
+            verdict["numerical_ok"] = False if kind == enf.NUMERICAL else None
+            if enf.blocks(kind, enf.active_mode()):
+                if verdict.get("failed_at") == "no_policy":
+                    raise NoPolicyForProvider(str(verdict.get("reason")))
+                raise BlockCorrectnessFailure(str(verdict.get("reason")))
+            # report-first: the numerical verdict stands and the block is timed
+            # anyway, so a number exists beside the disagreement.
+            correctness["numerical_ok"] = False
+            correctness["numerical_reason"] = str(verdict.get("reason"))
     del result
     correctness["ok"] = True
 
@@ -858,6 +868,12 @@ def assemble_block_report(
     """The block report, in the format :mod:`evograd.evaluation.tier3.report` reads."""
     from evograd.evaluation.tier3.runner import _environment
 
+    def _enforcement_note():
+        from evograd.evaluation.tier3.gate import enforcement as enf
+
+        mode = enf.active_mode()
+        return {"mode": mode, "rule": enf.DESCRIPTION[mode]}
+
     levels: set[int] = set()
     for entry in results.values():
         if not entry.get("ok"):
@@ -891,6 +907,7 @@ def assemble_block_report(
         "provider_order": list(order),
         "isolation": isolation,
         "environment": _environment(),
+        "numerical_enforcement": _enforcement_note(),
         "providers": results,
     }
     report["speedup_intervals"] = block_speedup_intervals(results, seed=seed)

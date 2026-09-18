@@ -36,7 +36,6 @@ implementations on different data.
 from __future__ import annotations
 
 import hashlib
-import statistics
 import random
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -62,38 +61,9 @@ DEFAULT_REP_MS = 500
 DEFAULT_WARMUP_MS = 25
 QUANTILES = (0.5, 0.2, 0.8)
 
-#: A fixed sample count, not a wall-clock budget. `do_bench`'s `rep` is a
-#: duration, so a fast provider is sampled many more times than a slow one and
-#: the two quantile estimates rest on different amounts of evidence. Every
-#: provider now contributes the same number of measurements.
-REPETITIONS = 500
 #: Untimed iterations before sampling. Enough to finish Triton autotuning and
 #: settle the allocator; compilation is already done by the correctness gate.
 WARMUP_ITERS = 10
-#: Evicts L2 between samples (GH200 has 60 MB), the discipline `do_bench`
-#: applies, so one sample does not read the previous sample's cache.
-L2_FLUSH_BYTES = 256 * 1024 * 1024
-
-
-def _timed_samples(fn, *, grad_to_none=None, reps=REPETITIONS,
-                   warmup=WARMUP_ITERS) -> list[float]:
-    """`warmup` untimed iterations, then exactly `reps` event-timed ones."""
-    flush = torch.empty(L2_FLUSH_BYTES // 4, dtype=torch.int32, device="cuda")
-    for _ in range(warmup):
-        fn()
-    torch.cuda.synchronize()
-    starts = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
-    ends = [torch.cuda.Event(enable_timing=True) for _ in range(reps)]
-    for index in range(reps):
-        if grad_to_none:
-            for tensor in grad_to_none:
-                tensor.grad = None
-        flush.zero_()
-        starts[index].record()
-        fn()
-        ends[index].record()
-    torch.cuda.synchronize()
-    return [s.elapsed_time(e) for s, e in zip(starts, ends)]
 
 
 def tensor_checksum(value) -> str:
@@ -495,20 +465,6 @@ def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
 # ── timing ───────────────────────────────────────────────────────────────────
 
 
-def _summarize_samples(samples: list[float]) -> dict[str, float]:
-    """Median and the 20/80 quantiles of a fixed-size sample."""
-    ordered = sorted(samples)
-
-    def quantile(fraction: float) -> float:
-        position = (len(ordered) - 1) * fraction
-        low = int(position)
-        high = min(low + 1, len(ordered) - 1)
-        return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
-
-    return {"median_ms": quantile(0.5), "q20_ms": quantile(0.2),
-            "q80_ms": quantile(0.8), "samples": len(ordered)}
-
-
 def _summarize(samples) -> dict[str, float]:
     """do_bench's quantile triple, in the shape the canonical report reads."""
     median, low, high = (float(v) for v in samples)
@@ -522,7 +478,6 @@ def measure_module(
     *,
     rep_ms: int = DEFAULT_REP_MS,
     warmup_ms: int = DEFAULT_WARMUP_MS,
-    reps: int = REPETITIONS,
 ) -> dict[str, Any]:
     """Time one provider's forward and full training step.
 

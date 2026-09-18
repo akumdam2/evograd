@@ -28,6 +28,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from evograd.evaluation.tier3.gate.enforcement import (
+    add_enforcement_argument,
+    apply_enforcement_argument,
+)
+
 from evograd.evaluation.tier3.workloads import tier3_model_names
 
 #: The workloads tier 3 can measure. Read from the registry rather than written
@@ -54,6 +59,8 @@ def load_program(path: Path):
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=MODELS[0], choices=MODELS)
+    parser.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
+    add_enforcement_argument(parser)
     parser.add_argument(
         "--candidate",
         action="append",
@@ -467,6 +474,9 @@ def _run_isolated(argv: list[str], provider: str, timeout: int) -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     args = _parser().parse_args(argv)
+    # The enforcement mode: what a numerical mismatch does is a
+    # property of the run, chosen once and inherited by every isolated child.
+    apply_enforcement_argument(args)
     # Before anything is built: a flag the selected workload does not
     # understand is an error, not a silently ignored request.
     check_options(args)
@@ -542,11 +552,25 @@ def main(argv: list[str] | None = None) -> int:
             eager["step_ms"] / entry["step_ms"]
             if eager.get("ok") and entry["step_ms"] else float("nan")
         )
+        # A timing line must never read as a correctness claim: under
+        # report-first a provider can be measured *because* its numerical
+        # mismatches were recorded rather than allowed to stop it, so the
+        # numerical answer is printed on the same line.
+        correctness = entry.get("model_correctness") or {}
+        status = correctness.get("numerical_status")
+        numerics = ""
+        if status and status != "within_limits":
+            counts = correctness.get("counts") or {}
+            numerics = (f"  [numerics: {status}"
+                        + (f", {counts['numerical']} recorded" if counts.get("numerical") else "")
+                        + "]")
+        elif status:
+            numerics = "  [numerics: within limits]"
         print(
             f"  {name:18} {entry['step_ms']:8.2f} ms/step  "
             f"{entry['units_per_second']:10.0f} {entry['unit_name']}/s  "
             f"{entry['peak_memory_bytes'] / 2**30:6.2f} GiB  "
-            f"cpu_bound={entry['cpu_bound_fraction']:.2f}  {speedup:.3f}x",
+            f"cpu_bound={entry['cpu_bound_fraction']:.2f}  {speedup:.3f}x{numerics}",
             file=sys.stderr,
         )
     if args.identity_control and report["providers"].get("eager_through_bind", {}).get("ok"):

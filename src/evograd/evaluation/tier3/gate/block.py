@@ -227,7 +227,7 @@ def check_candidate(reference: _block.BlockResult, candidate: _block.BlockResult
     envelopes = {g: numerics.GroupEnvelope(**e) for g, e in entry["envelopes"].items()}
     checked = numerics.check_against(envelopes, samples)
     verdict["envelope"] = {"ok": checked["ok"], "checked": checked["checked"],
-                           "exceeded": checked["exceeded"][:16],
+                           "exceeded": checked["exceeded"],
                            "thresholds": {g: e.threshold for g, e in envelopes.items()}}
     if not checked["ok"]:
         first = checked["exceeded"][0]
@@ -239,6 +239,26 @@ def check_candidate(reference: _block.BlockResult, candidate: _block.BlockResult
         return fail("envelope", reason)
     verdict["ok"] = True
     return verdict
+
+
+#: Which stage of the block verdict is a tolerance question and which is not.
+_FINDING_KINDS = {
+    "envelope": "numerical",
+    "finiteness": "execution",
+    "structure": "structural", "aliases": "structural",
+    "gradient_presence": "structural", "input_mutation": "structural",
+    "metadata_outputs": "structural",
+    "no_policy": "unavailable", "invalid_policy": "unavailable",
+}
+
+
+def finding_kind(verdict: Mapping[str, Any]) -> str:
+    """The enforcement kind of a failed block verdict.
+
+    Anything unrecognised is structural: a stage this table does not know about
+    must never be waved through as a numerical difference.
+    """
+    return _FINDING_KINDS.get(str(verdict.get("failed_at")), "structural")
 
 
 def _jsonable(value: Any) -> Any:
@@ -511,6 +531,7 @@ def check_policy_binding(policy: Mapping[str, Any], adapter, environment: Mappin
 
 __all__ = [
     "DEFAULT_CONTROLS",
+    "finding_kind",
     "GATE_NAME",
     "POLICY_SCHEMA",
     "calibrate_policy",

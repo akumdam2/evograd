@@ -443,9 +443,13 @@ class TestTheThreeParts(unittest.TestCase):
         )
 
     def test_the_runner_depends_on_both_and_nothing_else(self):
+        # `gate` is the shared, workload-neutral half (see tests/test_layering.py):
+        # the runner reads the Tier-3 enforcement mode from it to decide whether a
+        # numerical mismatch stops a provider. Nothing workload-specific is added.
         self.assertLessEqual(
             self._tier3_imports("runner"),
-            {"evograd.evaluation.tier3.patch", "evograd.evaluation.tier3.model"},
+            {"evograd.evaluation.tier3.patch", "evograd.evaluation.tier3.model",
+             "evograd.evaluation.tier3.gate"},
         )
 
     def test_no_tier3_module_reaches_into_a_workload(self):
@@ -525,6 +529,68 @@ class TestCli(unittest.TestCase):
         from evograd.evaluation.tier3.cli import _parser
 
         self.assertIsNone(_parser().parse_args([]).dtype)
+
+
+class TestAProviderTheGateNeverJudged(unittest.TestCase):
+    """"Not checked" must never be readable as "checked and fine".
+
+    ``model_correctness_check`` returns early for three providers: one whose
+    workload has no whole-model gate, one under ``--no-verify``, and one that
+    patches no site. All three used to return a bare ``ok: True``, and a report
+    reading that field alone would count them as having passed a comparison that
+    never ran. Whole-model ``torch.compile`` is the case that makes this matter:
+    it patches no site and it does change the arithmetic.
+    """
+
+    class _Workload:
+        def model_correctness(self, kernels, *, device):  # pragma: no cover - never reached
+            raise AssertionError("the gate should not have been called")
+
+    class _Kernels:
+        patched = ()
+
+    def _verdicts(self):
+        from evograd.evaluation.tier3.runner import model_correctness_check
+
+        return {
+            "unpatched": model_correctness_check(
+                self._Workload(), self._Kernels(), verify=True, device="cpu"),
+            "no_verify": model_correctness_check(
+                self._Workload(), self._Kernels(), verify=False, device="cpu"),
+            "no_gate": model_correctness_check(
+                object(), self._Kernels(), verify=True, device="cpu"),
+        }
+
+    def test_timing_is_still_allowed(self):
+        """The change is to the claim, not to what runs: these are all timeable."""
+        for name, verdict in self._verdicts().items():
+            with self.subTest(provider=name):
+                self.assertTrue(verdict["ok"])
+
+    def test_the_numerical_answer_is_unavailable_not_a_pass(self):
+        for name, verdict in self._verdicts().items():
+            with self.subTest(provider=name):
+                self.assertIsNone(verdict["numerical_ok"])
+                self.assertEqual(verdict["numerical_status"], "unavailable")
+
+    def test_the_evaluation_is_not_complete(self):
+        """The one field a report must read before calling a row fully checked."""
+        for name, verdict in self._verdicts().items():
+            with self.subTest(provider=name):
+                self.assertFalse(verdict["evaluation_complete"])
+                self.assertTrue(verdict["evaluation_incomplete_because"])
+
+    def test_the_fields_match_the_enforcement_summary(self):
+        """One reader for every row: the early return uses the same names the
+        gate's own summary does, so a table does not need to special-case it."""
+        from evograd.evaluation.tier3.gate import enforcement as enf
+
+        summary = enf.summarize([], gate="x", active=enf.REPORT_FIRST)
+        for verdict in self._verdicts().values():
+            self.assertLessEqual(
+                {"ok", "execution_ok", "numerical_ok", "numerical_status",
+                 "evaluation_complete", "evaluation_incomplete_because"},
+                set(summary) & set(verdict))
 
 
 if __name__ == "__main__":

@@ -129,7 +129,7 @@ def _step(workload, kernels, *, data_seed: int, learning_rate: float):
 def capture_step(model, optimizer, ids, labels) -> dict[str, Any]:
     """The five quantities one training step produces, each kept apart.
 
-    **Host memory is the binding constraint at Llama-3-8B's size.** Three
+    **Host memory is the binding constraint at Llama-3.2-1B's size.** Three
     float32 host copies of every parameter is roughly 15 GiB for 1.24B
     parameters, and the comparison holds more than one capture live. Iterate
     with ``--layers``; the per-layer families shrink linearly with it and the
@@ -259,7 +259,13 @@ def _trajectory(workload, kernels, *, data_seed: int, horizon: int,
 # ── the gate ─────────────────────────────────────────────────────────────────
 
 
-def build_references(workload, *, policy: NumericsPolicy, data_seed: int = 0):
+#: The learning rate a policy-free reference step uses. Same value every policy
+#: here carries, written down so a run without a calibration is still a
+#: reproducible experiment rather than an unstated default.
+POLICY_FREE_LEARNING_RATE = 1e-4
+
+
+def build_references(workload, *, policy: NumericsPolicy | None = None, data_seed: int = 0):
     """The two reference steps a verdict is measured against.
 
     Separated so a caller checking many providers against the same references --
@@ -270,7 +276,8 @@ def build_references(workload, *, policy: NumericsPolicy, data_seed: int = 0):
 
     from .sites import bound_pair_identity_kernels
 
-    learning_rate = policy.trajectory.learning_rate
+    learning_rate = (policy.trajectory.learning_rate if policy is not None
+                     else POLICY_FREE_LEARNING_RATE)
     eager = _step(workload, KernelSet(registry=workload.site_registry),
                   data_seed=data_seed, learning_rate=learning_rate)
     bound = _step(workload,
@@ -283,7 +290,7 @@ def check_model_correctness(
     workload,
     kernels,
     *,
-    policy: NumericsPolicy,
+    policy: NumericsPolicy | None,
     data_seed: int = 0,
     check_trajectory: bool = True,
     references: dict[str, Any] | None = None,
@@ -295,35 +302,61 @@ def check_model_correctness(
     path an evolved kernel actually replaces. A candidate is reported against
     both, because "matches eager" and "matches what it replaced" are different
     claims and only reporting one of them hides which reference moved.
+
+    Every stage runs and every outcome is recorded. What a finding *does* is
+    decided by the Tier-3 enforcement mode
+    (:mod:`evograd.evaluation.tier3.gate.enforcement`), exactly as at Qwen's
+    model scope: under ``strict`` any finding stops the provider, as this gate
+    always behaved; under ``report_first`` a finite numerical disagreement is
+    recorded and execution continues, while a missing gradient, a non-finite
+    value, an impure provider, wrong invocation coverage and any runtime failure
+    still stop it. The numerical verdict is identical either way.
     """
+    from evograd.evaluation.tier3.gate import enforcement as enf
     from evograd.evaluation.tier3.patch import KernelSet
 
     from . import boundary, purity
 
+    mode = enf.active_mode()
+    findings: list[dict[str, Any]] = []
     verdict: dict[str, Any] = {
-        "gate": "llama3_model_correctness",
-        "policy": {
+        "policy": ({
             "workload_id": policy.workload_id,
             "environment_hash": policy.environment_hash,
             "margin": policy.notes.get("margin"),
             "gated_metrics": policy.notes.get("gated_metrics"),
-        },
+        } if policy is not None else {
+            "bound": False,
+            "note": ("no calibration binds to this workload and environment, so the "
+                     "envelope and trajectory stages have no thresholds to apply. "
+                     "Everything that needs none -- preflight, purity, every live "
+                     "invocation against its declared tolerance, invocation counts, "
+                     "gradient presence, finiteness -- still runs, and the whole-model "
+                     "differences are measured and reported without a verdict"),
+        }),
         "data_seed": data_seed,
         "stages": list(STAGES),
     }
+    learning_rate = (policy.trajectory.learning_rate if policy is not None
+                     else POLICY_FREE_LEARNING_RATE)
 
-    def fail(stage: str, reason: str) -> dict[str, Any]:
-        verdict["ok"] = False
-        verdict["failed_at"] = stage
-        verdict["reason"] = reason
-        return verdict
+    def record(stage: str, kind: str, reason: str, **extra) -> bool:
+        """Note a finding; True when this mode stops the provider here."""
+        findings.append(enf.finding(stage, kind, reason, **extra))
+        return enf.blocks(kind, mode)
+
+    def done() -> dict[str, Any]:
+        return enf.summarize(findings, gate="llama3_model_correctness", active=mode, **verdict)
 
     # 1. Does the provider hold at the shapes this model will actually give it?
     verdict["site_preflight"] = preflight or {"ok": True, "skipped": True}
     if not verdict["site_preflight"].get("ok", True):
-        return fail("site_preflight",
-                    str(verdict["site_preflight"].get("reason",
-                                                      "site preflight failed")))
+        kind = (enf.NUMERICAL if enf.preflight_numerical_only(verdict["site_preflight"])
+                else enf.EXECUTION)
+        if record("site_preflight", kind,
+                  str(verdict["site_preflight"].get("reason", "site preflight failed")),
+                  detail=verdict["site_preflight"].get("detail")):
+            return done()
 
     # 2. Is it a function of its arguments, or does it remember? Asked before
     #    the model is built, because a provider that remembers must never reach
@@ -332,18 +365,24 @@ def check_model_correctness(
         kernels, workload, device=str(workload.spec.device)
     )
     if not verdict["provider_purity"].get("ok", False):
-        return fail("provider_purity", _purity_reason(verdict["provider_purity"]))
+        if record("provider_purity", enf.STRUCTURAL,
+                  _purity_reason(verdict["provider_purity"])):
+            return done()
 
     # 3. Every invocation, on the model's own tensors and upstream gradients.
     verdict["live_boundary"] = boundary.validate_all_invocations(
         workload, kernels, data_seed=data_seed
     )
     if not verdict["live_boundary"].get("ok", False):
-        return fail("live_boundary", _boundary_reason(verdict["live_boundary"]))
+        if record("live_boundary", enf.boundary_finding_kind(verdict["live_boundary"]),
+                  _boundary_reason(verdict["live_boundary"]),
+                  failure_count=verdict["live_boundary"].get("failure_count"),
+                  checked_invocations=verdict["live_boundary"].get("checked_invocations")):
+            return done()
 
     # 4. The whole model: finiteness, then each quantity in its own namespace.
     candidate = _step(workload, kernels, data_seed=data_seed,
-                      learning_rate=policy.trajectory.learning_rate)
+                      learning_rate=learning_rate)
     verdict["provenance"] = candidate["provenance"]
     verdict["observed_counts"] = candidate["counts"]
     verdict["expected_counts"] = candidate["expected_counts"]
@@ -366,33 +405,74 @@ def check_model_correctness(
     # it replaces, the drift is already spent but the noise is not, and holding
     # the two to different bounds would make one of them the real gate by
     # accident rather than by choice.
-    bound = combined_envelope(policy.envelopes, policy.bound_pair_envelopes)
-    verdict["envelope"] = {
-        "hardware_groups": len(policy.envelopes),
-        "integration_groups": len(policy.bound_pair_envelopes),
-        "kinds": sorted({g.split("|", 1)[0] for g in bound}),
-        "formula": "threshold = E/E threshold + S/B threshold, per group and metric",
-    }
-    verdict["vs_eager"] = check_against(bound, versus_eager)
-    verdict["vs_bound_pair"] = check_against(bound, versus_bound)
-    verdict["vs_eager"]["worst"] = _worst(versus_eager)
-    verdict["vs_bound_pair"]["worst"] = _worst(versus_bound)
-    for label in ("vs_eager", "vs_bound_pair"):
-        verdict[label]["exceeded_groups"] = sorted(
-            {e.get("group") for e in verdict[label]["exceeded"]}
-        )
+    if policy is not None:
+        bound = combined_envelope(policy.envelopes, policy.bound_pair_envelopes)
+        verdict["envelope"] = {
+            "hardware_groups": len(policy.envelopes),
+            "integration_groups": len(policy.bound_pair_envelopes),
+            "kinds": sorted({g.split("|", 1)[0] for g in bound}),
+            "formula": "threshold = E/E threshold + S/B threshold, per group and metric",
+        }
+        verdict["vs_eager"] = check_against(bound, versus_eager)
+        verdict["vs_bound_pair"] = check_against(bound, versus_bound)
+        verdict["vs_eager"]["worst"] = _worst(versus_eager)
+        verdict["vs_bound_pair"]["worst"] = _worst(versus_bound)
+        for label in ("vs_eager", "vs_bound_pair"):
+            verdict[label]["exceeded_groups"] = sorted(
+                {e.get("group") for e in verdict[label]["exceeded"]}
+            )
+    else:
+        # Measured, not judged: the same comparisons, reported with the worst
+        # disagreement per reference and no threshold attached to any of them.
+        verdict["envelope"] = {"available": False,
+                               "reason": "no bound calibration: no thresholds applied"}
+        verdict["vs_eager"] = {"ok": None, "measured_only": True,
+                               "checked": len(versus_eager), "exceeded": [],
+                               "worst": _worst(versus_eager)}
+        verdict["vs_bound_pair"] = {"ok": None, "measured_only": True,
+                                    "checked": len(versus_bound), "exceeded": [],
+                                    "worst": _worst(versus_bound)}
     del candidate
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
+    # Counts, presence and finiteness are not tolerance questions, and are
+    # reported before the envelopes so a structural problem is never read as a
+    # numerical one.
+    if verdict["count_problems"] or verdict["missing_grads"]:
+        if record("counts_and_provenance", enf.STRUCTURAL, _reason(verdict),
+                  count_problems=verdict["count_problems"],
+                  missing_grads=verdict["missing_grads"][:8]):
+            return done()
     if not verdict["finite"]["ok"]:
-        return fail("numerical_envelopes",
-                    f"non-finite values in {len(non_finite)} results, "
-                    f"first {non_finite[0]}")
-    if not (verdict["vs_eager"]["ok"] and verdict["vs_bound_pair"]["ok"]):
-        return fail("numerical_envelopes", _reason(verdict))
+        if record("numerical_envelopes", enf.EXECUTION,
+                  f"non-finite values in {len(non_finite)} results, first {non_finite[0]}",
+                  non_finite=non_finite[:8]):
+            return done()
+    if policy is None:
+        if record("numerical_envelopes", enf.UNAVAILABLE,
+                  "no calibration binds to this workload and environment, so the "
+                  "whole-model envelope comparison has no threshold; the differences "
+                  "are measured and reported, and nothing is claimed about them",
+                  worst_vs_eager=verdict["vs_eager"]["worst"],
+                  worst_vs_bound_pair=verdict["vs_bound_pair"]["worst"]):
+            return done()
+    elif not (verdict["vs_eager"]["ok"] and verdict["vs_bound_pair"]["ok"]):
+        if record("numerical_envelopes", enf.NUMERICAL, _reason(verdict),
+                  vs_eager_exceeded=len(verdict["vs_eager"]["exceeded"]),
+                  vs_bound_pair_exceeded=len(verdict["vs_bound_pair"]["exceeded"]),
+                  exceeded_groups=verdict["vs_eager"]["exceeded_groups"]):
+            return done()
 
     # 5. A few steps of training: does the loss go where the reference's went?
+    if policy is None:
+        verdict["trajectory"] = {"ok": None, "available": False,
+                                 "reason": "no bound calibration: no trajectory limits"}
+        if record("loss_trajectory", enf.UNAVAILABLE,
+                  "no calibration binds, so the short-trajectory bound is unavailable; "
+                  "the 200-step training diagnostic is reported separately"):
+            return done()
+        return done()
     if check_trajectory:
         reference_curve = _trajectory(
             workload, KernelSet(registry=workload.site_registry),
@@ -415,15 +495,10 @@ def check_model_correctness(
     else:
         verdict["trajectory"] = {"ok": True, "skipped": True}
     if not verdict["trajectory"]["ok"]:
-        return fail("loss_trajectory", _reason(verdict))
+        if record("loss_trajectory", enf.NUMERICAL, _reason(verdict)):
+            return done()
 
-    # 6. Was every site reached the declared number of times, by what it says?
-    if verdict["count_problems"] or verdict["missing_grads"]:
-        return fail("counts_and_provenance", _reason(verdict))
-
-    verdict["ok"] = True
-    verdict["failed_at"] = None
-    return verdict
+    return done()
 
 
 def _purity_reason(report: dict[str, Any]) -> str:
@@ -536,12 +611,16 @@ def summarize(verdict: dict[str, Any]) -> dict[str, Any]:
     trimmed["trajectory"] = trajectory
     for label in ("vs_eager", "vs_bound_pair"):
         section = dict(trimmed.get(label) or {})
-        section["exceeded"] = section.get("exceeded", [])[:8]
+        # Every exceeded group is kept: this list *is* the aggregate
+        # localization a reader needs, and a truncated one cannot be acted on.
+        section["exceeded"] = section.get("exceeded", [])
         trimmed[label] = section
     boundary = dict(trimmed.get("live_boundary") or {})
     if boundary:
         # The per-invocation detail is a debugging view, not a report.
-        boundary["failures"] = boundary.get("failures", [])[:8]
+        # Failures are the numerical record, not a debugging view: all of them
+        # travel, and a console summary is what trims (never the artifact).
+        boundary["failures"] = boundary.get("failures", [])
         trimmed["live_boundary"] = boundary
     purity = dict(trimmed.get("provider_purity") or {})
     if purity.get("sites"):

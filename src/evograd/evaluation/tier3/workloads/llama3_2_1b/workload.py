@@ -1,4 +1,4 @@
-"""The canonical Llama-3-8B training step, as a tier-3 workload.
+"""The canonical Llama-3.2-1B training step, as a tier-3 workload.
 
     evograd tier3-bench --model llama_3_2_1b --structural-identity
 
@@ -9,7 +9,7 @@ serializable fields; :meth:`Llama3Workload.to_config` writes them out and
 :func:`from_config` rebuilds an identical workload on the other side.
 
 The execution is the canonical one the level-4 smoke and the harvest run:
-Llama-3-8B, batch 2, sequence 2048, BF16, CUDA, SDPA, ``use_cache`` off,
+Llama-3.2-1B, batch 2, sequence 2048, BF16, CUDA, SDPA, ``use_cache`` off,
 gradient checkpointing off, ``model.train()``, randomly initialised from config
 with no weight or tokenizer download -- Llama-3 is a gated repository and this
 needs no Hub token. It is not re-specified here; it is ``spec.CANONICAL``, and
@@ -65,9 +65,33 @@ def _spec_from_config(config: dict[str, Any]) -> WorkloadSpec:
     return CANONICAL.replace(**overrides) if overrides else CANONICAL
 
 
+#: Whole-model ``torch.compile``: a baseline of the *unpatched* model, so it
+#: patches no site and can never be combined with one. The same spelling Qwen
+#: uses, so a report can compare the two models' compile rows on equal terms.
+WHOLE_MODEL_COMPILE_ORIGIN = "whole_model_torch_compile"
+WHOLE_MODEL_COMPILE_SITE = "__whole_model__"
+WHOLE_MODEL_COMPILE_SETTINGS: dict[str, Any] = {
+    "backend": "inductor", "mode": None, "dynamic": False, "fullgraph": False,
+}
+
+
+def whole_model_compile_kernels(registry):
+    """A kernel set that patches nothing and asks for the whole model compiled."""
+    from evograd.evaluation.tier3.patch import KernelSet, KernelSource
+
+    return KernelSet(registry=registry, sources=(KernelSource(
+        site=WHOLE_MODEL_COMPILE_SITE, op_name=None, module=None,
+        origin=WHOLE_MODEL_COMPILE_ORIGIN),))
+
+
+def whole_model_compile_requested(kernels) -> bool:
+    return any(getattr(s, "origin", None) == WHOLE_MODEL_COMPILE_ORIGIN
+               for s in getattr(kernels, "sources", ()))
+
+
 @dataclass
 class Llama3Workload:
-    """Llama-3-8B next-token training, one step at a time.
+    """Llama-3.2-1B next-token training, one step at a time.
 
     Implements tier 3's ``TrainingWorkload`` protocol and owns the Llama site
     registry. Qwen3's is untouched: the two share no site name -- Llama's
@@ -87,7 +111,8 @@ class Llama3Workload:
     #: Moves the token stream without touching the workload identity.
     data_seed: int = 0
     #: Reduced architectures for tests and for iteration. Empty means the
-    #: published Llama-3-8B.
+    #: published Llama-3.2-1B (16 layers, hidden 2048, 32 heads over 8 KV
+    #: heads, tied embeddings: 1.24B parameters).
     arch_overrides: dict[str, Any] = field(default_factory=dict)
     #: Where the numerics calibration lives. ``None`` uses the default path.
     calibration_path: str | None = None
@@ -141,6 +166,21 @@ class Llama3Workload:
         touches no parameter, so rebuilding is how a run is reverted.
         """
         model = build_model(self.spec)
+        if whole_model_compile_requested(kernels):
+            if kernels.patched:
+                raise ValueError(
+                    "whole-model torch.compile is a baseline of the unpatched model; "
+                    f"it cannot be combined with site patches {list(kernels.patched)}")
+            from evograd.evaluation.tier3.patch import PatchProvenance
+
+            model = torch.compile(model, **WHOLE_MODEL_COMPILE_SETTINGS)
+            provenance = PatchProvenance(
+                method="whole_model_torch_compile", requested_sites=(), actual_sites=(),
+                paths={WHOLE_MODEL_COMPILE_SITE: ("model",)})
+            self._last = PatchedModel(
+                model=model, provenance=provenance, counters=SiteCounters(), carrier=None,
+                expected=expected_counts(self.spec.arch["num_hidden_layers"]))
+            return model, provenance
         if not kernels.patched:
             self._last = PatchedModel(
                 model=model,
@@ -169,6 +209,18 @@ class Llama3Workload:
         """
         spec = self.spec.replace(seed=self.data_seed + seed)
         return make_inputs(spec)
+
+    def eager_evaluator(self):
+        """A fresh unpatched model: the trusted evaluator for validation NLL.
+
+        Built from the same deterministic initialization as the trained model,
+        then loaded with the trained weights at each checkpoint, so what is
+        scored is the weights training produced rather than a provider's own
+        forward.
+        """
+        model = build_model(self.spec)
+        model.eval()
+        return model
 
     def loss(self, model, batch) -> torch.Tensor:
         input_ids, labels = batch
@@ -253,28 +305,52 @@ class Llama3Workload:
         than no timing, it is worse. **No Llama calibration has been run yet, so
         this refuses today**, and that refusal names the command that fixes it.
         """
+        from evograd.evaluation.tier3.gate import enforcement as enf
+
         from .gate import CalibrationUnavailable, check_model_correctness, load_policy
 
+        def unavailable(reason: str, **detail) -> dict[str, Any]:
+            """No bound calibration: the comparison cannot be made, so it is
+            reported unavailable -- never a pass, and never confused with a
+            provider that failed. Under report-first execution may continue;
+            the verdict carries ``evaluation_complete=False`` so no report can
+            call such a run fully checked."""
+            return enf.summarize(
+                [enf.finding("policy_binding", enf.UNAVAILABLE, reason)],
+                gate="llama3_model_correctness", **detail)
+
+        policy = None
+        unbound_reason = unbound_detail = None
         try:
             policy = load_policy(self.calibration_path)
+            if policy.workload_id != self.spec.workload_id:
+                unbound_reason = (f"the calibration is for {policy.workload_id}, this is "
+                                  f"{self.spec.workload_id}")
+                unbound_detail = unbound_reason
+                policy = None
         except CalibrationUnavailable as exc:
-            return {"gate": "llama3_model_correctness", "ok": False,
-                    "reason": str(exc).splitlines()[0], "detail": str(exc)}
-        if policy.workload_id != self.spec.workload_id:
-            return {
-                "gate": "llama3_model_correctness", "ok": False,
-                "reason": (
-                    f"the calibration is for {policy.workload_id}, this is "
-                    f"{self.spec.workload_id}"
-                ),
-            }
+            # The one-line reason is what a table shows; the full text is what
+            # names the command that fixes it, so both are kept.
+            unbound_reason, unbound_detail = str(exc).splitlines()[0], str(exc)
+            policy = None
+        if policy is None and enf.active_mode() == enf.STRICT:
+            # Historical behaviour: an uncalibrated gate refuses outright.
+            return unavailable(unbound_reason, detail=unbound_detail,
+                               calibration_path=str(self.calibration_path))
         preflight = self.site_preflight(kernels, device=device)
         from .gate import summarize
 
-        return summarize(check_model_correctness(
+        verdict = summarize(check_model_correctness(
             self, kernels, policy=policy, data_seed=self.data_seed,
             preflight=preflight,
         ))
+        if policy is None:
+            # Recorded on the verdict, so a reader never has to infer from a
+            # missing threshold that none was applied.
+            verdict["policy_binding"] = {"ok": False, "reason": unbound_reason,
+                                         "detail": unbound_detail,
+                                         "calibration_path": str(self.calibration_path)}
+        return verdict
 
     @property
     def last_build(self) -> PatchedModel | None:

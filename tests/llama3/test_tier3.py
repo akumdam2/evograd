@@ -78,7 +78,11 @@ class TestRegistration(unittest.TestCase):
             frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        # generic providers built by tier3.providers; declaring
                        # them is how a workload says it offers them
-                       "compile_site", "patch_set"}),
+                       "compile_site", "patch_set",
+                       # the unpatched whole-model torch.compile baseline, the
+                       # same provider Qwen offers, so the two models' compile
+                       # rows mean the same thing
+                       "whole_model_compile"}),
         )
 
     def test_the_registry_entry_is_a_dotted_path_not_an_import(self):

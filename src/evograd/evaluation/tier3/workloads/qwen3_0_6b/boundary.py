@@ -290,15 +290,22 @@ class BoundaryReport:
             )
             for category in RESIDUAL_CATEGORIES
         }
+        # Every failed invocation is kept: a truncated machine-readable list
+        # cannot be acted on, and the count here is bounded by invocations x
+        # results. `summarize()` is what trims this for a console report.
         failures = [
-            {"id": r["id"], "site": r["site"], "result": e["name"],
+            {"id": r["id"], "site": r["site"], "layer": r.get("layer"),
+             "category": r.get("category"), "ordinal": r.get("ordinal"),
+             "result": e["name"], "role": ("gradient" if kind == "gradients" else "output"),
              "max_abs_err": e["max_abs_err"], "atol": e["atol"], "rtol": e["rtol"],
-             "rel_l2": e.get("rel_l2"), "envelope": e.get("envelope")}
+             "rel_l2": e.get("rel_l2"), "envelope": e.get("envelope"),
+             "finite": e.get("finite"), "discrepancy": e.get("discrepancy")}
             for r in self.invocations
             for kind in ("outputs", "gradients")
             for e in r.get(kind, [])
             if not e["ok"]
         ]
+        non_finite = [f["id"] for f in failures if f.get("finite") is False]
         # Accounting is per site, and every site the plan names is held to its
         # own declared count -- carried ones included. There is deliberately no
         # aggregate total: an expected sum built from the patched sites alone
@@ -353,8 +360,17 @@ class BoundaryReport:
             "envelope_admitted": sum(
                 1 for r in self.invocations for kind in ("outputs", "gradients")
                 for e in r.get(kind, []) if e.get("ok") and not e.get("declared_ok", True)),
-            "failures": failures[:32],
+            "failures": failures,
             "failure_count": len(failures),
+            "non_finite_results": non_finite,
+            # Is everything that went wrong here a finite tolerance
+            # disagreement? Coverage, duplicates, shared parameters, lost
+            # records, shadow errors and non-finite values are not, and a
+            # report-first run must not treat them as one.
+            "numerical_only": bool(
+                failures and not non_finite and not missing and not unexpected
+                and not self.duplicates and not self.errors
+                and not self.shared_parameters and not record_desync),
             "errors": self.errors[:16],
             "shared_parameter_boundaries": self.shared_parameters[:8],
             "summed_is_the_residual_stream": all(
@@ -393,8 +409,8 @@ def ulp_at_max(want: torch.Tensor) -> float:
     return eps * 2.0 ** math.floor(math.log2(peak))
 
 
-def _judge(actual, want, atol, rtol, bounds):
-    """The declared clause, then the envelope clause. Both recorded."""
+def _judge(actual, want, atol, rtol, bounds, *, name=None, role=None, reference=None):
+    """Apply the declared tolerance or calibrated envelope; detail every failure."""
     diff = float((actual.float() - want.float()).abs().max())
     declared_ok = bool(torch.allclose(actual.float(), want.float(), atol=atol, rtol=rtol))
     rel = _rel_l2(actual, want)
@@ -409,6 +425,15 @@ def _judge(actual, want, atol, rtol, bounds):
                              "rel_l2": rel_l2, "ok": env_ok,
                              "abs_binding": "calibrated" if abs_bound == max_abs else "ulp_floor"}
         entry["ok"] = declared_ok or env_ok
+    if not entry["ok"]:
+        # A failing comparison has to say which elements disagree and by how
+        # much; one streaming pass, no tensor retained (gate.discrepancy).
+        from evograd.evaluation.tier3.gate.discrepancy import elementwise_record
+
+        entry["discrepancy"] = elementwise_record(
+            actual, want, atol=atol, rtol=rtol, name=name, role=role, reference=reference,
+            rule=(ENVELOPE_RULE if bounds is not None else "allclose(declared atol, rtol)"),
+            envelope=(entry.get("envelope") if bounds is not None else None))
     return entry
 
 
@@ -470,7 +495,10 @@ def make_validator(op_lookup, *, workload_case, report: BoundaryReport, envelope
                 record["outputs"].append({
                     "name": name,
                     **_judge(actual.detach(), want, atol, rtol,
-                             envelope_bounds(envelope, site, name)),
+                             envelope_bounds(envelope, site, name),
+                             name=name, role="forward_output",
+                             reference=f"{op.name}: declared runtime spelling "
+                                       f"(resolve_runtime_forward) on this invocation's live inputs"),
                     "finite": bool(torch.isfinite(actual.detach()).all()),
                 })
             del expected
@@ -559,7 +587,10 @@ def _arm_gradient_shadow(op, workload, reference, record, inputs, outputs,
                 record["gradients"].append({
                     "name": grad_name,
                     **_judge(actual, want, atol, rtol,
-                             envelope_bounds(envelope, record["site"], grad_name)),
+                             envelope_bounds(envelope, record["site"], grad_name),
+                             name=grad_name, role="backward_gradient",
+                             reference=f"{op.name}: declared runtime spelling differentiated with "
+                                       f"the model's own upstream cotangent"),
                     "aliased_boundary": source in aliased,
                     "finite": bool(torch.isfinite(actual).all()),
                 })

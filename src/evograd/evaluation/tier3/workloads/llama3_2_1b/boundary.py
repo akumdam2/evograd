@@ -199,14 +199,21 @@ class BoundaryReport:
             )
             for category in RESIDUAL_CATEGORIES
         }
+        # Every failed invocation is kept: a truncated machine-readable list
+        # cannot be acted on, and the count is bounded by invocations x results.
         failures = [
-            {"id": r["id"], "site": r["site"], "result": e["name"],
-             "max_abs_err": e["max_abs_err"], "atol": e["atol"], "rtol": e["rtol"]}
+            {"id": r["id"], "site": r["site"], "layer": r.get("layer"),
+             "category": r.get("category"), "ordinal": r.get("ordinal"),
+             "result": e["name"], "role": ("gradient" if kind == "gradients" else "output"),
+             "max_abs_err": e["max_abs_err"], "atol": e["atol"], "rtol": e["rtol"],
+             "rel_l2": e.get("rel_l2"), "finite": e.get("finite"),
+             "discrepancy": e.get("discrepancy")}
             for r in self.invocations
             for kind in ("outputs", "gradients")
             for e in r.get(kind, [])
             if not e["ok"]
         ]
+        non_finite = [f["id"] for f in failures if f.get("finite") is False]
         # Accounting is per site, and every site the plan names is held to its
         # own declared count -- carried ones included. There is deliberately no
         # aggregate total: an expected sum built from the patched sites alone
@@ -248,8 +255,17 @@ class BoundaryReport:
             "residual_categories": residual,
             "checked_invocations": len(self.invocations),
             "worst_per_site": self.worst(),
-            "failures": failures[:32],
+            "failures": failures,
             "failure_count": len(failures),
+            "non_finite_results": non_finite,
+            # Is everything that went wrong a finite tolerance disagreement?
+            # Coverage, duplicates, shared parameters, lost records, shadow
+            # errors and non-finite values are not, and a report-first run must
+            # not treat them as one (gate.enforcement.boundary_finding_kind).
+            "numerical_only": bool(
+                failures and not non_finite and not missing and not unexpected
+                and not self.duplicates and not self.errors
+                and not self.shared_parameters and not record_desync),
             "errors": self.errors[:16],
             "shared_parameter_boundaries": self.shared_parameters[:8],
             "summed_is_the_residual_stream": all(
@@ -262,6 +278,27 @@ class BoundaryReport:
                 and not self.shared_parameters and not record_desync
             ),
         }
+
+
+def _judge(actual, want, atol, rtol, *, name, role, reference):
+    """The declared clause, and -- when it fails -- what exactly disagreed.
+
+    The record is the shared one (``gate.discrepancy``): violation count and
+    fraction, relative L2, and the worst elements by error-to-allowance ratio
+    with their coordinates. One streaming pass; no tensor is retained.
+    """
+    from evograd.evaluation.tier3.gate.discrepancy import elementwise_record
+
+    diff = float((actual.detach().float() - want.float()).abs().max())
+    ok = bool(torch.allclose(actual.detach().float(), want.float(), atol=atol, rtol=rtol))
+    entry = {"name": name, "max_abs_err": diff, "atol": atol, "rtol": rtol, "ok": ok,
+             "finite": bool(torch.isfinite(actual.detach()).all())}
+    if not entry["ok"] or not entry["finite"]:
+        entry["discrepancy"] = elementwise_record(
+            actual.detach(), want, atol=atol, rtol=rtol, name=name, role=role,
+            reference=reference, rule="allclose(declared atol, rtol)")
+        entry["rel_l2"] = entry["discrepancy"].get("rel_l2")
+    return entry
 
 
 def make_validator(op_lookup, *, workload_case, report: BoundaryReport):
@@ -319,13 +356,10 @@ def make_validator(op_lookup, *, workload_case, report: BoundaryReport):
                 expected = as_output_tuple(op, reference(*detached))
             for name, actual, want in zip(op.output_names, got, expected):
                 atol, rtol = op.tolerance_for(workload, name)
-                diff = float((actual.detach().float() - want.float()).abs().max())
-                record["outputs"].append({
-                    "name": name, "max_abs_err": diff, "atol": atol, "rtol": rtol,
-                    "ok": bool(torch.allclose(actual.detach().float(), want.float(),
-                                              atol=atol, rtol=rtol)),
-                    "finite": bool(torch.isfinite(actual.detach()).all()),
-                })
+                record["outputs"].append(_judge(
+                    actual, want, atol, rtol, name=name, role="forward_output",
+                    reference=f"{op.name}: declared runtime spelling "
+                              f"(resolve_runtime_forward) on this invocation's live inputs"))
             del expected
         except Exception as exc:  # a boundary that cannot be checked is a failure
             report.errors.append(f"{identity}: forward shadow: {type(exc).__name__}: {exc}")
@@ -409,13 +443,12 @@ def _arm_gradient_shadow(op, workload, reference, record, inputs, outputs,
                 if want is None:
                     want = torch.zeros_like(actual)
                 atol, rtol = op.tolerance_for(workload, grad_name)
-                diff = float((actual.float() - want.float()).abs().max())
                 record["gradients"].append({
-                    "name": grad_name, "max_abs_err": diff, "atol": atol,
-                    "rtol": rtol, "aliased_boundary": source in aliased,
-                    "ok": bool(torch.allclose(actual.float(), want.float(),
-                                              atol=atol, rtol=rtol)),
-                    "finite": bool(torch.isfinite(actual).all()),
+                    **_judge(actual, want, atol, rtol, name=grad_name,
+                             role="backward_gradient",
+                             reference=f"{op.name}: declared runtime spelling differentiated "
+                                       f"with the model's own upstream cotangent"),
+                    "aliased_boundary": source in aliased,
                 })
             missing = sorted(wanted - set(produced))
             if missing:

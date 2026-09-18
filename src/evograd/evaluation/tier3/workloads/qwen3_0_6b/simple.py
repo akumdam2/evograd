@@ -205,6 +205,7 @@ def global_grad_rel_l2(candidate: dict[str, torch.Tensor],
     extra = sorted(set(candidate) - set(reference))
     non_finite: list[str] = []
     shape_mismatch: list[str] = []
+    per_parameter: list[dict[str, Any]] = []
 
     for name in sorted(reference):
         reference_grad = reference[name]
@@ -220,14 +221,32 @@ def global_grad_rel_l2(candidate: dict[str, torch.Tensor],
         if not bool(torch.isfinite(c64).all()):
             non_finite.append(name)
         difference = c64 - r64
-        numerator += float((difference ** 2).sum())
-        denominator += float((r64 ** 2).sum())
-        rms_accumulator += float((r64 ** 2).sum())
-        elements += r64.numel()
-        peak = max(peak, float(difference.abs().max()))
+        part_numerator = float((difference ** 2).sum())
+        part_denominator = float((r64 ** 2).sum())
+        part_peak = float(difference.abs().max())
+        r64_numel = int(r64.numel())
+        numerator += part_numerator
+        denominator += part_denominator
+        rms_accumulator += part_denominator
+        elements += r64_numel
+        peak = max(peak, part_peak)
+        # Where the global number comes from. The vector norm alone cannot say
+        # whether one parameter carries the disagreement or all 310 share it,
+        # so each parameter's own share is kept as it streams past.
+        per_parameter.append({
+            "name": name,
+            "shape": list(reference_grad.shape),
+            "squared_error": part_numerator,
+            "rel_l2": (part_numerator ** 0.5) / max(part_denominator ** 0.5, 1e-30),
+            "max_abs_error": part_peak,
+            "reference_rms": (part_denominator / max(r64_numel, 1)) ** 0.5,
+        })
         del r64, c64, difference
 
     rms = (rms_accumulator / elements) ** 0.5 if elements else 0.0
+    for entry in per_parameter:
+        entry["share_of_squared_error"] = (entry["squared_error"] / numerator) if numerator else 0.0
+    worst = sorted(per_parameter, key=lambda e: e["squared_error"], reverse=True)[:12]
     return {
         "rel_l2": (numerator ** 0.5) / max(denominator ** 0.5, 1e-30),
         "max_abs_over_rms": peak / max(rms, 1e-30),
@@ -239,6 +258,10 @@ def global_grad_rel_l2(candidate: dict[str, torch.Tensor],
         "shape_mismatch": shape_mismatch[:16],
         "non_finite": non_finite[:16],
         "ok": not missing and not shape_mismatch and not non_finite,
+        # Localization for the aggregate: the parameters that dominate it, and
+        # the worst per-parameter relative L2 whatever its share.
+        "worst_by_squared_error": worst,
+        "worst_by_rel_l2": sorted(per_parameter, key=lambda e: e["rel_l2"], reverse=True)[:12],
     }
 
 

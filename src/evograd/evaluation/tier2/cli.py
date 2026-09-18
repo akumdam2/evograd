@@ -33,6 +33,7 @@ def load_candidate(path: Path):
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
     parser.add_argument("--op", required=True)
     parser.add_argument("--candidate", type=Path, default=None)
     parser.add_argument("--baseline", default="liger", help="declared pair baseline")
@@ -167,7 +168,6 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.evaluation.tier2.runner import (
         DEFAULT_REP_MS,
         DEFAULT_WARMUP_MS,
-        REPETITIONS,
         WARMUP_ITERS,
         _require_declared_split,
     )
@@ -215,9 +215,7 @@ def main(argv: list[str] | None = None) -> int:
             "step": "y = model(*activations); torch.autograd.backward(y, output_grads)",
             "isolation": ("one process per provider per shape"
                           if not args.no_isolate else "single process"),
-            "repetitions": REPETITIONS,
             "warmup_iterations": WARMUP_ITERS,
-            "driver": "cuda events, fixed repetition count, L2 flushed between samples",
         },
         "environment": environment_fingerprint(),
         "cases": cases,

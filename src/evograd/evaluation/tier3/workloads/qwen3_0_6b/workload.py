@@ -370,8 +370,12 @@ class Qwen3Workload:
         try:
             run_preflight(kernels, TASKS, device=device)
         except Exception as exc:
+            # `detail` (when the runner attached one) says whether the cases
+            # failed on tolerance or raised, which is what separates a numerical
+            # disagreement from a kernel that cannot run at all.
             return {"ok": False, "sites": list(kernels.patched),
-                    "reason": f"{type(exc).__name__}: {exc}"}
+                    "reason": f"{type(exc).__name__}: {exc}",
+                    "detail": getattr(exc, "detail", None)}
         return {"ok": True, "sites": list(kernels.patched),
                 "checked": "declared correctness grid plus the observed shapes"}
 
@@ -429,18 +433,51 @@ class Qwen3Workload:
         ))
 
     def _protocol4_hook(self, kernels, device: str) -> dict[str, Any]:
-        """A, B and C in-process; D from the frozen holdout verdict for this provider.
+        """A, B and C in-process; D -- or the A/B/C screening -- from the frozen holdout.
 
-        Refuses -- and therefore the runner does not time -- when the policy does
-        not bind, when B or C exceed their thresholds, or when no protocol-4
-        holdout verdict exists for the provider being timed.
+        Every stage runs and every outcome is recorded. What a finding *does* is
+        decided by the Tier-3 enforcement mode
+        (:mod:`evograd.evaluation.tier3.gate.enforcement`):
+
+        ``strict``
+            any finding stops the provider before training and timing, exactly
+            as this gate always behaved.
+        ``report_first``
+            a finite numerical mismatch, or a comparison that could not be made,
+            is recorded in full and execution continues; missing gradients,
+            non-finite values, purity, permissions, patch coverage and runtime
+            failures still stop it.
+
+        The numerical verdict itself is identical under both modes: nothing here
+        turns a numerical failure into a numerical pass.
         """
         from . import boundary, protocol4, purity
-        from .gate import summarize
+        from .gate import _boundary_reason
+        from evograd.evaluation.tier3.gate import enforcement as enf
+        from evograd.evaluation.tier3.gate.discrepancy import aggregate_record
         from evograd.evaluation.tier3.gate.numerics import environment_fingerprint, fingerprint_hash
         from .simple import PatchSet
 
+        mode = enf.active_mode()
         gate_name = "qwen3_protocol4"
+        findings: list[dict[str, Any]] = []
+        detail: dict[str, Any] = {"data_seed": self.data_seed,
+                                  "provider": _provider_identity(kernels)}
+
+        def record(stage: str, kind: str, reason: str, **extra) -> bool:
+            """Note a finding; True when this mode stops the provider here."""
+            findings.append(enf.finding(stage, kind, reason, **extra))
+            return enf.blocks(kind, mode)
+
+        def done() -> dict[str, Any]:
+            return enf.summarize(findings, gate=gate_name, active=mode, **detail)
+
+        # 1. Does a frozen policy describe this run? Its thresholds are used
+        #    only if it binds; a policy that does not bind is never silently
+        #    reused, and its absence is reported as unavailable, never a pass.
+        policy = None
+        envelope = None
+        calibration_path = verdict_path = None
         try:
             patch_set = PatchSet.of(kernels, layers=self.spec.arch["num_hidden_layers"])
             calibration_path, verdict_path = self._protocol4_files_for(patch_set)
@@ -452,30 +489,61 @@ class Qwen3Workload:
                 environment_hash=fingerprint_hash(environment_fingerprint()),
                 patch_set=patch_set, data_identity_digest=self.data_identity_digest(),
                 training_plan=plan)
-        except Exception as exc:  # binding is the first gate
-            return {"gate": gate_name, "ok": False, "failed_at": "policy_binding",
-                    "reason": str(exc)}
+            detail["policy_file"] = str(calibration_path)
+            detail["verdict_file"] = str(verdict_path) if verdict_path else None
+            detail["policy_binding"] = {"ok": True, "schema": policy.schema,
+                                        "thresholds": dict(policy.thresholds),
+                                        "screening": protocol4.is_screening(policy)}
+            envelope = json.loads(Path(calibration_path).read_text(
+                encoding="utf-8")).get("local_envelope") or None
+        except Exception as exc:
+            policy = None
+            detail["policy_binding"] = {
+                "ok": False, "reason": str(exc),
+                "policy_file": str(calibration_path) if calibration_path else None}
+            if record("policy_binding", enf.UNAVAILABLE,
+                      f"no frozen policy describes this run, so its thresholds are not "
+                      f"applied and the model-level comparison is unavailable: {exc}"):
+                return done()
 
+        # 2. The declaration's own gate at the shapes this model supplies.
         preflight = self.site_preflight(kernels, device=device)
+        detail["site_preflight"] = preflight
         if not preflight.get("ok", True):
-            return {"gate": gate_name, "ok": False, "failed_at": "site_preflight",
-                    "reason": str(preflight.get("reason"))}
+            kind = (enf.NUMERICAL if _preflight_numerical_only(preflight) else enf.EXECUTION)
+            if record("site_preflight", kind, str(preflight.get("reason")),
+                      detail=preflight.get("detail")):
+                return done()
+
+        # 3. Is the provider a function of its arguments? Never a tolerance question.
         pure = purity.run_for(kernels, self, device=device)
+        detail["provider_purity"] = {"ok": bool(pure.get("ok")),
+                                     "isolation": pure.get("isolation"),
+                                     "sites": [{k: v for k, v in site.items()
+                                                if k not in ("compared", "checkpoints", "workload", "gate")}
+                                               for site in pure.get("sites", [])]}
         if not pure.get("ok", False):
-            return {"gate": gate_name, "ok": False, "failed_at": "provider_purity",
-                    "reason": "provider is not a function of its arguments"}
-        # The reference-calibrated local envelope, when the frozen calibration
-        # derived one (protocol4_cli calibrate --local-envelope). Read from the
-        # same file the policy binds from, so the two cannot come apart.
-        envelope = json.loads(Path(calibration_path).read_text(
-            encoding="utf-8")).get("local_envelope") or None
+            if record("provider_purity", enf.STRUCTURAL,
+                      "provider is not a function of its arguments"):
+                return done()
+
+        # 4. Part A: every live invocation, on the model's own tensors.
         local = boundary.validate_all_invocations(self, kernels, data_seed=self.data_seed,
                                                   envelope=envelope)
+        detail["local_check_mode"] = local.get("local_check_mode")
+        detail["live_boundary"] = {k: local.get(k) for k in (
+            "ok", "failure_count", "sites", "local_check_mode", "envelope_admitted",
+            "numerical_only", "non_finite_results",
+            "errors", "coverage_ok", "missing_or_extra", "checked_invocations",
+            "per_result_worst", "failures")}
         if not local.get("ok", False):
-            from .gate import _boundary_reason
-            return {"gate": gate_name, "ok": False, "failed_at": "live_boundary",
-                    "reason": _boundary_reason(local), "live_boundary": local}
+            kind = _boundary_finding_kind(local)
+            if record("live_boundary", kind, _boundary_reason(local),
+                      failure_count=local.get("failure_count"),
+                      checked_invocations=local.get("checked_invocations")):
+                return done()
 
+        # 5. Parts B and C, measured here whatever part A said.
         from evograd.evaluation.tier3.patch import KernelSet
         ids, labels = self.batch_for(seed=0)
         reference = protocol4.capture_first_step(self, KernelSet(registry=self.site_registry), ids, labels)
@@ -483,51 +551,73 @@ class Qwen3Workload:
         measured = protocol4.step_distances(provider, reference, labels, device=device)
         del reference, provider
 
-        # Part D: the frozen holdout verdict for this provider, by kernel origin.
-        # A screening policy (SCREENING_PLAN) enforces A/B/C only; its holdout
-        # verdict is still required to exist for this provider, so nothing is
-        # timed that the frozen policy has not judged on independent seeds.
+        # 6. Part D (or the frozen A/B/C screening) for this provider, by kernel origin.
         origin = tuple(sorted(s.origin for s in kernels.sources))
-        if protocol4.requires_training_part(policy):
+        detail["kernel_origin"] = list(origin)
+        if policy is not None and protocol4.requires_training_part(policy):
             d_part = _protocol4_training_part(verdict_path, origin)
             if d_part is None:
-                return {"gate": gate_name, "ok": False, "failed_at": "training_behaviour",
-                        "reason": (f"no protocol-4 holdout verdict for provider origin {origin} "
-                                   f"at {verdict_path}; run protocol4_cli holdout"),
-                        "live_boundary": local, "step": measured}
-            measured.update(d_part)
-        else:
+                if record("training_behaviour", enf.UNAVAILABLE,
+                          f"no protocol-4 holdout verdict for provider origin {origin} at "
+                          f"{verdict_path}; run protocol4_cli holdout"):
+                    detail["step"] = measured
+                    return done()
+            else:
+                measured.update(d_part)
+        elif policy is not None:
             judged = _protocol4_screening_rows(verdict_path, origin)
+            detail["screening_holdout"] = judged
             if not judged:
-                return {"gate": gate_name, "ok": False, "failed_at": "screening_holdout",
-                        "reason": (f"no A/B/C screening holdout verdict for provider origin "
-                                   f"{origin} at {verdict_path}; run "
-                                   "protocol4_cli holdout --screening"),
-                        "live_boundary": local, "step": measured}
-            failed = [r for r in judged if not r["ok"]]
-            if failed and not self.protocol4_diagnostic_timing:
-                return {"gate": gate_name, "ok": False, "failed_at": "screening_holdout",
-                        "reason": (f"the frozen A/B/C screening FAILED for this provider on "
-                                   f"holdout seeds {sorted(r['seed'] for r in failed)}; "
-                                   "timing refused (pass --protocol4-diagnostic-timing to time "
-                                   "it anyway, labelled diagnostic)"),
-                        "live_boundary": local, "step": measured, "screening_holdout": judged}
-            measured["screening_holdout"] = judged
-            if failed:
-                measured["diagnostic_only"] = (
-                    f"screening FAILED on holdout seeds {sorted(r['seed'] for r in failed)}; "
-                    "timed only because --protocol4-diagnostic-timing was given")
+                if record("screening_holdout", enf.UNAVAILABLE,
+                          f"no A/B/C screening holdout verdict for provider origin {origin} "
+                          f"at {verdict_path}; run protocol4_cli holdout --screening"):
+                    detail["step"] = measured
+                    return done()
+            else:
+                measured["screening_holdout"] = judged
+                failed = [r for r in judged if not r["ok"]]
+                if failed:
+                    seeds = sorted(r["seed"] for r in failed)
+                    kinds = {r.get("failed_at") for r in failed}
+                    kind = (enf.STRUCTURAL if kinds & _STRUCTURAL_HOLDOUT_STAGES
+                            else enf.NUMERICAL)
+                    if self.protocol4_diagnostic_timing and kind == enf.NUMERICAL:
+                        # The historical escape hatch: time it anyway, labelled.
+                        findings.append(enf.finding(
+                            "screening_holdout", enf.NUMERICAL,
+                            f"the frozen A/B/C screening FAILED on holdout seeds {seeds}; "
+                            "timed as a diagnostic because --protocol4-diagnostic-timing was given",
+                            seeds=seeds, waived="--protocol4-diagnostic-timing"))
+                        measured["diagnostic_only"] = (
+                            f"screening FAILED on holdout seeds {seeds}; "
+                            "timed only because --protocol4-diagnostic-timing was given")
+                    elif record("screening_holdout", kind,
+                                f"the frozen A/B/C screening FAILED for this provider on holdout "
+                                f"seeds {seeds}", seeds=seeds, stages=sorted(k for k in kinds if k)):
+                        detail["step"] = measured
+                        return done()
+
+        # 7. The frozen thresholds, when a policy bound; the metrics either way.
+        detail["step"] = measured
+        detail["diagnostic_only"] = measured.get("diagnostic_only")
+        if policy is None:
+            detail["protocol4"] = {"available": False,
+                                   "reason": "no bound policy: metrics measured, no threshold applied",
+                                   "measured": {k: measured.get(k) for k in protocol4.SCREENING_METRICS}}
+            detail["numerical_records"] = _model_metric_records(measured, None)
+            return done()
         verdict = protocol4.check(policy, measured)
-        return {
-            "gate": gate_name, "ok": verdict["ok"], "failed_at": verdict["failed_at"],
-            "reason": verdict["reason"], "protocol4": verdict,
-            "policy_file": str(calibration_path), "verdict_file": str(verdict_path),
-            "local_check_mode": local.get("local_check_mode"),
-            "diagnostic_only": measured.get("diagnostic_only"),
-            "live_boundary": {k: local.get(k) for k in ("ok", "failure_count", "sites",
-                                                        "local_check_mode", "envelope_admitted")},
-            "provider_purity": {"ok": True}, "site_preflight": preflight,
-        }
+        detail["protocol4"] = verdict
+        detail["numerical_records"] = _model_metric_records(measured, policy)
+        for failure in verdict.get("failures", []):
+            metric = failure.get("metric")
+            kind = (enf.STRUCTURAL if metric == "presence"
+                    else enf.EXECUTION if metric == "finite" else enf.NUMERICAL)
+            if record(f"protocol4:{metric}", kind, failure.get("reason", ""),
+                      value=failure.get("value"), threshold=failure.get("threshold"),
+                      ratio=failure.get("ratio")):
+                return done()
+        return done()
 
     def _protocol4_files_for(self, patch_set) -> tuple[str, str | None]:
         """The frozen policy and verdict files that describe this patch set.
@@ -594,9 +684,85 @@ def _protocol4_screening_rows(path: str | None, origin: tuple[str, ...]) -> list
         return []
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     return [{"seed": r["seed"], "ok": bool(r["verdict"].get("ok")),
+             "failed_at": r["verdict"].get("failed_at"),
+             "reason": r["verdict"].get("reason"),
              "ratios": r["verdict"].get("ratios", {})}
             for r in payload.get("results", [])
             if tuple(sorted(r["measured"].get("kernel_origin", []))) == origin]
+
+
+#: Holdout screening stages that are not tolerance questions.
+_STRUCTURAL_HOLDOUT_STAGES = frozenset({"presence", "finite", "invocation_counts"})
+
+
+def _provider_identity(kernels) -> list[dict[str, Any]]:
+    """Which implementation sits behind each patched site, with a content hash.
+
+    A discrepancy record has to name the program it came from; the module's file
+    is hashed so a report can be tied to the exact candidate bytes.
+    """
+    import hashlib
+
+    out: list[dict[str, Any]] = []
+    for site in sorted(kernels.patched):
+        source = kernels.source_for(site)
+        module = getattr(source, "module", None) if source else None
+        path = getattr(module, "__file__", None)
+        digest = None
+        if path and Path(path).is_file():
+            digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        out.append({"site": site, "op": getattr(source, "op_name", None),
+                    "origin": getattr(source, "origin", None),
+                    "module_file": path, "sha256": digest})
+    return out
+
+
+def _preflight_numerical_only(preflight: dict[str, Any]) -> bool:
+    """Shared classifier (gate.enforcement); kept under this name for callers."""
+    from evograd.evaluation.tier3.gate import enforcement as enf
+
+    return enf.preflight_numerical_only(preflight)
+
+
+def _boundary_finding_kind(local: dict[str, Any]) -> str:
+    """Shared classifier (gate.enforcement); kept under this name for callers."""
+    from evograd.evaluation.tier3.gate import enforcement as enf
+
+    return enf.boundary_finding_kind(local)
+
+
+def _model_metric_records(measured: dict[str, Any], policy) -> list[dict[str, Any]]:
+    """Parts B and C as aggregate discrepancy records, threshold or not.
+
+    Localization travels with each: the position whose KL is largest, and the
+    parameters that dominate the gradient vector's squared error.
+    """
+    from evograd.evaluation.tier3.gate.discrepancy import aggregate_record
+
+    thresholds = dict(getattr(policy, "thresholds", {}) or {})
+    presence = measured.get("grad_presence") or {}
+    records = [
+        aggregate_record(
+            "kl_mean", measured.get("kl_mean", float("nan")), thresholds.get("kl_mean"),
+            rule="mean valid-token KL(P_eager || P_provider), nats, float32 log_softmax",
+            reference="unpatched eager model, first training batch, before any optimizer step",
+            localization={"kl_max_position": measured.get("kl_max_position"),
+                          "kl_std": measured.get("kl_std"),
+                          "valid_positions": measured.get("valid_positions"),
+                          "logits_rel_l2_valid": measured.get("logits_rel_l2_valid")},
+            scope="model_output"),
+        aggregate_record(
+            "global_grad_rel_l2", measured.get("global_grad_rel_l2", float("nan")),
+            thresholds.get("global_grad_rel_l2"),
+            rule="sqrt(sum_p ||g_provider - g_eager||^2) / sqrt(sum_p ||g_eager||^2), float64",
+            reference="unpatched eager model, same batch, before any optimizer step",
+            localization={"parameters": presence.get("parameters"),
+                          "compared": presence.get("compared"),
+                          "worst_by_squared_error": presence.get("worst_by_squared_error"),
+                          "worst_by_rel_l2": presence.get("worst_by_rel_l2")},
+            scope="model_gradient"),
+    ]
+    return records
 
 
 def _empty_provenance():

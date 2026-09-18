@@ -542,6 +542,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("calibrate", "holdout", "step", "train"):
         p = sub.add_parser(name)
+        p.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
         p.add_argument("--device", default="cuda")
         p.add_argument("--dtype", default="bfloat16")
         p.add_argument("--layers", type=int, default=None)

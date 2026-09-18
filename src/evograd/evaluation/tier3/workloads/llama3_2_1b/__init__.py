@@ -1,4 +1,4 @@
-"""Tier 3 for Llama-3-8B: replace an operator inside the real model.
+"""Tier 3 for Llama-3.2-1B: replace an operator inside the real model.
 
 Four sites in the live ``LlamaForCausalLM`` can be swapped without touching the
 call site, the model state, the parameter names, or the training loop. What

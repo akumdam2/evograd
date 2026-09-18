@@ -49,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         help="verify only this declared dtype (repeatable)",
     )
     parser.add_argument("candidate", type=Path)
+    parser.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     from evograd.opdecl.verify import verify

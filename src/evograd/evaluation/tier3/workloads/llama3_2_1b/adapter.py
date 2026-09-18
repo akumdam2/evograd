@@ -25,7 +25,7 @@ from evograd.evaluation.tier3.workloads import Tier3Adapter
 
 
 def build(args) -> Any:
-    """The canonical Llama-3-8B training step, shrunk only where asked.
+    """The canonical Llama-3.2-1B training step, shrunk only where asked.
 
     Every value comes off the command line, which is what lets a child process
     reconstruct an identical workload from the same argv rather than inheriting
@@ -77,6 +77,10 @@ def providers(args, registry) -> dict[str, Any]:
         from .sites import structural_identity_kernels
 
         providers["structural_identity"] = structural_identity_kernels(registry)
+    if getattr(args, "whole_model_compile", False):
+        from .workload import whole_model_compile_kernels
+
+        providers["torch_compile_model"] = whole_model_compile_kernels(registry)
     providers.update(compile_and_patch_set_providers(args, registry))
     return providers
 
@@ -94,7 +98,7 @@ ADAPTER = Tier3Adapter(
     providers=providers,
     block=block,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
-                       "compile_site", "patch_set"}),
+                       "compile_site", "patch_set", "whole_model_compile"}),
     summary=(
         "Llama-3.2-1B, 16 layers, the canonical training step "
         "(~9 GiB of weights, grads and AdamW moments; fits at full depth)"
