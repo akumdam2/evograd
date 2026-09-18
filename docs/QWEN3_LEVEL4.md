@@ -77,5 +77,55 @@ supplied with `--block-policy`. Policies bind to the case and environment.
 Current schema is `evograd-t3-block-policy/2`; v1 policies require recalibration.
 A failed calibration cannot authorize candidate timing.
 
-See [correctness checks](L3_CORRECTNESS_CHECKS.md) and
-[the 2026-09-15 benchmark](experiments/benchmark_run_20260915.md).
+See [correctness checks](L3_CORRECTNESS_CHECKS.md), the
+[evaluation method and input sources](../src/evograd/evaluation/README.md),
+[the 2026-09-15 block benchmark](experiments/benchmark_run_20260915.md), and
+[the 2026-09-17 end-to-end report](experiments/benchmark_run_20260917.md).
+
+## Report-first numerical evaluation (model scope)
+
+A Tier-3 model-scope verdict answers two questions, and `--numerical-enforcement`
+decides what the first one does to the second:
+
+| question | field | mode `strict` (default) | mode `report-first` |
+| --- | --- | --- | --- |
+| did the comparisons meet their limits? | `numerical_ok`, `numerical_status` | recorded | recorded, identically |
+| may the provider be trained and timed? | `ok`, `execution_ok` | no, if anything failed | yes, unless a structural or execution failure occurred |
+
+`numerical_status` is one of `within_limits`, `mismatches_recorded` or
+`unavailable`; a comparison that could not be made (a policy that does not bind,
+a missing holdout verdict) is reported `unavailable` and never as a pass. Nothing
+in report-first mode turns a numerical failure into a numerical pass.
+
+The current implementation also allows execution after an unavailable comparison,
+but sets `evaluation_complete: false`. Read that field and
+`evaluation_incomplete_because` even when the status is `mismatches_recorded`:
+a provider can have both a measured mismatch and a missing comparison.
+
+These stop a provider in **both** modes, because none of them is a tolerance
+question: a missing or extra gradient, a shape or dtype mismatch, parameter
+misalignment, patch coverage or invocation counts, purity and input mutation,
+candidate permissions, a non-finite output, gradient or loss, a kernel that
+raises, and any runtime failure. Numerical findings do not short-circuit later
+stages; structural and execution failures do. `--no-verify` remains a different
+thing entirely (it skips the checks, and its reports say so).
+
+```bash
+evograd tier3-bench --model qwen3_0_6b --real-text --whole-model-compile \
+    --numerical-enforcement report-first \
+    --patch-set B:attention=candidate.py \
+    --protocol4-calibration policy.json --protocol4-verdict holdout_B.json \
+    --out results/report_first_B.json
+```
+
+Each failed tensor comparison is kept in full under
+`providers.<name>.model_correctness`: the provider and its content hash, the
+scope, data seed, layer and invocation, the tensor and whether it is a forward
+output or a backward gradient, the reference implementation and the exact rule
+and thresholds, shape and dtype, maximum absolute error, relative L2, violation
+count and fraction, and a few representative violating coordinates with the
+actual value, the reference value, the allowance there and the error-to-allowance
+ratio. Whole-model metrics carry their own localization: the worst KL position,
+and the parameters that dominate the gradient vector's squared error. The
+scale-normalized `e_rms`/`e_max` of the budget experiment travel beside each
+record as reported diagnostics, with no threshold attached.

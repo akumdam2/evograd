@@ -45,10 +45,18 @@ explicitly when an operator has both generic and model-observed grids.
 
 ## Measurement
 
-Correctness gates run before timing. Speedup is reference latency divided by
-candidate latency for the same case and execution boundary. Failed providers
-remain in coverage reports and have no valid timing result. Memory is reported
-separately from speedup.
+Correctness comparisons run before timing. Tier 2 and Tier-3 `strict` reject
+failed checks before timing. Tier-3 `report-first` records finite numerical
+mismatches and continues to end-to-end measurement; unavailable comparisons
+remain explicitly incomplete. Structural and execution failures still stop
+providers. A timing result is not a numerical correctness verdict.
+
+Speedup is reference latency divided by candidate latency for the same case and
+execution boundary. Memory and short training trajectories are reported
+separately. The [evaluation guide](../src/evograd/evaluation/README.md) specifies
+the current method and input sources; the
+[September 17 report](experiments/benchmark_run_20260917.md) identifies the
+workloads, timing boundaries and limitations behind the latest Qwen/Llama table.
 
 See [block correctness](L3_CORRECTNESS_CHECKS.md),
 [Qwen usage](QWEN3_LEVEL4.md), the [evaluation guide](../src/evograd/evaluation/README.md)
