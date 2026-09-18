@@ -101,14 +101,24 @@ op = declare_op(
     ),
     grad_order=("dq", "dk"),
     correctness=_CORRECTNESS,
-    # PROVISIONAL until calibrated: the calibration report in
-    # results/experiments/gqa_l1_context/20260915/evolve/calibration/ compares
-    # the declared oracle against runtime_forward and a torch.compile control
-    # on every correctness case and fixes these before any search runs.
+    # Measured, not chosen (2026-09-16, GH200, before any search; report:
+    # results/experiments/gqa_l1_context/20260915/evolve/calibration/calibration.json).
+    # The declared oracle was compared against runtime_forward (bf16 tensor-core
+    # GEMMs, ds cast to bf16) and torch.compile of the oracle on every
+    # correctness case including the full-size one.
+    #
+    # float32: worst 8.4e-07 (accumulation order only); the ordinary pair.
+    # bfloat16: s is float32 and needs only 8.9e-07, so the base is set at the
+    # 2e-3 dtype floor -- tight enough that a score tensor rounded through
+    # bf16 (relative 3.9e-3) is rejected, which is the point of the float32
+    # output. dq and dk are what a bf16-operand backward needs at this
+    # cotangent scale: minimal atol multipliers 46.4 and 50.9 at base 2e-3,
+    # declared with a 1.5x margin.
     tolerances={
         "float32": (2e-5, 2e-5),
-        "bfloat16": (1e-2, 1e-2),
+        "bfloat16": (2e-3, 2e-3),
     },
+    tolerance_multipliers={"dq": (70.0, 1.0), "dk": (77.0, 1.0)},
     memory_inputs=("q", "k"),
     make_inputs=make_gqa_scaled_scores_inputs,
 )

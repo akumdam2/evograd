@@ -215,3 +215,44 @@ def causal_softmax_backward_from_saved(dp, saved_tensors):
     def test_an_explicit_spelling_is_not(self):
         source = self.SOURCE.format(call="torch.exp(s - s.amax(-1, keepdim=True))")
         check_source(source)
+
+
+class TestOpaqueAttentionOperatorsAreDenied(unittest.TestCase):
+    """The leaf-name rule missed ``torch.ops.aten._scaled_dot_product_flash_attention``:
+    an evolved qwen3_attention candidate wrapped it and scored 0.85x eager. Private
+    ATen entry points, the ``torch.ops`` / ``torch._C`` namespaces and every
+    attention spelling are now denied inside the evolve block."""
+
+    SOURCE = """\
+import torch
+import triton
+import triton.language as tl
+
+# EVOLVE-BLOCK-START
+def qwen3_attention_forward_with_saved(q, k, v, o_weight):
+    res = {call}
+    return res[0], (q,)
+
+
+def qwen3_attention_backward_from_saved(dout, saved_tensors):
+    (q,) = saved_tensors
+    return q, q, q, q
+# EVOLVE-BLOCK-END
+"""
+
+    def test_private_and_namespaced_attention_calls_are_violations(self):
+        for call in (
+            "torch.ops.aten._scaled_dot_product_flash_attention.default(q, k, v, 0.0, True, False)",
+            "torch.ops.aten._scaled_dot_product_flash_attention_backward(q, k, v)",
+            "torch._scaled_dot_product_flash_attention(q, k, v)",
+            "torch._C._nn.scaled_dot_product_attention(q, k, v)",
+            "torch.nn.attention.flex_attention.flex_attention(q, k, v)",
+            "torch._flash_attention_forward(q, k, v)",
+        ):
+            with self.subTest(call=call):
+                with self.assertRaises(PrimitiveViolation):
+                    check_source(self.SOURCE.format(call=call))
+
+    def test_ordinary_torch_allocation_calls_still_pass(self):
+        source = self.SOURCE.format(call="(torch.empty_like(q), torch.zeros(4, device=q.device))")
+        check_source(source)

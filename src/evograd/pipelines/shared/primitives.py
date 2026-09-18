@@ -58,7 +58,16 @@ _DENIED_METHODS = frozenset({
 
 #: Attribute paths under ``torch`` that are denied by prefix rather than leaf.
 _DENIED_TORCH_PREFIXES = (("nn", "functional"), ("autograd",), ("_dynamo",),
-                          ("jit",), ("fx",))
+                          ("jit",), ("fx",),
+                          # Whole-operator escapes the leaf rule cannot see:
+                          # ``torch.ops.aten._scaled_dot_product_flash_attention``
+                          # is fused attention with a different name.
+                          ("ops",), ("_C",), ("_ops",), ("_VF",), ("nn", "attention"))
+
+
+def _denied_torch_leaf(leaf: str) -> bool:
+    """Private ATen entry points and every attention spelling are denied."""
+    return leaf in _TORCH_DENIED or leaf.startswith("_") or "attention" in leaf
 
 
 class PrimitiveViolation(RuntimeError):
@@ -214,7 +223,7 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
         elif root == "torch":
             if any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES):
                 found.append(f"line {child.lineno}: {'.'.join(path)}")
-            elif leaf in _TORCH_DENIED:
+            elif _denied_torch_leaf(leaf):
                 found.append(f"line {child.lineno}: {'.'.join(path)}")
         elif len(path) == 1:
             if leaf in REGISTRY or leaf in granted:

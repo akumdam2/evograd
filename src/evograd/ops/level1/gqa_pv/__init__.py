@@ -88,12 +88,17 @@ op = declare_op(
     ),
     grad_order=("dp", "dv"),
     correctness=_CORRECTNESS,
-    # PROVISIONAL until calibrated (oracle vs runtime_forward vs a
-    # torch.compile control); see gqa_scaled_scores.
+    # Measured, not chosen (2026-09-16, before any search; report in
+    # results/experiments/gqa_l1_context/20260915/evolve/calibration/):
+    # float32 worst 0.0 (kept at the ordinary pair); bfloat16 worst o 1.4e-3,
+    # dp 7.3e-3, dv 1.2e-2 against runtime_forward / torch.compile. Base 1e-2
+    # (the bf16 output's own need x1.5 clears it); minimal atol multipliers at
+    # that base: dp 1.00, dv 1.21, declared with a 1.5x margin.
     tolerances={
         "float32": (2e-5, 2e-5),
         "bfloat16": (1e-2, 1e-2),
     },
+    tolerance_multipliers={"dp": (1.5, 1.0), "dv": (1.9, 1.0)},
     memory_inputs=("p", "v"),
     make_inputs=make_gqa_pv_inputs,
 )

@@ -84,10 +84,13 @@ op = declare_op(
     ),
     grad_order=("ds",),
     correctness=_CORRECTNESS,
-    # PROVISIONAL until calibrated against a torch.compile control and the
-    # oracle's own repeat noise; see gqa_scaled_scores for where the report is.
+    # Measured, not chosen (2026-09-16, before any search; report in
+    # results/experiments/gqa_l1_context/20260915/evolve/calibration/): the
+    # torch.compile control needs p 4.6e-04 (one bf16 rounding flip) and
+    # ds 1.6e-07; 1.5x margin lands below the 2e-3 dtype floor, which is
+    # declared. No multipliers.
     tolerances={
-        "bfloat16": (1e-2, 1e-2),
+        "bfloat16": (2e-3, 2e-3),
     },
     memory_inputs=("s",),
     make_inputs=make_causal_softmax_inputs,
