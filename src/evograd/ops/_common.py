@@ -257,3 +257,15 @@ def accepted_kwargs(fn: Callable, values: dict) -> dict:
     if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
         return values
     return {name: value for name, value in values.items() if name in parameters}
+
+
+def head_major_randn(torch, batch: int, tokens: int, heads: int, dim: int, *, device, dtype):
+    """A ``[B, heads, T, D]`` tensor with the strides a decoder hands attention.
+
+    Built token-major and transposed, which is how a model produces q, k and v
+    (``proj(x).view(B, T, heads, D).transpose(1, 2)``), so a primitive derived
+    from the attention decomposition sees the non-contiguous head-major view
+    the real boundary presents rather than a contiguous substitute.
+    """
+    token_major = torch.randn((batch, tokens, heads, dim), device=device, dtype=dtype)
+    return token_major.transpose(1, 2)

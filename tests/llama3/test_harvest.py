@@ -34,8 +34,8 @@ from tests.llama3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
     from evograd.benchmark.topdown.common.manifest import semantic_hash
-    from evograd.benchmark.topdown.llama3_8b.harvest.harvest import run_harvest
-    from evograd.benchmark.topdown.llama3_8b.harvest.observe import (
+    from evograd.benchmark.topdown.llama3_2_1b.harvest.harvest import run_harvest
+    from evograd.benchmark.topdown.llama3_2_1b.harvest.observe import (
         MANDATORY_TASKS,
         MandatoryBoundaryError,
         Observation,
@@ -43,7 +43,7 @@ if HAVE_TRANSFORMERS:
         check_mandatory_boundaries,
         observe,
     )
-    from evograd.benchmark.topdown.llama3_8b.levels.level4.model import (
+    from evograd.benchmark.topdown.llama3_2_1b.levels.level4.model import (
         build_model,
         make_inputs,
         training_step,
@@ -396,7 +396,7 @@ class TestObserverIsolation(unittest.TestCase):
     def test_observation_changes_neither_loss_nor_gradients(self):
         """The load-bearing one. A harvest that perturbed the step would
         describe a model nobody trains."""
-        from evograd.benchmark.topdown.llama3_8b.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.smoke import run_smoke
 
         spec = tiny_spec()
         unobserved = run_smoke(spec)

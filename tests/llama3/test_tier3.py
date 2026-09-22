@@ -48,7 +48,7 @@ SMALL = {
 
 
 def _workload():
-    from evograd.evaluation.tier3.workloads.llama3_8b.workload import Llama3Workload
+    from evograd.evaluation.tier3.workloads.llama3_2_1b.workload import Llama3Workload
 
     return Llama3Workload.from_config(SMALL)
 
@@ -66,29 +66,36 @@ class TestRegistration(unittest.TestCase):
     """The CLI reaches Llama by name, and only through the registry."""
 
     def test_llama_is_a_selectable_tier3_model(self):
-        self.assertIn("llama_3_8b", tier3_model_names())
+        self.assertIn("llama_3_2_1b", tier3_model_names())
 
     def test_the_adapter_declares_its_own_optional_flags(self):
-        adapter = tier3_adapter("llama_3_8b")
-        self.assertEqual(adapter.name, "llama_3_8b")
+        adapter = tier3_adapter("llama_3_2_1b")
+        self.assertEqual(adapter.name, "llama_3_2_1b")
         # A flag not named here is refused by name for this workload, rather
         # than accepted and ignored.
         self.assertEqual(
             adapter.options,
-            frozenset({"structural_identity", "layers", "data_seed", "calibration"}),
+            frozenset({"structural_identity", "layers", "data_seed", "calibration",
+                       # generic providers built by tier3.providers; declaring
+                       # them is how a workload says it offers them
+                       "compile_site", "patch_set",
+                       # the unpatched whole-model torch.compile baseline, the
+                       # same provider Qwen offers, so the two models' compile
+                       # rows mean the same thing
+                       "whole_model_compile"}),
         )
 
     def test_the_registry_entry_is_a_dotted_path_not_an_import(self):
         """Resolved lazily: every operator declaration imports this module."""
         self.assertEqual(
-            TIER3_ADAPTERS["llama_3_8b"],
-            "evograd.evaluation.tier3.workloads.llama3_8b.adapter:ADAPTER",
+            TIER3_ADAPTERS["llama_3_2_1b"],
+            "evograd.evaluation.tier3.workloads.llama3_2_1b.adapter:ADAPTER",
         )
 
 
 class TestSiteRegistry(unittest.TestCase):
     def setUp(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b import sites
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import sites
 
         self.sites = sites
 
@@ -150,7 +157,7 @@ class TestIdentityControls(unittest.TestCase):
         """Every site patched with the spelling it already had. The module
         structure changes and the arithmetic does not, so this is not a
         tolerance question -- it is equality."""
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             structural_identity_kernels,
         )
 
@@ -169,7 +176,7 @@ class TestIdentityControls(unittest.TestCase):
         copy weights. So the parameters are the same objects, and key order,
         dtype and ``requires_grad`` are identical by construction."""
         from evograd.evaluation.tier3.patch import KernelSet
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             structural_identity_kernels,
         )
 
@@ -182,7 +189,7 @@ class TestIdentityControls(unittest.TestCase):
         self.assertEqual(list(plain.state_dict()), list(patched.state_dict()))
 
     def test_every_site_runs_the_declared_number_of_times(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             structural_identity_kernels,
         )
 
@@ -200,7 +207,7 @@ class TestIdentityControls(unittest.TestCase):
         equality, because the reference and the production spelling are
         different computations -- but in float32 on these widths they agree."""
         from evograd.evaluation.tier3.patch import restrict
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             bound_pair_identity_kernels,
         )
         from evograd.benchmark import TASKS
@@ -226,8 +233,8 @@ class TestLiveBoundary(unittest.TestCase):
     """The shadow validator: every invocation against its own contract."""
 
     def test_every_invocation_is_checked_and_passes(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             bound_pair_identity_kernels,
         )
         from evograd.benchmark import TASKS
@@ -248,8 +255,8 @@ class TestLiveBoundary(unittest.TestCase):
         """A validator that checked only the in-layer one would miss exactly the
         wiring the other two exercise, so the category travels with the
         invocation."""
-        from evograd.evaluation.tier3.workloads.llama3_8b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             bound_pair_identity_kernels,
         )
         from evograd.benchmark import TASKS
@@ -272,8 +279,8 @@ class TestLiveBoundary(unittest.TestCase):
         declaration's own grid. That is weaker, and the report says so rather
         than reading as though the harvested population had been used."""
         from evograd.benchmark.topdown import has_snapshot
-        from evograd.evaluation.tier3.workloads.llama3_8b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             bound_pair_identity_kernels,
         )
         from evograd.benchmark import TASKS
@@ -284,7 +291,7 @@ class TestLiveBoundary(unittest.TestCase):
             bound_pair_identity_kernels(TASKS, None, workload.site_registry),
         )
         expected = (
-            "llama_3_8b_observed" if has_snapshot("llama_3_8b")
+            "llama_3_2_1b_observed" if has_snapshot("llama_3_2_1b")
             else "declared_correctness_grid"
         )
         self.assertEqual(report["tolerance_source"], expected)
@@ -295,7 +302,7 @@ class TestGateRefusesWithoutCalibration(unittest.TestCase):
     """An ungated timing is not cheaper than no timing; it is worse."""
 
     def test_model_correctness_refuses_and_names_the_command(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             structural_identity_kernels,
         )
 
@@ -310,7 +317,7 @@ class TestGateRefusesWithoutCalibration(unittest.TestCase):
     def test_the_calibration_path_is_llamas_own(self):
         """Qwen3's artifact describes Qwen3's noise floor on Qwen3's shapes and
         cannot stand in for this one."""
-        from evograd.evaluation.tier3.workloads.llama3_8b import gate
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import gate
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate as qwen_gate
 
         self.assertNotEqual(gate.DEFAULT_ARTIFACT, qwen_gate.DEFAULT_ARTIFACT)
@@ -321,8 +328,8 @@ class TestGateRefusesWithoutCalibration(unittest.TestCase):
 class TestFaultCatalogue(unittest.TestCase):
     def test_every_fault_builds_and_applies(self):
         """A control that cannot be constructed proves nothing about the gate."""
-        from evograd.evaluation.tier3.workloads.llama3_8b import faults
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import (
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import faults
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
             bound_pair_identity_kernels,
         )
         from evograd.benchmark import TASKS
@@ -338,8 +345,8 @@ class TestFaultCatalogue(unittest.TestCase):
                 workload.loss(model, workload.batch_for(seed=0))
 
     def test_faults_only_name_sites_this_registry_has(self):
-        from evograd.evaluation.tier3.workloads.llama3_8b import faults
-        from evograd.evaluation.tier3.workloads.llama3_8b.sites import llama3_sites
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import faults
+        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import llama3_sites
 
         known = {site.name for site in llama3_sites().sites}
         for fault in faults.catalogue():
@@ -351,9 +358,11 @@ class TestPurityCallCounts(unittest.TestCase):
     def test_min_calls_is_twice_the_canonical_invocation_count(self):
         """A provider that only misbehaves after "more calls than preflight
         makes" has nowhere to hide."""
-        from evograd.evaluation.tier3.workloads.llama3_8b import purity, sites
+        from evograd.evaluation.tier3.workloads.llama3_2_1b import purity, sites
 
-        canonical = sites.expected_counts(32)
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+
+        canonical = sites.expected_counts(LLAMA_3_2_1B["num_hidden_layers"])
         self.assertEqual(
             purity.MIN_CALLS, {site: 2 * n for site, n in canonical.items()}
         )

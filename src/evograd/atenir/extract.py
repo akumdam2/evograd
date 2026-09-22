@@ -404,7 +404,17 @@ def _serialise(gm: fx.GraphModule) -> dict:
         elif n.op == "output":
             nodes_json.append({"op": "output", "args": [arg_to_str(a) for a in n.args]})
 
-    return {"nodes": nodes_json, "distinct_ops": sorted(distinct_ops)}
+    graph = {"nodes": nodes_json, "distinct_ops": sorted(distinct_ops)}
+    # Autograd mode only. Absent (or 0) means a gradients-only graph, which is
+    # what every previously extracted JSON is -- consumers must treat a missing
+    # key as 0 and behave exactly as before.
+    n_fwd = int(getattr(gm, "_evograd_num_forward_outputs", 0) or 0)
+    if n_fwd:
+        graph["num_forward_outputs"] = n_fwd
+        graph["num_grad_placeholders"] = int(
+            getattr(gm, "_evograd_num_grad_placeholders", 0) or 0
+        )
+    return graph
 
 
 # ── Extraction modes ─────────────────────────────────────────────────────────
@@ -465,7 +475,15 @@ def extract_autograd(
         diff_ins = [t for t in ins if t.requires_grad]
         out = forward_fn(*ins)
         outs = tuple(out) if isinstance(out, (tuple, list)) else (out,)
-        return torch.autograd.grad(outs, diff_ins, grad_outputs=grads)
+        # Return the forward outputs *as well as* the gradients. The forward
+        # already executes inside this trace -- without this its nodes are
+        # present only as backward intermediates and no consumer can emit a
+        # forward implementation, which is why Pipeline B's seed forwarded to
+        # the eager reference. The leading `len(outs)` graph outputs are the
+        # forward's; `num_forward_outputs` in the serialized graph records how
+        # many, so a consumer can slice them off and recover the previous
+        # gradients-only contract exactly.
+        return (*outs, *torch.autograd.grad(outs, diff_ins, grad_outputs=grads))
 
     # tracing_mode="symbolic" keeps input dims as SymInts, so shape-derived
     # values appear as sym_size nodes / node refs in the graph instead of baked
@@ -473,12 +491,18 @@ def extract_autograd(
     # mode (default) is preserved for back-compat. Avoid size-1 dims in the
     # example input under dynamic mode: symbolic tracing specializes on 0/1.
     if dynamic:
-        return make_fx(
+        gm = make_fx(
             bwd,
             decomposition_table=_decomposition_table(),
             tracing_mode="symbolic",
         )(*grad_outs, *fwd_in)
-    return make_fx(bwd, decomposition_table=_decomposition_table())(*grad_outs, *fwd_in)
+    else:
+        gm = make_fx(bwd, decomposition_table=_decomposition_table())(*grad_outs, *fwd_in)
+    # Read back by `_serialise`. Attributes rather than a changed return type,
+    # so `extract_named_op` and every existing caller stay as they are.
+    gm._evograd_num_forward_outputs = len(sample_outs)
+    gm._evograd_num_grad_placeholders = arity
+    return gm
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────

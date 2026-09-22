@@ -214,6 +214,8 @@ class TestQwenProvenance(unittest.TestCase):
         """The Qwen suite is added, not substituted."""
         full = OP.benchmark_workloads("full")
         self.assertTrue(full)
+        # The `full` suite is the 56-site Llama-3-8B grid the task was first
+        # declared against; it keeps citing that model, not the 1B workload.
         self.assertTrue(all(w.provenance.model == "llama_3_8b" for w in full))
         self.assertEqual(len(OP.benchmark_workloads("legacy")), 16)
 

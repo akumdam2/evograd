@@ -39,6 +39,10 @@ _TORCH_DENIED = frozenset({
     "dot", "inner", "outer", "chain_matmul", "matrix_power", "kron",
     "scaled_dot_product_attention", "compile", "rms_norm", "layer_norm",
     "group_norm", "batch_norm",
+    # Opaque softmax spellings: an attention decomposition whose softmax stage
+    # is ``torch.softmax`` has been wrapped, not evolved, and the same holds
+    # for the row-wise softmax primitive itself.
+    "softmax", "log_softmax",
 })
 
 #: Namespaces no generated pair math may reach into at all.
@@ -49,11 +53,21 @@ _DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_
 #: arithmetic, not an escape from it.
 _DENIED_METHODS = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "linear", "backward",
+    "softmax", "log_softmax",
 })
 
 #: Attribute paths under ``torch`` that are denied by prefix rather than leaf.
 _DENIED_TORCH_PREFIXES = (("nn", "functional"), ("autograd",), ("_dynamo",),
-                          ("jit",), ("fx",))
+                          ("jit",), ("fx",),
+                          # Whole-operator escapes the leaf rule cannot see:
+                          # ``torch.ops.aten._scaled_dot_product_flash_attention``
+                          # is fused attention with a different name.
+                          ("ops",), ("_C",), ("_ops",), ("_VF",), ("nn", "attention"))
+
+
+def _denied_torch_leaf(leaf: str) -> bool:
+    """Private ATen entry points and every attention spelling are denied."""
+    return leaf in _TORCH_DENIED or leaf.startswith("_") or "attention" in leaf
 
 
 class PrimitiveViolation(RuntimeError):
@@ -209,7 +223,7 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
         elif root == "torch":
             if any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES):
                 found.append(f"line {child.lineno}: {'.'.join(path)}")
-            elif leaf in _TORCH_DENIED:
+            elif _denied_torch_leaf(leaf):
                 found.append(f"line {child.lineno}: {'.'.join(path)}")
         elif len(path) == 1:
             if leaf in REGISTRY or leaf in granted:

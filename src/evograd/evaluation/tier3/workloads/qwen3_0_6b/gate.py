@@ -586,13 +586,17 @@ def summarize(verdict: dict[str, Any]) -> dict[str, Any]:
     trimmed["trajectory"] = trajectory
     for label in ("vs_eager", "vs_bound_pair"):
         section = dict(trimmed.get(label) or {})
-        section["exceeded"] = section.get("exceeded", [])[:8]
+        # Every exceeded group is kept: this list *is* the aggregate
+        # localization a reader needs, and a truncated one cannot be acted on.
+        section["exceeded"] = section.get("exceeded", [])
         trimmed[label] = section
     boundary = dict(trimmed.get("live_boundary") or {})
     if boundary:
         # The per-invocation detail is a debugging view, not a report: counts,
         # the worst per site, and the failures are what a reader needs.
-        boundary["failures"] = boundary.get("failures", [])[:8]
+        # Failures are the numerical record, not a debugging view: all of them
+        # travel, and a console summary is what trims (never the artifact).
+        boundary["failures"] = boundary.get("failures", [])
         trimmed["live_boundary"] = boundary
     purity = dict(trimmed.get("provider_purity") or {})
     if purity.get("sites"):

@@ -1,23 +1,23 @@
-# Result layout
+# Result paths
 
-The package reorganization does not move or overwrite historical experiment
-output. Existing repository `results/` and `/u/wzhan/.cache/evograd-mF` paths
-remain read-only evidence and are interpreted at the paths that produced them.
-
-New runs use this layout:
+Generated candidates, captured tensors, calibrated policies, logs and raw
+measurements stay local. Use the ignored `results/` directory:
 
 ```text
 results/
-├── benchmark/
-│   ├── operator_suite/<run>/...
-│   └── topdown/<workload>/<run>/...
-└── evaluation/
-    ├── tier1/<workload-or-op>/<run>/...
-    ├── tier2/<workload-or-op>/<run>/...
-    └── tier3/<workload>/<run>/...
+├── benchmark/operator_suite/<run>/
+├── benchmark/topdown/<workload>/<run>/
+├── evaluation/tier1/<op>/<run>/
+├── evaluation/tier2/<op>/<run>/
+├── evaluation/tier3/<workload>/block/<run>/
+├── evaluation/tier3/<workload>/model/<run>/
+└── experiments/<experiment>/<run>/
 ```
 
-Legacy directories such as `results/qwen3-level4/` are path indexes for old
-runs and must not be renamed in bulk. Report schemas, fields, and provenance
-remain authoritative; directory names organize results but do not redefine
-them.
+Keep existing result paths and artifacts unchanged. Their embedded identities
+and hashes determine which workload they describe.
+
+Publish selected summaries in `docs/experiments/benchmark_run_YYYYMMDD.md`.
+Include settings, correctness outcomes, performance, limitations and artifact
+identifiers. Candidate source and raw evidence are not included by default.
+Small regression-test fixtures remain under `tests/fixtures/`.

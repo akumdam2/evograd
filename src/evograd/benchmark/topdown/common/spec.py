@@ -40,6 +40,7 @@ make the workload identity depend on what the Hub served that day.
 from __future__ import annotations
 
 import dataclasses
+import copy
 import hashlib
 import json
 from dataclasses import dataclass
@@ -93,7 +94,20 @@ class WorkloadSpec:
 
     @property
     def arch(self) -> dict[str, Any]:
-        return dict(self.arch_items)
+        """The declared architecture, deep-copied.
+
+        A shallow ``dict(self.arch_items)`` hands out the *same* nested objects
+        the declaration holds, and ``build_config`` passes them straight to
+        ``AutoConfig``. Transformers normalises RoPE by writing ``rope_theta``
+        into ``rope_scaling`` **in place**, which silently rewrote the frozen
+        declaration: after one ``build_model`` the module-level config had an
+        extra key, so ``config_hash`` and ``workload_id`` changed mid-process
+        and a harvest recorded a different id than the capture expected.
+
+        Latent until a model declared a non-``None`` ``rope_scaling``; Qwen3-0.6B
+        and Meta-Llama-3-8B both declare ``None``, Llama-3.2-1B does not.
+        """
+        return copy.deepcopy(dict(self.arch_items))
 
     @property
     def token_count(self) -> int:

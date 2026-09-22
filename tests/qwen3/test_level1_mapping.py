@@ -215,6 +215,9 @@ class TestProvenance(unittest.TestCase):
 class TestDefaultsPreserved(unittest.TestCase):
     """The Qwen cases are added; the Llama-derived defaults are not replaced."""
 
+    # The default grids are derived from Meta-Llama-3-8B's widths (hidden 4096,
+    # vocab 128256) and every historical suite report records them under that
+    # key. The top-down workload moved to Llama-3.2-1B; these grids did not.
     def test_default_benchmark_grids_stay_llama_derived(self):
         for task in ("linear_no_bias", "rmsnorm", "rope", "swiglu", "cross_entropy"):
             with self.subTest(task=task):

@@ -137,9 +137,13 @@ def capture_first_step(workload, kernels, ids, labels) -> dict[str, Any]:
         shifted.reshape(-1, shifted.shape[-1]), targets.reshape(-1),
         ignore_index=IGNORE_INDEX, reduction="sum") / int(mask.sum())
     loss.backward()
-    grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()
-             if p.grad is not None}
-    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    # A torch.compile'd model reports its parameters as ``_orig_mod.<name>``;
+    # the gradient comparison matches by name, so read them off the original
+    # module (found 2026-09-11: the whole-model compile baseline compared zero
+    # parameters and reported a relative L2 of exactly 0.0).
+    named = getattr(model, "_orig_mod", model).named_parameters
+    grads = {n: p.grad.detach().clone() for n, p in named() if p.grad is not None}
+    missing = [n for n, p in named() if p.grad is None]
     built = workload.last_build
     capture = {
         "logits": logits.detach().to("cpu"),      # bfloat16 on the host
@@ -170,7 +174,8 @@ def step_distances(provider: dict[str, Any], reference: dict[str, Any],
         "global_grad_rel_l2": grads["rel_l2"],
         "grad_presence": {k: grads[k] for k in ("parameters", "compared", "missing",
                                                 "missing_count", "extra",
-                                                "shape_mismatch", "non_finite", "ok")},
+                                                "shape_mismatch", "non_finite", "ok",
+                                                "worst_by_squared_error", "worst_by_rel_l2")},
         "missing_grads": list(provider.get("missing_grads") or []),
         "finite": {"logits": finite_logits, "gradients": not grads["non_finite"],
                    "loss": provider["loss"] == provider["loss"],

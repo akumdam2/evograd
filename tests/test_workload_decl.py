@@ -68,7 +68,7 @@ class TestValidation(unittest.TestCase):
 
     def test_provenance_must_cite_the_declared_model(self):
         with self.assertRaises(ValueError):
-            _declare(benchmark=(_case(model="llama_3_8b", component="rmsnorm"),))
+            _declare(benchmark=(_case(model="llama_3_2_1b", component="rmsnorm"),))
 
     def test_factory_must_be_a_module_reference(self):
         with self.assertRaises(ValueError):
@@ -128,3 +128,35 @@ class TestTheAlphafold3Declaration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestArchIsNotMutableByTheLibrary(unittest.TestCase):
+    """``spec.arch`` is handed to ``AutoConfig``, which rewrites it in place.
+
+    Transformers normalises RoPE by writing ``rope_theta`` into ``rope_scaling``.
+    With a shallow copy that reached the module-level declaration, so one
+    ``build_model`` changed ``config_hash`` and ``workload_id`` for the rest of
+    the process -- a harvest then recorded an id the capture refused. Only a
+    model with a non-``None`` nested config value can show it.
+    """
+
+    def test_mutating_the_returned_arch_leaves_the_declaration_alone(self):
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import (
+            CANONICAL, LLAMA_3_2_1B,
+        )
+
+        before = CANONICAL.workload_id
+        arch = CANONICAL.arch
+        arch["rope_scaling"]["rope_theta"] = 500000.0   # what transformers does
+        arch["num_hidden_layers"] = 999
+
+        self.assertNotIn("rope_theta", LLAMA_3_2_1B["rope_scaling"])
+        self.assertEqual(LLAMA_3_2_1B["num_hidden_layers"], 16)
+        self.assertEqual(CANONICAL.workload_id, before)
+
+    def test_two_reads_are_independent(self):
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import CANONICAL
+
+        first = CANONICAL.arch
+        first["rope_scaling"]["injected"] = True
+        self.assertNotIn("injected", CANONICAL.arch["rope_scaling"])

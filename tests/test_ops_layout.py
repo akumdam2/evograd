@@ -136,7 +136,7 @@ class TestFusedTasksLiveInBenchmark(unittest.TestCase):
 
 class TestRegistryComposition(unittest.TestCase):
     def test_expected_counts_per_level(self):
-        """20 reusable primitives, 4 generic fusions, 4 Qwen and 4 Llama ones.
+        """23 reusable primitives, 4 generic fusions, 4 Qwen and 4 Llama ones.
 
         The legacy direct-block tasks -- ``llama3_decoder_layer`` and
         ``af3_single_repr_block`` -- have been deleted, so no task declares
@@ -153,9 +153,9 @@ class TestRegistryComposition(unittest.TestCase):
         counts: dict[int, int] = {}
         for op in TASKS.values():
             counts[op.level] = counts.get(op.level, 0) + 1
-        self.assertEqual(counts, {1: 20, 2: 12})
-        self.assertEqual(len(PRIMITIVES), 20)
-        self.assertEqual(len(TASKS), 32)
+        self.assertEqual(counts, {1: 23, 2: 12})
+        self.assertEqual(len(PRIMITIVES), 23)
+        self.assertEqual(len(TASKS), 35)
         for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope",
                      "llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp",
                      "llama3_residual_rmsnorm"):

@@ -569,12 +569,20 @@ class TestGateDispatch(unittest.TestCase):
         plain = tier3_cli._parser().parse_args(["--model", "qwen3_0_6b", "--device", "cpu"])
         self.assertFalse(tier3_cli.build_workload(plain).protocol4_diagnostic_timing)
 
-    def test_the_hook_source_refuses_a_failed_screening_unless_diagnostic(self):
+    def test_the_hook_refuses_a_failed_screening_unless_diagnostic(self):
+        """The property, not the spelling.
+
+        Behaviour is exercised end to end in ``tests/qwen3/test_report_first.py``
+        (strict refuses a failed frozen screening; ``--protocol4-diagnostic-timing``
+        times it anyway, labelled; report-first records it and continues). Here:
+        the guard and the label still exist in the hook, and the protocol-4 hook
+        is still reached before the legacy calibration.
+        """
         import inspect
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         source = inspect.getsource(Qwen3Workload._protocol4_hook)
-        self.assertIn("if failed and not self.protocol4_diagnostic_timing:", source)
-        self.assertIn('"failed_at": "screening_holdout"', source)
+        self.assertIn("self.protocol4_diagnostic_timing", source)
+        self.assertIn('"screening_holdout"', source)
         self.assertIn('measured["diagnostic_only"]', source)
         dispatch = inspect.getsource(Qwen3Workload.model_correctness)
         self.assertLess(dispatch.index("self._protocol4_hook(kernels, device)"),

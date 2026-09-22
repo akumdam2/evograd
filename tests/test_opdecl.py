@@ -93,11 +93,16 @@ class TestDerivedNaming(unittest.TestCase):
                     # The one primitive a decoder-only step runs that had no
                     # generic task before the Qwen3 Level-1 mapping.
                     "causal_gqa_attention",
+                    # The three primitives the attention boundary decomposes
+                    # into (scores -> causal softmax -> PV); derived, not observed.
+                    "causal_softmax",
                     "conv2d",
                     "cross_entropy",
                     "dyt",
                     "evoattention",
                     "geglu",
+                    "gqa_pv",
+                    "gqa_scaled_scores",
                     "jsd",
                     "kl_div",
                     "layernorm",

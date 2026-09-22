@@ -51,6 +51,24 @@ class TestModelRegistry(unittest.TestCase):
         # declaration that derives a shape imports this module.
         self.assertNotIn("torch", imported)
 
+    def test_both_llama_configurations_are_registered_under_their_own_keys(self):
+        """The operator suite derives its grids from Llama-3-8B; the top-down
+        workload pins Llama-3.2-1B. They are different models with different
+        widths, and each must be reachable under the key its cases cite --
+        otherwise one silently re-derives the other's shapes."""
+        self.assertIs(MODELS["llama_3_8b"], LLAMA_3_8B)
+        self.assertEqual(MODELS["llama_3_8b"].hidden, 4096)
+        self.assertEqual(MODELS["llama_3_2_1b"].hidden, 2048)
+        self.assertEqual(MODELS["llama_3_2_1b"].layers, 16)
+        for name, op in TASKS.items():
+            if not name.startswith("llama3_"):
+                continue
+            for workload in op.benchmark:
+                self.assertEqual(workload.provenance.model, "llama_3_2_1b", name)
+        for name in ("rmsnorm", "swiglu", "kl_div"):
+            for workload in TASKS[name].benchmark:
+                self.assertEqual(workload.provenance.model, "llama_3_8b", name)
+
     def test_llama_derived_widths(self):
         self.assertEqual(LLAMA_3_8B.q_out, 4096)  # 32 heads x 128
         self.assertEqual(LLAMA_3_8B.kv_out, 1024)  # 8 kv heads x 128, GQA

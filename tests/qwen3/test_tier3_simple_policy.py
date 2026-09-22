@@ -367,7 +367,7 @@ class TestSchemaAndLegacy(unittest.TestCase):
         # Part 5: the elementwise layer must not be weakened by any of this.
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import boundary
 
-        self.assertEqual(boundary.SCHEMA_VERSION, "evograd-qwen3-t3-boundary/2")
+        self.assertEqual(boundary.SCHEMA_VERSION, "evograd-qwen3-t3-boundary/3")
         source = inspect_source(boundary.BoundaryReport.to_dict)
         self.assertIn("failures", source)
         self.assertIn("not failures", source)

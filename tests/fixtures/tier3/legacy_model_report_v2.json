@@ -1,0 +1,244 @@
+{
+  "batch": 2,
+  "dtype": "bfloat16",
+  "environment": {
+    "cuda": "12.8",
+    "gpu_name": "NVIDIA GH200 120GB",
+    "torch": "2.11.0+cu128"
+  },
+  "isolation": "one child process per provider, 1800s budget",
+  "layers": 4,
+  "model": "Sample-Decoder",
+  "name": "sample-decoder-fixture",
+  "protocol": "evograd-tier3-model-v2",
+  "provider_order": [
+    "liger",
+    "eager",
+    "candidate"
+  ],
+  "providers": {
+    "candidate": {
+      "blocks": 3,
+      "cpu_bound_fraction": 0.98,
+      "cpu_bound_fraction_per_block": [
+        0.98,
+        0.97,
+        0.99
+      ],
+      "kernel_sources": [
+        {
+          "op": "rmsnorm",
+          "origin": "candidate",
+          "site": "rms_norm"
+        },
+        {
+          "op": "swiglu",
+          "origin": "candidate",
+          "site": "swiglu"
+        }
+      ],
+      "latency": {
+        "max_ms": 81.6,
+        "median_ms": 80.0,
+        "min_ms": 79.2,
+        "n": 3
+      },
+      "losses": [
+        10.9,
+        10.8,
+        10.7,
+        10.6,
+        10.5
+      ],
+      "model_correctness": {
+        "gate": "none",
+        "ok": true,
+        "skipped": false
+      },
+      "ok": true,
+      "optimizer": {
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "learning_rate": 0.0001,
+        "name": "AdamW",
+        "weight_decay": 0.01
+      },
+      "patch_provenance": {
+        "actual_sites": [
+          "rms_norm",
+          "swiglu"
+        ],
+        "counts": {},
+        "method": "by_construction",
+        "modules_replaced": 0,
+        "paths": {},
+        "requested_sites": [
+          "rms_norm",
+          "swiglu"
+        ]
+      },
+      "patched": [
+        "rms_norm",
+        "swiglu"
+      ],
+      "peak_memory_bytes": 17000000000,
+      "per_block_ms": [
+        80.0,
+        81.6,
+        79.2
+      ],
+      "provider": "candidate",
+      "step_ms": 80.0,
+      "step_ms_min": 79.2,
+      "steps": 10,
+      "unit_name": "tokens",
+      "units_per_second": 51200.0,
+      "verification": {
+        "checked": [],
+        "gate": "tier1 pair correctness",
+        "unverifiable": []
+      }
+    },
+    "eager": {
+      "blocks": 3,
+      "cpu_bound_fraction": 0.98,
+      "cpu_bound_fraction_per_block": [
+        0.98,
+        0.97,
+        0.99
+      ],
+      "kernel_sources": [],
+      "latency": {
+        "max_ms": 102.0,
+        "median_ms": 100.0,
+        "min_ms": 99.0,
+        "n": 3
+      },
+      "losses": [
+        10.9,
+        10.8,
+        10.7,
+        10.6,
+        10.5
+      ],
+      "model_correctness": {
+        "gate": "none",
+        "ok": true,
+        "skipped": false
+      },
+      "ok": true,
+      "optimizer": {
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "learning_rate": 0.0001,
+        "name": "AdamW",
+        "weight_decay": 0.01
+      },
+      "patch_provenance": {
+        "actual_sites": [],
+        "counts": {},
+        "method": "by_construction",
+        "modules_replaced": 0,
+        "paths": {},
+        "requested_sites": []
+      },
+      "patched": [],
+      "peak_memory_bytes": 18214154240,
+      "per_block_ms": [
+        100.0,
+        102.0,
+        99.0
+      ],
+      "provider": "eager",
+      "step_ms": 100.0,
+      "step_ms_min": 99.0,
+      "steps": 10,
+      "unit_name": "tokens",
+      "units_per_second": 40960.0,
+      "verification": {
+        "checked": [],
+        "gate": "tier1 pair correctness",
+        "unverifiable": []
+      }
+    },
+    "liger": {
+      "error": "PreflightFailure: rmsnorm dweight max_abs_err 0.5 > atol",
+      "failed_at": "preflight",
+      "ok": false,
+      "provider": "liger"
+    }
+  },
+  "seed": 0,
+  "site_registry": {
+    "preflight_workloads": {
+      "cross_entropy": 0,
+      "rms_norm": 0,
+      "swiglu": 0
+    },
+    "site_ops": {
+      "cross_entropy": "fused_linear_cross_entropy",
+      "rms_norm": "rmsnorm",
+      "swiglu": "swiglu"
+    },
+    "workload_family": "sample_decoder"
+  },
+  "speedup_intervals": {
+    "available": true,
+    "reference": "eager",
+    "vs_reference": {
+      "candidate": {
+        "ci95": {
+          "high": 1.2878787878787878,
+          "iterations": 2000,
+          "low": 1.2132352941176472
+        },
+        "step_ms_ratio": 1.25
+      }
+    }
+  },
+  "timing_protocol": {
+    "batch_data": "seeded; every provider sees the same sequence",
+    "blocks": 3,
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "loss_trajectory_steps": 5,
+    "optimizer": "AdamW",
+    "optimizer_config": {
+      "amsgrad": false,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01
+    },
+    "peak_memory": "measured after the optimizer state exists",
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "timed_steps_per_block": 10,
+    "warmup_steps": 3,
+    "weights": "built by the workload from a fixed seed, identical across providers"
+  },
+  "tokens": 2048,
+  "unit_name": "tokens",
+  "units_per_step": 4096,
+  "verification_policy": {
+    "loss_delta_threshold": null,
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "model_correctness": "a workload may declare a whole-model gate: one untimed canonical forward/backward/optimizer step against both the original eager model and the bound-pair path a candidate replaces, checked against a calibrated per-role noise envelope, plus its loss trajectory over the calibrated horizon. A failure is recorded failed_at='model_correctness' and is never timed",
+    "preflight": "every patched kernel through bench.provider.verify_pair_provider on its declaration's correctness workloads; a provider that fails is not timed"
+  },
+  "workload": "sample_decoder",
+  "workload_id": "sample-decoder.train.bs2.seq2048.bf16.cuda.sdpa.deadbeef"
+}

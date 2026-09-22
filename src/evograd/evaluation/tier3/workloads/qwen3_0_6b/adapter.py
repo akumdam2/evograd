@@ -90,42 +90,39 @@ def providers(args, registry) -> dict[str, Any]:
 
         providers["structural_identity"] = structural_identity_kernels(registry)
 
-    # One provider per --compile-site: only that site's arithmetic is replaced,
-    # by torch.compile of the *declared* runtime_forward the unpatched model
-    # already calls. Compiled autograd is preserved -- a plain callable patched
-    # into the site, not a pair wrapper that would recompute backward.
-    for site in getattr(args, "compile_site", []) or []:
-        from .simple import PatchSet, compiled_trusted_kernels
+    # Whole-model torch.compile of the unpatched model: the compiler baseline a
+    # kernel has to beat end to end. Not a site provider -- nothing is patched,
+    # so it carries no site gate -- and never combined with one. Qwen's own,
+    # because only this workload knows how to compile and gate its whole model.
+    if getattr(args, "whole_model_compile", False):
+        from .workload import whole_model_compile_kernels
 
-        if site not in registry:
-            raise ValueError(f"--compile-site {site!r} is not a site of {registry.name!r}; "
-                             f"known: {sorted(registry.names)}")
-        providers[f"torch_compile_{site}"] = compiled_trusted_kernels(
-            PatchSet((site,), (), {}), registry)
+        providers["torch_compile_model"] = whole_model_compile_kernels(registry)
 
-    # --patch-set NAME:SITE=SPEC,...: one provider patching several sites at once,
-    # each by its real route (compile | liger | an evolved program).
-    for entry in getattr(args, "patch_set", []) or []:
-        from .simple import kernels_from_patches, parse_patch_set_spec
+    # `--compile-site` and `--patch-set` mean the same thing for every
+    # architecture, so they are built once in `tier3.providers`. Declaring the
+    # options and calling this is the whole cost of offering them.
+    from evograd.evaluation.tier3.providers import compile_and_patch_set_providers
 
-        name, patches = parse_patch_set_spec(entry)
-        if name in providers or name == "eager":
-            raise ValueError(f"--patch-set name {name!r} is already a provider")
-        unknown = [s for s in patches if s not in registry]
-        if unknown:
-            raise ValueError(f"--patch-set {name!r}: unknown sites {unknown}; "
-                             f"known: {sorted(registry.names)}")
-        providers[name] = kernels_from_patches(patches, registry)
+    providers.update(compile_and_patch_set_providers(args, registry))
     return providers
+
+
+def block(args):
+    """The block-scope adapter: one decoder layer, captured or config-derived."""
+    from .block import from_args
+
+    return from_args(args)
 
 
 ADAPTER = Tier3Adapter(
     name="qwen3_0_6b",
     build=build,
     providers=providers,
+    block=block,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        "simple_calibration", "real_text", "protocol4_calibration",
                        "protocol4_verdict", "protocol4_diagnostic_timing",
-                       "compile_site", "patch_set"}),
+                       "compile_site", "patch_set", "whole_model_compile"}),
     summary="Qwen3-0.6B, 28 layers, the harvested canonical training step",
 )

@@ -38,7 +38,7 @@ from typing import Any
 #: is the question to ask; :func:`load_snapshot` refuses with the command to run.
 TOPDOWN_WORKLOADS: dict[str, str] = {
     "qwen3_0_6b": "qwen3_0_6b",
-    "llama_3_8b": "llama3_8b",
+    "llama_3_2_1b": "llama3_2_1b",
 }
 
 

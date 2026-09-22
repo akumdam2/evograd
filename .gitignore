@@ -15,3 +15,18 @@ artifacts/
 /results/
 # Captured tensor artifacts are large (tens to ~100 MB) wherever they land.
 *.pt
+
+# Local notes and generated experiment artifacts.
+/.local/
+/docs/CLAUDE_*.md
+/docs/HANDOFF.md
+/docs/MIGRATION_AUDIT.md
+/docs/AGENTIC_KERNEL_OPTIMIZATION_RESEARCH.md
+/docs/BENCHMARK_EXPANSION_PLAN.md
+/docs/BLOCK_TRAINING_RESOURCES.md
+/docs/L3_TIER3_IMPLEMENTATION_PLAN.md
+/docs/L3_TIER3_INTERFACES.md
+/docs/experiments/evidence/
+/docs/experiments/mapelites_liger_sweep_2026-08.md
+/examples/evolved/
+/scripts/llama3_l2_l3/

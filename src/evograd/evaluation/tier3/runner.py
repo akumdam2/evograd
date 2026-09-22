@@ -43,6 +43,11 @@ from evograd.evaluation.tier3.patch import KernelSet
 
 TIER3_PROTOCOL_VERSION = "evograd-tier3-model-v2"
 
+#: What this runner executes: a whole model's training step. The block scope
+#: (one architectural block, forward + VJP) is a different protocol and never
+#: reuses this runner's timing loop; the two share the report reader.
+EXECUTION_SCOPE_MODEL = "model"
+
 #: What the optimizer is, spelled out rather than implied by "AdamW". Every
 #: provider gets exactly this, and the report carries it, because a comparison
 #: across two runs with different weight decay is not a comparison.
@@ -176,10 +181,16 @@ def preflight(
             ]
             entry["failures"] = failing
             checked.append(entry)
-            raise PreflightFailure(
+            failure = PreflightFailure(
                 f"{site} ({source.op_name}, workload {registry.name}) failed the "
                 f"tier-1 correctness gate: {failing[0]}"
             )
+            # Structured, so a caller can tell a tolerance disagreement (every
+            # case has `error: None` and named failing results) from a kernel
+            # that raised. A string cannot carry that distinction safely.
+            failure.detail = {"site": site, "op": source.op_name,
+                              "origin": source.origin, "failures": failing}
+            raise failure
         checked.append(entry)
     return {
         "gate": (
@@ -235,26 +246,65 @@ def _peak_memory() -> int | None:
     return int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else None
 
 
+def _not_checked(gate: str, reason: str, *, skipped: bool) -> dict:
+    """A verdict for a provider the whole-model gate did not judge.
+
+    ``ok`` stays True -- nothing here forbids timing -- but the numerical answer
+    is reported as unavailable and ``evaluation_complete`` is False, so a report
+    cannot mistake "not checked" for "checked and fine". The field names match
+    :func:`evograd.evaluation.tier3.gate.enforcement.summarize` so one reader
+    works for every row.
+    """
+    return {"gate": gate, "ok": True, "skipped": skipped,
+            "execution_ok": True, "numerical_ok": None,
+            "numerical_status": "unavailable", "numerical_unavailable_at": ["model_gate"],
+            "evaluation_complete": False, "evaluation_incomplete_because": [reason],
+            "reason": reason, "findings": []}
+
+
 def model_correctness_check(workload, kernels, *, verify: bool, device: str):
     """Ask the workload for its whole-model gate, and refuse to time a failure.
 
     Optional by design: a workload that has not calibrated one returns
     ``not_applicable`` and tier 3 proceeds on site preflight alone, which is
-    where every workload started. A workload that *has* one and fails it raises,
-    so the provider is recorded ``failed_at="model_correctness"`` and never
-    reaches a timer.
+    where every workload started.
+
+    The verdict answers two questions, and only the second one decides anything
+    here: whether the numerical comparisons met their limits
+    (``numerical_ok`` / ``numerical_status``, recorded whatever it says), and
+    whether the provider may be timed (``ok``). Under the ``strict`` enforcement
+    mode those coincide, as they always did. Under ``report_first`` a finite
+    numerical mismatch is recorded and the provider still reaches training and
+    timing, while a missing gradient, a non-finite value, a purity, coverage or
+    permission failure and any runtime error still stop it here.
     """
     check = getattr(workload, "model_correctness", None)
     if not verify or not callable(check):
-        return {"gate": "not_applicable" if callable(check) else "none",
-                "ok": True, "skipped": not verify}
+        return _not_checked(
+            "not_applicable" if callable(check) else "none",
+            "the tier-1 and whole-model gates were skipped (--no-verify)" if not verify
+            else "this workload declares no whole-model gate",
+            skipped=not verify)
     if not kernels.patched:
-        return {"gate": "unpatched provider", "ok": True, "skipped": True}
+        # A provider that patches no site never reaches the whole-model gate.
+        # That is right for native eager and WRONG to read as a pass for a
+        # provider that transforms the model another way -- whole-model
+        # torch.compile patches no site and does change the arithmetic. Timing
+        # it is still admissible; calling it checked is not, so the verdict says
+        # so in the same field every other row is read from.
+        return _not_checked(
+            "unpatched provider",
+            "this provider patches no site, so the whole-model gate did not run; "
+            "any numerical comparison for it comes from a separate measurement",
+            skipped=True)
     verdict = check(kernels, device=device)
     if not verdict.get("ok"):
+        stage = verdict.get("failed_at", "unknown")
+        kinds = ", ".join(f"{f['kind']}:{f['stage']}" for f in verdict.get("findings", []))
         raise ModelCorrectnessFailure(
-            f"the assembled model failed its whole-model gate: "
+            f"the assembled model failed its whole-model gate at {stage}: "
             f"{verdict.get('reason', 'unknown')}"
+            + (f" [findings: {kinds}]" if kinds else "")
         )
     return verdict
 
@@ -668,11 +718,21 @@ def assemble_report(
     """
     report = {
         "protocol": TIER3_PROTOCOL_VERSION,
+        # Stated, not implied by the protocol string: this runner measures a
+        # whole model's training step (benchmark level 4). A block-scope report
+        # (level 3, forward + VJP) carries its own protocol and says so here;
+        # see ``evograd.evaluation.tier3.report`` for how both are read. Reports
+        # written before these three fields existed are model-scope by
+        # construction and the reader treats them so.
+        "evaluation_tier": 3,
+        "execution_scope": EXECUTION_SCOPE_MODEL,
+        "benchmark_level": 4,
         **workload.describe(),
         "seed": seed,
         "provider_order": list(order),
         "isolation": isolation,
         "timing_protocol": {
+            "boundary": "loss.backward() + optimizer step",
             "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
             "optimizer": OPTIMIZER,
             "optimizer_config": {
@@ -728,8 +788,17 @@ def verification_policy(
     workload: TrainingWorkload, *, verify: bool = True
 ) -> dict[str, Any]:
     """Exactly what was gated, and what was only observed. Recorded in the report."""
+    from evograd.evaluation.tier3.gate import enforcement as enf
+
     threshold = getattr(workload, "loss_delta_threshold", None)
+    mode = enf.active_mode()
     return {
+        "numerical_enforcement": {
+            "mode": mode, "rule": enf.DESCRIPTION[mode],
+            "note": ("a numerical verdict is recorded identically under both modes; the mode "
+                     "decides only whether a numerical mismatch stops the provider before "
+                     "training and timing"),
+        },
         "preflight": (
             "every patched kernel through bench.provider.verify_pair_provider on "
             "its declaration's correctness workloads; a provider that fails is "

@@ -1,35 +1,81 @@
-"""The Tier-2 timing protocol: fixed samples, isolation, recorded identity."""
+"""Tier-2 timing and declared correctness: actual driver, isolation, input identity."""
 
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 import torch
 
-from evograd.evaluation.tier2.runner import (
-    REPETITIONS,
-    WARMUP_ITERS,
-    _summarize_samples,
-    tensor_checksum,
-)
+from evograd.evaluation.tier2.runner import tensor_checksum
 
 
-class TestFixedSampleCount(unittest.TestCase):
-    def test_the_protocol_declares_a_count_not_a_duration(self):
-        # A wall-clock budget samples a fast provider far more often than a
-        # slow one, so their quantiles rest on different amounts of evidence.
-        self.assertEqual(REPETITIONS, 500)
-        self.assertEqual(WARMUP_ITERS, 10)
+class TestTimingDriver(unittest.TestCase):
+    def test_measurement_uses_the_duration_budget_for_both_regions(self):
+        from evograd.evaluation.tier2.runner import measure_module
 
-    def test_quantiles_are_the_median_and_the_twenty_eighty_pair(self):
-        summary = _summarize_samples([float(i) for i in range(101)])
-        self.assertAlmostEqual(summary["median_ms"], 50.0)
-        self.assertAlmostEqual(summary["q20_ms"], 20.0)
-        self.assertAlmostEqual(summary["q80_ms"], 80.0)
-        self.assertEqual(summary["samples"], 101)
+        class Operator(torch.nn.Module):
+            adapter_kind = "test"
 
-    def test_the_sample_count_is_reported_so_it_can_be_checked(self):
-        self.assertIn("samples", _summarize_samples([1.0, 2.0]))
+            def activations(self, values):
+                return [values["x"]]
+
+            def forward(self, x):
+                return x.square()
+
+        op = SimpleNamespace(is_multi_output=False, output_names=("out",),
+                             upstream_grad_names=("dout",))
+        values = {"x": torch.arange(4, dtype=torch.float32), "dout": torch.ones(4)}
+
+        def measure(fn, **kwargs):
+            fn()  # Exercise the real forward/backward callable on CPU.
+            return (1.0, 0.8, 1.2)
+
+        bench = mock.Mock(side_effect=measure)
+        with mock.patch.dict("sys.modules", {"triton.testing": SimpleNamespace(do_bench=bench)}), \
+                mock.patch("torch.cuda.synchronize"), \
+                mock.patch("torch.cuda.reset_peak_memory_stats"), \
+                mock.patch("torch.cuda.max_memory_allocated", return_value=1234):
+            result = measure_module(op, Operator(), values, warmup_ms=13, rep_ms=17)
+
+        self.assertEqual(bench.call_count, 2)
+        for call in bench.call_args_list:
+            self.assertEqual(call.kwargs["warmup"], 13)
+            self.assertEqual(call.kwargs["rep"], 17)
+            self.assertEqual(call.kwargs["quantiles"], [0.5, 0.2, 0.8])
+        self.assertEqual(result["full_step"],
+                         {"median_ms": 1.0, "q20_ms": 0.8, "q80_ms": 1.2})
+        self.assertEqual(result["peak_memory_bytes"], 1234)
+
+
+class TestDeclaredNumerics(unittest.TestCase):
+    def test_retired_profile_environment_cannot_change_tier1_or_tier2(self):
+        from evograd.opdecl.verify import _check
+        from evograd.evaluation.tier2.runner import _compare
+
+        want = torch.full((16,), 32.0, dtype=torch.bfloat16)
+        actual = want.clone()
+        actual[0] = 32.25
+        for mode in ("strict", "report_first"):
+            with mock.patch.dict("os.environ", {
+                "EVOGRAD_NUMERICAL_PROFILE": "dtype_default",
+                "EVOGRAD_TIER3_ENFORCEMENT": mode,
+            }):
+                self.assertFalse(_check("out", actual, want, 1e-2, 1e-3).ok)
+                result = _compare(actual, want, 1e-2, 1e-3)
+                self.assertFalse(result["ok"])
+                self.assertEqual((result["atol"], result["rtol"]), (1e-2, 1e-3))
+
+    def test_legacy_declared_flag_cannot_select_the_retired_strategy(self):
+        import contextlib
+        import io
+        from evograd.evaluation.tier2.cli import _parser
+
+        args = _parser().parse_args(["--op", "rmsnorm", "--numerical-profile", "declared"])
+        self.assertEqual(args.numerical_profile, "declared")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            _parser().parse_args(["--op", "rmsnorm", "--numerical-profile", "dtype_default"])
 
 
 class TestInputIdentity(unittest.TestCase):

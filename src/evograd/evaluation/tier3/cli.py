@@ -28,6 +28,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from evograd.evaluation.tier3.gate.enforcement import (
+    add_enforcement_argument,
+    apply_enforcement_argument,
+)
+
 from evograd.evaluation.tier3.workloads import tier3_model_names
 
 #: The workloads tier 3 can measure. Read from the registry rather than written
@@ -54,6 +59,8 @@ def load_program(path: Path):
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default=MODELS[0], choices=MODELS)
+    parser.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
+    add_enforcement_argument(parser)
     parser.add_argument(
         "--candidate",
         action="append",
@@ -178,6 +185,12 @@ def _parser() -> argparse.ArgumentParser:
              "torch.compile",
     )
     parser.add_argument(
+        "--whole-model-compile", action="store_true",
+        help="add a provider that is torch.compile of the WHOLE unpatched model "
+             "(inductor, dynamic=False, fullgraph=False): the compiler baseline, not a "
+             "site provider. Where the workload accepts it",
+    )
+    parser.add_argument(
         "--patch-set", action="append", default=[], metavar="NAME:SITE=SPEC[,SITE=SPEC]",
         help="add ONE provider that patches several sites at once, each by its real "
              "route -- SPEC is 'compile', 'liger' (the declared Liger pair through the "
@@ -205,6 +218,10 @@ def _parser() -> argparse.ArgumentParser:
                         help="override the workload's own training dtype")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--order-seed", type=int, default=None,
+                        help="seed for the randomized provider order only (default: --seed). "
+                             "Lets independent sessions shuffle the order without moving the "
+                             "workload seed a frozen calibration is bound to")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
         "--no-verify",
@@ -228,6 +245,9 @@ def _parser() -> argparse.ArgumentParser:
     # Set by the parent when it re-invokes itself for one provider.
     parser.add_argument("--provider", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--result-json", default=None, help=argparse.SUPPRESS)
+    from evograd.evaluation.tier3.block_cli import add_block_arguments
+
+    add_block_arguments(parser)
     return parser
 
 
@@ -279,12 +299,14 @@ def _sites(args, registry):
     return sites
 
 
-def build_providers(args, *, quiet: bool = False) -> dict:
+def build_providers(args, *, quiet: bool = False, registry=None) -> dict:
     """Every provider this invocation asks for, as ``{name: KernelSet}``.
 
     Built identically in the parent (which needs the names and the order) and in
     each child (which needs one of them), so an isolated run and an in-process
-    run compare exactly the same things.
+    run compare exactly the same things. ``registry`` defaults to the model
+    workload's; the block scope passes its block's, which is the same registry
+    object for a workload whose block shares the model's sites.
     """
     from evograd.evaluation.tier3 import (
         KernelSet, identity_control_kernels, patched_kernels, restrict,
@@ -295,7 +317,7 @@ def build_providers(args, *, quiet: bool = False) -> dict:
     # Every provider below is built against the registry the *workload* owns.
     # Nothing here reads a module-level site namespace, which is what let one
     # model's identity control claim sites belonging to another.
-    registry = site_registry_for(build_workload(args))
+    registry = registry if registry is not None else site_registry_for(build_workload(args))
     sites = _sites(args, registry)
 
     def limited(kernels):
@@ -382,6 +404,10 @@ def check_options(args) -> None:
     anything else is an error here.
     """
     adapter = tier3_adapter(args.model)
+    if getattr(args, "scope", "model") == "block":
+        from evograd.evaluation.tier3.block_cli import check_block_options
+
+        check_block_options(args, _parser(), adapter)
     #: Flag -> the value that means "not requested".
     optional = {"structural_identity": False, "layers": None, "data_seed": 0,
                 "calibration": None, "residues": None,
@@ -390,7 +416,7 @@ def check_options(args) -> None:
                 "simple_calibration": None, "real_text": False,
                 "protocol4_calibration": None, "protocol4_verdict": None,
                 "protocol4_diagnostic_timing": False, "compile_site": [],
-                "patch_set": []}
+                "patch_set": [], "whole_model_compile": False}
     for dest, unset in optional.items():
         if dest in adapter.options:
             continue
@@ -495,16 +521,28 @@ def _run_isolated(argv: list[str], provider: str, timeout: int) -> dict:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     args = _parser().parse_args(argv)
+    # The enforcement mode: what a numerical mismatch does is a
+    # property of the run, chosen once and inherited by every isolated child.
+    apply_enforcement_argument(args)
     # Before anything is built: a flag the selected workload does not
     # understand is an error, not a silently ignored request.
     check_options(args)
 
     # Worker mode: one provider, write JSON, exit.
     if args.provider is not None:
-        entry = _run_one_provider(args)
+        if args.scope == "block":
+            from evograd.evaluation.tier3.block_cli import run_worker
+
+            entry = run_worker(args, _parser())
+        else:
+            entry = _run_one_provider(args)
         if args.result_json:
-            Path(args.result_json).write_text(json.dumps(entry), encoding="utf-8")
+            Path(args.result_json).write_text(json.dumps(entry, default=str), encoding="utf-8")
         return 0
+    if args.scope == "block":
+        from evograd.evaluation.tier3.block_cli import main_block
+
+        return main_block(args, _parser(), argv)
 
     from evograd.evaluation.tier3 import (
         assemble_report, loss_agreement, measure_one, provider_order,
@@ -512,7 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.benchmark import TASKS
 
     providers = build_providers(args)
-    order = provider_order(providers, seed=args.seed)
+    order = provider_order(providers, seed=args.seed if args.order_seed is None else args.order_seed)
 
     workload = build_workload(args)
     parent_argv = [a for a in argv]
@@ -561,11 +599,25 @@ def main(argv: list[str] | None = None) -> int:
             eager["step_ms"] / entry["step_ms"]
             if eager.get("ok") and entry["step_ms"] else float("nan")
         )
+        # A timing line must never read as a correctness claim: under
+        # report-first a provider can be measured *because* its numerical
+        # mismatches were recorded rather than allowed to stop it, so the
+        # numerical answer is printed on the same line.
+        correctness = entry.get("model_correctness") or {}
+        status = correctness.get("numerical_status")
+        numerics = ""
+        if status and status != "within_limits":
+            counts = correctness.get("counts") or {}
+            numerics = (f"  [numerics: {status}"
+                        + (f", {counts['numerical']} recorded" if counts.get("numerical") else "")
+                        + "]")
+        elif status:
+            numerics = "  [numerics: within limits]"
         print(
             f"  {name:18} {entry['step_ms']:8.2f} ms/step  "
             f"{entry['units_per_second']:10.0f} {entry['unit_name']}/s  "
             f"{entry['peak_memory_bytes'] / 2**30:6.2f} GiB  "
-            f"cpu_bound={entry['cpu_bound_fraction']:.2f}  {speedup:.3f}x",
+            f"cpu_bound={entry['cpu_bound_fraction']:.2f}  {speedup:.3f}x{numerics}",
             file=sys.stderr,
         )
     if args.identity_control and report["providers"].get("eager_through_bind", {}).get("ok"):
