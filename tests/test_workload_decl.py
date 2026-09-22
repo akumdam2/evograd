@@ -14,6 +14,7 @@ from evograd.opdecl import Provenance, Workload, declare_workload
 from evograd.opdecl.models import ALPHAFOLD3, rederive_dims
 from evograd.benchmark import WORKLOADS, get_workload
 from evograd.benchmark import TASKS
+from evograd.benchmark.topdown.alphafold3 import workload as af3_declaration
 
 
 def _case(dims=None, model="alphafold3", component="train_step", free=None):
@@ -41,6 +42,8 @@ def _declare(**overrides):
 
 
 class TestValidation(unittest.TestCase):
+    """The declaration contract, exercised through a throwaway declaration."""
+
     def test_a_complete_declaration_validates(self):
         self.assertEqual(_declare().level, 4)
 
@@ -72,30 +75,55 @@ class TestValidation(unittest.TestCase):
             _declare(factory="not_a_reference")
 
 
-class TestTheAlphafold3Declaration(unittest.TestCase):
+class TestTheRegisteredWorkload(unittest.TestCase):
+    """MegaFold is the level-4 task the suite runs."""
+
     def test_it_is_registered(self):
-        self.assertIn("alphafold3", WORKLOADS)
-        self.assertEqual(get_workload("alphafold3").level, 4)
+        self.assertIn("megafold", WORKLOADS)
+        self.assertEqual(get_workload("megafold").level, 4)
 
     def test_every_site_names_a_declared_operator(self):
-        for site, op_name in get_workload("alphafold3").sites.items():
+        for site, op_name in get_workload("megafold").sites.items():
             with self.subTest(site=site):
                 self.assertIn(op_name, TASKS)
 
     def test_every_benchmark_case_rederives_from_the_config(self):
         """The provenance assertion, extended to level 4: the stored dims and
         the model configuration must agree, or one of them is wrong."""
-        for case in get_workload("alphafold3").benchmark:
+        for case in get_workload("megafold").benchmark:
             with self.subTest(dims=case.dims):
                 self.assertEqual(rederive_dims(case.provenance), case.dims)
 
     def test_the_factory_resolves(self):
-        factory = get_workload("alphafold3").resolve_factory()
+        factory = get_workload("megafold").resolve_factory()
         self.assertTrue(callable(factory))
 
     def test_unknown_workload_names_fail_loudly(self):
         with self.assertRaises(KeyError):
             get_workload("alphafold4")
+
+
+class TestTheAlphafold3Declaration(unittest.TestCase):
+    """Kept in the tree and kept valid, but no longer part of the suite.
+
+    MegaFold replaced it in ``WORKLOADS``: it is the implementation every
+    AlphaFold3 shape was transcribed from, and it ships fused kernels for the
+    sites, so the level-4 comparison has a production baseline rather than only
+    eager. This declaration is still a valid one and still re-derives from the
+    configuration it cites, which is what these check.
+    """
+
+    def test_it_is_no_longer_registered(self):
+        self.assertNotIn("alphafold3", WORKLOADS)
+
+    def test_it_is_still_a_valid_declaration(self):
+        self.assertEqual(af3_declaration.level, 4)
+        self.assertTrue(callable(af3_declaration.resolve_factory()))
+
+    def test_every_benchmark_case_still_rederives_from_the_config(self):
+        for case in af3_declaration.benchmark:
+            with self.subTest(dims=case.dims):
+                self.assertEqual(rederive_dims(case.provenance), case.dims)
 
 
 if __name__ == "__main__":

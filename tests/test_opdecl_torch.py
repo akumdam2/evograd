@@ -171,6 +171,43 @@ class TestBind(unittest.TestCase):
         y.backward(inputs["dy"])
         self.assertIsNone(mask.grad)  # Inactive: harness emitted None for its slot
 
+    def test_a_bound_pair_survives_activation_checkpointing(self):
+        """``ctx.saved_tensors`` must be read exactly once in the backward.
+
+        It is a property, and each read unpacks the saved state. Reading it
+        once per saved tensor is invisible in a plain model and fatal inside
+        ``torch.utils.checkpoint``: non-reentrant checkpointing packs saved
+        tensors behind hooks that allow a single unpack each, so the second
+        read raises ``CheckpointError``. Any evolved kernel patched into a
+        checkpointed model hit this, which is every MegaFold provider, since
+        its own training config checkpoints four stacks.
+        """
+        from torch.utils.checkpoint import checkpoint
+
+        from evograd.opdecl import bind, make_case_inputs
+
+        op = toy_op()
+        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        fn = bind(op, _toy_seed_module())
+
+        x = inputs["x"].detach().clone().requires_grad_(True)
+        w = inputs["w"].detach().clone().requires_grad_(True)
+        mask = inputs["mask"]
+
+        # use_reentrant=False is the spelling that installs the pack/unpack
+        # hooks, and the one MegaFold's stacks run under.
+        y = checkpoint(lambda a, b: fn(a, b, mask), x, w, use_reentrant=False)
+        y.backward(inputs["dy"])
+
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(w.grad)
+
+        reference_x = inputs["x"].detach().clone().requires_grad_(True)
+        reference_w = inputs["w"].detach().clone().requires_grad_(True)
+        toy_forward_ref(reference_x, reference_w, mask).backward(inputs["dy"])
+        torch.testing.assert_close(x.grad, reference_x.grad)
+        torch.testing.assert_close(w.grad, reference_w.grad)
+
     def test_plain_scalar_saved_state_round_trips(self):
         from evograd.opdecl import bind, make_case_inputs
 

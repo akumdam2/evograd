@@ -99,8 +99,17 @@ def bind(op: OpDecl, module):
             # One incoming gradient per declared output; the pair's backward
             # receives them as a tuple when there are several.
             dout = tuple(douts) if ctx.multi_output else douts[0]
+            # Read `ctx.saved_tensors` EXACTLY ONCE. It is a property, so
+            # touching it inside the comprehension below unpacked the saved
+            # state once per saved tensor. That is invisible normally and fatal
+            # under activation checkpointing: non-reentrant checkpointing packs
+            # saved tensors behind hooks that permit a single unpack each, so
+            # the second access raises CheckpointError ("Unpack is being
+            # triggered for a tensor that was already unpacked once"). Any
+            # candidate patched into a checkpointed model hit this.
+            saved_tensors = ctx.saved_tensors
             saved = tuple(
-                ctx.saved_tensors[payload] if kind == "tensor" else payload
+                saved_tensors[payload] if kind == "tensor" else payload
                 for kind, payload in ctx.saved_layout
             )
             kwargs = backward_inactive_kwargs(op, bwd, ctx.inactive_values)

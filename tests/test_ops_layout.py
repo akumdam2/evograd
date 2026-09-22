@@ -163,7 +163,7 @@ class TestRegistryComposition(unittest.TestCase):
             self.assertEqual(TASKS[name].level, 2)
         self.assertEqual(
             {name: decl.level for name, decl in WORKLOADS.items()},
-            {"alphafold3": 4},
+            {"megafold": 4},
         )
 
     def test_the_deleted_legacy_blocks_are_not_registered(self):

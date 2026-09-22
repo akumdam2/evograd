@@ -20,6 +20,7 @@ it, and list which submodules a kernel replaces.
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -51,6 +52,11 @@ class TrainingWorkload(Protocol):
     construction. A workload that cannot -- because it did not write the model --
     ignores it and calls :func:`patch_modules` on the built tree instead; see
     :class:`ModuleWorkload`.
+
+    Either may additionally declare a keyword-only ``provider`` parameter, and
+    is then told which provider's model it is building. Only a workload whose
+    providers are different *trees* rather than different kernels needs it; see
+    :func:`accepts_provider`.
 
     Two things are optional. ``build_patched`` returns the model *and* what it
     replaced, and a workload that does module surgery should implement it so its
@@ -106,8 +112,33 @@ def site_registry_for(workload: TrainingWorkload) -> SiteRegistry:
     return registry
 
 
+def accepts_provider(builder: Callable) -> bool:
+    """Whether a workload's builder wants to be told which provider it is.
+
+    Most do not. A workload whose providers differ only in their kernels learns
+    everything it needs from the :class:`KernelSet`, and asking it to carry a
+    name it never reads would be noise in every signature.
+
+    Some cannot work that way. A workload whose providers are different
+    *trees* -- MegaFold builds its fused Triton kernels straight into the module
+    tree, so "which implementation" is decided at construction and not by any
+    kernel -- has no way to tell two providers apart from an identical kernel
+    set. Those declare a ``provider`` parameter and are handed the name.
+
+    Asked of the builder rather than configured, so adding a workload of the
+    second kind is a parameter in that workload and nothing anywhere else.
+    """
+    try:
+        parameters = inspect.signature(builder).parameters
+    except (TypeError, ValueError):  # a builtin or C callable: assume not
+        return False
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return True
+    return "provider" in parameters
+
+
 def build_with_provenance(
-    workload: TrainingWorkload, kernels: KernelSet
+    workload: TrainingWorkload, kernels: KernelSet, *, provider: str | None = None
 ) -> tuple[nn.Module, PatchProvenance]:
     """Build one provider's model and record what that build actually patched.
 
@@ -120,11 +151,23 @@ def build_with_provenance(
     back. One that patches by construction does not need to: the sites the
     :class:`KernelSet` carries are what it replaced, because the model reaches
     for them by name at every call.
+
+    ``provider`` is the name the report will file this build under, passed
+    through to a workload that declares it (see :func:`accepts_provider`). It is
+    passed explicitly rather than smuggled inside the kernel set: a provider
+    that differs by construction used to have to encode itself in
+    ``overrides`` under a key chosen not to collide with a site name, which put
+    a workload's private convention inside a shared type.
     """
     build_patched = getattr(workload, "build_patched", None)
     if callable(build_patched):
-        model, provenance = build_patched(kernels)
-        return model, provenance
+        if accepts_provider(build_patched):
+            return build_patched(kernels, provider=provider)
+        return build_patched(kernels)
+    if accepts_provider(workload.build):
+        return workload.build(kernels, provider=provider), by_construction_provenance(
+            kernels
+        )
     return workload.build(kernels), by_construction_provenance(kernels)
 
 

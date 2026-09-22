@@ -504,6 +504,35 @@ class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
             _sites(args, SAMPLE_SITES)
         self.assertIn(SAMPLE_SITES.name, stderr.getvalue())
 
+    def test_the_providers_flag_only_narrows(self):
+        """``--providers`` selects among what was built and builds nothing.
+
+        It exists so a run can drop a provider it does not need -- a compile
+        baseline that costs minutes to build before it is measured -- without
+        the workload growing a flag per provider. Selection only: an unknown
+        name is an error that lists what was available, never a silent no-op.
+        """
+        import contextlib, io
+
+        from evograd.evaluation.tier3.cli import _parser, build_providers
+
+        with _stub_adapter() as name:
+            args = _parser().parse_args(
+                ["--model", name, "--identity-control", "--baseline", "liger",
+                 "--providers", "eager_through_bind,eager"]
+            )
+            providers = build_providers(args, quiet=True)
+            self.assertEqual(list(providers), ["eager_through_bind", "eager"])
+
+            args = _parser().parse_args(
+                ["--model", name, "--baseline", "none", "--providers", "compile"]
+            )
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+                build_providers(args, quiet=True)
+            self.assertIn("compile", stderr.getvalue())
+            self.assertIn("eager", stderr.getvalue())
+
     def test_the_cli_default_providers_are_unchanged(self):
         from evograd.evaluation.tier3.cli import _parser, build_providers
 

@@ -119,6 +119,29 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--residues", type=int, default=None,
                         help="crop length, where the workload accepts it")
     parser.add_argument(
+        "--evo", default=None, choices=("none", "triton", "deepspeed"),
+        help="which optimized Evoformer attention the model's own tree uses, "
+             "where the workload accepts it. Selects the implementation the "
+             "unpatched production provider runs, not a patch site",
+    )
+    parser.add_argument(
+        "--checkpointing", default=None, choices=("on", "off"),
+        help="activation checkpointing, where the workload accepts it. Off "
+             "trades memory for recompute and moves step latency without "
+             "changing any kernel, so a run that turns it off says so",
+    )
+    parser.add_argument(
+        "--recycling", type=int, default=None,
+        help="recycling steps, where the workload accepts it. Pinned across "
+             "providers rather than sampled per step",
+    )
+    parser.add_argument(
+        "--confidence-head", action="store_true",
+        help="call the confidence head on every timed step, where the workload "
+             "accepts it. Its trainer calls it on every tenth step, so the "
+             "default measures the other nine",
+    )
+    parser.add_argument(
         "--simple-calibration", type=Path, default=None,
         help="compile-anchored simplified policy (schema evograd-qwen3-t3-numerics/3), "
              "where the workload accepts it. When given it DECIDES the model-level "
@@ -159,6 +182,15 @@ def _parser() -> argparse.ArgumentParser:
         help="add ONE provider that patches several sites at once, each by its real "
              "route -- SPEC is 'compile', 'liger' (the declared Liger pair through the "
              "bind wrapper) or a path to an evolved program. Repeatable",
+    )
+    parser.add_argument(
+        "--providers", default=None,
+        help=(
+            "run only these providers, comma separated, out of the ones this "
+            "invocation would otherwise build. Selection only: it removes "
+            "providers and builds nothing new, and an unknown name lists what "
+            "was available"
+        ),
     )
     parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--blocks", type=int, default=3)
@@ -313,6 +345,19 @@ def build_providers(args, *, quiet: bool = False) -> dict:
         if not quiet:
             print(f"[tier3] candidate patches {sorted(selected)}", file=sys.stderr)
 
+    if args.providers:
+        # Applied last, so it can only narrow what the rules above produced.
+        # Built identically in parent and child, so a child asked for one
+        # provider still sees the same filtered set the parent ordered.
+        wanted = tuple(name.strip() for name in args.providers.split(",") if name.strip())
+        unknown = [name for name in wanted if name not in providers]
+        if unknown:
+            _parser().error(
+                f"unknown providers {sorted(unknown)}; this invocation builds "
+                f"{sorted(providers)}"
+            )
+        providers = {name: providers[name] for name in wanted}
+
     return providers
 
 
@@ -340,6 +385,8 @@ def check_options(args) -> None:
     #: Flag -> the value that means "not requested".
     optional = {"structural_identity": False, "layers": None, "data_seed": 0,
                 "calibration": None, "residues": None,
+                "evo": None, "checkpointing": None, "recycling": None,
+                "confidence_head": False,
                 "simple_calibration": None, "real_text": False,
                 "protocol4_calibration": None, "protocol4_verdict": None,
                 "protocol4_diagnostic_timing": False, "compile_site": [],

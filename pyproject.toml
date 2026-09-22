@@ -26,10 +26,22 @@ baselines = ["liger-kernel"]
 qwen3 = ["transformers>=4.51"]
 llama3 = ["transformers>=4.51"]
 workloads = ["transformers>=4.51"]
-# The level-4 AlphaFold3 training-step workload. alphafold3-pytorch is the
-# implementation MegaFold builds on, which is where the AF3 benchmark shapes
-# come from; without it the alphafold3 workload reports as uncovered.
+# The alphafold3 training-step workload, which the MegaFold one replaced as the
+# registered Level-4 task. alphafold3-pytorch is the implementation MegaFold
+# builds on; the declaration and its adapters are still in the tree, so the
+# extra stays.
 af3 = ["alphafold3-pytorch>=0.8.3,<0.9"]
+# There is deliberately no `megafold` extra. MegaFold is a source checkout, not
+# a distribution: it ships no setup.py and no pyproject.toml, so there is
+# nothing for pip to resolve and no version to pin. The Level-4 workload finds
+# it on PYTHONPATH instead:
+#
+#     git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold
+#     PYTHONPATH=/path/to/MegaFold:src python -m evograd.evaluation.tier3.cli \
+#         --model megafold_2l --residues 128
+#
+# Without it the megafold workload reports as uncovered, which is the same
+# thing every unmet `requires` does.
 
 [project.scripts]
 evograd = "evograd.cli:main"
