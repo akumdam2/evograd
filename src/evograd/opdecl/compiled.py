@@ -57,12 +57,29 @@ def _leaf_args(op: OpDecl, inputs: dict) -> tuple[list[Any], list[tuple[str, Any
     return positional, leaves
 
 
-def compile_forward(op: OpDecl, mode: str | None, dynamic: bool | None):
+def compile_forward(op: OpDecl, mode: str | None, dynamic: bool | None,
+                    *, spelling: str = "declared"):
+    """``torch.compile`` of one of the declaration's two forwards.
+
+    ``declared`` compiles ``op.forward``, the primitive spelling the oracle
+    differentiates. ``runtime`` compiles ``op.runtime_forward`` -- the fused
+    equivalent a production user would run -- falling back to ``op.forward``
+    where a declaration names none.
+
+    Which one a baseline compiles is not a detail. ``llama3_attention``
+    declares a forward that materializes a ``[B, HQ, T, T]`` score matrix and a
+    runtime forward that calls SDPA; compiling the first produces a baseline
+    roughly nine times slower than eager, and every speedup measured against it
+    is a speedup over a strawman.
+    """
     import torch
 
-    from evograd.opdecl.oracle import resolve_forward
+    from evograd.opdecl.oracle import resolve_forward, resolve_runtime_forward
 
-    return torch.compile(resolve_forward(op), mode=mode, dynamic=dynamic)
+    if spelling not in ("declared", "runtime"):
+        raise ValueError(f"unknown forward spelling {spelling!r}; use declared or runtime")
+    reference = resolve_runtime_forward(op) if spelling == "runtime" else resolve_forward(op)
+    return torch.compile(reference, mode=mode, dynamic=dynamic)
 
 
 def reference_run(op: OpDecl, inputs: dict, *, mode: str | None, dynamic: bool | None):

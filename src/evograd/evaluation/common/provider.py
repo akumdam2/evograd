@@ -297,6 +297,10 @@ def torch_compile_provider(
 ) -> PairProvider:
     """Expose a compiled forward/backward through the common pair boundary.
 
+    Compiled from the declaration's ``runtime_forward`` -- the same callable the
+    eager provider is timed through -- so the two baselines differ only in the
+    compiler, which is the comparison the row is meant to report.
+
     ``torch.compile`` compiles the forward eagerly and its AOTAutograd backward
     lazily on the first ``torch.autograd.grad`` call.  The fair runner warms both
     before recording samples, so compilation time is never included.  With the
@@ -310,10 +314,15 @@ def torch_compile_provider(
     AOTAutograd's internal save-set; Pipeline D records that separately.
     """
     from evograd.opdecl.compiled import compile_forward
-    from evograd.opdecl.oracle import resolve_forward
 
-    compiled = compile_forward(op, mode, dynamic)
-    forward_ref = resolve_forward(op)
+    # The *runtime* spelling, because that is what `pytorch_autograd_provider`
+    # above is timed through. Compiling `op.forward` instead would put the two
+    # baselines on different functions -- for `llama3_attention`, a compiled
+    # score-matrix implementation against eager SDPA -- and the compiled row
+    # would describe the declaration rather than what a compiler can do with
+    # the model's own code.
+    compiled = compile_forward(op, mode, dynamic, spelling="runtime")
+    forward_ref = resolve_runtime_forward(op)
     arg_names = tuple(arg.name for arg in op.args)
     active_args = tuple(op.active_args())
     active_names = tuple(arg.name for arg in active_args)
