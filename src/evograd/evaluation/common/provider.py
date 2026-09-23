@@ -180,6 +180,68 @@ def liger_provider(op: OpDecl) -> PairProvider:
     return declared_provider(op, "liger")
 
 
+def candidate_autograd_provider(op: OpDecl, module) -> PairProvider:
+    """The candidate, timed through the autograd engine like the baselines.
+
+    ``candidate_provider`` above calls the pair's ``backward_from_saved``
+    directly, with no engine in between -- which is what tier 1 is *for*, and
+    is the right measurement when the baseline is also a raw pair (liger,
+    cublas_pair). It is the wrong one against ``pytorch_autograd`` or
+    ``torch_compile``, whose backwards run ``torch.autograd.grad``: the
+    baseline is then charged for engine traversal and gradient accumulation and
+    the candidate is not, and the reported speedup includes that difference.
+
+    On ``llama3_residual_rmsnorm`` the gap is most of the result. The pair's
+    backward alone is 0.034 ms against eager's engine-mediated 0.129 ms; put
+    both through the engine at tier 2 and the same kernel reads 0.266 against
+    0.168. A tier-1 ratio built from the first pair of numbers is not a
+    statement about the kernel.
+
+    This provider takes the route the model would: the artifact's own
+    ``autograd.Function`` when it ships one -- the same object tier 2 and tier 3
+    install -- and ``bind`` for a pair-only candidate that predates the
+    contract.
+    """
+    from evograd.opdecl.bind import bind
+    from evograd.pipelines.shared.artifact import deployment_entry
+
+    entry = deployment_entry(module)
+    differentiable = entry if entry is not None else bind(op, module)
+    route = "direct_deployment" if entry is not None else "bound_pair"
+    arg_names = tuple(arg.name for arg in op.args)
+    active_args = tuple(op.active_args())
+    active_names = tuple(arg.name for arg in active_args)
+    by_grad = {arg.grad_name: arg.name for arg in active_args}
+
+    def forward(values):
+        for name in active_names:
+            value = values[name]
+            if not value.requires_grad:
+                value.requires_grad_(True)
+        output = differentiable(*(values[name] for name in arg_names))
+        return output, as_output_tuple(op, output)
+
+    def backward(dout, saved, values):
+        outputs = tuple(saved)
+        gradients = torch.autograd.grad(
+            outputs,
+            tuple(values[name] for name in active_names),
+            _grad_outputs(dout, outputs),
+            retain_graph=False,
+            create_graph=False,
+        )
+        by_name = dict(zip(active_names, gradients))
+        return tuple(by_name[by_grad[name]] for name in op.grad_names())
+
+    return PairProvider(
+        name="candidate",
+        forward=forward,
+        backward=backward,
+        source_hash=_callable_hash(differentiable),
+        adapter_kind=f"candidate_{route}_autograd",
+    )
+
+
 def pytorch_autograd_provider(op: OpDecl) -> PairProvider:
     """Expose eager PyTorch autograd through the common provider boundary.
 

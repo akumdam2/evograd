@@ -149,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     import torch
 
     from evograd.evaluation.tier1.fair import (
+        candidate_autograd_provider,
         candidate_provider,
         declared_provider,
         environment_fingerprint,
@@ -276,9 +277,18 @@ def main(argv: list[str] | None = None) -> int:
                     # the oracle.
                     verify_performance_baseline(op, resolved, device=args.device)
                     baseline_provider = declared_provider(op, resolved)
+                # Match the candidate's timing route to the baseline's, for
+                # the reason `candidate_autograd_provider` documents: an
+                # engine-mediated baseline against a direct pair call charges
+                # one side for the autograd engine and the other for nothing.
+                candidate_pv = (
+                    candidate_autograd_provider(op, module)
+                    if resolved == "pytorch_autograd" or resolved in BUILTIN_MODES
+                    else candidate_provider(op, module)
+                )
                 fair = run_fair_benchmarks(
                     op,
-                    candidate_provider(op, module),
+                    candidate_pv,
                     baseline_provider,
                     workloads=workloads,
                     device=args.device,

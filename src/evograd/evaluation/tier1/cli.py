@@ -38,6 +38,21 @@ def main(argv: list[str] | None = None) -> int:
             "provides (liger, cublas_pair, triton_tutorial, ...)."
         ),
     )
+    parser.add_argument(
+        "--candidate-route",
+        choices=("auto", "pair", "autograd"),
+        default="auto",
+        help=(
+            "how the candidate's backward is timed. `pair` calls "
+            "backward_from_saved directly; `autograd` runs the artifact's "
+            "deployment entry through torch.autograd.grad, as the model does. "
+            "`auto` (default) matches the baseline: engine-mediated baselines "
+            "(pytorch_autograd, torch_compile) get `autograd`, raw-pair "
+            "baselines (liger, cublas_pair) get `pair`. Timing a direct call "
+            "against an engine-mediated baseline charges the baseline for the "
+            "autograd engine and the candidate for nothing"
+        ),
+    )
     parser.add_argument("--suite", default=None)
     parser.add_argument(
         "--dtype",
@@ -59,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--blocks must be >= 1")
 
     from evograd.evaluation.tier1.fair import (
+        candidate_autograd_provider,
         candidate_provider,
         declared_provider,
         pytorch_autograd_provider,
@@ -125,7 +141,17 @@ def main(argv: list[str] | None = None) -> int:
                 "candidate correctness failed:\n"
                 + json.dumps(correctness.to_dict(), indent=2)
             )
-        candidate = candidate_provider(op, module)
+        # Like for like: an engine-mediated baseline needs an engine-mediated
+        # candidate, or the ratio reports the autograd engine rather than the
+        # kernel. `pair` remains available to reproduce older numbers.
+        engine_baselines = {"pytorch_autograd", *BUILTIN_MODES}
+        route = args.candidate_route
+        if route == "auto":
+            route = "autograd" if baseline_name in engine_baselines else "pair"
+        if route == "autograd":
+            candidate = candidate_autograd_provider(op, module)
+        else:
+            candidate = candidate_provider(op, module)
 
     report = run_fair_benchmarks(
         op,

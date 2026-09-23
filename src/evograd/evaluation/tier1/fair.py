@@ -39,6 +39,7 @@ from evograd.evaluation.common.provider import (  # noqa: F401  (re-export)
     PairProvider,
     TensorSnapshot,
     assert_tensors_unchanged,
+    candidate_autograd_provider,
     candidate_provider,
     clone_values,
     declared_provider,
