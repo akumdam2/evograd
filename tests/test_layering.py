@@ -11,7 +11,7 @@ SHARED = (
     EVOGRAD / "benchmark" / "topdown" / "common",
     EVOGRAD / "evaluation" / "tier3" / "gate",
 )
-WORKLOAD_MARKERS = ("qwen3_0_6b", "llama3_2_1b", "alphafold3")
+WORKLOAD_MARKERS = ('qwen3_0_6b', 'llama3_8b', 'llama3_2_1b', 'alphafold3', 'megafold')
 
 
 def _resolved_imports(path: pathlib.Path) -> set[str]:

@@ -387,7 +387,13 @@ def measure_step(step, *, warmup: int, steps: int, blocks: int) -> dict[str, Any
 
 
 def loss_trajectory(
-    workload: TrainingWorkload, model, optimizer, *, steps: int, seed: int
+    workload: TrainingWorkload,
+    model,
+    optimizer,
+    *,
+    steps: int,
+    seed: int,
+    step_ms: list[float] | None = None,
 ) -> list[float]:
     """The first N losses, on a fresh batch each step, for cross-provider agreement.
 
@@ -404,15 +410,25 @@ def loss_trajectory(
 
     Every loss is checked for scalarity and finiteness as it is produced, so a
     provider that diverges is failed here rather than timed and reported.
+
+    ``step_ms``, when given, receives each step's wall time. These steps are
+    never part of the timed measurement, and the first of them is where a
+    ``torch.compile`` provider actually compiles, so recording them is what
+    lets a report say how long that cost without it touching a timed number.
     """
     losses = []
     for index in range(steps):
         batch = workload.batch_for(seed=seed + 1 + index)
+        _sync()
+        started = time.perf_counter()
         loss = workload.loss(model, batch)
         losses.append(check_loss(loss, where=f"loss trajectory step {index}"))
         loss.backward()
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
+        _sync()
+        if step_ms is not None:
+            step_ms.append((time.perf_counter() - started) * 1e3)
     return losses
 
 
@@ -420,6 +436,7 @@ def measure_provider(
     workload: TrainingWorkload,
     kernels: KernelSet,
     *,
+    provider: str | None = None,
     warmup: int = 3,
     steps: int = 10,
     blocks: int = 3,
@@ -430,7 +447,13 @@ def measure_provider(
     verify: bool = True,
     device: str = "cuda",
 ) -> dict[str, Any]:
-    """One kernel set on one workload: verify, then loss trajectory, then timing."""
+    """One kernel set on one workload: verify, then loss trajectory, then timing.
+
+    ``provider`` is the name this measurement will be filed under. It reaches
+    the build because a workload whose providers are different *trees* rather
+    than different kernels cannot tell them apart from the kernel set alone;
+    workloads that do not declare it never see it.
+    """
     verification = (
         preflight(kernels, ops, device=device)
         if verify
@@ -444,13 +467,15 @@ def measure_provider(
         workload, kernels, verify=verify, device=device
     )
 
-    model, provenance = build_with_provenance(workload, kernels)
+    model, provenance = build_with_provenance(workload, kernels, provider=provider)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, **OPTIMIZER_DEFAULTS
     )
 
+    trajectory_step_ms: list[float] = []
     losses = loss_trajectory(
-        workload, model, optimizer, steps=loss_steps, seed=seed
+        workload, model, optimizer, steps=loss_steps, seed=seed,
+        step_ms=trajectory_step_ms,
     )
 
     batch = workload.batch_for(seed=seed)
@@ -459,8 +484,11 @@ def measure_provider(
     # Peak memory over a settled step, measured outside the timing loops: the
     # optimizer's state is allocated on its first step, so measuring before that
     # would report a number no steady-state training run ever sees.
+    _sync()
+    first_started = time.perf_counter()
     check_loss(step(), where="timed batch, first step")
     _sync()
+    first_timed_batch_step_ms = (time.perf_counter() - first_started) * 1e3
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
     check_loss(step(), where="timed batch, memory probe")
@@ -481,6 +509,11 @@ def measure_provider(
         "unit_name": workload.unit_name,
         "peak_memory_bytes": peak_memory,
         "losses": losses,
+        # Untimed steps, recorded so a report can say what they cost without
+        # any of it entering a timed number. The first trajectory step is
+        # where a compiled provider compiles.
+        "loss_trajectory_step_ms": trajectory_step_ms,
+        "first_timed_batch_step_ms": first_timed_batch_step_ms,
         "patched": list(kernels.patched),
         "patch_provenance": provenance.to_dict(),
         "kernel_sources": [s.to_dict() for s in kernels.sources],
@@ -635,7 +668,7 @@ def measure_one(
     """
     try:
         return {"ok": True, "provider": name, **measure_provider(
-            workload, kernels, **options
+            workload, kernels, provider=name, **options
         )}
     except Exception as exc:  # one provider must not take the run down
         return {

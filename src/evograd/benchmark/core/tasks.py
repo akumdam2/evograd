@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from evograd.opdecl.workloads import WorkloadDecl
 
-from evograd.benchmark.topdown.alphafold3 import workload as _alphafold3
+from evograd.benchmark.topdown.megafold import workload as _megafold
 
-WORKLOADS: dict[str, WorkloadDecl] = {_alphafold3.name: _alphafold3}
+#: The level-4 whole-model tasks. MegaFold replaced the alphafold3-pytorch
+#: declaration here: it is the implementation every AlphaFold3 shape in
+#: ``opdecl.models`` was transcribed from, and it ships its own fused kernels
+#: for four of the five patch sites, so the level-4 comparison has a real
+#: baseline rather than only eager. The alphafold3 declaration and its tier-3
+#: adapters are still in the tree and still importable; they are no longer part
+#: of the suite.
+WORKLOADS: dict[str, WorkloadDecl] = {_megafold.name: _megafold}
 
 
 def get_workload(name: str) -> WorkloadDecl:

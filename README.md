@@ -609,9 +609,89 @@ adapters construct one native decoder layer and install selected L2 providers.
 Inputs may come from verified captures or a seeded configuration; the latter
 does not require a full-model run. Reports identify the source and block scope.
 
+What replaces them is not another block declaration but the top-down path:
+Qwen3-0.6B's captured layer artifact and its replay live under
+`benchmark/topdown/qwen3_0_6b/levels/level3/`, and their judgment under
+`evaluation/workloads/qwen3_0_6b/level3/`. That path is deliberately still
+described as incomplete — see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
+
+MegaFold's whole-model declaration and its Tier-3 adapters are unaffected, as
+are Llama-3-8B's Level-4 workload and harvest. What a
+level-3 declaration would still have to do, whenever one is written: compute
+its correctness reference in float32 while the candidate runs in bfloat16
+(`reference_dtype`), because composing ten operators makes a same-dtype
+reference carry as much rounding error as the candidate, at which point the
+tolerance stops bounding the candidate's own error. It would also have to state
+what it excludes — as the deleted Llama block did for the KV cache, and the
+AlphaFold3 block did by being the single-representation update rather than a full
+pairformer block, which would need two outputs.
+
 The single-layer boundary includes the original final residual addition.
 Cross-layer residual fusion is covered by model scope. See
 [block usage and boundaries](docs/QWEN3_LEVEL4.md).
+
+### Level 4 -- whole-model workloads
+
+`megafold` is the registered Level-4 task: one full
+[MegaFold](https://github.com/Supercomputing-System-AI-Lab/MegaFold) training
+step (arXiv:2506.20686), with evolved kernels patched into the module tree by
+surgery. MegaFold is the implementation every AlphaFold3 shape in
+`src/evograd/opdecl/models.py` was transcribed from, so the Level-1/2 operator
+grids and the attention this model executes are the same widths by
+construction.
+
+**The shapes are declared from MegaFold's configuration, not harvested from a
+run.** Every benchmark case re-derives from the registered AlphaFold3
+configuration, and the workload re-derives them again at build.
+
+Three providers run one architecture on identical weights and batches:
+
+| Provider | Tree |
+|---|---|
+| `eager` | every fused module replaced by the plain PyTorch mathematics it stands for. The reference. |
+| `megafold` | the tree as MegaFold builds it, with its Triton EvoAttention on. |
+| `compile` | `torch.compile` of the eager model on eager RNG, with no module surgery. |
+| `evolved` | the eager tree with the candidate kernels patched in. |
+
+These are four module trees rather than four kernel sets, so the runner passes
+the provider's name to the workload, and forwards it only to a workload that
+declares a `provider` parameter.
+
+Five sites are patchable, and they are exactly the boundaries MegaFold fuses:
+`layer_norm`, `layernorm_linear`, `transition`, `pair_bias_attention` and
+`triangle_attention`. MegaFold's own kernels are therefore the line an evolved
+one has to clear, which is the point of running this model rather than a
+reference implementation.
+
+What the workload excludes, stated in the declaration: triangle multiplication,
+outer product mean, MSA pair-weighted averaging, the diffusion internals and
+the confidence head internals run stock; attention-weight dropout is disabled
+for every provider alike; the MSA and template data pipeline is replaced by
+seeded synthetic features at a fixed crop; EMA, gradient clipping, DeepSpeed
+and sequence parallelism are excluded; the recycling count and confidence-head
+inclusion are pinned rather than sampled; weights are random; and step times
+are single-GPU compute per step, not comparable to the MegaFold paper's
+multi-GPU end-to-end throughput.
+
+MegaFold is a source checkout rather than a distribution, so there is no extra
+to install. Clone it and put its root on `PYTHONPATH`:
+
+```bash
+git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold
+PYTHONPATH=/path/to/MegaFold:src python -m evograd.evaluation.tier3.cli \
+    --model megafold_2l --residues 128 --baseline none
+```
+
+`scripts/smoke_megafold.py` builds every provider and runs one step each, as a
+check before a first real run.
+
+It needs a visible GPU: MegaFold builds its fused Triton modules at import
+time, so on a CPU-only node the import fails even with every dependency
+present. Use `megafold_2l` (the same architecture at two pairformer blocks) to
+iterate, and report from `megafold`. The `alphafold3` declaration it replaced
+is still in the tree and still valid, but is no longer part of the suite.
+
+See [docs/BENCHMARK.md](docs/BENCHMARK.md) for the full task specification.
 
 Timed grids are derived from frozen model configurations in
 `src/evograd/opdecl/models.py` rather than written by hand, and each workload
@@ -696,7 +776,7 @@ src/evograd/
 ├── benchmark/                 # what is benchmarked
 │   ├── core/                  # task registry and result aggregation
 │   ├── operator_suite/        # operator task/config selection and suite CLI
-│   └── topdown/               # common + Qwen3-0.6B/Llama3/AlphaFold3 workloads
+│   └── topdown/               # common + Qwen3-0.6B/Llama3/MegaFold workloads
 ├── evaluation/                # how a candidate is evaluated
 │   ├── common/                # providers and canonical reports
 │   ├── tier1/                 # direct pair: fast/fair modes

@@ -7,6 +7,10 @@ layer that alters the answer would make every level-4 speedup unattributable.
 
 Tests needing the model implementation skip when ``alphafold3-pytorch`` is not
 installed (the ``af3`` extra); the declaration-side tests always run.
+
+The declaration is imported directly rather than looked up in ``WORKLOADS``:
+MegaFold is the registered level-4 workload now, and this one is kept in the
+tree and kept covered without being part of the suite.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import unittest
 import torch
 
 from evograd.benchmark.core.report import task_from_tier3_report
-from evograd.benchmark import get_workload
+from evograd.benchmark.topdown.alphafold3 import workload as af3_declaration
 from evograd.evaluation.tier3.patch import KernelSet, identity_control_kernels
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.models import ALPHAFOLD3_2L
@@ -42,7 +46,7 @@ class TestRegistryAgreesWithTheDeclaration(unittest.TestCase):
     def test_sites_match(self):
         from evograd.evaluation.tier3.workloads.alphafold3.workload import AF3_SITES
 
-        self.assertEqual(AF3_SITES.site_ops, get_workload("alphafold3").sites)
+        self.assertEqual(AF3_SITES.site_ops, af3_declaration.sites)
 
     def test_surgery_defaults_refuse_to_compute(self):
         """An unpatched surgery site is the original module in the tree, so a
@@ -95,7 +99,7 @@ class TestSuiteReader(unittest.TestCase):
 @needs_af3
 class TestWorkloadDeterminism(unittest.TestCase):
     def test_batches_are_identical_for_identical_seeds(self):
-        factory = get_workload("alphafold3").resolve_factory()
+        factory = af3_declaration.resolve_factory()
         first = factory(_tiny_case(), device="cpu", seed=0).batch_for(seed=5)
         second = factory(_tiny_case(), device="cpu", seed=0).batch_for(seed=5)
         for key, value in first.items():
@@ -104,7 +108,7 @@ class TestWorkloadDeterminism(unittest.TestCase):
                     self.assertTrue(torch.equal(value, second[key]))
 
     def test_the_crop_length_is_exactly_as_declared(self):
-        factory = get_workload("alphafold3").resolve_factory()
+        factory = af3_declaration.resolve_factory()
         batch = factory(_tiny_case(), device="cpu", seed=0).batch_for(seed=1)
         self.assertEqual(
             batch["atom_inputs"].shape[1], 4 * ALPHAFOLD3_2L.atoms_per_window
