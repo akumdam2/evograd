@@ -1,7 +1,8 @@
 """Operator declaration: layernorm_linear."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.opdecl.models import ALPHAFOLD3
+from evograd.ops._common import make_pair_baseline
+from evograd.opdecl.models import AF3_RESIDUE_SWEEP, ALPHAFOLD3
 from evograd.ops._common import fixed_shape_suites, model_workloads
 
 # MegaFold's FusedLayernormLinear, normalizing the c_s single representation and
@@ -25,6 +26,26 @@ _DERIVED = model_workloads(
     note="MegaFold runs batch 1 with activation checkpointing; the MSA depth is swept instead",
 )
 
+# The pair track. ``_DERIVED`` above is the single-representation site
+# (``c_s`` -> q/k/v fan-out); the level-4 MegaFold workload spends most of its
+# LayernormLinear calls on the pair representation instead -- one row per
+# residue pair, ``c_z = 128`` in -- feeding triangle multiplication (N = 5 c_z,
+# twice per block) and the pair transition (N = 2 * 4 c_z, once per block).
+# At the production crop of 384 residues that is M = 147456, K = 128.
+_PAIR_DTYPES = ("float32", "bfloat16")
+_PAIR = model_workloads(
+    ALPHAFOLD3, "pair_transition_layernorm_linear",
+    tuple({"residues": r} for r in AF3_RESIDUE_SWEEP), _PAIR_DTYPES,
+    note="MegaFold runs this site in float32 outside its own Triton path",
+) + model_workloads(
+    ALPHAFOLD3, "triangle_mult_layernorm_linear",
+    tuple({"residues": r} for r in AF3_RESIDUE_SWEEP), _PAIR_DTYPES,
+    note="MegaFold runs this site in float32 outside its own Triton path",
+)
+#: Both pair-track shapes at the production crop, float32: one program has to
+#: serve both, so this pair is the level-4 evolution objective.
+_PAIR_384 = tuple(w for w in _PAIR if w.dims["M"] == 384 * 384 and w.dtype == "float32")
+
 
 def make_layernorm_linear_inputs(torch, op, workload, device="cuda"):
     m, k, n = (workload.dims[name] for name in ("M", "K", "N"))
@@ -43,6 +64,14 @@ def make_layernorm_linear_inputs(torch, op, workload, device="cuda"):
         "eps": 1e-5,
         "dout": dout,
     }
+
+def _megafold_factory():
+    from evograd.benchmark.operator_suite.tasks.level2.layernorm_linear.megafold_pair import (
+        make_megafold_layernorm_linear_autograd_pair_fns,
+    )
+
+    return make_megafold_layernorm_linear_autograd_pair_fns()
+
 
 op = declare_op(
     name="layernorm_linear",
@@ -74,6 +103,9 @@ op = declare_op(
     benchmark=_DERIVED,
     benchmark_suites={
         **fixed_shape_suites(_DERIVED),
+        "megafold_pair": _PAIR,
+        "megafold_pair384": _PAIR_384,
+        **fixed_shape_suites(_PAIR),
         "legacy": tuple(
             Workload(dims=dict(M=m, K=k, N=n), dtype=dtype)
             for (m, k, n) in (
@@ -89,5 +121,10 @@ op = declare_op(
         "bfloat16": (1.5e-1, 3e-2),
     },
     tolerance_multipliers={"dweight": (2.0, 1.0), "dbias": (2.0, 1.0)},
+    performance_baselines={
+        "megafold": make_pair_baseline(
+            _megafold_factory, ("x", "weight", "bias", "linear_weight", "eps")
+        ),
+    },
     make_inputs=make_layernorm_linear_inputs,
 )

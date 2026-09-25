@@ -21,6 +21,12 @@ def _liger_factory():
     return make_liger_swiglu_autograd_pair_fns()
 
 
+def _megafold_factory():
+    from evograd.ops.level1.swiglu.megafold_pair import make_megafold_swiglu_autograd_pair_fns
+
+    return make_megafold_swiglu_autograd_pair_fns()
+
+
 #: The observed Qwen3-0.6B pointwise boundary. The harvest records a bare SiLU
 #: module, but the production boundary is `silu(gate) * up` -- the activation
 #: never appears without the multiply -- so it maps here rather than onto a
@@ -45,7 +51,8 @@ op = declare_op(
     correctness=standard_correctness(),
     tolerances=STANDARD_TOLERANCES,
     performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("a", "b"))
+        "liger": make_pair_baseline(_liger_factory, ("a", "b")),
+        "megafold": make_pair_baseline(_megafold_factory, ("a", "b"))
     },
     make_inputs=_inputs,
     # da and db may be written over a and b. Both gradients have exactly the

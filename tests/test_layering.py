@@ -110,10 +110,23 @@ class TestDependencyDirection(unittest.TestCase):
             self.assertEqual(offenders, [], f"{path}: {offenders}")
 
     def test_ops_imports_no_workload_package(self):
+        """No evograd workload package is reachable from ``ops``.
+
+        A marker counts when it is a whole component of an *evograd* import
+        path: that is what importing a workload package looks like. It does
+        not count for an external library that happens to share the name --
+        MegaFold is also a source checkout of Triton kernels, and an
+        operator's reviewed pair baseline may wrap those kernels exactly as
+        ``liger.py`` wraps Liger's -- nor for an adapter module whose name
+        merely contains the marker (``megafold_pair``).
+        """
         for path in _python_files(EVOGRAD / "ops"):
             for imported in _resolved_imports(path):
+                if not imported.startswith("evograd."):
+                    continue
+                components = imported.split(".")
                 self.assertFalse(
-                    any(marker in imported for marker in WORKLOAD_MARKERS),
+                    any(marker in components for marker in WORKLOAD_MARKERS),
                     f"{path} imports workload-specific module {imported}",
                 )
 

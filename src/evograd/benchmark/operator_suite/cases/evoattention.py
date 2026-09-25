@@ -27,14 +27,20 @@ _PAIR_BIAS = model_workloads(
 _TRIANGLE = model_workloads(
     ALPHAFOLD3,
     "triangle_attention",
-    tuple({"batch": 1, "residues": n} for n in AF3_RESIDUE_SWEEP[:2]),
+    tuple({"batch": 1, "residues": n} for n in AF3_RESIDUE_SWEEP),
     _DTYPES,
     scaled=True,
     note=(
         "MegaFold benchmarks batch 4; batch 1 keeps the grid on a single GPU. "
-        "Residues stop at 256 because S == N makes this the most expensive family"
+        "S == N makes this the most expensive family; 384 is the production "
+        "crop the MegaFold level-4 workload runs, so it is in the grid"
     ),
 )
+
+#: The two attention sites of the pairformer trunk at MegaFold's production
+#: crop (batch 1, 384 residues): one program has to serve both, so the
+#: level-4 evolution objective is this pair rather than either alone.
+_TRUNK_384 = tuple(w for w in _PAIR_BIAS + _TRIANGLE if w.dims["N"] == 384)
 
 _MSA = model_workloads(
     ALPHAFOLD3,
@@ -61,6 +67,7 @@ cases = SuiteCases(
         "pair_bias": _PAIR_BIAS,
         "triangle": _TRIANGLE,
         "msa": _MSA,
+        "megafold_trunk384": _TRUNK_384,
         **fixed_shape_suites(_BENCHMARK),
         # Not an AlphaFold3 configuration: no AF3 module uses head dim 128 (the
         # largest is 64). These probe register pressure, which is worth running

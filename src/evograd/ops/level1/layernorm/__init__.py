@@ -18,8 +18,17 @@ def make_layernorm_inputs(torch, op, workload, device="cuda"):
 
 
 def layernorm_tolerance(workload, result_name, atol, rtol):
-    """Account for BF16 error growth in long parameter-gradient reductions."""
-    if workload.dtype == "bfloat16" and result_name in {"dweight", "dbias"}:
+    """Row-scale ``atol`` on the parameter-gradient reductions.
+
+    ``dweight`` and ``dbias`` sum over every row, so their rounding error grows
+    like ``sqrt(rows)`` in every dtype, not only bfloat16: at MegaFold's pair
+    shape (rows = 384 * 384 = 147456, hidden 128) the float32 sum lands at
+    5e-4 against a float64 oracle -- for eager PyTorch and torch.compile as
+    much as for any candidate -- while the flat float32 tolerance is 2e-5. The
+    anchor is the smallest correctness case (8 rows), so nothing at or below it
+    changes; ``rtol`` is untouched.
+    """
+    if result_name in {"dweight", "dbias"}:
         rows = workload.dims["rows"]
         atol = max(atol, atol * math.sqrt(max(1.0, rows / 8.0)))
     return atol, rtol

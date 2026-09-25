@@ -393,6 +393,37 @@ class AlphaFoldConfig:
             "N": self.pair_bias_attn_heads * self.pair_bias_attn_dim_head,
         }
 
+    def pair_transition_layernorm_linear_dims(self, *, residues: int) -> dict[str, int]:
+        """The pair transition's fused LayerNorm+Linear: one row per residue
+        pair, ``c_z`` in, the SwiGLU's two ``expansion * c_z`` halves out.
+        MegaFold builds it as ``LayernormLinear(dim, dim_inner * 2)``."""
+        return {
+            "M": residues * residues,
+            "K": self.c_z,
+            "N": 2 * self.transition_expansion * self.c_z,
+        }
+
+    def triangle_mult_layernorm_linear_dims(self, *, residues: int) -> dict[str, int]:
+        """Triangle multiplication's combined projection: ``c_z`` in, five
+        ``c_z``-wide outputs (left, right, their gates, the output gate) in
+        one fused LayerNorm+Linear, twice per pairformer block. MegaFold
+        builds it as ``LayernormLinear(dim, dim_hidden * 5)``."""
+        return {"M": residues * residues, "K": self.c_z, "N": 5 * self.c_z}
+
+    def pair_layernorm_dims(self, *, residues: int) -> dict[str, int]:
+        """LayerNorm over the pair representation: one row per residue pair.
+
+        The pairformer trunk's dominant normalization site at a given crop --
+        ``[1, N, N, c_z]`` flattened to rows -- which is where MegaFold's
+        ``layer_norm`` patch site does most of its work.
+        """
+        return {"rows": residues * residues, "hidden": self.c_z}
+
+    def pair_transition_swiglu_dims(self, *, residues: int) -> dict[str, int]:
+        """The pair transition's gated activation: ``silu(a) * b`` over the
+        expanded pair width, one row per residue pair."""
+        return {"rows": residues * residues, "cols": self.transition_expansion * self.c_z}
+
     def train_step_dims(self, *, batch: int, residues: int) -> dict[str, int]:
         """Every dim a whole-model training-step workload needs (level 4).
 

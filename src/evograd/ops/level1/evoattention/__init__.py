@@ -1,6 +1,7 @@
 """Operator declaration: evoattention."""
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.ops._common import make_pair_baseline
 
 
 def make_evoattention_inputs(torch, op, workload, device="cuda"):
@@ -30,6 +31,14 @@ def make_evoattention_inputs(torch, op, workload, device="cuda"):
 
     pair_bias = torch.randn((b, 1, h, n, n), device=device, dtype=torch.float32) * 0.5
     return {"q": q, "k": k, "v": v, "res_mask": res_mask, "pair_bias": pair_bias, "do": do}
+
+
+def _megafold_factory():
+    from evograd.ops.level1.evoattention.megafold_pair import (
+        make_megafold_evoattention_autograd_pair_fns,
+    )
+
+    return make_megafold_evoattention_autograd_pair_fns()
 
 
 op = declare_op(
@@ -65,5 +74,10 @@ op = declare_op(
     ),
     tolerances={"float16": (2e-2, 2e-2), "bfloat16": (4e-2, 4e-2)},
     tolerance_multipliers={"d_pair_bias": (2.0, 1.0)},
+    performance_baselines={
+        "megafold": make_pair_baseline(
+            _megafold_factory, ("q", "k", "v", "res_mask", "pair_bias")
+        ),
+    },
     make_inputs=make_evoattention_inputs,
 )

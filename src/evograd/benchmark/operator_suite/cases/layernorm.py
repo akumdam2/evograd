@@ -11,7 +11,18 @@ from __future__ import annotations
 from evograd.benchmark.operator_suite.cases import SuiteCases
 from evograd.opdecl import Workload
 from evograd.opdecl.models import LLAMA_3_8B, LLAMA_TOKEN_SWEEP
+from evograd.opdecl.models import ALPHAFOLD3, AF3_RESIDUE_SWEEP
 from evograd.ops._common import fixed_shape_suites, log_distance_weight, model_workloads, regime_suites
+
+#: MegaFold's production shape for the pairformer-trunk site at each crop of
+#: the residue sweep (batch 1). Declared from the frozen AlphaFold3
+#: configuration, not harvested; the Level-4 MegaFold task patches this site at
+#: exactly these dims. A named suite plus its fixed/ cases, deliberately not
+#: folded into the timed grid.
+_MEGAFOLD_TRUNK = model_workloads(
+    ALPHAFOLD3, "pair_layernorm",
+    tuple({"residues": r} for r in AF3_RESIDUE_SWEEP), ('float32', 'bfloat16',),
+)
 
 _LEGACY_MIXED = ((1, 768), (8, 1024), (32, 1536), (8, 4096), (1, 8192),
                  (17, 127), (17, 513), (17, 1000))
@@ -92,6 +103,8 @@ cases = SuiteCases(
         **{name: _workloads(shapes) for name, shapes in _SHAPE_SUITES.items()},
         **_REGIME_SUITES,
         **fixed_shape_suites(_BENCHMARK),
+        "megafold_trunk": _MEGAFOLD_TRUNK,
+        **fixed_shape_suites(_MEGAFOLD_TRUNK),
         "coverage": _workloads(_COVERAGE),
     },
     regime_feature=_regime_feature,
