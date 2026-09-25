@@ -171,6 +171,10 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
 
     # `backward_from_saved` takes one upstream gradient for a single-output
     # declaration and a tuple for a structured one; the declaration decides.
+    upstream_fix = "\n".join(
+        f"        {n} = {n}.contiguous() if ({n} is not None and not {n}.is_contiguous()) else {n}"
+        for n in c.upstream_names
+    )
     upstream_arg = f"({upstream},)" if len(c.upstream_names) > 1 else upstream
     if len(c.upstream_names) > 1:
         upstream_arg = f"({upstream})"
@@ -269,6 +273,12 @@ class {c.function_cls}(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, {upstream}):
+        # The engine hands back whatever view the consumer's backward produced
+        # (a permuted or sliced output arrives as a strided gradient). The pair
+        # was declared, verified and evolved on contiguous gradients and may
+        # refuse anything else, so the copy is made here, once, inside this
+        # candidate's own backward; a contiguous gradient passes through as is.
+{upstream_fix}
         {grad_unpack} = {c.backward_fn}(
             {upstream_arg}, ctx.saved_tensors{backward_scalars}
         )

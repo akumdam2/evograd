@@ -98,6 +98,17 @@ def bind(op: OpDecl, module):
         def backward(ctx, *douts):
             # One incoming gradient per declared output; the pair's backward
             # receives them as a tuple when there are several.
+            # The engine hands back whatever view the consumer's backward
+            # produced: a site that permutes the kernel's output to the model's
+            # layout gets its gradient as the permuted-back view, which is not
+            # contiguous. The pair was declared, verified and evolved on
+            # contiguous gradients and may refuse anything else, so the copy
+            # is made here, once, inside the candidate's own timed backward.
+            # A gradient that is already contiguous is returned as is.
+            douts = tuple(
+                d.contiguous() if torch.is_tensor(d) and not d.is_contiguous() else d
+                for d in douts
+            )
             dout = tuple(douts) if ctx.multi_output else douts[0]
             # Read `ctx.saved_tensors` EXACTLY ONCE. It is a property, so
             # touching it inside the comprehension below unpacked the saved

@@ -402,13 +402,33 @@ class _PatchedLayernormLinear(nn.Module):
         self.kernel = kernel
 
     def forward(self, x):
+        # The declaration is two-dimensional, ``[M, K] -> [M, N]``, and covers
+        # float32 and float16; the site is reached with leading batch/residue
+        # axes and, under MegaFold's autocast, in bfloat16 as well. MegaFold's
+        # own kernel flattens the leading axes (``a.view(-1, K)``) and casts
+        # its inputs (to bfloat16, via ``custom_fwd``). The site does the
+        # same in the declaration's terms: flatten to ``[M, K]``, run the
+        # kernel in the nearest declared dtype -- float32 for bfloat16, which
+        # loses nothing -- and hand back the caller's shape and dtype. Both
+        # conversions sit inside the patched boundary and so inside every
+        # patched provider's timed step, identity control included.
+        lead, k = x.shape[:-1], x.shape[-1]
+        model_dtype = x.dtype
+        kernel_dtype = model_dtype if model_dtype in (torch.float32, torch.float16) else torch.float32
+        # ``reshape`` of a view whose leading axes flatten without a copy
+        # stays a view, and ``.to`` of the same dtype returns the tensor
+        # unchanged, so the float32 majority of calls would reach the kernel
+        # non-contiguous. The pair was declared, verified and evolved on
+        # contiguous rows, like the swiglu and attention sites' inputs.
+        x2 = x.reshape(-1, k).to(kernel_dtype).contiguous()
         out = self.kernel(
-            x,
-            _like(self.weight, x),
-            _like(self.bias, x),
-            _like(self.linear_weight, x),
+            x2,
+            _like(self.weight, x2),
+            _like(self.bias, x2),
+            _like(self.linear_weight, x2),
             LAYER_NORM_EPS,
         )
+        out = out.reshape(*lead, out.shape[-1]).to(model_dtype)
         if self.linear_bias is not None:
             out = out + _like(self.linear_bias, out)
         return out
@@ -461,30 +481,66 @@ class _PatchedAttend(nn.Module):
             raise ValueError(
                 "evoattention site received windowed/memory-kv attention inputs"
             )
-        batch, heads, n, _ = q.shape
+        batch, heads, n, d = q.shape
+        # Layout. MegaFold folds the leading axes into one batch before
+        # ``Attend`` -- ``[b, h, n, d]`` with ``b = batch_size * n1`` -- and its
+        # own Triton path unfolds them again right before the kernel:
+        # ``(b n1) h n2 d -> b n1 n2 h d``. The declaration's ``S`` is that
+        # ``n1`` axis (one row of the pair representation per sequence), so
+        # the site maps ``B = batch_size`` and ``S = b // batch_size``; for
+        # pair-bias attention over the single representation ``S == 1``, for
+        # triangle attention ``S == n1``. Folding ``n1`` into ``B`` instead
+        # would run the kernel at a shape no tier measured and hand it ``S``
+        # copies of the bias.
+        B = batch_size if batch_size and batch % batch_size == 0 else batch
+        S = batch // B
+        # The declaration takes float16 or bfloat16 only, and the site is also
+        # reached in float32 (the diffusion module's attention, the trunk under
+        # the eager tree). MegaFold's own Triton path casts q, k, v to bfloat16
+        # before its kernel and the output back to the caller's dtype; the site
+        # does the same, so the kernel meets its declared contract and the
+        # model sees the dtype it asked for. The casts are inside the patched
+        # boundary and so inside every patched provider's timed step,
+        # identity control included.
+        model_dtype = q.dtype
+        kernel_dtype = model_dtype if model_dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
 
-        def to_declared(t):  # [b, h, n, d] -> [B, S=1, N, H, D]
-            return t.permute(0, 2, 1, 3).unsqueeze(1).contiguous()
+        def to_declared(t):  # [(B S), h, n, d] -> [B, S, N, H, D]
+            return t.view(B, S, heads, n, d).permute(0, 1, 3, 2, 4).to(kernel_dtype).contiguous()
 
         if attn_bias is None:
-            pair_bias = q.new_zeros((batch, 1, heads, n, n), dtype=torch.float32)
+            pair_bias = q.new_zeros((B, 1, heads, n, n), dtype=torch.float32)
         else:
-            # [b, h, n, n] (or head-broadcast) -> [B, 1, H, N, N], float32 as
-            # MegaFold keeps it.
-            pair_bias = attn_bias.expand(batch, heads, n, n).unsqueeze(1).float()
+            # The bias is one ``[b, h, n, n]`` tensor per batch element; the
+            # declaration broadcasts it over ``S`` (``[B, 1, H, N, N]``) and the
+            # kernel reduces ``d_pair_bias`` over ``S`` itself. Triangle
+            # attention arrives with that one bias ``repeat``-ed over its rows,
+            # so the site takes the first row's copy rather than materialising
+            # all ``S`` of them (906 MB per call at 384 residues) and leaving
+            # autograd an ``S``-way reduction. ``contiguous`` because
+            # ``expand``/slicing leave views and ``.float()`` on float32 is a
+            # no-op; the pair was declared, verified and evolved on contiguous
+            # inputs.
+            pair_bias = (
+                attn_bias.expand(batch, heads, n, n)
+                .reshape(B, S, heads, n, n)[:, :1]
+                .float()
+                .contiguous()
+            )
         if mask is None:
-            res_mask = q.new_zeros((batch, 1, 1, 1, n), dtype=torch.float32)
+            res_mask = q.new_zeros((B, S, 1, 1, n), dtype=torch.float32)
         else:
             res_mask = torch.where(
-                mask.view(batch, 1, 1, 1, n),
+                mask.view(B, S, 1, 1, n),
                 q.new_zeros((), dtype=torch.float32),
                 q.new_full((), -1e9, dtype=torch.float32),
-            )
+            ).contiguous()
 
         out = self.kernel(
             to_declared(q), to_declared(k), to_declared(v), res_mask, pair_bias
         )
-        return out.squeeze(1).permute(0, 2, 1, 3)  # -> [b, h, n, d]
+        # [B, S, N, H, D] -> [(B S), h, n, d], the layout the caller folded.
+        return out.permute(0, 1, 3, 2, 4).reshape(batch, heads, n, d).to(model_dtype)
 
 
 # -- replacement modules: the eager reference --------------------------------

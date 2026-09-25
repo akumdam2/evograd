@@ -432,6 +432,31 @@ def loss_trajectory(
     return losses
 
 
+
+def _dynamo_counters() -> dict[str, Any] | None:
+    """Graph-break and graph counts for a provider that ran under torch.compile.
+
+    ``None`` when dynamo never ran in this process (an eager provider), so the
+    field says "not compiled" rather than reporting zero breaks for a tree that
+    was never traced. Read from dynamo's own counters, which every compiled
+    provider populates on its first step; providers run one per process, so the
+    counters belong to this provider alone.
+    """
+    try:
+        from torch._dynamo.utils import counters
+    except Exception:  # pragma: no cover
+        return None
+    breaks = counters.get("graph_break", {})
+    stats = counters.get("stats", {})
+    if not breaks and not stats:
+        return None
+    return {
+        "graph_breaks": int(sum(breaks.values())),
+        "graph_break_reasons": {str(k)[:160]: int(v) for k, v in list(breaks.items())[:40]},
+        "unique_graphs": int(stats.get("unique_graphs", 0)),
+        "calls_captured": int(stats.get("calls_captured", 0)),
+    }
+
 def measure_provider(
     workload: TrainingWorkload,
     kernels: KernelSet,
@@ -516,6 +541,7 @@ def measure_provider(
         "first_timed_batch_step_ms": first_timed_batch_step_ms,
         "patched": list(kernels.patched),
         "patch_provenance": provenance.to_dict(),
+        "dynamo": _dynamo_counters(),
         "kernel_sources": [s.to_dict() for s in kernels.sources],
         "verification": verification,
         "model_correctness": model_correctness,

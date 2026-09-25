@@ -26,6 +26,10 @@ from typing import Any
 #: The replacement routes ``--patch-set`` understands, besides a file path.
 PATCH_SPEC_KINDS = ("compile", "liger")
 
+#: Compiled variants one site may hold. MegaFold's ``transition`` site alone is
+#: called at more than eight (shape, dtype) signatures per training step.
+SITE_RECOMPILE_LIMIT = 256
+
 
 def compiled_site_kernel(site: str, registry):
     """The site's own declared production spelling, compiled.
@@ -42,6 +46,17 @@ def compiled_site_kernel(site: str, registry):
     from evograd.opdecl.oracle import resolve_runtime_forward
 
     reference = resolve_runtime_forward(get_task(registry.require(site).op))
+    # ``dynamic=False`` means one compiled variant per distinct input
+    # signature. A decoder-layer site sees one; a MegaFold site sees dozens
+    # (the pair stack, the MSA stack, the diffusion module and the heads all
+    # reach the same LayerNorm and transition at their own shapes and dtypes),
+    # and Dynamo's default budget of 8 turns the ninth into a hard failure
+    # under ``fullgraph=True``. Raise the budget rather than go dynamic: each
+    # shape still gets the specialized kernel this provider is meant to time.
+    for name in ("recompile_limit", "cache_size_limit"):
+        if hasattr(torch._dynamo.config, name):
+            setattr(torch._dynamo.config, name,
+                    max(getattr(torch._dynamo.config, name), SITE_RECOMPILE_LIMIT))
     return torch.compile(reference, dynamic=False, fullgraph=True)
 
 

@@ -142,13 +142,20 @@ def providers(args, registry) -> dict[str, Any]:
     from evograd.evaluation.tier3.patch import KernelSet
     from evograd.evaluation.tier3.workloads.megafold.workload import BUILD_MODES
 
-    return {mode: KernelSet(registry=registry) for mode in BUILD_MODES}
+    from evograd.evaluation.tier3.providers import compile_and_patch_set_providers
+    providers = {mode: KernelSet(registry=registry) for mode in BUILD_MODES}
+    # Per-site torch.compile (--compile-site) and composed patch sets
+    # (--patch-set): kernel-level providers on the eager tree, the route
+    # Llama-3 and Qwen3 offer. Distinct from the whole-model compile trees.
+    providers.update(compile_and_patch_set_providers(args, registry))
+    return providers
 
 
 #: The workload-specific flags this adapter understands. Anything else the
 #: parser carries is refused by name for this model rather than ignored.
 OPTIONS = frozenset(
-    {"residues", "evo", "checkpointing", "recycling", "confidence_head"}
+    {"residues", "evo", "checkpointing", "recycling", "confidence_head",
+     "compile_site", "patch_set"}
 )
 
 
