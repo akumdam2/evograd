@@ -41,22 +41,28 @@ if HAS_TRITON:
         tl.store(out_ptr + offs, a * b, mask=mask)
 
     @triton.jit
-    def _add_kernel(a_ptr, b_ptr, out_ptr, N, BLOCK: tl.constexpr):
+    def _add_kernel(a_ptr, b_ptr, out_ptr, alpha, N, BLOCK: tl.constexpr):
         pid = tl.program_id(0)
         offs = pid * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
         a = tl.load(a_ptr + offs, mask=mask, other=0.0)
         b = tl.load(b_ptr + offs, mask=mask, other=0.0)
-        tl.store(out_ptr + offs, a + b, mask=mask)
+        if a.dtype == tl.float16 or a.dtype == tl.bfloat16:
+            a = a.to(tl.float32)
+            b = b.to(tl.float32)
+        tl.store(out_ptr + offs, a + alpha * b, mask=mask)
 
     @triton.jit
-    def _sub_kernel(a_ptr, b_ptr, out_ptr, N, BLOCK: tl.constexpr):
+    def _sub_kernel(a_ptr, b_ptr, out_ptr, alpha, N, BLOCK: tl.constexpr):
         pid = tl.program_id(0)
         offs = pid * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
         a = tl.load(a_ptr + offs, mask=mask, other=0.0)
         b = tl.load(b_ptr + offs, mask=mask, other=0.0)
-        tl.store(out_ptr + offs, a - b, mask=mask)
+        if a.dtype == tl.float16 or a.dtype == tl.bfloat16:
+            a = a.to(tl.float32)
+            b = b.to(tl.float32)
+        tl.store(out_ptr + offs, a - alpha * b, mask=mask)
 
     @triton.jit
     def _div_kernel(a_ptr, b_ptr, out_ptr, N, BLOCK: tl.constexpr):
@@ -66,6 +72,19 @@ if HAS_TRITON:
         a = tl.load(a_ptr + offs, mask=mask, other=0.0)
         b = tl.load(b_ptr + offs, mask=mask, other=1.0)
         tl.store(out_ptr + offs, a / b, mask=mask)
+
+    @triton.jit
+    def _fma_kernel(a_ptr, b_ptr, c_ptr, out_ptr, N, BLOCK: tl.constexpr):
+        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        a = tl.load(a_ptr + offs, mask=mask, other=0.0)
+        b = tl.load(b_ptr + offs, mask=mask, other=0.0)
+        c = tl.load(c_ptr + offs, mask=mask, other=0.0)
+        if a.dtype == tl.float16 or a.dtype == tl.bfloat16:
+            a = a.to(tl.float32)
+            b = b.to(tl.float32)
+            c = c.to(tl.float32)
+        tl.store(out_ptr + offs, tl.fma(a, b, c), mask=mask)
 
     # ── existing unary ────────────────────────────────────────────────────────
 
@@ -104,12 +123,23 @@ if HAS_TRITON:
         tl.store(out_ptr + offs, a * scalar, mask=mask)
 
     @triton.jit
-    def _add_scalar_kernel(a_ptr, out_ptr, scalar, N, BLOCK: tl.constexpr):
+    def _add_scalar_kernel(a_ptr, out_ptr, scalar, alpha, N, BLOCK: tl.constexpr):
         pid = tl.program_id(0)
         offs = pid * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
         a = tl.load(a_ptr + offs, mask=mask, other=0.0)
-        tl.store(out_ptr + offs, a + scalar, mask=mask)
+        if a.dtype == tl.float16 or a.dtype == tl.bfloat16:
+            a = a.to(tl.float32)
+        tl.store(out_ptr + offs, a + alpha * scalar, mask=mask)
+
+    @triton.jit
+    def _rsub_scalar_kernel(a_ptr, out_ptr, scalar, alpha, N, BLOCK: tl.constexpr):
+        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        a = tl.load(a_ptr + offs, mask=mask, other=0.0)
+        if a.dtype == tl.float16 or a.dtype == tl.bfloat16:
+            a = a.to(tl.float32)
+        tl.store(out_ptr + offs, scalar - alpha * a, mask=mask)
 
     @triton.jit
     def _div_scalar_kernel(a_ptr, out_ptr, scalar, N, BLOCK: tl.constexpr):
@@ -125,7 +155,7 @@ if HAS_TRITON:
         offs = pid * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
         a = tl.load(a_ptr + offs, mask=mask, other=1.0).to(tl.float32)
-        tl.store(out_ptr + offs, tl.exp(exp * tl.log(a)), mask=mask)
+        tl.store(out_ptr + offs, libdevice.pow(a, exp), mask=mask)
 
     @triton.jit
     def _pow_tt_kernel(a_ptr, b_ptr, out_ptr, N, BLOCK: tl.constexpr):
@@ -134,7 +164,20 @@ if HAS_TRITON:
         mask = offs < N
         a = tl.load(a_ptr + offs, mask=mask, other=1.0).to(tl.float32)
         b = tl.load(b_ptr + offs, mask=mask, other=0.0).to(tl.float32)
-        tl.store(out_ptr + offs, tl.exp(b * tl.log(a)), mask=mask)
+        tl.store(out_ptr + offs, libdevice.pow(a, b), mask=mask)
+
+    @triton.jit
+    def _pow_scalar_base_kernel(exp_ptr, out_ptr, base, N, BLOCK: tl.constexpr):
+        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        exponent = tl.load(exp_ptr + offs, mask=mask, other=1.0).to(tl.float32)
+        tl.store(out_ptr + offs, libdevice.pow(base, exponent), mask=mask)
+
+    @triton.jit
+    def _arange_kernel(out_ptr, start, step, N, BLOCK: tl.constexpr):
+        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        tl.store(out_ptr + offs, start + offs.to(tl.int64) * step, mask=mask)
 
     # ── new unary: simple tl ops ──────────────────────────────────────────────
 
@@ -853,6 +896,31 @@ def _bc(*tensors):
     return tuple(t.contiguous() for t in broadcast)
 
 
+def _binary_inputs(a, b, *, true_divide=False):
+    """ATen promotion must precede broadcasting away scalar-tensor rank."""
+    dtype = torch.result_type(a, b)
+    if true_divide and not dtype.is_floating_point and not dtype.is_complex:
+        dtype = torch.get_default_dtype()
+    a, b = torch.broadcast_tensors(a, b)
+    return a.to(dtype).contiguous(), b.to(dtype).contiguous()
+
+
+def _scalar_input(a, scalar, *, true_divide=False):
+    dtype = torch.result_type(a, scalar)
+    if true_divide and not dtype.is_floating_point and not dtype.is_complex:
+        dtype = torch.get_default_dtype()
+    return a.to(dtype).contiguous()
+
+
+def _check_alpha(alpha, dtype):
+    if isinstance(alpha, bool) and dtype != torch.bool:
+        raise RuntimeError("Boolean alpha only supported for Boolean results")
+    if isinstance(alpha, float) and not (dtype.is_floating_point or dtype.is_complex):
+        raise RuntimeError("For integral input tensors, alpha must not be floating point")
+    if isinstance(alpha, complex) and not dtype.is_complex:
+        raise RuntimeError("For non-complex input tensors, alpha must not be complex")
+
+
 def _f32_out(a: torch.Tensor) -> torch.Tensor:
     """Allocate a float32 output with the same shape/device as a."""
     return torch.empty_like(a, dtype=torch.float32)
@@ -866,34 +934,45 @@ def _bool_out(a: torch.Tensor) -> torch.Tensor:
 
 
 def mul_tt(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    a, b = _bc(a, b)
+    a, b = _binary_inputs(a, b)
     out = torch.empty_like(a)
     _mul_kernel[_grid(a.numel())](a, b, out, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
-def add_tt(a: torch.Tensor, b: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-    a, b = _bc(a, b)
+def add_tt(a: torch.Tensor, b: torch.Tensor, alpha=1) -> torch.Tensor:
+    a, b = _binary_inputs(a, b)
+    _check_alpha(alpha, a.dtype)
     out = torch.empty_like(a)
-    if alpha != 1.0:
-        b = mul_scalar(b, alpha)
-    _add_kernel[_grid(a.numel())](a, b, out, N=a.numel(), BLOCK=_BLOCK)
+    _add_kernel[_grid(a.numel())](a, b, out, alpha, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
-def sub_tt(a: torch.Tensor, b: torch.Tensor, alpha: float = 1.0) -> torch.Tensor:
-    a, b = _bc(a, b)
+def sub_tt(a: torch.Tensor, b: torch.Tensor, alpha=1) -> torch.Tensor:
+    if a.dtype == torch.bool or b.dtype == torch.bool:
+        raise RuntimeError("Subtraction with Boolean tensors is not supported")
+    a, b = _binary_inputs(a, b)
+    _check_alpha(alpha, a.dtype)
     out = torch.empty_like(a)
-    if alpha != 1.0:
-        b = mul_scalar(b, alpha)
-    _sub_kernel[_grid(a.numel())](a, b, out, N=a.numel(), BLOCK=_BLOCK)
+    _sub_kernel[_grid(a.numel())](a, b, out, alpha, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
 def div_tt(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    a, b = _bc(a, b)
+    a, b = _binary_inputs(a, b, true_divide=True)
     out = torch.empty_like(a)
     _div_kernel[_grid(a.numel())](a, b, out, N=a.numel(), BLOCK=_BLOCK)
+    return out
+
+
+def fma(a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
+    """The fused multiply-add semantics of ``prims.fma``, without an interim store."""
+    a, b = _binary_inputs(a, b)
+    dtype = torch.result_type(a, c)
+    a, b, c = torch.broadcast_tensors(a, b, c)
+    a, b, c = (value.to(dtype).contiguous() for value in (a, b, c))
+    out = torch.empty_like(a)
+    _fma_kernel[_grid(a.numel())](a, b, c, out, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
@@ -916,23 +995,40 @@ def exp(a: torch.Tensor) -> torch.Tensor:
 
 
 def mul_scalar(a: torch.Tensor, scalar) -> torch.Tensor:
-    a = a.contiguous()
+    a = _scalar_input(a, scalar)
     out = torch.empty_like(a)
-    _mul_scalar_kernel[_grid(a.numel())](a, out, float(scalar), N=a.numel(), BLOCK=_BLOCK)
+    _mul_scalar_kernel[_grid(a.numel())](a, out, scalar, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
-def add_scalar(a: torch.Tensor, scalar) -> torch.Tensor:
-    a = a.contiguous()
+def add_scalar(a: torch.Tensor, scalar, alpha=1) -> torch.Tensor:
+    a = _scalar_input(a, scalar)
+    _check_alpha(alpha, a.dtype)
     out = torch.empty_like(a)
-    _add_scalar_kernel[_grid(a.numel())](a, out, float(scalar), N=a.numel(), BLOCK=_BLOCK)
+    _add_scalar_kernel[_grid(a.numel())](a, out, scalar, alpha, N=a.numel(), BLOCK=_BLOCK)
+    return out
+
+
+def sub_scalar(a: torch.Tensor, scalar, alpha=1) -> torch.Tensor:
+    if a.dtype == torch.bool or isinstance(scalar, bool):
+        raise RuntimeError("Subtraction with Boolean tensors is not supported")
+    return add_scalar(a, -scalar, alpha=alpha)
+
+
+def rsub_scalar(a: torch.Tensor, scalar, alpha=1) -> torch.Tensor:
+    if a.dtype == torch.bool or isinstance(scalar, bool):
+        raise RuntimeError("Subtraction with Boolean tensors is not supported")
+    a = _scalar_input(a, scalar)
+    _check_alpha(alpha, a.dtype)
+    out = torch.empty_like(a)
+    _rsub_scalar_kernel[_grid(a.numel())](a, out, scalar, alpha, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
 def div_scalar(a: torch.Tensor, scalar) -> torch.Tensor:
-    a = a.contiguous()
+    a = _scalar_input(a, scalar, true_divide=True)
     out = torch.empty_like(a)
-    _div_scalar_kernel[_grid(a.numel())](a, out, float(scalar), N=a.numel(), BLOCK=_BLOCK)
+    _div_scalar_kernel[_grid(a.numel())](a, out, scalar, N=a.numel(), BLOCK=_BLOCK)
     return out
 
 
@@ -940,23 +1036,32 @@ def pow_scalar(a: torch.Tensor, exp) -> torch.Tensor:
     a = a.contiguous()
     exp_f = float(exp)
     if exp_f == 0.0:
-        return torch.ones_like(a)
+        return fill_scalar(a, 1)
     if exp_f == 1.0:
         return a.clone()
     if exp_f == 2.0:
         return mul_tt(a, a)
-    if exp_f == 3.0:
-        return mul_tt(mul_tt(a, a), a)
     out = torch.empty_like(a, dtype=torch.float32)
     _pow_scalar_kernel[_grid(a.numel())](a, out, exp_f, N=a.numel(), BLOCK=_BLOCK)
     return out.to(a.dtype)
 
 
 def pow_tt(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    a, b = _bc(a, b)
+    a, b = _binary_inputs(a, b)
     out = torch.empty_like(a, dtype=torch.float32)
     _pow_tt_kernel[_grid(a.numel())](a, b, out, N=a.numel(), BLOCK=_BLOCK)
     return out.to(a.dtype)
+
+
+def pow_scalar_base(base, exponent: torch.Tensor) -> torch.Tensor:
+    """Scalar ** tensor, including zero and negative scalar bases."""
+    dtype = torch.result_type(exponent, base)
+    exponent = exponent.to(dtype).contiguous()
+    out = torch.empty_like(exponent)
+    _pow_scalar_base_kernel[_grid(exponent.numel())](
+        exponent, out, float(base), N=exponent.numel(), BLOCK=_BLOCK
+    )
+    return out
 
 
 # ── new unary wrappers ────────────────────────────────────────────────────────
@@ -1355,6 +1460,10 @@ def logical_xor(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 
 def bitwise_not(a: torch.Tensor) -> torch.Tensor:
+    # Boolean inversion is logical NOT. Inverting after widening to int64
+    # produces -1/-2, both of which convert back to True.
+    if a.dtype == torch.bool:
+        return logical_not(a)
     a = a.contiguous()
     out = torch.empty_like(a)
     _bitwise_not_kernel[_grid(a.numel())](a, out, N=a.numel(), BLOCK=_BLOCK)
@@ -1404,7 +1513,40 @@ def where(condition: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> torch.Te
 def fill_scalar(a: torch.Tensor, scalar) -> torch.Tensor:
     """Return a new tensor with the same shape/dtype as a, filled with scalar."""
     out = torch.empty_like(a)
-    _fill_scalar_kernel[_grid(a.numel())](out, float(scalar), N=a.numel(), BLOCK=_BLOCK)
+    _fill_scalar_kernel[_grid(a.numel())](out, scalar, N=a.numel(), BLOCK=_BLOCK)
+    return out
+
+
+def fill_tensor(shape, value, *, dtype, device="cuda"):
+    """Allocate a constant tensor without a PyTorch fill kernel."""
+    out = torch.empty(tuple(shape), dtype=dtype, device=device)
+    if out.numel():
+        _fill_scalar_kernel[_grid(out.numel())](out, value, N=out.numel(), BLOCK=_BLOCK)
+    return out
+
+
+def fill_like(a, value, *, dtype=None):
+    return fill_tensor(a.shape, value, dtype=a.dtype if dtype is None else dtype, device=a.device)
+
+
+def arange(start, end=None, step=1, *, dtype=None, device="cuda"):
+    """ATen arange for the integer/floating ranges used by semantic graphs."""
+    import math
+
+    if end is None:
+        start, end = 0, start
+    if step == 0:
+        raise RuntimeError("step must be nonzero")
+    if not all(math.isfinite(value) for value in (start, end, step)):
+        raise RuntimeError("arange requires finite bounds and step")
+    if (end - start) * step < 0:
+        raise RuntimeError("upper bound and lower bound inconsistent with step sign")
+    if dtype is None:
+        dtype = torch.get_default_dtype() if any(isinstance(value, float) for value in (start, end, step)) else torch.int64
+    count = max(0, math.ceil((end - start) / step))
+    out = torch.empty((count,), dtype=dtype, device=device)
+    if count:
+        _arange_kernel[_grid(count)](out, start, step, N=count, BLOCK=_BLOCK)
     return out
 
 

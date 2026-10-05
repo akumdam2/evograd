@@ -1,39 +1,19 @@
-"""Shape-generic Triton reduction kernels for primitive aten ops.
+"""Shape-generic handwritten Triton reductions.
 
-2D Triton paths (one program per row or column) cover the common case.
-All other shapes fall back to PyTorch.
-
-Kernels / factory functions:
-  make_sum_kernel      -- aten.sum.dim_IntList
-  make_mean_kernel     -- aten.mean / aten.mean.dim
-  make_softmax_kernel  -- aten._softmax
-  make_amax_kernel     -- aten.amax
-  make_amin_kernel     -- aten.amin
-  make_max_dim_kernel  -- aten.max.dim  (returns values + indices namedtuple)
-  make_min_dim_kernel  -- aten.min.dim
-  make_argmax_kernel   -- aten.argmax
-  make_argmin_kernel   -- aten.argmin
-  make_prod_kernel     -- aten.prod / aten.prod.dim_int
-  make_any_kernel      -- aten.any / aten.any.dim / aten.any.dims
-  make_var_kernel      -- aten.var.correction / aten.var.dim
-  make_cumsum_kernel   -- aten.cumsum
+Axes are flattened with metadata views/copies; numerical work stays in Triton.
+Long rows are processed in chunks rather than silently truncating at 65536.
 """
-
 from __future__ import annotations
 
 from typing import Callable
-
 import torch
 
 try:
     import triton
     import triton.language as tl
-
     HAS_TRITON = True
 except ImportError:
     HAS_TRITON = False
-
-from . import elementwise
 
 
 def _next_pow2(n: int) -> int:
@@ -44,459 +24,407 @@ def _next_pow2(n: int) -> int:
 
 
 if HAS_TRITON:
-
-    # ── existing kernels ──────────────────────────────────────────────────────
+    @triton.jit
+    def _nan_maximum(a, b):
+        return tl.maximum(a, b, propagate_nan=tl.PropagateNan.ALL)
 
     @triton.jit
-    def _row_sum_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """sum([R, C], dim=1) → [R]  (one program per row)."""
+    def _nan_minimum(a, b):
+        return tl.minimum(a, b, propagate_nan=tl.PropagateNan.ALL)
+
+    @triton.jit
+    def _reduce_rows_kernel(X, Y, C, OP: tl.constexpr, CORRECTION: tl.constexpr,
+                            BLOCK: tl.constexpr):
         row = tl.program_id(0)
-        cols = tl.arange(0, BLOCK_C)
-        mask = cols < C
-        a = tl.load(a_ptr + row * C + cols, mask=mask, other=0.0)
-        tl.store(out_ptr + row, tl.sum(a.to(tl.float32), axis=0).to(a.dtype))
+        lane = tl.arange(0, BLOCK)
+        if X.dtype.element_ty == tl.float64:
+            acc = tl.full((BLOCK,), 0, tl.float64)
+        elif X.dtype.element_ty.is_floating():
+            acc = tl.full((BLOCK,), 0, tl.float32)
+        else:
+            acc = tl.full((BLOCK,), 0, tl.int64)
+        if OP == 'amax':
+            acc = tl.full((BLOCK,), float('-inf'), acc.dtype)
+        elif OP == 'amin':
+            acc = tl.full((BLOCK,), float('inf'), acc.dtype)
+        elif OP == 'prod':
+            acc = tl.full((BLOCK,), 1, acc.dtype)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            if OP == 'amax':
+                value = tl.load(X + row * C + cols, cols < C, other=float('-inf')).to(acc.dtype)
+                acc = _nan_maximum(acc, value)
+            elif OP == 'amin':
+                value = tl.load(X + row * C + cols, cols < C, other=float('inf')).to(acc.dtype)
+                acc = _nan_minimum(acc, value)
+            elif OP == 'prod':
+                value = tl.load(X + row * C + cols, cols < C, other=1).to(acc.dtype)
+                acc *= value
+            else:
+                value = tl.load(X + row * C + cols, cols < C, other=0).to(acc.dtype)
+                if OP == 'any':
+                    acc = tl.maximum(acc, (value != 0).to(acc.dtype))
+                else:
+                    acc += value
+        if OP == 'any':
+            result = tl.max(acc, 0)
+        elif OP == 'amax':
+            result = tl.reduce(acc, 0, _nan_maximum)
+        elif OP == 'amin':
+            result = tl.reduce(acc, 0, _nan_minimum)
+        elif OP == 'prod':
+            result = tl.reduce(acc, 0, _product_combine)
+        else:
+            result = tl.sum(acc, 0)
+        if OP == 'mean' or OP == 'var':
+            mean = result / C
+            if OP == 'mean':
+                result = mean
+            else:
+                squared = tl.full((BLOCK,), 0, acc.dtype)
+                for start in range(0, C, BLOCK):
+                    cols = start + lane
+                    value = tl.load(X + row * C + cols, cols < C, other=0).to(acc.dtype)
+                    delta = value - mean
+                    squared += tl.where(cols < C, delta * delta, 0)
+                result = tl.sum(squared, 0) / tl.maximum(C - CORRECTION, 0)
+        tl.store(Y + row, result)
 
     @triton.jit
-    def _col_sum_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """sum([R, C], dim=0) → [C]  (one program per column)."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=0.0)
-        tl.store(out_ptr + col, tl.sum(a.to(tl.float32), axis=0).to(a.dtype))
-
-    @triton.jit
-    def _row_softmax_kernel(a_ptr, out_ptr, C, BLOCK_C: tl.constexpr):
-        """Numerically-stable softmax along dim=-1.  One program per row."""
-        row = tl.program_id(0)
-        offs = tl.arange(0, BLOCK_C)
-        mask = offs < C
-        a = tl.load(a_ptr + row * C + offs, mask=mask, other=float("-inf")).to(tl.float32)
-        row_max = tl.max(a, axis=0)
-        a_exp = tl.exp(a - row_max)
-        a_exp = tl.where(mask, a_exp, 0.0)
-        row_sum = tl.sum(a_exp, axis=0)
-        tl.store(out_ptr + row * C + offs, a_exp / row_sum, mask=mask)
-
-    # ── amax / amin kernels ───────────────────────────────────────────────────
-
-    @triton.jit
-    def _row_amax_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """amax([R, C], dim=1) → [R]."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, BLOCK_C)
-        mask = cols < C
-        a = tl.load(a_ptr + row * C + cols, mask=mask, other=float("-inf"))
-        tl.store(out_ptr + row, tl.max(a, axis=0))
-
-    @triton.jit
-    def _col_amax_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """amax([R, C], dim=0) → [C]."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=float("-inf"))
-        tl.store(out_ptr + col, tl.max(a, axis=0))
-
-    @triton.jit
-    def _row_amin_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """amin([R, C], dim=1) → [R]."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, BLOCK_C)
-        mask = cols < C
-        a = tl.load(a_ptr + row * C + cols, mask=mask, other=float("inf"))
-        tl.store(out_ptr + row, tl.min(a, axis=0))
-
-    @triton.jit
-    def _col_amin_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """amin([R, C], dim=0) → [C]."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=float("inf"))
-        tl.store(out_ptr + col, tl.min(a, axis=0))
-
-    # ── prod kernels ──────────────────────────────────────────────────────────
-
-    @triton.jit
-    def _row_prod_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """prod([R, C], dim=1) → [R]."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, BLOCK_C)
-        mask = cols < C
-        a = tl.load(a_ptr + row * C + cols, mask=mask, other=1.0).to(tl.float32)
-        tl.store(out_ptr + row, tl.reduce(a, axis=0, combine_fn=_prod_combine))
-
-    @triton.jit
-    def _col_prod_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """prod([R, C], dim=0) → [C]."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=1.0).to(tl.float32)
-        tl.store(out_ptr + col, tl.reduce(a, axis=0, combine_fn=_prod_combine))
-
-    @triton.jit
-    def _prod_combine(a, b):
+    def _product_combine(a, b):
         return a * b
 
-    # ── any kernels ───────────────────────────────────────────────────────────
-
     @triton.jit
-    def _row_any_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """any([R, C], dim=1) → [R] bool."""
+    def _softmax_rows_kernel(X, Y, C, LOG: tl.constexpr, BLOCK: tl.constexpr):
         row = tl.program_id(0)
-        cols = tl.arange(0, BLOCK_C)
-        mask = cols < C
-        a = tl.load(a_ptr + row * C + cols, mask=mask, other=0)
-        result = tl.reduce(a != 0, axis=0, combine_fn=_or_combine)
-        tl.store(out_ptr + row, result.to(tl.int8))
+        lane = tl.arange(0, BLOCK)
+        maximum = tl.full((BLOCK,), float('-inf'), tl.float32)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            values = tl.load(X + row * C + cols, cols < C, other=float('-inf')).to(tl.float32)
+            maximum = _nan_maximum(maximum, values)
+        row_max = tl.reduce(maximum, 0, _nan_maximum)
+        total = tl.full((BLOCK,), 0, tl.float32)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            values = tl.load(X + row * C + cols, cols < C, other=float('-inf')).to(tl.float32)
+            total += tl.where(cols < C, tl.exp(values - row_max), 0)
+        denominator = tl.sum(total, 0)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            values = tl.load(X + row * C + cols, cols < C, other=0).to(tl.float32)
+            if LOG:
+                output = values - row_max - tl.log(denominator)
+            else:
+                output = tl.exp(values - row_max) / denominator
+            tl.store(Y + row * C + cols, output, cols < C)
 
     @triton.jit
-    def _col_any_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """any([R, C], dim=0) → [C] bool."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=0)
-        result = tl.reduce(a != 0, axis=0, combine_fn=_or_combine)
-        tl.store(out_ptr + col, result.to(tl.int8))
-
-    @triton.jit
-    def _or_combine(a, b):
-        return a | b
-
-    # ── cumsum kernel (row-wise) ───────────────────────────────────────────────
-
-    @triton.jit
-    def _row_cumsum_kernel(a_ptr, out_ptr, R, C, BLOCK_C: tl.constexpr):
-        """cumsum([R, C], dim=1) → [R, C].  One program per row."""
+    def _extreme_rows_kernel(X, Y, I, C, MAXIMUM: tl.constexpr, BLOCK: tl.constexpr):
         row = tl.program_id(0)
-        offs = tl.arange(0, BLOCK_C)
-        mask = offs < C
-        a = tl.load(a_ptr + row * C + offs, mask=mask, other=0.0).to(tl.float32)
-        cs = tl.cumsum(a, axis=0)
-        tl.store(out_ptr + row * C + offs, cs, mask=mask)
+        lane = tl.arange(0, BLOCK)
+        best = tl.full((), float('-inf') if MAXIMUM else float('inf'), tl.float32)
+        best_index = tl.full((), 0x7fffffffffffffff, tl.int64)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            values = tl.load(X + row * C + cols, cols < C,
+                             other=float('-inf') if MAXIMUM else float('inf')).to(tl.float32)
+            value = tl.reduce(values, 0, _nan_maximum) if MAXIMUM else tl.reduce(values, 0, _nan_minimum)
+            equal = (values == value) | ((values != values) & (value != value))
+            index = tl.min(tl.where((cols < C) & equal, cols.to(tl.int64), 0x7fffffffffffffff), 0)
+            improves = value > best if MAXIMUM else value < best
+            improves = improves | ((value != value) & (best == best))
+            equal_best = (value == best) | ((value != value) & (best != best))
+            choose = improves | (equal_best & (index < best_index))
+            best, best_index = tl.where(choose, value, best), tl.where(choose, index, best_index)
+        tl.store(Y + row, best)
+        tl.store(I + row, best_index)
 
     @triton.jit
-    def _col_cumsum_kernel(a_ptr, out_ptr, R, C, BLOCK_R: tl.constexpr):
-        """cumsum([R, C], dim=0) → [R, C].  One program per column."""
-        col = tl.program_id(0)
-        rows = tl.arange(0, BLOCK_R)
-        mask = rows < R
-        a = tl.load(a_ptr + rows * C + col, mask=mask, other=0.0).to(tl.float32)
-        cs = tl.cumsum(a, axis=0)
-        tl.store(out_ptr + rows * C + col, cs, mask=mask)
+    def _cumsum_rows_kernel(X, Y, C, BLOCK: tl.constexpr):
+        row = tl.program_id(0)
+        lane = tl.arange(0, BLOCK)
+        if X.dtype.element_ty.is_floating():
+            running = tl.full((), 0, tl.float64 if X.dtype.element_ty == tl.float64 else tl.float32)
+        else:
+            running = tl.full((), 0, tl.int64)
+        for start in range(0, C, BLOCK):
+            cols = start + lane
+            values = tl.load(X + row * C + cols, cols < C, other=0).to(running.dtype)
+            result = tl.cumsum(values, 0) + running
+            tl.store(Y + row * C + cols, result, cols < C)
+            running += tl.sum(values, 0)
+
+    @triton.jit
+    def _sort_rows_kernel(X, Y, I, C, DESCENDING: tl.constexpr, LOG_BLOCK: tl.constexpr,
+                          BLOCK: tl.constexpr):
+        row = tl.program_id(0)
+        lane = tl.arange(0, BLOCK)
+        values = tl.load(X + row * C + lane, lane < C,
+                         other=float('-inf') if DESCENDING else float('inf')).to(tl.float32)
+        indices = lane
+        for stage in tl.static_range(1, LOG_BLOCK + 1):
+            for bit in tl.static_range(stage - 1, -1, -1):
+                peer = lane ^ (1 << bit)
+                other = tl.gather(values, peer, 0)
+                other_index = tl.gather(indices, peer, 0)
+                less = other > values if DESCENDING else other < values
+                other_nan, this_nan = other != other, values != values
+                if DESCENDING:
+                    less = less | (other_nan & ~this_nan)
+                else:
+                    less = less | (~other_nan & this_nan)
+                equal = (other == values) | (other_nan & this_nan)
+                less = less | (equal & (other_index < indices))
+                # Padding must sort after every real value, including NaNs
+                # and infinities; a numeric +/-inf sentinel alone cannot do it.
+                less = tl.where((other_index < C) != (indices < C), other_index < C, less)
+                ascending = (lane & (1 << stage)) == 0
+                take_less = ((lane & (1 << bit)) == 0) == ascending
+                swap = less == take_less
+                values = tl.where(swap, other, values)
+                indices = tl.where(swap, other_index, indices)
+        tl.store(Y + row * C + lane, values, lane < C)
+        tl.store(I + row * C + lane, indices, lane < C)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+def _require_cuda(a):
+    if not HAS_TRITON or not a.is_cuda:
+        raise NotImplementedError('handwritten reductions require CUDA and Triton')
 
 
-def _row_reduce(a: torch.Tensor, kernel, out_dtype, keepdim: bool) -> torch.Tensor:
-    assert a.ndim == 2
-    a = a.contiguous()
-    R, C = a.shape
-    out = torch.empty(R, device=a.device, dtype=out_dtype)
-    BLOCK_C = min(_next_pow2(C), 65536)
-    kernel[(R,)](a, out, R, C, BLOCK_C=BLOCK_C)
-    return out.unsqueeze(1) if keepdim else out
+def _reduction_plan(a, dims, keepdim):
+    rank = a.ndim
+    if rank == 0:
+        if dims and (len(dims) != 1 or int(dims[0]) not in (-1, 0)):
+            raise IndexError('scalar reduction dimension out of range')
+        return a.reshape(1, 1), ()
+    axes = list(range(rank)) if not dims else [int(d) % max(rank, 1) for d in dims]
+    if any(int(d) < -max(rank, 1) or int(d) >= max(rank, 1) for d in (dims or [])):
+        raise IndexError('reduction dimension out of range')
+    if len(set(axes)) != len(axes):
+        raise ValueError('duplicate reduction dimension')
+    axes = sorted(axes)
+    other = [d for d in range(rank) if d not in axes]
+    order = other + axes
+    rows, width = 1, 1
+    for d in other:
+        rows *= a.shape[d]
+    for d in axes:
+        width *= a.shape[d]
+    matrix = a.permute(order).contiguous().reshape(rows, width) if rank else a.reshape(1, 1)
+    shape = tuple(1 if d in axes else a.shape[d] for d in range(rank)) if keepdim else tuple(a.shape[d] for d in other)
+    return matrix, shape
 
 
-def _col_reduce(a: torch.Tensor, kernel, out_dtype, keepdim: bool) -> torch.Tensor:
-    assert a.ndim == 2
-    a = a.contiguous()
-    R, C = a.shape
-    out = torch.empty(C, device=a.device, dtype=out_dtype)
-    BLOCK_R = min(_next_pow2(R), 65536)
-    kernel[(C,)](a, out, R, C, BLOCK_R=BLOCK_R)
-    return out.unsqueeze(0) if keepdim else out
+def _reduce(a, dims, keepdim, operation, dtype=None, correction=1):
+    _require_cuda(a)
+    if dtype is not None:
+        a = a.to(dtype)
+    matrix, shape = _reduction_plan(a, dims, keepdim)
+    rows, width = matrix.shape
+    if operation in ('amax', 'amin') and width == 0:
+        raise ValueError('cannot reduce an empty dimension without an identity')
+    if operation in ('amax', 'amin') and not a.is_floating_point():
+        raise NotImplementedError('handwritten extrema currently require floating point input')
+    if operation in ('mean', 'var') and not a.is_floating_point():
+        raise TypeError('mean and variance require floating point input')
+    output_dtype = a.dtype
+    if operation in ('sum', 'prod') and dtype is None and not a.is_floating_point():
+        output_dtype = torch.int64
+    if operation == 'any':
+        output_dtype = torch.uint8 if a.dtype == torch.uint8 else torch.bool
+    output = torch.empty((rows,), device=a.device, dtype=output_dtype)
+    if rows:
+        block = min(_next_pow2(width), 1024)
+        _reduce_rows_kernel[(rows,)](matrix, output, width, OP=operation,
+                                     CORRECTION=correction, BLOCK=block)
+    return output.reshape(shape)
 
 
-def _dispatch_2d(a, dims_norm, keepdim, row_fn, col_fn, fallback_fn):
-    """Route 2D tensor to row/col Triton kernel or PyTorch fallback."""
-    if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-        if dims_norm == [1]:
-            return row_fn(a, keepdim)
-        if dims_norm == [0]:
-            return col_fn(a, keepdim)
-    return fallback_fn()
+def _row_sum(a, keepdim):
+    return _reduce(a, [1], keepdim, 'sum')
 
 
-# ── existing factory functions ────────────────────────────────────────────────
+def _col_sum(a, keepdim):
+    return _reduce(a, [0], keepdim, 'sum')
 
 
-def _row_sum(a: torch.Tensor, keepdim: bool) -> torch.Tensor:
-    return _row_reduce(a, _row_sum_kernel, a.dtype, keepdim)
-
-
-def _col_sum(a: torch.Tensor, keepdim: bool) -> torch.Tensor:
-    return _col_reduce(a, _col_sum_kernel, a.dtype, keepdim)
-
-
-def make_sum_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def triton_sum(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2:
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                return _row_sum(a, _keepdim)
-            if dims_norm == [0]:
-                return _col_sum(a, _keepdim)
-        return a.sum(dim=_dims if _dims else None, keepdim=_keepdim)
-
+def make_sum_kernel(reduction_dims, keepdim, dtype=None) -> Callable:
+    _dims, _keepdim, _dtype = reduction_dims, bool(keepdim), dtype
+    def triton_sum(a):
+        return _reduce(a, _dims, _keepdim, 'sum', _dtype)
     return triton_sum
 
 
-def make_mean_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def triton_mean(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2:
-            R, C = a.shape
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                total = _row_sum(a, _keepdim)
-                return elementwise.div_scalar(total, float(C))
-            if dims_norm == [0]:
-                total = _col_sum(a, _keepdim)
-                return elementwise.div_scalar(total, float(R))
-        return a.mean(dim=_dims if _dims else None, keepdim=_keepdim)
-
+def make_mean_kernel(reduction_dims, keepdim, dtype=None) -> Callable:
+    _dims, _keepdim, _dtype = reduction_dims, bool(keepdim), dtype
+    def triton_mean(a):
+        return _reduce(a, _dims, _keepdim, 'mean', _dtype)
     return triton_mean
 
 
-def _softmax_2d(a: torch.Tensor) -> torch.Tensor:
-    R, C = a.shape
-    a = a.contiguous()
-    out = torch.empty(R, C, device=a.device, dtype=torch.float32)
-    BLOCK_C = min(_next_pow2(C), 65536)
-    _row_softmax_kernel[(R,)](a, out, C, BLOCK_C=BLOCK_C)
-    return out
+def _axis_matrix(a, dim):
+    rank = a.ndim
+    if not -max(rank, 1) <= int(dim) < max(rank, 1):
+        raise IndexError('dimension out of range')
+    axis = int(dim) % max(rank, 1)
+    order = [d for d in range(rank) if d != axis] + ([axis] if rank else [])
+    shape = tuple(a.shape[d] for d in order)
+    width = a.shape[axis] if rank else 1
+    rows = 1
+    for size in shape[:-1]:
+        rows *= size
+    matrix = a.permute(order).contiguous().reshape(rows, width) if rank else a.reshape(1, 1)
+    inverse = [order.index(d) for d in range(rank)]
+    return matrix, shape, inverse
 
 
-def make_softmax_kernel(dim: int | None = None) -> Callable:
-    _dim = dim
+def _softmax(a, dim, logarithmic=False, dtype=None):
+    _require_cuda(a)
+    if dtype is not None:
+        a = a.to(dtype)
+    if not a.is_floating_point():
+        raise TypeError('softmax requires floating point input')
+    if a.dtype == torch.float64:
+        raise NotImplementedError('handwritten softmax supports float16, bfloat16 and float32')
+    matrix, shape, inverse = _axis_matrix(a, dim)
+    rows, width = matrix.shape
+    out = torch.empty(matrix.shape, device=a.device, dtype=a.dtype)
+    if rows and width:
+        _softmax_rows_kernel[(rows,)](matrix, out, width, LOG=logarithmic,
+                                      BLOCK=min(_next_pow2(width), 1024))
+    return out.reshape(shape).permute(inverse)
 
-    def triton_softmax(x: torch.Tensor, dim_arg=None, *rest) -> torch.Tensor:
-        actual_dim = int(dim_arg) if dim_arg is not None else (_dim if _dim is not None else -1)
-        actual_dim = actual_dim % x.ndim
-        if HAS_TRITON and actual_dim == x.ndim - 1 and x.ndim >= 2:
-            C = x.shape[-1]
-            rows = x.numel() // C
-            out = _softmax_2d(x.reshape(rows, C))
-            return out.to(x.dtype).reshape(x.shape)
-        return torch.softmax(x, dim=actual_dim)
 
+def _softmax_2d(a):
+    return _softmax(a, -1, dtype=torch.float32)
+
+
+def make_softmax_kernel(dim=None, dtype=None) -> Callable:
+    _dim, _dtype = dim, dtype
+    def triton_softmax(a, dim_arg=None, *rest):
+        axis = int(dim_arg) if dim_arg is not None else (_dim if _dim is not None else -1)
+        return _softmax(a, axis, dtype=_dtype)
     return triton_softmax
 
 
-# ── new factory functions ─────────────────────────────────────────────────────
+def make_log_softmax_kernel(dim=None, dtype=None) -> Callable:
+    _dim, _dtype = dim, dtype
+    def triton_log_softmax(a, dim_arg=None, *rest):
+        axis = int(dim_arg) if dim_arg is not None else (_dim if _dim is not None else -1)
+        return _softmax(a, axis, logarithmic=True, dtype=_dtype)
+    return triton_log_softmax
 
 
-def make_amax_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def _row_amax(a, kd):
-        return _row_reduce(a, _row_amax_kernel, a.dtype, kd)
-
-    def _col_amax(a, kd):
-        return _col_reduce(a, _col_amax_kernel, a.dtype, kd)
-
-    def triton_amax(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                return _row_amax(a, _keepdim)
-            if dims_norm == [0]:
-                return _col_amax(a, _keepdim)
-        return a.amax(dim=_dims if _dims else None, keepdim=_keepdim)
-
+def make_amax_kernel(reduction_dims, keepdim) -> Callable:
+    _dims, _keepdim = reduction_dims, bool(keepdim)
+    def triton_amax(a):
+        return _reduce(a, _dims, _keepdim, 'amax')
     return triton_amax
 
 
-def make_amin_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def _row_amin(a, kd):
-        return _row_reduce(a, _row_amin_kernel, a.dtype, kd)
-
-    def _col_amin(a, kd):
-        return _col_reduce(a, _col_amin_kernel, a.dtype, kd)
-
-    def triton_amin(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                return _row_amin(a, _keepdim)
-            if dims_norm == [0]:
-                return _col_amin(a, _keepdim)
-        return a.amin(dim=_dims if _dims else None, keepdim=_keepdim)
-
+def make_amin_kernel(reduction_dims, keepdim) -> Callable:
+    _dims, _keepdim = reduction_dims, bool(keepdim)
+    def triton_amin(a):
+        return _reduce(a, _dims, _keepdim, 'amin')
     return triton_amin
 
 
-def make_max_dim_kernel(dim: int, keepdim: bool) -> Callable:
-    """aten.max.dim — returns namedtuple(values, indices)."""
-    _dim = int(dim)
-    _keepdim = bool(keepdim)
+def _extreme(a, dim, keepdim, maximum):
+    _require_cuda(a)
+    matrix, shape = _reduction_plan(a, None if dim is None else [dim], keepdim)
+    rows, width = matrix.shape
+    if not width:
+        raise ValueError('cannot reduce an empty dimension')
+    if not a.is_floating_point() or a.dtype == torch.float64:
+        raise NotImplementedError('indexed extrema currently support float16, bfloat16 and float32')
+    values = torch.empty((rows,), dtype=a.dtype, device=a.device)
+    indices = torch.empty((rows,), dtype=torch.int64, device=a.device)
+    if rows:
+        _extreme_rows_kernel[(rows,)](matrix, values, indices, width, MAXIMUM=maximum,
+                                      BLOCK=min(_next_pow2(width), 1024))
+    return values.reshape(shape), indices.reshape(shape)
 
-    def triton_max_dim(a: torch.Tensor) -> tuple:
-        actual_dim = _dim % a.ndim
-        values, indices = torch.max(a, dim=actual_dim, keepdim=_keepdim)
-        return torch.return_types.max([values, indices])
 
+def make_max_dim_kernel(dim, keepdim) -> Callable:
+    _dim, _keepdim = int(dim), bool(keepdim)
+    def triton_max_dim(a):
+        return _extreme(a, _dim, _keepdim, True)
     return triton_max_dim
 
 
-def make_min_dim_kernel(dim: int, keepdim: bool) -> Callable:
-    """aten.min.dim — returns namedtuple(values, indices)."""
-    _dim = int(dim)
-    _keepdim = bool(keepdim)
-
-    def triton_min_dim(a: torch.Tensor) -> tuple:
-        actual_dim = _dim % a.ndim
-        values, indices = torch.min(a, dim=actual_dim, keepdim=_keepdim)
-        return torch.return_types.min([values, indices])
-
+def make_min_dim_kernel(dim, keepdim) -> Callable:
+    _dim, _keepdim = int(dim), bool(keepdim)
+    def triton_min_dim(a):
+        return _extreme(a, _dim, _keepdim, False)
     return triton_min_dim
 
 
-def make_argmax_kernel(dim: int | None, keepdim: bool) -> Callable:
-    _dim = int(dim) if dim is not None else None
-    _keepdim = bool(keepdim)
-
-    def triton_argmax(a: torch.Tensor) -> torch.Tensor:
-        return torch.argmax(a, dim=_dim, keepdim=_keepdim)
-
+def make_argmax_kernel(dim, keepdim) -> Callable:
+    _dim, _keepdim = dim, bool(keepdim)
+    def triton_argmax(a):
+        return _extreme(a, _dim, _keepdim, True)[1]
     return triton_argmax
 
 
-def make_argmin_kernel(dim: int | None, keepdim: bool) -> Callable:
-    _dim = int(dim) if dim is not None else None
-    _keepdim = bool(keepdim)
-
-    def triton_argmin(a: torch.Tensor) -> torch.Tensor:
-        return torch.argmin(a, dim=_dim, keepdim=_keepdim)
-
+def make_argmin_kernel(dim, keepdim) -> Callable:
+    _dim, _keepdim = dim, bool(keepdim)
+    def triton_argmin(a):
+        return _extreme(a, _dim, _keepdim, False)[1]
     return triton_argmin
 
 
-def make_prod_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def _row_prod(a: torch.Tensor, kd: bool) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty(R, device=a.device, dtype=torch.float32)
-        BLOCK_C = min(_next_pow2(C), 65536)
-        _row_prod_kernel[(R,)](a, out, R, C, BLOCK_C=BLOCK_C)
-        return (out.unsqueeze(1) if kd else out).to(a.dtype)
-
-    def _col_prod(a: torch.Tensor, kd: bool) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty(C, device=a.device, dtype=torch.float32)
-        BLOCK_R = min(_next_pow2(R), 65536)
-        _col_prod_kernel[(C,)](a, out, R, C, BLOCK_R=BLOCK_R)
-        return (out.unsqueeze(0) if kd else out).to(a.dtype)
-
-    def triton_prod(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                return _row_prod(a, _keepdim)
-            if dims_norm == [0]:
-                return _col_prod(a, _keepdim)
-        return a.prod(dim=_dims[0] if len(_dims) == 1 else None, keepdim=_keepdim)
-
+def make_prod_kernel(reduction_dims, keepdim) -> Callable:
+    _dims, _keepdim = reduction_dims, bool(keepdim)
+    def triton_prod(a):
+        return _reduce(a, _dims, _keepdim, 'prod')
     return triton_prod
 
 
-def make_any_kernel(reduction_dims: list, keepdim: bool) -> Callable:
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-
-    def _row_any(a: torch.Tensor, kd: bool) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty(R, device=a.device, dtype=torch.bool)
-        BLOCK_C = min(_next_pow2(C), 65536)
-        _row_any_kernel[(R,)](a, out, R, C, BLOCK_C=BLOCK_C)
-        return out.unsqueeze(1) if kd else out
-
-    def _col_any(a: torch.Tensor, kd: bool) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty(C, device=a.device, dtype=torch.bool)
-        BLOCK_R = min(_next_pow2(R), 65536)
-        _col_any_kernel[(C,)](a, out, R, C, BLOCK_R=BLOCK_R)
-        return out.unsqueeze(0) if kd else out
-
-    def triton_any(a: torch.Tensor) -> torch.Tensor:
-        if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-            dims_norm = [d % a.ndim for d in _dims]
-            if dims_norm == [1]:
-                return _row_any(a, _keepdim)
-            if dims_norm == [0]:
-                return _col_any(a, _keepdim)
-        if _dims:
-            return a.any(dim=_dims[0] if len(_dims) == 1 else _dims, keepdim=_keepdim)
-        return a.any()
-
+def make_any_kernel(reduction_dims, keepdim) -> Callable:
+    _dims, _keepdim = reduction_dims, bool(keepdim)
+    def triton_any(a):
+        return _reduce(a, _dims, _keepdim, 'any')
     return triton_any
 
 
-def make_var_kernel(reduction_dims: list, keepdim: bool, correction: int = 1) -> Callable:
-    """Two-pass variance: mean then sum-of-squared-deviations / (n - correction)."""
-    _dims = list(reduction_dims) if reduction_dims is not None else []
-    _keepdim = bool(keepdim)
-    _correction = int(correction)
-
-    def triton_var(a: torch.Tensor) -> torch.Tensor:
-        dim_arg = _dims[0] if len(_dims) == 1 else (_dims if _dims else None)
-        return torch.var(a, dim=dim_arg, correction=_correction, keepdim=_keepdim)
-
+def make_var_kernel(reduction_dims, keepdim, correction=1) -> Callable:
+    _dims, _keepdim, _correction = reduction_dims, bool(keepdim), correction
+    def triton_var(a):
+        return _reduce(a, _dims, _keepdim, 'var', correction=_correction)
     return triton_var
 
 
-def make_cumsum_kernel(dim: int) -> Callable:
-    _dim = int(dim)
-
-    def _row_cs(a: torch.Tensor) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty_like(a, dtype=torch.float32)
-        BLOCK_C = min(_next_pow2(C), 65536)
-        _row_cumsum_kernel[(R,)](a, out, R, C, BLOCK_C=BLOCK_C)
-        return out.to(a.dtype)
-
-    def _col_cs(a: torch.Tensor) -> torch.Tensor:
-        assert a.ndim == 2
-        a = a.contiguous()
-        R, C = a.shape
-        out = torch.empty_like(a, dtype=torch.float32)
-        BLOCK_R = min(_next_pow2(R), 65536)
-        _col_cumsum_kernel[(C,)](a, out, R, C, BLOCK_R=BLOCK_R)
-        return out.to(a.dtype)
-
-    def triton_cumsum(a: torch.Tensor) -> torch.Tensor:
-        actual_dim = _dim % a.ndim
-        if HAS_TRITON and a.ndim == 2 and a.is_cuda:
-            if actual_dim == 1:
-                return _row_cs(a)
-            if actual_dim == 0:
-                return _col_cs(a)
-        return torch.cumsum(a, dim=actual_dim)
-
+def make_cumsum_kernel(dim, dtype=None) -> Callable:
+    _dim, _dtype = int(dim), dtype
+    def triton_cumsum(a):
+        _require_cuda(a)
+        if _dtype is not None:
+            a = a.to(_dtype)
+        matrix, shape, inverse = _axis_matrix(a, _dim)
+        rows, width = matrix.shape
+        output_dtype = a.dtype if a.is_floating_point() or _dtype is not None else torch.int64
+        out = torch.empty(matrix.shape, device=a.device, dtype=output_dtype)
+        if rows and width:
+            _cumsum_rows_kernel[(rows,)](matrix, out, width, BLOCK=min(_next_pow2(width), 1024))
+        return out.reshape(shape).permute(inverse)
     return triton_cumsum
+
+
+def make_sort_kernel(dim=-1, descending=False, stable=False) -> Callable:
+    _dim, _descending = int(dim), bool(descending)
+    def triton_sort(a):
+        _require_cuda(a)
+        matrix, shape, inverse = _axis_matrix(a, _dim)
+        rows, width = matrix.shape
+        if width > 16384 or not a.is_floating_point() or a.dtype == torch.float64:
+            raise NotImplementedError('handwritten sort supports float16/bfloat16/float32 axes up to16384')
+        values = torch.empty(matrix.shape, device=a.device, dtype=a.dtype)
+        indices = torch.empty(matrix.shape, device=a.device, dtype=torch.int64)
+        if rows and width:
+            block = _next_pow2(width)
+            _sort_rows_kernel[(rows,)](matrix, values, indices, width, DESCENDING=_descending,
+                                       LOG_BLOCK=block.bit_length()-1, BLOCK=block)
+        return values.reshape(shape).permute(inverse), indices.reshape(shape).permute(inverse)
+    return triton_sort

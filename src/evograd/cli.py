@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 _PIPELINES = {
+    "unified": ("evograd.pipelines.unified.cli", "Unified — compiler-aware deterministic AtenIR synthesis"),
     "a": ("evograd.pipelines.a_atenir_llm.cli", "Pipeline A — AtenIR + LLM"),
     "b": ("evograd.pipelines.b_dispatch.cli", "Pipeline B — LLM-free handwritten dispatch"),
     "c": ("evograd.pipelines.c_forward_only.cli", "Pipeline C — forward-source-only ablation"),
@@ -30,7 +31,7 @@ _PIPELINES = {
 def _seed(argv: list[str]) -> int:
     if not argv or argv[0] not in _PIPELINES:
         names = ", ".join(f"{k} ({v[1]})" for k, v in _PIPELINES.items())
-        print(f"usage: evograd seed {{a|b|c|d}} [pipeline args]\npipelines: {names}")
+        print(f"usage: evograd seed {{unified|a|b|c|d}} [pipeline args]\npipelines: {names}")
         return 2
     import importlib
 

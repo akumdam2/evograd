@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from evograd.opdecl.activity import Active, OpDecl, Workload
 
@@ -97,7 +97,10 @@ def _grad_indices(op: OpDecl) -> tuple[int, ...]:
 
 @contextlib.contextmanager
 def _record_generated_modules(
-    sink: dict[str, list[str]], modules: dict[str, list[Any]], slot: list[str]
+    sink: dict[str, list[str]],
+    modules: dict[str, list[Any]],
+    slot: list[str],
+    lowering_observer: Callable[[str, Any], None] | None = None,
 ):
     """Record each Inductor-generated module's source and the module itself.
 
@@ -109,6 +112,8 @@ def _record_generated_modules(
     original = inductor_graph.GraphLowering.compile_to_module
 
     def patched(self):
+        if lowering_observer is not None:
+            lowering_observer(slot[0], self)
         module = original(self)
         path = getattr(module, "__file__", None)
         if isinstance(path, str):
@@ -220,13 +225,20 @@ def capture_inductor_pair(
     *,
     device: str = "cuda",
     dynamic: bool = True,
+    graph_observer: Callable[[str, Any], None] | None = None,
+    lowering_observer: Callable[[str, Any], None] | None = None,
+    decompositions: dict[Any, Any] | None = None,
+    allow_multi_output: bool = False,
 ) -> CapturedPair:
-    """Trace, partition, and lower ``op``'s forward; return both generated halves."""
-    if op.is_multi_output:
-        # The AOT capture below keeps a single output as the graph handle and
-        # differentiates it against one upstream gradient. Refuse here rather
-        # than at `output = output[0]`, which would silently drop every result
-        # after the first and lower a graph for a different function.
+    """Trace, partition, and lower ``op``'s forward; return both generated halves.
+
+    Optional observers let semantic seed pipelines snapshot the joint and
+    partitioned graphs before mutation, then inspect selected compiler IR
+    before code generation. They must not mutate the observed objects.
+    """
+    if op.is_multi_output and not allow_multi_output:
+        # Pipeline D's source renderer still assumes one output. Semantic
+        # consumers with a structured-output ABI explicitly opt in below.
         raise NotImplementedError(
             f"Pipeline D cannot yet capture a multi-output declaration "
             f"({op.name} returns {op.output_names}); the AOT trace assumes one "
@@ -239,7 +251,7 @@ def capture_inductor_pair(
     from torch._inductor.decomposition import select_decomp_table
 
     from evograd.opdecl.importing import resolve_callable
-    from evograd.opdecl.inputs import make_case_inputs
+    from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
 
     forward_fn = resolve_callable(op.forward)
     values = make_case_inputs(op, workload, device=device)
@@ -273,9 +285,11 @@ def capture_inductor_pair(
     # no longer lines up with the backward's placeholders, which keep their
     # original names.
     contract: dict[str, Any] = {}
-    num_fwd_outputs = 1
+    num_fwd_outputs = len(op.outputs)
 
     def fw_compiler(gm, example_inputs):
+        if graph_observer is not None:
+            graph_observer("forward", gm)
         out_node = next(n for n in gm.graph.nodes if n.op == "output")
         outputs = list(out_node.args[0])
         if len(outputs) < num_fwd_outputs:
@@ -287,34 +301,46 @@ def capture_inductor_pair(
         return compile_fx_inner(gm, example_inputs)
 
     def bw_compiler(gm, example_inputs):
+        if graph_observer is not None:
+            graph_observer("backward", gm)
         contract["bw_placeholders"] = [
             str(n) for n in gm.graph.nodes if n.op == "placeholder"
         ]
         slot[0] = "backward"
         return compile_fx_inner(gm, example_inputs)
 
+    def partition(gm, joint_inputs, **kwargs):
+        if graph_observer is not None:
+            graph_observer("joint", gm)
+        return min_cut_rematerialization_partition(gm, joint_inputs, **kwargs)
+
     # A warm FX-graph cache skips codegen entirely, so there would be no module
     # to record. Force a real compile for the duration of the capture.
     with inductor_config.patch(force_disable_caches=True):
-        with _record_generated_modules(sources, modules, slot):
+        with _record_generated_modules(sources, modules, slot, lowering_observer):
             compiled = aot_function(
                 traced,
                 fw_compiler,
                 bw_compiler,
-                partition_fn=min_cut_rematerialization_partition,
+                partition_fn=(
+                    min_cut_rematerialization_partition
+                    if graph_observer is None
+                    else partition
+                ),
                 # compile_fx_inner expects a graph already lowered through
                 # Inductor's decomposition table; without it, ops that have
                 # both a decomp and a fallback trip an assertion.
-                decompositions=select_decomp_table(),
+                decompositions=(
+                    select_decomp_table() if decompositions is None else decompositions
+                ),
                 dynamic=dynamic,
             )
-            output = compiled(*tensors)
-            if isinstance(output, (tuple, list)):
-                output = output[0]
-            dout = values[op.upstream_grad_name]
+            outputs = as_output_tuple(op, compiled(*tensors))
+            dout = upstream_grad_values(op, values)
+            tangents = dout if isinstance(dout, tuple) else (dout,)
             differentiable = [t for t in tensors if t.requires_grad]
             slot[0] = "backward"
-            torch.autograd.grad(output, differentiable, grad_outputs=dout)
+            torch.autograd.grad(outputs, differentiable, grad_outputs=tangents)
 
     for side in ("forward", "backward"):
         emitted = sources.get(side, [])
@@ -336,7 +362,8 @@ def capture_inductor_pair(
         saved=contract["saved"],
         grad_indices=_grad_indices(op),
         backward_arg_spec=_backward_arg_spec(
-            op, contract["saved_names"], contract["bw_placeholders"]
+            op, contract["saved_names"], contract["bw_placeholders"],
+            num_tangents=num_fwd_outputs,
         ),
         kernel_configs={
             side: _selected_configs(modules.get(side, []))
@@ -349,7 +376,7 @@ def capture_inductor_pair(
 
 
 def _backward_arg_spec(
-    op: OpDecl, saved_names: list[str], bw_placeholders: list[str]
+    op: OpDecl, saved_names: list[str], bw_placeholders: list[str], *, num_tangents: int = 1,
 ) -> tuple[tuple[str, int], ...]:
     """Map the backward's placeholders onto (save-set entry | tangent) slots."""
     spec: list[tuple[str, int]] = []
@@ -366,9 +393,8 @@ def _backward_arg_spec(
                 f"{op.name}: backward expects {name!r}, which the forward does "
                 f"not return; forward save-set is {saved_names}"
             ) from None
-    if tangents_seen != 1:
+    if tangents_seen != num_tangents:
         raise RuntimeError(
-            f"{op.name}: backward takes {tangents_seen} tangents; this pipeline "
-            "supports single-output forwards only"
+            f"{op.name}: backward takes {tangents_seen} tangents; expected {num_tangents}"
         )
     return tuple(spec)

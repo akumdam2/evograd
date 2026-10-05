@@ -145,6 +145,14 @@ class _ProgramBuilder:
             return self._generic_fallback_call(target, arg_exprs, node)
         if self._is_unimplemented(kernel):
             raise NotImplementedError(f"No hand-written kernel for target {target!r}")
+        # Registry callables consume only runtime tensor/symbolic arguments.
+        # make_kernel has already used literal options to select/bake the
+        # implementation, even when it returns a module helper directly (GELU
+        # approximate='tanh' selects gelu_tanh(a), not gelu_tanh(a, 'tanh')).
+        ordered = node.get("args_ordered")
+        if ordered is not None:
+            arg_exprs = [expression for entry, expression in zip(ordered, arg_exprs)
+                         if entry.get("kind") != "scalar"]
         qualname = getattr(kernel, "__qualname__", "")
         if "<locals>" in qualname:
             parameters = inspect.signature(kernel).parameters.values()
@@ -157,7 +165,7 @@ class _ProgramBuilder:
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
                 )
             ]
-            if not any(
+            if getattr(kernel, "_atenir_runtime_only", False) or not any(
                 parameter.kind is inspect.Parameter.VAR_POSITIONAL
                 for parameter in parameters
             ):
@@ -165,13 +173,8 @@ class _ProgramBuilder:
                 # variables. The AtenIR node still carries those constants, but
                 # passing them again would bind the generated freevar defaults
                 # positionally (e.g. ``_k0(a, 0)`` overwrote ``fn_s``).
-                ordered = node.get("args_ordered") or []
-                runtime_exprs = [
-                    expression
-                    for entry, expression in zip(ordered, arg_exprs)
-                    if entry.get("kind") != "scalar"
-                ]
-                arg_exprs = runtime_exprs[: len(positional)]
+                arg_exprs = (arg_exprs if getattr(kernel, "_atenir_runtime_only", False)
+                             else arg_exprs[: len(positional)])
         callee = self._resolve(kernel)
         return f"{callee}({', '.join(arg_exprs)})"
 
@@ -248,8 +251,12 @@ class _ProgramBuilder:
             if fv_name in existing_params:
                 continue
             default_expr = self._default_expr_for(cell.cell_contents)
-            func_def.args.args.append(ast.arg(arg=fv_name))
-            func_def.args.defaults.append(ast.parse(default_expr, mode="eval").body)
+            if func_def.args.vararg is not None:
+                func_def.args.kwonlyargs.append(ast.arg(arg=fv_name))
+                func_def.args.kw_defaults.append(ast.parse(default_expr, mode="eval").body)
+            else:
+                func_def.args.args.append(ast.arg(arg=fv_name))
+                func_def.args.defaults.append(ast.parse(default_expr, mode="eval").body)
 
         ast.fix_missing_locations(func_def)
         return func_def
@@ -327,6 +334,9 @@ class _ProgramBuilder:
                 if origin_module is None or not hasattr(origin_module, name):
                     continue
                 candidate = getattr(origin_module, name)
+                if inspect.ismodule(candidate) and candidate.__name__ in {"math", "operator"}:
+                    self.constants[name] = f"import {candidate.__name__} as {name}"
+                    continue
                 if callable(candidate):
                     cand_mod = getattr(candidate, "__module__", "")
                     cand_qual = getattr(_unwrap_jit(candidate), "__qualname__", "") or ""
@@ -374,6 +384,12 @@ class _ProgramBuilder:
         # at runtime `compose.run_graph` passes only tensor arguments, so the
         # scalars genuinely are missing there. The two contexts differ; only
         # this one had the duplication.
+        if node is not None and "positional_args" in node:
+            arg_exprs = _ordered_arg_exprs(node["positional_args"])
+            arg_exprs += [
+                f"{key}={_ordered_arg_exprs([value])[0]}"
+                for key, value in node.get("kwargs_ordered", {}).items()
+            ]
         return f"_resolve_aten({target!r})({', '.join(arg_exprs)})"
 
     def _submodule_short(self, modname: str) -> str | None:
@@ -421,16 +437,15 @@ def _ordered_arg_exprs(args_ordered: list[dict]) -> list[str]:
         if kind in ("node", "sym_node"):
             arg_exprs.append(_pyname(entry["name"]))
         elif kind == "shape_list":
-            parts = [
-                _pyname(item["name"])
-                if item["kind"] in ("node", "sym_node")
-                else repr(item["value"])
-                for item in entry["items"]
-            ]
+            parts = _ordered_arg_exprs(entry["items"])
             trailing = "," if len(parts) == 1 else ""
             arg_exprs.append(f"({', '.join(parts)}{trailing})")
         elif kind == "scalar":
-            arg_exprs.append(repr(entry["value"]))
+            arg_exprs.append(_scalar_literal(entry["value"]))
+        elif kind in {"torch_constant", "dtype", "layout", "memory_format"}:
+            arg_exprs.append(entry["value"])
+        elif kind == "device":
+            arg_exprs.append(f"torch.device({entry['value']!r})")
         else:
             raise ValueError(f"Unsupported serialized argument kind: {kind!r}")
     return arg_exprs
@@ -569,7 +584,7 @@ def generate_dispatch_program(graph: dict) -> str:
             ):
                 # reshape of a contiguous tensor is a zero-copy view (and stays contiguous).
                 call_lines.append(
-                    f"    {_pyname(name)} = {_pyname(_node_names[0])}.reshape{_tuple_expr(_shape_arg)}  # {name}: {target}"
+                    f"    {_pyname(name)} = {_pyname(_node_names[0])}.reshape({_tuple_expr(_shape_arg)})  # {name}: {target}"
                 )
                 continue
             if "aten.permute" in target and len(_node_names) == 1 and isinstance(_shape_arg, list):
@@ -622,6 +637,10 @@ def generate_dispatch_program(graph: dict) -> str:
         call_lines.append(_line)
         line_by_name[name] = _line
 
+    # Every branch above emits exactly one statement, including symbolic
+    # arithmetic and layout aliases. The forward dependency cone needs all of
+    # them, not only the ordinary kernel-dispatch branch.
+    line_by_name = dict(zip((node["name"] for node in call_nodes), call_lines, strict=True))
     output_names = list(out_node["args"][0])
     # An autograd-mode graph now returns the forward outputs ahead of the
     # gradients. Slice them off here so `run_graph_program` keeps returning

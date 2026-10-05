@@ -113,12 +113,19 @@ def verify_candidate(
     declaration: str | None = None,
     timeout: int = 120,
     device: str = "cuda",
+    seed_acceptance: bool = False,
+    benchmark_suite: str | None = None,
 ) -> dict:
     """Verify a candidate against the op's autograd oracle in a subprocess."""
+    # Validated before the command is built, so a misuse cannot be half-applied.
+    if seed_acceptance and dtypes:
+        raise ValueError("seed acceptance checks every declared correctness dtype")
+    if benchmark_suite is not None and not seed_acceptance:
+        raise ValueError("benchmark_suite requires seed_acceptance")
     cmd = [
         python,
         "-m",
-        "evograd.opdecl.verify_cli",
+        "evograd.evaluation.common.seed" if seed_acceptance else "evograd.opdecl.verify_cli",
         "--op",
         op_name,
         "--device",
@@ -130,6 +137,8 @@ def verify_candidate(
         cmd.extend(["--declaration", declaration])
     for dtype in dtypes or ():
         cmd.extend(["--dtype", dtype])
+    if benchmark_suite is not None:
+        cmd.extend(["--benchmark-suite", benchmark_suite])
     cmd.append(str(program_path))
     completed = _run(
         cmd,
@@ -149,6 +158,11 @@ def verify_candidate(
         }
     if completed.stderr:
         report["stderr"] = completed.stderr
+    if completed.returncode != 0:
+        # A valid-looking JSON payload followed by a crash/timeout is not an
+        # accepted seed. Keep the diagnostic for the next repair prompt.
+        report["metrics"] = {**report.get("metrics", {}), "correct": 0.0}
+        report["returncode"] = completed.returncode
     return report
 
 

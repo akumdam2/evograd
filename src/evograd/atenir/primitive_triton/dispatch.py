@@ -1,11 +1,11 @@
 """Build an AtenIR kernel registry from a graph JSON.
 
 ``make_registry(graph)`` walks every call_function node and assigns a kernel:
-  - Category 1 (view/shape ops) → PyTorch, output_shape captured in closure.
-  - Category 2 (pointwise) → Triton kernels in elementwise module.
-  - Category 3 (reductions/scan) → Triton kernels in reduction module.
-  - Category 4 (GEMM) → PyTorch torch.mm / torch.bmm.
-  - Category 5 (skip / complex) → PyTorch generic fallback.
+  - View/shape operations use metadata helpers.
+  - Supported pointwise, reduction, scan, indexing and GEMM math uses
+    handwritten Triton primitives on CUDA.
+  - Unimplemented targets retain a legacy generic PyTorch fallback. Unified's
+    seed generator rejects that route; it is not handwritten coverage.
 
 The returned dict maps node name → callable compatible with compose.run_graph.
 """
@@ -44,7 +44,19 @@ def _generic_fallback(target: str, node: dict | None = None) -> Callable:
         return fn
 
     ao = (node or {}).get("args_ordered") or []
-    if any(e.get("kind") == "scalar" for e in ao):
+    if node is not None and "positional_args" in node:
+        positional = node["positional_args"]
+        keywords = node.get("kwargs_ordered", {})
+        runtime_entries = [entry for entry in ao if entry["kind"] != "scalar"]
+
+        def fn(*args):
+            values = {}
+            for entry, value in zip(runtime_entries, args):
+                _bind_argument(entry, value, values)
+            return op(*[_decode_argument(entry, values) for entry in positional],
+                      **{key: _decode_argument(entry, values) for key, entry in keywords.items()})
+
+    elif any(e.get("kind") == "scalar" for e in ao):
         # compose.run_graph passes only tensor/sym/shape-list args; literal
         # scalars (dim ints, descending flags, fill values, …) must be baked
         # here and re-interleaved at their positional slots, or the aten op
@@ -67,9 +79,54 @@ def _generic_fallback(target: str, node: dict | None = None) -> Callable:
     return fn
 
 
+def _bind_argument(entry, value, values):
+    if entry["kind"] in {"node", "sym_node"}:
+        values[entry["name"]] = value
+    elif entry["kind"] == "shape_list":
+        for item, item_value in zip(entry["items"], value):
+            _bind_argument(item, item_value, values)
+
+
+def _decode_argument(entry, values):
+    kind = entry["kind"]
+    if kind in {"node", "sym_node"}:
+        return values[entry["name"]]
+    if kind == "shape_list":
+        return [_decode_argument(item, values) for item in entry["items"]]
+    if kind in {"torch_constant", "dtype", "layout", "memory_format"}:
+        return getattr(torch, entry["value"].removeprefix("torch."))
+    if kind == "device":
+        return torch.device(entry["value"])
+    return entry["value"]
+
+
+def _keyword(node, name, default=None):
+    entry = node.get("kwargs_ordered", {}).get(name)
+    if entry is not None:
+        return _decode_argument(entry, {})
+    return next((entry["value"] for entry in node.get("args_ordered", ())
+                 if entry.get("keyword") == name), default)
+
+
+def _positional_entries(node):
+    return node.get("positional_args", [entry for entry in node.get("args_ordered", ())
+                                        if "keyword" not in entry])
+
+
+def _runtime_plan(entries):
+    return [(entry["kind"] in {"node", "sym_node", "shape_list"},
+             entry.get("value")) for entry in entries]
+
+
+def _runtime_only(fn):
+    fn._atenir_runtime_only = True
+    return fn
+
+
 def _parse_dtype(dtype_str: str):
     return {
         "torch.float32": torch.float32,
+        "torch.float64": torch.float64,
         "torch.float16": torch.float16,
         "torch.bfloat16": torch.bfloat16,
         "torch.int64": torch.int64,
@@ -102,6 +159,57 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
     dims = node.get("reduction_dims")
     keepdim = bool(node.get("keepdim") or False)
     output_shape = node.get("output_shape")
+
+    # Exact positional arguments prevent flattened kwargs (pin_memory=False,
+    # dtype, device) from becoming arange's step or a slice endpoint.
+    if target.startswith("aten.arange."):
+        positional = _positional_entries(node)
+        if "positional_args" not in node:
+            positional = [entry for entry in positional
+                          if entry.get("kind") != "scalar" or not isinstance(entry.get("value"), bool)]
+        plan = _runtime_plan(positional)
+        dtype = _keyword(node, "dtype") or _parse_dtype(node.get("output_dtype") or "") or torch.int64
+
+        def _arange(*runtime):
+            values = iter(runtime)
+            args = [next(values) if dynamic else constant for dynamic, constant in plan]
+            if len(args) == 1:
+                return elementwise.arange(0, args[0], 1, dtype=dtype, device="cuda")
+            return elementwise.arange(args[0], args[1], args[2] if len(args) > 2 else 1,
+                                      dtype=dtype, device="cuda")
+
+        return _runtime_only(_arange)
+
+    if target in {"aten.slice.Tensor", "aten.select.int", "aten.slice_scatter.default"}:
+        plan = _runtime_plan(_positional_entries(node))
+        if target == "aten.slice.Tensor":
+            def _slice(*runtime):
+                values = iter(runtime)
+                args = [next(values) if dynamic else constant for dynamic, constant in plan]
+                tensor = args[0]
+                dim = args[1] if len(args) > 1 else 0
+                start = args[2] if len(args) > 2 else None
+                end = args[3] if len(args) > 3 else None
+                step = args[4] if len(args) > 4 else 1
+                slices = [slice(None)] * tensor.ndim
+                slices[dim] = slice(start, end, step)
+                return tensor[tuple(slices)].contiguous()
+
+            return _runtime_only(_slice)
+        if target == "aten.select.int":
+            def _select(*runtime):
+                values = iter(runtime)
+                args = [next(values) if dynamic else constant for dynamic, constant in plan]
+                return args[0].select(args[1], args[2]).contiguous()
+
+            return _runtime_only(_select)
+
+        def _slice_scatter(*runtime):
+            values = iter(runtime)
+            args = [next(values) if dynamic else constant for dynamic, constant in plan]
+            return scatter_gather.slice_scatter(*args)
+
+        return _runtime_only(_slice_scatter)
 
     # ── Category 0: symbolic-shape args (atenir.extract --dynamic) ────────────
     # Symbolic tracing replaces shape-derived literals with int-valued nodes:
@@ -260,25 +368,13 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return _split
 
     if has_shape_list and "aten.full" in target and "full_like" not in target:
-        # Two lowerings landed here independently: a Triton fill (MoE routing
-        # buffers) and a torch.full fallback (poly_norm's constant mask). Use
-        # the Triton kernel for floating dtypes, since Pipeline B's generated
-        # math must not call PyTorch, and keep the fallback for integer/bool
-        # fills, whose exact value would not survive the kernel's float cast.
+        # Runtime dimensions remain runtime values; integer/bool fills use the
+        # same handwritten allocator without routing through torch.full.
         dtype = _parse_dtype(node.get("output_dtype") or "") or torch.float32
         fill_value = scalar_args[0] if scalar_args else 0
 
-        if dtype.is_floating_point:
-
-            def _full(shape):
-                return scatter_gather.full(shape, fill_value, dtype)
-
-        else:
-
-            def _full(shape):
-                return torch.full(
-                    tuple(int(size) for size in shape), fill_value, dtype=dtype, device="cuda"
-                )
+        def _full(shape):
+            return elementwise.fill_tensor(shape, fill_value, dtype=dtype, device="cuda")
 
         return _full
 
@@ -307,33 +403,6 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
             return _mul_sym
 
-    if n_sym_nodes and "aten.arange" in target:
-        # aten.arange whose *end* is a runtime size (e.g. sparsemax's
-        # arange(1, N + 1)). Positional numerics before the symbolic end are
-        # the start, after it the step; trailing bools are flattened kwargs
-        # (pin_memory). A symbolic start falls through to the loud failure.
-        sym_pos = next(i for i, e in enumerate(ao) if e.get("kind") == "sym_node")
-        if sym_pos > 0 or target.endswith(".default"):
-            out_dtype = _parse_dtype(node.get("output_dtype") or "") or torch.int64
-
-            def _is_positional_num(entry):
-                value = entry.get("value")
-                return (
-                    entry.get("kind") == "scalar"
-                    and isinstance(value, (int, float))
-                    and not isinstance(value, bool)
-                )
-
-            before = [e["value"] for e in ao[:sym_pos] if _is_positional_num(e)]
-            after = [e["value"] for e in ao[sym_pos + 1 :] if _is_positional_num(e)]
-            start = before[0] if before else 0
-            step = after[0] if after else 1
-
-            def _arange_rt(end):
-                return torch.arange(start, end, step, dtype=out_dtype, device="cuda")
-
-            return _arange_rt
-
     if n_sym_nodes or has_shape_list:
         # Fail loudly: falling through to the static branches would bake a stale
         # default (e.g. s=1.0) and silently compute wrong gradients.
@@ -347,7 +416,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
     if "aten.mul" in target:
         if n_tensors >= 2:
             return elementwise.mul_tt
-        s = float(scalar_args[0]) if scalar_args else 1.0
+        s = scalar_args[0] if scalar_args else 1
 
         def _mul_s(a):
             return elementwise.mul_scalar(a, s)
@@ -358,41 +427,39 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
     # addmm is handled in the matmul group below.
     if "aten.add." in target:
         if n_tensors >= 2:
-            alpha = float(scalar_args[0]) if scalar_args else 1.0
-            if alpha == 1.0:
-                return elementwise.add_tt
+            alpha = _keyword(node, "alpha", scalar_args[0] if scalar_args else 1)
 
             def _add_alpha(a, b):
                 return elementwise.add_tt(a, b, alpha)
 
             return _add_alpha
-        s = float(scalar_args[0]) if scalar_args else 0.0
+        s = scalar_args[0] if scalar_args else 0
+        alpha = _keyword(node, "alpha", scalar_args[1] if len(scalar_args) > 1 else 1)
 
         def _add_s(a):
-            return elementwise.add_scalar(a, s)
+            return elementwise.add_scalar(a, s, alpha)
 
         return _add_s
 
-    if "aten.sub" in target:
+    if "aten.sub" in target or target.startswith("aten.rsub."):
         if n_tensors >= 2:
-            alpha = float(scalar_args[0]) if scalar_args else 1.0
-            if alpha == 1.0:
-                return elementwise.sub_tt
+            alpha = _keyword(node, "alpha", scalar_args[0] if scalar_args else 1)
 
             def _sub_alpha(a, b):
                 return elementwise.sub_tt(a, b, alpha)
 
             return _sub_alpha
-        s = float(scalar_args[0]) if scalar_args else 0.0
-        if scalar_first:
+        s = scalar_args[0] if scalar_args else 0
+        alpha = _keyword(node, "alpha", scalar_args[1] if len(scalar_args) > 1 else 1)
+        if scalar_first or target.startswith("aten.rsub."):
 
             def _rsub_s(a):
-                return elementwise.add_scalar(elementwise.neg(a), s)
+                return elementwise.rsub_scalar(a, s, alpha)
 
             return _rsub_s
 
         def _sub_s(a):
-            return elementwise.add_scalar(a, -s)
+            return elementwise.sub_scalar(a, s, alpha)
 
         return _sub_s
 
@@ -420,7 +487,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return _div_floor_s
         if n_tensors >= 2:
             return elementwise.div_tt
-        s = float(numeric[0]) if numeric else 1.0
+        s = numeric[0] if numeric else 1
         if scalar_first:
             # div.Tensor(scalar, tensor) = scalar / tensor = scalar * reciprocal(tensor)
             def _rdiv_s(a):
@@ -448,18 +515,13 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         if "Scalar_Tensor" in target or (
             "Scalar" in target and "Tensor_Scalar" not in target and "Tensor" not in target
         ):
-            import math
-
-            base = float(scalar_args[0]) if scalar_args else math.e
-            log_base = math.log(base) if base > 0 else 0.0
+            base = scalar_args[0]
 
             def _pow_base(tensor_exp):
-                return elementwise.exp(
-                    elementwise.mul_scalar(tensor_exp.to(torch.float32), log_base)
-                )
+                return elementwise.pow_scalar_base(base, tensor_exp)
 
             return _pow_base
-        exp_val = float(scalar_args[0]) if scalar_args else 2.0
+        exp_val = scalar_args[0] if scalar_args else 2
 
         def _pow_s(a):
             return elementwise.pow_scalar(a, exp_val)
@@ -743,17 +805,31 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
     # ── Category 3: existing reductions ───────────────────────────────────────
 
     if "aten.sum" in target:
-        return reduction.make_sum_kernel(dims, keepdim)
+        return reduction.make_sum_kernel(dims, keepdim, dtype=_keyword(node, "dtype"))
 
     if "aten.mean" in target:
-        return reduction.make_mean_kernel(dims, keepdim)
+        return reduction.make_mean_kernel(dims, keepdim, dtype=_keyword(node, "dtype"))
 
     # exact match to avoid matching aten.exp
-    if target == "aten._softmax.default":
-        return reduction.make_softmax_kernel(dims[0] if dims else None)
+    if target == "aten._softmax.default" or target.startswith("aten.softmax."):
+        positional = _positional_entries(node)
+        half_to_float = (target == "aten._softmax.default" and len(positional) > 2
+                         and positional[2].get("value") is True)
+        dtype = _keyword(node, "dtype", torch.float32 if half_to_float else None)
+        return reduction.make_softmax_kernel(int(scalar_args[0]) if scalar_args else -1, dtype=dtype)
 
-    if "aten.softmax" in target:
-        return reduction.make_softmax_kernel(dims[0] if dims else None)
+    if target in {"aten._log_softmax.default", "aten.log_softmax.int"}:
+        positional = _positional_entries(node)
+        half_to_float = (target == "aten._log_softmax.default" and len(positional) > 2
+                         and positional[2].get("value") is True)
+        dtype = _keyword(node, "dtype", torch.float32 if half_to_float else None)
+        return reduction.make_log_softmax_kernel(int(scalar_args[0]) if scalar_args else -1, dtype=dtype)
+
+    if target in {"aten.sort.default", "aten.sort.stable"}:
+        positional = _positional_entries(node)
+        dim = _keyword(node, "dim", positional[1]["value"] if len(positional) > 1 else -1)
+        descending = _keyword(node, "descending", positional[2]["value"] if len(positional) > 2 else False)
+        return reduction.make_sort_kernel(dim, descending, stable=_keyword(node, "stable", False))
 
     # ── Category 3: new reductions ────────────────────────────────────────────
 
@@ -912,8 +988,8 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return _matmul
 
     if "aten.addmm" in target:
-        beta = float(scalar_args[0]) if len(scalar_args) > 0 else 1.0
-        alpha = float(scalar_args[1]) if len(scalar_args) > 1 else 1.0
+        beta = _keyword(node, "beta", scalar_args[0] if len(scalar_args) > 0 else 1)
+        alpha = _keyword(node, "alpha", scalar_args[1] if len(scalar_args) > 1 else 1)
 
         def _addmm(bias, a, b):
             return gemm.addmm(bias, a, b, beta=beta, alpha=alpha)
@@ -952,16 +1028,27 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
     # ── init / allocation ops ─────────────────────────────────────────────────
 
     if "zeros_like" in target:
-        return torch.zeros_like
+        dtype = _keyword(node, "dtype")
+
+        def zeros_like_kernel(t):
+            return elementwise.fill_like(t, 0, dtype=dtype)
+
+        return zeros_like_kernel
 
     if "ones_like" in target:
-        return torch.ones_like
+        dtype = _keyword(node, "dtype")
+
+        def ones_like_kernel(t):
+            return elementwise.fill_like(t, 1, dtype=dtype)
+
+        return ones_like_kernel
 
     if "full_like" in target:
-        fill_val = float(scalar_args[0]) if scalar_args else 0.0
+        fill_val = scalar_args[0] if scalar_args else 0
+        dtype = _keyword(node, "dtype")
 
         def full_like_kernel(t):
-            return torch.full_like(t, fill_val)
+            return elementwise.fill_like(t, fill_val, dtype=dtype)
 
         return full_like_kernel
 
@@ -971,16 +1058,16 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         fill_val = scalar_args[1] if len(scalar_args) > 1 else 0.0
 
         def full_kernel():
-            return torch.full(tuple(shape), fill_val, dtype=dtype, device="cuda")
+            return elementwise.fill_tensor(shape, fill_val, dtype=dtype, device="cuda")
 
         return full_kernel
 
     if "aten.scalar_tensor" in target:
         out_dtype = _parse_dtype(node.get("output_dtype") or "") or torch.float32
-        val = float(scalar_args[0]) if scalar_args else 0.0
+        val = scalar_args[0] if scalar_args else 0
 
         def _scalar_tensor():
-            return torch.tensor(val, dtype=out_dtype, device="cuda")
+            return elementwise.fill_tensor((), val, dtype=out_dtype, device="cuda")
 
         return _scalar_tensor
 
@@ -995,6 +1082,21 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return scatter_add_kernel
 
     if "aten.scatter" in target:
+        if target == "aten.scatter.src":
+            dim = scalar_args[0] if scalar_args else 0
+
+            def scatter_src_kernel(base, index, source):
+                return scatter_gather.scatter_src(base, dim, index, source)
+
+            return scatter_src_kernel
+        if target == "aten.scatter.value":
+            dim = scalar_args[0] if scalar_args else 0
+            value = scalar_args[1] if len(scalar_args) > 1 else 0
+
+            def scatter_value_kernel(base, index):
+                return scatter_gather.scatter_value(base, dim, index, value)
+
+            return scatter_value_kernel
         return _generic_fallback(target, node)
 
     if "aten.gather" in target:

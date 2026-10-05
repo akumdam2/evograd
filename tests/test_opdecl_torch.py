@@ -92,7 +92,9 @@ class TestAtenIRExtraction(unittest.TestCase):
             target="aten.gelu.default", args=(), kwargs={"approximate": "tanh"}
         )
         _, _, _, args_ordered = _classify_args(node, {})
-        self.assertIn({"kind": "scalar", "value": "tanh"}, args_ordered)
+        self.assertIn(
+            {"kind": "scalar", "value": "tanh", "keyword": "approximate"}, args_ordered
+        )
 
     def test_gelu_dispatch_honors_tanh_approximate(self):
         try:

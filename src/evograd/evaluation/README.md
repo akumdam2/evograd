@@ -74,6 +74,24 @@ Activation gradients are reset between training samples; parameter gradients
 accumulate. Older report headers may contain obsolete fixed-repetition fields;
 the current report identifies the actual `do_bench` driver.
 
+## Unified seed admission and evolution
+
+`evograd seed unified` publishes only a seed that passes direct-pair oracle
+checks, native autograd deployment checks, and the numerical variants in
+`pipelines/unified/validation.py`. The isolated admission entry point is
+`evograd.evaluation.common.seed`; it runs without timing, using the generated
+`declaration.py` to restrict checks to the captured shape, dtype and scalars.
+Variants include reproducible input-factory reseeds, independent upstream
+gradients, and eligible activation stress inputs. Invalid stress references are
+reported separately and do not count as passes. Tolerances still come from the
+declaration. `evograd verify` remains the direct-pair grid check described above.
+
+Evolution loads that scoped declaration and pins `unified_contract.json`
+outside generated candidates through `EVOGRAD_UNIFIED_CONTRACT_PATH`. It checks
+fixed provider/deployment code and preserved call sites, then counts actual
+external-library calls in forward and backward. Unified numerical variants
+must pass before timing. NCU refinement inherits the same declaration and gates.
+
 ## Tier 3: record differences and continue evaluation
 
 Select `report-first` explicitly; the CLI default remains `strict`.

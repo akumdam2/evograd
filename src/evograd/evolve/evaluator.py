@@ -258,6 +258,15 @@ def _primitive_usage(program_path: str, module):
         usage = check_source(
             pathlib.Path(program_path).read_text(encoding="utf-8"), allowed=granted
         )
+        from evograd.pipelines.unified.contract import CONTRACT_ENV, load_contract, validate_source
+
+        if contract_path := os.environ.get(CONTRACT_ENV):
+            try:
+                validate_source(pathlib.Path(program_path).read_text(encoding="utf-8"),
+                                load_contract(contract_path))
+            except (ValueError, KeyError, OSError) as exc:
+                raise PrimitiveViolation(f"unified pipeline preservation: {exc}") from exc
+            usage["unified_fixed_code_valid"] = True
     except PrimitiveViolation as exc:
         return None, {"error_type": "PrimitiveViolation", "error_message": str(exc)}
     except SyntaxError as exc:
@@ -482,6 +491,13 @@ def build_evaluate(
             if primitive_failure is not None:
                 return emit({"combined_score": -1e9, "correct": 0.0},
                             {"failure": primitive_failure})
+            from evograd.pipelines.unified.contract import CONTRACT_ENV, load_contract
+
+            if contract_path := os.environ.get(CONTRACT_ENV):
+                from evograd.pipelines.unified.execution import validate_external_execution
+
+                validate_external_execution(op, module, load_contract(contract_path))
+                primitive_usage["unified_library_regions_preserved"] = True
         except Exception as exc:
             return emit(
                 {"combined_score": -1e9, "correct": 0.0},
@@ -495,6 +511,7 @@ def build_evaluate(
             )
 
         correctness = None
+        numerical_variants = None
         benchmark = None
         native_output_path = None
         try:
@@ -502,6 +519,14 @@ def build_evaluate(
                 native_output_path = captured_path
                 correctness = _run_correctness(op, module)
                 if correctness["passed"] == correctness["total"]:
+                    if hasattr(module, "UNIFIED_DEPLOYMENT_CONFIG"):
+                        from evograd.pipelines.unified.validation import validate_numerical_variants
+
+                        numerical_variants = validate_numerical_variants(op, module)
+                        if not numerical_variants["ok"]:
+                            return emit({"combined_score": -1e6, "correct": 0.0},
+                                        {"correctness": correctness,
+                                         "numerical_variants": numerical_variants})
                     smoke_workloads = op.coverage if op.coverage else benchmark_workloads
                     smoke_failure = _smoke_benchmark_shapes(op, module, smoke_workloads)
                     if smoke_failure is None:
@@ -660,7 +685,8 @@ def build_evaluate(
         benchmark["primitives"] = primitive_usage
         return emit(
             metrics,
-            {"correctness": correctness, "benchmark": benchmark},
+            {"correctness": correctness, "benchmark": benchmark,
+             **({"numerical_variants": numerical_variants} if numerical_variants is not None else {})},
             cases=benchmark["cases"],
         )
 

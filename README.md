@@ -6,7 +6,8 @@ PyTorch forward function.**
 Evograd turns an operator definition into a training-ready _autograd pair_: a
 forward function that chooses what to save and a backward function that consumes
 that saved state. It can generate the initial Triton implementation through
-four research pipelines, verify it against PyTorch autograd, optimize it with
+the unified pipeline or four research baselines, verify it against PyTorch
+autograd, optimize it with
 [OpenEvolve](https://github.com/algorithmicsuperintelligence/openevolve), and
 measure its speed and saved-tensor memory.
 
@@ -14,7 +15,7 @@ measure its speed and saved-tensor memory.
 PyTorch forward reference + operator declaration
                          │
                          ▼
-            Pipeline A, B, C, or D
+          Unified pipeline or baseline A–D
                          │
                          ▼
              Triton forward/backward seed
@@ -30,9 +31,10 @@ PyTorch forward reference + operator declaration
 ```
 
 > [!IMPORTANT]
-> The repository has comprehensive CPU-independent structural tests, but its
-> Triton paths have not yet been run on a CUDA machine in this environment. See
-> [Project status](#project-status) before using results in experiments.
+> CUDA coverage depends on the pipeline and operator. Unified-pipeline acceptance
+> covers fixed configurations, including structured outputs and convolution; this is correctness coverage,
+> not a performance result. See [Project status](#project-status) before using
+> results in experiments.
 
 ## What evograd does
 
@@ -41,7 +43,7 @@ otherwise tend to be duplicated per operator:
 
 - A typed declaration of inputs, outputs, shapes, differentiation activity,
   workloads, and tolerances.
-- Four ways to generate a Triton autograd-pair seed.
+- A compiler-aware unified seed pipeline and four research baselines.
 - A PyTorch-autograd oracle derived from the declared forward reference.
 - A hard correctness gate for the candidate forward and every requested
   gradient, including shape and dtype checks.
@@ -171,8 +173,60 @@ makes every later subprocess reproducible.
 
 ## Seed-generation pipelines
 
-All four pipelines target the same candidate API and use the same declaration,
-oracle, and verification path.
+The unified pipeline constructs a deterministic starting point without an LLM.
+It captures AOTAutograd's joint and partitioned graphs, observes Inductor's
+actual external-kernel choices, preserves those calls, and lowers the remaining
+ATen semantics using Pipeline B's handwritten primitives. Fusion and performance
+optimization belong to the subsequent evolution stage. Compiler-generated
+Triton is retained as diagnostic evidence, not copied into the seed.
+
+```bash
+evograd seed unified --op layernorm --dtype float32 \
+    --dims rows=8 hidden=64 --output-dir /tmp/unified_layernorm
+
+evograd verify --op layernorm --declaration /tmp/unified_layernorm/declaration.py:op \
+    /tmp/unified_layernorm/initial_program_autograd_pair.py
+
+evograd evolve --op layernorm --declaration /tmp/unified_layernorm/declaration.py:op \
+    --seed /tmp/unified_layernorm/initial_program_autograd_pair.py \
+    --scoring speed_memory_min --output-dir /tmp/unified_layernorm_evolved
+```
+
+Unified specializes to one exact shape, dtype, CUDA device and set of scalar parameters; without
+`--dims`, it uses the first declared workload of the selected dtype. The emitted
+`declaration.py` keeps verification and evolution on that same configuration.
+Use the `seed unified` entry point; the existing one-call `run` API continues to
+serve the A–D baselines.
+
+Only a seed that passes forward/all-gradient oracle checks and native autograd
+deployment checks is published as `initial_program_autograd_pair.py`. Unified also
+checks reproducible factory reseeds, independent upstream gradients, and large
+activation/cancellation cases where the declaration's input domain permits them.
+Invalid stress references are recorded separately, never counted as passes;
+these finite checks do not prove correctness for every possible input. There is
+no `--skip-verify` or synthesis repair search. Outputs include `graphs/`,
+`compiler_prior/`, `partition.json`, `verification_report.json`, and
+`unified_contract.json`. Evolution pins the latter outside the candidate and
+checks fixed library/deployment code, preserved call sites, and actual library
+execution in forward and backward (outside benchmark timing), while
+the primitive kernels, surrounding computation and saved tensors can evolve.
+Keep the contract beside the seed when moving artifacts.
+
+Unified supports single and structured tensor outputs, and preserves compiler-selected
+`mm`, `bmm`, `addmm`, convolution and convolution-backward regions. Unknown/ambiguous external mappings, unresolved
+compiler choices, and unsupported primitive lowerings fail explicitly.
+Host allocations, layout handling and dtype conversions reuse existing helpers.
+Run `python -m unittest tests.test_pipeline_unified -v` on a CUDA node for the
+compiler-to-seed acceptance tests.
+
+The October 1, 2026 lowering audit checked all 173 declared correctness
+configurations of the 32 tasks registered at that time through B's interpreter and emitted code, with no
+observed PyTorch mathematical fallback. Unified was checked on one existing small
+configuration per task, including its expanded numerical variants. These are
+the tested scopes, not a claim of complete ATen coverage. Unsupported domains
+(for example large sorting axes or unsupported sorting dtypes) raise explicitly.
+
+The four research baselines target the same pair API and PyTorch-autograd oracle:
 
 | Pipeline                   | Inputs                                                | Generation method                                                                                      | LLM required |
 | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------ |
@@ -761,10 +815,9 @@ special initialization, define a declaration-local `make_inputs` hook. If
 Pipeline B encounters an unsupported Aten operation, add its lowering under
 `src/evograd/atenir/primitive_triton/`.
 
-The current declaration model targets deterministic, single-tensor-output
-operators. Integer/bool tensor inputs are supported as `Inactive` values
-(cross-entropy labels are the worked example). Multiple outputs, sparse
-gradients, and stateful operators require declaration/API extensions.
+The current declaration model supports deterministic operators with single
+or structured tensor outputs. Integer/bool tensor inputs are supported as `Inactive` values
+(cross-entropy labels are the worked example). Sparse gradients and stateful operators require declaration/API extensions.
 
 ## Repository layout
 
@@ -787,6 +840,7 @@ src/evograd/
 │   ├── compose.py             # serialized graph execution
 │   └── primitive_triton/      # Pipeline B's handwritten Triton primitives
 ├── pipelines/
+│   ├── unified/               # compiler-aware deterministic semantic seeds
 │   ├── a_atenir_llm/          # AtenIR-grounded LLM synthesis
 │   ├── b_dispatch/            # LLM-free primitive lowering and code generation
 │   ├── c_forward_only/        # forward-only LLM ablation

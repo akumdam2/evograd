@@ -282,7 +282,9 @@ def _classify_args(node: fx.Node, meta):
     args_ordered = []
 
     target = str(node.target)
-    is_reduction = "sum" in target or "mean" in target
+    is_reduction = target.startswith(("aten.", "prims.")) and target.split(".")[1] in {
+        "sum", "mean", "amax", "amin"
+    }
 
     def _is_symint_node(a: fx.Node) -> bool:
         return isinstance(a.meta.get("val"), _SYM_TYPES)
@@ -350,10 +352,31 @@ def _classify_args(node: fx.Node, meta):
 
     for a in node.args:
         _process(a)
-    for v in (node.kwargs or {}).values():
+    for key, v in (node.kwargs or {}).items():
+        before = len(args_ordered)
         _process(v)
+        for entry in args_ordered[before:]:
+            entry["keyword"] = key
 
     return input_nodes, reduction_dims, keepdim, args_ordered
+
+
+def _serialize_arg(value):
+    """Preserve exact ATen positional and keyword arguments alongside legacy fields."""
+    if isinstance(value, fx.Node):
+        kind = "sym_node" if isinstance(value.meta.get("val"), _SYM_TYPES) else "node"
+        return {"kind": kind, "name": value.name}
+    if isinstance(value, (tuple, list)):
+        return {"kind": "shape_list", "items": [_serialize_arg(item) for item in value]}
+    if isinstance(value, torch.device):
+        return {"kind": "device", "value": str(value)}
+    if isinstance(value, (torch.dtype, torch.layout, torch.memory_format)):
+        return {"kind": "torch_constant", "value": str(value)}
+    if isinstance(value, _SYM_TYPES):
+        return {"kind": "scalar", "value": _sym_hint(value)}
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return {"kind": "scalar", "value": value}
+    raise TypeError(f"Cannot serialize ATen argument {value!r}")
 
 
 def _serialise(gm: fx.GraphModule) -> dict:
@@ -393,6 +416,8 @@ def _serialise(gm: fx.GraphModule) -> dict:
                 "reduction_dims": red_dims,
                 "keepdim": keepdim,
                 "args_ordered": args_ordered,
+                "positional_args": [_serialize_arg(arg) for arg in n.args],
+                "kwargs_ordered": {key: _serialize_arg(value) for key, value in n.kwargs.items()},
             }
             if "sym_shape" in m:
                 entry["sym_output_shape"] = m["sym_shape"]

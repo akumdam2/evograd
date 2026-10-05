@@ -182,6 +182,16 @@ def run_evolve(
         )
 
     env = evograd_env()
+    from evograd.pipelines.unified.contract import CONTRACT_ENV, CONTRACT_FILE, seed_contract_path
+
+    unified_contract = seed_contract_path(seed_path)
+    if unified_contract is not None:
+        # Keep the reference outside generated programs so candidates cannot
+        # redefine which library regions or deployment ABI are protected.
+        contract_text = unified_contract.read_text(encoding="utf-8")
+        contract_target = output_dir / CONTRACT_FILE
+        contract_target.write_text(contract_text, encoding="utf-8")
+        env[CONTRACT_ENV] = str(contract_target.resolve())
     env["EVOGRAD_OP"] = op.name
     env["EVOGRAD_SCORING"] = scoring
     env["EVOGRAD_FORWARD_OVERRIDE"] = op.forward
@@ -246,18 +256,21 @@ def run_evolve(
     if ncu:
         from evograd.ncu.refine import refine_candidate
 
-        record = refine_candidate(
-            op,
-            target,
-            output_dir=output_dir / "ncu_passes" / "final",
-            baseline=performance_baseline,
-            model=ncu_model or primary_model,
-            api_base=api_base,
-            api_key=ncu_api_key,
-            ncu_timeout=ncu_timeout,
-            optimizer_timeout=ncu_optimizer_timeout,
-            skip_at_roofline_pct=ncu_skip_at_roofline_pct,
-        )
+        # Refinement uses the same scoped declaration and preservation gates as
+        # ordinary candidates, including unified's evaluator-owned contract.
+        with _temporary_environ(env):
+            record = refine_candidate(
+                op,
+                target,
+                output_dir=output_dir / "ncu_passes" / "final",
+                baseline=performance_baseline,
+                model=ncu_model or primary_model,
+                api_base=api_base,
+                api_key=ncu_api_key,
+                ncu_timeout=ncu_timeout,
+                optimizer_timeout=ncu_optimizer_timeout,
+                skip_at_roofline_pct=ncu_skip_at_roofline_pct,
+            )
         print(f"NCU refinement: {record['outcome']}")
     print(f"Wrote final best program to: {target}")
     if save_programs:

@@ -1,7 +1,6 @@
 """Triton kernels for gather/scatter and dynamic tensor assembly.
 
-Two kernels per op cover the two 2D cases (dim=0 and dim=1).
-For non-2D tensors the functions fall back to PyTorch.
+Generic flattened-coordinate kernels cover arbitrary ranks and axes.
 
 gather(input, dim, index)      -- indexed read
 scatter_add(self, dim, index, src) -- indexed atomic accumulate into clone of self
@@ -28,6 +27,51 @@ def _next_pow2(n: int) -> int:
 
 
 if HAS_TRITON:
+
+    @triton.jit
+    def _indexed_kernel(INPUT, INDEX, SRC, OUT, N, INDEX_SHAPE: tl.constexpr,
+                        INDEX_STRIDES: tl.constexpr, DATA_STRIDES: tl.constexpr,
+                        SRC_STRIDES: tl.constexpr, AXIS: tl.constexpr,
+                        AXIS_SIZE: tl.constexpr, OP: tl.constexpr, VALUE,
+                        BLOCK: tl.constexpr):
+        offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offsets < N
+        index = tl.load(INDEX + offsets, mask, other=0).to(tl.int64)
+        target = tl.full((BLOCK,), 0, tl.int64)
+        source = tl.full((BLOCK,), 0, tl.int64)
+        for dim in tl.static_range(len(INDEX_SHAPE)):
+            coordinate = (offsets // INDEX_STRIDES[dim]) % INDEX_SHAPE[dim]
+            target += (index if dim == AXIS else coordinate) * DATA_STRIDES[dim]
+            source += coordinate * SRC_STRIDES[dim]
+        tl.device_assert((~mask) | ((index >= 0) & (index < AXIS_SIZE)), 'index out of bounds')
+        valid = mask & (index >= 0) & (index < AXIS_SIZE)
+        if OP == 'gather':
+            value = tl.load(INPUT + target, valid, other=0)
+            tl.store(OUT + offsets, value, mask)
+        elif OP == 'scatter_add':
+            value = tl.load(SRC + source, mask, other=0)
+            tl.atomic_add(OUT + target, value, valid)
+        elif OP == 'scatter_src':
+            value = tl.load(SRC + source, mask, other=0)
+            tl.store(OUT + target, value, valid)
+        else:
+            tl.store(OUT + target, VALUE, valid)
+
+    @triton.jit
+    def _slice_scatter_kernel(SRC, OUT, N, SRC_SHAPE: tl.constexpr,
+                              SRC_STRIDES: tl.constexpr, OUT_STRIDES: tl.constexpr,
+                              AXIS: tl.constexpr, START: tl.constexpr, STEP: tl.constexpr,
+                              BLOCK: tl.constexpr):
+        offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offsets < N
+        target = tl.full((BLOCK,), 0, tl.int64)
+        for dim in tl.static_range(len(SRC_SHAPE)):
+            coordinate = (offsets // SRC_STRIDES[dim]) % SRC_SHAPE[dim]
+            if dim == AXIS:
+                coordinate = START + coordinate * STEP
+            target += coordinate * OUT_STRIDES[dim]
+        value = tl.load(SRC + offsets, mask, other=0)
+        tl.store(OUT + target, value, mask)
 
     @triton.jit
     def _gather_1d_kernel(input_ptr, index_ptr, out_ptr, N, BLOCK: tl.constexpr):
@@ -192,74 +236,107 @@ if HAS_TRITON:
         tl.store(out_ptr + offs, value, mask=mask)
 
 
+def _check_indexed(base, dim, index):
+    if not HAS_TRITON or not base.is_cuda:
+        raise NotImplementedError('handwritten gather/scatter requires CUDA and Triton')
+    if base.ndim == 0 or not -base.ndim <= int(dim) < base.ndim:
+        raise IndexError('indexed dimension out of range')
+    axis = int(dim) % base.ndim
+    if index.ndim != base.ndim or index.dtype != torch.int64:
+        raise ValueError('index must be int64 and have the same rank as the input')
+    if index.device != base.device:
+        raise ValueError('index and input must share a device')
+    if any(index.shape[d] > base.shape[d] for d in range(base.ndim) if d != axis):
+        raise ValueError('index exceeds input shape outside the indexed dimension')
+    return axis
+
+
 def gather(input: torch.Tensor, dim: int, index: torch.Tensor) -> torch.Tensor:
-    actual_dim = int(dim) % input.ndim
-
-    if HAS_TRITON and input.ndim == 1 and index.ndim == 1 and input.is_cuda:
-        input = input.contiguous()
-        index = index.contiguous()
-        out = torch.empty(index.shape, device=input.device, dtype=input.dtype)
-
-        BLOCK = min(_next_pow2(index.numel()), 1024)
-        grid = (triton.cdiv(index.numel(), BLOCK),)
-        _gather_1d_kernel[grid](input, index, out, index.numel(), BLOCK=BLOCK)
-        return out
-
-    if not HAS_TRITON or input.ndim != 2 or index.ndim != 2 or not input.is_cuda:
-        return torch.gather(input, actual_dim, index)
-
-    input = input.contiguous()
-    index = index.contiguous()
-    out = torch.empty(index.shape, device=input.device, dtype=input.dtype)
-
-    if actual_dim == 1:
-        R_idx, C_idx = index.shape
-        _, C_in = input.shape
-        BLOCK_C = min(_next_pow2(C_idx), 65536)
-        _gather_dim1_kernel[(R_idx,)](input, index, out, C_in, C_idx, BLOCK_C=BLOCK_C)
-    else:
-        R_idx, C = index.shape
-        BLOCK_C = min(_next_pow2(C), 65536)
-        _gather_dim0_kernel[(R_idx,)](input, index, out, C, BLOCK_C=BLOCK_C)
-
-    return out
+    axis = _check_indexed(input, dim, index)
+    input, index = input.contiguous(), index.contiguous()
+    output = torch.empty(index.shape, device=input.device, dtype=input.dtype)
+    if index.numel():
+        _indexed_kernel[(triton.cdiv(index.numel(), 256),)](
+            input, index, input, output, index.numel(),
+            INDEX_SHAPE=tuple(index.shape), INDEX_STRIDES=tuple(index.stride()),
+            DATA_STRIDES=tuple(input.stride()), SRC_STRIDES=tuple(index.stride()),
+            AXIS=axis, AXIS_SIZE=input.shape[axis], OP='gather', VALUE=0, BLOCK=256,
+        )
+    return output
 
 
-def scatter_add(
-    self_t: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor
-) -> torch.Tensor:
-    actual_dim = int(dim) % self_t.ndim
+def _scatter_tensor(self_t, dim, index, src, operation):
+    axis = _check_indexed(self_t, dim, index)
+    if src.ndim != index.ndim or any(a > b for a, b in zip(index.shape, src.shape)):
+        raise ValueError('scatter source must cover the index shape')
+    if src.dtype != self_t.dtype or src.device != self_t.device:
+        raise ValueError('scatter source must match the base dtype and device')
+    output, index, src = self_t.contiguous().clone(), index.contiguous(), src.contiguous()
+    if index.numel():
+        _indexed_kernel[(triton.cdiv(index.numel(), 256),)](
+            output, index, src, output, index.numel(),
+            INDEX_SHAPE=tuple(index.shape), INDEX_STRIDES=tuple(index.stride()),
+            DATA_STRIDES=tuple(output.stride()), SRC_STRIDES=tuple(src.stride()),
+            AXIS=axis, AXIS_SIZE=output.shape[axis], OP=operation, VALUE=0, BLOCK=256,
+        )
+    return output
 
-    if HAS_TRITON and self_t.ndim == 1 and index.ndim == 1 and src.ndim == 1 and self_t.is_cuda:
-        out = self_t.clone().contiguous()
-        index = index.contiguous()
-        src = src.contiguous()
 
-        BLOCK = min(_next_pow2(index.numel()), 1024)
-        grid = (triton.cdiv(index.numel(), BLOCK),)
-        _scatter_add_1d_kernel[grid](out, index, src, index.numel(), BLOCK=BLOCK)
-        return out
+def scatter_add(self_t: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor) -> torch.Tensor:
+    return _scatter_tensor(self_t, dim, index, src, 'scatter_add')
 
-    if not HAS_TRITON or self_t.ndim != 2 or index.ndim != 2 or not self_t.is_cuda:
-        out = self_t.clone()
-        out.scatter_add_(actual_dim, index, src)
-        return out
 
-    out = self_t.clone().contiguous()
-    index = index.contiguous()
-    src = src.contiguous()
+def scatter_src(self_t: torch.Tensor, dim: int, index: torch.Tensor, src: torch.Tensor) -> torch.Tensor:
+    return _scatter_tensor(self_t, dim, index, src, 'scatter_src')
 
-    if actual_dim == 1:
-        R, C_out = out.shape
-        _, C_idx = index.shape
-        BLOCK_C = min(_next_pow2(C_idx), 65536)
-        _scatter_add_dim1_kernel[(R,)](out, index, src, C_out, C_idx, BLOCK_C=BLOCK_C)
-    else:
-        R_src, C = index.shape
-        BLOCK_C = min(_next_pow2(C), 65536)
-        _scatter_add_dim0_kernel[(R_src,)](out, index, src, C, BLOCK_C=BLOCK_C)
 
-    return out
+def scatter_value(self_t: torch.Tensor, dim: int, index: torch.Tensor, value) -> torch.Tensor:
+    axis = _check_indexed(self_t, dim, index)
+    output, index = self_t.contiguous().clone(), index.contiguous()
+    if index.numel():
+        _indexed_kernel[(triton.cdiv(index.numel(), 256),)](
+            output, index, output, output, index.numel(),
+            INDEX_SHAPE=tuple(index.shape), INDEX_STRIDES=tuple(index.stride()),
+            DATA_STRIDES=tuple(output.stride()), SRC_STRIDES=tuple(index.stride()),
+            AXIS=axis, AXIS_SIZE=output.shape[axis], OP='scatter_value', VALUE=value, BLOCK=256,
+        )
+    return output
+
+
+def slice_scatter(base: torch.Tensor, src: torch.Tensor, dim=0, start=None, end=None, step=1):
+    if not HAS_TRITON or not base.is_cuda:
+        raise NotImplementedError('handwritten slice_scatter requires CUDA and Triton')
+    if base.ndim == 0 or not -base.ndim <= int(dim) < base.ndim:
+        raise IndexError('slice dimension out of range')
+    if step <= 0:
+        raise ValueError('slice_scatter step must be positive')
+    axis = int(dim) % base.ndim
+    begin, stop, stride = slice(start, end, step).indices(base.shape[axis])
+    shape = list(base.shape)
+    shape[axis] = len(range(begin, stop, stride))
+    if tuple(src.shape) != tuple(shape) or src.dtype != base.dtype or src.device != base.device:
+        raise ValueError('slice_scatter source must match the selected slice')
+    output, src = base.contiguous().clone(), src.contiguous()
+    if src.numel():
+        _slice_scatter_kernel[(triton.cdiv(src.numel(), 256),)](
+            src, output, src.numel(), SRC_SHAPE=tuple(src.shape),
+            SRC_STRIDES=tuple(src.stride()), OUT_STRIDES=tuple(output.stride()),
+            AXIS=axis, START=begin, STEP=stride, BLOCK=256,
+        )
+    return output
+
+
+def select_scatter(base: torch.Tensor, src: torch.Tensor, dim: int, index: int):
+    """Write one selected slice without introducing framework mathematics."""
+    if base.ndim == 0 or not -base.ndim <= int(dim) < base.ndim:
+        raise IndexError('select dimension out of range')
+    axis = int(dim) % base.ndim
+    selected = int(index)
+    if selected < 0:
+        selected += base.shape[axis]
+    if not 0 <= selected < base.shape[axis]:
+        raise IndexError('select index out of range')
+    return slice_scatter(base, src.unsqueeze(axis), axis, selected, selected + 1, 1)
 
 
 def advanced_index_dim0(input: torch.Tensor, indices) -> torch.Tensor:
@@ -323,13 +400,17 @@ def advanced_index_put_dim0(
     return output
 
 
-def full(shape, fill_value, dtype):
+def full(shape, fill_value, dtype, device=None):
     shape = tuple(int(size) for size in shape)
-    output = torch.empty(shape, device="cuda", dtype=dtype)
+    output = torch.empty(shape, device=device or "cuda", dtype=dtype)
+    if not HAS_TRITON or not output.is_cuda:
+        raise NotImplementedError('handwritten full requires CUDA and Triton')
+    if not output.numel():
+        return output
     block = 256
     _fill_kernel[(triton.cdiv(output.numel(), block),)](
         output,
-        float(fill_value),
+        fill_value,
         output.numel(),
         BLOCK=block,
     )

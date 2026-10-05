@@ -25,7 +25,7 @@ from dataclasses import replace
 
 from evograd.evolve.evaluator import archive_program, build_evaluate, evaluate_isolated
 from evograd.evolve.scoring import get_policy
-from evograd.benchmark import get_task
+from evograd.benchmark import get_task, load_task
 
 
 def _env(name: str, legacy: str | None = None) -> str | None:
@@ -116,7 +116,10 @@ def _restrict_correctness(op):
     return replace(op, correctness=selected)
 
 
-_OP = get_task(os.environ["EVOGRAD_OP"])
+_DECLARATION = os.environ.get("EVOGRAD_DECLARATION")
+_OP = load_task(_DECLARATION) if _DECLARATION else get_task(os.environ["EVOGRAD_OP"])
+if _OP.name != os.environ["EVOGRAD_OP"]:
+    raise ValueError("evaluator declaration does not match EVOGRAD_OP")
 if os.environ.get("EVOGRAD_FORWARD_OVERRIDE"):
     _OP = replace(_OP, forward=os.environ["EVOGRAD_FORWARD_OVERRIDE"])
     _OP.validate()
