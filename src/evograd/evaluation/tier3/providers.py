@@ -24,6 +24,8 @@ from __future__ import annotations
 from typing import Any
 
 #: The replacement routes ``--patch-set`` understands, besides a file path.
+#: Named specs besides a program path. Any other declared pair baseline of the
+#: site's operator (e.g. ``fla``) is accepted by name too.
 PATCH_SPEC_KINDS = ("compile", "liger")
 
 #: Compiled variants one site may hold. MegaFold's ``transition`` site alone is
@@ -104,9 +106,10 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *,
     """One kernel set holding several sites' replacements, each by its real route.
 
     ``compile`` -> ``torch.compile`` of the site's declared runtime_forward
-    (origin ``trusted_torch_compile``); ``liger`` -> the declaration's reviewed
-    Liger pair through ``kernel_from_pair`` (origin ``baseline:liger``, a bind
-    pair wrapper -- *not* Liger's own autograd Function); a path -> the evolved
+    (origin ``trusted_torch_compile``); ``liger`` (or any other pair baseline
+    the site's operator declares, e.g. ``fla``) -> that reviewed pair through
+    ``kernel_from_pair`` (origin ``baseline:<name>``, a bind pair wrapper --
+    *not* the library's own autograd Function); a path -> the evolved
     program through ``patched_kernels``. Every site is patched exactly once, so
     the resulting patch set is the union and the adapters carry whatever comes
     along.
@@ -127,14 +130,16 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *,
             kernels = patch(kernels, site, compiled_site_kernel(site, registry),
                             source=KernelSource(site=site, op_name=decl.op, module=None,
                                                 origin="trusted_torch_compile"))
-        elif spec == "liger":
+        elif spec in PATCH_SPEC_KINDS or (
+                decl.op and spec in getattr(ops.get(decl.op), "performance_baselines", {})):
+            # A reviewed library pair by its declared name (liger, fla, ...).
             op = ops[decl.op]
-            if "liger" not in op.performance_baselines:
-                raise ValueError(f"{decl.op} declares no liger baseline")
-            module = baseline_candidate_module(op, "liger")
+            if spec not in op.performance_baselines:
+                raise ValueError(f"{decl.op} declares no {spec} baseline")
+            module = baseline_candidate_module(op, spec)
             kernels = patch(kernels, site, kernel_from_pair(op, module),
                             source=KernelSource(site=site, op_name=decl.op, module=module,
-                                                origin="baseline:liger"))
+                                                origin=f"baseline:{spec}"))
         else:
             path = Path(spec)
             if load_program is None:

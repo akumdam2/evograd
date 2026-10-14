@@ -1,4 +1,4 @@
-"""Workload declaration: AlphaFold3 training step (level 4).
+"""Workload declaration: AlphaFold3 training step (level 3).
 
 The whole-model AlphaFold3 workload: one full
 AlphaFold3 training step — forward to the model's own combined loss, backward,
@@ -6,14 +6,14 @@ optimizer step — with evolved kernels patched into the module tree by surgery.
 
 The model is `alphafold3-pytorch <https://pypi.org/project/alphafold3-pytorch/>`_,
 which is the implementation MegaFold builds on, and MegaFold is where every AF3
-shape in :mod:`evograd.opdecl.models` came from. Using it here means the level-4
+shape in :mod:`evograd.opdecl.models` came from. Using it here means the level-3
 task trains the same architecture the level-1/2 operator shapes were derived
 from, so the provenance chain closes: ``evoattention``'s benchmark grid and the
 attention this model executes are the same widths by construction.
 
 Nothing in this task is evolved. The sites below accept the winners of the
 level-1/2 searches, and the task measures whether their kernel-level speedups
-survive a real training step — the paper's level-4 question. Measurement is the
+survive a real training step — the paper's level-3 question. Measurement is the
 tier-3 protocol (``evaluation/tier3/runner.py``): identical weights and batches per
 provider, step latency, peak memory, loss agreement, ``cpu_bound_fraction``.
 
@@ -59,7 +59,7 @@ workload = declare_workload(
         "triangle-multiplicative updates, outer-product mean, MSA "
         "pair-weighted averaging, diffusion module internals, and confidence "
         "heads run stock eager inside the timed step and dilute the measured "
-        "speedup accordingly — that dilution is the level-4 result, not a "
+        "speedup accordingly — that dilution is the level-3 result, not a "
         "flaw. Attention-weight dropout is disabled for every provider alike: "
         "alphafold3-pytorch places the pair-stack dropout inside the "
         "attention core, which no fused-attention contract models (MegaFold's "

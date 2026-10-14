@@ -21,8 +21,8 @@ from typing import Any
 
 import torch
 
-from .level4 import Level4Workload
-from .model import check_effective_settings, effective_settings, training_step
+from .level3 import Level3Workload
+from .model import training_step
 from .report import STATUS_FAILED, STATUS_OK, SmokeReport
 from .spec import WorkloadSpec
 
@@ -39,6 +39,12 @@ def _nvidia_smi_driver_version() -> str | None:
         return None
     line = out.stdout.strip().splitlines()
     return line[0].strip() if out.returncode == 0 and line else None
+
+
+def _sdpa_policy() -> dict[str, Any]:
+    from evograd import sdpa_policy
+
+    return sdpa_policy.describe()
 
 
 def environment_info(spec: WorkloadSpec) -> dict[str, Any]:
@@ -60,6 +66,7 @@ def environment_info(spec: WorkloadSpec) -> dict[str, Any]:
         "cuda_available": torch.cuda.is_available(),
         "cuda_version": torch.version.cuda,
         "cudnn_version": torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None,
+        "sdpa": _sdpa_policy(),
         "gpu_name": None,
         "gpu_capability": None,
         "gpu_total_memory_bytes": None,
@@ -128,7 +135,7 @@ def gradient_coverage(model) -> dict[str, Any]:
     }
 
 
-def run_smoke(workload: Level4Workload, spec: WorkloadSpec | None = None) -> SmokeReport:
+def run_smoke(workload: Level3Workload, spec: WorkloadSpec | None = None) -> SmokeReport:
     """Execute one training step and return the report. Never raises for a
     run-time failure -- the failure is the report's payload."""
     spec = workload.resolve(spec)
@@ -153,7 +160,7 @@ def run_smoke(workload: Level4Workload, spec: WorkloadSpec | None = None) -> Smo
         model = workload.build_model(spec)
         input_ids, labels = workload.make_inputs(spec)
 
-        effective = effective_settings(model, spec)
+        effective = workload.effective_settings(model, spec)
         effective["input_ids_dtype"] = str(input_ids.dtype)
         effective["input_ids_device"] = str(input_ids.device).split(":")[0]
         effective["input_ids_shape"] = list(input_ids.shape)
@@ -163,7 +170,7 @@ def run_smoke(workload: Level4Workload, spec: WorkloadSpec | None = None) -> Smo
         effective["labels_match_input_ids"] = bool(torch.equal(input_ids, labels))
         report.effective = effective
 
-        problems = check_effective_settings(effective, spec)
+        problems = workload.check_settings(effective, spec)
         if problems:
             raise RuntimeError(
                 "the built model does not match the requested workload: "

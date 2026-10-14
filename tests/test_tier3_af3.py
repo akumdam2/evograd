@@ -1,15 +1,15 @@
-"""The AlphaFold3 level-4 workload, on CPU.
+"""The AlphaFold3 level-3 workload, on CPU.
 
 The expensive claim these tests pin is the identity control: patching every
 AF3 site with the eager mathematics routed through ``bind`` and the adapters —
 the exact plumbing an evolved kernel uses — must not change the loss. A patch
-layer that alters the answer would make every level-4 speedup unattributable.
+layer that alters the answer would make every level-3 speedup unattributable.
 
 Tests needing the model implementation skip when ``alphafold3-pytorch`` is not
 installed (the ``af3`` extra); the declaration-side tests always run.
 
 The declaration is imported directly rather than looked up in ``WORKLOADS``:
-MegaFold is the registered level-4 workload now, and this one is kept in the
+MegaFold is the registered level-3 workload now, and this one is kept in the
 tree and kept covered without being part of the suite.
 """
 
@@ -71,7 +71,7 @@ class TestSuiteReader(unittest.TestCase):
                 candidate={"ok": True, "step_ms": 20.0},
             ),
         )
-        self.assertEqual(task.level, 4)
+        self.assertEqual(task.level, 3)
         self.assertEqual(task.tier, "model")
         self.assertAlmostEqual(task.speedup, 1.5)
         self.assertTrue(task.ok)

@@ -39,6 +39,23 @@ import torch
 #: floor is not a tolerance, it is a coin flip.
 DEFAULT_REPEATS = 4
 
+#: Above this many elements a comparison stays on the tensors' device instead of
+#: copying to the host: a routed-MoE expert weight gradient can reach 1e9
+#: elements, 4.3 GB per float32 copy, and the comparison makes several. Every
+#: dense model's result is below it, so their comparisons are unchanged.
+ON_DEVICE_ELEMENTS = 1 << 26
+
+
+def _as_f32(t: torch.Tensor) -> torch.Tensor:
+    t = t.detach()
+    if t.numel() > ON_DEVICE_ELEMENTS:
+        return t.to(torch.float32)
+    return t.to("cpu", torch.float32)
+
+
+#: The rtols :func:`compare` also reports the required atol at.
+REFERENCE_RTOLS = (0.0, 1e-5, 2e-5, 1e-3, 1e-2, 2e-2, 5e-2, 8e-2)
+
 
 # ── one pass through one spelling ────────────────────────────────────────────
 
@@ -143,8 +160,8 @@ def compare(
     actual: torch.Tensor, expected: torch.Tensor, *, atol: float, rtol: float
 ) -> dict[str, Any]:
     """Everything worth knowing about one disagreement, in one place."""
-    a = actual.detach().to("cpu", torch.float32)
-    b = expected.detach().to("cpu", torch.float32)
+    a = _as_f32(actual)
+    b = _as_f32(expected)
     diff = (a - b).abs()
     bound = atol + rtol * b.abs()
     failures = int((diff > bound).sum())
@@ -175,6 +192,12 @@ def compare(
         "required_atol_at_declared_rtol": float(
             (diff - rtol * b.abs()).clamp(min=0.0).max()
         ),
+        # The same at a few fixed rtols, so a tolerance can be fitted on a base
+        # other than whatever was declared when this was measured.
+        "required_atol_by_rtol": {
+            f"{r:g}": float((diff - r * b.abs()).clamp(min=0.0).max())
+            for r in REFERENCE_RTOLS
+        },
     }
 
 
@@ -204,9 +227,11 @@ def case(
     for _ in range(max(repeats - 1, 0)):
         again = production_results(op, values)
         for name in results:
-            a = again[name].detach().to("cpu", torch.float32)
-            b = production[name].detach().to("cpu", torch.float32)
+            a = _as_f32(again[name])
+            b = _as_f32(production[name])
             noise[name] = max(noise[name], float((a - b).abs().max()))
+            del a, b
+        del again
 
     for name, record in results.items():
         scale = record["required_scale_over_declared"]
@@ -254,6 +279,8 @@ def inventory_task(
     repeats: int = DEFAULT_REPEATS,
     include_harvested: bool = True,
     artifact: Path | None = None,
+    extra_suites: tuple[str, ...] = (),
+    grid_only: bool = False,
     descriptor,
 ) -> dict[str, Any]:
     from evograd.opdecl.inputs import make_case_inputs
@@ -267,14 +294,22 @@ def inventory_task(
             case(op, f"correctness {dict(workload.dims)}", workload, values,
                  repeats=repeats)
         )
-    for workload in _observed_workloads(op, descriptor=descriptor):
+    for workload in () if grid_only else _observed_workloads(op, descriptor=descriptor):
         values = make_case_inputs(op, workload, device=device)
         cases.append(
             case(op, f"observed {dict(workload.dims)}", workload, values,
                  repeats=repeats)
         )
+    for suite in () if grid_only else extra_suites:  # a declared suite beyond the observed one
+        for workload in op.benchmark_suites.get(suite, ()):
+            values = make_case_inputs(op, workload, device=device)
+            cases.append(
+                case(op, f"{suite} {dict(workload.dims)}", workload, values,
+                     repeats=repeats)
+            )
     harvested = None
-    if include_harvested and artifact is not None and artifact.is_file():
+    if include_harvested and not grid_only and (descriptor.harvested_invocation is not None
+                              or (artifact is not None and artifact.is_file())):
         harvested = _harvested_case(op, artifact, device=device, repeats=repeats, descriptor=descriptor)
         if harvested is not None:
             cases.append(harvested)
@@ -328,14 +363,13 @@ def _harvested_case(op, artifact: Path, *, device: str, repeats: int, descriptor
     "BF16 cannot do this reduction" from "the synthetic distribution is not the
     model's".
     """
-    builders = {
-        "qwen3_swiglu_mlp": _harvested_mlp,
-        "qwen3_attention": _harvested_attention,
-        descriptor.level2_tasks[0]: _harvested_qkv,
-    }
-    build = builders.get(op.name)
-    if build is None:
-        return None
+    if descriptor.harvested_invocation is not None:
+        return _hooked_case(op, device=device, repeats=repeats, descriptor=descriptor)
+    builders = {"mlp": _harvested_mlp, "attention": _harvested_attention, "qkv": _harvested_qkv}
+    role = descriptor.harvested_tasks.get(op.name)
+    if role is None:
+        return None  # this model declares no harvested invocation for the task
+    build = builders[role]
     try:
         values, workload = build(op, artifact, device=device, descriptor=descriptor)
     except Exception as exc:  # a missing or stale capture is not a failure here
@@ -348,6 +382,25 @@ def _harvested_case(op, artifact: Path, *, device: str, repeats: int, descriptor
         }
     record = case(op, f"harvested layer-{descriptor.representative_layer} invocation", workload, values, repeats=repeats)
     record["source"] = str(artifact)
+    return record
+
+
+def _hooked_case(op, *, device: str, repeats: int, descriptor):
+    """The descriptor's own harvested invocation (a config-derived block's)."""
+    import importlib
+
+    module, _, function = descriptor.harvested_invocation.partition(":")
+    hook = getattr(importlib.import_module(module), function)
+    try:
+        built = hook(op, device)
+    except Exception as exc:
+        return {"label": "harvested (unavailable)", "error": f"{type(exc).__name__}: {exc}",
+                "ok": True, "results": {}, "worst_required_scale": 0.0}
+    if built is None:
+        return None
+    values, workload, label = built
+    record = case(op, label, workload, values, repeats=repeats)
+    record["source"] = descriptor.harvested_invocation
     return record
 
 
@@ -535,10 +588,15 @@ def build_parser(descriptor) -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("inventory", "scaling"):
         sp = sub.add_parser(name)
-        sp.add_argument("--task", action="append", default=None, choices=descriptor.level2_tasks)
+        sp.add_argument("--task", action="append", default=None,
+                        choices=(*descriptor.level2_tasks, *descriptor.level1_tasks))
         sp.add_argument("--device", default="cuda")
         sp.add_argument("--repeats", type=int, default=DEFAULT_REPEATS)
         sp.add_argument("--report", type=Path, default=None)
+        sp.add_argument("--extra-suite", action="append", default=[],
+                        help="also calibrate on this declared benchmark suite")
+        sp.add_argument("--grid-only", action="store_true",
+                        help="only the declared correctness grid (e.g. on the CPU)")
         sp.add_argument(
             "--artifact",
             type=Path,
@@ -550,7 +608,8 @@ def build_parser(descriptor) -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None, *, descriptor) -> int:
     args = build_parser(descriptor).parse_args(sys.argv[1:] if argv is None else argv)
-    tasks = tuple(args.task) if args.task else descriptor.level2_tasks
+    tasks = tuple(args.task) if args.task else (*descriptor.level2_tasks,
+                                                 *descriptor.level1_tasks)
 
     report: dict[str, Any] = {
         "schema_version": descriptor.schema("l2-calibration/1"),
@@ -569,7 +628,8 @@ def main(argv: list[str] | None = None, *, descriptor) -> int:
         report["tasks"] = [
             inventory_task(
                 task, device=args.device, repeats=args.repeats,
-                artifact=args.artifact, descriptor=descriptor,
+                artifact=args.artifact, extra_suites=tuple(args.extra_suite),
+                grid_only=args.grid_only, descriptor=descriptor,
             )
             for task in tasks
         ]

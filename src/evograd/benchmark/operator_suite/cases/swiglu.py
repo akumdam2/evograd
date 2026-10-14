@@ -16,7 +16,7 @@ from evograd.ops._common import STANDARD_TOLERANCES, fixed_shape_suites, log_dis
 
 #: MegaFold's production shape for the pairformer-trunk site at each crop of
 #: the residue sweep (batch 1). Declared from the frozen AlphaFold3
-#: configuration, not harvested; the Level-4 MegaFold task patches this site at
+#: configuration, not harvested; the Level-3 MegaFold task patches this site at
 #: exactly these dims. A named suite plus its fixed/ cases, deliberately not
 #: folded into the timed grid.
 _MEGAFOLD_TRUNK = model_workloads(

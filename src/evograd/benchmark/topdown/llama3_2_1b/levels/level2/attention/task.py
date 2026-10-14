@@ -10,7 +10,7 @@ make every one of them ambiguous.
 The timed case is derived from the frozen Llama-3-8B configuration rather than
 from a harvest snapshot: the shape is a property of the architecture, and
 ``tests/test_provenance`` re-derives it. Batch 2 x sequence 2048 is the
-canonical Level-4 step for both models.
+canonical Level-3 step for both models.
 """
 
 from evograd.benchmark.topdown.common.level2_references import (

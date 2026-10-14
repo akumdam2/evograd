@@ -54,7 +54,7 @@ SUPPORTED_ATTENTION = ("sdpa", "eager")
 
 
 class WorkloadSpecError(ValueError):
-    """A workload spec that violates the Level-4 workload contract."""
+    """A workload spec that violates the Level-3 workload contract."""
 
 
 def _canonical_json(payload: Any) -> str:
@@ -178,7 +178,7 @@ class WorkloadSpec:
             )
         if self.attn_implementation not in SUPPORTED_ATTENTION:
             raise WorkloadSpecError(
-                f"attn_implementation={self.attn_implementation!r} is not a Level-4 "
+                f"attn_implementation={self.attn_implementation!r} is not a Level-3 "
                 f"backend for this milestone; choose one of {SUPPORTED_ATTENTION}. "
                 "The canonical workload is 'sdpa'."
             )
@@ -241,7 +241,16 @@ def analytic_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
     Lets a CPU-only test assert the pinned architecture really is Qwen3-0.6B
     (596M total / 440M non-embedding) instead of trusting the numbers were typed
     in correctly.
+
+    Mixed token mixers with a dense MLP (``layer_types`` or
+    ``full_attention_interval`` set, as Qwen3.5 has) are counted by
+    :func:`hybrid_dense_parameter_count`; every dense decoder takes the branch
+    below unchanged. A routed MoE is not supported.
     """
+    if arch.get("num_experts"):
+        raise ValueError("analytic_parameter_count does not count routed-MoE architectures")
+    if arch.get("layer_types") or arch.get("full_attention_interval"):
+        return hybrid_dense_parameter_count(arch)
     h = arch["hidden_size"]
     layers = arch["num_hidden_layers"]
     heads = arch["num_attention_heads"]
@@ -266,6 +275,72 @@ def analytic_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
     lm_head = 0 if arch.get("tie_word_embeddings") else vocab * h
     return {
         "per_layer": per_layer,
+        "embedding": embedding,
+        "lm_head": lm_head,
+        "non_embedding": non_embedding,
+        "total": embedding + non_embedding + lm_head,
+    }
+
+
+def _hybrid_layer_types(arch: Mapping[str, Any]) -> list[str]:
+    """``layer_types`` as written, else derived from ``full_attention_interval``
+    the way Transformers derives it."""
+    if arch.get("layer_types"):
+        return list(arch["layer_types"])
+    interval = arch["full_attention_interval"]
+    return ["linear_attention" if (i + 1) % interval else "full_attention"
+            for i in range(arch["num_hidden_layers"])]
+
+
+def _hybrid_mixers(arch: Mapping[str, Any]) -> dict[str, int]:
+    """Per-layer parameters of the two token mixers, attention and Gated DeltaNet.
+
+    Laid out as Qwen3.5 holds them (four separate GDN input projections).
+    """
+    h = arch["hidden_size"]
+    bias = 1 if arch.get("attention_bias") else 0
+    heads, kv_heads, head_dim = (arch["num_attention_heads"], arch["num_key_value_heads"],
+                                 arch["head_dim"])
+    q = h * 2 * heads * head_dim + bias * 2 * heads * head_dim   # query and gate
+    kv = 2 * (h * kv_heads * head_dim + bias * kv_heads * head_dim)
+    o = heads * head_dim * h + bias * h
+    full_mixer = q + kv + o + 2 * head_dim  # + q_norm, k_norm
+
+    hk, hv = arch["linear_num_key_heads"], arch["linear_num_value_heads"]
+    dk, dv = arch["linear_key_head_dim"], arch["linear_value_head_dim"]
+    key_dim, value_dim = hk * dk, hv * dv
+    conv_dim = 2 * key_dim + value_dim
+    linear_mixer = (
+        h * conv_dim                             # in_proj_qkv
+        + h * value_dim                          # in_proj_z
+        + 2 * h * hv                             # in_proj_b, in_proj_a
+        + conv_dim * arch["linear_conv_kernel_dim"]  # depthwise conv, no bias
+        + 2 * hv                                 # dt_bias, A_log
+        + dv                                     # gated norm
+        + value_dim * h                          # out_proj
+    )
+    return {"linear_attention": linear_mixer, "full_attention": full_mixer}
+
+
+def hybrid_dense_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
+    """Parameters of a hybrid Gated-DeltaNet / gated-attention decoder with a
+    dense SwiGLU MLP in every layer (Qwen3.5), from the config alone.
+
+    ``per_layer`` maps each layer type to its count, as for the MoE variant.
+    """
+    h = arch["hidden_size"]
+    mixers = _hybrid_mixers(arch)
+    mlp = 3 * h * arch["intermediate_size"]
+    norms = 2 * h
+    per_type = {kind: mixer + mlp + norms for kind, mixer in mixers.items()}
+    types = _hybrid_layer_types(arch)
+    counts = {kind: types.count(kind) for kind in per_type}
+    embedding = arch["vocab_size"] * h
+    non_embedding = sum(per_type[kind] * counts[kind] for kind in per_type) + h
+    lm_head = 0 if arch.get("tie_word_embeddings") else embedding
+    return {
+        "per_layer": per_type,
+        "layers_by_type": counts,
         "embedding": embedding,
         "lm_head": lm_head,
         "non_embedding": non_embedding,

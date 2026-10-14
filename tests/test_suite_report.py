@@ -149,12 +149,12 @@ class TestAggregation(unittest.TestCase):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
             _task("flce", 2, "loss", [3.0]),
-            _task("synthetic_block", 3, "llm_block", [1.5]),
+            _task("megafold", 3, "protein", [1.5]),
         ]
         levels = SuiteReport(tasks=tasks).to_dict()["levels"]
         self.assertEqual(set(levels), {"1", "2", "3"})
         self.assertEqual(levels["1"]["name"], "primitive")
-        self.assertEqual(levels["3"]["name"], "architectural-block integration")
+        self.assertEqual(levels["3"]["name"], "whole-model workload")
         self.assertAlmostEqual(levels["2"]["speedup_full_step_macro"], 3.0)
 
     def test_within_operator_pooling_is_geometric(self):
@@ -175,7 +175,7 @@ class TestMarkdown(unittest.TestCase):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
             _task("conv2d", 1, "conv", [], cases_total=4),
-            _task("synthetic_block", 3, "llm_block", [1.5]),
+            _task("megafold", 3, "protein", [1.5]),
         ]
         text = SuiteReport(tasks=tasks).to_markdown()
         self.assertIn("full-step", text)

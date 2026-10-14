@@ -50,7 +50,7 @@ from .sites import (
     SITE_QKV,
     SITE_RESIDUAL,
 )
-from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
 
 _LAYERS = LLAMA_3_2_1B["num_hidden_layers"]
 

@@ -19,8 +19,8 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import ArtifactError, load_canonical
-from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import declared_gate, required_tolerance
+from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import ArtifactError, load_canonical
+from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import declared_gate, required_tolerance
 from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load as load_snapshot
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.capture import (
     DIRECT_GRADS,
@@ -87,14 +87,14 @@ def run_verify(
         fused_add_rms_norm_runtime_ref,
     )
 
-    from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import (
+    from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import (
         FORWARD_TOL,
         GRADIENT_TOL,
         _max_noise,
         _noise,
         compare_tensors,
     )
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import (
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import (
         validate_noise_repeats,
     )
 
@@ -534,7 +534,7 @@ def main(argv: list[str] | None = None) -> int:
             _write(args.report, report)
             return 0
 
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import validate_noise_repeats
+        from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import validate_noise_repeats
         try:
             validate_noise_repeats(args.noise_repeats)
         except ValueError as exc:

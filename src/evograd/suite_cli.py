@@ -100,8 +100,8 @@ def main(argv: list[str] | None = None) -> int:
         metavar="WORKLOAD=PATH",
         help=(
             "fold a finished tier-3 training-step report into the suite as "
-            "that level-4 workload's row (e.g. alphafold3=results/t3.json). "
-            "Level-4 tasks are measured by `evograd tier3-bench`, not by this "
+            "that level-3 workload's row (e.g. alphafold3=results/t3.json). "
+            "Level-3 tasks are measured by `evograd tier3-bench`, not by this "
             "command; without a report here they appear as uncovered."
         ),
     )
@@ -348,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    # Level-4 workloads: measured by tier3-bench, reported here. A declared
+    # Level-3 workloads: measured by tier3-bench, reported here. A declared
     # workload with no supplied report is a coverage fact, not an omission.
     from evograd.benchmark import WORKLOADS
 

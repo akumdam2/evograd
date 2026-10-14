@@ -2,7 +2,8 @@
 
 The Tier-3 runner and patcher are architecture-independent.  This registry is
 the only place that maps a public ``--model`` name to model-specific build and
-provider hooks.
+provider hooks. Tier 3 has one scope, the whole-model training step (benchmark
+Level 3); the block scope was removed on 2026-10-13.
 """
 
 from __future__ import annotations
@@ -21,14 +22,6 @@ class Tier3Adapter:
     providers: Callable[[Any, Any], dict[str, Any]] | None = None
     options: frozenset[str] = field(default_factory=frozenset)
     summary: str = ""
-    #: Block scope: parsed arguments -> a ``BlockAdapter`` for one case, or
-    #: ``None`` when this workload offers no block-scope evaluation. Model
-    #: scope is what every adapter has; block scope is declared by having this.
-    block: Callable[[Any], Any] | None = None
-
-    @property
-    def scopes(self) -> frozenset[str]:
-        return frozenset({"model", "block"} if self.block is not None else {"model"})
 
 
 TIER3_ADAPTERS: dict[str, str] = {
@@ -49,6 +42,9 @@ TIER3_ADAPTERS: dict[str, str] = {
     ),
     "megafold": (
         "evograd.evaluation.tier3.workloads.megafold.adapter:ADAPTER"
+    ),
+    "qwen3_5_4b": (
+        "evograd.evaluation.tier3.workloads.qwen3_5_4b.adapter:ADAPTER"
     ),
 }
 

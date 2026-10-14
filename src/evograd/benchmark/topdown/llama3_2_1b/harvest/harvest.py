@@ -3,7 +3,7 @@
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \
         --out results/llama3-level4/harvest.json
 
-This is the Level-4 smoke run with an observer attached. It reuses the same
+This is the Level-3 smoke run with an observer attached. It reuses the same
 build, the same inputs, the same step and the same gradient validation -- the
 harvest must describe *the* canonical execution, and a second, subtly different
 implementation of it would defeat that.
@@ -13,7 +13,7 @@ a boundary is worse than no manifest, because everything derived from it would
 inherit the gap silently.
 
 **Memory.** Llama-3.2-1B in BF16 is ~2.5 GiB of weights and as much again in
-gradients before activations, and the Level-4 step takes no optimizer step. It
+gradients before activations, and the Level-3 step takes no optimizer step. It
 fits any current card at full depth and full sequence, which is the reason this
 workload moved off Meta-Llama-3-8B: the 8B needed ``--layers`` to harvest at
 all, and a reduced-depth harvest describes shapes the canonical run never had.

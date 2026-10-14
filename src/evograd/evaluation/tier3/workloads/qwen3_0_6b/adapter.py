@@ -108,18 +108,11 @@ def providers(args, registry) -> dict[str, Any]:
     return providers
 
 
-def block(args):
-    """The block-scope adapter: one decoder layer, captured or config-derived."""
-    from .block import from_args
-
-    return from_args(args)
-
 
 ADAPTER = Tier3Adapter(
     name="qwen3_0_6b",
     build=build,
     providers=providers,
-    block=block,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        "simple_calibration", "real_text", "protocol4_calibration",
                        "protocol4_verdict", "protocol4_diagnostic_timing",

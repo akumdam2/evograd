@@ -9,10 +9,12 @@ results/
 ├── benchmark/topdown/<workload>/<run>/
 ├── evaluation/tier1/<op>/<run>/
 ├── evaluation/tier2/<op>/<run>/
-├── evaluation/tier3/<workload>/block/<run>/
+├── evaluation/tier3/<workload>/block/<run>/     historical: the block scope was removed 2026-10-13
 ├── evaluation/tier3/<workload>/model/<run>/
 └── experiments/<experiment>/<run>/
 ```
+
+FLA is not under `results/`: it is the sidecar at `~/.cache/evograd-fla/0.5.2`.
 
 Keep existing result paths and artifacts unchanged. Their embedded identities
 and hashes determine which workload they describe.

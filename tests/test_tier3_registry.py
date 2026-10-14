@@ -623,7 +623,8 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         default was removed for AlphaFold3's sake."""
         from evograd.evaluation.tier3.cli import _parser, build_workload
 
-        expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32"}
+        expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32",
+                    "qwen3_5_4b": "bfloat16"}
         for name, dtype in expected.items():
             with self.subTest(model=name):
                 args = _parser().parse_args(
@@ -631,6 +632,21 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 )
                 self.assertIsNone(args.dtype)
                 self.assertEqual(build_workload(args).describe()["dtype"], dtype)
+
+    def test_qwen3_5_is_registered_with_its_own_batch(self):
+        """Qwen3.5-4B's canonical batch is 1, not the CLI's or another
+        workload's 2; only an explicit flag changes it."""
+        from evograd.evaluation.tier3.cli import _parser, build_workload
+        from evograd.evaluation.tier3.workloads import tier3_adapter
+
+        self.assertEqual(tier3_adapter("qwen3_5_4b").name, "qwen3_5_4b")
+        # The default device (cuda) is part of the canonical identity; nothing is
+        # built here, so no GPU is needed.
+        described = build_workload(_parser().parse_args(
+            ["--model", "qwen3_5_4b", "--baseline", "none"])).describe()
+        self.assertEqual((described["batch"], described["tokens"]), (1, 2048))
+        self.assertTrue(described["canonical"])
+        self.assertIs(described["model_gate"]["implemented"], False)
 
     def test_an_explicit_dtype_still_overrides_the_workloads_own(self):
         from evograd.evaluation.tier3.cli import _parser, build_workload

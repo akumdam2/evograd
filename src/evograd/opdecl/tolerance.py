@@ -55,6 +55,16 @@ class ReductionScaledAtol:
     #: Safety factor on the measured excess. 2.0 means "twice as far past the
     #: anchor as the measurement said", which is the margin the artifact reports.
     gain: float = 2.0
+    #: result name -> its own gain, where one operator's results grow at
+    #: measurably different rates (a weight gradient that sums 4096 tokens
+    #: in float32 grows far slower than the random walk; another does not).
+    #: A result absent here uses ``gain``.
+    result_gain: dict[str, float] = field(default_factory=dict)
+    #: dtype -> result name -> atol multiplier, applied before the growth
+    #: factor. ``OpDecl.tolerance_multipliers`` is one number per result for
+    #: every dtype; a multiplier a bfloat16 reduction needs would otherwise
+    #: widen the float32 gate by the same factor.
+    dtype_multipliers: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def _extent(self, names, dims: dict[str, int]) -> int:
         total = 1
@@ -80,11 +90,15 @@ class ReductionScaledAtol:
         return walk * extreme
 
     def factor(self, result_name: str, dims: dict[str, int]) -> float:
-        return 1.0 + self.gain * max(0.0, self.raw_factor(result_name, dims) - 1.0)
+        gain = self.result_gain.get(result_name, self.gain)
+        return 1.0 + gain * max(0.0, self.raw_factor(result_name, dims) - 1.0)
 
     def __call__(self, workload, result_name, atol, rtol):
         if result_name is None:
             return atol, rtol
+        if self.dtype_multipliers:
+            by_result = self.dtype_multipliers.get(getattr(workload, "dtype", None), {})
+            atol *= by_result.get(result_name, 1.0)
         return atol * self.factor(result_name, dict(workload.dims)), rtol
 
     def describe(self) -> dict:
@@ -92,6 +106,9 @@ class ReductionScaledAtol:
             "kind": "reduction_scaled_atol",
             "formula": "atol *= 1 + gain * max(0, sqrt(N/N_a) * sqrt(log M / log M_a) - 1)",
             "gain": self.gain,
+            **({"result_gain": dict(self.result_gain)} if self.result_gain else {}),
+            **({"dtype_multipliers": {d: dict(m) for d, m in self.dtype_multipliers.items()}}
+               if self.dtype_multipliers else {}),
             "anchor_dims": dict(self.anchor_dims),
             "reduction_dims": {k: list(v) for k, v in self.reduction_dims.items()},
             "rtol": "unchanged",

@@ -1,19 +1,7 @@
 """Reviewed explicit-pair adapter for Liger's fused MoE autograd function."""
 
+from evograd.ops._common import FunctionContext as _FunctionContext
 from evograd.ops._common import make_pair_baseline
-
-
-class _FunctionContext:
-    """Minimal torch.autograd.Function context for direct pair benchmarking."""
-
-    def save_for_backward(self, *tensors):
-        self.saved_tensors = tensors
-
-    def mark_non_differentiable(self, *tensors):
-        return None
-
-    def set_materialize_grads(self, value):
-        self.materialize_grads = value
 
 
 def _liger_factory():

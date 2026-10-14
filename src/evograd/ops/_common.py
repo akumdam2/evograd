@@ -193,6 +193,69 @@ def recorded_layout(shape: Iterable[int], stride: Iterable[int]) -> str:
     return "contiguous"
 
 
+def contiguous_stride(shape: Iterable[int]) -> tuple[int, ...]:
+    """Row-major strides for ``shape``."""
+    shape = tuple(int(v) for v in shape)
+    stride, step = [], 1
+    for size in reversed(shape):
+        stride.append(step)
+        step *= max(size, 1)
+    return tuple(reversed(stride))
+
+
+def view_stride(shape: Iterable[int], stride: Iterable[int],
+                target: Iterable[int]) -> tuple[int, ...] | None:
+    """The strides of ``reshape(target)`` when it is a view, else ``None``.
+
+    A harvested tensor is often recorded at a higher rank than the operator
+    declares -- ``[B, T, H, D]`` for a ``[rows, D]`` norm -- and the rank
+    adapter flattens the leading dims with ``reshape``. That is a view exactly
+    when each merged group of dims is itself contiguous; then this returns the
+    strides the operator really receives. Pure Python, so declarations can call
+    it without torch.
+    """
+    shape, stride, target = (tuple(int(v) for v in x) for x in (shape, stride, target))
+    if shape == target:
+        return stride
+    total = 1
+    for size in shape:
+        total *= size
+    goal = 1
+    for size in target:
+        goal *= size
+    if total != goal:
+        return None
+    # Drop size-1 dims: their strides carry no information.
+    dims = [(n, s) for n, s in zip(shape, stride) if n != 1]
+    out: list[int] = []
+    i = 0
+    for size in target:
+        if size == 1:
+            out.append(0)
+            continue
+        if i >= len(dims):
+            return None
+        group_size, group_stride = dims[i]
+        i += 1
+        while group_size < size:
+            if i >= len(dims):
+                return None
+            next_size, next_stride = dims[i]
+            if group_stride != next_stride * next_size:
+                return None
+            group_size *= next_size
+            group_stride = next_stride
+            i += 1
+        if group_size != size:
+            return None
+        out.append(group_stride)
+    if i != len(dims):
+        return None
+    # A size-1 output dim's stride is free; use the row-major value.
+    natural = contiguous_stride(target)
+    return tuple(o if n != 1 else c for o, n, c in zip(out, target, natural))
+
+
 def is_head_major_view(workload: Workload) -> bool:
     """Whether this workload's primary input is the non-contiguous view a model
     hands its attention and RoPE kernels.
@@ -209,8 +272,15 @@ def make_pair_baseline(
     factory: Callable[[], tuple[Callable, Callable]],
     forward_args: tuple[str, ...],
     backward_extras: tuple[str, ...] = (),
+    *,
+    sidecar: str | None = None,
 ):
-    """Adapt a reviewed Liger autograd pair to evograd's timing-hook API."""
+    """Adapt a reviewed library autograd pair (Liger, FLA) to evograd's timing-hook API.
+
+    ``sidecar`` names a library installed outside the environment
+    (:mod:`evograd.opdecl.sidecar`): the harness then measures this baseline only
+    in a child process started for it, and the factory is not called anywhere else.
+    """
 
     def measure(torch, inputs, dout, warmup, reps, median_ms, median_ms_timed_region):
         forward, backward = factory()
@@ -239,7 +309,23 @@ def make_pair_baseline(
     measure.pair_factory = factory
     measure.forward_args = tuple(forward_args)
     measure.backward_extras = tuple(backward_extras)
+    measure.sidecar = sidecar
     return measure
+
+
+class FunctionContext:
+    """A stand-in ``ctx`` for calling a library's ``torch.autograd.Function``
+    ``forward``/``backward`` directly, so the pair runs exactly the library's
+    code with its saved state held in one object."""
+
+    def save_for_backward(self, *tensors):
+        self.saved_tensors = tensors
+
+    def mark_non_differentiable(self, *tensors):
+        return None
+
+    def set_materialize_grads(self, value):
+        self.materialize_grads = value
 
 
 def baseline_available(factory: Callable) -> bool:

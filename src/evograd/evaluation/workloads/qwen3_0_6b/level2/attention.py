@@ -19,8 +19,8 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import ArtifactError, load_canonical
-from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import declared_gate, required_tolerance
+from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import ArtifactError, load_canonical
+from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import declared_gate, required_tolerance
 from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load as load_snapshot
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.capture import (
     AttentionExtractionError,
@@ -69,7 +69,7 @@ def run_verify(
 
     Two comparisons with two separately justified tolerances, as for the MLP.
     The production spelling is *the same call* the model made, so it is held to
-    the Level-3 replay tolerances -- one BF16 unit roundoff forward, one epsilon
+    the layer-replay tolerances -- one BF16 unit roundoff forward, one epsilon
     on gradients. The declared dense reference computes the softmax in float32
     over a materialized score matrix, which is deliberately a different
     computation, and is held to the operator's declared tolerance.
@@ -80,7 +80,7 @@ def run_verify(
         qwen3_attention_forward_ref,
     )
 
-    from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import (
+    from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import (
         FORWARD_TOL,
         GRADIENT_TOL,
         _max_noise,
@@ -88,7 +88,7 @@ def run_verify(
         compare_tensors,
         declared_gate,
     )
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import (
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import (
         validate_noise_repeats,
     )
 
@@ -194,7 +194,7 @@ def run_verify(
                 "gradient": GRADIENT_TOL,
                 "why": (
                     "the same SDPA call the model made, so it is held to the "
-                    "Level-3 replay tolerances"
+                    "layer-replay tolerances"
                 ),
             },
             "declared_reference": {
@@ -482,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
             _write(args.report, report)
             return 0
 
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import validate_noise_repeats
+        from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import validate_noise_repeats
         try:
             validate_noise_repeats(args.noise_repeats)
         except ValueError as exc:

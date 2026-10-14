@@ -5,14 +5,17 @@ shapes, provenance, and aggregation. It does not define how a candidate runs;
 execution and correctness checks belong to
 [`evograd.evaluation`](../evaluation/README.md).
 
-## Four-level task hierarchy
+## Three-level task hierarchy
 
 | Level | Paper term | Scope |
 | ---: | --- | --- |
 | L1 | primitive | One mathematical primitive and its backward contract |
 | L2 | composite | A boundary composed from multiple adjacent primitives |
-| L3 | architectural-block integration | Cross-operator integration inside a real architectural block |
-| L4 | whole-model workload | A complete model-training workload |
+| L3 | whole-model workload | A complete model-training workload |
+
+The architectural-block level was removed on 2026-10-13. The decoder layer a
+model's L2 sites take their real invocations from is a data source
+(`topdown/<model>/layer`), not a level.
 
 A Level is the integration scope of an optimization, not the strength of a
 measurement. An L2 task may be evaluated in T1, T2, or T3; Level and Tier are
@@ -26,8 +29,9 @@ benchmark/
 ├── operator_suite/       implementation-neutral selection and suite CLI
 └── topdown/
     ├── common/           harvest, snapshot, smoke, and workload facilities
-    ├── qwen3_0_6b/       the current Qwen3-0.6B L4-to-L1 path
-    ├── llama3_2_1b/        the Llama-3.2-1B workload and harvest
+    ├── qwen3_0_6b/       the Qwen3-0.6B L3-to-L1 path
+    ├── llama3_2_1b/      the Llama-3.2-1B workload and harvest
+    ├── qwen3_5_4b/       the Qwen3.5-4B (text) L3-to-L1 path
     └── alphafold3/       the AlphaFold3 whole-model declaration
 ```
 
@@ -95,18 +99,17 @@ change the inputs generated for the provenance-free correctness cases. It is
 declaration infrastructure rather than a benchmark manifest, so importing the
 primitives still loads no benchmark package and no frozen snapshot.
 
-L3 blocks are evaluated through Tier-3 workload adapters with `--scope block`.
-Qwen3-0.6B and Llama-3.2-1B support captured and config-derived decoder layers.
-These are integration workloads rather than standalone `OpDecl` kernels.
+L3 workloads are evaluated through Tier-3 workload adapters
+(`evograd tier3-bench --model <name>`): the whole training step, with candidate
+kernels patched into their sites. They are `WorkloadDecl`s, never `OpDecl`s.
 
 ## Two benchmark families
 
 - The operator suite selects tasks from the existing Liger-derived and other
   declared operators, then aggregates coverage, full-step speedup, and retained
   state by family and Level.
-- The top-down benchmark starts from a real L4 workload and traces through a
-  harvest and frozen snapshot to L3/L2/L1. The current Qwen instance is named
-  `qwen3_0_6b`; it must not be confused with the planned Qwen3-Next workload.
+- The top-down benchmark starts from a real L3 workload and traces through a
+  harvest and frozen snapshot to L2/L1.
 
 Registry counts must be queried from `evograd.ops.PRIMITIVES`,
 `evograd.benchmark.TASKS`, `evograd.benchmark.WORKLOADS`, and

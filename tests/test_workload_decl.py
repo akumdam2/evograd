@@ -1,4 +1,4 @@
-"""Level-4 workload declarations: validation rules and the registry.
+"""Level-3 workload declarations: validation rules and the registry.
 
 What these pin is the declaration contract — what a whole-model task must
 state before it can claim a place in the suite — and that the AlphaFold3
@@ -45,11 +45,12 @@ class TestValidation(unittest.TestCase):
     """The declaration contract, exercised through a throwaway declaration."""
 
     def test_a_complete_declaration_validates(self):
-        self.assertEqual(_declare().level, 4)
+        self.assertEqual(_declare().level, 3)
 
-    def test_level_four_is_the_only_level(self):
-        with self.assertRaises(ValueError):
-            _declare(level=3)
+    def test_level_three_is_the_only_level(self):
+        for level in (1, 2, 4):
+            with self.subTest(level=level), self.assertRaises(ValueError):
+                _declare(level=level)
 
     def test_sites_are_required(self):
         with self.assertRaises(ValueError):
@@ -76,11 +77,11 @@ class TestValidation(unittest.TestCase):
 
 
 class TestTheRegisteredWorkload(unittest.TestCase):
-    """MegaFold is the level-4 task the suite runs."""
+    """MegaFold is the level-3 task the suite runs."""
 
     def test_it_is_registered(self):
         self.assertIn("megafold", WORKLOADS)
-        self.assertEqual(get_workload("megafold").level, 4)
+        self.assertEqual(get_workload("megafold").level, 3)
 
     def test_every_site_names_a_declared_operator(self):
         for site, op_name in get_workload("megafold").sites.items():
@@ -88,7 +89,7 @@ class TestTheRegisteredWorkload(unittest.TestCase):
                 self.assertIn(op_name, TASKS)
 
     def test_every_benchmark_case_rederives_from_the_config(self):
-        """The provenance assertion, extended to level 4: the stored dims and
+        """The provenance assertion, extended to level 3: the stored dims and
         the model configuration must agree, or one of them is wrong."""
         for case in get_workload("megafold").benchmark:
             with self.subTest(dims=case.dims):
@@ -108,7 +109,7 @@ class TestTheAlphafold3Declaration(unittest.TestCase):
 
     MegaFold replaced it in ``WORKLOADS``: it is the implementation every
     AlphaFold3 shape was transcribed from, and it ships fused kernels for the
-    sites, so the level-4 comparison has a production baseline rather than only
+    sites, so the level-3 comparison has a production baseline rather than only
     eager. This declaration is still a valid one and still re-derives from the
     configuration it cites, which is what these check.
     """
@@ -117,7 +118,7 @@ class TestTheAlphafold3Declaration(unittest.TestCase):
         self.assertNotIn("alphafold3", WORKLOADS)
 
     def test_it_is_still_a_valid_declaration(self):
-        self.assertEqual(af3_declaration.level, 4)
+        self.assertEqual(af3_declaration.level, 3)
         self.assertTrue(callable(af3_declaration.resolve_factory()))
 
     def test_every_benchmark_case_still_rederives_from_the_config(self):
@@ -141,7 +142,7 @@ class TestArchIsNotMutableByTheLibrary(unittest.TestCase):
     """
 
     def test_mutating_the_returned_arch_leaves_the_declaration_alone(self):
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import (
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
             CANONICAL, LLAMA_3_2_1B,
         )
 
@@ -155,7 +156,7 @@ class TestArchIsNotMutableByTheLibrary(unittest.TestCase):
         self.assertEqual(CANONICAL.workload_id, before)
 
     def test_two_reads_are_independent(self):
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import CANONICAL
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import CANONICAL
 
         first = CANONICAL.arch
         first["rope_scaling"]["injected"] = True

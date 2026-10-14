@@ -1,7 +1,8 @@
 # Evaluation
 
 **Tier 2 checks an operator before timing it. Tier 3 measures the operator
-inside a block or model, recording numerical differences alongside performance.**
+inside the whole model's training step, recording numerical differences
+alongside performance.**
 
 For end-to-end research runs, use `--numerical-enforcement report-first`:
 finite numerical mismatches do not stop training. Structural errors, missing
@@ -16,12 +17,12 @@ for the latest measurements and their limits.
 | --- | --- |
 | T1 | Call the forward/backward pair directly |
 | T2 | Run one operator through PyTorch autograd, without an optimizer |
-| T3 block | Run one decoder layer forward and backward with supplied output gradients |
-| T3 model | Run the full model: forward/loss, backward, AdamW update and gradient reset |
+| T3 | Run the full model: forward/loss, backward, AdamW update and gradient reset |
 
-Levels describe tasks: L1 primitive, L2 composite operator, L3 block, L4 model.
-An L2 candidate can be evaluated at T2 and installed in either T3 scope.
-Block and whole-model times must be reported separately.
+Levels describe tasks: L1 primitive, L2 composite operator, L3 whole model.
+An L2 candidate can be evaluated at T2 and installed in the T3 model. (The
+block scope -- one decoder layer, forward plus VJP -- was removed on
+2026-10-13.)
 
 ## Tier 2: keep the declared correctness rules
 
@@ -116,7 +117,7 @@ describes agreement; `evaluation_complete` identifies missing comparisons.
 A row can have both recorded mismatches and incomplete evaluation.
 
 T3 checks the replacement sites, actual call counts, purity, local outputs and
-gradients, then block/model results. Native execution is the reference.
+gradients, then whole-model results. Native execution is the reference.
 Local comparisons use the same live inputs and incoming gradients. Frozen
 policies supply any additional numerical limits and must match the case,
 environment and patch set. Compile-relative Tier-2 gates and extra diagnostic
@@ -136,8 +137,8 @@ Read the case's provenance, not just its suite name.
 | Scope | Inputs | Outputs and reference gradients |
 | --- | --- | --- |
 | T1/T2 operator | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
-| Captured block | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
-| Config-derived block | Seeded layer, inputs and external gradients | Native layer on that case |
+| L2 real invocation (captured layer) | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
+| L2 real invocation (config-derived layer) | Seeded layer, inputs and external gradients | Native layer on that case |
 | Whole model | Checkpoint or seeded weights; real-text or synthetic token IDs and labels | Model logits and LM loss; backward supplies the intermediate and parameter gradients |
 
 Capture hooks save detached CPU copies from a full-model forward/backward.
@@ -166,7 +167,7 @@ The current matrix uses BF16, `B=2`, `T=2048` and `rows=B*T=4096`.
 
 Q/K/V are head-major views of token-major tensors. Attention begins after QKV
 projection and RoPE; those operations belong to the QKV site. Each site runs
-once per block, but full-model residual fusion also covers cross-layer/final
+once per decoder layer, but full-model residual fusion also covers cross-layer/final
 norm boundaries: 56 calls for Qwen and 32 for Llama.
 
 Sources: [model dimensions](../opdecl/models.py),
@@ -174,28 +175,19 @@ Sources: [model dimensions](../opdecl/models.py),
 [Llama sites](../benchmark/topdown/llama3_2_1b/levels/level2/manifest.py).
 The generic Llama-3-8B operator grids are a different workload.
 
+### Qwen3.5-4B L2 boundaries and canonical shapes
+
+The hybrid linear-attention model: 32 layers (24 Gated DeltaNet, 8 gated full
+attention), BF16, `B=1`, `T=2048`. Its seven L2 sites, their contracts and
+calibrated tolerances are described in [docs/QWEN3_5_4B.md](../../../docs/QWEN3_5_4B.md)
+and [the package README](../benchmark/topdown/qwen3_5_4b/README.md).
+
 ## Running Tier 3 and reading its timings
 
-Captured block example, with identical external gradients for native and candidate:
+Example:
 
 ```bash
-evograd tier3-bench --scope block --model llama_3_2_1b \
-  --block-source captured --artifact layer8.pt --layer-index 8 \
-  --candidate attention=candidate.py --baseline none \
-  --numerical-enforcement report-first \
-  --calibrate-with structural_identity,bound_pair_identity,trusted_torch_compile \
-  --out results/llama_attention_block.json
-```
-
-Record the calibration controls and policy hash. Different control sets can
-produce different limits. Failed controls cannot establish a valid calibration.
-Block timing includes forward and backward only; gradient/state reset is outside
-samples. Site-wise compile combinations are not whole-block compilation.
-
-Whole-model example:
-
-```bash
-evograd tier3-bench --scope model --model qwen3_0_6b --real-text \
+evograd tier3-bench --model qwen3_0_6b --real-text \
   --whole-model-compile --baseline none --patch-set ours:attention=candidate.py \
   --numerical-enforcement report-first \
   --protocol4-calibration policy.json --protocol4-verdict holdout.json \
@@ -217,6 +209,5 @@ from allocations retained by numerical checking. Unpatched eager/whole-model
 compile currently bypass the standard model gate; separate numerical measurements
 do not automatically make their policy-based evaluation complete.
 
-Further details: [block checks](../../../docs/L3_CORRECTNESS_CHECKS.md),
-[Qwen usage](../../../docs/QWEN3_LEVEL4.md),
+Further details: [Qwen usage](../../../docs/QWEN3_LEVEL3.md),
 [result storage](../../../docs/RESULTS_LAYOUT.md).

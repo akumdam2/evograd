@@ -1,13 +1,13 @@
-"""Whole-model workload declarations: the level-4 tasks of the benchmark.
+"""Whole-model workload declarations: the level-3 tasks of the benchmark.
 
 Levels 1–3 are :class:`~evograd.opdecl.activity.OpDecl`\\ s — forward/backward
 pairs with a declared argument list, one active output, and a saved-state
-contract. A level-4 task is not that shape. A whole-model training step has no
+contract. A level-3 task is not that shape. A whole-model training step has no
 single output, nothing crossing a pair boundary, and it is not evolved as one
 kernel: evolved level-1/2 kernels are patched *into* it, and the task measures
 whether their local speedups survive the surrounding computation.
 
-So level 4 gets its own declaration type. A :class:`WorkloadDecl` names the
+So level 3 gets its own declaration type. A :class:`WorkloadDecl` names the
 model configuration the step trains (a registry key in
 :mod:`evograd.opdecl.models`, so shapes stay provenance-checked exactly as they
 are at levels 1–3), the patch sites and which declared operator each one
@@ -54,7 +54,7 @@ class WorkloadDecl:
     #: ``<component>_dims`` method, exactly as level-1..3 benchmark cases do.
     benchmark: tuple[Workload, ...]
     #: What the workload does not exercise, stated rather than discovered.
-    #: Required: a level-4 task named for a model while training a subset of it
+    #: Required: a level-3 task named for a model while training a subset of it
     #: would be worse than the restriction it hides.
     exclusions: str = ""
     #: Pip distribution the factory needs at runtime (e.g. the model
@@ -65,13 +65,13 @@ class WorkloadDecl:
     baselines: tuple[str, ...] = ()
     notes: str = ""
     #: Task hierarchy level. Whole-model is the only shape this type declares.
-    level: int = 4
+    level: int = 3
 
     def __post_init__(self) -> None:
-        if self.level != 4:
+        if self.level != 3:
             raise ValueError(
                 f"{self.name}: WorkloadDecl declares whole-model tasks; level "
-                f"must be 4, got {self.level!r} (levels 1-3 are OpDecls)"
+                f"must be 3, got {self.level!r} (levels 1-2 are OpDecls)"
             )
         if not self.name or not self.family or not self.model:
             raise ValueError("a workload declaration needs name, family, and model")
@@ -82,7 +82,7 @@ class WorkloadDecl:
             )
         if not self.sites:
             raise ValueError(
-                f"{self.name}: a level-4 task with no patch sites measures "
+                f"{self.name}: a level-3 task with no patch sites measures "
                 "nothing a kernel can change"
             )
         if not self.benchmark:
@@ -90,7 +90,7 @@ class WorkloadDecl:
         for workload in self.benchmark:
             if workload.provenance is None:
                 raise ValueError(
-                    f"{self.name}: every level-4 benchmark case must carry a "
+                    f"{self.name}: every level-3 benchmark case must carry a "
                     "provenance; a whole-model shape with no model behind it "
                     "is a contradiction"
                 )

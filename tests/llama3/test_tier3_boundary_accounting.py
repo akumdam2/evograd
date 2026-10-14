@@ -46,7 +46,7 @@ from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
     expected_counts,
     live_sites,
 )
-from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
 
 #: Small enough to enumerate by hand, large enough that a per-layer count and a
 #: per-model count cannot be confused for each other.

@@ -360,7 +360,7 @@ class TestPurityCallCounts(unittest.TestCase):
         makes" has nowhere to hide."""
         from evograd.evaluation.tier3.workloads.llama3_2_1b import purity, sites
 
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
 
         canonical = sites.expected_counts(LLAMA_3_2_1B["num_hidden_layers"])
         self.assertEqual(

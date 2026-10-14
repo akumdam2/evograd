@@ -19,4 +19,6 @@ WORKLOAD = EvalWorkload(
     # This model's own Level-2 declarations; `residual_rmsnorm` is excluded
     # from the inventory sweep, as it always was.
     level2_tasks=("qwen3_qkv_norm_rope", "qwen3_attention", "qwen3_swiglu_mlp"),
+    harvested_tasks={"qwen3_qkv_norm_rope": "qkv", "qwen3_attention": "attention",
+                     "qwen3_swiglu_mlp": "mlp"},
 )

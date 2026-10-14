@@ -3,7 +3,7 @@
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
         --out results/qwen3-level4/harvest.json
 
-This is the Level-4 smoke run with an observer attached. It reuses the same
+This is the Level-3 smoke run with an observer attached. It reuses the same
 build, the same inputs, the same step and the same gradient validation -- the
 point of the milestone is that the harvest describes *the* canonical execution,
 and a second, subtly different implementation of it would defeat that.

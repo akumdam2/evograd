@@ -338,10 +338,10 @@ class AlphaFoldConfig:
     #: gated activation — the same ratio a transformer feed-forward block uses.
     transition_expansion: int = 4
 
-    # ── whole-model structure (level 4) ───────────────────────────────────
+    # ── whole-model structure (level 3) ───────────────────────────────────
     # Stack depths and input-feature widths, as the AF3 paper specifies them
     # and as alphafold3-pytorch (the implementation MegaFold builds on) sets
-    # its defaults. A level-4 workload builds the training model from these,
+    # its defaults. A level-3 workload builds the training model from these,
     # so a benchmark run is traceable to the published architecture rather
     # than to whatever a harness happened to construct.
     pairformer_depth: int = 48
@@ -425,10 +425,10 @@ class AlphaFoldConfig:
         return {"rows": residues * residues, "cols": self.transition_expansion * self.c_z}
 
     def train_step_dims(self, *, batch: int, residues: int) -> dict[str, int]:
-        """Every dim a whole-model training-step workload needs (level 4).
+        """Every dim a whole-model training-step workload needs (level 3).
 
         ``batch`` and ``residues`` (the crop length) are the free dimensions;
-        widths and stack depths come from the configuration, so a level-4
+        widths and stack depths come from the configuration, so a level-3
         benchmark case cannot silently drift away from the architecture it
         claims to train.
         """
@@ -441,6 +441,209 @@ class AlphaFoldConfig:
             "pairformer_depth": self.pairformer_depth,
             "diffusion_depth": self.diffusion_token_transformer_depth,
         }
+
+
+@dataclass(frozen=True)
+class HybridDenseModelConfig:
+    """A hybrid Gated-DeltaNet / gated-attention decoder with a *dense* MLP in
+    every layer, as Qwen3.5 publishes it.
+
+    Three of every four layers are a Gated DeltaNet (linear attention), the
+    fourth gated full attention; every layer's MLP is one dense SwiGLU, with no
+    router and no experts. The GDN input stage projects q|k|v, z, b and a with
+    four separate linears, so its site dims name ``C`` (the q|k|v width the
+    convolution runs over) and ``VD`` (z).
+
+    Layer types are derived from ``full_attention_interval`` exactly as
+    Transformers derives them; Qwen3.5's ``config.json`` also writes the list out,
+    and a test holds the two equal.
+    """
+
+    name: str
+    hidden: int
+    intermediate: int
+    layers: int
+    full_attention_interval: int
+    # gated full attention
+    n_heads: int
+    n_kv_heads: int
+    head_dim: int
+    partial_rotary_factor: float
+    rope_theta: float
+    # Gated DeltaNet
+    linear_num_key_heads: int
+    linear_num_value_heads: int
+    linear_key_head_dim: int
+    linear_value_head_dim: int
+    linear_conv_kernel_dim: int
+    vocab: int
+    rms_norm_eps: float
+    dtype: str
+    tie_word_embeddings: bool = True
+    #: Transformers' torch chunk size for the gated delta rule (a constant of the
+    #: reference implementation, not a config field).
+    chunk_size: int = 64
+    source: str = ""
+
+    # ── structure ────────────────────────────────────────────────────────
+    @property
+    def layer_types(self) -> tuple[str, ...]:
+        return tuple(
+            "linear_attention" if (i + 1) % self.full_attention_interval else "full_attention"
+            for i in range(self.layers)
+        )
+
+    def layer_count(self, kind: str) -> int:
+        """How many layers of one kind the model stacks -- 24 GDN, 8 full for Qwen3.5-4B."""
+        return sum(1 for t in self.layer_types if t == kind)
+
+    # ── derived widths ───────────────────────────────────────────────────
+    @property
+    def key_dim(self) -> int:
+        return self.linear_num_key_heads * self.linear_key_head_dim
+
+    @property
+    def value_dim(self) -> int:
+        return self.linear_num_value_heads * self.linear_value_head_dim
+
+    @property
+    def conv_dim(self) -> int:
+        """``in_proj_qkv``'s fan-out, and the channels the short convolution runs over."""
+        return 2 * self.key_dim + self.value_dim
+
+    @property
+    def q_out(self) -> int:
+        """Query fan-out *without* the gate: what ``o_proj`` reads."""
+        return self.n_heads * self.head_dim
+
+    @property
+    def q_gate_out(self) -> int:
+        """``q_proj``'s fan-out: every head's query interleaved with its gate."""
+        return 2 * self.q_out
+
+    @property
+    def kv_out(self) -> int:
+        return self.n_kv_heads * self.head_dim
+
+    @property
+    def rotary_dim(self) -> int:
+        return int(self.head_dim * self.partial_rotary_factor)
+
+    # ── Level-2 site dims ────────────────────────────────────────────────
+    def gdn_in_proj_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The four GDN input projections, conv, split, gating and q/k repeat."""
+        return {
+            "B": batch, "T": seq, "H": self.hidden,
+            "C": self.conv_dim, "VD": self.value_dim,
+            "HV": self.linear_num_value_heads, "K": self.linear_conv_kernel_dim,
+            "D": self.linear_key_head_dim,
+        }
+
+    def gated_delta_rule_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The chunked gated delta rule, q and k already repeated to the
+        value-head count (Dk == Dv)."""
+        return {"B": batch, "T": seq, "HV": self.linear_num_value_heads,
+                "D": self.linear_value_head_dim}
+
+    def gdn_norm_out_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "HV": self.linear_num_value_heads,
+                "D": self.linear_value_head_dim, "VD": self.value_dim, "H": self.hidden}
+
+    def qkv_norm_partial_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {
+            "B": batch, "T": seq, "H": self.hidden,
+            "HQ": self.n_heads, "HK": self.n_kv_heads, "D": self.head_dim,
+            "R": self.rotary_dim, "QG": self.q_gate_out, "KVO": self.kv_out,
+            "QO": self.q_out,
+        }
+
+    def gated_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "HQ": self.n_heads, "HK": self.n_kv_heads,
+                "D": self.head_dim, "QO": self.q_out, "H": self.hidden}
+
+    def residual_rmsnorm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "H": self.hidden}
+
+    def swiglu_mlp_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The dense gated MLP, kept in ``[B, T, H]`` as the module receives it."""
+        return {"B": batch, "T": seq, "H": self.hidden, "I": self.intermediate}
+
+    # ── Level-1 component dims ───────────────────────────────────────────
+    def gdn_conv1d_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "C": self.conv_dim, "T": seq, "K": self.linear_conv_kernel_dim}
+
+    def gdn_qk_l2norm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """q and k are L2-normalized after the repeat to the value-head count."""
+        return {"rows": batch * seq * self.linear_num_value_heads,
+                "cols": self.linear_key_head_dim}
+
+    def gdn_gating_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"rows": tokens, "heads": self.linear_num_value_heads}
+
+    def gdn_gated_norm_dims(self, *, tokens: int) -> dict[str, int]:
+        """``Qwen3_5RMSNormGated`` over one value head per row."""
+        return {"rows": tokens * self.linear_num_value_heads,
+                "hidden": self.linear_value_head_dim}
+
+    def residual_norm_dims(self, *, tokens: int) -> dict[str, int]:
+        """The residual-stream (1 + w) RMSNorm: both per-layer norms and the final one."""
+        return {"rows": tokens, "hidden": self.hidden}
+
+    def attn_q_norm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"rows": batch * seq * self.n_heads, "hidden": self.head_dim}
+
+    def attn_k_norm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"rows": batch * seq * self.n_kv_heads, "hidden": self.head_dim}
+
+    def partial_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "H": self.n_heads, "T": seq, "D": self.head_dim,
+                "R": self.rotary_dim}
+
+    def partial_rope_kv_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "H": self.n_kv_heads, "T": seq, "D": self.head_dim,
+                "R": self.rotary_dim}
+
+    def causal_gqa_sdpa_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "HQ": self.n_heads, "HK": self.n_kv_heads, "T": seq,
+                "D": self.head_dim}
+
+    def mlp_activation_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"rows": tokens, "cols": self.intermediate}
+
+    def logits_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"rows": tokens, "cols": self.vocab}
+
+    # Biasless projections, as plain GEMMs: [M, K] @ [N, K]^T.
+    def gdn_in_qkv_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.conv_dim}
+
+    def gdn_in_z_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.value_dim}
+
+    def gdn_in_ba_dims(self, *, tokens: int) -> dict[str, int]:
+        """``in_proj_b`` and ``in_proj_a``: one scalar per value head each."""
+        return {"M": tokens, "K": self.hidden, "N": self.linear_num_value_heads}
+
+    def gdn_out_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.value_dim, "N": self.hidden}
+
+    def attn_q_gate_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.q_gate_out}
+
+    def attn_kv_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.kv_out}
+
+    def attn_out_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.q_out, "N": self.hidden}
+
+    def mlp_up_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.intermediate}
+
+    def mlp_down_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.intermediate, "N": self.hidden}
+
+    def lm_head_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.vocab}
 
 
 #: Meta-Llama-3-8B. The operator suite's timed grids (``rmsnorm``, ``swiglu``,
@@ -510,7 +713,7 @@ QWEN3_0_6B = ModelConfig(
     layers=28,
     rope_theta=1000000.0,
     dtype="bfloat16",
-    source="Qwen/Qwen3-0.6B config.json; observed in the evograd Level-4 harvest",
+    source="Qwen/Qwen3-0.6B config.json; observed in the evograd Level-3 harvest",
 )
 
 #: Llama-3-8B's architecture with four layers instead of thirty-two.
@@ -536,6 +739,34 @@ LLAMA_3_8B_4L = ModelConfig(
     source="LLAMA_3_8B with layers=4; iteration config, not a published model",
 )
 
+#: Qwen3.5-4B's text model, as ``Qwen/Qwen3.5-4B``'s ``config.json`` publishes it
+#: under ``text_config`` (the ViT and the MTP head are not part of this
+#: workload). Every benchmark shape the ``qwen3_5_4b`` cases use is derived from
+#: here; ``benchmark.topdown.qwen3_5_4b.architecture`` carries the same fields
+#: verbatim and a test keeps the two in agreement.
+QWEN3_5_4B = HybridDenseModelConfig(
+    name="qwen3_5_4b",
+    hidden=2560,
+    intermediate=9216,
+    layers=32,
+    full_attention_interval=4,
+    n_heads=16,
+    n_kv_heads=4,
+    head_dim=256,
+    partial_rotary_factor=0.25,
+    rope_theta=10000000.0,
+    linear_num_key_heads=16,
+    linear_num_value_heads=32,
+    linear_key_head_dim=128,
+    linear_value_head_dim=128,
+    linear_conv_kernel_dim=4,
+    vocab=248320,
+    rms_norm_eps=1e-6,
+    dtype="bfloat16",
+    tie_word_embeddings=True,
+    source="Qwen/Qwen3.5-4B config.json (text_config)",
+)
+
 ALPHAFOLD3 = AlphaFoldConfig(
     name="alphafold3",
     c_s=384,
@@ -552,7 +783,7 @@ ALPHAFOLD3 = AlphaFoldConfig(
 
 #: AlphaFold3's architecture with the stacks cut to two pairformer blocks.
 #:
-#: The level-4 analogue of ``LLAMA_3_8B_4L``: every width, head count, and
+#: The level-3 analogue of ``LLAMA_3_8B_4L``: every width, head count, and
 #: input-feature dimension is the real configuration, only the stack depths are
 #: reduced, so the kernels see the true shapes while a training step stays
 #: cheap enough to iterate on. Use it to iterate; report from ``ALPHAFOLD3``.
@@ -602,16 +833,16 @@ LLAMA_VOCAB_REGIME_SPLIT = 2048
 #: 384 belong in untimed coverage rather than the default timed suite.
 AF3_RESIDUE_SWEEP = (128, 256, 384)
 
-MODELS: dict[str, ModelConfig | AlphaFoldConfig] = {
+MODELS: dict[str, ModelConfig | AlphaFoldConfig | HybridDenseModelConfig] = {
     config.name: config
-    for config in (LLAMA_3_8B, LLAMA_3_2_1B, QWEN3_0_6B, ALPHAFOLD3)
+    for config in (LLAMA_3_8B, LLAMA_3_2_1B, QWEN3_0_6B, ALPHAFOLD3, QWEN3_5_4B)
 }
-# Two keys, two models: a name collision here would let one configuration
-# silently answer for the other's provenance.
-assert len(MODELS) == 4, sorted(MODELS)
+# One key per model: a name collision here would let one configuration
+# silently answer for another's provenance.
+assert len(MODELS) == 5, sorted(MODELS)
 
 
-def config_for(provenance) -> ModelConfig | AlphaFoldConfig:
+def config_for(provenance) -> ModelConfig | AlphaFoldConfig | HybridDenseModelConfig:
     """The configuration a :class:`Provenance` names, or a clear failure."""
     try:
         return MODELS[provenance.model]
@@ -644,6 +875,7 @@ __all__ = [
     "ALPHAFOLD3",
     "ALPHAFOLD3_2L",
     "AlphaFoldConfig",
+    "HybridDenseModelConfig",
     "LLAMA_3_8B",
     "LLAMA_REGIME_SPLIT",
     "LLAMA_TOKEN_SWEEP",
@@ -652,6 +884,7 @@ __all__ = [
     "LLAMA_VOCAB_TOKEN_SWEEP_FP32",
     "MODELS",
     "ModelConfig",
+    "QWEN3_5_4B",
     "config_for",
     "rederive_dims",
 ]

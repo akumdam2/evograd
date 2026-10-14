@@ -49,10 +49,42 @@ def case_seed(workload: Workload) -> int:
     return seed * 131 + sum(map(ord, workload.dtype))
 
 
+def with_strides(tensor: torch.Tensor, stride) -> torch.Tensor:
+    """The same values laid out with exactly ``stride`` (gaps allowed).
+
+    ``empty_strided`` allocates storage covering every addressed element, so a
+    view with gaps -- a channel slice of a larger buffer -- is reproduced as
+    the model holds it, not packed.
+    """
+    stride = tuple(int(s) for s in stride)
+    if tuple(tensor.stride()) == stride:
+        return tensor
+    out = torch.empty_strided(tuple(tensor.shape), stride, dtype=tensor.dtype,
+                              device=tensor.device)
+    out.copy_(tensor)
+    return out
+
+
+def apply_recorded_strides(op: OpDecl, workload: Workload, values: dict) -> dict:
+    """Re-lay out every argument the workload's provenance gives strides for."""
+    provenance = getattr(workload, "provenance", None)
+    for name, stride in getattr(provenance, "strides", ()) or ():
+        value = values.get(name)
+        if not torch.is_tensor(value):
+            raise ValueError(f"{op.name}: recorded strides name {name!r}, which the "
+                             "input generator did not produce as a tensor")
+        values[name] = with_strides(value, stride)
+    return values
+
+
 def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> dict:
-    """All primals plus the upstream gradient, keyed by declared names."""
+    """All primals plus the upstream gradient, keyed by declared names.
+
+    Whatever generates them, arguments the workload's provenance records
+    strides for come back with exactly those strides.
+    """
     if op.make_inputs is not None:
-        return op.make_inputs(torch, op, workload, device)
+        return apply_recorded_strides(op, workload, op.make_inputs(torch, op, workload, device))
 
     torch.manual_seed(case_seed(workload))
     values: dict = {}
@@ -75,7 +107,7 @@ def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> di
         out_shape = bind_shape(out.shape, workload.dims)
         out_dtype = resolve_dtype(arg_dtype_name(out, workload))
         values[out.grad_name] = torch.randn(out_shape, device=device, dtype=out_dtype) * 0.5
-    return values
+    return apply_recorded_strides(op, workload, values)
 
 
 def upstream_grad_values(op, values):

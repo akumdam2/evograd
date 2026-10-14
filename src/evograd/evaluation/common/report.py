@@ -123,7 +123,7 @@ class CaseMetrics:
         Never the backward-only ratio. The eager baseline's "backward" runs the
         forward too, while a candidate's backward is timed from pre-saved
         state, so that comparison is inflated by roughly the forward's share of
-        the step — about half for a level-3 block.
+        the step — about half for a decoder layer.
         """
         return self._ratio(self.baseline_full_ms, self.candidate_full_ms)
 

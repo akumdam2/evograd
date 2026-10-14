@@ -162,7 +162,25 @@ def baseline_candidate_module(op: OpDecl, baseline: str):
             "--baseline instead."
         )
 
-    forward, backward = factory()
+    sidecar = getattr(hook, "sidecar", None)
+    if sidecar is None:
+        forward, backward = factory()
+    else:
+        # A sidecar library (FLA) may be imported only in the child measuring
+        # this baseline, so the pair is built on first use rather than here:
+        # a parent assembling providers never touches it.
+        pair: list = []
+
+        def _pair():
+            if not pair:
+                pair.extend(factory())
+            return pair
+
+        def forward(*args):
+            return _pair()[0](*args)
+
+        def backward(*args):
+            return _pair()[1](*args)
     forward_args = tuple(getattr(hook, "forward_args", ()))
     backward_extras = tuple(getattr(hook, "backward_extras", ()))
     arg_names = tuple(arg.name for arg in op.args)
@@ -192,7 +210,17 @@ def baseline_candidate_module(op: OpDecl, baseline: str):
     )
     # bind.lookup_pair reports this in its error messages.
     module.__name__ = f"<{baseline} baseline as candidate for {op.name}>"
+    # Which sidecar libraries the process running this module must be allowed.
+    module.sidecars = (sidecar,) if sidecar else ()
     return module
+
+
+def kernel_sidecars(kernels) -> tuple[str, ...]:
+    """The sidecar libraries a Tier-3 kernel set's sources need, sorted."""
+    names = set()
+    for source in getattr(kernels, "sources", ()):
+        names.update(getattr(getattr(source, "module", None), "sidecars", ()) or ())
+    return tuple(sorted(names))
 
 
 def available_baselines(op: OpDecl) -> list[str]:

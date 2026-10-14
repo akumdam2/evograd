@@ -34,8 +34,40 @@ from __future__ import annotations
 import dataclasses
 from typing import Iterable
 
-from evograd.opdecl import OpDecl, Provenance, Workload
-from evograd.ops._common import recorded_layout
+from evograd.opdecl import OpDecl, Provenance, Workload, bind_shape
+from evograd.ops._common import contiguous_stride, recorded_layout, view_stride
+
+
+def recorded_strides(op: OpDecl | None, dims: dict[str, int], entries, layout: str):
+    """The exact strides a harvested call gave the primitive's tensor arguments.
+
+    The harvested boundary's tensors are paired with the primitive's tensor
+    arguments by position. A pair counts only when the recorded tensor *is* the
+    argument at this workload's shape -- the same shape, or a higher-rank view
+    the rank adapter would flatten into it without a copy (``view_stride``);
+    anything else (a boundary whose argument list is not the primitive's) is
+    skipped rather than guessed. Contiguous tensors are left out, and so are
+    head-major views when the primary input is one, because the generators
+    already reproduce those; what remains is every layout a generator would
+    otherwise get wrong.
+    """
+    if op is None:
+        return ()
+    tensor_args = [arg for arg in op.args if getattr(arg, "shape", None) not in (None, "unspecified")]
+    found = []
+    for arg, entry in zip(tensor_args, entries or ()):
+        try:
+            target = bind_shape(arg.shape, dims)
+        except ValueError:
+            continue
+        stride = view_stride(entry.get("shape", ()), entry.get("stride", ()), target)
+        if stride is None or stride == contiguous_stride(target):
+            continue
+        if (layout == "head_major_view"
+                and recorded_layout(target, stride) == "head_major_view"):
+            continue
+        found.append((arg.name, tuple(stride)))
+    return tuple(found)
 
 
 def observed_workloads(
@@ -44,11 +76,12 @@ def observed_workloads(
     *,
     tolerances: dict[str, tuple[float, float]] | None = None,
     dtype: str | None = None,
+    op: OpDecl | None = None,
 ) -> tuple[Workload, ...]:
     """Every observed configuration of one generic Level-1 task, for one workload.
 
     Read from that workload's tracked snapshot, which derives them from its
-    Level-4 harvest: dims, dtype, roles, frequency and memory layout all come
+    Level-3 harvest: dims, dtype, roles, frequency and memory layout all come
     from what the canonical step ran. Nothing here is a second hand-written
     copy, and the provenance each workload carries re-derives the same dims from
     the published model configuration, so ``tests/test_provenance`` proves the
@@ -72,6 +105,14 @@ def observed_workloads(
         # generator branches on -- RoPE's `x`, attention's q/k/v -- are the
         # leading argument at every harvested boundary.
         primary = (config.get("inputs") or [{}])[0]
+        layout = recorded_layout(primary.get("shape", ()), primary.get("stride", ()))
+        # Exact strides for every argument a generator would otherwise lay out
+        # wrong (``op`` names the arguments; without it, none are recorded).
+        strides = recorded_strides(op, dict(config["dims"]), config.get("inputs"), layout)
+        first = next((a.name for a in (op.args if op is not None else ())
+                      if getattr(a, "shape", None) not in (None, "unspecified")), None)
+        if any(name == first for name, _ in strides):
+            layout = "strided"
         workloads.append(
             Workload(
                 dims=dict(config["dims"]),
@@ -83,9 +124,8 @@ def observed_workloads(
                     component=config["provenance"]["component"],
                     free=dict(config["provenance"]["free"]),
                     source="hf_config",
-                    layout=recorded_layout(
-                        primary.get("shape", ()), primary.get("stride", ())
-                    ),
+                    layout=layout,
+                    strides=strides,
                 ),
             )
         )
@@ -161,6 +201,7 @@ class ObservedBinding:
             self.workload,
             self.task,
             tolerances=primitive.tolerances if self.declared_tolerances else None,
+            op=primitive,
         )
 
 

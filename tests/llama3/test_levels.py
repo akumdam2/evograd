@@ -274,7 +274,7 @@ class TestResidualRmsnormEpsilon(unittest.TestCase):
         import torch
 
         from evograd.benchmark.topdown.llama3_2_1b.levels.level2.residual_rmsnorm import task as decl
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
         from evograd.opdecl.inputs import make_case_inputs
 
         self.assertEqual(decl.MODEL_EPS, LLAMA_3_2_1B["rms_norm_eps"])
@@ -420,8 +420,8 @@ class TestLevel3Package(unittest.TestCase):
     def test_the_representative_layer_is_this_architectures(self):
         """Half depth, as Qwen3 picks half of 28. Naming one is what makes two
         captures comparable."""
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level3 import capture
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+        from evograd.benchmark.topdown.llama3_2_1b.layer import capture
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
 
         self.assertEqual(
             capture.CANONICAL_LAYER_INDEX, LLAMA_3_2_1B["num_hidden_layers"] // 2
@@ -429,18 +429,18 @@ class TestLevel3Package(unittest.TestCase):
 
     def test_the_schemas_are_llamas_own(self):
         """A Qwen3 capture relabelled as a Llama one would otherwise load."""
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level3 import artifact
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3 import (
+        from evograd.benchmark.topdown.llama3_2_1b.layer import artifact
+        from evograd.benchmark.topdown.qwen3_0_6b.layer import (
             artifact as qwen_artifact,
         )
-        from evograd.evaluation.workloads.llama3_2_1b.level3 import replay
+        from evograd.evaluation.workloads.llama3_2_1b.layer import replay
 
         self.assertIn("llama3", artifact.SCHEMA_VERSION)
         self.assertIn("llama3", replay.REPORT_SCHEMA)
         self.assertNotEqual(artifact.SCHEMA_VERSION, qwen_artifact.SCHEMA_VERSION)
 
     def test_replay_builds_one_decoder_layer_and_nothing_above_it(self):
-        from evograd.evaluation.workloads.llama3_2_1b.level3 import replay
+        from evograd.evaluation.workloads.llama3_2_1b.layer import replay
 
         live = replay.live_model_instances()
         self.assertIn("LlamaForCausalLM", live)

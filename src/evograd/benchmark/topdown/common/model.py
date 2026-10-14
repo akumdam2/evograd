@@ -78,7 +78,7 @@ def require_transformers(classes: ModelClasses):
     """Import Transformers or fail with something the reader can act on."""
     floor = f"transformers>={classes.min_transformers[0]}.{classes.min_transformers[1]}"
     hint = (
-        f"The {classes.label} Level-4 workload needs Hugging Face Transformers, "
+        f"The {classes.label} Level-3 workload needs Hugging Face Transformers, "
         "an optional evograd dependency.\n"
         f"    pip install '{classes.extra}'    # or: pip install '{floor}'\n"
         f"{classes.label} requires {floor.replace('>=', ' >= ')}; "

@@ -99,7 +99,18 @@ def _run_one_case(args, op, workload, only: str | None = None):
     )
 
 
-def _run_isolated(argv: list[str], index: int, provider: str | None = None) -> dict:
+def _provider_env(op, provider: str | None) -> dict | None:
+    """The child's environment: a baseline built on a sidecar library (FLA) may
+    import it, and only that child may (:mod:`evograd.opdecl.sidecar`)."""
+    from evograd.opdecl.sidecar import sidecar_env
+
+    hook = op.performance_baselines.get(provider) if provider else None
+    sidecar = getattr(hook, "sidecar", None)
+    return sidecar_env((sidecar,) if sidecar else ())
+
+
+def _run_isolated(argv: list[str], index: int, provider: str | None = None,
+                  env: dict | None = None) -> dict:
     """Re-invoke this module for one shape (and one provider) and read its JSON.
 
     One provider per process, not one shape per process. Providers are not
@@ -118,7 +129,7 @@ def _run_isolated(argv: list[str], index: int, provider: str | None = None) -> d
             [sys.executable, "-m", "evograd.evaluation.tier2.cli", *argv,
              "--case-index", str(index), "--result-json", result_path]
             + (["--provider-name", provider] if provider else []),
-            capture_output=True, text=True, timeout=ISOLATION_TIMEOUT,
+            capture_output=True, text=True, timeout=ISOLATION_TIMEOUT, env=env,
         )
         try:
             with open(result_path, encoding="utf-8") as file:
@@ -196,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
             ]
             merged: dict | None = None
             for name in names:
-                part = _run_isolated(parent_argv, index, name)
+                part = _run_isolated(parent_argv, index, name, env=_provider_env(op, name))
                 if merged is None:
                     merged = {k: v for k, v in part.items() if k != "providers"}
                     merged["providers"] = {}

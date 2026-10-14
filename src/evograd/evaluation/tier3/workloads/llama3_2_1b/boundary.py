@@ -35,7 +35,7 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import LLAMA_3_2_1B
+from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
 
 SCHEMA_VERSION = "evograd-llama3-t3-boundary/2"
 

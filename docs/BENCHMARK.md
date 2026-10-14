@@ -7,20 +7,25 @@ describe how an implementation is executed.
 | --- | --- | --- |
 | L1 | Primitive operator | RMSNorm, linear projection, RoPE |
 | L2 | Composite operator | QKV + normalization + RoPE, SwiGLU MLP |
-| L3 | Architectural block | One decoder layer with selected L2 providers |
-| L4 | Whole model | Model forward, loss and backward |
+| L3 | Whole model | Model forward, loss, backward and optimizer step |
 
-L3 uses Tier 3 with `--scope block`; L4 uses `--scope model`. Block timing
-covers forward and backward from supplied output gradients. Model timing
-includes loss, backward, AdamW and gradient reset. Results from these scopes
-are reported separately.
+L3 is measured by Tier 3 (`evograd tier3-bench --model <name>`): loss,
+backward, AdamW and gradient reset. The architectural-block level (one decoder
+layer, forward plus VJP) was removed on 2026-10-13; the decoder layer a model's
+L2 sites take their real invocations from is a data source
+(`topdown/<model>/layer`), not a level.
 
 ## Cases and ownership
 
 - `evograd.ops` owns reusable primitive contracts and correctness cases.
 - `benchmark/operator_suite` owns operator performance grids and aggregation.
 - `benchmark/topdown/<model>` owns model configurations, harvested cases and
-  captured blocks. Current families are Qwen3-0.6B, Llama-3.2-1B and AlphaFold3.
+  captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and AlphaFold3.
+- Qwen3.5-4B (`benchmark/topdown/qwen3_5_4b`, text model): L3 at B1 x T2048 on one
+  GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), seven
+  calibrated L2 sites and ten bound L1 primitives; L2 invocations come from
+  layers 14 and 15, captured or config-derived. No L3 gate yet; see
+  `docs/QWEN3_5_4B.md`.
 - `evograd.evaluation` owns execution, numerical checks, calibration and timing.
 
 Qwen and Llama each declare their own four L2 tasks. Attention with output
@@ -28,8 +33,8 @@ projection, SwiGLU MLP and residual RMSNorm share reference computations but
 have different model dimensions. Qwen's QKV task additionally includes Q/K
 normalization.
 
-The L3 adapters construct native decoder layers and install providers at their
-declared sites. They are registered through `TIER3_ADAPTERS`; they are not
+The L3 adapters build the whole model and install providers at their declared
+sites on every layer. They are registered through `TIER3_ADAPTERS`; they are not
 monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
 - `benchmark/operator_suite/` is the implementation-neutral operator suite. It
@@ -54,9 +59,9 @@ explicitly when an operator has both generic and model-observed grids.
 
 ## Measurement
 
-## The Level-4 workload: MegaFold
+## The Level-3 workload: MegaFold
 
-`megafold` is the registered Level-4 task. It runs one full MegaFold training
+`megafold` is the registered Level-3 task. It runs one full MegaFold training
 step -- forward to the model's own combined loss, backward, optimizer step --
 with evolved kernels patched into the module tree by surgery.
 
@@ -116,7 +121,7 @@ be discovered:
 
 - Triangle multiplication, outer product mean, MSA pair-weighted averaging, the
   diffusion module internals and the confidence head internals run stock inside
-  the timed step and dilute the measured speedup. That dilution is the Level-4
+  the timed step and dilute the measured speedup. That dilution is the Level-3
   result, not a flaw.
 - Attention-weight dropout is disabled for every provider alike. No
   fused-attention contract models it, MegaFold's own EvoAttention included, and
@@ -187,6 +192,5 @@ the current method and input sources; the
 [September 17 report](experiments/benchmark_run_20260917.md) identifies the
 workloads, timing boundaries and limitations behind the latest Qwen/Llama table.
 
-See [block correctness](L3_CORRECTNESS_CHECKS.md),
-[Qwen usage](QWEN3_LEVEL4.md), the [evaluation guide](../src/evograd/evaluation/README.md)
+See [Qwen usage](QWEN3_LEVEL3.md), the [evaluation guide](../src/evograd/evaluation/README.md)
 and [result paths](RESULTS_LAYOUT.md).

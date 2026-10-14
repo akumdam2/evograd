@@ -245,9 +245,6 @@ def _parser() -> argparse.ArgumentParser:
     # Set by the parent when it re-invokes itself for one provider.
     parser.add_argument("--provider", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--result-json", default=None, help=argparse.SUPPRESS)
-    from evograd.evaluation.tier3.block_cli import add_block_arguments
-
-    add_block_arguments(parser)
     return parser
 
 
@@ -305,8 +302,7 @@ def build_providers(args, *, quiet: bool = False, registry=None) -> dict:
     Built identically in the parent (which needs the names and the order) and in
     each child (which needs one of them), so an isolated run and an in-process
     run compare exactly the same things. ``registry`` defaults to the model
-    workload's; the block scope passes its block's, which is the same registry
-    object for a workload whose block shares the model's sites.
+    workload's.
     """
     from evograd.evaluation.tier3 import (
         KernelSet, identity_control_kernels, patched_kernels, restrict,
@@ -404,10 +400,6 @@ def check_options(args) -> None:
     anything else is an error here.
     """
     adapter = tier3_adapter(args.model)
-    if getattr(args, "scope", "model") == "block":
-        from evograd.evaluation.tier3.block_cli import check_block_options
-
-        check_block_options(args, _parser(), adapter)
     #: Flag -> the value that means "not requested".
     optional = {"structural_identity": False, "layers": None, "data_seed": 0,
                 "calibration": None, "residues": None,
@@ -471,7 +463,8 @@ def _run_one_provider(args) -> dict:
     )
 
 
-def _run_isolated(argv: list[str], provider: str, timeout: int) -> dict:
+def _run_isolated(argv: list[str], provider: str, timeout: int,
+                  env: dict | None = None) -> dict:
     """Re-invoke this module for one provider and read back its JSON.
 
     Three failure modes are captured here rather than allowed to end the run: a
@@ -488,7 +481,7 @@ def _run_isolated(argv: list[str], provider: str, timeout: int) -> dict:
         process = subprocess.run(
             [sys.executable, "-m", "evograd.evaluation.tier3.cli", *argv,
              "--provider", provider, "--result-json", result_path],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True, text=True, timeout=timeout, env=env,
         )
         try:
             with open(result_path, encoding="utf-8") as file:
@@ -530,20 +523,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Worker mode: one provider, write JSON, exit.
     if args.provider is not None:
-        if args.scope == "block":
-            from evograd.evaluation.tier3.block_cli import run_worker
-
-            entry = run_worker(args, _parser())
-        else:
-            entry = _run_one_provider(args)
+        entry = _run_one_provider(args)
         if args.result_json:
             Path(args.result_json).write_text(json.dumps(entry, default=str), encoding="utf-8")
         return 0
-    if args.scope == "block":
-        from evograd.evaluation.tier3.block_cli import main_block
-
-        return main_block(args, _parser(), argv)
-
     from evograd.evaluation.tier3 import (
         assemble_report, loss_agreement, measure_one, provider_order,
     )
@@ -564,7 +547,11 @@ def main(argv: list[str] | None = None) -> int:
                 workload, name, providers[name], ops=TASKS, **_measure_options(args)
             )
         else:
-            results[name] = _run_isolated(parent_argv, name, args.timeout)
+            from evograd.opdecl.baselines import kernel_sidecars
+            from evograd.opdecl.sidecar import sidecar_env
+
+            results[name] = _run_isolated(parent_argv, name, args.timeout,
+                                          env=sidecar_env(kernel_sidecars(providers[name])))
 
     report = assemble_report(
         workload, results, order,

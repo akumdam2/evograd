@@ -115,15 +115,6 @@ class TestClassifiers(_Mode):
         self.assertFalse(_preflight_numerical_only(raised))
         self.assertFalse(_preflight_numerical_only({"ok": False}))          # unknown -> not numerical
 
-    def test_block_verdict_stages_map_to_kinds_and_unknown_is_structural(self):
-        from evograd.evaluation.tier3.gate.block import finding_kind
-
-        self.assertEqual(finding_kind({"failed_at": "envelope"}), "numerical")
-        self.assertEqual(finding_kind({"failed_at": "finiteness"}), "execution")
-        self.assertEqual(finding_kind({"failed_at": "gradient_presence"}), "structural")
-        self.assertEqual(finding_kind({"failed_at": "no_policy"}), "unavailable")
-        self.assertEqual(finding_kind({"failed_at": "something_new"}), "structural")
-
 
 class TestBoundaryRecords(_Mode):
     """Part A keeps every failed invocation, and says which elements disagree."""

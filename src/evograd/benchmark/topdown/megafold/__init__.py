@@ -1,6 +1,6 @@
-"""Workload declaration: MegaFold training step (level 4).
+"""Workload declaration: MegaFold training step (level 3).
 
-The whole-model level-4 task: one full MegaFold training step, forward to the
+The whole-model level-3 task: one full MegaFold training step, forward to the
 model's own combined loss, backward, optimizer step, with evolved kernels
 patched into the module tree by surgery.
 
@@ -15,7 +15,7 @@ same widths by construction rather than by coincidence.
 MegaFold also supplies the comparison this level exists to make. It ships its
 own fused kernels for four of the five sites below, so a run puts three
 implementations of one architecture side by side: plain eager PyTorch,
-MegaFold's hand-written Triton, and the evolved candidates. The level-4
+MegaFold's hand-written Triton, and the evolved candidates. The level-3
 question is whether an evolved kernel's local speedup survives a real training
 step, and MegaFold's own kernels are the line it has to clear.
 
@@ -71,7 +71,7 @@ workload = declare_workload(
         "the fused LayerNorm+Linear, the SwiGLU transition, and the two "
         "softmax-attention flavours. Everything else inside the timed step "
         "runs stock and dilutes the measured speedup accordingly, and that "
-        "dilution is the level-4 result rather than a flaw: triangle "
+        "dilution is the level-3 result rather than a flaw: triangle "
         "multiplication, outer product mean, MSA pair-weighted averaging, the "
         "diffusion module internals and the confidence head internals are all "
         "unpatched. Attention-weight dropout is disabled for every provider "

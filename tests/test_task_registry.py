@@ -18,6 +18,7 @@ import unittest
 from evograd.benchmark import TASKS, get_task, load_task, tasks_at_level
 from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest as llama_manifest
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
+from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as qwen3_5_manifest
 from evograd.ops import PRIMITIVES, get_primitive
 
 GENERIC_LEVEL2 = (
@@ -41,7 +42,17 @@ LLAMA_LEVEL2 = (
     "llama3_residual_rmsnorm",
     "llama3_swiglu_mlp",
 )
-MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2
+#: Qwen3.5-4B's seven sites (lm_head_ce deferred).
+QWEN3_5_LEVEL2 = (
+    "qwen3_5_gated_attention",
+    "qwen3_5_gated_delta_rule",
+    "qwen3_5_gdn_in_proj",
+    "qwen3_5_gdn_norm_out",
+    "qwen3_5_qkv_norm_partial_rope",
+    "qwen3_5_residual_rmsnorm",
+    "qwen3_5_swiglu_mlp",
+)
+MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2
 DELETED_LEGACY = ("af3_single_repr_block", "llama3_decoder_layer")
 
 
@@ -55,11 +66,12 @@ class TestPrimitiveRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(PRIMITIVES),
             [
-                "causal_gqa_attention", "causal_softmax", "conv2d", "cross_entropy",
-                "dyt", "evoattention", "geglu", "gqa_pv", "gqa_scaled_scores",
-                "jsd", "kl_div", "layernorm", "linear", "linear_no_bias", "matmul",
-                "poly_norm", "relu_squared", "rmsnorm", "rope", "softmax",
-                "sparsemax", "swiglu", "tvd",
+                "causal_conv1d", "causal_gqa_attention", "causal_softmax", "conv2d",
+                "cross_entropy", "dyt", "evoattention", "gated_rmsnorm", "gdn_gating",
+                "geglu", "gemma_rmsnorm", "gqa_pv", "gqa_scaled_scores", "jsd",
+                "kl_div", "l2norm", "layernorm", "linear", "linear_no_bias", "matmul",
+                "partial_rope", "poly_norm", "relu_squared",
+                "rmsnorm", "rope", "softmax", "sparsemax", "swiglu", "tvd",
             ],
         )
 
@@ -86,6 +98,7 @@ class TestPrimitiveRegistry(unittest.TestCase):
                     self.assertNotIn("qwen3_0_6b", suite)
                     self.assertNotIn("llama_3_8b", suite)
                     self.assertNotIn("llama_3_2_1b", suite)
+                    self.assertNotIn("qwen3_5_4b", suite)
 
 
 class TestTaskRegistry(unittest.TestCase):
@@ -112,6 +125,14 @@ class TestTaskRegistry(unittest.TestCase):
             with self.subTest(op=name):
                 self.assertIn(name, TASKS)
                 self.assertEqual(TASKS[name].level, 2)
+
+    def test_contains_the_qwen3_5_level_two_tasks(self):
+        for name in QWEN3_5_LEVEL2:
+            with self.subTest(op=name):
+                self.assertIn(name, TASKS)
+                self.assertEqual(TASKS[name].level, 2)
+        self.assertEqual(sorted(qwen3_5_manifest.SITE_TASKS.values()), sorted(QWEN3_5_LEVEL2))
+        self.assertNotIn("qwen3_5_lm_head_ce", TASKS)
 
     def test_the_two_models_share_no_level_two_task(self):
         """Each architecture's four boundaries are its own.
@@ -258,6 +279,58 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
             manifest.workload_id(),
             "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad",
         )
+
+
+class TestQwen3_5LevelTwoInvariance(unittest.TestCase):
+    """Block kinds, outputs and gradient order are contracts."""
+
+    EXPECTED_OUTPUTS = {
+        "qwen3_5_gdn_in_proj": ("q", "k", "v", "z", "beta", "g"),
+        "qwen3_5_gated_delta_rule": ("o",),
+        "qwen3_5_gdn_norm_out": ("y",),
+        "qwen3_5_qkv_norm_partial_rope": ("q", "k", "v", "gate"),
+        "qwen3_5_gated_attention": ("y",),
+        "qwen3_5_residual_rmsnorm": ("normed", "summed"),
+        "qwen3_5_swiglu_mlp": ("out",),
+    }
+    EXPECTED_GRADS = {
+        "qwen3_5_gdn_in_proj": ("dx", "dw_qkv", "dw_z", "dw_b", "dw_a", "dconv_w", "dA_log",
+                                "ddt_bias"),
+        "qwen3_5_gated_delta_rule": ("dq", "dk", "dv", "dg", "dbeta"),
+        "qwen3_5_gdn_norm_out": ("do", "dz", "dw_norm", "dw_out"),
+        "qwen3_5_qkv_norm_partial_rope": ("dx", "dq_weight", "dk_weight", "dv_weight",
+                                          "dq_norm_weight", "dk_norm_weight"),
+        "qwen3_5_gated_attention": ("dq", "dk", "dv", "dgate", "do_weight"),
+        "qwen3_5_residual_rmsnorm": ("dbranch", "dresidual", "dweight"),
+        "qwen3_5_swiglu_mlp": ("dx", "dgate_weight", "dup_weight", "ddown_weight"),
+    }
+
+    def test_sites_by_block_kind(self):
+        self.assertEqual(
+            qwen3_5_manifest.SITES_BY_BLOCK["linear_attention"],
+            ("gdn_in_proj", "gated_delta_rule", "gdn_norm_out", "residual_rmsnorm", "swiglu_mlp"))
+        self.assertEqual(
+            qwen3_5_manifest.SITES_BY_BLOCK["full_attention"],
+            ("qkv_norm_partial_rope", "gated_attention", "residual_rmsnorm", "swiglu_mlp"))
+
+    def test_outputs_and_gradient_order(self):
+        for task, names in self.EXPECTED_OUTPUTS.items():
+            with self.subTest(op=task):
+                self.assertEqual(TASKS[task].output_names, names)
+                self.assertEqual(TASKS[task].grad_names(), self.EXPECTED_GRADS[task])
+
+    def test_every_task_is_calibrated_and_resolves_from_its_site(self):
+        import importlib
+
+        for site, task in qwen3_5_manifest.SITE_TASKS.items():
+            with self.subTest(site=site):
+                module = importlib.import_module(
+                    f"evograd.benchmark.topdown.qwen3_5_4b.levels.level2.{site}.task")
+                self.assertIs(module.PROVISIONAL_TOLERANCES, False)
+                self.assertIs(module.CALIBRATED, True)
+                self.assertTrue(TASKS[task].forward.startswith(
+                    f"evograd.benchmark.topdown.qwen3_5_4b.levels.level2.{site}.reference:"))
+                self.assertIn("qwen3_5_4b_observed", TASKS[task].benchmark_suites)
 
 
 if __name__ == "__main__":

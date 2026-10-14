@@ -17,7 +17,7 @@ tokenizer, so no Hub token is required.
 
 Transformers is optional. Importing this package never imports it; the failure
 appears at
-:func:`~evograd.benchmark.topdown.llama3_2_1b.levels.level4.model.require_transformers`
+:func:`~evograd.benchmark.topdown.llama3_2_1b.levels.level3.model.require_transformers`
 with the extra to install.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b --out report.json
@@ -25,15 +25,15 @@ with the extra to install.
 **State.** Levels 4 through 1 and the tier-3 evaluation half are implemented,
 and the shared machinery is Qwen3's. What does not exist is anything that must
 be *derived from a run*: there is no tracked ``harvest/snapshot.json``, no
-level-3 capture and no tier-3 numerics calibration, because each comes out of
+layer capture and no tier-3 numerics calibration, because each comes out of
 executing the canonical step on a GPU and none has been executed. Every stage
 that consumes one of those refuses by name rather than substituting a synthetic
 stand-in; ``README.md`` lists the three commands, in the order they unblock each
 other.
 """
 
-from .levels.level4.report import SmokeReport
-from .levels.level4.spec import (
+from .levels.level3.report import SmokeReport
+from .levels.level3.spec import (
     CANONICAL,
     LLAMA_3_2_1B,
     WorkloadSpec,

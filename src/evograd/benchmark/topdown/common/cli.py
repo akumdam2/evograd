@@ -1,4 +1,4 @@
-"""The command line every Level-4 workload shares: overrides, banner, report.
+"""The command line every Level-3 workload shares: overrides, banner, report.
 
 Two entry points, one argument surface. ``smoke_main`` runs the canonical step
 and writes its report; ``harvest_main`` runs the same step with the observer
@@ -19,12 +19,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .level4 import Level4Workload
+from .level3 import Level3Workload
 from .spec import WorkloadSpecError
 
 
 def add_override_arguments(
-    parser: argparse.ArgumentParser, workload: Level4Workload
+    parser: argparse.ArgumentParser, workload: Level3Workload
 ) -> argparse.ArgumentParser:
     """The debug overrides, shared by every entry point so the commands cannot
     drift into accepting different workloads.
@@ -65,7 +65,7 @@ def add_override_arguments(
     return parser
 
 
-def resolve_spec(args: argparse.Namespace, workload: Level4Workload):
+def resolve_spec(args: argparse.Namespace, workload: Level3Workload):
     """Apply the command line's overrides to this workload's canonical spec."""
     overrides = {
         key: getattr(args, key)
@@ -79,7 +79,7 @@ def resolve_spec(args: argparse.Namespace, workload: Level4Workload):
     return canonical.replace(**overrides) if overrides else canonical
 
 
-def warn_if_non_canonical(spec, workload: Level4Workload) -> None:
+def warn_if_non_canonical(spec, workload: Level3Workload) -> None:
     """A shrunk run is useful; a shrunk run mistaken for the reference is not."""
     if spec.is_canonical:
         return
@@ -95,7 +95,7 @@ def warn_if_non_canonical(spec, workload: Level4Workload) -> None:
 # ── entry points ─────────────────────────────────────────────────────────────
 
 
-def smoke_main(workload: Level4Workload, argv: list[str] | None = None,
+def smoke_main(workload: Level3Workload, argv: list[str] | None = None,
                description: str | None = None) -> int:
     """Run the canonical training smoke and write its JSON report."""
     from .smoke import run_smoke
@@ -139,7 +139,7 @@ def smoke_main(workload: Level4Workload, argv: list[str] | None = None,
     return 0 if report.ok else 1
 
 
-def harvest_main(workload: Level4Workload, argv: list[str] | None = None,
+def harvest_main(workload: Level3Workload, argv: list[str] | None = None,
                  description: str | None = None) -> int:
     """Run the canonical step under observation and write its manifest.
 

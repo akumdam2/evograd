@@ -12,7 +12,6 @@ Three things are declared here:
 * the ``structural_identity`` provider, which exists because Llama's adapters
   can call the exact Transformers spellings through native autograd;
 * the ``torch.compile`` providers, which are generic and only need declaring;
-* the block-scope adapter (:mod:`.block`), one decoder layer for ``--scope block``;
 * which optional flags mean anything here, so the parser can refuse the rest by
   name instead of accepting them silently.
 """
@@ -85,18 +84,11 @@ def providers(args, registry) -> dict[str, Any]:
     return providers
 
 
-def block(args):
-    """The block-scope adapter: one decoder layer, captured or config-derived."""
-    from .block import from_args
-
-    return from_args(args)
-
 
 ADAPTER = Tier3Adapter(
     name="llama_3_2_1b",
     build=build,
     providers=providers,
-    block=block,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
                        "compile_site", "patch_set", "whole_model_compile"}),
     summary=(

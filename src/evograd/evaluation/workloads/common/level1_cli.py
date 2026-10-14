@@ -70,7 +70,7 @@ def _write(path: Path | None, payload: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None, *, descriptor) -> int:
     mapping = descriptor.module("levels.level1.manifest").mapping
-    ArtifactError = descriptor.module("levels.level3.artifact").ArtifactError
+    ArtifactError = descriptor.module("layer.artifact").ArtifactError
     args = build_parser(descriptor).parse_args(argv)
     try:
         if args.command == "mapping":

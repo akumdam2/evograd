@@ -47,7 +47,7 @@ _BENCHMARK = model_workloads(
     tolerances=STANDARD_TOLERANCES,
 )
 #: The Qwen3-0.6B configuration this fusion site actually runs at, observed in
-#: the Level-4 harvest: one row per token of the canonical batch-2 x
+#: the Level-3 harvest: one row per token of the canonical batch-2 x
 #: sequence-2048 step, one column per residual channel.
 _QWEN3_OBSERVED = model_workloads(
     QWEN3_0_6B,

@@ -116,12 +116,18 @@ PROVENANCE_SOURCES = ("hf_config", "paper", "handpicked")
 #:     projects into ``[B, T, heads, D]`` and transposes, so the tensor is a
 #:     *non-contiguous view* whose strides are ``[T*H*D, D, H*D, 1]``.
 #:
+#: ``strided``
+#:     Any other view, stated exactly: the primary input's strides are in
+#:     :attr:`Provenance.strides`. A transposed ``[B, C, T]`` convolution input
+#:     or a channel slice of a larger buffer is not a head-major view, and
+#:     calling it contiguous would benchmark a substitute.
+#:
 #: This is a property of the tensor a real model produced, not of the model that
 #: produced it, which is why it lives here rather than being inferred from
 #: ``model``. Harvested workloads get it from the strides the harvest recorded;
 #: hand-derived grids keep the default, which is the layout they have always
 #: been measured at.
-PROVENANCE_LAYOUTS = ("contiguous", "head_major_view")
+PROVENANCE_LAYOUTS = ("contiguous", "head_major_view", "strided")
 
 #: Dtypes a reference computation may be promoted to. Only float types: the
 #: point is to make the reference more accurate than the candidate, and the
@@ -162,6 +168,13 @@ class Provenance:
     #: layout its own run recorded instead of falling back to a contiguous
     #: substitute at the right shape.
     layout: str = "contiguous"
+    #: Exact strides, per argument, at this workload's shape: ``((name,
+    #: (s0, s1, ...)), ...)``. Every input generator's tensors are re-laid-out
+    #: to these by :func:`evograd.opdecl.inputs.make_case_inputs`, so a recorded
+    #: view -- whatever its shape -- is reproduced without any per-operator
+    #: code. Empty means each argument is generated as its generator makes it
+    #: (contiguous, or head-major under ``layout="head_major_view"``).
+    strides: tuple[tuple[str, tuple[int, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         if self.source not in PROVENANCE_SOURCES:
@@ -174,6 +187,19 @@ class Provenance:
                 f"provenance layout must be one of {PROVENANCE_LAYOUTS}, "
                 f"got {self.layout!r}"
             )
+        if self.layout == "strided" and not self.strides:
+            raise ValueError(
+                f"{self.model}/{self.component}: layout 'strided' must state the "
+                "strides it means"
+            )
+        for entry in self.strides:
+            if (not isinstance(entry, tuple) or len(entry) != 2
+                    or not isinstance(entry[0], str) or not isinstance(entry[1], tuple)
+                    or not all(isinstance(v, int) and v >= 0 for v in entry[1])):
+                raise ValueError(
+                    f"{self.model}/{self.component}: strides entries must be "
+                    f"(name, (int, ...)), got {entry!r}"
+                )
         if not self.model or not self.component:
             raise ValueError("provenance requires both a model and a component")
         if self.scaled and not self.note:
@@ -245,7 +271,8 @@ class OpDecl:
     runtime_forward: str | None = None
 
     # ── benchmark taxonomy ────────────────────────────────────────────────
-    # Task hierarchy level: 1 primitive, 2 fused, 3 architectural block.
+    # Task hierarchy level: 1 primitive, 2 composite. Level 3, the whole model,
+    # is a ``WorkloadDecl`` (``evograd.opdecl.workloads``), never an OpDecl.
     # ``None`` means "not a benchmark task" — scaffolded and user-supplied
     # declarations are perfectly usable without claiming a place in the suite.
     # Every built-in operator sets it; ``tests/test_opdecl`` enforces that.
@@ -258,7 +285,7 @@ class OpDecl:
     # dtype instead of the workload's, then compare the candidate against it.
     # A same-dtype reference carries its own rounding error, so at low precision
     # the tolerance has to cover both sides and stops meaning "how wrong is the
-    # candidate". Composing ~10 ops in a level-3 block makes that untenable;
+    # candidate". Composing ~10 ops in a decoder layer makes that untenable;
     # a float32 reference restores a tolerance that bounds the candidate's own
     # error. ``None`` keeps the historical same-dtype behavior.
     reference_dtype: str | None = None
@@ -528,10 +555,10 @@ class OpDecl:
                 f"(got level={self.level!r}, family={self.family!r})"
             )
         if self.level is not None:
-            if self.level not in (1, 2, 3):
+            if self.level not in (1, 2):
                 raise ValueError(
-                    f"{self.name}: level must be 1 (primitive), 2 (fused), or "
-                    f"3 (block), got {self.level!r}"
+                    f"{self.name}: level must be 1 (primitive) or 2 (composite); "
+                    f"level 3 is the whole model (a WorkloadDecl), got {self.level!r}"
                 )
             if not self.family.isidentifier():
                 raise ValueError(
@@ -658,6 +685,26 @@ class OpDecl:
             raise ValueError(f"{self.name}: tolerance_hook must be callable")
 
         suites = [self.benchmark, *self.benchmark_suites.values()]
+        # Recorded strides may name a tensor argument or an upstream gradient:
+        # a model hands a backward its gradients in a layout too.
+        tensor_args = {arg.name: arg for arg in self.args
+                       if getattr(arg, "shape", None) not in (None, "unspecified")}
+        tensor_args.update({out.grad_name: out for out in self.outputs
+                            if getattr(out, "shape", None) not in (None, "unspecified")})
+        for workload in (*self.correctness, *self.coverage,
+                         *(w for suite in suites for w in suite)):
+            for name, stride in getattr(workload.provenance, "strides", ()) or ():
+                arg = tensor_args.get(name)
+                if arg is None:
+                    raise ValueError(
+                        f"{self.name}: provenance strides name {name!r}, which is neither "
+                        f"a tensor argument nor an upstream gradient ({sorted(tensor_args)})"
+                    )
+                if len(bind_shape(arg.shape, workload.dims)) != len(stride):
+                    raise ValueError(
+                        f"{self.name}: recorded stride {stride} for {name!r} does not "
+                        f"match its rank at {workload.dims}"
+                    )
         for workload in (
             *self.correctness,
             *self.coverage,

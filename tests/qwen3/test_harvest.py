@@ -1,7 +1,7 @@
 """The Qwen3 workload harvest: what was observed, how it deduplicates, and that
 observing changes nothing.
 
-Everything runs on the tiny CPU Qwen3 from ``test_level4_workload``. The point of
+Everything runs on the tiny CPU Qwen3 from ``test_level3_workload``. The point of
 these tests is structure -- boundaries, ordering, provenance, determinism -- and
 structure is the same at two layers as at twenty-eight.
 """
@@ -13,7 +13,7 @@ import unittest
 
 import torch
 
-from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
+from tests.qwen3.test_level3_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
@@ -23,7 +23,7 @@ if HAVE_TRANSFORMERS:
         semantic_hash,
         summarize,
     )
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, make_inputs, training_step
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import build_model, make_inputs, training_step
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.observe import (
         MANDATORY_TASKS,
         MandatoryBoundaryError,
@@ -445,7 +445,7 @@ class TestObserverIsolation(unittest.TestCase):
         self.assertEqual(counts[0], counts[1])
 
     def test_observation_changes_neither_loss_nor_gradients(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.smoke import run_smoke
 
         spec = tiny_spec()
         unobserved = run_smoke(spec)

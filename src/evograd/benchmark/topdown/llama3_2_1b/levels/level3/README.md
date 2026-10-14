@@ -1,178 +1,116 @@
-# Level 3 — one decoder layer, lifted out of the full step
+# Level 3 — the canonical Meta-Llama-3-8B training step
 
-Level 3 is a whole architectural block. Levels 1 and 2 ask whether a kernel is
-fast in isolation; this asks whether those choices survive composition, because
-what the block saves for backward becomes a whole-layer decision and a
-candidate is free to fuse across the boundaries the smaller tasks draw.
+Level 3 declares no operator. It is one whole model executed the way training
+executes it, and it exists so that every level below can be *derived from* a
+real step rather than inferred from one. Nothing here is evolved; nothing here
+is timed as a benchmark result.
 
-## The whole-layer declaration has been removed
+## The canonical workload
 
-`llama3_decoder_layer` — a single declaration spanning the entire block — is
-**no longer registered**, and neither is `af3_single_repr_block`. No task
-declares level 3. The description below is kept as the record of what that
-declaration asserted, because the capture and replay machinery in this package
-still brackets exactly that span and the two have to agree about what a layer
-is; it is not a description of anything a CLI can run today.
-
-What replaced it is the four Level-2 boundaries the layer decomposes into, each
-owned by this model — see `../level2/README.md`. Composition is still checked,
-but through the capture-and-replay path in this package rather than through one
-ten-operator contract.
-
-Its shape was: level 3, family `llm_block`, dims
-`(B, T, hidden, head_dim, q_out, kv_out, intermediate)`.
-
-**Ten differentiable inputs, one output, ten gradients:**
-
-| arg | shape | |
-| --- | --- | --- |
-| `x` | `[B, T, hidden]` | the residual stream |
-| `input_norm_weight` | `[hidden]` | RMSNorm gain before attention |
-| `q_weight` | `[q_out, hidden]` | |
-| `k_weight` | `[kv_out, hidden]` | fewer heads than q, under GQA |
-| `v_weight` | `[kv_out, hidden]` | |
-| `o_weight` | `[hidden, q_out]` | |
-| `post_norm_weight` | `[hidden]` | RMSNorm gain before the MLP |
-| `gate_weight` | `[intermediate, hidden]` | |
-| `up_weight` | `[intermediate, hidden]` | |
-| `down_weight` | `[hidden, intermediate]` | |
-| `cos`, `sin` | `[T, head_dim]` | rotary tables — **Inactive**, no gradient |
-| `eps` | scalar | **Inactive** |
-
-Output: `out` `[B, T, hidden]`.
-
-The forward is the whole layer:
-
-```
-x → RMSNorm → Q/K/V → RoPE on Q and K → causal GQA attention → o_proj
-  → + residual → RMSNorm → SwiGLU MLP (silu(gate) * up, then down)
-  → + residual → out
-```
-
-RMSNorm statistics, the SiLU and the attention softmax are computed in float32.
-Under GQA the key/value gradients must be summed over the query heads that
-share each kv head. Both residual connections contribute to `dx`, so it
-accumulates three paths.
-
-**What is deliberately excluded, and stated in the declaration rather than left
-to be discovered:** this models the *training* forward pass — no KV cache (per-
-step mutable state the declaration model does not express) and no attention-
-weight output.
-
-**Correctness at this depth is handled three ways**, because composing ten
-operators makes a naive gate meaningless:
-
-- `reference_dtype="float32"` — the reference runs in float32 while the
-  candidate runs in bfloat16, so the tolerance bounds the candidate's own error
-  rather than the difference between two equally-rounded computations;
-- float32 correctness cases at small dimensions, because a bfloat16-only gate
-  cannot separate a real bug (an RMSNorm that skips its float32 upcast) from
-  ordinary rounding — both land at the same magnitude;
-- the upstream gradient is scaled by `1/sqrt(batch*tokens)`, which is what a
-  real mean-over-tokens loss produces, and which keeps one tolerance valid
-  across the token grid.
-
-The timed grid is 1024/2048/4096 tokens; 8192 lives in untimed coverage. The
-ceiling is set by the *oracle*, not the candidate — the reference builds an
-autograd graph for the whole layer in float32.
-
-## What this package adds
-
-The declaration above is generic over its dims. What is here is the machinery
-that proves one real Llama-3 layer can be lifted out of the canonical step and
-replayed alone.
-
-| file | what it does |
+| field | value |
 | --- | --- |
-| `artifact.py` | the replay format, and its two hashes |
-| `capture.py` | hooks one `LlamaDecoderLayer` during the canonical run and writes it |
-| `prepare.py` | rebuilds the layer from the artifact, ready to be run |
-| `replay.py` | reruns that layer alone, in a fresh process, and checks it against the full model — **now `evograd.evaluation.workloads.llama3_2_1b.level3.replay`**, because deciding whether the replay agrees is a verdict |
+| model | Meta-Llama-3-8B, 8.03B parameters (6.98B excluding the untied embedding and `lm_head`), randomly initialised |
+| batch size | 2 |
+| sequence length | 2048 |
+| tokens per step | 4096 |
+| dtype | bfloat16 |
+| device | cuda |
+| attention backend | sdpa |
+| mode | `model.train()` |
+| `use_cache` | False |
+| gradient checkpointing | disabled |
+| optimizer step | none |
+| seed | 0 |
+| workload id | `meta-llama-3-8b.train.bs2.seq2048.bf16.cuda.sdpa.5f08b9e7` |
 
-### `capture.py`
+The executed step is exactly:
 
-The layer is selected **from the harvest manifest**, not by index alone: the
-manifest is checked for self-consistency, checked against the workload the
-capture is about to run, and searched for an observed `decoder_layer` event at
-that index. The event's module path is what the hook is installed on. So the
-artifact cannot describe a layer the canonical run did not execute, and its
-provenance points at a specific line of a specific manifest.
+```python
+loss = model(input_ids=input_ids, labels=labels, use_cache=False).loss
+loss.backward()
+```
 
-What is captured is everything a standalone replay needs and nothing else:
+`labels = input_ids.clone()`, and `input_ids` are synthetic, drawn from an
+explicit CPU generator seeded with the workload seed so the token stream is
+identical on any device and does not depend on how many random numbers model
+construction consumed.
 
-- the positional and keyword arguments Transformers really passed — including
-  `attention_mask=None`, which is what sends SDPA down its causal path
-- the layer's output
-- the upstream gradient the **full-model** backward delivered to that output
-- the gradient the layer produced for its input
-- the layer's weights, and the gradient full-model backward left on each
+Sequence 2048 rather than the 8192 the architecture permits, so the observed
+shapes line up with Qwen3's and the two workloads can be read side by side. It
+is a canonical choice, not a limit.
 
-Every one of those is detached, cloned and moved to CPU inside the hook that
-sees it. Nothing keeps a view into the running graph — a capture that held one
-would keep activations alive and change the memory behaviour of the run it is
-describing.
+## What is in this package
 
-**Layer 16**, mid-stack of 32, for the same reason Qwen3 uses 14 of 28: the
-first and last layers of a decoder see distributions the rest do not.
+| file | what it declares |
+| --- | --- |
+| `spec.py` | `LLAMA_3_2_1B` — the published architecture, written out — and the canonical batch/sequence/dtype/device/backend as `WorkloadSpec`'s field defaults |
+| `model.py` | two class names, `transformers:LlamaConfig` and `transformers:LlamaForCausalLM`, bound to the shared builder |
+| `smoke.py` | runs the step once and describes what happened |
+| `report.py` | the report schema string, `evograd-llama3-smoke/1` |
 
-### `artifact.py` — two hashes, because there are two ways to be wrong
+Everything that *acts* — building, seeding, stepping, verifying, reporting —
+is in `../../common/`. What is here is the short list only Llama can answer.
 
-- **`content_hash`** covers the captured numbers alone, and catches a corrupted
-  or truncated file.
-- **`artifact_hash`** binds those numbers to the schema version and to every
-  provenance identity field, and catches a file whose *label* was edited. A
-  correct layer-16 capture relabelled as layer 9, or as belonging to a different
-  manifest, has intact content and a valid content hash and is exactly as wrong.
+## Three settings no command-line flag can change
 
-Loading verifies both, together, always, with `weights_only=True`. Anything
-downstream that claims to be derived from the canonical execution goes through
-`load_canonical`, which additionally checks all four identity fields
-(`workload_id`, `config_hash`, `manifest_hash`, `layer_index`) against the
-tracked snapshot — and **takes no argument that turns any of that off**. A
-consumer cannot accidentally build a Level-2 task on a debug capture, or on the
-right numbers with the wrong label.
+`--batch-size`, `--seq-len`, `--dtype`, `--device`, `--attn`, `--seed` and
+`--layers` all shrink or shift the workload; any of them changes the workload
+id, sets `"canonical": false`, and prints a banner to stderr. But three
+settings are refused by `WorkloadSpec.validate` rather than by the parser, so
+no flag can produce a run that claims to be this workload while executing a
+different graph:
 
-### `replay.py`
+- **`use_cache` must be False.** A KV cache is a decode-time structure: with it
+  on, the model allocates and returns per-layer caches a training step never
+  reads, so the executed graph is not the training graph.
+- **`gradient_checkpointing` must be False.** Checkpointing re-executes forward
+  regions inside backward, which would double-count every operator invocation
+  the observation stage records.
+- **`training` must be True.** This workload is defined as a training step.
 
-Constructs exactly one `LlamaDecoderLayer`. It never builds `LlamaModel` or
-`LlamaForCausalLM`, and the report proves it by scanning the live heap with
-`gc` for instances of those classes rather than asserting it in prose — "no
-such object is alive" is stronger evidence than "we did not call the
-constructor".
+## No Hub token
 
-The layer is given the captured weights and arguments, run forward, then
-backward with the *real* upstream gradient the full-model backward delivered.
-Output, input gradient and every parameter gradient are compared against what
-the full model produced.
-
-**Tolerances are stated, not tuned.** BF16 carries a 7-bit explicit mantissa,
-so machine epsilon near 1.0 is `2^-7` and the unit roundoff is `2^-8`. The
-forward path is deterministic and is held to one unit roundoff. Backward is
-not: SDPA's backward accumulates with atomics, so a rerun of the same layer
-differs from itself. That noise is **measured** — `--noise-repeats` replays
-several times and compares the replays to each other — and reported next to the
-replay-versus-capture error, so the reader can see which is larger.
-
-Errors are relative to the scale of the reference tensor (`max|a-b| / max|b|`)
-rather than elementwise.
+Llama-3 is a gated repository, but nothing here fetches a checkpoint, a config
+or a tokenizer. The architecture is written out in `spec.py` and the model is
+built with random weights, because a reference execution must not depend on
+what the Hub served that day or on a node having network access.
 
 ## Running it
 
 ```bash
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level3.capture \
-    --harvest results/llama3-level4/harvest.json \
-    --out results/llama3-level4/layer16.pt
-
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level3.replay \
-    --artifact results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/layer16-replay.json
+PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b \
+    --out results/llama3-level4/canonical.json
 ```
 
-`--layer` defaults to 16; the JSON sidecar defaults to `--out` with a `.json`
-suffix. `--expect-workload-id` / `--expect-manifest-hash` / `--expect-layer`
-turn the identity checks into assertions with values you supply.
+Exit code 0 means the step ran and every check passed. `--print-spec` resolves
+the workload id and hashes without running anything.
 
-Capture needs the full canonical step. Everything below this level costs one
-layer instead, which is the point: `layer16.pt` has already been shown to
-reproduce the full model, so a derivation taken from replaying it inherits that
-guarantee.
+## What the report contains
+
+Schema `evograd-llama3-smoke/1`:
+
+- **`workload`** — id, hashes, `canonical` flag, the full architecture config,
+  batch/sequence/token counts, dtype, device, backend, cache and checkpointing
+  state, seed
+- **`environment`** — Python, platform, torch, transformers, CUDA, cuDNN, GPU
+  name and capability, total memory, driver version
+- **`effective`** — what the *built model* reports, as distinct from what was
+  requested: backend at the root and at every submodule, `use_cache`,
+  checkpointing, `model.training`, parameter dtypes and devices, buffer dtypes,
+  input dtype/shape/checksum, loss and logits dtypes, whether a KV cache came back
+- **`result`** — loss, whether it is finite, trainable parameter count, how many
+  received gradients, the names of any that did not or whose gradient is not finite
+- **`diagnostics`** — wall time and peak allocated/reserved memory
+
+**Everything under `diagnostics` is diagnostic only.** One unwarmed step, no
+repetition, no L2 flush, no median: a sanity check on the shape of the
+allocation, not a measurement.
+
+## One environment dependency worth knowing
+
+The step is numerically correct across a range of Transformers versions, but
+the *observed operator* is not. Whether SDPA is reached with `enable_gqa=True`
+and eight key/value heads, or with an explicit mask and `repeat_kv` having
+materialised thirty-two, is the installed library's choice. The harvest refuses
+the second case by name; see `../../harvest/`. The canonical harvest on record
+was produced under transformers 5.16.1.

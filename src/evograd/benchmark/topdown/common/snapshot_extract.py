@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Mapping, Sequence
 
 from .snapshot import SnapshotError, snapshot_hash
 
@@ -145,14 +145,26 @@ def _free_for(kind: str, batch: int, seq: int) -> dict[str, int]:
     raise SnapshotError(f"unknown provenance free-variable kind {kind!r}")
 
 
-def _level1_dims(task: str, record: dict[str, Any], entries: list[dict[str, Any]]):
+#: A workload-supplied dim rule: ``(record, tensor entries) -> [(dims, role_key,
+#: extra), ...]``, for a harvested task the shared rules below do not know or
+#: map differently (a partial RoPE keys on the rotary width as well).
+DimRule = Callable[[dict[str, Any], list[dict[str, Any]]], list[tuple[dict, str, dict]]]
+
+
+def _level1_dims(task: str, record: dict[str, Any], entries: list[dict[str, Any]],
+                 dim_rules: Mapping[str, DimRule] | None = None):
     """Generic dims for one harvested configuration, and the role it keys on.
 
     Returns a list of ``(dims, role_key, extra)`` -- a list because one harvested
     record can be more than one generic invocation: ``apply_rotary_pos_emb``
     rotates the queries *and* the keys in a single call, at different head
     counts, and they are two RoPE workloads.
+
+    A rule in ``dim_rules`` takes precedence over the shared one for its task.
     """
+    rule = (dim_rules or {}).get(task)
+    if rule is not None:
+        return rule(record, entries)
     attrs = record["attrs"]
     if task == "linear":
         width = attrs["in_features"]
@@ -202,6 +214,7 @@ def _level1_dims(task: str, record: dict[str, Any], entries: list[dict[str, Any]
 def _extract_level1(
     manifest: dict[str, Any], arch: dict[str, Any], batch: int, seq: int,
     level1_sources: dict[str, dict[str, Any]],
+    dim_rules: Mapping[str, DimRule] | None = None,
 ) -> dict[str, Any]:
     """Every generic Level-1 configuration the canonical step runs.
 
@@ -218,7 +231,7 @@ def _extract_level1(
         configurations = []
         for record in sorted(records, key=lambda r: (-r["frequency"], r["config_id"])):
             entries = _tensor_entries(record["inputs"])
-            for dims, role_key, extra in _level1_dims(harvested, record, entries):
+            for dims, role_key, extra in _level1_dims(harvested, record, entries, dim_rules):
                 component = spec["component_by_role"].get(role_key)
                 if generic == "rope":
                     component = (
@@ -339,6 +352,114 @@ def _supporting(manifest: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _task_entry(manifest: dict[str, Any], record: dict[str, Any],
+                spec: dict[str, Any]) -> dict[str, Any]:
+    """One Level-2 task's frozen record: its primary configuration and supports."""
+    return {
+        "config_id": record["config_id"],
+        "harvested_task": record["task"],
+        "roles": sorted(record["roles"]),
+        "frequency": record["frequency"],
+        "module_paths": list(record["module_paths"]),
+        "layer_indices": list(record["layer_indices"]),
+        "input_shapes": _tensor_entries(record["inputs"]),
+        "output_shapes": _tensor_entries(record["outputs"]),
+        "dtype": _tensor_entries(record["inputs"])[0]["dtype"],
+        "params": {
+            name: {"shape": meta["shape"], "dtype": meta["dtype"]}
+            for name, meta in sorted(record.get("params", {}).items())
+        },
+        "attrs": record["attrs"],
+        "supporting": {
+            key: _supporting(manifest, sub)
+            for key, sub in spec["supporting_tasks"].items()
+        },
+    }
+
+
+def _layer_event(manifest: dict[str, Any], layer_index: int) -> dict[str, Any]:
+    events = [
+        event
+        for event in manifest["events"]
+        if event["task"] == "decoder_layer" and event["layer_index"] == layer_index
+    ]
+    if len(events) != 1:
+        raise SnapshotError(
+            f"expected exactly one decoder_layer event at index {layer_index}, "
+            f"found {len(events)}"
+        )
+    return events[0]
+
+
+def extract_blocks(
+    manifest: dict[str, Any],
+    *,
+    representative_layers: Mapping[str, int],
+    task_sources: dict[str, dict[str, Any]],
+    level1_sources: dict[str, dict[str, Any]],
+    schema_version: str,
+    model_fields: Sequence[str],
+    dim_rules: Mapping[str, DimRule] | None = None,
+    derived: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+    observed: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a snapshot from a harvest of several representative layers.
+
+    The single-layer :func:`extract` assumes a whole-model step whose layers are
+    alike, so one layer represents them all. A hybrid model's blocks are not
+    alike -- a Gated DeltaNet layer and a full-attention layer share no token
+    mixer -- so each block kind names its own representative layer, every one of
+    them must appear in the harvest, and the frozen record keeps them apart.
+
+    ``model_fields`` selects the architecture fields the snapshot records (an
+    MoE model's are not a dense decoder's), and ``derived`` may attach
+    information computed rather than observed -- whole-model call counts, say --
+    to each task entry, under a key that says so. ``observed`` does the same for
+    information read off the harvest itself (the call counts of a *whole-model*
+    harvest, whose layers of several kinds were all observed), under the key
+    ``observed``.
+    """
+    arch = manifest["workload"]["config"]
+    layers = {}
+    for kind, layer_index in sorted(representative_layers.items()):
+        event = _layer_event(manifest, layer_index)
+        layers[kind] = {
+            "layer_index": layer_index,
+            "module_path": event["module_path"],
+            "event_ordinal": event["ordinal"],
+        }
+    tasks: dict[str, Any] = {}
+    for name, spec in task_sources.items():
+        record = _find(manifest, spec["task"], spec["roles"])
+        tasks[name] = _task_entry(manifest, record, spec)
+        if derived is not None:
+            tasks[name]["derived"] = derived(name, record)
+        if observed is not None:
+            tasks[name]["observed"] = observed(name, record)
+    workload = manifest["workload"]
+    payload = {
+        "schema_version": schema_version,
+        "workload_id": manifest["workload_id"],
+        "workload_hash": workload["workload_hash"],
+        "config_hash": manifest["config_hash"],
+        "manifest_hash": manifest["manifest_hash"],
+        "manifest_schema": manifest["schema_version"],
+        "provenance": manifest["configurations"][0]["provenance"]["kind"],
+        "model": {"name": workload["model_name"], **{key: arch[key] for key in model_fields}},
+        "batch_size": workload["batch_size"],
+        "seq_len": workload["seq_len"],
+        "dtype": workload["dtype"],
+        "level1": _extract_level1(
+            manifest, arch, workload["batch_size"], workload["seq_len"],
+            level1_sources, dim_rules,
+        ),
+        "representative_layers": layers,
+        "tasks": tasks,
+    }
+    payload["snapshot_hash"] = snapshot_hash(payload)
+    return payload
+
+
 def extract(
     manifest: dict[str, Any],
     *,
@@ -363,26 +484,7 @@ def extract(
     tasks: dict[str, Any] = {}
     for name, spec in task_sources.items():
         record = _find(manifest, spec["task"], spec["roles"])
-        tasks[name] = {
-            "config_id": record["config_id"],
-            "harvested_task": record["task"],
-            "roles": sorted(record["roles"]),
-            "frequency": record["frequency"],
-            "module_paths": list(record["module_paths"]),
-            "layer_indices": list(record["layer_indices"]),
-            "input_shapes": _tensor_entries(record["inputs"]),
-            "output_shapes": _tensor_entries(record["outputs"]),
-            "dtype": _tensor_entries(record["inputs"])[0]["dtype"],
-            "params": {
-                name: {"shape": meta["shape"], "dtype": meta["dtype"]}
-                for name, meta in sorted(record.get("params", {}).items())
-            },
-            "attrs": record["attrs"],
-            "supporting": {
-                key: _supporting(manifest, sub)
-                for key, sub in spec["supporting_tasks"].items()
-            },
-        }
+        tasks[name] = _task_entry(manifest, record, spec)
         if spec.get("derived") == "fusion_sites":
             tasks[name]["fusion_sites"] = _derive_fusion_sites(record, arch)
 

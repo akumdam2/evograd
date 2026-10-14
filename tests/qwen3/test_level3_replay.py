@@ -15,17 +15,17 @@ from pathlib import Path
 
 import torch
 
-from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
+from tests.qwen3.test_level3_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import (
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import (
         SCHEMA_VERSION,
         ArtifactError,
         LayerArtifact,
         content_hash,
         describe,
     )
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture import (
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.capture import (
         CaptureError,
         capture_decoder_layer,
         load_manifest,
@@ -34,9 +34,9 @@ if HAVE_TRANSFORMERS:
     )
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import build_model, make_inputs, training_step
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import artifact_hash, load_canonical
-    from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import (
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import build_model, make_inputs, training_step
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import artifact_hash, load_canonical
+    from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import (
         BF16_EPS,
         BF16_UNIT_ROUNDOFF,
         FORWARD_TOL,
@@ -45,7 +45,7 @@ if HAVE_TRANSFORMERS:
         compare_tensors,
         run_replay,
     )
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import validate_noise_repeats
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import validate_noise_repeats
 
 #: The tiny model has two layers; 1 is the deeper one, the analogue of 14.
 TINY_LAYER = 1
@@ -508,7 +508,7 @@ class TestNoiseRepeatValidation(unittest.TestCase):
         import contextlib
         import io
 
-        from evograd.evaluation.workloads.qwen3_0_6b.level3.replay import main
+        from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import main
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
             main(["--artifact", "unused.pt", "--noise-repeats", "1"])

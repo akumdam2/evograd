@@ -1,4 +1,4 @@
-"""The MegaFold level-4 workload.
+"""The MegaFold level-3 workload.
 
 Two halves, and the split is deliberate.
 
@@ -7,7 +7,7 @@ task with no model in sight: that the modules import without MegaFold, that a
 missing MegaFold is reported as a sentence someone can act on, that the
 declaration is registered and validates, that both adapters resolve, and that
 the exclusions actually state every restriction the task operates under. That
-last one is the point of having exclusions at all: a level-4 number read
+last one is the point of having exclusions at all: a level-3 number read
 without them overstates what was measured.
 
 The **model half** skips unless MegaFold can be built. It needs more than the
@@ -171,10 +171,10 @@ class TestModulesImportWithoutMegaFold(unittest.TestCase):
 
 
 class TestTheDeclaration(unittest.TestCase):
-    def test_it_is_the_registered_level_four_workload(self):
+    def test_it_is_the_registered_level_three_workload(self):
         self.assertIn("megafold", WORKLOADS)
         self.assertNotIn("alphafold3", WORKLOADS)
-        self.assertEqual(get_workload("megafold").level, 4)
+        self.assertEqual(get_workload("megafold").level, 3)
 
     def test_every_site_names_a_declared_operator(self):
         for site, op_name in get_workload("megafold").sites.items():
@@ -219,7 +219,7 @@ class TestTheDeclaration(unittest.TestCase):
 class TestTheExclusionsStateEveryRestriction(unittest.TestCase):
     """Each restriction the task operates under, named in the declaration.
 
-    Not a spelling test. A level-4 speedup read without these overstates what
+    Not a spelling test. A level-3 speedup read without these overstates what
     was measured, so every one of them is a claim the declaration has to make
     out loud rather than a fact discoverable only by reading the workload.
     """
@@ -559,7 +559,7 @@ class TestEverySiteMatchesSomething(unittest.TestCase):
 
 @needs_megafold
 class TestTheProvidersAgree(unittest.TestCase):
-    """The claim every level-4 number rests on.
+    """The claim every level-3 number rests on.
 
     ``eager`` and ``megafold`` are two implementations of one architecture on
     identical weights and identical batches. If their losses disagree, the
@@ -664,7 +664,7 @@ class TestIdentityControl(unittest.TestCase):
 
     Patching every site with the eager mathematics routed through ``bind`` and
     the adapters -- the exact plumbing an evolved kernel uses -- must not change
-    the loss. A patch layer that alters the answer would make every level-4
+    the loss. A patch layer that alters the answer would make every level-3
     speedup unattributable.
     """
 

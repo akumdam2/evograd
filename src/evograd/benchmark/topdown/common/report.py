@@ -20,7 +20,7 @@ from typing import Any
 
 #: Overridden per workload; a workload states its own so a report can be
 #: told apart from another model's at a glance.
-SCHEMA_VERSION = "evograd-level4-smoke/1"
+SCHEMA_VERSION = "evograd-level3-smoke/1"
 
 STATUS_OK = "ok"
 STATUS_FAILED = "failed"

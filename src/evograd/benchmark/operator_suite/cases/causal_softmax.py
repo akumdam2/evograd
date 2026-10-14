@@ -5,7 +5,7 @@ Derived from the attention decomposition of Qwen3-0.6B's observed
 2048 tokens, bf16): the scores -> causal softmax -> PV split of that one
 observed call. The dims are re-derived from the published configuration
 (``hf_config`` provenance), and the note says what this is: a case derived from
-a decomposition, NOT an operator the Level-4 harvest observed on its own. It
+a decomposition, NOT an operator the Level-3 harvest observed on its own. It
 therefore joins the contract here, as an operator-suite case under a
 ``*_derived`` suite name, and never through the model's observed bindings --
 the public ``qwen3_0_6b_observed`` suites are untouched.

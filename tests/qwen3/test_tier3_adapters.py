@@ -27,7 +27,7 @@ except Exception:  # pragma: no cover
 HAVE_TRANSFORMERS = False
 if HAVE_TORCH:
     try:
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import require_transformers
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import require_transformers
 
         require_transformers()
         HAVE_TRANSFORMERS = True
@@ -149,7 +149,7 @@ class TestWorkloadIdentityAndSerialization(unittest.TestCase):
         json.dumps(described)
 
     def test_cache_enabled_execution_is_refused(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import WorkloadSpecError
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.spec import WorkloadSpecError
 
         with self.assertRaises(WorkloadSpecError):
             _workload().spec.replace(use_cache=True)

@@ -238,6 +238,11 @@ class TestSingleOutputRegression(unittest.TestCase):
     MULTI_OUTPUT = {
         "qwen3_qkv_norm_rope", "fused_add_rms_norm",
         "llama3_qkv_rope", "llama3_residual_rmsnorm",
+        # Qwen3.5: the GDN gates (g, beta), the GDN input stage's six outputs,
+        # the attention prefix's (q, k, v, gate) and the residual fusion's
+        # (normed, summed).
+        "gdn_gating", "qwen3_5_gdn_in_proj", "qwen3_5_qkv_norm_partial_rope",
+        "qwen3_5_residual_rmsnorm",
     }
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):

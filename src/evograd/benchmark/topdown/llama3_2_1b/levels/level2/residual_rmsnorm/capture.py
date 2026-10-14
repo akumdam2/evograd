@@ -66,7 +66,7 @@ from typing import Any, Iterator
 
 import torch
 
-from evograd.benchmark.topdown.llama3_2_1b.levels.level3.artifact import ArtifactError, content_hash_over, identity_hash_over, load_canonical
+from evograd.benchmark.topdown.llama3_2_1b.layer.artifact import ArtifactError, content_hash_over, identity_hash_over, load_canonical
 from evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention.capture import preserve_layout_cpu
 from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import load as load_snapshot
 
@@ -193,7 +193,7 @@ def capture_residual(layer: torch.nn.Module) -> Iterator[_ResidualCapture]:
 def derive_residual_invocation(
     source: Path, *, device: str = "cuda", snapshot_path: Path | None = None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    from evograd.benchmark.topdown.llama3_2_1b.levels.level3.prepare import prepare_layer
+    from evograd.benchmark.topdown.llama3_2_1b.layer.prepare import prepare_layer
     snapshot = load_snapshot(snapshot_path)
     harvest = snapshot["tasks"][TASK_NAME]
     artifact = load_canonical(source, snapshot_path=snapshot_path)

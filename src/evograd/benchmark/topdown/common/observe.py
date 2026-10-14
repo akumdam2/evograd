@@ -228,9 +228,15 @@ def _linear_attrs(module: nn.Module) -> dict[str, Any]:
 
 
 def _rms_norm_attrs(module: nn.Module) -> dict[str, Any]:
+    # Llama and Qwen3 spell the epsilon ``variance_epsilon``; the zero-centred
+    # ``(1 + w)`` norms (Gemma, Qwen3.5) spell it ``eps``. Either is the same
+    # fact, and a norm with neither is a real incompatibility.
+    eps = getattr(module, "variance_epsilon", None)
+    if eps is None:
+        eps = module.eps
     return {
         "normalized_size": int(module.weight.shape[-1]),
-        "eps": float(module.variance_epsilon),
+        "eps": float(eps),
     }
 
 
@@ -255,10 +261,51 @@ def _attention_attrs(module: nn.Module) -> dict[str, Any]:
 
 
 def _mlp_attrs(module: nn.Module) -> dict[str, Any]:
+    # A dense MLP carries its own ``intermediate_size``. A routed MoE block in
+    # the MLP position does not -- its width is per expert -- so the configured
+    # expert widths are recorded instead of failing on an absent attribute.
+    config = module.config if hasattr(module, "config") else None
+    attrs: dict[str, Any] = {"hidden_size": int(getattr(module, "hidden_size", 0)
+                                                or getattr(config, "hidden_size"))}
+    if hasattr(module, "intermediate_size"):
+        attrs["intermediate_size"] = int(module.intermediate_size)
+    else:
+        attrs["moe_intermediate_size"] = int(config.moe_intermediate_size)
+        attrs["num_experts"] = int(config.num_experts)
+    attrs["hidden_act"] = str(config.hidden_act)
+    return attrs
+
+
+def _moe_attrs(module: nn.Module) -> dict[str, Any]:
+    """A routed MoE block: router, experts and (optionally) a shared expert."""
+    gate, experts = module.gate, module.experts
+    shared = getattr(module, "shared_expert", None)
     return {
-        "hidden_size": int(module.hidden_size),
-        "intermediate_size": int(module.intermediate_size),
-        "hidden_act": str(module.config.hidden_act),
+        "num_experts": int(getattr(gate, "num_experts", getattr(experts, "num_experts", 0))),
+        "top_k": int(getattr(gate, "top_k", 0)),
+        "norm_topk_prob": bool(getattr(gate, "norm_topk_prob", False)),
+        "shared_expert_intermediate_size": (
+            int(shared.intermediate_size) if shared is not None else None),
+        "shared_expert_gate": getattr(module, "shared_expert_gate", None) is not None,
+    }
+
+
+def _router_attrs(module: nn.Module) -> dict[str, Any]:
+    return {
+        "num_experts": int(module.num_experts),
+        "top_k": int(module.top_k),
+        "norm_topk_prob": bool(getattr(module, "norm_topk_prob", False)),
+        "hidden_dim": int(getattr(module, "hidden_dim", module.weight.shape[-1])),
+    }
+
+
+def _experts_attrs(module: nn.Module) -> dict[str, Any]:
+    config = getattr(module, "config", None)
+    return {
+        "num_experts": int(module.num_experts),
+        "hidden_dim": int(module.hidden_dim),
+        "intermediate_dim": int(module.intermediate_dim),
+        "experts_implementation": getattr(config, "_experts_implementation", None),
     }
 
 
@@ -290,6 +337,8 @@ class Observation:
     workload_id: str
     config_hash: str
     events: list[Event] = field(default_factory=list)
+    #: The provenance kind every event carries; see ``ObservationPlan``.
+    provenance_kind: str = "observed"
     boundaries: dict[str, dict[str, Any]] = field(default_factory=dict)
     _ordinal: int = 0
     _pending: dict[int, list[tuple[int, list, dict]]] = field(default_factory=dict)
@@ -306,7 +355,7 @@ class Observation:
     @property
     def provenance(self) -> dict[str, Any]:
         return {
-            "kind": "observed",
+            "kind": self.provenance_kind,
             "workload_id": self.workload_id,
             "config_hash": self.config_hash,
         }
@@ -407,7 +456,36 @@ DECODER_ATTRS: dict[str, Callable[[nn.Module], dict[str, Any]]] = {
     "rms_norm": _rms_norm_attrs,
     "linear": _linear_attrs,
     "rotary_embedding": _rotary_attrs,
+    # Routed-MoE boundaries, spelled the same way by the HF MoE decoders.
+    "moe": _moe_attrs,
+    "router": _router_attrs,
+    "experts": _experts_attrs,
 }
+
+
+@dataclass(frozen=True)
+class FunctionBoundary:
+    """A module-level function a workload wants observed, beyond the standard three.
+
+    The standard decoder boundaries (RoPE, SDPA, the loss) are installed for
+    every plan. An architecture whose operators are plain functions --
+    a gated delta rule, a causal convolution, a grouped GEMM -- names them here:
+    which attribute on which namespace, the task they record as, and the role.
+    ``role`` may be a callable ``(args, kwargs, module_path) -> str`` when one
+    function serves several roles distinguishable only by their arguments.
+    """
+
+    task: str
+    namespace: str
+    attribute: str
+    role: str | Callable[[tuple, dict, str | None], str]
+    #: Keyword arguments recorded as inputs after the positional ones, in order.
+    tensor_kwargs: tuple[str, ...] = ()
+    attrs: Callable[[tuple, dict], dict[str, Any]] | None = None
+
+    @property
+    def wrapper_name(self) -> str:
+        return f"{self.namespace}.{self.attribute}"
 
 
 @dataclass(frozen=True)
@@ -428,31 +506,56 @@ class ObservationPlan:
     modeling_module: str
     #: Tasks a finished manifest must contain.
     mandatory_tasks: tuple[str, ...] = MANDATORY_DECODER_TASKS
+    #: Further function boundaries this architecture's operators live behind.
+    functions: tuple[FunctionBoundary, ...] = ()
+    #: Classes other than the MLP whose ``act_fn`` is an observed activation
+    #: (a routed experts module, say). Recorded under the role
+    #: ``<owner role>_act_fn`` so it cannot merge with the MLP's ``act_fn``.
+    activation_owners: tuple[str, ...] = ()
+    #: What the events' provenance calls this observation. ``observed`` for a
+    #: whole training step; a block-level harvest says so.
+    provenance_kind: str = "observed"
+
+
+def _names(value: str | Sequence[str]) -> tuple[str, ...]:
+    return (value,) if isinstance(value, str) else tuple(value)
 
 
 def decoder_boundaries(
     *,
-    decoder_layer: str,
-    attention: str,
-    mlp: str,
-    rms_norm: str,
+    decoder_layer: str | Sequence[str],
+    attention: str | Sequence[str],
+    mlp: str | Sequence[str],
+    rms_norm: str | Sequence[str],
     rotary_embedding: str | None = None,
     linear: str = "Linear",
+    extra: Sequence[ModuleBoundary] = (),
 ) -> tuple[ModuleBoundary, ...]:
-    """The standard decoder boundary table, given one model's class names."""
-    table = [
-        ModuleBoundary("decoder_layer", decoder_layer,
-                       DECODER_ATTRS["decoder_layer"], is_layer=True),
-        ModuleBoundary("attention", attention, DECODER_ATTRS["attention"]),
-        ModuleBoundary("mlp", mlp, DECODER_ATTRS["mlp"]),
-        ModuleBoundary("rms_norm", rms_norm, DECODER_ATTRS["rms_norm"]),
-        ModuleBoundary("linear", linear, DECODER_ATTRS["linear"]),
-    ]
+    """The standard decoder boundary table, given one model's class names.
+
+    Each standard task may be implemented by more than one class -- a hybrid
+    decoder has two token mixers and, in the MLP position, a routed MoE beside a
+    dense shared expert -- and ``extra`` adds the boundaries only such a model
+    has. A single class name per task, as every dense decoder passes, gives the
+    same table as before.
+    """
+    table: list[ModuleBoundary] = []
+    for name in _names(decoder_layer):
+        table.append(ModuleBoundary("decoder_layer", name, DECODER_ATTRS["decoder_layer"],
+                                    is_layer=True))
+    for name in _names(attention):
+        table.append(ModuleBoundary("attention", name, DECODER_ATTRS["attention"]))
+    for name in _names(mlp):
+        table.append(ModuleBoundary("mlp", name, DECODER_ATTRS["mlp"]))
+    for name in _names(rms_norm):
+        table.append(ModuleBoundary("rms_norm", name, DECODER_ATTRS["rms_norm"]))
+    table.append(ModuleBoundary("linear", linear, DECODER_ATTRS["linear"]))
     if rotary_embedding is not None:
         table.append(
             ModuleBoundary("rotary_embedding", rotary_embedding,
                            DECODER_ATTRS["rotary_embedding"], mandatory=False)
         )
+    table.extend(extra)
     return tuple(table)
 
 
@@ -564,32 +667,41 @@ class _Installer:
         self._undos.clear()
 
 
-def _activation_modules(model: nn.Module, mlp_class: str) -> dict[int, str]:
-    """The activation instances the model's MLP actually calls, by identity.
+def _activation_modules(model: nn.Module, mlp_classes: Sequence[str],
+                        owners: Sequence[str] = ()) -> dict[int, tuple[str, str]]:
+    """The activation instances the model actually calls, by identity.
 
     ``ACT2FN`` yields a fresh ``nn.Module`` per lookup in Transformers 5.16.1, so
     each MLP owns its own SiLU and a hook on it fires once per MLP call. Found
-    by walking to each MLP's ``act_fn`` rather than by class name, because the
+    by walking to each owner's ``act_fn`` rather than by class name, because the
     class behind ``"silu"`` has changed spelling before (``SiLUActivation`` vs
     ``nn.SiLU``) and may again.
+
+    Returns ``{id: (path, role)}``. An MLP's activation keeps the role
+    ``act_fn``; another owner's (a routed experts module) is ``<owner>_act_fn``,
+    so the two never collapse into one role.
     """
-    found: dict[int, str] = {}
+    found: dict[int, tuple[str, str]] = {}
+    mlp_classes, owners = set(mlp_classes), set(owners)
     for path, module in model.named_modules():
-        if type(module).__name__ != mlp_class:
+        name = type(module).__name__
+        if name not in mlp_classes and name not in owners:
             continue
         act = getattr(module, "act_fn", None)
         if isinstance(act, nn.Module):
-            found[id(act)] = f"{path}.act_fn"
+            role = "act_fn" if name in mlp_classes else f"{_role_of(path)}_act_fn"
+            found[id(act)] = (f"{path}.act_fn", role)
     return found
 
 
 def _install_module_hooks(installer: _Installer, model: nn.Module,
-                          boundaries: tuple[ModuleBoundary, ...]) -> dict[str, int]:
+                          boundaries: tuple[ModuleBoundary, ...],
+                          activation_owners: Sequence[str] = ()) -> dict[str, int]:
     by_class = {b.class_name: b for b in boundaries}
     installed: dict[str, int] = {task: 0 for task in (b.task for b in boundaries)}
 
-    mlp_class = next((b.class_name for b in boundaries if b.task == "mlp"), None)
-    activations = _activation_modules(model, mlp_class) if mlp_class else {}
+    mlp_classes = [b.class_name for b in boundaries if b.task == "mlp"]
+    activations = _activation_modules(model, mlp_classes, activation_owners)
     installed["silu"] = 0
 
     for path, module in model.named_modules():
@@ -604,7 +716,8 @@ def _install_module_hooks(installer: _Installer, model: nn.Module,
             )
             installed[boundary.task] += 1
         elif id(module) in activations:
-            installer.hook_module(module, path, "silu", _no_attrs, role="act_fn")
+            act_path, role = activations[id(module)]
+            installer.hook_module(module, path, "silu", _no_attrs, role=role)
             installed["silu"] += 1
     return installed
 
@@ -629,9 +742,7 @@ def _install_function_patches(installer: _Installer, obs: Observation,
     available: dict[str, bool] = {}
 
     def _context() -> tuple[str | None, int | None]:
-        module = obs.current_module
-        layer = obs.current_layer
-        return (module[0] if module else None, layer[1] if layer else None)
+        return _context_of(obs)
 
     # RoPE: a module-level function in the model's modeling module, called by
     # name from the attention forward, so rebinding the attribute is enough.
@@ -769,6 +880,58 @@ def _install_function_patches(installer: _Installer, obs: Observation,
     return available
 
 
+def _context_of(obs: Observation) -> tuple[str | None, int | None]:
+    """The enclosing module path and decoder-layer index, from the observer's stacks."""
+    module = obs.current_module
+    layer = obs.current_layer
+    return (module[0] if module else None, layer[1] if layer else None)
+
+
+def _install_extra_functions(installer: _Installer, obs: Observation,
+                             functions: Sequence[FunctionBoundary]) -> dict[str, bool]:
+    """Wrap each workload-named function boundary at its call site.
+
+    Same contract as the standard wrappers: the ordinal is taken before the
+    call, only metadata leaves the wrapper, and the enclosing module and layer
+    come from the observer's stacks.
+    """
+    import importlib
+
+    available: dict[str, bool] = {}
+    for boundary in functions:
+        namespace = importlib.import_module(boundary.namespace)
+
+        def factory(original, _b=boundary):
+            def wrapper(*args, **kwargs):
+                ordinal = obs.next_ordinal()
+                tensors = list(args) + [kwargs[k] for k in _b.tensor_kwargs if k in kwargs]
+                inputs = describe_all(tensors)
+                input_kwargs = {k: describe(v) for k, v in sorted(kwargs.items())
+                                if k not in _b.tensor_kwargs}
+                out = original(*args, **kwargs)
+                path, layer = _context_of(obs)
+                role = _b.role(args, kwargs, path) if callable(_b.role) else _b.role
+                obs.record(
+                    ordinal=ordinal,
+                    task=_b.task,
+                    inputs=inputs,
+                    input_kwargs=input_kwargs,
+                    outputs=describe_all(out if isinstance(out, tuple) else (out,)),
+                    module_path=path,
+                    module_class=None,
+                    role=role,
+                    layer_index=layer,
+                    attrs=_b.attrs(args, kwargs) if _b.attrs is not None else {},
+                )
+                return out
+
+            return wrapper
+
+        installer.patch(namespace, boundary.attribute, factory)
+        available[boundary.task] = True
+    return available
+
+
 @contextmanager
 def observe(model: nn.Module, *, workload_id: str, config_hash: str,
             plan: ObservationPlan) -> Iterator[Observation]:
@@ -784,13 +947,17 @@ def observe(model: nn.Module, *, workload_id: str, config_hash: str,
             "invocation twice"
         )
 
-    observation = Observation(workload_id=workload_id, config_hash=config_hash)
+    observation = Observation(workload_id=workload_id, config_hash=config_hash,
+                              provenance_kind=plan.provenance_kind)
     installer = _Installer(observation)
     _ACTIVE = observation
     try:
-        hooked = _install_module_hooks(installer, model, plan.boundaries)
+        hooked = _install_module_hooks(installer, model, plan.boundaries,
+                                       plan.activation_owners)
         patched = _install_function_patches(installer, observation,
                                             plan.modeling_module)
+        if plan.functions:
+            patched.update(_install_extra_functions(installer, observation, plan.functions))
         missing = [task for task, count in hooked.items()
                    if count == 0 and task in plan.mandatory_tasks]
         if missing:
@@ -820,6 +987,28 @@ def check_mandatory_boundaries(observation: Observation,
             f"these mandatory boundaries produced no events: {missing}. "
             f"Observed: {counts}. The installed Transformers may have moved the "
             "call site; the manifest was not written."
+        )
+
+
+def check_layer_boundaries(observation: Observation, layer_index: int,
+                           tasks: Sequence[str]) -> None:
+    """Every listed task produced events inside one decoder layer.
+
+    The whole-manifest check above is not enough for a hybrid model: SDPA and
+    RoPE run in one layer in four, so "the manifest has an SDPA event" says
+    nothing about whether the full-attention layer that should have run it did.
+    Each block kind states the tasks it must contain, and each harvested layer
+    is held to its own list.
+    """
+    counts: dict[str, int] = {}
+    for event in observation.events:
+        if event.layer_index == layer_index:
+            counts[event.task] = counts.get(event.task, 0) + 1
+    missing = [task for task in tasks if counts.get(task, 0) == 0]
+    if missing:
+        raise MandatoryBoundaryError(
+            f"layer {layer_index} produced no events for {missing}. Observed in that "
+            f"layer: {dict(sorted(counts.items()))}. The manifest was not written."
         )
 
 

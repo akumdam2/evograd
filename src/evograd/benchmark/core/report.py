@@ -13,7 +13,7 @@ asymmetric things: the eager baseline's "backward" runs through the oracle,
 which computes the forward *and* the backward, while the candidate's backward is
 timed from pre-saved state with the forward outside the timed region. For a
 single elementwise kernel the forward is cheap and the distortion is small; for
-a level-3 block the forward is roughly a third of the step, so the number is
+a decoder layer the forward is roughly a third of the step, so the number is
 inflated by about half. ``speedup_vs_baseline_raw_full_step`` compares
 like with like, and it is the metric the benchmark specification defines.
 
@@ -53,8 +53,7 @@ REPORT_VERSION = "evograd-suite-v1"
 LEVEL_NAMES = {
     1: "primitive",
     2: "composite",
-    3: "architectural-block integration",
-    4: "whole-model workload",
+    3: "whole-model workload",
 }
 
 
@@ -193,9 +192,9 @@ def task_from_tier3_report(
     provider: str = "candidate",
     reference: str = "eager",
 ) -> TaskResult:
-    """Read one tier-3 (training-step) report into a level-4 suite row.
+    """Read one tier-3 (training-step) report into a level-3 suite row.
 
-    A level-4 task is measured by ``evaluation.tier3.runner`` — a full training step
+    A level-3 task is measured by ``evaluation.tier3.runner`` — a full training step
     per provider — not by the pair or operator protocols, so its suite row is
     built from step latency: the full-step speedup is the reference provider's
     ``step_ms`` over the candidate's, one case per report. Saved-state memory
@@ -223,7 +222,7 @@ def task_from_tier3_report(
 
     return TaskResult(
         op=workload_name,
-        level=4,
+        level=3,
         family=family,
         tier="model",
         protocol=str(report.get("protocol", "")) or "fair",

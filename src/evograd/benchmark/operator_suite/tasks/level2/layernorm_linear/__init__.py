@@ -27,7 +27,7 @@ _DERIVED = model_workloads(
 )
 
 # The pair track. ``_DERIVED`` above is the single-representation site
-# (``c_s`` -> q/k/v fan-out); the level-4 MegaFold workload spends most of its
+# (``c_s`` -> q/k/v fan-out); the level-3 MegaFold workload spends most of its
 # LayernormLinear calls on the pair representation instead -- one row per
 # residue pair, ``c_z = 128`` in -- feeding triangle multiplication (N = 5 c_z,
 # twice per block) and the pair transition (N = 2 * 4 c_z, once per block).
@@ -43,7 +43,7 @@ _PAIR = model_workloads(
     note="MegaFold runs this site in float32 outside its own Triton path",
 )
 #: Both pair-track shapes at the production crop, float32: one program has to
-#: serve both, so this pair is the level-4 evolution objective.
+#: serve both, so this pair is the level-3 evolution objective.
 _PAIR_384 = tuple(w for w in _PAIR if w.dims["M"] == 384 * 384 and w.dtype == "float32")
 
 

@@ -226,7 +226,7 @@ class TestCrossEntropyCanonicalCheck(unittest.TestCase):
     def setUpClass(cls):
         from evograd.evaluation.workloads.qwen3_0_6b.level1.verify import run_cross_entropy_check
 
-        from tests.qwen3.test_level4_workload import tiny_spec
+        from tests.qwen3.test_level3_workload import tiny_spec
 
         cls.report = run_cross_entropy_check(device="cpu", spec=tiny_spec())
 

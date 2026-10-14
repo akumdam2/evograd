@@ -69,6 +69,19 @@ class TestModelRegistry(unittest.TestCase):
             for workload in TASKS[name].benchmark:
                 self.assertEqual(workload.provenance.model, "llama_3_8b", name)
 
+    def test_qwen3_5_tasks_cite_its_record(self):
+        """Every Qwen3.5 site case is config-derived from its own record, at B1."""
+        self.assertEqual(MODELS["qwen3_5_4b"].hidden, 2560)
+        names = [n for n in TASKS if n.startswith("qwen3_5_")]
+        self.assertEqual(len(names), 7)
+        for name in names:
+            for workload in TASKS[name].benchmark:
+                with self.subTest(op=name):
+                    self.assertEqual(workload.provenance.model, "qwen3_5_4b")
+                    self.assertEqual(workload.provenance.source, "hf_config")
+                    self.assertEqual(workload.provenance.free, {"batch": 1, "seq": 2048})
+                    self.assertEqual(workload.dims, rederive_dims(workload.provenance))
+
     def test_llama_derived_widths(self):
         self.assertEqual(LLAMA_3_8B.q_out, 4096)  # 32 heads x 128
         self.assertEqual(LLAMA_3_8B.kv_out, 1024)  # 8 kv heads x 128, GQA

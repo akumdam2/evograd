@@ -41,11 +41,11 @@ from evograd.evaluation.tier3.model import (
 )
 from evograd.evaluation.tier3.patch import KernelSet
 
-TIER3_PROTOCOL_VERSION = "evograd-tier3-model-v2"
+#: v3 (2026-10-13): the same measurement as v2, with the whole model numbered
+#: benchmark level 3 (the block level was removed). v2 reports are still read.
+TIER3_PROTOCOL_VERSION = "evograd-tier3-model-v3"
 
-#: What this runner executes: a whole model's training step. The block scope
-#: (one architectural block, forward + VJP) is a different protocol and never
-#: reuses this runner's timing loop; the two share the report reader.
+#: What this runner executes: a whole model's training step.
 EXECUTION_SCOPE_MODEL = "model"
 
 #: What the optimizer is, spelled out rather than implied by "AdamW". Every
@@ -545,6 +545,13 @@ def measure_provider(
         "kernel_sources": [s.to_dict() for s in kernels.sources],
         "verification": verification,
         "model_correctness": model_correctness,
+        # Lifted to the row, as block-scope rows carry them: whether the
+        # provider's numerical evaluation is complete, and if not why -- so a
+        # timed row can never be read as "checked and fine" by a reader that
+        # does not open ``model_correctness``.
+        "evaluation_complete": model_correctness.get("evaluation_complete"),
+        "evaluation_incomplete_because": model_correctness.get(
+            "evaluation_incomplete_because"),
         "optimizer": {
             "name": OPTIMIZER,
             "learning_rate": learning_rate,
@@ -745,14 +752,13 @@ def assemble_report(
     report = {
         "protocol": TIER3_PROTOCOL_VERSION,
         # Stated, not implied by the protocol string: this runner measures a
-        # whole model's training step (benchmark level 4). A block-scope report
-        # (level 3, forward + VJP) carries its own protocol and says so here;
-        # see ``evograd.evaluation.tier3.report`` for how both are read. Reports
+        # whole model's training step (benchmark level 3); see
+        # ``evograd.evaluation.tier3.report`` for how reports are read. Reports
         # written before these three fields existed are model-scope by
         # construction and the reader treats them so.
         "evaluation_tier": 3,
         "execution_scope": EXECUTION_SCOPE_MODEL,
-        "benchmark_level": 4,
+        "benchmark_level": 3,
         **workload.describe(),
         "seed": seed,
         "provider_order": list(order),

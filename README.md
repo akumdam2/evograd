@@ -476,32 +476,29 @@ started from a program that could not run.
 | --- | --- |
 | 1 — pair | Call forward and backward directly. |
 | 2 — operator | Run an operator through PyTorch autograd. |
-| 3 — integrated | Install providers in a real block or whole model. |
+| 3 — integrated | Install providers in the whole model's training step. |
 
-Tier 3 has two scopes. `--scope block` measures block forward plus backward
-from supplied cotangents; `--scope model` (the default) measures loss,
-backward, AdamW and gradient reset. Block and model results are kept separate.
-`fast` and `fair` select measurement protocols, independently of tier.
+Tier 3 measures the whole training step: loss, backward, AdamW and gradient
+reset (benchmark Level 3). `fast` and `fair` select measurement protocols,
+independently of tier.
 
 ```bash
 evograd tier1-bench --op layernorm --candidate best.py
 evograd tier2-bench --op layernorm --candidate best.py
-evograd tier3-bench --scope block --model qwen3_0_6b \
-  --baseline none --candidate swiglu_mlp=best.py
+evograd tier3-bench --model qwen3_0_6b \
+  --baseline none --patch-set best:swiglu_mlp=best.py
 ```
 
-By default, correctness checks precede timing. Block checks cover provider
-preflight, local results, patch counts and complete block outputs/gradients.
-Calibration uses trusted controls; failed controls cannot authorize timing.
-Model scope retains its workload-specific gates and loss checks.
+By default, correctness checks precede timing: provider preflight, patch
+counts, and the workload-specific model gates and loss checks.
 
 See [benchmark levels](docs/BENCHMARK.md),
-[block correctness](docs/L3_CORRECTNESS_CHECKS.md),
-[Qwen usage](docs/QWEN3_LEVEL4.md) and
+[Qwen usage](docs/QWEN3_LEVEL3.md) and
 [the 2026-09-15 benchmark report](docs/experiments/benchmark_run_20260915.md).
 
 One naming collision to keep straight: `OpDecl.level` is the **task**
-hierarchy — primitive, fused, architectural block — and has nothing to do with
+hierarchy — primitive, composite (the whole model, level 3, is a
+`WorkloadDecl`) — and has nothing to do with
 evaluation tiers. A level-1 primitive measured at tier 2 is an ordinary thing
 to want.
 
@@ -512,7 +509,7 @@ claims:
 | --- | --- |
 | `evograd.opdecl` | declaration infrastructure and shared types |
 | `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
-| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L2/L3/L4 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
+| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L1/L2/L3 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
 | `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
 | `evograd.cli` / `evograd.suite_cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
 
@@ -618,8 +615,8 @@ retaining the fork’s private every-N worker patch.
 
 ## Supported operators
 
-Operators are organized into benchmark L1/L2 and legacy direct-block L3 tasks;
-whole-model workloads occupy L4. See
+Operators are organized into benchmark L1/L2 tasks; whole-model workloads
+occupy L3. See
 [the benchmark specification](docs/BENCHMARK.md) for the metrics, the shape
 provenance rules, and how the levels are aggregated.
 
@@ -646,7 +643,7 @@ provenance rules, and how the levels are aggregated.
 | `evoattention`  | attention  | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`   | no             |
 | `rope`          | positional | rotary position embedding                 | `dx`                              | yes            |
 
-### Level 2 — fused operators
+### Level 2 — composite operators
 
 | Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
 | ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
@@ -656,37 +653,9 @@ provenance rules, and how the levels are aggregated.
 | `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
 | `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
 
-### Level 3 — architectural blocks
+### Level 3 — whole-model workloads
 
-Qwen3-0.6B and Llama-3.2-1B support `tier3-bench --scope block`. Their
-adapters construct one native decoder layer and install selected L2 providers.
-Inputs may come from verified captures or a seeded configuration; the latter
-does not require a full-model run. Reports identify the source and block scope.
-
-What replaces them is not another block declaration but the top-down path:
-Qwen3-0.6B's captured layer artifact and its replay live under
-`benchmark/topdown/qwen3_0_6b/levels/level3/`, and their judgment under
-`evaluation/workloads/qwen3_0_6b/level3/`. That path is deliberately still
-described as incomplete — see [docs/QWEN3_LEVEL4.md](docs/QWEN3_LEVEL4.md).
-
-MegaFold's whole-model declaration and its Tier-3 adapters are unaffected, as
-are Llama-3-8B's Level-4 workload and harvest. What a
-level-3 declaration would still have to do, whenever one is written: compute
-its correctness reference in float32 while the candidate runs in bfloat16
-(`reference_dtype`), because composing ten operators makes a same-dtype
-reference carry as much rounding error as the candidate, at which point the
-tolerance stops bounding the candidate's own error. It would also have to state
-what it excludes — as the deleted Llama block did for the KV cache, and the
-AlphaFold3 block did by being the single-representation update rather than a full
-pairformer block, which would need two outputs.
-
-The single-layer boundary includes the original final residual addition.
-Cross-layer residual fusion is covered by model scope. See
-[block usage and boundaries](docs/QWEN3_LEVEL4.md).
-
-### Level 4 -- whole-model workloads
-
-`megafold` is the registered Level-4 task: one full
+`megafold` is the registered Level-3 task: one full
 [MegaFold](https://github.com/Supercomputing-System-AI-Lab/MegaFold) training
 step (arXiv:2506.20686), with evolved kernels patched into the module tree by
 surgery. MegaFold is the implementation every AlphaFold3 shape in
@@ -829,12 +798,12 @@ src/evograd/
 ├── benchmark/                 # what is benchmarked
 │   ├── core/                  # task registry and result aggregation
 │   ├── operator_suite/        # operator task/config selection and suite CLI
-│   └── topdown/               # common + Qwen3-0.6B/Llama3/MegaFold workloads
+│   └── topdown/               # common + Qwen3-0.6B/Llama3/Qwen3.5/MegaFold workloads
 ├── evaluation/                # how a candidate is evaluated
 │   ├── common/                # providers and canonical reports
 │   ├── tier1/                 # direct pair: fast/fair modes
 │   ├── tier2/                 # operator/autograd runner
-│   └── tier3/                 # block/model runners, patching and gates
+│   └── tier3/                 # whole-model runner, patching and gates
 ├── atenir/
 │   ├── extract.py             # PyTorch/autograd graph extraction
 │   ├── compose.py             # serialized graph execution
@@ -862,8 +831,8 @@ program database, LLM orchestration, and checkpointing.
 ## Project status
 
 Operator declarations, seed pipelines and OpenEvolve integration are available.
-Tier 3 supports Qwen3-0.6B and Llama-3.2-1B decoder blocks as well as the
-existing model workloads. Hardware-specific results and their limitations are
+Tier 3 runs the whole-model workloads (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B,
+MegaFold, AlphaFold3). Hardware-specific results and their limitations are
 recorded in [benchmark reports](docs/experiments/benchmark_run_20260915.md).
 
 Generated candidates, raw measurements and internal design notes stay local.

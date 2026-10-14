@@ -137,8 +137,8 @@ def derive_sdpa_invocation(
     source: Path, *, device: str = "cuda", snapshot_path: Path | None = None,
     descriptor,
 ) -> _SdpaCapture:
-    prepare_layer = descriptor.module("levels.level3.prepare").prepare_layer
-    load_canonical = descriptor.module("levels.level3.artifact").load_canonical
+    prepare_layer = descriptor.module("layer.prepare").prepare_layer
+    load_canonical = descriptor.module("layer.artifact").load_canonical
     artifact = load_canonical(source, snapshot_path=snapshot_path)
     payload = artifact.payload
     if device.startswith("cuda") and not torch.cuda.is_available():
@@ -182,7 +182,7 @@ def run_verify(
         compare_tensors,
     )
     validate_noise_repeats = descriptor.module(
-        "levels.level3.prepare"
+        "layer.prepare"
     ).validate_noise_repeats
 
     noise_repeats = validate_noise_repeats(noise_repeats)
@@ -426,7 +426,7 @@ def run_loss_check(
         # This is a printed reference value, not a gate -- and it is
         # environment-sensitive: the same step under transformers 4.57.6 took a
         # different SDPA path and produced 12.594093322753906.
-        "canonical_level4_loss": descriptor.canonical_loss,
+        "canonical_level3_loss": descriptor.canonical_loss,
         "tensors_written": False,
         "diagnostics": {
             "note": "diagnostic only -- one unwarmed pass, not a benchmark result",
@@ -443,7 +443,7 @@ def run_loss_check(
 def run_cross_entropy_check(*, device: str = "cuda", spec=None, descriptor) -> dict[str, Any]:
     """Compare the Level-1 contract against the model's own cross entropy.
 
-    The canonical Level-4 step is run on demand and its call to
+    The canonical Level-3 step is run on demand and its call to
     ``fixed_cross_entropy`` is intercepted. The declared Level-1 reference is
     then evaluated **on the same live tensors** -- the exact flattened float32
     logits and int64 labels Transformers passed -- and against the same upstream
@@ -458,11 +458,11 @@ def run_cross_entropy_check(*, device: str = "cuda", spec=None, descriptor) -> d
     """
     from evograd.ops.level1.cross_entropy.forward_ref import cross_entropy_forward_ref
 
-    _level4 = descriptor.module("levels.level4.model")
-    build_model, make_inputs = _level4.build_model, _level4.make_inputs
-    require_transformers, training_step = _level4.require_transformers, _level4.training_step
+    _level3 = descriptor.module("levels.level3.model")
+    build_model, make_inputs = _level3.build_model, _level3.make_inputs
+    require_transformers, training_step = _level3.require_transformers, _level3.training_step
     from evograd.evaluation.workloads.common.replay import compare_tensors
-    CANONICAL = descriptor.module("levels.level4.spec").CANONICAL
+    CANONICAL = descriptor.module("levels.level3.spec").CANONICAL
 
     require_transformers()
     import transformers.loss.loss_utils as loss_utils
@@ -671,7 +671,7 @@ def summarize_loss(report: dict[str, Any]) -> str:
             f"loss scalar: {report['loss_is_scalar']}  finite: {report['loss_is_finite']}",
             f"  loss {report['loss']:.6f}   uniform-logit loss "
             f"{report['uniform_logit_loss']:.6f}   ln(vocab) {report['ln_vocab']:.6f}",
-            f"  canonical Level-4 loss for reference: {report['canonical_level4_loss']}",
+            f"  canonical Level-3 loss for reference: {report['canonical_level3_loss']}",
             f"  dlogits {report['dlogits_shape']} all finite: "
             f"{report['dlogits_all_finite']}",
         ]

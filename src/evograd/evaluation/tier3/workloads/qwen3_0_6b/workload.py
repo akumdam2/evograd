@@ -9,11 +9,11 @@ serializable fields; :meth:`Qwen3Workload.to_config` writes them out and
 :func:`from_config` rebuilds an identical workload on the other side.
 
 The execution is the canonical one this repository has been measuring since
-level 4: Qwen3-0.6B, batch 2, sequence 2048, BF16, CUDA, SDPA, ``use_cache``
+level 3: Qwen3-0.6B, batch 2, sequence 2048, BF16, CUDA, SDPA, ``use_cache``
 off, gradient checkpointing off, ``model.train()``, randomly initialised from
 config with no weight or tokenizer download. It is not re-specified here -- it
 is ``spec.CANONICAL``, and ``build_model``/``make_inputs`` are the same
-functions the level-4 smoke, the harvest and the replay all use.
+functions the level-3 smoke, the harvest and the replay all use.
 
 One thing is new: a **data seed** separate from the workload's own. The tier
 needs a fresh batch per loss-trajectory step, and drawing those from the
@@ -31,12 +31,12 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import (
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import (
     build_model,
     effective_settings,
     make_inputs,
 )
-from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.spec import (
+from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.spec import (
     CANONICAL,
     WorkloadSpec,
 )
@@ -250,7 +250,7 @@ class Qwen3Workload:
 
             from transformers import AutoTokenizer
 
-            from evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model import (
+            from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import (
                 pretrained_snapshot,
             )
             from . import textdata

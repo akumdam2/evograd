@@ -72,16 +72,16 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
                 self.assertTrue(primitive.correctness, f"{name} lost its correctness cases")
 
     def test_no_primitive_names_a_model_configuration(self):
-        """One documented exception, and it is a numerical rule rather than a
-        case list: RoPE's input generator reads ``rope_theta`` from each
-        workload's own provenance, and needs the published configuration table
-        to do so."""
+        """Two documented exceptions, both a numerical rule rather than a case
+        list: the RoPE and partial-RoPE input generators read ``rope_theta`` from
+        each workload's own provenance, and need the published configuration
+        table to do so."""
         offenders = []
         for package in sorted((REPO / "src/evograd/ops/level1").iterdir()):
             init = package / "__init__.py"
             if init.is_file() and "opdecl.models" in init.read_text():
                 offenders.append(package.name)
-        self.assertEqual(offenders, ["rope"])
+        self.assertEqual(offenders, ["partial_rope", "rope"])
 
     def test_importing_primitives_loads_no_benchmark_or_evaluation(self):
         """Checked in a fresh interpreter: the ownership rule is about what a
@@ -98,7 +98,7 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, loaded = result.stdout.strip().splitlines()
-        self.assertEqual(count, "23")
+        self.assertEqual(count, "29")
         self.assertEqual(loaded, "[]", f"importing primitives loaded {loaded}")
 
 
@@ -350,6 +350,7 @@ class TestObservedBindingOwnership(unittest.TestCase):
         owners = {
             self.MANIFEST,
             REPO / "src/evograd/benchmark/topdown/llama3_2_1b/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/qwen3_5_4b/levels/level1/manifest.py",
         }
         declaring = []
         for path in (REPO / "src/evograd").rglob("*.py"):
@@ -580,11 +581,11 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
             self.assertEqual(workload.provenance.model, "llama_3_2_1b")
         self.assertIn("llama_3_2_1b_observed", TASKS["rmsnorm"].benchmark_suites)
 
-    def test_the_registry_supplies_both_models(self):
+    def test_the_registry_supplies_every_model(self):
         from evograd.benchmark.core.registry import _observed_bindings
 
         workloads = {b.workload for b in _observed_bindings()}
-        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b"})
+        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b", "qwen3_5_4b"})
 
 
 if __name__ == "__main__":

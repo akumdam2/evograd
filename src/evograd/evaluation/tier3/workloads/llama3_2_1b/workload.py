@@ -8,12 +8,12 @@ cannot cross that boundary. Everything this workload needs is a handful of
 serializable fields; :meth:`Llama3Workload.to_config` writes them out and
 :func:`from_config` rebuilds an identical workload on the other side.
 
-The execution is the canonical one the level-4 smoke and the harvest run:
+The execution is the canonical one the level-3 smoke and the harvest run:
 Llama-3.2-1B, batch 2, sequence 2048, BF16, CUDA, SDPA, ``use_cache`` off,
 gradient checkpointing off, ``model.train()``, randomly initialised from config
 with no weight or tokenizer download -- Llama-3 is a gated repository and this
 needs no Hub token. It is not re-specified here; it is ``spec.CANONICAL``, and
-``build_model``/``make_inputs`` are the same functions level 4 uses.
+``build_model``/``make_inputs`` are the same functions level 3 uses.
 
 One thing is new relative to the spec: a **data seed** separate from the
 workload's own. The tier needs a fresh batch per loss-trajectory step, and
@@ -38,8 +38,8 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.llama3_2_1b.levels.level4.model import build_model, effective_settings, make_inputs
-from evograd.benchmark.topdown.llama3_2_1b.levels.level4.spec import CANONICAL, WorkloadSpec
+from evograd.benchmark.topdown.llama3_2_1b.levels.level3.model import build_model, effective_settings, make_inputs
+from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import CANONICAL, WorkloadSpec
 from .sites import (
     PatchedModel,
     SiteCounters,

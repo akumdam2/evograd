@@ -52,7 +52,7 @@ two different questions.
 
 **Is the extraction wired correctly?** Compared against ``llama3_swiglu_mlp_forward_hf``
 -- the BF16 spelling ``LlamaMLP`` actually executes -- this is the same
-computation, so it is held to the Level-3 replay tolerances: one BF16 unit
+computation, so it is held to the layer-replay tolerances: one BF16 unit
 roundoff forward, one epsilon on gradients. If the weight mapping, a transpose,
 or the upstream gradient were wrong, this is what would catch it.
 
@@ -79,7 +79,7 @@ from typing import Any, Iterator
 
 import torch
 
-from evograd.benchmark.topdown.llama3_2_1b.levels.level3.artifact import (
+from evograd.benchmark.topdown.llama3_2_1b.layer.artifact import (
     ArtifactError,
     content_hash_over,
     identity_hash_over,
@@ -204,7 +204,7 @@ def derive_mlp_invocation(
     is written: ``layer8.pt`` is the authoritative tensor store, and this is a
     view of part of it.
     """
-    from evograd.benchmark.topdown.llama3_2_1b.levels.level3.prepare import prepare_layer
+    from evograd.benchmark.topdown.llama3_2_1b.layer.prepare import prepare_layer
     snapshot = load_snapshot(snapshot_path)
     harvest = snapshot["tasks"][TASK_NAME]
     # Every identity check, with no way to opt out.

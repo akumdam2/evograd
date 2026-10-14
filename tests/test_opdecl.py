@@ -90,6 +90,8 @@ class TestDerivedNaming(unittest.TestCase):
             {level: sorted(names) for level, names in sorted(by_level.items())},
             {
                 1: [
+                    # The Gated DeltaNet's short convolution (Qwen3.5).
+                    "causal_conv1d",
                     # The one primitive a decoder-only step runs that had no
                     # generic task before the Qwen3 Level-1 mapping.
                     "causal_gqa_attention",
@@ -100,16 +102,25 @@ class TestDerivedNaming(unittest.TestCase):
                     "cross_entropy",
                     "dyt",
                     "evoattention",
+                    # The GDN output norm and gates.
+                    "gated_rmsnorm",
+                    "gdn_gating",
                     "geglu",
+                    # The zero-centred (1 + w) RMSNorm.
+                    "gemma_rmsnorm",
                     "gqa_pv",
                     "gqa_scaled_scores",
                     "jsd",
                     "kl_div",
+                    # The delta rule's q/k normalization.
+                    "l2norm",
                     "layernorm",
                     "linear",
                     # Biasless projections -- what a modern decoder runs.
                     "linear_no_bias",
                     "matmul",
+                    # Gated attention's 64-of-256-channel rotary embedding.
+                    "partial_rope",
                     "poly_norm",
                     "relu_squared",
                     "rmsnorm",
@@ -137,6 +148,14 @@ class TestDerivedNaming(unittest.TestCase):
                     "llama3_qkv_rope",
                     "llama3_residual_rmsnorm",
                     "llama3_swiglu_mlp",
+                    # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
+                    "qwen3_5_gated_attention",
+                    "qwen3_5_gated_delta_rule",
+                    "qwen3_5_gdn_in_proj",
+                    "qwen3_5_gdn_norm_out",
+                    "qwen3_5_qkv_norm_partial_rope",
+                    "qwen3_5_residual_rmsnorm",
+                    "qwen3_5_swiglu_mlp",
                     "qwen3_attention",
                     "qwen3_qkv_norm_rope",
                     "qwen3_swiglu_mlp",
@@ -144,42 +163,11 @@ class TestDerivedNaming(unittest.TestCase):
             },
         )
 
-    def test_a_deep_task_must_widen_its_reference(self):
-        """A block composes ~10 operators, so a same-dtype reference is useless.
-
-        At that depth a bfloat16 reference carries as much rounding error as the
-        candidate does, and the tolerance stops meaning "how wrong is the
-        candidate". A task at level 3 or deeper therefore computes its reference
-        in float32 and gates bfloat16 candidates against it.
-
-        No task declares level 3 today -- the two legacy direct-block
-        declarations were deleted -- so the rule is asserted twice: over the
-        registry, which keeps it armed for the next one, and over a synthetic
-        declaration, which keeps the behaviour itself covered.
-        """
-        deep = {name: op for name, op in TASKS.items() if (op.level or 0) >= 3}
-        for name, op in deep.items():
-            with self.subTest(op=name):
-                self.assertEqual(op.reference_dtype, "float32")
-                self.assertIn(
-                    "float32",
-                    {case.dtype for case in op.correctness},
-                    f"{name}: a bfloat16-only gate cannot separate a real "
-                    "algebra bug from ordinary rounding",
-                )
-
-        widened = _minimal(
-            level=3,
-            family="synthetic_block",
-            reference_dtype="float32",
-            correctness=(
-                Workload(dims=dict(M=4, N=8), dtype="float32"),
-                Workload(dims=dict(M=4, N=8), dtype="bfloat16"),
-            ),
-            tolerances={"float32": (1e-5, 1e-5), "bfloat16": (8e-2, 8e-2)},
-        )
-        self.assertEqual(widened.reference_dtype, "float32")
-        self.assertIn("float32", {case.dtype for case in widened.correctness})
+    def test_no_operator_claims_level_three(self):
+        """Level 3 is the whole model, a ``WorkloadDecl``; an OpDecl is level 1 or 2."""
+        self.assertFalse([name for name, op in TASKS.items() if (op.level or 0) >= 3])
+        with self.assertRaises(ValueError):
+            _minimal(level=3, family="synthetic_block")
 
     def test_liger_paper_kernels_are_all_declared(self):
         """The seven kernels the Liger paper reports must each have a task.

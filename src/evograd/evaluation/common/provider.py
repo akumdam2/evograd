@@ -124,7 +124,7 @@ def candidate_provider(op: OpDecl, module) -> PairProvider:
 def declared_provider(op: OpDecl, name: str) -> PairProvider:
     """Wrap any declaration-provided pair baseline in the common boundary.
 
-    Named rather than hard-coded to ``liger``: the level-3 protein block is
+    Named rather than hard-coded to ``liger``: the protein trunk block is
     meant to be compared against MegaFold's kernels, and ``matmul`` already
     declares a cuBLAS pair, so the final-report protocol has to reach every
     declared baseline rather than one privileged name.

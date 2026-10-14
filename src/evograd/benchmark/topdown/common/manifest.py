@@ -119,7 +119,8 @@ class Configuration:
         }
 
 
-def deduplicate(events: Iterable[Event], *, workload_id: str, config_hash: str) -> list[Configuration]:
+def deduplicate(events: Iterable[Event], *, workload_id: str, config_hash: str,
+                provenance_kind: str = PROVENANCE_KIND) -> list[Configuration]:
     """Collapse events by structural equivalence, keeping all provenance."""
     by_key: dict[str, Configuration] = {}
     paths: dict[str, set[str]] = {}
@@ -141,7 +142,7 @@ def deduplicate(events: Iterable[Event], *, workload_id: str, config_hash: str) 
                 attrs=payload["attrs"],
                 first_ordinal=event.ordinal,
                 provenance={
-                    "kind": PROVENANCE_KIND,
+                    "kind": provenance_kind,
                     "workload_id": workload_id,
                     "config_hash": config_hash,
                 },
@@ -221,6 +222,7 @@ def build_manifest(
         events,
         workload_id=observation.workload_id,
         config_hash=observation.config_hash,
+        provenance_kind=getattr(observation, "provenance_kind", PROVENANCE_KIND),
     )
 
     semantic = {

@@ -34,13 +34,13 @@ from evograd.ops._common import (
     model_workloads,
     standard_correctness,
 )
-from ...level4.spec import LLAMA_3_2_1B as _SPEC
+from ...level3.spec import LLAMA_3_2_1B as _SPEC
 
 #: The workload these cases belong to; also the ``Provenance`` model key.
 WORKLOAD = "llama_3_2_1b"
 
 #: The epsilon the model's RMSNorms run: ``rms_norm_eps`` from the published
-#: ``config.json``, read off the same frozen spec the Level-4 model is built
+#: ``config.json``, read off the same frozen spec the Level-3 model is built
 #: from so the two cannot disagree. Qwen3-0.6B's is ``1e-6`` and matched the
 #: declaration default by coincidence; Llama-3.2-1B's does not.
 MODEL_EPS = float(_SPEC["rms_norm_eps"])

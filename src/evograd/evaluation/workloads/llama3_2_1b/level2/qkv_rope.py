@@ -19,8 +19,8 @@ from typing import Any
 
 import torch
 
-from evograd.benchmark.topdown.llama3_2_1b.levels.level3.artifact import ArtifactError, load_canonical
-from evograd.evaluation.workloads.llama3_2_1b.level3.replay import declared_gate, required_tolerance
+from evograd.benchmark.topdown.llama3_2_1b.layer.artifact import ArtifactError, load_canonical
+from evograd.evaluation.workloads.llama3_2_1b.layer.replay import declared_gate, required_tolerance
 from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import load as load_snapshot
 from evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope.capture import (
     GRAD_NAMES,
@@ -68,7 +68,7 @@ def run_verify(
     """Check both spellings against what Transformers computed.
 
     The production spelling is the same computation the model ran, so it is held
-    to the Level-3 replay tolerances. The declared reference carries the rotation
+    to the layer-replay tolerances. The declared reference carries the rotation
     in float32 and is therefore deliberately a different computation, held to
     the operator's own declared gate.
     """
@@ -78,14 +78,14 @@ def run_verify(
         llama3_qkv_rope_forward_ref,
     )
 
-    from evograd.evaluation.workloads.llama3_2_1b.level3.replay import (
+    from evograd.evaluation.workloads.llama3_2_1b.layer.replay import (
         FORWARD_TOL,
         GRADIENT_TOL,
         _max_noise,
         _noise,
         compare_tensors,
     )
-    from evograd.benchmark.topdown.llama3_2_1b.levels.level3.prepare import (
+    from evograd.benchmark.topdown.llama3_2_1b.layer.prepare import (
         validate_noise_repeats,
     )
 
@@ -463,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
             _write(args.report, report)
             return 0
 
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.prepare import validate_noise_repeats
+        from evograd.benchmark.topdown.llama3_2_1b.layer.prepare import validate_noise_repeats
         try:
             validate_noise_repeats(args.noise_repeats)
         except ValueError as exc:

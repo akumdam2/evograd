@@ -25,14 +25,14 @@ from evograd.evaluation.workloads.common.descriptor import EvalWorkload
 
 
 def _bind(workload: EvalWorkload):
-    """Resolve this model's Level-3 machinery.
+    """Resolve this model's layer-capture machinery.
 
     On demand, not at import: these modules reach torch and Transformers, and
     the pure comparison helpers below must stay importable without either.
     """
-    artifact = workload.module("levels.level3.artifact")
-    prepare = workload.module("levels.level3.prepare")
-    model = workload.module("levels.level4.model")
+    artifact = workload.module("layer.artifact")
+    prepare = workload.module("layer.prepare")
+    model = workload.module("levels.level3.model")
     return artifact, prepare, model
 
 
@@ -70,7 +70,7 @@ ELEMENTWISE_FLOOR_FRACTION = 1e-2
 def tensor_meta(tensor: torch.Tensor) -> dict[str, Any]:
     """A JSON-safe description of one tensor.
 
-    Byte-for-byte what each model's ``levels.level3.artifact.tensor_meta``
+    Byte-for-byte what each model's ``layer.artifact.tensor_meta``
     produces -- the report format is shared, so the formatter is too.
     """
     return {
@@ -522,7 +522,7 @@ def run_replay(
 
 def build_parser(workload: EvalWorkload) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog=f"python -m evograd.evaluation.workloads.{workload.name}.level3.replay",
+        prog=f"python -m evograd.evaluation.workloads.{workload.name}.layer.replay",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

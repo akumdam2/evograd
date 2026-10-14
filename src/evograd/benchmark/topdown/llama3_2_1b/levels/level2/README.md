@@ -233,7 +233,7 @@ those measurements plus a 1.5x margin.
 ## What each entry point needs
 
 Everything except `calibrate --skip-canonical` consumes
-`results/llama3-level4/layer16.pt` — produced by the level-3 capture — and
+`results/llama3-level4/layer16.pt` — produced by the layer capture — and
 `harvest/snapshot.json`. A stage with no artifact **refuses by name** rather
 than substituting synthetic tensors.
 

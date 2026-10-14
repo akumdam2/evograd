@@ -1,13 +1,13 @@
 """The Llama-3 harvest: architecture-derived counts, deduplication, and that
 observing changes nothing.
 
-Everything runs on the tiny CPU Llama from ``test_level4_workload`` -- two
+Everything runs on the tiny CPU Llama from ``test_level3_workload`` -- two
 layers at the published widths, because Llama's embedding and untied
 ``lm_head`` are 128256x4096 each and dominate construction whatever the depth.
 The point is structure -- boundaries, ordering, provenance, determinism -- and
 structure is the same at two layers as at thirty-two.
 
-**What is deliberately not here.** ``test_level4_workload.TestItActuallyHarvests``
+**What is deliberately not here.** ``test_level3_workload.TestItActuallyHarvests``
 already pins the manifest's self-consistent hash, the capture scope naming
 Llama's call sites, the single ``rms_norm`` configuration, and the whole
 snapshot extraction. This file covers what nothing else does: counts re-derived
@@ -30,7 +30,7 @@ import unittest
 
 import torch
 
-from tests.llama3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
+from tests.llama3.test_level3_workload import HAVE_TRANSFORMERS, tiny_spec
 
 if HAVE_TRANSFORMERS:
     from evograd.benchmark.topdown.common.manifest import semantic_hash
@@ -43,7 +43,7 @@ if HAVE_TRANSFORMERS:
         check_mandatory_boundaries,
         observe,
     )
-    from evograd.benchmark.topdown.llama3_2_1b.levels.level4.model import (
+    from evograd.benchmark.topdown.llama3_2_1b.levels.level3.model import (
         build_model,
         make_inputs,
         training_step,
@@ -396,7 +396,7 @@ class TestObserverIsolation(unittest.TestCase):
     def test_observation_changes_neither_loss_nor_gradients(self):
         """The load-bearing one. A harvest that perturbed the step would
         describe a model nobody trains."""
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level4.smoke import run_smoke
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.smoke import run_smoke
 
         spec = tiny_spec()
         unobserved = run_smoke(spec)

@@ -3,7 +3,7 @@
     PYTHONPATH=src python -m <workload package>.harvest.harvest \
         --out results/harvest.json
 
-This is the Level-4 smoke run with an observer attached. It reuses
+This is the Level-3 smoke run with an observer attached. It reuses
 ``build_model``, ``make_inputs``, ``training_step``, the effective-setting
 checks and the gradient validation unchanged -- the point of the milestone is
 that the harvest describes *the* canonical execution, and a second, subtly
@@ -24,9 +24,9 @@ from typing import Any
 
 import torch
 
-from .level4 import Level4Workload
+from .level3 import Level3Workload
 from .manifest import build_manifest, summarize, write_manifest
-from .model import check_effective_settings, effective_settings, training_step
+from .model import training_step
 from .observe import (
     check_mandatory_boundaries,
     check_observed_attention,
@@ -36,7 +36,7 @@ from .smoke import environment_info, gradient_coverage, workload_info
 from .spec import WorkloadSpec
 
 
-def run_harvest(workload: Level4Workload,
+def run_harvest(workload: Level3Workload,
                 spec: WorkloadSpec | None = None) -> dict[str, Any]:
     """Execute the canonical step under observation and return the manifest.
 
@@ -58,13 +58,13 @@ def run_harvest(workload: Level4Workload,
     model = workload.build_model(spec)
     input_ids, labels = workload.make_inputs(spec)
 
-    effective = effective_settings(model, spec)
+    effective = workload.effective_settings(model, spec)
     effective["input_ids_dtype"] = str(input_ids.dtype)
     effective["input_ids_device"] = input_ids.device.type
     effective["input_ids_shape"] = list(input_ids.shape)
     effective["input_ids_checksum"] = int(input_ids.sum().item())
     effective["labels_match_input_ids"] = bool(torch.equal(input_ids, labels))
-    problems = check_effective_settings(effective, spec)
+    problems = workload.check_settings(effective, spec)
     if problems:
         raise RuntimeError(
             "the built model does not match the requested workload: " + "; ".join(problems)
@@ -81,6 +81,8 @@ def run_harvest(workload: Level4Workload,
     # describes. This catches the case where the step is correct but the
     # operator recorded is not the model's.
     check_observed_attention(observation, spec.arch)
+    if workload.observation_checks is not None:
+        workload.observation_checks(observation, spec)
 
     loss = outputs.loss
     if spec.device.startswith("cuda"):
@@ -112,10 +114,12 @@ def run_harvest(workload: Level4Workload,
             f"first: {coverage['non_finite_grad_params'][:5]}"
         )
 
+    extra = {} if workload.not_observed is None else {"not_observed": workload.not_observed}
     return build_manifest(
         observation,
         schema_version=workload.manifest_schema,
         function_wrappers=workload.function_wrappers,
+        **extra,
         workload=workload_info(spec),
         environment=environment_info(spec),
         validation=validation,

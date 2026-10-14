@@ -26,13 +26,13 @@ from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.task import (
     PROVENANCE_CHAIN,
 )
 
-from tests.qwen3.test_level4_workload import HAVE_TRANSFORMERS, tiny_spec
+from tests.qwen3.test_level3_workload import HAVE_TRANSFORMERS, tiny_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 if HAVE_TRANSFORMERS:
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import ArtifactError
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.capture import run_capture
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import ArtifactError
+    from evograd.benchmark.topdown.qwen3_0_6b.layer.capture import run_capture
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.capture import (
@@ -487,7 +487,7 @@ class TestExtractionAndVerification(unittest.TestCase):
         )
 
     def test_the_source_artifact_hashes_are_carried_forward(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import LayerArtifact
+        from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import LayerArtifact
 
         source = LayerArtifact.load(self.layer_path)
         self.assertEqual(
@@ -605,8 +605,8 @@ class TestExtractionAndVerification(unittest.TestCase):
 
     def test_a_second_mlp_call_inside_one_extraction_is_refused(self):
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.capture import capture_mlp
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.prepare import build_single_layer
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.artifact import LayerArtifact
+        from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import build_single_layer
+        from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import LayerArtifact
 
         layer_payload = LayerArtifact.load(self.layer_path).payload
         layer = build_single_layer(

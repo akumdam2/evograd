@@ -27,4 +27,6 @@ WORKLOAD = EvalWorkload(
     # is excluded from the inventory sweep, as it always was: it has its own
     # module. The first entry is the q/k/v boundary.
     level2_tasks=("llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp"),
+    harvested_tasks={"llama3_qkv_rope": "qkv", "llama3_attention": "attention",
+                     "llama3_swiglu_mlp": "mlp"},
 )

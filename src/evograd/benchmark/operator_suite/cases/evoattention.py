@@ -33,13 +33,13 @@ _TRIANGLE = model_workloads(
     note=(
         "MegaFold benchmarks batch 4; batch 1 keeps the grid on a single GPU. "
         "S == N makes this the most expensive family; 384 is the production "
-        "crop the MegaFold level-4 workload runs, so it is in the grid"
+        "crop the MegaFold level-3 workload runs, so it is in the grid"
     ),
 )
 
 #: The two attention sites of the pairformer trunk at MegaFold's production
 #: crop (batch 1, 384 residues): one program has to serve both, so the
-#: level-4 evolution objective is this pair rather than either alone.
+#: level-3 evolution objective is this pair rather than either alone.
 _TRUNK_384 = tuple(w for w in _PAIR_BIAS + _TRIANGLE if w.dims["N"] == 384)
 
 _MSA = model_workloads(

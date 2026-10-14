@@ -9,7 +9,7 @@ deterministic seed -- run as::
 
 with no optimizer step. Everything in this package is derived from that one
 execution: :mod:`.harvest` records what it invokes, :mod:`.levels` decomposes it
-into level 4/3/2/1 tasks, and :mod:`.evaluation` holds the tier-3 machinery for
+into level 3/3/2/1 tasks, and :mod:`.evaluation` holds the tier-3 machinery for
 swapping an operator into the live model.
 
 Level and tier are independent axes. A level-2 operator can be measured by a
@@ -19,14 +19,14 @@ asked of a kernel, the tier says how carefully the answer is checked. See
 
 Transformers is optional. Importing this package never imports it; the failure
 appears at
-:func:`~evograd.benchmark.topdown.qwen3_0_6b.levels.level4.model.require_transformers`
+:func:`~evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model.require_transformers`
 with the extra to install.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b --out report.json
 """
 
-from .levels.level4.report import SmokeReport
-from .levels.level4.spec import (
+from .levels.level3.report import SmokeReport
+from .levels.level3.spec import (
     CANONICAL,
     QWEN3_0_6B,
     WorkloadSpec,
