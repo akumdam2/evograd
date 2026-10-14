@@ -14,6 +14,13 @@ __version__ = "0.1.0"
 
 __all__ = ["EvogradResult", "evograd"]
 
+# Every evograd process runs SDPA under one policy (cuDNN's backward returns wrong
+# gradients when one process mixes upstream-gradient layouts). Imports no torch:
+# applies when torch is, or now if it already is. See evograd.sdpa_policy.
+from evograd import sdpa_policy as _sdpa_policy  # noqa: E402
+
+_sdpa_policy.install()
+
 if TYPE_CHECKING:  # pragma: no cover - import-time typing only
     from evograd.api import EvogradResult, evograd
 

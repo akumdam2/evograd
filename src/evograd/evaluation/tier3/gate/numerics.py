@@ -267,13 +267,26 @@ def environment_fingerprint() -> dict[str, Any]:
     return fingerprint
 
 
-def _sdpa_backends() -> dict[str, bool]:
+def _sdpa_backends() -> dict[str, Any]:
+    """Which SDPA kernels may run, and under which evograd policy.
+
+    cuDNN and the policy are included because a cuDNN backward that saw two
+    upstream-gradient layouts in one process is wrong, and the guard that
+    prevents it changes the layout cuDNN sees: a calibration taken under one
+    must not bind to the other (``evograd.sdpa_policy``).
+    """
+    from evograd import sdpa_policy
+
     backend = torch.backends.cuda
-    return {
+    out: dict[str, Any] = {
         name: bool(getattr(backend, f"{name}_sdp_enabled")())
-        for name in ("flash", "mem_efficient", "math")
+        for name in ("cudnn", "flash", "mem_efficient", "math")
         if hasattr(backend, f"{name}_sdp_enabled")
     }
+    described = sdpa_policy.describe()
+    out["policy"] = described["policy"]
+    out["guard"] = described["guard"]
+    return out
 
 
 def _driver_version() -> str | None:
