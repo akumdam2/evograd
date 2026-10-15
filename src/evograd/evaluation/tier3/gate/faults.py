@@ -78,9 +78,11 @@ def runtime_forward_for(op_name: str) -> Callable:
 
 
 def smallest_rejected(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Per fault kind, the smallest magnitude rejected on every seed tested."""
+    """Per fault kind, the smallest magnitude rejected on every judged seed."""
     by_kind: dict[str, dict[float, list[bool]]] = {}
     for record in results:
+        if record.get("errored") or record.get("error"):
+            continue
         by_kind.setdefault(record["fault"]["name"], {}).setdefault(
             record["fault"]["magnitude"], []
         ).append(bool(record["rejected"]))

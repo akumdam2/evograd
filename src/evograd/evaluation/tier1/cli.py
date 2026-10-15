@@ -165,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(json.dumps(report["aggregate"], indent=2, sort_keys=True))
     if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(
             json.dumps(report, indent=2, sort_keys=True),
             encoding="utf-8",
