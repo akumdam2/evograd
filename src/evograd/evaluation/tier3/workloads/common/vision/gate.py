@@ -213,7 +213,7 @@ def calibrate(workload, sites, steps=5, backend="inductor"):
         "schema_version": SCHEMA,
         "fingerprint": fingerprint(workload),
         "data_hash": data_hash,
-        "data_mode": "prepared" if workload.data_path else "synthetic",
+        "data_mode": "pinned_real" if workload.spec.weights == "pretrained" else ("prepared" if workload.data_path else "synthetic"),
         "sites": sorted(sites),
         "steps": steps,
         "compile_backend": backend,
@@ -254,7 +254,8 @@ def evaluate(workload, kernels):
             or artifact["margin"] != MARGIN
         ):
             raise ValueError("calibration policy or optimizer differs from current gate")
-        if artifact.get("data_mode") != ("prepared" if workload.data_path else "synthetic"):
+        mode = "pinned_real" if workload.spec.weights == "pretrained" else ("prepared" if workload.data_path else "synthetic")
+        if artifact.get("data_mode") != mode:
             raise ValueError("calibration input mode differs from workload")
         all_batches, data_hash = verification_batches(workload, artifact["steps"])
         if data_hash != artifact["data_hash"]:
@@ -327,13 +328,22 @@ def main():
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--data", type=Path,
                         help="optional prepared batches; omitted for seeded generated inputs")
+    parser.add_argument("--real-input", action="store_true",
+                        help="use pinned checkpoint and public dataset batches")
     parser.add_argument("--sites", required=True)
     parser.add_argument("--steps", type=int, default=5)
     parser.add_argument("--compile-backend", choices=("inductor", "aot_eager"), default="inductor")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    config["weights"] = "random"
     config["data_path"] = str(args.data) if args.data else None
+    if args.real_input:
+        from evograd.benchmark.topdown.common.vision.spec import VisionSpec
+        from evograd.benchmark.topdown.common.vision.data import ensure_pinned_data
+        config["weights"] = "pretrained"
+        spec = VisionSpec(**{k: v for k, v in config.items() if k in VisionSpec.__dataclass_fields__})
+        config["data_path"] = ensure_pinned_data(spec, config["data_path"], batch_count=2 * args.steps)
     workload = VisionWorkload.from_config(config)
     row = calibrate(workload, args.sites.split(","), args.steps, args.compile_backend)
     args.out.parent.mkdir(parents=True, exist_ok=True)

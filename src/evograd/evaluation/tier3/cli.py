@@ -215,7 +215,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-path", type=Path, default=None,
                         help="Prepared real-data batch artifact for vision model gates")
     parser.add_argument("--real-input", action="store_true",
-                        help="reserved for a future pinned real-input vision workload; currently unsupported")
+                        help="use pinned checkpoint and public real-input batches for vision workloads")
     # No hard default. Workloads disagree about their training dtype -- a
     # language model trains bf16, AlphaFold3 fp32 -- and the canonical value is
     # part of a workload's identity, so it belongs in that workload's spec

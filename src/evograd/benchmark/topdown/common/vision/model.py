@@ -4,7 +4,66 @@ Random weights and synthetic inputs are deterministic benchmark fixtures, not
 real-data training validation. Nothing reads the reference checkouts.
 """
 
+import json
+import os
 import torch
+
+
+def pretrained_snapshot(spec):
+    """Resolve the exact published checkpoint from the local Hugging Face cache."""
+    from huggingface_hub import snapshot_download
+    from .spec import REVISIONS
+
+    try:
+        location = snapshot_download(
+            spec.model_name, revision=REVISIONS[spec.model],
+            cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+            local_files_only=True,
+            allow_patterns=["*.json", "*.safetensors", "merges.txt", "vocab.json"],
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"Pinned checkpoint {spec.model_name}@{REVISIONS[spec.model]} is not cached; "
+            "download it before --real-input"
+        ) from exc
+    from pathlib import Path
+
+    root = Path(location)
+    weights = (
+        ["model.safetensors"] if spec.model == "convnextv2_tiny" else
+        ["model.safetensors.index.json", "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors"]
+    )
+    required = ["config.json", "preprocessor_config.json", *weights]
+    if spec.model == "qwen2_vl_2b":
+        required += ["tokenizer.json", "tokenizer_config.json", "chat_template.json"]
+    missing = [name for name in required if not (root / name).is_file()]
+    if missing:
+        raise RuntimeError(
+            f"Pinned checkpoint {spec.model_name}@{REVISIONS[spec.model]} is incomplete "
+            f"in cache: {missing}. Fetch the files with `hf download {spec.model_name} "
+            + " ".join(missing)
+            + f" --revision {REVISIONS[spec.model]}` using the same cache."
+        )
+    return location
+
+
+def _check_checkpoint_config(spec, location):
+    from pathlib import Path
+
+    published = json.loads((Path(location) / "config.json").read_text())
+    declared = spec.arch
+    ignored = {"architectures", "transformers_version", "torch_dtype", "use_cache", "id2label", "label2id"}
+    mismatches = {
+        key: (published.get(key), value)
+        for key, value in declared.items()
+        if key not in ignored and key in published and published[key] != value
+    }
+    if spec.model == "convnextv2_tiny":
+        labels = len(published.get("id2label", {})) or published.get("num_labels")
+        if labels != declared["num_labels"]:
+            mismatches["num_labels"] = (labels, declared["num_labels"])
+    if mismatches:
+        raise RuntimeError(f"pinned checkpoint differs from workload architecture: {mismatches}")
 
 
 def build_model(spec):
@@ -29,9 +88,25 @@ def build_model(spec):
         if spec.model == "convnextv2_tiny"
         else {"attn_implementation": spec.attn_implementation}
     )
-    with torch.random.fork_rng(devices=[]):
-        torch.manual_seed(spec.seed)
-        model = model_cls._from_config(config, dtype=getattr(torch, spec.dtype), **kwargs)
+    if spec.weights == "pretrained":
+        location = pretrained_snapshot(spec)
+        _check_checkpoint_config(spec, location)
+        model = model_cls.from_pretrained(
+            location, local_files_only=True, use_safetensors=True,
+            dtype=getattr(torch, spec.dtype), **kwargs
+        )
+        if spec.model == "qwen2_vl_2b" and (
+            model.lm_head.weight.data_ptr()
+            != model.model.language_model.embed_tokens.weight.data_ptr()
+        ):
+            raise RuntimeError("checkpoint lost tied Qwen2-VL embeddings")
+    else:
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(spec.seed)
+            model = model_cls._from_config(config, dtype=getattr(torch, spec.dtype), **kwargs)
+    model.config.use_cache = False
+    if hasattr(model.config, "text_config"):
+        model.config.text_config.use_cache = False
     model.to(spec.device).train()
     if hasattr(model, "gradient_checkpointing_disable"):
         model.gradient_checkpointing_disable()

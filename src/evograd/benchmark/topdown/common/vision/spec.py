@@ -16,6 +16,17 @@ REVISIONS = {
     "qwen2_vl_2b": "895c3a49bc3fa70a340399125c650a463535e71c",
 }
 
+DATASETS = {
+    "convnextv2_tiny": (
+        "ShaomuTan/imagenette", "061f0ab5ca70523e13982a7ba463c076af657386",
+        "320px/train-00000-of-00001.parquet",
+    ),
+    "qwen2_vl_2b": (
+        "lmms-lab-encoder/textvqa", "9c0699cd19768ac5ab97568f6b3cbac4c0062884",
+        "data/train-00000-of-00020.parquet",
+    ),
+}
+
 
 def digest(value):
     return hashlib.sha256(
@@ -39,6 +50,7 @@ class VisionSpec:
     data_seed: int = 0
     attn_implementation: str = "sdpa"
     arch_overrides: dict = field(default_factory=dict)
+    weights: str = "random"
 
     def __post_init__(self):
         if self.model not in MODELS:
@@ -50,6 +62,10 @@ class VisionSpec:
             raise ValueError("batch_size and image_size must be positive")
         if self.dtype not in ("float32", "bfloat16"):
             raise ValueError("supported dtypes: float32, bfloat16")
+        if self.weights not in ("random", "pretrained"):
+            raise ValueError("weights must be random or pretrained")
+        if self.weights == "pretrained" and self.arch_overrides:
+            raise ValueError("pretrained weights require the published architecture")
         if self.attn_implementation not in ("sdpa", "eager"):
             raise ValueError("supported attention: sdpa, eager")
         if self.model == "convnextv2_tiny":
@@ -104,7 +120,15 @@ class VisionSpec:
 
     @property
     def workload_hash(self):
-        return digest({"execution": self.to_config(), "architecture": self.arch})
+        if self.weights == "random":
+            # Preserve the published generated-input workload identity.
+            execution = {k: v for k, v in self.to_config().items() if k != "weights"}
+            return digest({"execution": execution, "architecture": self.arch})
+        return digest({
+            "execution": self.to_config(), "architecture": self.arch,
+            "checkpoint_revision": REVISIONS[self.model],
+            "dataset": DATASETS[self.model],
+        })
 
     @property
     def workload_id(self):

@@ -26,7 +26,7 @@ baselines = ["liger-kernel"]
 qwen3 = ["transformers>=4.51"]
 llama3 = ["transformers>=4.51"]
 workloads = ["transformers>=4.51"]
-vision_workloads = ["transformers>=4.57,<4.58", "pillow"]
+vision_workloads = ["transformers>=4.57,<4.58", "pillow", "torchvision", "datasets>=3,<5", "pyarrow>=17", "safetensors"]
 # The alphafold3 training-step workload, which the MegaFold one replaced as the
 # registered Level-4 task. alphafold3-pytorch is the implementation MegaFold
 # builds on; the declaration and its adapters are still in the tree, so the

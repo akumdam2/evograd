@@ -46,10 +46,19 @@ def test_calibration_and_holdout(tmp_path, model):
 
 
 @pytest.mark.parametrize("model", ["convnextv2_tiny", "qwen2_vl_2b"])
-def test_real_input_flag_is_explicitly_unsupported(model):
+def test_real_input_selects_pinned_checkpoint_and_data(monkeypatch, model):
     from evograd.evaluation.tier3.cli import _parser, build_workload, check_options
+    from evograd.benchmark.topdown.common.vision import data
 
+    seen = []
+    def cached(spec, path=None, **kwargs):
+        seen.append((spec.weights, spec.model, path))
+        return "/tmp/pinned-vision-data.pt"
+    monkeypatch.setattr(data, "ensure_pinned_data", cached)
     args = _parser().parse_args(["--model", model, "--real-input"])
     check_options(args)
-    with pytest.raises(NotImplementedError, match="future pinned-data"):
-        build_workload(args)
+    workload = build_workload(args)
+    assert seen == [("pretrained", model, None)]
+    assert workload.spec.weights == "pretrained"
+    assert workload.data_path == "/tmp/pinned-vision-data.pt"
+    assert build_workload(_parser().parse_args(["--model", model])).spec.weights == "random"

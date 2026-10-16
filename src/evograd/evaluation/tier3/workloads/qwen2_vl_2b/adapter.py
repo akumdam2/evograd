@@ -9,13 +9,17 @@ def build(args):
     if args.learning_rate != 1e-4:
         raise ValueError("vision calibration uses the benchmark AdamW learning rate 1e-4")
     config.update(device=args.device, seed=args.seed, data_seed=args.data_seed)
-    if getattr(args, "real_input", False):
-        raise NotImplementedError("--real-input is reserved for a future pinned-data vision workload")
+    config["weights"] = "random"
     config["calibration"] = str(args.calibration) if args.calibration else None
     config["data_path"] = str(args.data_path) if args.data_path else None
     for flag, field in [("batch", "batch_size"), ("dtype", "dtype"), ("tokens", "seq_len")]:
         if getattr(args, flag, None) is not None:
             config[field] = getattr(args, flag)
+    if getattr(args, "real_input", False):
+        from evograd.benchmark.topdown.common.vision.data import ensure_pinned_data
+        spec = from_config({**config, "weights": "random"}).spec.replace(weights="pretrained")
+        config["weights"] = "pretrained"
+        config["data_path"] = ensure_pinned_data(spec, config["data_path"])
     return from_config(config)
 
 

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import hashlib
 import torch
-from evograd.benchmark.topdown.common.vision.spec import VisionSpec
+from evograd.benchmark.topdown.common.vision.spec import VisionSpec, REVISIONS
 from evograd.benchmark.topdown.common.vision.model import build_model, make_inputs, forward
 from evograd.benchmark.topdown.common.vision.operators import FUNCTIONS
 from .sites import install, preflight_cases
@@ -38,6 +38,9 @@ class VisionWorkload:
 
     def __post_init__(self):
         from evograd.evaluation.tier3.patch import Site, SiteRegistry
+
+        if self.spec.weights == "pretrained" and not self.data_path:
+            raise ValueError("pretrained vision workload requires pinned real-data batches")
 
         self.name = self.spec.workload_id
         self.unit_name = "images" if self.spec.model == "convnextv2_tiny" else "tokens"
@@ -117,14 +120,15 @@ class VisionWorkload:
             "benchmark_level": 3,
             "unit_name": self.unit_name,
             "units_per_step": self.units_per_step(),
-            "weights": "random",
-            "data": "prepared_real_data" if self.data_path else "synthetic",
+            "weights": self.spec.weights,
+            "checkpoint_revision": REVISIONS[self.spec.model] if self.spec.weights == "pretrained" else None,
+            "data": "pinned_real_data" if self.spec.weights == "pretrained" else ("prepared_data" if self.data_path else "synthetic"),
             "all_parameters_trainable": True,
             "gradient_checkpointing": False,
             "use_cache": False,
             "input_checksum": self.input_checksum(),
             "architecture": self.spec.arch,
-            "model_gate": {"calibration": self.calibration, "requires_real_data": bool(self.data_path)},
+            "model_gate": {"calibration": self.calibration, "requires_real_data": self.spec.weights == "pretrained"},
         }
 
     def input_checksum(self):
