@@ -26,6 +26,7 @@ baselines = ["liger-kernel"]
 qwen3 = ["transformers>=4.51"]
 llama3 = ["transformers>=4.51"]
 workloads = ["transformers>=4.51"]
+vision_workloads = ["transformers>=4.57,<4.58", "pillow"]
 # The alphafold3 training-step workload, which the MegaFold one replaced as the
 # registered Level-4 task. alphafold3-pytorch is the implementation MegaFold
 # builds on; the declaration and its adapters are still in the tree, so the
@@ -50,7 +51,7 @@ evograd = "evograd.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-evograd = ["evolve/*.yaml", "benchmark/topdown/*/harvest/*.json"]
+evograd = ["evolve/*.yaml", "benchmark/topdown/*/harvest/*.json", "benchmark/topdown/*/*.json"]
 
 [tool.black]
 line-length = 100

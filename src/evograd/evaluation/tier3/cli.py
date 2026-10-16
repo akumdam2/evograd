@@ -210,6 +210,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--loss-steps", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--vision-config", type=Path, default=None,
+                        help="ConvNeXt/Qwen2-VL execution configuration JSON")
+    parser.add_argument("--data-path", type=Path, default=None,
+                        help="Prepared real-data batch artifact for vision model gates")
+    parser.add_argument("--real-input", action="store_true",
+                        help="reserved for a future pinned real-input vision workload; currently unsupported")
     # No hard default. Workloads disagree about their training dtype -- a
     # language model trains bf16, AlphaFold3 fp32 -- and the canonical value is
     # part of a workload's identity, so it belongs in that workload's spec
@@ -401,7 +407,7 @@ def check_options(args) -> None:
     """
     adapter = tier3_adapter(args.model)
     #: Flag -> the value that means "not requested".
-    optional = {"structural_identity": False, "layers": None, "data_seed": 0,
+    optional = {"vision_config": None, "data_path": None, "real_input": False, "structural_identity": False, "layers": None, "data_seed": 0,
                 "calibration": None, "residues": None,
                 "evo": None, "checkpointing": None, "recycling": None,
                 "confidence_head": False,
@@ -600,10 +606,15 @@ def main(argv: list[str] | None = None) -> int:
                         + "]")
         elif status:
             numerics = "  [numerics: within limits]"
+        peak_memory = entry.get("peak_memory_bytes")
+        memory_text = (
+            f"{peak_memory / 2**30:6.2f} GiB"
+            if peak_memory is not None else "   n/a GiB"
+        )
         print(
             f"  {name:18} {entry['step_ms']:8.2f} ms/step  "
             f"{entry['units_per_second']:10.0f} {entry['unit_name']}/s  "
-            f"{entry['peak_memory_bytes'] / 2**30:6.2f} GiB  "
+            f"{memory_text}  "
             f"cpu_bound={entry['cpu_bound_fraction']:.2f}  {speedup:.3f}x{numerics}",
             file=sys.stderr,
         )

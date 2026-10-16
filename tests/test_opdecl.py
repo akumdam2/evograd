@@ -106,10 +106,12 @@ class TestDerivedNaming(unittest.TestCase):
                     "gated_rmsnorm",
                     "gdn_gating",
                     "geglu",
+                    "gelu",
                     # The zero-centred (1 + w) RMSNorm.
                     "gemma_rmsnorm",
                     "gqa_pv",
                     "gqa_scaled_scores",
+                    "grn",
                     "jsd",
                     "kl_div",
                     # The delta rule's q/k normalization.
@@ -122,15 +124,18 @@ class TestDerivedNaming(unittest.TestCase):
                     # Gated attention's 64-of-256-channel rotary embedding.
                     "partial_rope",
                     "poly_norm",
+                    "quick_gelu",
                     "relu_squared",
                     "rmsnorm",
                     "rope",
                     "softmax",
                     "sparsemax",
+                    "spatial_conv2d",
                     "swiglu",
                     "tvd",
                 ],
                 2: [
+                    "convnextv2_tiny_convnext_mlp",
                     # Qwen3-0.6B's residual fusion, under the generic key it
                     # was declared with before a second architecture existed.
                     "fused_add_rms_norm",
@@ -149,6 +154,8 @@ class TestDerivedNaming(unittest.TestCase):
                     "llama3_residual_rmsnorm",
                     "llama3_swiglu_mlp",
                     # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
+                    "qwen2_vl_2b_text_mlp",
+                    "qwen2_vl_2b_vision_mlp",
                     "qwen3_5_gated_attention",
                     "qwen3_5_gated_delta_rule",
                     "qwen3_5_gdn_in_proj",

@@ -52,7 +52,8 @@ QWEN3_5_LEVEL2 = (
     "qwen3_5_residual_rmsnorm",
     "qwen3_5_swiglu_mlp",
 )
-MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2
+VISION_LEVEL2 = ("convnextv2_tiny_convnext_mlp", "qwen2_vl_2b_text_mlp", "qwen2_vl_2b_vision_mlp")
+MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + VISION_LEVEL2
 DELETED_LEGACY = ("af3_single_repr_block", "llama3_decoder_layer")
 
 
@@ -68,10 +69,10 @@ class TestPrimitiveRegistry(unittest.TestCase):
             [
                 "causal_conv1d", "causal_gqa_attention", "causal_softmax", "conv2d",
                 "cross_entropy", "dyt", "evoattention", "gated_rmsnorm", "gdn_gating",
-                "geglu", "gemma_rmsnorm", "gqa_pv", "gqa_scaled_scores", "jsd",
+                "geglu", "gelu", "gemma_rmsnorm", "gqa_pv", "gqa_scaled_scores", "grn", "jsd",
                 "kl_div", "l2norm", "layernorm", "linear", "linear_no_bias", "matmul",
-                "partial_rope", "poly_norm", "relu_squared",
-                "rmsnorm", "rope", "softmax", "sparsemax", "swiglu", "tvd",
+                "partial_rope", "poly_norm", "quick_gelu", "relu_squared",
+                "rmsnorm", "rope", "softmax", "sparsemax", "spatial_conv2d", "swiglu", "tvd",
             ],
         )
 

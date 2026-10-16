@@ -1,0 +1,12 @@
+{
+  "model": "qwen2_vl_2b",
+  "batch_size": 1,
+  "seq_len": 512,
+  "image_size": 224,
+  "dtype": "bfloat16",
+  "device": "cuda",
+  "seed": 0,
+  "data_seed": 0,
+  "attn_implementation": "sdpa",
+  "arch_overrides": {}
+}

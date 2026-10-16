@@ -1,0 +1,12 @@
+{
+  "model": "convnextv2_tiny",
+  "batch_size": 32,
+  "seq_len": 0,
+  "image_size": 224,
+  "dtype": "bfloat16",
+  "device": "cuda",
+  "seed": 0,
+  "data_seed": 0,
+  "attn_implementation": "sdpa",
+  "arch_overrides": {}
+}

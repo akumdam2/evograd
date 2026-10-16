@@ -98,7 +98,7 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, loaded = result.stdout.strip().splitlines()
-        self.assertEqual(count, "29")
+        self.assertEqual(count, "33")
         self.assertEqual(loaded, "[]", f"importing primitives loaded {loaded}")
 
 
@@ -351,6 +351,8 @@ class TestObservedBindingOwnership(unittest.TestCase):
             self.MANIFEST,
             REPO / "src/evograd/benchmark/topdown/llama3_2_1b/levels/level1/manifest.py",
             REPO / "src/evograd/benchmark/topdown/qwen3_5_4b/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/convnextv2_tiny/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/qwen2_vl_2b/levels/level1/manifest.py",
         }
         declaring = []
         for path in (REPO / "src/evograd").rglob("*.py"):
@@ -585,7 +587,7 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
         from evograd.benchmark.core.registry import _observed_bindings
 
         workloads = {b.workload for b in _observed_bindings()}
-        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b", "qwen3_5_4b"})
+        self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b", "qwen3_5_4b", "convnextv2_tiny", "qwen2_vl_2b"})
 
 
 if __name__ == "__main__":

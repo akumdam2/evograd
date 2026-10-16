@@ -194,3 +194,10 @@ workloads, timing boundaries and limitations behind the latest Qwen/Llama table.
 
 See [Qwen usage](QWEN3_LEVEL3.md), the [evaluation guide](../src/evograd/evaluation/README.md)
 and [result paths](RESULTS_LAYOUT.md).
+
+## Vision and multimodal workloads
+
+ConvNeXt V2 Tiny and Qwen2-VL-2B now have whole-model training adapters,
+observed L1 bindings and selected L2 replacement sites. See
+[VISION_WORKLOADS.md](../VISION_WORKLOADS.md) for fixed configurations, source
+training recipes, harvest/calibration commands and validation status.

@@ -104,8 +104,11 @@ def bind_shape(shape: str, dims: dict[str, int]) -> tuple[int, ...]:
 #: the claim, not a free-text note: ``hf_config`` means every dim is derivable
 #: from a frozen :mod:`evograd.opdecl.models` entry (and ``tests/test_provenance``
 #: re-derives it), ``paper`` means it is quoted from a published sweep, and
-#: ``handpicked`` is an honest admission that a human chose the number.
-PROVENANCE_SOURCES = ("hf_config", "paper", "handpicked")
+#: ``handpicked`` means a human chose the number; ``execution`` means it
+#: was captured from a run and is traced through a hashed workload snapshot.
+#: ``specification`` covers explicit architecture/execution-derived cases before
+#: a matching harvest exists (distinct from legacy ModelConfig-backed hf_config).
+PROVENANCE_SOURCES = ("hf_config", "paper", "handpicked", "execution", "specification")
 
 #: How the operator's primary activation input is laid out in memory.
 #:

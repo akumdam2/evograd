@@ -14,7 +14,7 @@ def make_layernorm_inputs(torch, op, workload, device="cuda"):
     weight = torch.randn((hidden,), device=device, dtype=dtype)
     bias = torch.randn((hidden,), device=device, dtype=dtype)
     dy = torch.randn((rows, hidden), device=device, dtype=dtype)
-    return {"x": x, "weight": weight, "bias": bias, "eps": 1e-5, "dy": dy}
+    return {"x": x, "weight": weight, "bias": bias, "eps": (workload.provenance.free.get("eps", 1e-5) if workload.provenance else 1e-5), "dy": dy}
 
 
 def layernorm_tolerance(workload, result_name, atol, rtol):

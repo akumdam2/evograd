@@ -98,7 +98,9 @@ def _observed_bindings() -> tuple:
     # Order is fixed and part of the contract: a primitive several models bind
     # receives Qwen3's suite first, Llama-3's second and Qwen3.5's third, so
     # the suites a task serves are in the same place on every import.
-    return QWEN3_0_6B + LLAMA_3_2_1B + QWEN3_5_4B
+    from evograd.benchmark.topdown.convnextv2_tiny.levels.level1.manifest import OBSERVED_BINDINGS as CONVNEXT
+    from evograd.benchmark.topdown.qwen2_vl_2b.levels.level1.manifest import OBSERVED_BINDINGS as QWEN2_VL
+    return QWEN3_0_6B + LLAMA_3_2_1B + QWEN3_5_4B + CONVNEXT + QWEN2_VL
 
 
 def _discover() -> dict[str, OpDecl]:
@@ -140,6 +142,8 @@ def _model_task_packages() -> tuple[str, ...]:
     be the wrong rule.
     """
     return (
+        "evograd.benchmark.topdown.convnextv2_tiny.levels.level2",
+        "evograd.benchmark.topdown.qwen2_vl_2b.levels.level2",
         "evograd.benchmark.topdown.qwen3_0_6b.levels.level2",
         "evograd.benchmark.topdown.llama3_2_1b.levels.level2",
         "evograd.benchmark.topdown.qwen3_5_4b.levels.level2",

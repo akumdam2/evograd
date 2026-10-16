@@ -1,0 +1,15 @@
+from evograd.opdecl import Active, Workload, declare_op
+
+op = declare_op(
+    name="gelu",
+    level=1,
+    family="activation",
+    forward="evograd.ops.level1.gelu.reference:forward",
+    dims=("rows", "hidden"),
+    args=(Active("x", "[rows, hidden]"),),
+    output=Active("out", "[rows, hidden]"),
+    forward_semantics="Exact GELU x*Phi(x), no tanh approximation.",
+    backward_semantics="Return dx by the analytic derivative, multiplied by dout.",
+    correctness=(Workload(dims=dict(rows=7, hidden=13), dtype="float32"),),
+    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
+)

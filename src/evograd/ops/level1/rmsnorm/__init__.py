@@ -18,7 +18,7 @@ def make_rmsnorm_inputs(torch, op, workload, device="cuda"):
         dtype
     )
     dy = torch.randn((rows, hidden), device=device, dtype=dtype)
-    return {"x": x, "weight": weight, "eps": 1e-5, "dy": dy}
+    return {"x": x, "weight": weight, "eps": (workload.provenance.free.get("eps", 1e-5) if workload.provenance else 1e-5), "dy": dy}
 
 
 def rmsnorm_tolerance(workload, result_name, atol, rtol):

@@ -15,8 +15,17 @@ _PROVENANCE = Provenance(
         "Llama-3-8B's projections so results compare with matmul"
     ),
 )
-from evograd.benchmark.operator_suite.tasks.level2.gemm_leaky_relu.triton_tutorial import (
-    measure_triton_tutorial_baseline,
+from evograd.ops._common import make_pair_baseline
+
+
+def _lazy_triton_tutorial_factory():
+    # Keep optional GPU dependencies out of model discovery and CPU smoke tests.
+    from .triton_tutorial import _triton_tutorial_factory
+    return _triton_tutorial_factory()
+
+
+measure_triton_tutorial_baseline = make_pair_baseline(
+    _lazy_triton_tutorial_factory, ("a", "b", "negative_slope")
 )
 
 

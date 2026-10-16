@@ -1,16 +1,10 @@
 """Operator declaration: bias-carrying Linear.
 
-**This is not the projection a modern decoder runs.** Llama-3 and Qwen3 both set
-``attention_bias=False`` and give their MLP projections and ``lm_head`` no bias;
-those live in ``linear_no_bias``. What remains here is deliberately an
-*ablation*: the same widths measured through a contract that adds a bias.
+The operator-suite grid remains a biased ablation of decoder projection widths.
+The vision workloads additionally bind genuine biased projections observed in
+ConvNeXt V2 and Qwen2-VL. Biasless decoder projections use ``linear_no_bias``;
+observed model suites keep their provenance separate from the historical grid.
 
-The grid is kept because ``dbias`` is a real row reduction worth exercising at
-realistic widths, and because deleting a historical timed set silently is worse
-than labelling it. Its provenance is marked ``scaled`` with a note saying what
-deviates, so the deviation is machine-visible rather than a comment: a
-zero-valued bias tensor does *not* model a biasless projection, and this
-declaration no longer claims it does.
 """
 
 from evograd.opdecl import Active, Workload, declare_op

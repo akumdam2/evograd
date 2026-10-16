@@ -123,7 +123,7 @@ def observed_workloads(
                     model=workload_name,
                     component=config["provenance"]["component"],
                     free=dict(config["provenance"]["free"]),
-                    source="hf_config",
+                    source=config["provenance"].get("source", "hf_config"),
                     layout=layout,
                     strides=strides,
                 ),
