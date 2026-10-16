@@ -28,10 +28,44 @@ def resolve_runtime_forward(op: OpDecl):
     every speedup into a comparison with a strawman. Declarations that have a
     fused equivalent name it in ``runtime_forward``; the rest fall back, because
     for them the primitive spelling really is the best PyTorch available.
+
+    A model-reference declaration (``op.reference_contract``) has a single
+    spelling -- the model's own computation -- so this resolves the same
+    callable the oracle differentiates.
     """
     if op.runtime_forward:
         return resolve_callable(op.runtime_forward)
     return resolve_callable(op.forward)
+
+
+#: ``reference_identity(op)["kind"]`` for the two contracts a declaration can have.
+DECLARED_MATHEMATICS = "declared_forward_oracle"
+MODEL_REFERENCE = "model_reference"
+
+
+def reference_identity(op: OpDecl) -> dict:
+    """What a report or a policy records about the reference ``op`` is judged against.
+
+    ``kind`` distinguishes a model-reference contract (``op.reference_contract``
+    set: ``forward`` is a pinned model's own computation) from the historical
+    declared-mathematics oracle. For a model reference, ``source`` is what the
+    reference module reports about its pinned source (``source_identity()``),
+    so a verdict or a frozen threshold names the exact computation behind it.
+    """
+    identity = {
+        "kind": MODEL_REFERENCE if op.reference_contract else DECLARED_MATHEMATICS,
+        "forward": op.forward,
+        "runtime_forward": op.runtime_forward,
+        "reference_dtype": op.reference_dtype,
+        "reference_contract": op.reference_contract,
+    }
+    if op.reference_contract:
+        import importlib
+
+        module = importlib.import_module(op.forward.split(":", 1)[0])
+        describe = getattr(module, "source_identity", None)
+        identity["source"] = describe() if callable(describe) else None
+    return identity
 
 
 def _promote(value, reference_dtype: torch.dtype):
@@ -68,7 +102,17 @@ def oracle(
     *performance* baseline runs through this same function, and timing it at
     float32 while the candidate runs at bfloat16 would not be a baseline at all;
     only the correctness path wants the more accurate reference.
+
+    A model-reference declaration (``op.reference_contract``) is differentiated
+    at the operands' own dtypes, through exactly the casts the model performs.
+    ``reference_dtype`` on such a declaration is refused here as well as in
+    ``OpDecl.validate``, so a declaration rebuilt with ``dataclasses.replace``
+    cannot widen the model's computation into a different target.
     """
+    if op.reference_contract and op.reference_dtype:
+        raise ValueError(
+            f"{op.name}: reference_dtype={op.reference_dtype!r} on a model reference "
+            f"contract ({op.reference_contract}) would change its numerical target")
     fwd = resolve_forward(op)
     reference_dtype = (
         getattr(torch, op.reference_dtype)

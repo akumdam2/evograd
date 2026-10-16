@@ -838,6 +838,15 @@ recorded in [benchmark reports](docs/experiments/benchmark_run_20260915.md).
 Generated candidates, raw measurements and internal design notes stay local.
 See [result paths](docs/RESULTS_LAYOUT.md) for the storage conventions.
 
+## Canonical verification APIs
+
+`evograd.verification` provides Gate 1 local pair checks, Gate 2 calibrated
+operator/model integration checks, and Gate 3 global loss-trajectory checks.
+It also provides generic recorded-payload adapters. See the
+[verification API guide](src/evograd/verification/README.md) for input contracts,
+calibration rules, limits, and CPU tests. Existing evaluator entry points are
+not automatically redirected to these APIs.
+
 ## Testing
 
 ```bash
