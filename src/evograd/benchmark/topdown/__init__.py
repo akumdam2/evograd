@@ -43,6 +43,8 @@ TOPDOWN_WORKLOADS: dict[str, str] = {
     "llama_3_2_1b": "llama3_2_1b",
     # Whole-model (text) Level 3 at B1 x T2048; L2 invocations from layers 14/15.
     "qwen3_5_4b": "qwen3_5_4b",
+    # Routed-MoE Level 3 at B2 x T2048 (grouped-GEMM experts); L2 invocations from layer 8.
+    "olmoe_1b_7b": "olmoe_1b_7b",
 }
 
 

@@ -46,6 +46,9 @@ TIER3_ADAPTERS: dict[str, str] = {
     "qwen3_5_4b": (
         "evograd.evaluation.tier3.workloads.qwen3_5_4b.adapter:ADAPTER"
     ),
+    "olmoe_1b_7b": (
+        "evograd.evaluation.tier3.workloads.olmoe_1b_7b.adapter:ADAPTER"
+    ),
     "convnextv2_tiny": "evograd.evaluation.tier3.workloads.convnextv2_tiny.adapter:ADAPTER",
     "qwen2_vl_2b": "evograd.evaluation.tier3.workloads.qwen2_vl_2b.adapter:ADAPTER",
 }

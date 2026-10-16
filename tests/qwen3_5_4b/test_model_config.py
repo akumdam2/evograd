@@ -95,7 +95,7 @@ class TestArchitecture(unittest.TestCase):
 class TestRecord(unittest.TestCase):
     def test_registered_under_its_own_key(self):
         self.assertIs(MODELS["qwen3_5_4b"], CFG)
-        self.assertEqual(len(MODELS), 5)
+        self.assertEqual(len(MODELS), 6)
 
     def test_derived_widths(self):
         self.assertEqual(CFG.key_dim, 2048)
@@ -192,10 +192,19 @@ class TestParameterCount(unittest.TestCase):
         self.assertEqual(sum(p.numel() for p in layer[2].parameters()), counts["linear_attention"])
         self.assertEqual(sum(p.numel() for p in layer[3].parameters()), counts["full_attention"])
 
-    def test_a_routed_moe_is_refused(self):
+    def test_a_routed_moe_takes_the_moe_counter_not_the_hybrid_one(self):
+        """``num_experts`` routes to the routed-MoE counter (OLMoE's), which
+        reads no hybrid field; a routed MoE missing its top-k is refused by
+        name rather than counted as dense."""
+        from evograd.benchmark.topdown.common.spec import moe_parameter_count
+
         from ._tiny import TINY_ARCH
 
-        with self.assertRaises(ValueError):
+        moe = {**TINY_ARCH, "num_experts": 8, "num_experts_per_tok": 2}
+        self.assertEqual(analytic_parameter_count(moe), moe_parameter_count(moe))
+        self.assertNotEqual(analytic_parameter_count(moe)["total"],
+                            analytic_parameter_count(TINY_ARCH)["total"])
+        with self.assertRaises(KeyError):
             analytic_parameter_count({**TINY_ARCH, "num_experts": 8})
 
 

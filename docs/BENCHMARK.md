@@ -26,6 +26,11 @@ L2 sites take their real invocations from is a data source
   calibrated L2 sites and ten bound L1 primitives; L2 invocations come from
   layers 14 and 15, captured or config-derived. No L3 gate yet; see
   `docs/QWEN3_5_4B.md`.
+- OLMoE-1B-7B (`benchmark/topdown/olmoe_1b_7b`): L3 at B2 x T2048 with
+  grouped-GEMM experts (16 layers of multi-head attention and 64 routed SwiGLU
+  experts, 8 active), four L2 sites with provisional tolerances and six bound
+  L1 primitives; L2 invocations come from layer 8, captured or config-derived.
+  No GPU session yet and no L3 gate; see `docs/OLMOE_1B_7B.md`.
 - `evograd.evaluation` owns execution, numerical checks, calibration and timing.
 
 Qwen and Llama each declare their own four L2 tasks. Attention with output

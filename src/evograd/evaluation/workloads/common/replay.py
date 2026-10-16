@@ -259,12 +259,32 @@ def _max_noise(values) -> float | None:
     return max(values) if values else 0.0
 
 
-def _one_pass(layer, hidden_states: torch.Tensor, kwargs: dict, grad_output: torch.Tensor):
+def _one_pass(layer, hidden_states: torch.Tensor, kwargs: dict, grad_output: torch.Tensor,
+              objective=None, payload: dict | None = None):
+    """One forward and one backward of the standalone layer.
+
+    ``objective``, when a workload's ``prepare`` module offers one
+    (``auxiliary_objective(layer, payload)``), is a context manager whose
+    ``loss()`` rebuilds a model-level objective that reaches the layer's
+    parameters from outside its output -- a routed MoE's load-balancing loss
+    into the router. It is backpropagated together with the output cotangent;
+    a dense decoder has none and takes the plain path.
+    """
     layer.zero_grad(set_to_none=True)
     leaf = hidden_states.detach().clone().requires_grad_(True)
-    output = layer(leaf, **kwargs)
-    tensor = output[0] if isinstance(output, tuple) else output
-    tensor.backward(grad_output)
+    if objective is None:
+        out = layer(leaf, **kwargs)
+        tensor = out[0] if isinstance(out, tuple) else out
+        tensor.backward(grad_output)
+    else:
+        with objective(layer, payload) as aux:
+            out = layer(leaf, **kwargs)
+            tensor = out[0] if isinstance(out, tuple) else out
+            extra = aux.loss()
+        if extra is None:
+            tensor.backward(grad_output)
+        else:
+            torch.autograd.backward([tensor, extra], [grad_output, torch.ones_like(extra)])
     grads = {name: p.grad.detach().clone() for name, p in layer.named_parameters() if p.grad is not None}
     return tensor.detach().clone(), leaf.grad.detach().clone(), grads
 
@@ -366,7 +386,9 @@ def run_replay(
         torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
     started = time.perf_counter()
-    output, grad_input, param_grads = _one_pass(layer, args[0], kwargs, grad_output)
+    objective = getattr(prepare, "auxiliary_objective", None)
+    output, grad_input, param_grads = _one_pass(layer, args[0], kwargs, grad_output,
+                                                objective, payload)
     if device.startswith("cuda"):
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
@@ -400,7 +422,8 @@ def run_replay(
         noise["measured"] = False
     else:
         noise["measured"] = True
-        passes = [_one_pass(layer, args[0], kwargs, grad_output) for _ in range(noise_repeats)]
+        passes = [_one_pass(layer, args[0], kwargs, grad_output, objective, payload)
+                  for _ in range(noise_repeats)]
         noise["output"] = _max_noise(
             _noise(passes[i][0], passes[0][0]) for i in range(1, noise_repeats)
         )

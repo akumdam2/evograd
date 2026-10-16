@@ -831,7 +831,7 @@ program database, LLM orchestration, and checkpointing.
 ## Project status
 
 Operator declarations, seed pipelines and OpenEvolve integration are available.
-Tier 3 runs the whole-model workloads (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B,
+Tier 3 runs the whole-model workloads (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B, OLMoE-1B-7B,
 MegaFold, AlphaFold3). Hardware-specific results and their limitations are
 recorded in [benchmark reports](docs/experiments/benchmark_run_20260915.md).
 

@@ -624,7 +624,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         from evograd.evaluation.tier3.cli import _parser, build_workload
 
         expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32",
-                    "qwen3_5_4b": "bfloat16"}
+                    "qwen3_5_4b": "bfloat16", "olmoe_1b_7b": "bfloat16"}
         for name, dtype in expected.items():
             with self.subTest(model=name):
                 args = _parser().parse_args(

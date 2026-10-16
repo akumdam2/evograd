@@ -243,6 +243,9 @@ class TestSingleOutputRegression(unittest.TestCase):
         # (normed, summed).
         "gdn_gating", "qwen3_5_gdn_in_proj", "qwen3_5_qkv_norm_partial_rope",
         "qwen3_5_residual_rmsnorm",
+        # OLMoE: the attention prefix's (q, k, v) and the residual fusion's
+        # (normed, summed).
+        "olmoe_qkv_norm_rope", "olmoe_residual_rmsnorm",
     }
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):

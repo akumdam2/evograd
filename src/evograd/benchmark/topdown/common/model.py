@@ -101,10 +101,17 @@ def build_config(spec: WorkloadSpec, classes: ModelClasses):
     """A config carrying the spec's architecture and run settings."""
     require_transformers(classes)
     config_cls = classes.resolve("config_class")
+    # A routed-MoE spec also pins which experts kernel runs (``grouped_mm`` or
+    # the per-expert ``eager`` loop); Transformers 5 reads the keyword off the
+    # config exactly as it reads ``attn_implementation``. A dense spec has no
+    # such field and passes nothing.
+    experts = getattr(spec, "experts_implementation", None)
+    extra = {"experts_implementation": experts} if experts is not None else {}
     return config_cls(
         **spec.arch,
         use_cache=spec.use_cache,
         attn_implementation=spec.attn_implementation,
+        **extra,
     )
 
 
@@ -214,6 +221,9 @@ def effective_settings(model, spec: WorkloadSpec) -> dict[str, Any]:
     return {
         "attn_implementation": getattr(model.config, "_attn_implementation", None),
         "attn_implementation_per_module": per_module,
+        # ``None`` for a dense decoder, which has no experts to dispatch; a
+        # routed MoE reports the kernel its experts modules actually resolved.
+        "experts_implementation": getattr(model.config, "_experts_implementation", None),
         "use_cache": bool(model.config.use_cache),
         "gradient_checkpointing": bool(getattr(model, "is_gradient_checkpointing", False)),
         "training_mode": bool(model.training),
@@ -246,6 +256,12 @@ def check_effective_settings(effective: dict[str, Any], spec: WorkloadSpec) -> l
     extra = [i for i in effective["attn_implementation_per_module"] if i != spec.attn_implementation]
     if extra:
         problems.append(f"some submodules report a different attention backend: {extra}")
+    want_experts = getattr(spec, "experts_implementation", None)
+    if want_experts is not None and effective.get("experts_implementation") != want_experts:
+        problems.append(
+            f"experts implementation is {effective.get('experts_implementation')!r}, "
+            f"requested {want_experts!r}"
+        )
     if effective["use_cache"] != spec.use_cache:
         problems.append(f"use_cache is {effective['use_cache']}, expected {spec.use_cache}")
     if effective["gradient_checkpointing"] != spec.gradient_checkpointing:

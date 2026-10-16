@@ -153,6 +153,13 @@ class TestDerivedNaming(unittest.TestCase):
                     "llama3_qkv_rope",
                     "llama3_residual_rmsnorm",
                     "llama3_swiglu_mlp",
+                    # OLMoE-1B-7B's four sites: the attention prefix with
+                    # full-width q/k norms, the attention core, the routed
+                    # experts (the router stays native) and the residual fusion.
+                    "olmoe_attention",
+                    "olmoe_moe_experts",
+                    "olmoe_qkv_norm_rope",
+                    "olmoe_residual_rmsnorm",
                     # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
                     "qwen2_vl_2b_text_mlp",
                     "qwen2_vl_2b_vision_mlp",

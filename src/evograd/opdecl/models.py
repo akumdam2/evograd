@@ -646,6 +646,118 @@ class HybridDenseModelConfig:
         return {"M": tokens, "K": self.hidden, "N": self.vocab}
 
 
+@dataclass(frozen=True)
+class MoeModelConfig:
+    """A decoder-only transformer with a routed mixture of experts in the MLP
+    position, as OLMoE publishes it.
+
+    Attention is Llama's shape (``head_dim = hidden // n_heads``) with one
+    difference that is OLMoE's own: the query and key projections are RMSNormed
+    over their *full width* (``q_out`` and ``kv_out``) before the head split,
+    not per head as Qwen3 does. The MLP position holds a router of ``[E, H]``
+    and ``n_experts`` SwiGLU experts of width ``intermediate`` each, stored as
+    one ``[E, 2I, H]`` gate/up tensor and one ``[E, H, I]`` down tensor
+    (Transformers 5's layout); ``top_k`` of them serve each token.
+    """
+
+    name: str  # registry key, also what Provenance.model stores
+    hidden: int
+    intermediate: int  # per expert
+    n_experts: int
+    top_k: int
+    n_heads: int
+    n_kv_heads: int
+    head_dim: int
+    vocab: int
+    layers: int
+    rope_theta: float
+    rms_norm_eps: float
+    dtype: str
+    norm_topk_prob: bool = False
+    tie_word_embeddings: bool = False
+    source: str = ""
+
+    # ── derived widths ────────────────────────────────────────────────────
+    @property
+    def q_out(self) -> int:
+        return self.n_heads * self.head_dim
+
+    @property
+    def kv_out(self) -> int:
+        return self.n_kv_heads * self.head_dim
+
+    @property
+    def gate_up_out(self) -> int:
+        """Each expert's fused gate/up fan-out: ``2 * intermediate``."""
+        return 2 * self.intermediate
+
+    # ── Level-2 site dims ────────────────────────────────────────────────
+    def qkv_norm_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """Projections, the full-width q/k RMSNorms and RoPE: the attention prefix."""
+        return {
+            "B": batch, "T": seq, "H": self.hidden,
+            "HQ": self.n_heads, "HK": self.n_kv_heads, "D": self.head_dim,
+            "QO": self.q_out, "KVO": self.kv_out,
+        }
+
+    def attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """Causal (grouped-query) SDPA plus the output projection."""
+        return {"B": batch, "T": seq, "HQ": self.n_heads, "HK": self.n_kv_heads,
+                "D": self.head_dim, "QO": self.q_out, "H": self.hidden}
+
+    def moe_experts_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The routed experts, token-flat as the block hands them over: ``T`` is
+        ``batch * seq`` because ``OlmoeSparseMoeBlock`` flattens before routing."""
+        return {"T": batch * seq, "H": self.hidden, "E": self.n_experts,
+                "G": self.gate_up_out, "I": self.intermediate, "K": self.top_k}
+
+    def residual_rmsnorm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "H": self.hidden}
+
+    # ── Level-1 component dims ───────────────────────────────────────────
+    def residual_norm_dims(self, *, tokens: int) -> dict[str, int]:
+        """The residual-stream RMSNorm: both per-layer norms and the final one."""
+        return {"rows": tokens, "hidden": self.hidden}
+
+    def attn_q_norm_dims(self, *, tokens: int) -> dict[str, int]:
+        """OLMoE's query norm: one row per token over the whole projection."""
+        return {"rows": tokens, "hidden": self.q_out}
+
+    def attn_k_norm_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"rows": tokens, "hidden": self.kv_out}
+
+    def rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "n_heads": self.n_heads, "head_dim": self.head_dim}
+
+    def rope_kv_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "T": seq, "n_heads": self.n_kv_heads, "head_dim": self.head_dim}
+
+    def causal_gqa_sdpa_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        return {"B": batch, "HQ": self.n_heads, "HK": self.n_kv_heads, "T": seq,
+                "D": self.head_dim}
+
+    def moe_activation_dims(self, *, tokens: int) -> dict[str, int]:
+        """The experts' SiLU under the grouped-GEMM path: one call per layer on
+        the packed ``[tokens * top_k, intermediate]`` tensor."""
+        return {"rows": tokens * self.top_k, "cols": self.intermediate}
+
+    def logits_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"rows": tokens, "cols": self.vocab}
+
+    # Biasless projections, as plain GEMMs: [M, K] @ [N, K]^T.
+    def attn_qkv_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.q_out}
+
+    def attn_kv_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.kv_out}
+
+    def attn_out_proj_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.q_out, "N": self.hidden}
+
+    def lm_head_dims(self, *, tokens: int) -> dict[str, int]:
+        return {"M": tokens, "K": self.hidden, "N": self.vocab}
+
+
 #: Meta-Llama-3-8B. The operator suite's timed grids (``rmsnorm``, ``swiglu``,
 #: the vocabulary-regime loss kernels, ...) are derived from *these* widths, and
 #: every historical suite report records them under the key ``llama_3_8b``.
@@ -767,6 +879,31 @@ QWEN3_5_4B = HybridDenseModelConfig(
     source="Qwen/Qwen3.5-4B config.json (text_config)",
 )
 
+#: OLMoE-1B-7B, as ``allenai/OLMoE-1B-7B-0924``'s ``config.json`` publishes it.
+#: Multi-head rather than grouped-query attention (16 query heads over 16 KV
+#: heads of 128), 64 experts of width 1024 with 8 active per token, untied
+#: embeddings over a 50,304-token vocabulary. ``intermediate`` is per expert;
+#: ``norm_topk_prob`` is false, so the routing weights are the raw softmax
+#: probabilities of the chosen experts and do not sum to one.
+OLMOE_1B_7B = MoeModelConfig(
+    name="olmoe_1b_7b",
+    hidden=2048,
+    intermediate=1024,
+    n_experts=64,
+    top_k=8,
+    n_heads=16,
+    n_kv_heads=16,
+    head_dim=128,
+    vocab=50304,
+    layers=16,
+    rope_theta=10000.0,
+    rms_norm_eps=1e-5,
+    dtype="bfloat16",
+    norm_topk_prob=False,
+    tie_word_embeddings=False,
+    source="allenai/OLMoE-1B-7B-0924 config.json",
+)
+
 ALPHAFOLD3 = AlphaFoldConfig(
     name="alphafold3",
     c_s=384,
@@ -833,16 +970,16 @@ LLAMA_VOCAB_REGIME_SPLIT = 2048
 #: 384 belong in untimed coverage rather than the default timed suite.
 AF3_RESIDUE_SWEEP = (128, 256, 384)
 
-MODELS: dict[str, ModelConfig | AlphaFoldConfig | HybridDenseModelConfig] = {
+MODELS: dict[str, ModelConfig | AlphaFoldConfig | HybridDenseModelConfig | MoeModelConfig] = {
     config.name: config
-    for config in (LLAMA_3_8B, LLAMA_3_2_1B, QWEN3_0_6B, ALPHAFOLD3, QWEN3_5_4B)
+    for config in (LLAMA_3_8B, LLAMA_3_2_1B, QWEN3_0_6B, ALPHAFOLD3, QWEN3_5_4B, OLMOE_1B_7B)
 }
 # One key per model: a name collision here would let one configuration
 # silently answer for another's provenance.
-assert len(MODELS) == 5, sorted(MODELS)
+assert len(MODELS) == 6, sorted(MODELS)
 
 
-def config_for(provenance) -> ModelConfig | AlphaFoldConfig | HybridDenseModelConfig:
+def config_for(provenance) -> ModelConfig | AlphaFoldConfig | HybridDenseModelConfig | MoeModelConfig:
     """The configuration a :class:`Provenance` names, or a clear failure."""
     try:
         return MODELS[provenance.model]
@@ -884,6 +1021,8 @@ __all__ = [
     "LLAMA_VOCAB_TOKEN_SWEEP_FP32",
     "MODELS",
     "ModelConfig",
+    "MoeModelConfig",
+    "OLMOE_1B_7B",
     "QWEN3_5_4B",
     "config_for",
     "rederive_dims",

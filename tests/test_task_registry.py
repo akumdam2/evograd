@@ -52,8 +52,15 @@ QWEN3_5_LEVEL2 = (
     "qwen3_5_residual_rmsnorm",
     "qwen3_5_swiglu_mlp",
 )
+#: OLMoE-1B-7B's four sites (the router and lm_head_ce are not sites).
+OLMOE_LEVEL2 = (
+    "olmoe_attention",
+    "olmoe_moe_experts",
+    "olmoe_qkv_norm_rope",
+    "olmoe_residual_rmsnorm",
+)
 VISION_LEVEL2 = ("convnextv2_tiny_convnext_mlp", "qwen2_vl_2b_text_mlp", "qwen2_vl_2b_vision_mlp")
-MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + VISION_LEVEL2
+MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + OLMOE_LEVEL2 + VISION_LEVEL2
 DELETED_LEGACY = ("af3_single_repr_block", "llama3_decoder_layer")
 
 
@@ -134,6 +141,16 @@ class TestTaskRegistry(unittest.TestCase):
                 self.assertEqual(TASKS[name].level, 2)
         self.assertEqual(sorted(qwen3_5_manifest.SITE_TASKS.values()), sorted(QWEN3_5_LEVEL2))
         self.assertNotIn("qwen3_5_lm_head_ce", TASKS)
+
+    def test_contains_the_olmoe_level_two_tasks(self):
+        from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import manifest as olmoe_manifest
+
+        for name in OLMOE_LEVEL2:
+            with self.subTest(op=name):
+                self.assertIn(name, TASKS)
+                self.assertEqual(TASKS[name].level, 2)
+        self.assertEqual(sorted(olmoe_manifest.SITE_TASKS.values()), sorted(OLMOE_LEVEL2))
+        self.assertNotIn("olmoe_router", TASKS)
 
     def test_the_two_models_share_no_level_two_task(self):
         """Each architecture's four boundaries are its own.

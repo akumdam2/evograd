@@ -244,11 +244,12 @@ def analytic_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
 
     Mixed token mixers with a dense MLP (``layer_types`` or
     ``full_attention_interval`` set, as Qwen3.5 has) are counted by
-    :func:`hybrid_dense_parameter_count`; every dense decoder takes the branch
-    below unchanged. A routed MoE is not supported.
+    :func:`hybrid_dense_parameter_count`; a routed MoE in the MLP position
+    (``num_experts`` set, as OLMoE has) by :func:`moe_parameter_count`; every
+    dense decoder takes the branch below unchanged.
     """
     if arch.get("num_experts"):
-        raise ValueError("analytic_parameter_count does not count routed-MoE architectures")
+        return moe_parameter_count(arch)
     if arch.get("layer_types") or arch.get("full_attention_interval"):
         return hybrid_dense_parameter_count(arch)
     h = arch["hidden_size"]
@@ -345,4 +346,57 @@ def hybrid_dense_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
         "lm_head": lm_head,
         "non_embedding": non_embedding,
         "total": embedding + non_embedding + lm_head,
+    }
+
+
+def moe_parameter_count(arch: Mapping[str, Any]) -> dict[str, int]:
+    """Parameters of a routed-MoE decoder (OLMoE), from the config alone.
+
+    Laid out as Transformers 5 holds it: every expert's gate and up projections
+    in one ``[E, 2I, H]`` tensor and its down projection in ``[E, H, I]``, a
+    router of ``[E, H]``, and -- OLMoE's own -- a full-width RMSNorm on the
+    query projection (``HQ * D``) and on the key projection (``HK * D``) rather
+    than Qwen3's per-head ones. No shared expert and no biases.
+
+    ``active`` counts the parameters one token's forward touches: the attention,
+    the router, the norms, ``top_k`` of the experts, the embedding row and the
+    head. That is the "1B" in OLMoE-1B-7B; ``total`` is the "7B".
+    """
+    h = arch["hidden_size"]
+    layers = arch["num_hidden_layers"]
+    heads = arch["num_attention_heads"]
+    kv_heads = arch["num_key_value_heads"]
+    head_dim = arch.get("head_dim") or h // heads
+    inter = arch["intermediate_size"]
+    experts = arch["num_experts"]
+    top_k = arch["num_experts_per_tok"]
+    vocab = arch["vocab_size"]
+    bias = 1 if arch.get("attention_bias") else 0
+
+    q_out, kv_out = heads * head_dim, kv_heads * head_dim
+    q = h * q_out + bias * q_out
+    k = h * kv_out + bias * kv_out
+    v = k
+    o = q_out * h + bias * h
+    qk_norm = q_out + kv_out
+    attention = q + k + v + o + qk_norm
+    router = experts * h
+    per_expert = 2 * inter * h + h * inter
+    norms = 2 * h  # input_layernorm + post_attention_layernorm
+    per_layer = attention + router + experts * per_expert + norms
+    active_per_layer = attention + router + top_k * per_expert + norms
+
+    embedding = vocab * h
+    non_embedding = layers * per_layer + h  # + final norm
+    lm_head = 0 if arch.get("tie_word_embeddings") else vocab * h
+    return {
+        "per_layer": per_layer,
+        "per_expert": per_expert,
+        "experts_per_layer": experts * per_expert,
+        "router_per_layer": router,
+        "embedding": embedding,
+        "lm_head": lm_head,
+        "non_embedding": non_embedding,
+        "total": embedding + non_embedding + lm_head,
+        "active": embedding + layers * active_per_layer + h + lm_head,
     }

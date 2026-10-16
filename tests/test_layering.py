@@ -12,7 +12,7 @@ SHARED = (
     EVOGRAD / "evaluation" / "tier3" / "gate",
 )
 WORKLOAD_MARKERS = ('qwen3_0_6b', 'llama3_8b', 'llama3_2_1b', 'alphafold3', 'megafold',
-                    'qwen3_5_4b')
+                    'qwen3_5_4b', 'olmoe_1b_7b')
 
 
 def _resolved_imports(path: pathlib.Path) -> set[str]:
@@ -308,6 +308,64 @@ class TestQwen3_5OwnershipSplit(unittest.TestCase):
             for marker in ("def run_verify(", "def run_calibration(",
                            "def declared_gate(", "def required_tolerance("):
                 self.assertNotIn(marker, source, f"{path} defines {marker.strip('def (')}")
+
+
+class TestOlmoeOwnershipSplit(unittest.TestCase):
+    """OLMoE-1B-7B: the benchmark side owns levels 3-1 and the harvest, imports
+    none of evaluation, and passes no verdict; every site package carries its
+    contract, reference and capture."""
+
+    BENCH = EVOGRAD / "benchmark" / "topdown" / "olmoe_1b_7b"
+    EVAL = EVOGRAD / "evaluation" / "workloads" / "olmoe_1b_7b"
+
+    def test_benchmark_side_imports_no_evaluation(self):
+        for path in _python_files(self.BENCH):
+            offenders = [name for name in _resolved_imports(path)
+                         if name.startswith("evograd.evaluation")]
+            self.assertEqual(offenders, [], f"{path}: {offenders}")
+
+    def test_the_benchmark_side_keeps_its_levels_and_harvest(self):
+        for relative in ("architecture.py", "declaration.py", "cli.py",
+                         "levels/level3/spec.py", "levels/level3/model.py",
+                         "levels/level3/smoke.py", "levels/level3/report.py",
+                         "layer/prepare.py", "layer/artifact.py",
+                         "layer/capture.py", "levels/level2/manifest.py",
+                         "levels/level1/manifest.py", "harvest/observe.py",
+                         "harvest/manifest.py", "harvest/harvest.py", "harvest/snapshot.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.BENCH / relative).is_file())
+
+    def test_each_site_package_owns_its_contract_reference_and_capture(self):
+        from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import manifest
+
+        for site in manifest.SITES:
+            for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
+                with self.subTest(site=site, part=part):
+                    self.assertTrue((self.BENCH / "levels" / "level2" / site / part).is_file())
+
+    def test_the_evaluation_side_exists(self):
+        for relative in ("descriptor.py", "level1/verify.py", "level1/calibrate.py",
+                         "level1/cli.py", "level2/calibrate.py", "level2/harvested.py",
+                         "level2/negative_controls.py", "layer/replay.py"):
+            with self.subTest(module=relative):
+                self.assertTrue((self.EVAL / relative).is_file())
+
+    def test_no_verdict_function_is_left_on_the_benchmark_side(self):
+        for path in _python_files(self.BENCH):
+            source = path.read_text(encoding="utf-8")
+            for marker in ("def run_verify(", "def run_calibration(",
+                           "def declared_gate(", "def required_tolerance("):
+                self.assertNotIn(marker, source, f"{path} defines {marker.strip('def (')}")
+
+    def test_the_benchmark_side_depends_on_no_other_workload_package(self):
+        """The experts oracle is copied from the operator suite's task rather
+        than imported: a workload package depends on no other task package."""
+        for path in _python_files(self.BENCH):
+            offenders = [name for name in _resolved_imports(path)
+                         if name.startswith("evograd.benchmark.operator_suite")
+                         or any(m in name.split(".") for m in WORKLOAD_MARKERS
+                                if m != "olmoe_1b_7b")]
+            self.assertEqual(offenders, [], f"{path}: {offenders}")
 
 
 class TestTaskNamesAreUnique(unittest.TestCase):

@@ -32,6 +32,7 @@ benchmark/
     ├── qwen3_0_6b/       the Qwen3-0.6B L3-to-L1 path
     ├── llama3_2_1b/      the Llama-3.2-1B workload and harvest
     ├── qwen3_5_4b/       the Qwen3.5-4B (text) L3-to-L1 path
+    ├── olmoe_1b_7b/      the OLMoE-1B-7B (routed MoE) L3-to-L1 path
     └── alphafold3/       the AlphaFold3 whole-model declaration
 ```
 
