@@ -1,0 +1,1 @@
+"""DiT full-model contract."""
