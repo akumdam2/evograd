@@ -49,3 +49,20 @@ def test_pinned_artifact_identity_and_supervision(tmp_path, model):
 def test_pretrained_requires_real_batches():
     with pytest.raises(ValueError, match="requires pinned"):
         VisionWorkload(canonical("convnextv2_tiny").replace(weights="pretrained"))
+
+
+def test_qwen_snapshot_requires_slow_tokenizer_assets(tmp_path, monkeypatch):
+    import huggingface_hub
+    from evograd.benchmark.topdown.common.vision.model import pretrained_snapshot
+
+    required = (
+        "config.json", "preprocessor_config.json", "model.safetensors.index.json",
+        "model-00001-of-00002.safetensors", "model-00002-of-00002.safetensors",
+        "tokenizer.json", "tokenizer_config.json", "chat_template.json",
+    )
+    for name in required:
+        (tmp_path / name).touch()
+    monkeypatch.setattr(huggingface_hub, "snapshot_download", lambda *args, **kwargs: str(tmp_path))
+    spec = canonical("qwen2_vl_2b").replace(weights="pretrained")
+    with pytest.raises(RuntimeError, match="merges.txt.*vocab.json"):
+        pretrained_snapshot(spec)

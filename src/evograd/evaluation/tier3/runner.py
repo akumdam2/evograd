@@ -749,6 +749,11 @@ def assemble_report(
     Shared by the in-process runner and the CLI's isolated one, so a report
     means the same thing however the providers were executed.
     """
+    description = workload.describe()
+    pinned_real = (
+        description.get("weights") == "pretrained"
+        and description.get("data") == "pinned_real_data"
+    )
     report = {
         "protocol": TIER3_PROTOCOL_VERSION,
         # Stated, not implied by the protocol string: this runner measures a
@@ -759,7 +764,7 @@ def assemble_report(
         "evaluation_tier": 3,
         "execution_scope": EXECUTION_SCOPE_MODEL,
         "benchmark_level": 3,
-        **workload.describe(),
+        **description,
         "seed": seed,
         "provider_order": list(order),
         "isolation": isolation,
@@ -772,8 +777,16 @@ def assemble_report(
                 **{k: list(v) if isinstance(v, tuple) else v
                    for k, v in OPTIMIZER_DEFAULTS.items()},
             },
-            "weights": "built by the workload from a fixed seed, identical across providers",
-            "batch_data": "seeded; every provider sees the same sequence",
+            "weights": (
+                "pinned pretrained checkpoint, identical across providers"
+                if pinned_real else
+                "built by the workload from a fixed seed, identical across providers"
+            ),
+            "batch_data": (
+                "pinned prepared real-data batches; every provider sees the same indexed sequence"
+                if pinned_real else
+                "seeded; every provider sees the same sequence"
+            ),
             "warmup_steps": warmup,
             "timed_steps_per_block": steps,
             "blocks": blocks,
@@ -832,19 +845,16 @@ def verification_policy(
                      "training and timing"),
         },
         "preflight": (
-            "every patched kernel through bench.provider.verify_pair_provider on "
-            "its declaration's correctness workloads; a provider that fails is "
-            "not timed"
+            "declaration-backed patched kernels go through "
+            "bench.provider.verify_pair_provider on their correctness workloads; "
+            "raw callables are reported as unverifiable here; a failed pair is not timed"
             if verify
             else "skipped by request (--no-verify): timings are ungated"
         ),
         "model_correctness": (
-            "a workload may declare a whole-model gate: one untimed canonical "
-            "forward/backward/optimizer step against both the original eager "
-            "model and the bound-pair path a candidate replaces, checked "
-            "against a calibrated per-role noise envelope, plus its loss "
-            "trajectory over the calibrated horizon. A failure is recorded "
-            "failed_at='model_correctness' and is never timed"
+            "a workload may declare an untimed whole-model gate with its own "
+            "input sequence, tensor checks, and training trajectory; a failure "
+            "is recorded failed_at='model_correctness' and is never timed"
         ),
         "loss_scalar_and_finite": (
             "every loss in the trajectory, and the settled steps on either side "

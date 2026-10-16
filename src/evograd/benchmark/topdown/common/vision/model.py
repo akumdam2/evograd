@@ -35,7 +35,10 @@ def pretrained_snapshot(spec):
     )
     required = ["config.json", "preprocessor_config.json", *weights]
     if spec.model == "qwen2_vl_2b":
-        required += ["tokenizer.json", "tokenizer_config.json", "chat_template.json"]
+        required += [
+            "tokenizer.json", "tokenizer_config.json", "chat_template.json",
+            "merges.txt", "vocab.json",
+        ]
     missing = [name for name in required if not (root / name).is_file()]
     if missing:
         raise RuntimeError(
