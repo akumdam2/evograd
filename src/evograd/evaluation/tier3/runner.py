@@ -750,10 +750,8 @@ def assemble_report(
     means the same thing however the providers were executed.
     """
     description = workload.describe()
-    pinned_real = (
-        description.get("weights") == "pretrained"
-        and description.get("data") == "pinned_real_data"
-    )
+    pinned_weights = description.get("weights") == "pretrained"
+    pinned_real = description.get("data") == "pinned_real_data"
     report = {
         "protocol": TIER3_PROTOCOL_VERSION,
         # Stated, not implied by the protocol string: this runner measures a
@@ -779,7 +777,7 @@ def assemble_report(
             },
             "weights": (
                 "pinned pretrained checkpoint, identical across providers"
-                if pinned_real else
+                if pinned_weights else
                 "built by the workload from a fixed seed, identical across providers"
             ),
             "batch_data": (

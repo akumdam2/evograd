@@ -212,10 +212,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--vision-config", type=Path, default=None,
                         help="ConvNeXt/Qwen2-VL execution configuration JSON")
+    parser.add_argument("--model-config", type=Path, default=None,
+                        help="DiT execution configuration JSON")
     parser.add_argument("--data-path", type=Path, default=None,
-                        help="Prepared real-data batch artifact for vision model gates")
+                        help="Prepared real-data batch artifact for vision or DiT model gates")
     parser.add_argument("--real-input", action="store_true",
-                        help="use pinned checkpoint and public real-input batches for vision workloads")
+                        help="use a model's pinned real-input policy (DiT uses seeded weights)")
     # No hard default. Workloads disagree about their training dtype -- a
     # language model trains bf16, AlphaFold3 fp32 -- and the canonical value is
     # part of a workload's identity, so it belongs in that workload's spec
@@ -407,7 +409,7 @@ def check_options(args) -> None:
     """
     adapter = tier3_adapter(args.model)
     #: Flag -> the value that means "not requested".
-    optional = {"vision_config": None, "data_path": None, "real_input": False, "structural_identity": False, "layers": None, "data_seed": 0,
+    optional = {"vision_config": None, "model_config": None, "data_path": None, "real_input": False, "structural_identity": False, "layers": None, "data_seed": 0,
                 "calibration": None, "residues": None,
                 "evo": None, "checkpointing": None, "recycling": None,
                 "confidence_head": False,

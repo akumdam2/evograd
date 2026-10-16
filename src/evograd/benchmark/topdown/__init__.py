@@ -39,6 +39,7 @@ from typing import Any
 TOPDOWN_WORKLOADS: dict[str, str] = {
     "convnextv2_tiny": "convnextv2_tiny",
     "qwen2_vl_2b": "qwen2_vl_2b",
+    "dit_s_2": "dit_s_2",
     "qwen3_0_6b": "qwen3_0_6b",
     "llama_3_2_1b": "llama3_2_1b",
     # Whole-model (text) Level 3 at B1 x T2048; L2 invocations from layers 14/15.
