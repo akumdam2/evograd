@@ -292,6 +292,18 @@ class OpDecl:
     # a float32 reference restores a tolerance that bounds the candidate's own
     # error. ``None`` keeps the historical same-dtype behavior.
     reference_dtype: str | None = None
+    # The numerical contract ``forward`` belongs to. ``None`` is the historical
+    # *declared mathematics* contract: ``forward`` states the operator in
+    # primitives (often with deliberate float32 upcasts) and ``runtime_forward``
+    # may name a faster, numerically different spelling. A model-specific task
+    # instead names a *model reference* contract -- e.g.
+    # ``evograd-model-reference/qwen3_0_6b/1`` -- and its ``forward`` is the
+    # pinned model's own computation at the model's dtypes. That contract has
+    # exactly one spelling, so ``validate`` refuses a different
+    # ``runtime_forward`` and any ``reference_dtype`` (widening would silently
+    # change the target the model computes). Gate 1, Gate 2, seed capture and
+    # the eager/compile baselines all reach the same callable.
+    reference_contract: str | None = None
     extra_constraints: str = ""
     grad_order: tuple[str, ...] | None = None
     correctness: tuple[Workload, ...] = ()
@@ -572,6 +584,21 @@ class OpDecl:
                 f"{self.name}: reference_dtype must be one of "
                 f"{sorted(_REFERENCE_DTYPES)}, got {self.reference_dtype!r}"
             )
+        if self.reference_contract is not None:
+            if not self.reference_contract.strip():
+                raise ValueError(f"{self.name}: reference_contract must be a non-empty identifier")
+            if self.reference_dtype is not None:
+                raise ValueError(
+                    f"{self.name}: a model reference contract ({self.reference_contract}) "
+                    f"computes at the model's own dtypes; reference_dtype="
+                    f"{self.reference_dtype!r} would widen it into a different target"
+                )
+            if self.runtime_forward not in (None, self.forward):
+                raise ValueError(
+                    f"{self.name}: a model reference contract has one spelling; "
+                    f"runtime_forward {self.runtime_forward!r} differs from forward "
+                    f"{self.forward!r}"
+                )
         # Provenance is checked here, beside every other declaration invariant,
         # rather than left to review: an operator that claims a place in the
         # benchmark must say where its timed shapes come from. Only the default
@@ -880,6 +907,7 @@ def declare_op(
     make_inputs: object | None = None,
     backward_may_overwrite: tuple[str, ...] = (),
     runtime_forward: str | None = None,
+    reference_contract: str | None = None,
 ) -> OpDecl:
     """Build and validate an :class:`OpDecl`. The only way ops should be made."""
     op = OpDecl(
@@ -922,6 +950,7 @@ def declare_op(
         make_inputs=make_inputs,
         backward_may_overwrite=tuple(backward_may_overwrite),
         runtime_forward=runtime_forward,
+        reference_contract=reference_contract,
     )
     op.validate()
     return op
