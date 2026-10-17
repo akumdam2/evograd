@@ -56,16 +56,13 @@ Install the data/VAE dependencies and cache the exact source files:
 
 ```bash
 pip install -e ".[dit]"
-hf download ShaomuTan/imagenette 320px/train-00000-of-00001.parquet \
-  --repo-type dataset --revision 061f0ab5ca70523e13982a7ba463c076af657386
-hf download stabilityai/sd-vae-ft-mse config.json diffusion_pytorch_model.safetensors \
-  --revision 31f26fdeee1355a5c34592e401dd41e45d25a493
+python scripts/prepare_benchmark_inputs.py --benchmark dit_s_2
 ```
 
 Preparation uses a 256-pixel center crop, random horizontal flip, `[-1, 1]`
 normalization, and VAE latent scale 0.18215. A fixed seed controls flips,
 latent sampling, diffusion noise, timesteps, and class dropout. Prepared
-batches are cached at `~/.cache/evograd/dit/` (override with
+batches are cached at `data/dit_s_2/batches/` (override with
 `EVOGRAD_DIT_DATA_CACHE`). The default gate needs ten batches: five for
 calibration and five disjoint batches for evaluation. Imagenette labels are
 mapped to their ImageNet-1k IDs.

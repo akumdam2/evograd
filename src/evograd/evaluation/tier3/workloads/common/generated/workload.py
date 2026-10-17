@@ -88,7 +88,7 @@ class GeneratedWorkload:
 
     def __post_init__(self):
         if self.spec.input_mode == "real" and not self.data_path:
-            raise ValueError("real DiT workload requires prepared pinned inputs")
+            raise ValueError("real generated-model workload requires prepared inputs")
         self.name = self.spec.workload_id
         self.unit_name = "latents" if self.spec.model == "dit_s_2" else "examples"
         if self.spec.model == "dit_s_2":
@@ -186,10 +186,20 @@ class GeneratedWorkload:
     def describe(self):
         real_source = {}
         if self.spec.input_mode == "real":
-            from evograd.benchmark.topdown.common.generated.data import DATASET, VAE
-            real_source = {"dataset_repo": DATASET[0], "dataset_revision": DATASET[1],
-                           "dataset_file": DATASET[2], "vae_repo": VAE[0],
-                           "vae_revision": VAE[1]}
+            if self.spec.model == "dit_s_2":
+                from evograd.benchmark.topdown.common.generated.data import DATASET, VAE
+                real_source = {"dataset_repo": DATASET[0], "dataset_revision": DATASET[1],
+                               "dataset_file": DATASET[2], "vae_repo": VAE[0],
+                               "vae_revision": VAE[1]}
+            else:
+                data, data_hash = self.load_data(self)
+                real_source = {"dataset": list(data["dataset"]),
+                               "source_dir": data["source_dir"],
+                               "source_files": data["source_files"],
+                               "source_rows_sha256": data["source_rows_sha256"],
+                               "source_artifact_sha256": data_hash,
+                               "selected_rows": data["selection"],
+                               "sparse_mapping": data["mapping"]}
         return {"name": self.name,
                 "model": "DiT-S/2" if self.spec.model == "dit_s_2" else "TorchRec DLRM example",
                 "workload_hash": self.spec.workload_hash, "config": self.to_config(),

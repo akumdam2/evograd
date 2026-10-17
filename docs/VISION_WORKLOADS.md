@@ -152,21 +152,13 @@ specialist shapes before calibration or evaluation. Calibration and evaluation
 use disjoint batches from that one artifact. This checks the declared inputs;
 it does not prove correctness for other resolutions, questions or shapes.
 
-Cache the pinned assets once on a networked machine, using the same Hugging
-Face cache on the benchmark machine (or set `EVOGRAD_HF_CACHE` for the Python
-process and `--cache-dir` for `hf download`):
+Prepare the pinned assets once from the repository root. Each benchmark keeps
+its Hugging Face cache in `data/<model>/hf_cache`, which the CLI reads by
+default:
 
 ```bash
-hf download facebook/convnextv2-tiny-1k-224 \
-  config.json preprocessor_config.json model.safetensors \
-  --revision f4db009e63145e02b3c075aa64d90ce41bcca4b1
-hf download Qwen/Qwen2-VL-2B-Instruct \
-  config.json preprocessor_config.json chat_template.json tokenizer.json tokenizer_config.json \
-  merges.txt vocab.json model.safetensors.index.json \
-  model-00001-of-00002.safetensors model-00002-of-00002.safetensors \
-  --revision 895c3a49bc3fa70a340399125c650a463535e71c
-hf download ShaomuTan/imagenette 320px/train-00000-of-00001.parquet --repo-type dataset --revision 061f0ab5ca70523e13982a7ba463c076af657386
-hf download lmms-lab-encoder/textvqa data/train-00000-of-00020.parquet --repo-type dataset --revision 9c0699cd19768ac5ab97568f6b3cbac4c0062884
+python scripts/prepare_benchmark_inputs.py --benchmark convnextv2_tiny
+python scripts/prepare_benchmark_inputs.py --benchmark qwen2_vl_2b
 ```
 
 Then calibrate and run ConvNeXt:
@@ -184,7 +176,7 @@ python -m evograd.evaluation.tier3.cli --model convnextv2_tiny --real-input \
 
 For Qwen2-VL, substitute its benchmark JSON, `--sites text_mlp,vision_mlp`,
 `--model qwen2_vl_2b`, and its own output paths. The flag alone prepares and
-caches the pinned batches at `~/.cache/evograd/vision/<model>/`. Use
+caches the pinned batches at `data/<model>/batches/`. Use
 `--data-path` for the Tier-3 CLI or `--data` for the calibration CLI to select
 an already prepared pinned artifact explicitly. Keep the same artifact for
 calibration and evaluation.

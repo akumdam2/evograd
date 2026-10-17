@@ -32,6 +32,10 @@ workloads = ["transformers>=4.51"]
 olmoe = ["transformers>=5.0"]
 vision_workloads = ["transformers>=4.57,<4.58", "pillow", "torchvision", "datasets>=3,<5", "pyarrow>=17", "safetensors"]
 dit = ["diffusers==0.36.0", "datasets>=3,<5", "pillow", "pyarrow>=17", "huggingface_hub>=0.34,<1", "safetensors"]
+dlrm = ["numpy>=1.26"]
+# Compatibility alias: Criteo preprocessing uses NumPy directly and does not
+# import TorchRec's optional FBGEMM/CUDA extensions.
+dlrm_preprocess = ["numpy>=1.26"]
 # The alphafold3 training-step workload, which the MegaFold one replaced as the
 # registered Level-4 task. alphafold3-pytorch is the implementation MegaFold
 # builds on; the declaration and its adapters are still in the tree, so the

@@ -1,7 +1,7 @@
-"""Prepare revision-pinned image/VAE inputs for the DiT-S/2 training workload.
+"""Prepare fixed real inputs for DiT-S/2 and TorchRec DLRM workloads.
 
-The public image shard and VAE must already be present in the Hugging Face
-cache. Preparation performs no implicit network access.
+DiT needs its image shard and VAE in the Hugging Face cache. DLRM needs local
+TorchRec-preprocessed Criteo NumPy files. Preparation never downloads data.
 """
 
 import hashlib
@@ -10,6 +10,7 @@ from pathlib import Path
 import tempfile
 
 import torch
+from evograd.benchmark.topdown.common.data_paths import hf_cache_dir, prepared_dir
 
 DATASET = ("ShaomuTan/imagenette", "061f0ab5ca70523e13982a7ba463c076af657386",
            "320px/train-00000-of-00001.parquet")
@@ -25,7 +26,7 @@ def _dataset_file():
     repo, revision, filename = DATASET
     try:
         return hf_hub_download(repo, filename=filename, repo_type="dataset", revision=revision,
-                               cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+                               cache_dir=hf_cache_dir("dit_s_2"),
                                local_files_only=True)
     except Exception as exc:
         raise RuntimeError(f"Dataset {repo}@{revision}/{filename} is not cached; "
@@ -38,7 +39,7 @@ def _vae_path():
     try:
         path = Path(snapshot_download(repo, revision=revision,
                                      allow_patterns=["config.json", "diffusion_pytorch_model.safetensors"],
-                                     cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+                                     cache_dir=hf_cache_dir("dit_s_2"),
                                      local_files_only=True))
     except Exception as exc:
         raise RuntimeError(f"VAE {repo}@{revision} is not cached; download its config "
@@ -64,8 +65,13 @@ def _crop(image, size=256):
     return image.crop((left, top, left + size, top + size))
 
 
-def prepare_pinned(spec, *, batch_count=10):
+def prepare_pinned(spec, *, batch_count=10, source_dir=None):
     """Encode fixed Imagenette rows with the pinned VAE, then freeze DiT inputs."""
+    if spec.model == "torchrec_dlrm":
+        from .dlrm_data import prepare_pinned as prepare_dlrm
+        return prepare_dlrm(spec, source_dir=source_dir, batch_count=batch_count)
+    if source_dir is not None:
+        raise ValueError("--criteo-dir applies only to DLRM")
     from datasets import load_dataset
     from diffusers.models import AutoencoderKL
     from PIL import ImageOps
@@ -134,12 +140,22 @@ def prepare_pinned(spec, *, batch_count=10):
             "examples": count, "selection": selection, "batches": batches}
 
 
-def default_data_path(spec):
-    root = Path(os.environ.get("EVOGRAD_DIT_DATA_CACHE", Path.home() / ".cache/evograd/dit"))
+def default_data_path(spec, source_dir=None):
+    if spec.model == "torchrec_dlrm":
+        from .dlrm_data import default_data_path as dlrm_path
+        return dlrm_path(spec, source_dir)
+    if source_dir is not None:
+        raise ValueError("--criteo-dir applies only to DLRM")
+    root = Path(os.environ.get("EVOGRAD_DIT_DATA_CACHE", prepared_dir("dit_s_2")))
     return root / f"{spec.workload_hash}-pinned.pt"
 
 
-def ensure_pinned_data(spec, path=None, *, batch_count=10):
+def ensure_pinned_data(spec, path=None, *, batch_count=10, source_dir=None):
+    if spec.model == "torchrec_dlrm":
+        from .dlrm_data import ensure_pinned_data as ensure_dlrm
+        return ensure_dlrm(spec, path, source_dir=source_dir, batch_count=batch_count)
+    if source_dir is not None:
+        raise ValueError("--criteo-dir applies only to DLRM")
     supplied = path is not None
     path = Path(path) if supplied else default_data_path(spec)
     from types import SimpleNamespace
@@ -166,6 +182,9 @@ def ensure_pinned_data(spec, path=None, *, batch_count=10):
 
 
 def load_data(workload):
+    if workload.spec.model == "torchrec_dlrm":
+        from .dlrm_data import load_data as load_dlrm
+        return load_dlrm(workload)
     if workload.spec.input_mode != "real" or not workload.data_path:
         raise ValueError("real DiT inputs require a prepared pinned-data artifact")
     path = Path(workload.data_path)

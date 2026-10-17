@@ -53,7 +53,8 @@ def fingerprint(workload):
     }
     if workload.spec.model in ("convnextv2_tiny", "qwen2_vl_2b"):
         result["transformers"] = __import__("transformers").__version__
-    if getattr(workload.spec, "input_mode", "generated") == "real":
+    if (getattr(workload.spec, "input_mode", "generated") == "real"
+            and workload.spec.model == "dit_s_2"):
         result["diffusers"] = __import__("diffusers").__version__
     return result
 

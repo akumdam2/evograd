@@ -31,8 +31,10 @@ IGNORE_INDEX = -100
 
 
 def hf_cache_dir() -> str | None:
-    """Where pinned snapshots live. ``EVOGRAD_HF_CACHE`` wins; else HF's default."""
-    return os.environ.get("EVOGRAD_HF_CACHE") or None
+    """Where pinned snapshots live; shared with the preparation script."""
+    from evograd.benchmark.topdown.common.data_paths import hf_cache_dir as model_hf_cache_dir
+
+    return model_hf_cache_dir("qwen3_0_6b")
 
 
 def dataset_file(split: str, *, cache_dir: str | None = None) -> str:

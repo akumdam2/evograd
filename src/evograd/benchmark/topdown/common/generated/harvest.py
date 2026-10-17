@@ -171,8 +171,9 @@ def main(model):
     parser.add_argument("--config", type=Path, help="JSON execution overrides")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-snapshot", action="store_true")
-    parser.add_argument("--real-input", action="store_true", help="DiT pinned images; reserved for DLRM")
-    parser.add_argument("--data", type=Path, help="prepared pinned DiT input artifact")
+    parser.add_argument("--real-input", action="store_true", help="harvest from prepared real inputs")
+    parser.add_argument("--data", type=Path, help="prepared real-input artifact path")
+    parser.add_argument("--criteo-dir", type=Path, help="TorchRec-preprocessed Criteo Kaggle NumPy directory")
     args = parser.parse_args()
     config = canonical(model).to_config()
     if args.config:
@@ -187,7 +188,7 @@ def main(model):
     if args.real_input:
         from .data import ensure_pinned_data, load_data
         from types import SimpleNamespace
-        path = ensure_pinned_data(spec, args.data, batch_count=1)
+        path = ensure_pinned_data(spec, args.data, batch_count=1, source_dir=args.criteo_dir)
         batch = {k: v.to(spec.device) for k, v in load_data(SimpleNamespace(spec=spec, data_path=path))[0]["batches"][0].items()}
     manifest = collect(spec, batch)
     payload = snapshot(manifest)

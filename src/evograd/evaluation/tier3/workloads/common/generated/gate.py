@@ -13,8 +13,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=("dit_s_2", "torchrec_dlrm"))
     parser.add_argument("--config", type=Path, help="JSON execution overrides")
-    parser.add_argument("--real-input", action="store_true", help="DiT pinned images; reserved for DLRM")
-    parser.add_argument("--data", type=Path, help="prepared pinned DiT input artifact")
+    parser.add_argument("--real-input", action="store_true", help="use prepared model-specific real inputs")
+    parser.add_argument("--data", type=Path, help="prepared real-input artifact path")
+    parser.add_argument("--criteo-dir", type=Path, help="TorchRec-preprocessed Criteo Kaggle NumPy directory")
     parser.add_argument("--sites", required=True)
     parser.add_argument("--steps", type=int, default=5)
     parser.add_argument("--compile-backend", choices=("inductor", "aot_eager"), default="inductor")
@@ -30,7 +31,8 @@ def main():
     data_path = None
     if args.real_input:
         from evograd.benchmark.topdown.common.generated.data import ensure_pinned_data
-        data_path = ensure_pinned_data(spec, args.data, batch_count=2 * args.steps)
+        data_path = ensure_pinned_data(spec, args.data, batch_count=2 * args.steps,
+                                       source_dir=args.criteo_dir)
     workload = GeneratedWorkload(spec, data_path=data_path)
     row = calibrate(workload, args.sites.split(","), args.steps, args.compile_backend)
     args.out.parent.mkdir(parents=True, exist_ok=True)

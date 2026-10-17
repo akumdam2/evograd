@@ -211,7 +211,17 @@ training recipes, harvest/calibration commands and validation status.
 
 DiT-S/2 and the single-device TorchRec DLRM architecture have whole-model
 training adapters and execution-derived operator cases. DiT supports generated
-and pinned image-derived inputs. DLRM currently supports generated inputs;
-`--real-input` is reserved. See the [DiT benchmark](../src/evograd/benchmark/topdown/common/generated/README.md)
+and pinned image-derived inputs. DLRM supports generated inputs and fixed
+Criteo Kaggle batches prepared from TorchRec-format NumPy files. See the [DiT benchmark](../src/evograd/benchmark/topdown/common/generated/README.md)
 and [DLRM benchmark](../src/evograd/benchmark/topdown/torchrec_dlrm/README.md)
 for their contracts and identity-check commands.
+
+For real-input source setup, run
+`python scripts/prepare_benchmark_inputs.py --benchmark NAME` from the
+repository root. Supported names are
+`convnextv2_tiny`, `qwen2_vl_2b`, `dit_s_2`, `torchrec_dlrm`, and
+`qwen3_0_6b`. It downloads the pinned checkpoint/dataset files or the Criteo
+Kaggle archive and runs compatible NumPy preprocessing for DLRM. Files stay under
+`data/<benchmark>/`: pinned downloads in `hf_cache/`, DLRM's raw and processed
+rows in `raw/` and `processed/`, and fixed input batches in `batches/` after
+calibration. The benchmark CLI reads these default paths without extra flags.

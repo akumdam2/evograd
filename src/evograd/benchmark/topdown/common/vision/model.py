@@ -5,7 +5,6 @@ real-data training validation. Nothing reads the reference checkouts.
 """
 
 import json
-import os
 import torch
 
 
@@ -13,11 +12,12 @@ def pretrained_snapshot(spec):
     """Resolve the exact published checkpoint from the local Hugging Face cache."""
     from huggingface_hub import snapshot_download
     from .spec import REVISIONS
+    from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
 
     try:
         location = snapshot_download(
             spec.model_name, revision=REVISIONS[spec.model],
-            cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+            cache_dir=hf_cache_dir(spec.model),
             local_files_only=True,
             allow_patterns=["*.json", "*.safetensors", "merges.txt", "vocab.json"],
         )

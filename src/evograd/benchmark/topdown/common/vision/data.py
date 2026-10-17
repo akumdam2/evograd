@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import torch
 from .spec import canonical, VisionSpec, REVISIONS, DATASETS
+from evograd.benchmark.topdown.common.data_paths import hf_cache_dir, prepared_dir
 
 # The dataset's ClassLabel order, mapped to the pinned classifier's ImageNet-1K order.
 IMAGENETTE_CLASS_IDS = (0, 217, 482, 491, 497, 566, 569, 571, 574, 701)
@@ -29,7 +30,7 @@ def _local_dataset_file(spec):
     try:
         return hf_hub_download(
             repo, filename=filename, repo_type="dataset", revision=revision,
-            cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+            cache_dir=hf_cache_dir(spec.model),
             local_files_only=True,
         )
     except Exception as exc:
@@ -164,8 +165,8 @@ def prepare_pinned(spec, *, batch_count=10):
 
 
 def default_data_path(spec):
-    root = Path(os.environ.get("EVOGRAD_VISION_DATA_CACHE", Path.home() / ".cache/evograd/vision"))
-    return root / spec.model / f"{spec.workload_hash}-pinned.pt"
+    root = Path(os.environ.get("EVOGRAD_VISION_DATA_CACHE", prepared_dir(spec.model)))
+    return root / f"{spec.workload_hash}-pinned.pt"
 
 
 def ensure_pinned_data(spec, path=None, *, batch_count=10):

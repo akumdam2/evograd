@@ -74,14 +74,13 @@ def build_model(spec: WorkloadSpec):
 
 def pretrained_snapshot(spec: WorkloadSpec) -> str:
     """The local directory of the pinned checkpoint. Local-only, never fetched here."""
-    import os
-
     from huggingface_hub import snapshot_download
+    from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
 
     repo, revision = spec.pretrained_repo
     return snapshot_download(
         repo, revision=revision, local_files_only=True,
-        cache_dir=os.environ.get("EVOGRAD_HF_CACHE") or None,
+        cache_dir=hf_cache_dir("qwen3_0_6b"),
         allow_patterns=["*.json", "*.safetensors", "merges.txt", "vocab.json"],
     )
 

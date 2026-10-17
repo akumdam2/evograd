@@ -27,9 +27,7 @@ class GeneratedSpec:
             raise ValueError("positive batch and float32/bfloat16 required")
         if self.input_mode not in ("generated", "real"):
             raise ValueError("input_mode must be generated or real")
-        if self.model == "torchrec_dlrm" and self.input_mode == "real":
-            raise NotImplementedError("--real-input is reserved for TorchRec DLRM")
-        if self.input_mode == "real" and self.arch_overrides:
+        if self.model == "dit_s_2" and self.input_mode == "real" and self.arch_overrides:
             raise ValueError("real-input requires the published DiT-S/2 architecture")
         base = architecture(self.model)
         unknown = set(self.arch_overrides) - set(base)
@@ -50,6 +48,11 @@ class GeneratedSpec:
               or arch["dense_arch_layer_sizes"][-1] != arch["embedding_dim"]
               or arch["over_arch_layer_sizes"][-1] != 1):
             raise ValueError("invalid DLRM table or MLP configuration")
+        if self.model == "torchrec_dlrm" and self.input_mode == "real" and (
+            arch["num_dense_features"] != 13 or arch["num_sparse_features"] != 26
+            or any(width != 1 for width in arch["multi_hot_sizes"])
+        ):
+            raise ValueError("Criteo real-input requires 13 dense, 26 one-hot categorical features")
 
     @property
     def arch(self):
@@ -60,6 +63,9 @@ class GeneratedSpec:
         execution = self.to_config()
         if self.input_mode == "generated":
             execution.pop("input_mode")  # Preserve the existing generated workload identity.
+        elif self.model == "torchrec_dlrm":
+            from .dlrm_data import DATASET, SCHEMA, MAPPING
+            execution.update(dataset=DATASET, data_schema=SCHEMA, sparse_mapping=MAPPING)
         else:
             from .data import DATASET, VAE
             execution.update(dataset=DATASET, vae=VAE)

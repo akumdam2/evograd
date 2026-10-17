@@ -29,7 +29,8 @@ def build(model, args):
         calibration_steps = (json.loads(args.calibration.read_text())["steps"]
                              if args.calibration else 5)
         data_path = ensure_pinned_data(spec, getattr(args, "data_path", None),
-                                       batch_count=2 * calibration_steps)
+                                       batch_count=2 * calibration_steps,
+                                       source_dir=getattr(args, "criteo_dir", None))
     return GeneratedWorkload(spec, str(args.calibration) if args.calibration else None, data_path)
 
 

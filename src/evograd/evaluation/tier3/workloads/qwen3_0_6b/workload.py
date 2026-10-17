@@ -257,7 +257,7 @@ class Qwen3Workload:
 
             snapshot = pretrained_snapshot(self.spec)
             tokenizer = AutoTokenizer.from_pretrained(snapshot)
-            cache_dir = os.environ.get("EVOGRAD_HF_CACHE") or None
+            cache_dir = textdata.hf_cache_dir()
             train = textdata.pack_split("train", tokenizer, block_len=self.seq_len,
                                         cache_dir=cache_dir)
             validation = textdata.pack_split("validation", tokenizer,
