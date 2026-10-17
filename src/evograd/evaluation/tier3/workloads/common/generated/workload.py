@@ -1,4 +1,4 @@
-"""Whole-model generated-input adapter for DiT-S/2."""
+"""Whole-model adapters for DiT-S/2 and the TorchRec DLRM architecture."""
 
 from dataclasses import dataclass
 import hashlib
@@ -6,8 +6,9 @@ import torch
 
 from evograd.benchmark.topdown.common.generated.spec import GeneratedSpec, canonical
 from evograd.benchmark.topdown.common.generated.model import (
-    build_model, make_inputs, forward_loss, dit_mlp, dit_modulation,
+    build_model, make_inputs, forward_loss, dit_mlp, dit_modulation, dlrm_interaction,
 )
+from evograd.ops.level1.embedding_bag.reference import forward as embedding_bag
 from evograd.evaluation.tier3.patch import Site, SiteRegistry, PatchProvenance
 from evograd.opdecl import Workload, Provenance
 
@@ -31,8 +32,11 @@ def _cases(spec, site):
     elif site == "dit_mlp":
         dims = dict(B=spec.batch_size, T=(a["input_size"] // a["patch_size"]) ** 2,
                     H=a["hidden_size"], I=a["hidden_size"] * a["mlp_ratio"])
+    elif site == "dlrm_interaction":
+        s, d = a["num_sparse_features"], a["embedding_dim"]
+        dims = dict(B=spec.batch_size, S=s, D=d, O=d + s * (s + 1) // 2)
     else:
-        raise ValueError(site)
+        raise ValueError("embedding_bag uses multiple table configurations")
     name = spec.model + "_" + site
     if has_snapshot(spec.model):
         snap = load_snapshot(spec.model)
@@ -50,6 +54,32 @@ def _cases(spec, site):
                                            note="Configuration-derived preflight, not a measured suite")),)
 
 
+def _bag_cases(spec):
+    from evograd.benchmark.topdown import has_snapshot, load_snapshot
+    a = spec.arch
+    dimensions = {
+        (count, width): dict(N=count, D=a["embedding_dim"], B=spec.batch_size,
+                             M=width, L=spec.batch_size * width)
+        for count, width in zip(a["num_embeddings_per_feature"], a["multi_hot_sizes"])
+    }
+    if has_snapshot(spec.model):
+        snap = load_snapshot(spec.model)
+        if snap["workload_id"] == spec.workload_id:
+            cases = tuple(Workload(dims=c["dims"], dtype=c["dtype"],
+                                   provenance=Provenance(model=spec.model, component="embedding_bag",
+                                                         source="execution", note=c["config_id"]))
+                          for c in snap["level1"]["embedding_bag"]["configurations"]
+                          if c["dims"] in dimensions.values())
+            if len(cases) == len(dimensions):
+                return cases
+            raise ValueError("embedding_bag: matching snapshot lacks a table configuration")
+    return tuple(Workload(dims=dims, dtype=spec.dtype,
+                          provenance=Provenance(model=spec.model, component="embedding_bag",
+                                                source="specification",
+                                                note="Configuration-derived preflight, not a measured suite"))
+                 for dims in dimensions.values())
+
+
 @dataclass
 class GeneratedWorkload:
     spec: GeneratedSpec
@@ -60,11 +90,17 @@ class GeneratedWorkload:
         if self.spec.input_mode == "real" and not self.data_path:
             raise ValueError("real DiT workload requires prepared pinned inputs")
         self.name = self.spec.workload_id
-        self.unit_name = "latents"
-        sites = (Site("dit_modulation", "dit_s_2_dit_modulation", dit_modulation,
-                      _cases(self.spec, "dit_modulation")),
-                 Site("dit_mlp", "dit_s_2_dit_mlp", dit_mlp,
-                      _cases(self.spec, "dit_mlp")))
+        self.unit_name = "latents" if self.spec.model == "dit_s_2" else "examples"
+        if self.spec.model == "dit_s_2":
+            sites = (Site("dit_modulation", "dit_s_2_dit_modulation", dit_modulation,
+                          _cases(self.spec, "dit_modulation")),
+                     Site("dit_mlp", "dit_s_2_dit_mlp", dit_mlp,
+                          _cases(self.spec, "dit_mlp")))
+        else:
+            sites = (Site("embedding_bag", "embedding_bag", embedding_bag,
+                          _bag_cases(self.spec)),
+                     Site("dlrm_interaction", "torchrec_dlrm_dlrm_interaction",
+                          dlrm_interaction, _cases(self.spec, "dlrm_interaction")))
         self.site_registry = SiteRegistry(self.spec.model, sites)
 
     def to_config(self):
@@ -97,6 +133,16 @@ class GeneratedWorkload:
                 for i, block in enumerate(model.blocks):
                     block.mod_fn = fn
                     paths.setdefault(site, []).append(f"blocks.{i}")
+            elif site == "dlrm_interaction":
+                model.interaction_fn = fn
+                paths[site] = ["interaction"]
+            elif site == "embedding_bag":
+                import types
+                for i, table in enumerate(model.tables):
+                    def call(self, indices, offsets=None, _fn=fn):
+                        return _fn(self.weight, indices, offsets)
+                    table.forward = types.MethodType(call, table)
+                    paths.setdefault(site, []).append(f"tables.{i}")
             else:
                 raise ValueError(site)
         return model, PatchProvenance("module_surgery", tuple(kernels.patched),
@@ -124,7 +170,7 @@ class GeneratedWorkload:
 
     @property
     def input_gradient_key(self):
-        return "latent"
+        return "latent" if self.spec.model == "dit_s_2" else "dense"
 
     def loss(self, model, batch):
         return self.forward(model, batch)[0]
@@ -144,7 +190,8 @@ class GeneratedWorkload:
             real_source = {"dataset_repo": DATASET[0], "dataset_revision": DATASET[1],
                            "dataset_file": DATASET[2], "vae_repo": VAE[0],
                            "vae_revision": VAE[1]}
-        return {"name": self.name, "model": "DiT-S/2",
+        return {"name": self.name,
+                "model": "DiT-S/2" if self.spec.model == "dit_s_2" else "TorchRec DLRM example",
                 "workload_hash": self.spec.workload_hash, "config": self.to_config(),
                 "canonical": self.spec.is_canonical, "execution_scope": "model",
                 "benchmark_level": 3, "unit_name": self.unit_name,
@@ -155,7 +202,10 @@ class GeneratedWorkload:
                 "input_checksum": self.input_checksum(), "architecture": self.spec.arch,
                 "model_gate": {"calibration": self.calibration,
                                "requires_real_data": self.spec.input_mode == "real"},
-                "execution_note": "DiT epsilon MSE plus learned-range variance loss"}
+                "execution_note": (
+                    "DiT epsilon MSE plus learned-range variance loss"
+                    if self.spec.model == "dit_s_2" else
+                    "single-device architecture and AdamW; TorchRec distributed sharding and fused sparse optimizer are outside this workload")}
 
     def runtime_report(self, model):
         return {"training": model.training,

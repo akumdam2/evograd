@@ -172,10 +172,56 @@ def diffusion_loss(model, batch):
     return (mse + vb).mean(), pred
 
 
+def dlrm_dense(x, weights, biases):
+    for weight, bias in zip(weights, biases):
+        x = F.relu(F.linear(x, weight, bias))
+    return x
+
+
+def dlrm_interaction(dense, sparse):
+    """Dense vector plus strict lower triangular pairwise dot products."""
+    features = torch.cat((dense[:, None], sparse), dim=1)
+    dots = torch.bmm(features, features.transpose(1, 2))
+    row, col = torch.tril_indices(features.shape[1], features.shape[1], offset=-1,
+                                  device=features.device)
+    return torch.cat((dense, dots[:, row, col]), dim=1)
+
+
+class DLRMModel(nn.Module):
+    def __init__(self, arch):
+        super().__init__()
+        self.arch = arch
+        self.tables = nn.ModuleList(nn.EmbeddingBag(count, arch["embedding_dim"], mode="sum")
+                                    for count in arch["num_embeddings_per_feature"])
+        dense_sizes = [arch["num_dense_features"], *arch["dense_arch_layer_sizes"]]
+        self.dense_layers = nn.ModuleList(nn.Linear(i, o) for i, o in zip(dense_sizes, dense_sizes[1:]))
+        features = arch["num_sparse_features"] + 1
+        over_sizes = [arch["embedding_dim"] + features * (features - 1) // 2,
+                      *arch["over_arch_layer_sizes"]]
+        self.over_layers = nn.ModuleList(nn.Linear(i, o) for i, o in zip(over_sizes, over_sizes[1:]))
+        self.interaction_fn = dlrm_interaction
+
+    def forward(self, dense, sparse_ids):
+        weights = [layer.weight for layer in self.dense_layers]
+        biases = [layer.bias for layer in self.dense_layers]
+        dense = dlrm_dense(dense, weights, biases)
+        b = dense.shape[0]
+        bags = []
+        for i, table in enumerate(self.tables):
+            width = self.arch["multi_hot_sizes"][i]
+            values = sparse_ids[i, :, :width].reshape(-1)
+            offsets = torch.arange(0, b * width, width, device=values.device)
+            bags.append(table(values, offsets))
+        x = self.interaction_fn(dense, torch.stack(bags, dim=1))
+        for layer in self.over_layers[:-1]:
+            x = F.relu(layer(x))
+        return self.over_layers[-1](x).squeeze(-1)
+
+
 def build_model(spec):
     with torch.random.fork_rng():
         torch.manual_seed(spec.seed)
-        model = DiTModel(spec.arch)
+        model = DiTModel(spec.arch) if spec.model == "dit_s_2" else DLRMModel(spec.arch)
     return model.to(device=spec.device, dtype=getattr(torch, spec.dtype)).train()
 
 
@@ -183,16 +229,28 @@ def make_inputs(spec, seed):
     arch = spec.arch
     g = torch.Generator(device="cpu").manual_seed(spec.data_seed + seed)
     b = spec.batch_size
-    shape = (b, arch["in_channels"], arch["input_size"], arch["input_size"])
-    batch = dict(latent=torch.randn(shape, generator=g), noise=torch.randn(shape, generator=g),
-                 timesteps=torch.randint(arch["diffusion_steps"], (b,), generator=g),
-                 labels=torch.randint(arch["num_classes"], (b,), generator=g),
-                 drop_mask=(torch.rand((b,), generator=g) < arch["class_dropout_prob"]).long())
+    if spec.model == "dit_s_2":
+        shape = (b, arch["in_channels"], arch["input_size"], arch["input_size"])
+        batch = dict(latent=torch.randn(shape, generator=g), noise=torch.randn(shape, generator=g),
+                     timesteps=torch.randint(arch["diffusion_steps"], (b,), generator=g),
+                     labels=torch.randint(arch["num_classes"], (b,), generator=g),
+                     drop_mask=(torch.rand((b,), generator=g) < arch["class_dropout_prob"]).long())
+    else:
+        max_hot = max(arch["multi_hot_sizes"])
+        ids = torch.zeros(arch["num_sparse_features"], b, max_hot, dtype=torch.long)
+        for i, count in enumerate(arch["num_embeddings_per_feature"]):
+            ids[i, :, :arch["multi_hot_sizes"][i]] = torch.randint(
+                count, (b, arch["multi_hot_sizes"][i]), generator=g)
+        batch = dict(dense=torch.randn((b, arch["num_dense_features"]), generator=g),
+                     sparse_ids=ids, labels=torch.randint(2, (b,), generator=g).float())
     return {k: v.to(device=spec.device, dtype=getattr(torch, spec.dtype) if v.is_floating_point() else None)
             for k, v in batch.items()}
 
 
 def forward_loss(model, batch, model_name):
-    if model_name != "dit_s_2":
-        raise ValueError(model_name)
-    return diffusion_loss(model, batch)
+    if model_name == "dit_s_2":
+        return diffusion_loss(model, batch)
+    if model_name == "torchrec_dlrm":
+        logits = model(batch["dense"], batch["sparse_ids"])
+        return F.binary_cross_entropy_with_logits(logits, batch["labels"]), logits
+    raise ValueError(model_name)

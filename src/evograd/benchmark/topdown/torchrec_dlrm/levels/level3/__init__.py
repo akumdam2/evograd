@@ -1,0 +1,1 @@
+"""DLRM full-model contract."""

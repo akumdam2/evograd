@@ -1,0 +1,4 @@
+{
+  "model": "torchrec_dlrm", "batch_size": 32, "dtype": "float32", "device": "cuda",
+  "seed": 0, "data_seed": 0, "arch_overrides": {}
+}

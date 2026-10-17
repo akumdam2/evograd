@@ -206,3 +206,12 @@ ConvNeXt V2 Tiny and Qwen2-VL-2B now have whole-model training adapters,
 observed L1 bindings and selected L2 replacement sites. See
 [VISION_WORKLOADS.md](../VISION_WORKLOADS.md) for fixed configurations, source
 training recipes, harvest/calibration commands and validation status.
+
+## Diffusion and recommendation workloads
+
+DiT-S/2 and the single-device TorchRec DLRM architecture have whole-model
+training adapters and execution-derived operator cases. DiT supports generated
+and pinned image-derived inputs. DLRM currently supports generated inputs;
+`--real-input` is reserved. See the [DiT benchmark](../src/evograd/benchmark/topdown/common/generated/README.md)
+and [DLRM benchmark](../src/evograd/benchmark/topdown/torchrec_dlrm/README.md)
+for their contracts and identity-check commands.

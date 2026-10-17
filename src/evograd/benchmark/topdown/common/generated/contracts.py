@@ -9,9 +9,11 @@ SHAPES = {
     "dit_modulation": (("c", "[B, H]"), ("weight", "[J, H]"), ("bias", "[J]")),
     "dit_mlp": (("x", "[B, T, H]"), ("w1", "[I, H]"), ("b1", "[I]"),
                 ("w2", "[H, I]"), ("b2", "[H]")),
+    "dlrm_interaction": (("dense", "[B, D]"), ("sparse", "[B, S, D]")),
 }
 DIMS = {"dit_modulation": dict(B=2, H=12, J=72),
-        "dit_mlp": dict(B=2, T=7, H=12, I=48)}
+        "dit_mlp": dict(B=2, T=7, H=12, I=48),
+        "dlrm_interaction": dict(B=3, S=4, D=8, O=18)}
 
 
 def _inputs(torch_module, op, workload, device="cuda"):
@@ -43,15 +45,18 @@ def declaration(model, site):
                                                    source="handpicked", scaled=True,
                                                    note="Reduced correctness fixture, not a timing case"))
                     for dtype in ("float32", "bfloat16"))
-    output = {"dit_modulation": "[B, J]", "dit_mlp": "[B, T, H]"}[site]
+    output = {"dit_modulation": "[B, J]", "dit_mlp": "[B, T, H]",
+              "dlrm_interaction": "[B, O]"}[site]
     return declare_op(name=name, level=2, family={"dit_modulation": "normalization",
-                                                  "dit_mlp": "mlp"}[site],
+                                                  "dit_mlp": "mlp",
+                                                  "dlrm_interaction": "interaction"}[site],
                       forward=PREFIX + site, dims=tuple(DIMS[site]),
                       args=tuple(Active(n, s) for n, s in SHAPES[site]),
                       output=Active("out", output),
-                      parameter_args=tuple(n for n, _ in SHAPES[site][1:]),
+                      parameter_args=tuple(n for n, _ in SHAPES[site][1:]) if site.startswith("dit_") else (),
                       forward_semantics={"dit_modulation": "SiLU conditioning projection to six adaLN-Zero shift, scale, and gate vectors",
-                                         "dit_mlp": "Biased linear, tanh-approximate GELU, biased linear"}[site],
+                                         "dit_mlp": "Biased linear, tanh-approximate GELU, biased linear",
+                                         "dlrm_interaction": "Dense vector and strict triangular pairwise dot products"}[site],
                       backward_semantics="Autograd gradients for every active input and parameter",
                       correctness=example, coverage=observed, benchmark=observed,
                       benchmark_suites={model + "_observed": observed},

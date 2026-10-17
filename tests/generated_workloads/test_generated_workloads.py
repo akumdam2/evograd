@@ -36,10 +36,50 @@ def test_generated_harvest_and_model_gate(tmp_path):
 
 
 def test_canonical_architecture_size():
-    from evograd.benchmark.topdown.common.generated.model import DiTModel
+    from evograd.benchmark.topdown.common.generated.model import DiTModel, DLRMModel
 
     dit = DiTModel(canonical("dit_s_2").arch)
     assert 32_000_000 < sum(p.numel() for p in dit.parameters()) < 34_000_000
+    dlrm = DLRMModel(canonical("torchrec_dlrm").arch)
+    assert sum(p.numel() for p in dlrm.parameters()) > 160_000_000
+
+
+def test_dlrm_generated_harvest_and_identity_gate(tmp_path):
+    from evograd.ops.level1.embedding_bag.reference import forward as embedding_bag
+    import pytest
+    import torch
+
+    small = dict(num_sparse_features=3, embedding_dim=8,
+                 num_embeddings_per_feature=[40] * 3,
+                 dense_arch_layer_sizes=[16, 8],
+                 over_arch_layer_sizes=[16, 8, 1],
+                 multi_hot_sizes=[1, 2, 1])
+    spec = GeneratedSpec(model="torchrec_dlrm", batch_size=2, device="cpu",
+                         arch_overrides=small)
+    manifest = collect(spec)
+    snap = snapshot(manifest)
+    assert manifest["backward_verified"]
+    assert snap["tasks"]["torchrec_dlrm_dlrm_interaction"]["frequency"] == 1
+    assert snap["level1"]["embedding_bag"]["frequency"] == 3
+    assert not TASKS["torchrec_dlrm_dlrm_interaction"].benchmark
+
+    path = tmp_path / "dlrm_calibration.json"
+    workload = GeneratedWorkload(spec, str(path))
+    sites = ["embedding_bag", "dlrm_interaction"]
+    path.write_text(json.dumps(calibrate(workload, sites, steps=2, backend="aot_eager")))
+    result = evaluate(workload, structural_identity_kernels(workload.site_registry))
+    assert result["ok"], result
+    assert result["evaluation_complete"]
+    assert result["trajectory"] == {"rms": 0.0, "max_abs": 0.0}
+
+    with pytest.raises(NotImplementedError, match="reserved"):
+        spec.replace(input_mode="real")
+
+    weight = torch.arange(15, dtype=torch.float32).reshape(5, 3).requires_grad_()
+    output = embedding_bag(weight, torch.tensor([2, 2, 4, 1, 2, 1]),
+                           torch.tensor([0, 3]))
+    output.sum().backward()
+    assert torch.equal(weight.grad[:, 0], torch.tensor([0., 2., 3., 0., 1.]))
 
 
 def test_real_input_artifact_contract(tmp_path):

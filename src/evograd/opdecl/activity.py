@@ -667,7 +667,13 @@ class OpDecl:
                     f"{self.name}: parameter_args repeats a name: "
                     f"{list(self.parameter_args)}"
                 )
-            if active_names and set(self.parameter_args) == active_names:
+            # Indexed operators can have only a differentiable weight while
+            # integer tensor inputs (for example EmbeddingBag indices) supply
+            # the module's non-parameter activation arguments.
+            has_inactive_tensor_input = any(
+                isinstance(arg, Inactive) and arg.is_tensor for arg in self.args
+            )
+            if active_names and set(self.parameter_args) == active_names and not has_inactive_tensor_input:
                 raise ValueError(
                     f"{self.name}: parameter_args names every Active arg, leaving no "
                     "activation for an nn.Module to take as input"

@@ -11,9 +11,9 @@ from evograd.evaluation.tier3.workloads.common.vision.gate import calibrate
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", required=True, choices=("dit_s_2",))
+    parser.add_argument("--model", required=True, choices=("dit_s_2", "torchrec_dlrm"))
     parser.add_argument("--config", type=Path, help="JSON execution overrides")
-    parser.add_argument("--real-input", action="store_true", help="use pinned Imagenette images encoded by a pinned VAE")
+    parser.add_argument("--real-input", action="store_true", help="DiT pinned images; reserved for DLRM")
     parser.add_argument("--data", type=Path, help="prepared pinned DiT input artifact")
     parser.add_argument("--sites", required=True)
     parser.add_argument("--steps", type=int, default=5)

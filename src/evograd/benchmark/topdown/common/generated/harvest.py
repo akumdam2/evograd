@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from evograd.benchmark.topdown.common.snapshot import snapshot_hash
 from evograd.benchmark.topdown import snapshot_path
 from .spec import GeneratedSpec, canonical, digest
-from .model import build_model, make_inputs, forward_loss, dit_mlp, dit_modulation
+from .model import build_model, make_inputs, forward_loss, dit_mlp, dit_modulation, dlrm_interaction
 
 
 def _meta(t):
@@ -33,7 +33,8 @@ def collect(spec, batch=None):
                         "source_inputs": [_meta(v) for v in values],
                         "input_adapter": "identity",
                         "strides": {n: list(v.stride()) for n, v in zip(names, values)},
-                        "provenance": {"component": task, "source": "execution", "note": note}})
+                        "provenance": {"component": task, "free": {},
+                                       "source": "execution", "note": note}})
 
     for path, module in model.named_modules():
         if isinstance(module, torch.nn.Conv2d):
@@ -51,20 +52,41 @@ def collect(spec, batch=None):
                 record(1, "spatial_conv2d", path, dims, ("x", "weight", "bias"),
                        (x, m.weight, m.bias))
             handles.append(module.register_forward_pre_hook(conv_hook))
-    for i, block in enumerate(model.blocks):
-        def mod_hook(c, weight, bias, i=i):
-            b, h = c.shape
-            record(2, "dit_s_2_dit_modulation", f"blocks.{i}.modulation",
-                   dict(B=b, H=h, J=weight.shape[0]),
-                   ("c", "weight", "bias"), (c, weight, bias))
-            return dit_modulation(c, weight, bias)
-        block.mod_fn = mod_hook
-        def mlp_hook(x, w1, b1, w2, b2, i=i):
-            b, t, h = x.shape
-            record(2, "dit_s_2_dit_mlp", f"blocks.{i}.mlp", dict(B=b, T=t, H=h, I=w1.shape[0]),
-                   ("x", "w1", "b1", "w2", "b2"), (x, w1, b1, w2, b2))
-            return dit_mlp(x, w1, b1, w2, b2)
-        block.mlp_fn = mlp_hook
+        elif isinstance(module, torch.nn.EmbeddingBag):
+            def bag_hook(m, args, path=path):
+                indices, offsets = args[:2]
+                b = offsets.numel()
+                width = indices.numel() // b
+                if width * b != indices.numel():
+                    raise ValueError("nonuniform bag lengths outside current contract")
+                record(1, "embedding_bag", path,
+                       dict(N=m.num_embeddings, D=m.embedding_dim, B=b, M=width,
+                            L=indices.numel()),
+                       ("weight", "indices", "offsets"), (m.weight, indices, offsets))
+            handles.append(module.register_forward_pre_hook(bag_hook))
+    if spec.model == "dit_s_2":
+        for i, block in enumerate(model.blocks):
+            def mod_hook(c, weight, bias, i=i):
+                b, h = c.shape
+                record(2, "dit_s_2_dit_modulation", f"blocks.{i}.modulation",
+                       dict(B=b, H=h, J=weight.shape[0]),
+                       ("c", "weight", "bias"), (c, weight, bias))
+                return dit_modulation(c, weight, bias)
+            block.mod_fn = mod_hook
+            def mlp_hook(x, w1, b1, w2, b2, i=i):
+                b, t, h = x.shape
+                record(2, "dit_s_2_dit_mlp", f"blocks.{i}.mlp", dict(B=b, T=t, H=h, I=w1.shape[0]),
+                       ("x", "w1", "b1", "w2", "b2"), (x, w1, b1, w2, b2))
+                return dit_mlp(x, w1, b1, w2, b2)
+            block.mlp_fn = mlp_hook
+    else:
+        def interaction_hook(dense, sparse):
+            b, s, d = sparse.shape
+            record(2, "torchrec_dlrm_dlrm_interaction", "interaction", dict(
+                B=b, S=s, D=d, O=d + s * (s + 1) // 2),
+                ("dense", "sparse"), (dense, sparse))
+            return dlrm_interaction(dense, sparse)
+        model.interaction_fn = interaction_hook
 
     original_linear = F.linear
     def observed_linear(x, weight, bias=None):
@@ -99,7 +121,7 @@ def collect(spec, batch=None):
                      if p.grad is not None and not torch.isfinite(p.grad).all()]
         if missing or nonfinite:
             raise ValueError(f"invalid training gradients: missing={missing}, nonfinite={nonfinite}")
-        expected = 2 * spec.arch["depth"]
+        expected = 2 * spec.arch["depth"] if spec.model == "dit_s_2" else 1
         if sum(row["level"] == 2 for row in records) != expected:
             raise ValueError("Level-2 invocation count differs from architecture")
         return {"schema_version": "evograd-generated-harvest/1",
@@ -108,8 +130,10 @@ def collect(spec, batch=None):
                 "execution_scope": "model", "loss": float(loss.detach()),
                 "parameter_count": sum(p.numel() for p in model.parameters()),
                 "torch": torch.__version__, "records": records, "backward_verified": True,
-                "not_bound": ["attention", "affine-free layer norm", "SiLU",
-                              "tanh-approximate GELU", "diffusion loss", "residual modulation"]}
+                "not_bound": (["attention", "affine-free layer norm", "SiLU",
+                               "tanh-approximate GELU", "diffusion loss", "residual modulation"]
+                              if spec.model == "dit_s_2" else
+                              ["ReLU", "binary cross entropy", "distributed sharding and fused sparse optimizer"])}
     finally:
         F.linear = original_linear
         for handle in handles:
@@ -134,7 +158,8 @@ def snapshot(manifest):
         payload[name] = {task: {"configurations": list(configs.values()),
                                 "frequency": sum(c["frequency"] for c in configs.values())}
                          for task, configs in groups[level].items()}
-    expected = {"linear", "spatial_conv2d"}
+    expected = ({"linear", "spatial_conv2d"} if manifest["config"]["model"] == "dit_s_2"
+                else {"linear", "embedding_bag"})
     if set(payload["level1"]) != expected:
         raise ValueError(f"primitive observation mismatch: {set(payload['level1'])} != {expected}")
     payload["snapshot_hash"] = snapshot_hash(payload)
@@ -146,7 +171,7 @@ def main(model):
     parser.add_argument("--config", type=Path, help="JSON execution overrides")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-snapshot", action="store_true")
-    parser.add_argument("--real-input", action="store_true", help="harvest from pinned VAE-encoded image inputs")
+    parser.add_argument("--real-input", action="store_true", help="DiT pinned images; reserved for DLRM")
     parser.add_argument("--data", type=Path, help="prepared pinned DiT input artifact")
     args = parser.parse_args()
     config = canonical(model).to_config()

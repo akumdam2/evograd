@@ -101,6 +101,7 @@ class TestDerivedNaming(unittest.TestCase):
                     "conv2d",
                     "cross_entropy",
                     "dyt",
+                    "embedding_bag",
                     "evoattention",
                     # The GDN output norm and gates.
                     "gated_rmsnorm",
@@ -175,6 +176,7 @@ class TestDerivedNaming(unittest.TestCase):
                     "qwen3_attention",
                     "qwen3_qkv_norm_rope",
                     "qwen3_swiglu_mlp",
+                    "torchrec_dlrm_dlrm_interaction",
                 ],
             },
         )
