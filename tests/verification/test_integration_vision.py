@@ -81,7 +81,7 @@ def tiny_cases(spec):
                                                                  component=c["provenance"]["component"],
                                                                  free=c["provenance"]["free"],
                                                                  strides=strides)),
-                                  c["frequency"]))
+                                  c["frequency"], tuple(c["module_paths"])))
     return tuple(cases)
 
 

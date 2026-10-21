@@ -223,6 +223,10 @@ class CaseTableTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "2 observed cases"):
             case_for(cases, "rope", args)
         self.assertEqual(case_for(cases, "rope", args, component="rope_kv").case_id, "rope/rope_kv")
+        # The module path the harvest recorded decides first.
+        tied = [Case("rope/a", "rope", 1, Workload(dims=dims, dtype="float32"), 1, ("m.x",)),
+                Case("rope/b", "rope", 1, Workload(dims=dims, dtype="float32"), 1, ("m.y", "m.z"))]
+        self.assertEqual(case_for(tied, "rope", args, path="m.z#2").case_id, "rope/b")
         # A role no tied case carries does not eliminate them all.
         with self.assertRaisesRegex(KeyError, "2 observed cases"):
             case_for(cases, "rope", args, component="rope_merged_elsewhere")

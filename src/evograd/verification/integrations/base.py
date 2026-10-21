@@ -127,6 +127,9 @@ class Case:
     level: int
     workload: Any
     frequency: int
+    #: The module paths the harvest observed this configuration at (when it
+    #: records them): what tells apart configurations with identical task inputs.
+    paths: tuple[str, ...] = ()
 
 
 def observed_cases(model: Model) -> tuple[Case, ...]:
@@ -142,7 +145,8 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
         if len(workloads) != len(configs) or any(dict(w.dims) != c["dims"]
                                                  for w, c in zip(workloads, configs)):
             raise ValueError(f"{task}: suite {model.suite} does not follow the snapshot")
-        cases += [Case(f"{task}/{w.provenance.component}", task, 1, w, int(c["frequency"]))
+        cases += [Case(f"{task}/{w.provenance.component}", task, 1, w, int(c["frequency"]),
+                       tuple(c.get("module_paths") or ()))
                   for w, c in zip(workloads, configs)]
     for task, entry in snapshot["tasks"].items():
         if "configurations" in entry:
@@ -153,7 +157,8 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
             if len(workloads) != len(configs) or any(dict(w.dims) != c["dims"]
                                                      for w, c in zip(workloads, configs)):
                 raise ValueError(f"{task}: suite {model.suite} does not follow the snapshot")
-            cases += [Case(f"{task}/{w.provenance.component}", task, 2, w, int(c["frequency"]))
+            cases += [Case(f"{task}/{w.provenance.component}", task, 2, w, int(c["frequency"]),
+                           tuple(c.get("module_paths") or ()))
                       for w, c in zip(workloads, configs)]
             continue
         (workload,) = get_task(task).benchmark_suites[model.suite]
@@ -177,11 +182,12 @@ def case_component(case: Case) -> str:
 
 
 def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
-             component: str | None = None) -> Case:
+             component: str | None = None, path: str | None = None) -> Case:
     """The one case of ``task`` whose declared shapes and dtypes ``args`` bind.
 
-    When several cases bind the same shapes, ``component`` (the recorded
-    call's role, e.g. OLMoE's q and k rope), then the argument layouts
+    When several cases bind the same shapes, the module ``path`` the harvest
+    observed (ConvNeXt's norms, whose task inputs coincide), ``component`` (the
+    recorded call's role, e.g. OLMoE's q and k rope), then the argument layouts
     (recorded strides, else contiguous), then the static parameters the
     configuration records (``Provenance.free``) decide.
     """
@@ -220,6 +226,10 @@ def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
         return True
 
     hits = [c for c in cases if c.task == task and binds(c)]
+    if len(hits) > 1 and path:
+        # The harvest observed each configuration at known modules.
+        module = path.split("#", 1)[0]
+        hits = [c for c in hits if module in c.paths] or hits
     if len(hits) > 1 and component is not None:
         # The role picks among cases that only the harvest tells apart (how the
         # model's tensor became the task's view); a role no tied case carries
@@ -254,7 +264,7 @@ def invocation(cases: Sequence[Case], task: str, level: int, call: dict, args: d
     ``call["component"]``, when a recorder sets it, resolves cases whose shapes
     coincide (and stays in the payload's call record).
     """
-    case = case_for(cases, task, args, component=call.get("component"))
+    case = case_for(cases, task, args, component=call.get("component"), path=call.get("path"))
     return {"case_id": case.case_id, "task": task, "level": level,
             "call": call, "args": args, "cotangents": cotangents,
             "live_outputs": live_outputs, "notes": notes or {}}
