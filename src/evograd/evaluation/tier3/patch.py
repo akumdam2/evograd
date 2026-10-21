@@ -153,7 +153,7 @@ class KernelSource:
     site: str
     op_name: str | None = None
     module: Any = None
-    #: "candidate", "baseline:liger", "identity_control", "callable".
+    #: "candidate", "baseline:fla", "identity_control", "callable".
     origin: str = "callable"
 
     @property

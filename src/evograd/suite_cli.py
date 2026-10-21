@@ -1,7 +1,7 @@
 """Run the benchmark suite across operators and emit the cross-operator report.
 
     evograd suite --candidates candidates/ --out results/
-    evograd suite --level 1 --level 2 --baseline liger --out results/
+    evograd suite --level 1 --level 2 --baseline torch_compile --out results/
 
 Each operator needs a candidate program implementing its autograd pair. They are
 found by name inside ``--candidates``: ``<dir>/<op>.py``, or
@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument(
         "--candidate-baseline",
         help=(
-            "run a reviewed pair baseline (liger, cublas_pair, ...) as the "
+            "run a reviewed pair baseline (cublas_pair, fla, ...) as the "
             "candidate on every operator that declares it. Produces the suite's "
             "reference line without needing a generated program per operator. "
             "Operators without that baseline are reported as uncovered."
@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         action="append",
         dest="levels",
-        choices=(1, 2, 3, 4),
+        choices=(1, 2, 3),
         help="restrict to these benchmark levels (repeatable; default: all)",
     )
     parser.add_argument(
@@ -111,10 +111,9 @@ def main(argv: list[str] | None = None) -> int:
         dest="ops",
         help="restrict to these operators (repeatable)",
     )
-    # Deliberately not defaulted to "auto" here: with --candidate-baseline liger,
-    # "auto" would also resolve to liger and every operator would report a
-    # perfect 1.000x against itself, which reads as a finished run rather than a
-    # mistake. Resolved below once the candidate source is known.
+    # Resolved below once the candidate source is known: a baseline timed
+    # against itself reports a perfect 1.000x, which reads as a finished run
+    # rather than a mistake.
     parser.add_argument("--baseline", default=None)
     parser.add_argument(
         "--protocol",

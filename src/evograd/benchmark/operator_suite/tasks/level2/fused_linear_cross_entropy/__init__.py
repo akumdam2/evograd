@@ -21,7 +21,6 @@ from evograd.opdecl.models import (
 from evograd.ops._common import (
     fixed_shape_suites,
     log_distance_weight,
-    make_pair_baseline,
     model_workloads,
     regime_suites,
 )
@@ -56,14 +55,6 @@ def make_flce_inputs(torch, op, workload, device="cuda"):
     # `loss.backward(dloss)` a dtype mismatch at Level 2.
     dloss = torch.ones((), device=device, dtype=torch.float32)
     return {"x": x, "weight": weight, "target": target, "dloss": dloss}
-
-
-def _liger_factory():
-    from evograd.benchmark.operator_suite.tasks.level2.fused_linear_cross_entropy.liger import (
-        make_liger_flce_autograd_pair_fns,
-    )
-
-    return make_liger_flce_autograd_pair_fns()
 
 
 _TOLERANCES = {
@@ -144,9 +135,6 @@ op = declare_op(
     benchmark_suites={
         **regime_suites(_BENCHMARK, _regime_feature, LLAMA_VOCAB_REGIME_SPLIT),
         **fixed_shape_suites(_BENCHMARK),
-    },
-    performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("x", "weight", "target"))
     },
     tolerances=_TOLERANCES,
     # int64 labels are not model state and must not count against the memory

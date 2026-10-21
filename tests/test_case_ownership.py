@@ -311,7 +311,7 @@ class TestSuiteCommandOwnership(unittest.TestCase):
             with contextlib.redirect_stderr(stderr):
                 with self.assertRaises(SystemExit) as raised:
                     suite_cli.main(
-                        ["--candidate-baseline", "liger", "--out", "/tmp",
+                        ["--candidate-baseline", "cublas_pair", "--out", "/tmp",
                          "--op", "not_an_operator"]
                     )
         self.assertEqual(raised.exception.code, 2)

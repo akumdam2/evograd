@@ -384,7 +384,7 @@ class TestEvolveConfigRendering(unittest.TestCase):
                 mock.patch("openevolve.run_evolution", side_effect=fake_run_evolution),
                 mock.patch(
                     "evograd.opdecl.baselines.resolve_performance_baseline",
-                    return_value="liger",
+                    return_value="cublas_pair",
                 ),
             ):
                 code = run_evolve(
@@ -393,12 +393,12 @@ class TestEvolveConfigRendering(unittest.TestCase):
                     output_dir=root / "out",
                     benchmark_suite="tb_i12",
                     benchmark_dtypes=("bfloat16",),
-                    performance_baseline="liger",
+                    performance_baseline="cublas_pair",
                 )
             self.assertEqual(code, 1)
             self.assertEqual(observed_env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
             self.assertEqual(observed_env["EVOGRAD_BENCHMARK_DTYPES"], "bfloat16")
-            self.assertEqual(observed_env["EVOGRAD_PERFORMANCE_BASELINE"], "liger")
+            self.assertEqual(observed_env["EVOGRAD_PERFORMANCE_BASELINE"], "cublas_pair")
 
 
 if __name__ == "__main__":

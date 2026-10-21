@@ -2,7 +2,7 @@
 
 A tier-3 run compares a candidate against things already known to be correct.
 This is where those are built: ``torch.compile`` of a site's own production
-spelling, a declaration's reviewed Liger pair, or an evolved program loaded from
+spelling, a declaration's reviewed library pair, or an evolved program loaded from
 a path -- each patched in by the route it would really take.
 
 None of it is about an architecture. A site name, a ``SiteRegistry`` and the
@@ -24,9 +24,9 @@ from __future__ import annotations
 from typing import Any
 
 #: The replacement routes ``--patch-set`` understands, besides a file path.
-#: Named specs besides a program path. Any other declared pair baseline of the
-#: site's operator (e.g. ``fla``) is accepted by name too.
-PATCH_SPEC_KINDS = ("compile", "liger")
+#: Any declared pair baseline of the site's operator (e.g. ``fla``) is accepted
+#: by name too.
+PATCH_SPEC_KINDS = ("compile",)
 
 #: Compiled variants one site may hold. MegaFold's ``transition`` site alone is
 #: called at more than eight (shape, dtype) signatures per training step.
@@ -81,12 +81,12 @@ def compiled_kernels(sites, registry):
 
 
 def parse_patch_specs(entries) -> dict[str, str]:
-    """``["attention=compile", "swiglu_mlp=liger"]`` -> ``{site: spec}``."""
+    """``["attention=compile", "swiglu_mlp=fla"]`` -> ``{site: spec}``."""
     patches: dict[str, str] = {}
     for entry in entries or ():
         site, _, spec = str(entry).partition("=")
         if not site or not spec:
-            raise ValueError(f"--patch wants SITE=compile|liger|PATH, got {entry!r}")
+            raise ValueError(f"--patch wants SITE=compile|BASELINE|PATH, got {entry!r}")
         if site in patches:
             raise ValueError(f"site {site!r} patched twice")
         patches[site] = spec
@@ -106,8 +106,8 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *,
     """One kernel set holding several sites' replacements, each by its real route.
 
     ``compile`` -> ``torch.compile`` of the site's declared runtime_forward
-    (origin ``trusted_torch_compile``); ``liger`` (or any other pair baseline
-    the site's operator declares, e.g. ``fla``) -> that reviewed pair through
+    (origin ``trusted_torch_compile``); any pair baseline the site's operator
+    declares (e.g. ``fla``) -> that reviewed pair through
     ``kernel_from_pair`` (origin ``baseline:<name>``, a bind pair wrapper --
     *not* the library's own autograd Function); a path -> the evolved
     program through ``patched_kernels``. Every site is patched exactly once, so
@@ -130,18 +130,20 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *,
             kernels = patch(kernels, site, compiled_site_kernel(site, registry),
                             source=KernelSource(site=site, op_name=decl.op, module=None,
                                                 origin="trusted_torch_compile"))
-        elif spec in PATCH_SPEC_KINDS or (
-                decl.op and spec in getattr(ops.get(decl.op), "performance_baselines", {})):
-            # A reviewed library pair by its declared name (liger, fla, ...).
+        elif decl.op and spec in getattr(ops.get(decl.op), "performance_baselines", {}):
+            # A reviewed library pair by its declared name (fla, cublas_pair, ...).
             op = ops[decl.op]
-            if spec not in op.performance_baselines:
-                raise ValueError(f"{decl.op} declares no {spec} baseline")
             module = baseline_candidate_module(op, spec)
             kernels = patch(kernels, site, kernel_from_pair(op, module),
                             source=KernelSource(site=site, op_name=decl.op, module=module,
                                                 origin=f"baseline:{spec}"))
         else:
             path = Path(spec)
+            if load_program is None and not path.is_file():
+                declared = sorted(getattr(ops.get(decl.op), "performance_baselines", {}))
+                raise ValueError(
+                    f"{site}: {spec!r} is not 'compile', a baseline {decl.op} declares "
+                    f"({declared or 'none'}), or a program file")
             if load_program is None:
                 s = importlib.util.spec_from_file_location(
                     f"evograd_patch_{path.stem}", path)

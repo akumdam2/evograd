@@ -1,7 +1,7 @@
 """Operator declaration: polynomial RMS-normalized features."""
 
 from evograd.opdecl import Active, Inactive, declare_op
-from evograd.ops._common import STANDARD_TOLERANCES, dtype_for, make_pair_baseline, standard_correctness
+from evograd.ops._common import STANDARD_TOLERANCES, dtype_for, standard_correctness
 
 _REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
 
@@ -23,12 +23,6 @@ def _inputs(torch, op, workload, device="cuda"):
         "eps": 1e-6,
         "dout": torch.randn((rows, cols), device=device, dtype=dtype),
     }
-
-
-def _liger_factory():
-    from evograd.ops.level1.poly_norm.liger import make_liger_poly_norm_autograd_pair_fns
-
-    return make_liger_poly_norm_autograd_pair_fns()
 
 
 op = declare_op(
@@ -53,10 +47,5 @@ op = declare_op(
     correctness=standard_correctness(),
     tolerances=STANDARD_TOLERANCES,
     tolerance_hook=_tolerance,
-    performance_baselines={
-        "liger": make_pair_baseline(
-            _liger_factory, ("x", "weight", "bias", "eps"), ("eps",)
-        )
-    },
     make_inputs=_inputs,
 )

@@ -20,7 +20,6 @@ from evograd.ops._common import (
     STANDARD_TOLERANCES,
     dtype_for,
     log_distance_weight,
-    make_pair_baseline,
     regime_suites,
     standard_correctness,
     workloads_2d,
@@ -107,14 +106,6 @@ def _inputs(torch, op, workload, device="cuda"):
     }
 
 
-def _liger_factory():
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.liger import (
-        make_liger_fused_add_rms_norm_autograd_pair_fns,
-    )
-
-    return make_liger_fused_add_rms_norm_autograd_pair_fns()
-
-
 op = declare_op(
     name="fused_add_rms_norm",
     level=2,
@@ -180,11 +171,6 @@ op = declare_op(
     # room for a legitimately different rounding order; it is not exactness.
     tolerance_multipliers={"summed": (0.01, 0.01)},
     tolerance_hook=_tolerance,
-    performance_baselines={
-        "liger": make_pair_baseline(
-            _liger_factory, ("x", "r", "weight", "eps"), ("eps",)
-        )
-    },
     regime_feature=_feature,
     regime_split=_SPLIT,
     case_weight=log_distance_weight(_feature, _SPLIT),

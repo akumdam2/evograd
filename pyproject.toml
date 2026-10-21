@@ -19,8 +19,7 @@ dependencies = [
 gpu = ["triton"]
 llm = ["openai"]
 dev = ["black", "pytest>=7"]
-baselines = ["liger-kernel"]
-# Level-4 model workloads. Qwen3 arrived in transformers 4.51.0;
+# Level-3 model workloads. Qwen3 arrived in transformers 4.51.0;
 # the milestone was developed and measured against 5.16.1. Llama predates
 # that, but 4.51 is the floor the rest of the harness targets.
 qwen3 = ["transformers>=4.51"]
@@ -37,13 +36,13 @@ dlrm = ["numpy>=1.26"]
 # import TorchRec's optional FBGEMM/CUDA extensions.
 dlrm_preprocess = ["numpy>=1.26"]
 # The alphafold3 training-step workload, which the MegaFold one replaced as the
-# registered Level-4 task. alphafold3-pytorch is the implementation MegaFold
+# registered Level-3 task. alphafold3-pytorch is the implementation MegaFold
 # builds on; the declaration and its adapters are still in the tree, so the
 # extra stays.
 af3 = ["alphafold3-pytorch>=0.8.3,<0.9"]
 # There is deliberately no `megafold` extra. MegaFold is a source checkout, not
 # a distribution: it ships no setup.py and no pyproject.toml, so there is
-# nothing for pip to resolve and no version to pin. The Level-4 workload finds
+# nothing for pip to resolve and no version to pin. The Level-3 workload finds
 # it on PYTHONPATH instead:
 #
 #     git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold

@@ -106,8 +106,8 @@ class TestDeclarations(unittest.TestCase):
     def test_library_baselines_are_declared(self):
         self.assertIn("fla", TASKS["qwen3_5_gated_delta_rule"].performance_baselines)
         self.assertIn("fla", TASKS["qwen3_5_gdn_norm_out"].performance_baselines)
-        self.assertIn("liger", TASKS["qwen3_5_residual_rmsnorm"].performance_baselines)
-        self.assertIn("liger", TASKS["qwen3_5_swiglu_mlp"].performance_baselines)
+        self.assertFalse(TASKS["qwen3_5_residual_rmsnorm"].performance_baselines)
+        self.assertFalse(TASKS["qwen3_5_swiglu_mlp"].performance_baselines)
 
 
 class TestCapturedInvocations(unittest.TestCase):

@@ -486,7 +486,7 @@ class TestScreeningPolicy(unittest.TestCase):
                  "measured": {"kernel_origin": ["trusted_torch_compile"]},
                  "verdict": {"ok": True, "ratios": {"kl_mean": 0.4}}},
                 {"seed": 11, "provider": "candidate",
-                 "measured": {"kernel_origin": ["baseline:liger"]},
+                 "measured": {"kernel_origin": ["baseline:fla"]},
                  "verdict": {"ok": False, "ratios": {}}}]
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             json.dump({"results": rows}, fh)
@@ -501,12 +501,12 @@ class TestPatchSpecs(unittest.TestCase):
     def test_patch_specs_parse_and_refuse_duplicates(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import (
             parse_patch_set_spec, parse_patch_specs)
-        self.assertEqual(parse_patch_specs(["attention=compile", "residual_rmsnorm=liger",
+        self.assertEqual(parse_patch_specs(["attention=compile", "residual_rmsnorm=fla",
                                             "qkv_norm_rope=examples/a.py"]),
-                         {"attention": "compile", "residual_rmsnorm": "liger",
+                         {"attention": "compile", "residual_rmsnorm": "fla",
                           "qkv_norm_rope": "examples/a.py"})
         with self.assertRaises(ValueError):
-            parse_patch_specs(["attention=compile", "attention=liger"])
+            parse_patch_specs(["attention=compile", "attention=fla"])
         with self.assertRaises(ValueError):
             parse_patch_specs(["attention"])
         name, patches = parse_patch_set_spec("all_compiled:attention=compile,swiglu_mlp=compile")
@@ -529,14 +529,13 @@ class TestPatchSpecs(unittest.TestCase):
         legacy = SimpleNamespace(sites="qkv_norm_rope", patch=[], candidate="examples/h.py")
         self.assertEqual(patches_of(legacy), {"qkv_norm_rope": "examples/h.py"})
 
-    def test_liger_route_is_only_offered_where_declared(self):
+    def test_an_undeclared_baseline_name_is_refused_by_name(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.simple import kernels_from_patches
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import qwen3_sites
-        with self.assertRaises(ValueError):
-            kernels_from_patches({"attention": "liger"}, qwen3_sites())
-        kernels = kernels_from_patches({"residual_rmsnorm": "liger"}, qwen3_sites())
-        self.assertEqual(kernels.patched, ("residual_rmsnorm",))
-        self.assertEqual([s.origin for s in kernels.sources], ["baseline:liger"])
+        for site in ("attention", "residual_rmsnorm"):
+            with self.assertRaises(ValueError) as caught:
+                kernels_from_patches({site: "liger"}, qwen3_sites())
+            self.assertIn("'liger'", str(caught.exception))
 
 
 class TestGateDispatch(unittest.TestCase):

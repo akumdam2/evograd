@@ -3,7 +3,6 @@
 import math
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import make_pair_baseline
 
 
 def make_rmsnorm_inputs(torch, op, workload, device="cuda"):
@@ -32,12 +31,6 @@ def rmsnorm_tolerance(workload, result_name, atol, rtol):
         rows = workload.dims["rows"]
         atol = max(atol, atol * math.sqrt(max(1.0, rows / 8.0)))
     return atol, rtol
-
-
-def _liger_factory():
-    from evograd.ops.level1.rmsnorm.liger import make_liger_rmsnorm_autograd_pair_fns
-
-    return make_liger_rmsnorm_autograd_pair_fns()
 
 
 # Untimed compile/runtime coverage: the non-power-of-two hidden width and the
@@ -77,9 +70,6 @@ op = declare_op(
         Workload(dims=dict(rows=64, hidden=512), dtype="bfloat16"),
         Workload(dims=dict(rows=128, hidden=4096), dtype="bfloat16"),
     ),
-    performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("x", "weight", "eps"))
-    },
     tolerances={
         "float32": (2e-5, 2e-5),
         "float16": (5e-2, 5e-2),

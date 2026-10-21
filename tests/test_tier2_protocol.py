@@ -112,7 +112,7 @@ class TestProviderOrderAndSelection(unittest.TestCase):
     def test_the_order_is_shuffled_deterministically_from_the_seed(self):
         import random
 
-        names = ["eager", "compile", "liger", "candidate"]
+        names = ["eager", "compile", "cublas_pair", "candidate"]
         first = list(names)
         random.Random(0).shuffle(first)
         again = list(names)

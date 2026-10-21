@@ -10,9 +10,7 @@ fusion is a later step's).
 """
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import make_pair_baseline
 
-from .. import library
 from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
 
 #: Calibrated: see the calibrated-tolerances block below.
@@ -128,7 +126,5 @@ op = declare_op(
     tolerances=CALIBRATED_TOLERANCES,
     tolerance_multipliers=CALIBRATED_MULTIPLIERS,
     tolerance_hook=CALIBRATED_HOOK,
-    performance_baselines={"liger": make_pair_baseline(
-        library.liger_residual_rmsnorm, ("branch", "residual", "weight", "eps"))},
     make_inputs=make_residual_rmsnorm_inputs,
 )

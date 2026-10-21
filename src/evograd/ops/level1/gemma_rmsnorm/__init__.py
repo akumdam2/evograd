@@ -10,7 +10,7 @@ rounding step in the second.
 import math
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import dtype_for, make_pair_baseline
+from evograd.ops._common import dtype_for
 
 #: Calibrated: see the calibrated-tolerances block below.
 PROVISIONAL_TOLERANCES = False
@@ -39,15 +39,6 @@ def make_gemma_rmsnorm_inputs(torch, op, workload, device="cuda"):
         "eps": 1e-6,
         "dy": torch.randn((rows, hidden), device=device, dtype=dtype),
     }
-
-
-
-def _liger_factory():
-    """``LigerRMSNorm(offset=1.0, casting_mode="gemma")``: everything in float32,
-    ``(1 + w)``, one cast at the end -- this primitive's own spelling."""
-    from evograd.ops.library_pairs import liger_rms_norm_pair
-
-    return liger_rms_norm_pair(offset=1.0, casting_mode="gemma")
 
 
 # --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
@@ -114,6 +105,5 @@ op = declare_op(
     tolerances=CALIBRATED_TOLERANCES,
     tolerance_multipliers=CALIBRATED_MULTIPLIERS,
     tolerance_hook=CALIBRATED_HOOK,
-    performance_baselines={"liger": make_pair_baseline(_liger_factory, ("x", "weight", "eps"))},
     make_inputs=make_gemma_rmsnorm_inputs,
 )

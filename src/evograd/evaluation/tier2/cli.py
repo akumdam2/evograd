@@ -3,8 +3,8 @@
     python -m evograd.evaluation.tier2.cli --op layernorm \
         --candidate evolved_layernorm.py --out ~/tmp/tier2.json
 
-Providers default to eager PyTorch, `torch.compile`, the declaration's `liger`
-pair, and the candidate when one is given. Each shape runs in its own process:
+Providers default to eager PyTorch, `torch.compile`, and the candidate when one
+is given; `--baseline NAME` adds a declared pair baseline (cublas_pair, fla, ...). Each shape runs in its own process:
 `torch.compile` caches compiled artifacts per process and a candidate can wedge
 a CUDA context, and neither should be able to reach the next shape's numbers.
 """
@@ -36,7 +36,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--numerical-profile", choices=("declared",), help=argparse.SUPPRESS)
     parser.add_argument("--op", required=True)
     parser.add_argument("--candidate", type=Path, default=None)
-    parser.add_argument("--baseline", default="liger", help="declared pair baseline")
+    parser.add_argument("--baseline", default=None, help="declared pair baseline (default: none)")
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--suite", default=None, help="named benchmark suite")
     parser.add_argument("--dtype", action="append", dest="dtypes")
@@ -74,7 +74,7 @@ def _specs(args, candidate_module):
     # ``--baseline none`` means no pair baseline, as it does in tier 3. Passing the
     # literal string through built a provider named "none" that failed at run
     # time with "declares no 'none' baseline" -- a failed row for an operator
-    # that simply has no Liger pair (qwen3_attention, qwen3_swiglu_mlp, ...).
+    # that simply has no declared pair (qwen3_attention, qwen3_swiglu_mlp, ...).
     baseline = args.baseline if args.baseline and args.baseline != "none" else None
     return default_provider_specs(
         candidate_module=candidate_module,

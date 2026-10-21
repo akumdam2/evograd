@@ -30,7 +30,6 @@ from evograd.opdecl.models import LLAMA_3_2_1B
 from evograd.ops._common import (
     STANDARD_TOLERANCES,
     dtype_for,
-    make_pair_baseline,
     model_workloads,
     standard_correctness,
 )
@@ -94,18 +93,6 @@ def is_model_case(workload) -> bool:
 def eps_for(workload) -> float:
     """The model's own epsilon for a model case; the grid default otherwise."""
     return MODEL_EPS if is_model_case(workload) else GRID_EPS
-
-
-def _liger_factory():
-    # The reviewed Liger adapter is dimension-free and takes ``eps`` as an
-    # argument, so it serves this model's residual width and epsilon unchanged.
-    # Imported lazily from the workload that first reviewed it; it is not a
-    # dependency on that model's shapes.
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.liger import (
-        make_liger_fused_add_rms_norm_autograd_pair_fns,
-    )
-
-    return make_liger_fused_add_rms_norm_autograd_pair_fns()
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -172,14 +159,6 @@ op = declare_op(
     tolerances=STANDARD_TOLERANCES,
     tolerance_multipliers={"summed": (0.01, 0.01)},
     tolerance_hook=_tolerance,
-    # The reviewed Liger fused add+RMSNorm pair, the same trusted baseline the
-    # Qwen3 task declares. Liger's backward returns fresh tensors here, so no
-    # overwrite allowance is needed.
-    performance_baselines={
-        "liger": make_pair_baseline(
-            _liger_factory, ("x", "r", "weight", "eps"), ("eps",)
-        )
-    },
     make_inputs=_inputs,
     backward_may_overwrite=(),
 )

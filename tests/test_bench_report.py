@@ -41,7 +41,7 @@ def _harness_case(*, full=2.0, backward=10.0, saved=100.0, inputs=200.0):
     }
 
 
-def _harness_report(cases, baseline="liger"):
+def _harness_report(cases, baseline="cublas_pair"):
     return {"performance_baseline": baseline, "cases": cases, "error": None}
 
 
@@ -54,7 +54,7 @@ def _provider(*, forward, backward, full, saved):
     }
 
 
-def _fair_report(*, candidate_saved=100.0, baseline_saved=999.0, baseline="liger"):
+def _fair_report(*, candidate_saved=100.0, baseline_saved=999.0, baseline="cublas_pair"):
     return {
         "environment": {"gpu_name": "GH200"},
         "cases": [
@@ -132,7 +132,7 @@ class TestMissingFieldsAreLoud(unittest.TestCase):
         report = _fair_report()
         del report["cases"][0]["providers"]["candidate"]["saved_state"]
         with self.assertRaises(ReportFieldError) as caught:
-            from_fair_report("swiglu", report, baseline="liger")
+            from_fair_report("swiglu", report, baseline="cublas_pair")
         self.assertIn("providers.candidate.saved_state", str(caught.exception))
 
     def test_the_original_bug_now_raises_instead_of_publishing_1_000(self):
@@ -146,7 +146,7 @@ class TestMissingFieldsAreLoud(unittest.TestCase):
         saved = report["cases"][0]["providers"]["candidate"]["saved_state"]
         saved["saved_bytes"] = saved.pop("logical_saved_bytes")
         with self.assertRaises(ReportFieldError) as caught:
-            from_fair_report("swiglu", report, baseline="liger")
+            from_fair_report("swiglu", report, baseline="cublas_pair")
         self.assertIn("logical_saved_bytes", str(caught.exception))
 
     def test_naming_the_wrong_baseline_provider_raises(self):
@@ -181,7 +181,7 @@ class TestTheTwoProtocolsAgree(unittest.TestCase):
 
     def test_same_measurement_same_suite_row(self):
         fair = task_from_report(
-            from_fair_report("swiglu", _fair_report(), baseline="liger", op=_FakeOp()),
+            from_fair_report("swiglu", _fair_report(), baseline="cublas_pair", op=_FakeOp()),
             level=1, family="activation",
         )
         harness = task_from_report(
@@ -198,7 +198,7 @@ class TestTheTwoProtocolsAgree(unittest.TestCase):
     def test_the_fair_reader_takes_the_candidates_memory_not_the_baselines(self):
         report = from_fair_report(
             "swiglu", _fair_report(candidate_saved=100.0, baseline_saved=999.0),
-            baseline="liger",
+            baseline="cublas_pair",
         )
         self.assertAlmostEqual(report.cases[0].saved_bytes, 100.0)
 
@@ -220,11 +220,11 @@ class TestTierTwo(unittest.TestCase):
         # Three providers measured once; each pairing is a different suite row
         # at no extra GPU cost.
         raw = _tier2_report()
-        raw["cases"][0]["providers"]["liger"] = _tier2_provider(forward=0.8, full=1.5)
+        raw["cases"][0]["providers"]["cublas_pair"] = _tier2_provider(forward=0.8, full=1.5)
         against_eager = from_tier2_report("layernorm", raw, baseline="eager")
-        against_liger = from_tier2_report("layernorm", raw, baseline="liger")
+        against_pair = from_tier2_report("layernorm", raw, baseline="cublas_pair")
         self.assertAlmostEqual(against_eager.cases[0].speedup_full, 2.0)
-        self.assertAlmostEqual(against_liger.cases[0].speedup_full, 1.5)
+        self.assertAlmostEqual(against_pair.cases[0].speedup_full, 1.5)
 
     def test_a_provider_that_failed_costs_coverage_not_speedup(self):
         task = task_from_report(
@@ -251,7 +251,7 @@ class TestTierTwo(unittest.TestCase):
 class TestTierAndProtocolTravel(unittest.TestCase):
     def test_a_row_says_how_it_was_measured(self):
         fair = task_from_report(
-            from_fair_report("swiglu", _fair_report(), baseline="liger"),
+            from_fair_report("swiglu", _fair_report(), baseline="cublas_pair"),
             level=1, family="activation",
         )
         fast = task_from_report(
@@ -266,7 +266,7 @@ class TestTierAndProtocolTravel(unittest.TestCase):
 
     def test_an_unknown_tier_is_rejected(self):
         with self.assertRaises(ValueError):
-            BenchReport(op="swiglu", tier="level2", protocol=PROTOCOL_FAIR, baseline="liger")
+            BenchReport(op="swiglu", tier="level2", protocol=PROTOCOL_FAIR, baseline="cublas_pair")
 
 
 if __name__ == "__main__":

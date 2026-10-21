@@ -53,10 +53,7 @@ class TestNativeContractRendering(unittest.TestCase):
             set(get_task("gemm_leaky_relu").performance_baselines),
             {"triton_tutorial"},
         )
-        self.assertIn(
-            "liger",
-            get_task("fused_moe_swiglu").performance_baselines,
-        )
+        self.assertFalse(get_task("fused_moe_swiglu").performance_baselines)
 
     def test_conv2d_pipeline_b_contract_is_scalar_specialized(self):
         op = get_task("conv2d")
@@ -188,7 +185,8 @@ class TestDerivedNaming(unittest.TestCase):
             _minimal(level=3, family="synthetic_block")
 
     def test_liger_paper_kernels_are_all_declared(self):
-        """The seven kernels the Liger paper reports must each have a task.
+        """The seven kernels the Liger paper reports must each have a task
+        (Liger itself is no longer a baseline).
 
         RoPE and fused-linear-cross-entropy were the two missing before v1, and
         they are the second and third most-patched Liger operators after
@@ -205,12 +203,7 @@ class TestDerivedNaming(unittest.TestCase):
             "fused_linear_cross_entropy",
         ):
             with self.subTest(op=name):
-                op = get_task(name)
-                self.assertIn(
-                    "liger",
-                    op.performance_baselines,
-                    f"{name}: a Liger paper kernel with no Liger baseline",
-                )
+                self.assertEqual(get_task(name).name, name)
 
     def test_registry_is_discovery_based(self):
         import inspect
@@ -437,28 +430,11 @@ class TestLigerSuiteMigration(unittest.TestCase):
         self.assertEqual(get_task("kl_div").memory_input_names(), ("y_pred",))
         self.assertEqual(get_task("jsd").memory_input_names(), ("log_q",))
 
-    def test_liger_hooks_keep_the_reviewed_pair_for_the_runtime_gate(self):
-        names = (
-            "cross_entropy",
-            "dyt",
-            "fused_add_rms_norm",
-            "fused_moe_swiglu",
-            "geglu",
-            "jsd",
-            "kl_div",
-            "layernorm",
-            "poly_norm",
-            "relu_squared",
-            "softmax",
-            "sparsemax",
-            "swiglu",
-            "tvd",
+    def test_no_task_declares_a_liger_baseline(self):
+        """Liger was retired to ``evograd.legacy.liger``; nothing registers it."""
+        self.assertFalse(
+            [name for name, op in TASKS.items() if "liger" in op.performance_baselines]
         )
-        for name in names:
-            with self.subTest(op=name):
-                hook = get_task(name).performance_baselines["liger"]
-                self.assertTrue(callable(getattr(hook, "pair_factory", None)))
-                self.assertIsInstance(hook.forward_args, tuple)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@
 import math
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
-from evograd.ops._common import make_pair_baseline
 
 
 def make_layernorm_inputs(torch, op, workload, device="cuda"):
@@ -34,27 +33,6 @@ def layernorm_tolerance(workload, result_name, atol, rtol):
     return atol, rtol
 
 
-def _liger_factory():
-    from liger_kernel.ops.layer_norm import layer_norm_backward, layer_norm_forward
-
-    def forward(x, weight, bias, eps):
-        y, x_2d, mean, rstd, _block_size, _num_warps = layer_norm_forward(
-            x, weight, bias, eps
-        )
-        return y, (x_2d, weight, bias, mean, rstd)
-
-    def backward(dy, saved):
-        x_2d, weight, bias, mean, rstd = saved
-        dy_2d = dy.view(-1, dy.shape[-1]).contiguous()
-        return layer_norm_backward(dy_2d, x_2d, weight, bias, mean, rstd)
-
-    return forward, backward
-
-
-measure_liger_baseline = make_pair_baseline(
-    _liger_factory, ("x", "weight", "bias", "eps")
-)
-
 op = declare_op(
     name="layernorm",
     forward="evograd.ops.level1.layernorm.forward_ref:layernorm_forward_ref",
@@ -84,7 +62,6 @@ op = declare_op(
         Workload(dims=dict(rows=128, hidden=4096), dtype="bfloat16"),
         Workload(dims=dict(rows=1024, hidden=8192), dtype="bfloat16"),
     ),
-    performance_baselines={"liger": measure_liger_baseline},
     tolerances={
         "float32": (2e-5, 2e-5),
         "float16": (5e-2, 5e-2),

@@ -14,7 +14,7 @@ of these primitives (:data:`...harvest.snapshot.LEVEL1_SOURCES`); an unmapped ro
 fails the extraction rather than being dropped.
 
 ``partial_rope`` cases read theta 1e7 from their provenance (the record's
-``rope_theta``); ``cross_entropy`` and its Liger reference run on 248,320-wide
+``rope_theta``); ``cross_entropy`` runs on 248,320-wide
 rows -- both are exercised by ``tests/qwen3_5_4b/test_level1_bindings.py``.
 """
 

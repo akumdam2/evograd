@@ -118,7 +118,7 @@ class TestDependencyDirection(unittest.TestCase):
         not count for an external library that happens to share the name --
         MegaFold is also a source checkout of Triton kernels, and an
         operator's reviewed pair baseline may wrap those kernels exactly as
-        ``liger.py`` wraps Liger's -- nor for an adapter module whose name
+        ``cublas.py`` wraps cuBLAS -- nor for an adapter module whose name
         merely contains the marker (``megafold_pair``).
         """
         for path in _python_files(EVOGRAD / "ops"):

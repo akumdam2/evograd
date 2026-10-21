@@ -534,8 +534,8 @@ task registry is built, from two places that mean different things:
   the two.
 
 Executable tasks resolve through `evograd.benchmark.get_task`;
-`evograd.ops.get_primitive` resolves the mathematics alone. Liger and other
-reviewed pair baselines stay co-located with the task or primitive they
+`evograd.ops.get_primitive` resolves the mathematics alone. Reviewed pair
+baselines (cuBLAS, MegaFold, FLA) stay co-located with the task or primitive they
 implement — an intentional arrangement, not a leftover: an adapter is an
 implementation of that contract, and it is discovered through the declaration
 that names it.
@@ -562,15 +562,17 @@ Available scoring policies are:
 | `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. Seventeen declarations expose reviewed optional
-Liger baselines. `--baseline auto` selects Liger when its adapter and
-`liger-kernel` are available, otherwise PyTorch autograd; an explicit
-`--baseline liger` hard-fails rather than silently changing the comparison:
+The default is `speed_memory`. `--baseline auto` is PyTorch autograd (eager).
+A declaration may also expose a reviewed library pair baseline (`cublas_pair`,
+`megafold`, `fla`, `triton_tutorial`); naming one that is not available
+hard-fails rather than silently changing the comparison:
 
 ```bash
-pip install -e ".[baselines]"
-evograd bench --op layernorm --candidate best.py --baseline liger
+evograd bench --op matmul --candidate best.py --baseline cublas_pair
 ```
+
+Liger-Kernel is no longer a baseline; its former adapters are kept, unregistered,
+under `src/evograd/legacy/liger/`.
 
 Two built-in `torch.compile` baselines are available for every operator without
 any declaration support — `torch_compile` and `torch_compile_max_autotune`:
@@ -622,36 +624,36 @@ provenance rules, and how the levels are aggregated.
 
 ### Level 1 — primitive operators
 
-| Operator        | Family     | Forward                                   | Requested gradients               | Liger baseline |
+| Operator        | Family     | Forward                                   | Requested gradients               | Pair baseline  |
 | --------------- | ---------- | ----------------------------------------- | --------------------------------- | -------------- |
-| `layernorm`     | norm       | LayerNorm                                 | `dx`, `dweight`, `dbias`          | yes            |
-| `rmsnorm`       | norm       | RMSNorm                                   | `dx`, `dweight`                   | yes            |
-| `poly_norm`     | norm       | polynomial normalization                  | `dx`, `dweight`, `dbias`          | yes            |
-| `dyt`           | norm       | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta` | yes            |
-| `softmax`       | reduction  | row-wise softmax                          | `dx`                              | yes            |
-| `sparsemax`     | reduction  | simplex projection                        | `dx`                              | yes            |
-| `swiglu`        | activation | SwiGLU activation                         | `da`, `db`                        | yes            |
-| `geglu`         | activation | GeGLU activation                          | `da`, `db`                        | yes            |
-| `relu_squared`  | activation | `relu(x)²`                                | `dx`                              | yes            |
-| `cross_entropy` | loss       | mean cross-entropy loss                   | `dlogits`                         | yes            |
-| `kl_div`        | loss       | KL divergence                             | `d_input`                         | yes            |
-| `jsd`           | loss       | Jensen-Shannon divergence                 | `dlog_q`                          | yes            |
-| `tvd`           | loss       | total-variation distance                  | `dp`, `dq`                        | yes            |
-| `matmul`        | gemm       | `a @ b`                                   | `da`, `db`                        | no (cuBLAS)    |
-| `linear`        | gemm       | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`          | no             |
-| `conv2d`        | conv       | dense NCHW convolution                    | `dx`, `dweight`, `dbias`          | no (cuDNN)     |
-| `evoattention`  | attention  | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`   | no             |
-| `rope`          | positional | rotary position embedding                 | `dx`                              | yes            |
+| `layernorm`     | norm       | LayerNorm                                 | `dx`, `dweight`, `dbias`          | —              |
+| `rmsnorm`       | norm       | RMSNorm                                   | `dx`, `dweight`                   | —              |
+| `poly_norm`     | norm       | polynomial normalization                  | `dx`, `dweight`, `dbias`          | —              |
+| `dyt`           | norm       | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta` | —              |
+| `softmax`       | reduction  | row-wise softmax                          | `dx`                              | —              |
+| `sparsemax`     | reduction  | simplex projection                        | `dx`                              | —              |
+| `swiglu`        | activation | SwiGLU activation                         | `da`, `db`                        | `megafold`     |
+| `geglu`         | activation | GeGLU activation                          | `da`, `db`                        | —              |
+| `relu_squared`  | activation | `relu(x)²`                                | `dx`                              | —              |
+| `cross_entropy` | loss       | mean cross-entropy loss                   | `dlogits`                         | —              |
+| `kl_div`        | loss       | KL divergence                             | `d_input`                         | —              |
+| `jsd`           | loss       | Jensen-Shannon divergence                 | `dlog_q`                          | —              |
+| `tvd`           | loss       | total-variation distance                  | `dp`, `dq`                        | —              |
+| `matmul`        | gemm       | `a @ b`                                   | `da`, `db`                        | `cublas_pair`  |
+| `linear`        | gemm       | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`          | —              |
+| `conv2d`        | conv       | dense NCHW convolution                    | `dx`, `dweight`, `dbias`          | —              |
+| `evoattention`  | attention  | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`   | `megafold`     |
+| `rope`          | positional | rotary position embedding                 | `dx`                              | —              |
 
 ### Level 2 — composite operators
 
-| Operator                     | Family | Forward                                        | Requested gradients                                   | Liger baseline           |
+| Operator                     | Family | Forward                                        | Requested gradients                                   | Pair baseline            |
 | ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
-| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | yes                      |
-| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | yes                      |
-| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | no                       |
-| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | no (Triton tutorial)     |
-| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | yes                      |
+| `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | —                        |
+| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | —                        |
+| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | `megafold`               |
+| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | `triton_tutorial`        |
+| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | —                        |
 
 ### Level 3 — whole-model workloads
 
@@ -722,22 +724,21 @@ records the model and component it came from. `tests/test_provenance.py`
 re-derives them, so a declared shape cannot drift from the model it claims to
 measure. The pre-v1 hand-picked grids survive as `legacy` ablation suites.
 
-Liger
-does not ship generic dense GEMM or convolution kernels: `matmul` therefore
-compares against PyTorch/cuBLAS, while `conv2d` compares against PyTorch/cuDNN.
+Every operator is timed against eager PyTorch and `torch.compile`; the pair
+baseline column lists the reviewed library pair it may also be timed against.
+`matmul` exposes cuBLAS as a pair, and `conv2d` compares against PyTorch/cuDNN.
 `gemm_leaky_relu` additionally exposes the reviewed `triton_tutorial` pair
 baseline; its forward uses the tutorial's grouped GEMM ordering and fused
 epilogue, while its backward uses the same GEMM kernel plus a pointwise
-activation derivative. `fused_moe_swiglu` is the separate, genuine Liger
-grouped-GEMM+activation benchmark; it must not be interpreted as a generic
+activation derivative. `fused_moe_swiglu` is a routed grouped-GEMM+activation
+benchmark on Liger's published grid; it must not be interpreted as a generic
 dense GEMM baseline.
 
 Pipeline B provides handwritten Triton lowerings for the fixed `conv2d`
 contract (NCHW/OIHW, stride 1, padding 0, dilation 1, groups 1), including
 forward, dX, dWeight, and dBias. Its MoE seed uses a coverage-safe dense-expert
-BMM decomposition plus Triton routing/scatter primitives; the Liger baseline
-retains sparse grouped-GEMM execution, leaving top-k/grouped fusion as an
-explicit evolution target.
+BMM decomposition plus Triton routing/scatter primitives, leaving top-k/grouped
+fusion as an explicit evolution target.
 
 LayerNorm also includes the legacy and TritonBench shape suites:
 

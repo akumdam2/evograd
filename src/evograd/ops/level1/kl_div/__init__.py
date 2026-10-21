@@ -1,7 +1,7 @@
 """Operator declaration: batchmean KL divergence."""
 
 from evograd.opdecl import Active, Inactive, declare_op
-from evograd.ops._common import dtype_for, make_pair_baseline, workloads_2d
+from evograd.ops._common import dtype_for, workloads_2d
 
 _TOLERANCES = {
     "float32": (1e-6, 1e-4),
@@ -21,12 +21,6 @@ def _inputs(torch, op, workload, device="cuda"):
         "y_true": torch.softmax(target_logits, dim=-1).to(dtype),
         "dloss": torch.rand((), device=device, dtype=dtype) + 0.5,
     }
-
-
-def _liger_factory():
-    from evograd.ops.level1.kl_div.liger import make_liger_kl_div_autograd_pair_fns
-
-    return make_liger_kl_div_autograd_pair_fns()
 
 
 _CORRECTNESS = (
@@ -59,9 +53,6 @@ op = declare_op(
     ),
     correctness=_CORRECTNESS,
     tolerances=_TOLERANCES,
-    performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("y_pred", "y_true"))
-    },
     memory_inputs=("y_pred",),
     make_inputs=_inputs,
 )

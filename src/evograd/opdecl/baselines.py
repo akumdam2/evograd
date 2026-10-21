@@ -130,11 +130,11 @@ def baseline_candidate_module(op: OpDecl, baseline: str):
     """Present a reviewed pair baseline as if it were a candidate seed module.
 
     The suite measures candidates, so without this the benchmark cannot report a
-    number until something has been generated for all 25 operators. A reviewed
+    number until something has been generated for every operator. A reviewed
     baseline is already an autograd pair that has been verified against the
-    oracle, which makes it the one honest stand-in: running `liger` as the
-    candidate against `pytorch_autograd` as the baseline produces the suite's
-    reference line — what a hand-written production kernel achieves over eager
+    oracle, which makes it the one honest stand-in: running `cublas_pair` or
+    `fla` as the candidate against `pytorch_autograd` as the baseline produces
+    a reference line — what a hand-written production kernel achieves over eager
     PyTorch — rather than a placeholder.
 
     Only pair baselines qualify. Compiled baselines (`torch_compile`) time a
@@ -239,11 +239,6 @@ def resolve_performance_baseline(op: OpDecl, requested: str) -> str:
     from evograd.opdecl.compiled import BUILTIN_MODES
 
     if requested == "auto":
-        hook = op.performance_baselines.get("liger")
-        if hook is not None:
-            probe = getattr(hook, "available", None)
-            if probe is None or probe():
-                return "liger"
         # torch_compile is never chosen by auto: it costs minutes of compilation
         # and is a deliberate comparison, not a default.
         return "pytorch_autograd"

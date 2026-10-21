@@ -1,6 +1,6 @@
 """``torch.compile`` as a performance baseline, generic over any declaration.
 
-The reviewed Liger baselines are per-operator: each declaration supplies a
+The reviewed library pair baselines are per-operator: each declaration supplies a
 factory returning a hand-written forward/backward pair. This one needs no
 declaration support at all — the activity annotations already say which args
 carry gradients, and the declared forward reference is the thing to compile —

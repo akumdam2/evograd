@@ -104,6 +104,5 @@ everything: `docs/OLMOE_1B_7B.md`.
 The tolerance calibration (the first GPU session, `20261016_gpu1`, ran the
 smoke, harvest, snapshot, layer capture, replay and tier-3 baselines, and
 showed the provisional gates too tight for the weight-gradient reductions at
-the observed size); the L3 whole-model gate; a library baseline for the experts site (the installed
-liger-kernel 0.5.9 has no fused MoE kernel); pretrained weights and real text;
+the observed size); the L3 whole-model gate; pretrained weights and real text;
 seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.

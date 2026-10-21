@@ -7,9 +7,8 @@
 unknown name lists the selected one's.
 
 With no candidate it measures the reference line: eager against any declared
-pair baseline that covers a patchable site. Validate the harness that way first
--- if Liger's end-to-end numbers reproduce here, the harness works, and that
-check does not need an evolved kernel to exist.
+pair baseline (``--baseline NAME``) that covers a patchable site, and the
+compiler baseline where the workload accepts it.
 
 Each provider runs in its own killable child process, in a seeded random order
 that the report records. An evolved kernel can hang, wedge the CUDA context, or
@@ -72,8 +71,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--baseline",
-        default="liger",
-        help="declared pair baseline to patch in as a second provider, or 'none'",
+        default="none",
+        help="declared pair baseline to patch in as a second provider (default: none)",
     )
     parser.add_argument(
         "--identity-control",
@@ -193,8 +192,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--patch-set", action="append", default=[], metavar="NAME:SITE=SPEC[,SITE=SPEC]",
         help="add ONE provider that patches several sites at once, each by its real "
-             "route -- SPEC is 'compile', 'liger' (the declared Liger pair through the "
-             "bind wrapper) or a path to an evolved program. Repeatable",
+             "route -- SPEC is 'compile', a declared pair baseline such as 'fla' (through "
+             "the bind wrapper) or a path to an evolved program. Repeatable",
     )
     parser.add_argument(
         "--providers", default=None,

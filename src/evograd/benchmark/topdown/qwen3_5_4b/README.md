@@ -28,7 +28,7 @@ every L3 provider row carries `evaluation_complete: false` and the reason.
 
 ### Decoder layers 14 and 15 -- where L2 takes its real invocations
 
-Not a level (the block level was removed on 2026-10-13): the two layers the L2
+Not a level: the two layers the L2
 sites' real invocations and the calibration's real population come from.
 
 | layer | kind | sites |
@@ -72,8 +72,7 @@ Canonical cases are config-derived
 (`hf_config`, B1 T2048). Whole-model call counts are **observed** (the harvest
 snapshot's `observed` entries). Every task is calibrated (L2 run
 `20261011_calib`, L1 run `20261013_l1calib`; see `docs/QWEN3_5_4B.md`). Library lines: FLA (sidecar)
-for `gated_delta_rule` and `gdn_norm_out`, Liger for `residual_rmsnorm` and
-`swiglu_mlp`. `lm_head_ce` is deferred.
+for `gated_delta_rule` and `gdn_norm_out`. `lm_head_ce` is deferred.
 
 ### L1 -- primitives
 

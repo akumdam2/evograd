@@ -282,7 +282,7 @@ class TestLevel1Bindings(unittest.TestCase):
 
     def test_cross_entropy_runs_on_full_width_rows(self):
         """The 248,320-wide rows of the loss: the oracle and production agree (a
-        few rows, on CPU; Liger's kernel needs a GPU and is the session's)."""
+        few rows, on CPU)."""
         from evograd.benchmark import TASKS
         from evograd.opdecl import Workload
         from evograd.opdecl.inputs import as_output_tuple, make_case_inputs
@@ -296,7 +296,6 @@ class TestLevel1Bindings(unittest.TestCase):
         prod = as_output_tuple(op, resolve_runtime_forward(op)(*args))
         for a, b in zip(ref, prod):
             self.assertTrue(torch.allclose(a, b, atol=1e-5, rtol=1e-5))
-        self.assertIn("liger", op.performance_baselines)
 
 
 class TestHarvestedInvocation(unittest.TestCase):

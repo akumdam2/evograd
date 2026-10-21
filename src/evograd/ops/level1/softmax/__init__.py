@@ -1,7 +1,7 @@
 """Operator declaration: row-wise softmax."""
 
 from evograd.opdecl import Active, declare_op
-from evograd.ops._common import STANDARD_TOLERANCES, dtype_for, make_pair_baseline, workloads_2d
+from evograd.ops._common import STANDARD_TOLERANCES, dtype_for, workloads_2d
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -12,12 +12,6 @@ def _inputs(torch, op, workload, device="cuda"):
         "x": torch.randn((rows, cols), device=device, dtype=dtype),
         "dy": torch.randn((rows, cols), device=device, dtype=dtype),
     }
-
-
-def _liger_factory():
-    from evograd.ops.level1.softmax.liger import make_liger_softmax_autograd_pair_fns
-
-    return make_liger_softmax_autograd_pair_fns()
 
 
 _CORRECTNESS = (
@@ -42,6 +36,5 @@ op = declare_op(
     backward_semantics="Return dx = y * (dy - sum(dy*y, dim=-1, keepdim=True)).",
     correctness=_CORRECTNESS,
     tolerances=STANDARD_TOLERANCES,
-    performance_baselines={"liger": make_pair_baseline(_liger_factory, ("x",))},
     make_inputs=_inputs,
 )

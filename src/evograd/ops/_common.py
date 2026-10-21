@@ -1,4 +1,4 @@
-"""Shared declaration helpers for the 2-D Liger-derived operator suite."""
+"""Shared declaration helpers for the Level-1 operator suite."""
 
 from __future__ import annotations
 
@@ -275,7 +275,7 @@ def make_pair_baseline(
     *,
     sidecar: str | None = None,
 ):
-    """Adapt a reviewed library autograd pair (Liger, FLA) to evograd's timing-hook API.
+    """Adapt a reviewed library autograd pair (FLA, MegaFold) to evograd's timing-hook API.
 
     ``sidecar`` names a library installed outside the environment
     (:mod:`evograd.opdecl.sidecar`): the harness then measures this baseline only
@@ -329,7 +329,7 @@ class FunctionContext:
 
 
 def baseline_available(factory: Callable) -> bool:
-    """Cheaply probe a Liger factory without importing Liger at declaration time."""
+    """Cheaply probe a library factory without importing the library at declaration time."""
     try:
         factory()
         return True
