@@ -229,6 +229,20 @@ class TinyCaptureTests(unittest.TestCase):
                                       "gate2_operator_calibration": "calibrated",
                                       "gate2_operator": expected}, scale)
 
+    def test_control_candidates_are_accepted_and_faults_rejected(self):
+        from evograd.verification.integrations.candidates import native_pair
+        from evograd.verification.integrations.gates import judge_case
+        from evograd.verification.integrations.llama3_2_1b import MODEL
+
+        for case_id, faulty in (("linear_no_bias/q_o", 1.05), ("llama3_swiglu_mlp/mlp", 1.05)):
+            case = next(c for c in self.cases if c.case_id == case_id)
+            for scale, expected in ((1.0, "passed"), (faulty, "failed")):
+                reports = judge_case(MODEL, case, native_pair("llama_3_2_1b", case.task, scale=scale),
+                                     self.corpus, device="cpu", compile_backend="aot_eager")
+                self.assertEqual(reports["gate2_operator"].status, expected, (case_id, scale))
+                if scale == 1.0:
+                    self.assertEqual(reports["gate1_payloads"].status, "passed", case_id)
+
 
 if __name__ == "__main__":
     unittest.main()
