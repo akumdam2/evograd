@@ -41,8 +41,7 @@ from evograd.evaluation.tier3.model import (
 )
 from evograd.evaluation.tier3.patch import KernelSet
 
-#: v3 (2026-10-13): the same measurement as v2, with the whole model numbered
-#: benchmark level 3 (the block level was removed). v2 reports are still read.
+#: The whole-model training-step protocol; the whole model is benchmark level 3.
 TIER3_PROTOCOL_VERSION = "evograd-tier3-model-v3"
 
 #: What this runner executes: a whole model's training step.
@@ -545,7 +544,7 @@ def measure_provider(
         "kernel_sources": [s.to_dict() for s in kernels.sources],
         "verification": verification,
         "model_correctness": model_correctness,
-        # Lifted to the row, as block-scope rows carry them: whether the
+        # Lifted to the row: whether the
         # provider's numerical evaluation is complete, and if not why -- so a
         # timed row can never be read as "checked and fine" by a reader that
         # does not open ``model_correctness``.

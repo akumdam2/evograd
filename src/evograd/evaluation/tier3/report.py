@@ -8,17 +8,10 @@ identity fields:
     execution_scope   "model"
     benchmark_level   3
 
-This module is the one place a report is identified. Three rules:
+This module is the one place a report is identified. Two rules:
 
-**The benchmark has three levels since 2026-10-13** (L1 primitive, L2
-composite, L3 whole model). A report of the previous protocol
-(``evograd-tier3-model-v2``) declared the whole model as level 4; it is read as
-level 3 with ``renumbered_from=4``. A report written before the identity fields
-existed is model-scope by construction and is marked ``legacy``.
-
-**Block-scope reports are refused.** The block scope (one decoder layer,
-forward plus VJP) was removed with the old Level 3; its reports
-(``evograd-tier3-block-v1``) are historical and are never aggregated.
+**Only the current protocol is read** (``evograd-tier3-model-v3``, with all
+three identity fields); any other protocol is refused by name.
 
 **Nothing numeric is read with a default.** A report that lacks a key raises
 with the path it was looking for -- the ``.get(name, 0.0)`` that once published
@@ -36,18 +29,12 @@ from evograd.evaluation.common.report import ReportFieldError, _require
 #: ``runner.TIER3_PROTOCOL_VERSION``; spelled here so this module does not
 #: import the runner (and torch) to read a JSON file.
 TIER3_MODEL_PROTOCOL_VERSION = "evograd-tier3-model-v3"
-#: The previous whole-model protocol: identical measurement, level numbered 4.
-TIER3_MODEL_PROTOCOL_V2 = "evograd-tier3-model-v2"
-#: The removed block scope's protocol, named only to refuse it clearly.
-REMOVED_BLOCK_PROTOCOL = "evograd-tier3-block-v1"
 
 SCOPE_MODEL = "model"
 SCOPES = (SCOPE_MODEL,)
 
 #: The benchmark level a model-scope report measures.
 MODEL_LEVEL = 3
-#: What the v2 protocol called the same measurement.
-MODEL_LEVEL_V2 = 4
 LEVEL_OF_SCOPE = {SCOPE_MODEL: MODEL_LEVEL}
 
 #: What the timing loop wraps. Recorded so a speedup is never read without the
@@ -74,12 +61,6 @@ class Tier3Identity:
     candidate_task_levels: tuple[int, ...]
     #: The timing boundary the latency numbers span.
     timing_boundary: str
-    #: True when the scope was inferred from the protocol string because the
-    #: report predates the explicit fields.
-    legacy: bool
-    #: The level number the report itself declared, when it differs from
-    #: today's numbering (``4`` for an ``evograd-tier3-model-v2`` report).
-    renumbered_from: int | None = None
 
     @property
     def group(self) -> str:
@@ -92,11 +73,9 @@ class Tier3Identity:
             "evaluation_tier": self.evaluation_tier,
             "execution_scope": self.execution_scope,
             "benchmark_level": self.benchmark_level,
-            "renumbered_from": self.renumbered_from,
             "workload": self.workload,
             "candidate_task_levels": list(self.candidate_task_levels),
             "timing_boundary": self.timing_boundary,
-            "legacy": self.legacy,
             "group": self.group,
         }
 
@@ -104,41 +83,23 @@ class Tier3Identity:
 def identify_report(report: Mapping[str, Any]) -> Tier3Identity:
     """What a tier-3 report measured. Refuses what it cannot place."""
     protocol = _require(report, "protocol")
-    if protocol == TIER3_MODEL_PROTOCOL_VERSION:
-        return _identify_model_report(report, declared_level=MODEL_LEVEL)
-    if protocol == TIER3_MODEL_PROTOCOL_V2:
-        return _identify_model_report(report, declared_level=MODEL_LEVEL_V2)
-    if protocol == REMOVED_BLOCK_PROTOCOL:
+    if protocol != TIER3_MODEL_PROTOCOL_VERSION:
         raise UnknownTier3Report(
-            f"{REMOVED_BLOCK_PROTOCOL} is the block scope, removed on 2026-10-13 with the "
-            "old Level 3; its reports are historical and are not read")
-    raise UnknownTier3Report(
-        f"unknown tier-3 protocol {protocol!r}; known: "
-        f"{[TIER3_MODEL_PROTOCOL_VERSION, TIER3_MODEL_PROTOCOL_V2]}"
-    )
-
-
-def _identify_model_report(report: Mapping[str, Any], *, declared_level: int) -> Tier3Identity:
-    legacy = "execution_scope" not in report
-    scope = SCOPE_MODEL if legacy else _require(report, "execution_scope")
+            f"unknown tier-3 protocol {protocol!r}; known: {[TIER3_MODEL_PROTOCOL_VERSION]}")
+    scope = _require(report, "execution_scope")
     if scope != SCOPE_MODEL:
         raise UnknownTier3Report(
-            f"{report['protocol']} is the whole-model training-step protocol; it cannot "
-            f"carry execution_scope={scope!r}"
-        )
-    level = declared_level if legacy else _require(report, "benchmark_level")
-    if level != declared_level:
+            f"{protocol} is the whole-model training-step protocol; it cannot "
+            f"carry execution_scope={scope!r}")
+    level = _require(report, "benchmark_level")
+    if level != MODEL_LEVEL:
         raise UnknownTier3Report(
-            f"a {report['protocol']} report measures benchmark level {declared_level}, "
-            f"not {level!r}"
-        )
-    tier = 3 if legacy else _require(report, "evaluation_tier")
+            f"a {protocol} report measures benchmark level {MODEL_LEVEL}, not {level!r}")
     return Tier3Identity(
-        protocol=str(report["protocol"]),
-        evaluation_tier=int(tier),
+        protocol=str(protocol),
+        evaluation_tier=int(_require(report, "evaluation_tier")),
         execution_scope=SCOPE_MODEL,
         benchmark_level=MODEL_LEVEL,
-        renumbered_from=None if declared_level == MODEL_LEVEL else declared_level,
         workload=str(_require(report, "workload")),
         candidate_task_levels=_declared_task_levels(report),
         timing_boundary=(
@@ -146,16 +107,14 @@ def _identify_model_report(report: Mapping[str, Any], *, declared_level: int) ->
             if "boundary" in (report.get("timing_protocol") or {})
             else BOUNDARY_OF_SCOPE[SCOPE_MODEL]
         ),
-        legacy=legacy,
     )
 
 
 def _declared_task_levels(report: Mapping[str, Any]) -> tuple[int, ...]:
-    """The levels a model report declares, or ``()`` when it predates the field.
+    """The levels a model report declares, or ``()`` when it does not.
 
-    A legacy report names its candidates' operators in ``kernel_sources`` but
-    not their levels; deriving them needs the task registry, which this reader
-    deliberately does not import. ``()`` means "not declared", never "none".
+    Deriving them from ``kernel_sources`` needs the task registry, which this
+    reader deliberately does not import. ``()`` means "not declared", never "none".
     """
     declared = report.get("candidate_task_levels")
     if declared is None:
@@ -307,8 +266,6 @@ __all__ = [
     "SCOPE_MODEL",
     "SCOPES",
     "MODEL_LEVEL",
-    "REMOVED_BLOCK_PROTOCOL",
-    "TIER3_MODEL_PROTOCOL_V2",
     "TIER3_MODEL_PROTOCOL_VERSION",
     "ProviderRow",
     "Tier3Identity",

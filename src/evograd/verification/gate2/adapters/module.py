@@ -54,7 +54,7 @@ class ModuleScope(ScopeBase):
     def __post_init__(self) -> None:
         if self.scope != "model":
             raise ValueError(f"ModuleScope is a model-scope adapter; Gate 2 has no {self.scope!r} "
-                             "scope (the block scope was removed: use scope='model')")
+                             "scope (use scope='model')")
         unknown = set(self.calls_per_execution) - set(self.native_sites)
         if unknown:
             raise ValueError(f"call counts for unknown sites {sorted(unknown)}")

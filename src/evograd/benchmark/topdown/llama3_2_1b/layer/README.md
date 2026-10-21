@@ -9,8 +9,7 @@ model produced, and replays it to prove the capture is faithful.
 ## The whole-layer declaration was removed
 
 `llama3_decoder_layer` -- a single declaration spanning the entire layer -- is
-**no longer registered**, and neither is `af3_single_repr_block`; the
-architectural-block level itself was removed on 2026-10-13. The description
+**no longer registered**, and neither is `af3_single_repr_block`. The description
 below is kept as the record of what that declaration asserted, because the
 capture and replay machinery in this package still brackets exactly that span
 and the two have to agree about what a layer is; it is not a description of
@@ -160,12 +159,12 @@ rather than elementwise.
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.layer.capture \
-    --harvest results/llama3-level4/harvest.json \
-    --out results/llama3-level4/layer16.pt
+    --harvest results/llama3-level3/harvest.json \
+    --out results/llama3-level3/layer16.pt
 
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.layer.replay \
-    --artifact results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/layer16-replay.json
+    --artifact results/llama3-level3/layer16.pt \
+    --report results/llama3-level3/layer16-replay.json
 ```
 
 `--layer` defaults to 16; the JSON sidecar defaults to `--out` with a `.json`

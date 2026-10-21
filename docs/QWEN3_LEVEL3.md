@@ -12,7 +12,7 @@ Run the reference forward and loss backward:
 
 ```bash
 python -m evograd.benchmark.topdown.qwen3_0_6b \
-  --out results/qwen3-level4/canonical.json
+  --out results/qwen3-level3/canonical.json
 ```
 
 This smoke command does not run an optimizer or measure steady-state speedup.
@@ -20,10 +20,10 @@ To capture the representative decoder layer, first harvest the model:
 
 ```bash
 python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
-  --out results/qwen3-level4/harvest.json
+  --out results/qwen3-level3/harvest.json
 python -m evograd.benchmark.topdown.qwen3_0_6b.layer.capture \
-  --layer 14 --harvest results/qwen3-level4/harvest.json \
-  --out results/qwen3-level4/layer14.pt
+  --layer 14 --harvest results/qwen3-level3/harvest.json \
+  --out results/qwen3-level3/layer14.pt
 ```
 
 Artifacts contain weights, call arguments, outputs, incoming gradients and
@@ -50,8 +50,7 @@ for one compiled site, and `--whole-model-compile` for the compiler baseline.
 | `swiglu_mlp` | `qwen3_swiglu_mlp` | 28 |
 | `residual_rmsnorm` | `fused_add_rms_norm` | 56 (both adds per layer; the cross-layer and final-norm fusions included) |
 
-The architectural-block scope (one decoder layer, forward plus VJP) was removed
-on 2026-10-13. The captured layer above remains the source of the Level-2
+The captured layer above is the source of the Level-2
 sites' real invocations and of the layer replay
 (`python -m evograd.evaluation.workloads.qwen3_0_6b.layer.replay`).
 

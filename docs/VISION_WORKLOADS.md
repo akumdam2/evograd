@@ -1,7 +1,7 @@
 # ConvNeXt V2 Tiny and Qwen2-VL-2B
 
 These are **whole-model Level-3 training workloads**, with harvested Level-1
-primitives and selected Level-2 fusion sites. There is no block-level benchmark.
+primitives and selected Level-2 fusion sites.
 Neither model imports from `references/`. Removing that directory is safe.
 
 ## Architecture sources and execution contracts

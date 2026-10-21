@@ -10,9 +10,9 @@
   "layers": 4,
   "model": "Sample-Decoder",
   "name": "sample-decoder-fixture",
-  "protocol": "evograd-tier3-model-v2",
+  "protocol": "evograd-tier3-model-v3",
   "provider_order": [
-    "liger",
+    "failing",
     "eager",
     "candidate"
   ],
@@ -169,11 +169,11 @@
         "unverifiable": []
       }
     },
-    "liger": {
+    "failing": {
       "error": "PreflightFailure: rmsnorm dweight max_abs_err 0.5 > atol",
       "failed_at": "preflight",
       "ok": false,
-      "provider": "liger"
+      "provider": "failing"
     }
   },
   "seed": 0,
@@ -240,5 +240,8 @@
     "preflight": "every patched kernel through bench.provider.verify_pair_provider on its declaration's correctness workloads; a provider that fails is not timed"
   },
   "workload": "sample_decoder",
-  "workload_id": "sample-decoder.train.bs2.seq2048.bf16.cuda.sdpa.deadbeef"
+  "workload_id": "sample-decoder.train.bs2.seq2048.bf16.cuda.sdpa.deadbeef",
+  "evaluation_tier": 3,
+  "execution_scope": "model",
+  "benchmark_level": 3
 }

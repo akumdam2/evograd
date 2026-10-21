@@ -1,7 +1,5 @@
 """Bridges to existing tier-3 code, run on tiny CPU configurations.
 
-* the removed block scope: ``LegacyBlockScope`` (a deprecated name) refuses a
-  legacy block adapter without importing removed block modules;
 * ``WorkloadModelScope`` over the Qwen3-0.6B and Llama-3.2-1B workloads,
   shrunk with ``arch_overrides`` (random initialization, no download);
 * Gate 3 over the Llama workload with its own ``SyntheticBatches``.
@@ -21,7 +19,6 @@ from torch import nn
 from evograd.verification import gate2, gate3
 from evograd.verification.common.execution import Deployment, Sample, candidate
 from evograd.verification.common.reports import FAILED, PASSED
-from evograd.verification.gate2.adapters.block import LegacyBlockScope
 from evograd.verification.gate2.adapters.model import WorkloadModelScope
 from evograd.verification.gate2.calibration import calibrate
 
@@ -62,28 +59,23 @@ def bound_eager(op_name, scale=1.0):
     return lambda *args: kernel(*args) * scale
 
 
-class TestNoBlockScope(unittest.TestCase):
-    """Gate 2 has no block scope: the tier-3 block bridge is gone and the generic
-    module adapter is model-scope only."""
+class TestScopes(unittest.TestCase):
+    """Gate 2 scopes are ``operator`` and ``model``; the module adapter is model scope."""
 
-    def test_legacy_block_bridge_refuses_to_build(self):
-        with self.assertRaisesRegex(ValueError, "no block scope"):
-            LegacyBlockScope(lambda s: None)
-
-    def test_module_scope_refuses_block(self):
+    def test_module_scope_refuses_another_scope(self):
         from evograd.verification.gate2.adapters.module import ModuleScope
         from tests.verification import _fixtures as F
 
-        with self.assertRaisesRegex(ValueError, "no 'block' scope"):
-            ModuleScope(scope="block", name="b", factory=lambda sites: F.ToyBlock(sites),
-                        native_sites=dict(F.NATIVE_SITES), make_invocation=F.block_invocation,
-                        select_outputs=F.block_outputs, output_names=("y", "aux", "tag"))
+        with self.assertRaisesRegex(ValueError, "no 'layer' scope"):
+            ModuleScope(scope="layer", name="b", factory=lambda sites: F.ToyModel(sites),
+                        native_sites=dict(F.NATIVE_SITES), make_invocation=F.toy_invocation,
+                        select_outputs=F.toy_outputs, output_names=("y", "aux", "tag"))
 
-    def test_a_block_scoped_adapter_cannot_calibrate_or_be_judged(self):
+    def test_an_unknown_scope_cannot_calibrate_or_be_judged(self):
         from tests.verification import _fixtures as F
 
         scope = F.toy_module_scope()
-        scope.scope = "block"                       # forced past the constructor
+        scope.scope = "layer"                       # forced past the constructor
         cal = calibrate(scope, patch_set=("norm",), samples=samples("b", [1]), compile_backend=FAST)
         self.assertIsNone(cal.policy)
         self.assertEqual([f.code for f in cal.findings], ["unknown_scope"])

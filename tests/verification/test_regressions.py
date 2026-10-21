@@ -86,8 +86,8 @@ class TestExactValues(unittest.TestCase):
             return {"y": result[0], "aux": result[1], "tag": result[2], "attn": attn(result)}
 
         return ModuleScope(
-            scope="model", name="toy_block_attn", factory=lambda sites: F.ToyBlock(sites),
-            native_sites=dict(F.NATIVE_SITES), make_invocation=F.block_invocation,
+            scope="model", name="toy_model_attn", factory=lambda sites: F.ToyModel(sites),
+            native_sites=dict(F.NATIVE_SITES), make_invocation=F.toy_invocation,
             select_outputs=outputs, output_names=("y", "aux", "tag", "attn"),
             metadata_outputs=("tag", "attn"), calls_per_execution={"norm": 2, "mix": 2},
             config={"width": 16}, device=CPU)
@@ -112,12 +112,12 @@ class TestSampleContent(unittest.TestCase):
     def blind_scope(self):
         """A recipe that ignores the sample seed: every sample is the same data."""
         def invocation(sample, device):
-            return F.block_invocation(Sample("fixed", 0), device)
+            return F.toy_invocation(Sample("fixed", 0), device)
 
         return ModuleScope(
-            scope="model", name="blind", factory=lambda sites: F.ToyBlock(sites),
+            scope="model", name="blind", factory=lambda sites: F.ToyModel(sites),
             native_sites=dict(F.NATIVE_SITES), make_invocation=invocation,
-            select_outputs=F.block_outputs, output_names=("y", "aux", "tag"),
+            select_outputs=F.toy_outputs, output_names=("y", "aux", "tag"),
             metadata_outputs=("tag",), make_cotangents=lambda o, i, s: {
                 k: torch.ones_like(v) for k, v in o.items() if k != "tag"},
             calls_per_execution={"norm": 2, "mix": 2}, device=CPU)
@@ -144,7 +144,7 @@ class TestSampleContent(unittest.TestCase):
 def _checkpointed_block(sites):
     """The toy network with weights loaded from a checkpoint file (the factory's
     code, hence the reference identity, does not change with the file)."""
-    module = F.ToyBlock(sites)
+    module = F.ToyModel(sites)
     module.load_state_dict(torch.load(_CHECKPOINT["path"]))
     return module
 
@@ -159,7 +159,7 @@ class TestWeightsBinding(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = f"{tmp}/weights.pt"
             _CHECKPOINT["path"] = path
-            torch.save(F.ToyBlock(F.NATIVE_SITES).state_dict(), path)
+            torch.save(F.ToyModel(F.NATIVE_SITES).state_dict(), path)
             scope = F.toy_module_scope(factory=_checkpointed_block)
             fixed = samples("w", [1, 2])
             cal = calibrate(scope, patch_set=("norm",), samples=fixed, compile_backend=FAST)
@@ -167,7 +167,7 @@ class TestWeightsBinding(unittest.TestCase):
             same = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
                                             policy=cal.policy, samples=fixed)
             self.assertEqual(same.status, PASSED, codes(same))
-            drifted = F.ToyBlock(F.NATIVE_SITES)
+            drifted = F.ToyModel(F.NATIVE_SITES)
             with torch.no_grad():
                 drifted.mix_b[0].add_(0.5)
             torch.save(drifted.state_dict(), path)              # the checkpoint changed
@@ -188,7 +188,7 @@ class TestBoundaryCapture(unittest.TestCase):
         def boxed(h, weight, bias):
             return Box(F.mix_site(h, weight, bias))
 
-        class BoxBlock(F.ToyBlock):
+        class BoxBlock(F.ToyModel):
             def forward(self, x, *, tag=7):
                 for i in range(len(self.norm_w)):
                     h = self.sites["norm"](x, self.norm_w[i])

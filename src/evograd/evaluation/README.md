@@ -20,9 +20,7 @@ for the latest measurements and their limits.
 | T3 | Run the full model: forward/loss, backward, AdamW update and gradient reset |
 
 Levels describe tasks: L1 primitive, L2 composite operator, L3 whole model.
-An L2 candidate can be evaluated at T2 and installed in the T3 model. (The
-block scope -- one decoder layer, forward plus VJP -- was removed on
-2026-10-13.)
+An L2 candidate can be evaluated at T2 and installed in the T3 model.
 
 ## Tier 2: keep the declared correctness rules
 

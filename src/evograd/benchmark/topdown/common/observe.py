@@ -513,7 +513,7 @@ class ObservationPlan:
     #: ``<owner role>_act_fn`` so it cannot merge with the MLP's ``act_fn``.
     activation_owners: tuple[str, ...] = ()
     #: What the events' provenance calls this observation. ``observed`` for a
-    #: whole training step; a block-level harvest says so.
+    #: whole training step.
     provenance_kind: str = "observed"
 
 

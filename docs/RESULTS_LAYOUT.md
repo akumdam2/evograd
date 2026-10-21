@@ -9,7 +9,6 @@ results/
 ├── benchmark/topdown/<workload>/<run>/
 ├── evaluation/tier1/<op>/<run>/
 ├── evaluation/tier2/<op>/<run>/
-├── evaluation/tier3/<workload>/block/<run>/     historical: the block scope was removed 2026-10-13
 ├── evaluation/tier3/<workload>/model/<run>/
 └── experiments/<experiment>/<run>/
 ```

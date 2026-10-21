@@ -92,8 +92,7 @@ choice of real versus generated inputs.
 its actual autograd deployment entry. `PayloadOperatorScope` uses that same
 path with recorded inputs, parameters and output cotangents. `ModuleScope`
 and `model_scope` support full-model evaluation; `WorkloadModelScope` bridges
-existing model workloads. There is no block scope. The deprecated `block.py`
-import shim only rejects the old scope and does not restore a block benchmark.
+existing model workloads.
 
 Each sample performs one forward/backward with matched inputs, weights, RNG
 conditions, and cotangents, without an optimizer update. Check every required
