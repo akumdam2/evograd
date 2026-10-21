@@ -56,13 +56,31 @@ def restore_rng(state: dict[str, Any], device: str) -> None:
         torch.cuda.set_rng_state(state["torch_cuda"], torch.device(device))
 
 
-def save(checkpoint: RunCheckpoint, payload: dict[str, Any]) -> None:
-    """Write atomically: a crash mid-write leaves the previous checkpoint."""
+def save(checkpoint: RunCheckpoint, payload: dict[str, Any], *, attempts: int = 3) -> None:
+    """Write atomically: a crash mid-write leaves the previous checkpoint.
+
+    Each attempt writes a fresh temporary name (a name recreated right after
+    its rename has left an unreadable entry on a parallel filesystem) and is
+    retried; the last error propagates.
+    """
+    import uuid
+
     path = Path(checkpoint.path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    torch.save({"schema": SCHEMA, **payload}, tmp)
-    os.replace(tmp, path)
+    for attempt in range(attempts):
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            torch.save({"schema": SCHEMA, **payload}, tmp)
+            os.replace(tmp, path)
+            return
+        except (OSError, RuntimeError):
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(1.0 + attempt)
 
 
 def load(checkpoint: RunCheckpoint) -> dict[str, Any] | None:

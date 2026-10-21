@@ -55,11 +55,26 @@ def load_program(path: str | Path):
     return module
 
 
-def _write(path: Path, data: Any) -> None:
+def _write(path: Path, data: Any, *, attempts: int = 3) -> None:
+    """Atomic, under a fresh temporary name per attempt (see ``gate3.checkpoint.save``)."""
+    import uuid
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=1, default=str))
-    tmp.replace(path)
+    text = json.dumps(data, indent=1, default=str)
+    for attempt in range(attempts):
+        tmp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+        try:
+            tmp.write_text(text)
+            tmp.replace(path)
+            return
+        except OSError:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            if attempt + 1 == attempts:
+                raise
+            time.sleep(1.0 + attempt)
 
 
 class Suspended(Exception):

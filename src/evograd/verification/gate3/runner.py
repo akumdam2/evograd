@@ -283,7 +283,15 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                 if checkpoint is not None and step < plan.steps and (
                         (checkpoint.every and step % checkpoint.every == 0) or checkpoint.expired()):
                     stage = f"checkpoint {step}"
-                    _save(checkpoint, run, model, optimizer, hooks, adapter.device, step)
+                    try:
+                        _save(checkpoint, run, model, optimizer, hooks, adapter.device, step)
+                    except (OSError, RuntimeError) as exc:
+                        # A checkpoint only serves a later resume; failing to write
+                        # one never invalidates the run. Recorded, training goes on.
+                        run.segments[-1].setdefault("checkpoint_failures", []).append(
+                            {"step": step, "error": f"{type(exc).__name__}: {exc}"[:300]})
+                        if checkpoint.expired():
+                            raise
                     if checkpoint.expired():
                         run.suspended = True
                         run.segments[-1]["suspended_after_step"] = step
