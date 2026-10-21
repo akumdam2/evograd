@@ -1,0 +1,4974 @@
+{
+ "environment": {
+  "machine": "aarch64",
+  "python": "3.12.13",
+  "torch": "2.11.0+cu128",
+  "transformers": "5.16.1"
+ },
+ "gate3_llama": {
+  "identity": {
+   "adapter": {
+    "backward": "mean over the batch's valid tokens",
+    "config": {
+     "workload": {
+      "attn_implementation": "sdpa",
+      "batch": 1,
+      "canonical": false,
+      "config": {
+       "arch_overrides": {
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "head_dim": 16,
+        "hidden_size": 64,
+        "intermediate_size": 128,
+        "max_position_embeddings": 64,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+        "num_key_value_heads": 1,
+        "vocab_size": 128
+       },
+       "attn_implementation": "sdpa",
+       "batch_size": 1,
+       "calibration_path": null,
+       "data_seed": 0,
+       "device": "cpu",
+       "dtype": "float32",
+       "model": "llama_3_2_1b",
+       "seed": 0,
+       "seq_len": 32
+      },
+      "config_hash": "65d9eb5b4c106423",
+      "data_seed": 0,
+      "dtype": "float32",
+      "expected_site_counts": {
+       "attention": 2,
+       "qkv_rope": 2,
+       "residual_rmsnorm": 4,
+       "swiglu_mlp": 2
+      },
+      "gradient_checkpointing": false,
+      "input_checksum": "0426176a52e66ae6:(1, 32)",
+      "layers": 2,
+      "model": "Llama-3.2-1B",
+      "name": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1",
+      "seed": 0,
+      "tokens": 32,
+      "training": true,
+      "unit_name": "tokens",
+      "units_per_step": 32,
+      "use_cache": false,
+      "workload": "llama3_next_token",
+      "workload_hash": "fc7f97b13080cc60",
+      "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
+     }
+    },
+    "objective": "token-weighted next-token NLL (float32, shifted, ignore_index=-100)"
+   },
+   "data": {
+    "train": {
+     "count": 6,
+     "describe": {
+      "batch_size": 1,
+      "batches": 6,
+      "generator_seed_base": 0,
+      "note": "synthetic tokens: an execution and numerical diagnostic, not evidence of language-model quality, and not comparable with a real-text loss",
+      "role": "train",
+      "seed_offset": 1000,
+      "seq_len": 32,
+      "source": "deterministic synthetic tokens (this workload's own generator)",
+      "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
+     }
+    },
+    "validation": null
+   },
+   "evaluator": null,
+   "initial_state": "9f62d3f5d1d3af2e9096a1b793b42e2438342e83542557f161d7db2d9247dde1",
+   "optimizer": {
+    "betas": [
+     0.9,
+     0.999
+    ],
+    "eps": 1e-08,
+    "foreach": false,
+    "lr": 0.001,
+    "optimizer": "AdamW",
+    "schedule": "constant",
+    "weight_decay": 0.01
+   },
+   "plan": {
+    "checkpoints": [],
+    "steps": 6,
+    "validation_enabled": false,
+    "window": 1
+   },
+   "protocol_context": {
+    "golden": true
+   },
+   "seed": 0
+  },
+  "identity_hash": "052a68e4a14ba839906bdc59de8fafe3f741d0a224d0833c183b55aa1453a80f",
+  "objectives": [
+   4.911254405975342,
+   4.904953479766846,
+   4.875096321105957,
+   4.92830753326416,
+   4.841803073883057,
+   4.882084846496582
+  ]
+ },
+ "model_scope": {
+  "llama_3_2_1b": {
+   "contract_digest": "98b632e01ecb0152b1b1789ceb7bb0877c41f7145e2200000f2f635ef2b222b2",
+   "control_measurements": [
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    }
+   ],
+   "identity": {
+    "bridge": "tier3.TrainingWorkload",
+    "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+    "outputs": [
+     "logits",
+     "loss"
+    ],
+    "scope": "model",
+    "site_references": {
+     "attention": {
+      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention.reference:llama3_attention_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention.reference:llama3_attention_forward_production",
+      "task": "llama3_attention"
+     },
+     "qkv_rope": {
+      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope.reference:llama3_qkv_rope_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope.reference:llama3_qkv_rope_forward_production",
+      "task": "llama3_qkv_rope"
+     },
+     "residual_rmsnorm": {
+      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.residual_rmsnorm.reference:llama3_residual_rmsnorm_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.residual_rmsnorm.reference:llama3_residual_rmsnorm_runtime_ref",
+      "task": "llama3_residual_rmsnorm"
+     },
+     "swiglu_mlp": {
+      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.swiglu_mlp.reference:llama3_swiglu_mlp_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.swiglu_mlp.reference:llama3_swiglu_mlp_forward_hf",
+      "task": "llama3_swiglu_mlp"
+     }
+    },
+    "workload": {
+     "attn_implementation": "sdpa",
+     "batch": 1,
+     "canonical": false,
+     "config": {
+      "arch_overrides": {
+       "bos_token_id": 0,
+       "eos_token_id": 1,
+       "head_dim": 16,
+       "hidden_size": 64,
+       "intermediate_size": 128,
+       "max_position_embeddings": 64,
+       "num_attention_heads": 4,
+       "num_hidden_layers": 2,
+       "num_key_value_heads": 1,
+       "vocab_size": 128
+      },
+      "attn_implementation": "sdpa",
+      "batch_size": 1,
+      "calibration_path": null,
+      "data_seed": 0,
+      "device": "cpu",
+      "dtype": "float32",
+      "model": "llama_3_2_1b",
+      "seed": 0,
+      "seq_len": 32
+     },
+     "config_hash": "65d9eb5b4c106423",
+     "data_seed": 0,
+     "dtype": "float32",
+     "expected_site_counts": {
+      "attention": 2,
+      "qkv_rope": 2,
+      "residual_rmsnorm": 4,
+      "swiglu_mlp": 2
+     },
+     "gradient_checkpointing": false,
+     "input_checksum": "0426176a52e66ae6:(1, 32)",
+     "layers": 2,
+     "model": "Llama-3.2-1B",
+     "name": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1",
+     "seed": 0,
+     "tokens": 32,
+     "training": true,
+     "unit_name": "tokens",
+     "units_per_step": 32,
+     "use_cache": false,
+     "workload": "llama3_next_token",
+     "workload_hash": "fc7f97b13080cc60",
+     "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
+    }
+   },
+   "results_digest": "b47573ae60a61fec86b4ca524356f26cf39df290125653ef4288a61f5f0ea95e",
+   "sample_fingerprint": "4365dfae2d89b622bf8c5bdcd9063d49386cc8a5a02328586bf26ae2783ae5a3",
+   "thresholds": {
+    "golden/seed1": {
+     "grad:model.embed_tokens.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "out:logits": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "out:loss": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     }
+    },
+    "golden/seed2": {
+     "grad:model.embed_tokens.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "out:logits": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "out:loss": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "qwen3_0_6b": {
+   "contract_digest": "eb48c59e505b21c7a838f4582dfde55774e3d0c8800ee73b129c1e934c520169",
+   "control_measurements": [
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed1",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "native_repeat"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:logits",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "output",
+     "result": "out:loss",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.embed_tokens.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.q_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.self_attn.k_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.0.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.v_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.o_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.q_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.self_attn.k_norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.gate_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.up_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.mlp.down_proj.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.input_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.layers.1.post_attention_layernorm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    },
+    {
+     "E2": 0.0,
+     "Emax": 0.0,
+     "kind": "param_grad",
+     "result": "grad:model.norm.weight",
+     "sample_id": "golden/seed2",
+     "source": "trusted_compile"
+    }
+   ],
+   "identity": {
+    "bridge": "tier3.TrainingWorkload",
+    "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+    "outputs": [
+     "logits",
+     "loss"
+    ],
+    "scope": "model",
+    "site_references": {
+     "attention": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference:qwen3_attention_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference:qwen3_attention_forward_production",
+      "task": "qwen3_attention"
+     },
+     "qkv_norm_rope": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference:qwen3_qkv_norm_rope_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference:qwen3_qkv_norm_rope_forward_production",
+      "task": "qwen3_qkv_norm_rope"
+     },
+     "residual_rmsnorm": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.reference:fused_add_rms_norm_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.reference:fused_add_rms_norm_runtime_ref",
+      "task": "fused_add_rms_norm"
+     },
+     "swiglu_mlp": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference:qwen3_swiglu_mlp_forward_ref",
+      "kind": "declared_forward_oracle",
+      "reference_contract": null,
+      "reference_dtype": null,
+      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference:qwen3_swiglu_mlp_forward_hf",
+      "task": "qwen3_swiglu_mlp"
+     }
+    },
+    "workload": {
+     "attn_implementation": "sdpa",
+     "batch": 1,
+     "canonical": false,
+     "config": {
+      "arch_overrides": {
+       "bos_token_id": 0,
+       "eos_token_id": 1,
+       "head_dim": 16,
+       "hidden_size": 64,
+       "intermediate_size": 128,
+       "max_position_embeddings": 64,
+       "num_attention_heads": 4,
+       "num_hidden_layers": 2,
+       "num_key_value_heads": 2,
+       "vocab_size": 128
+      },
+      "attn_implementation": "sdpa",
+      "batch_size": 1,
+      "calibration_path": null,
+      "data": "synthetic",
+      "data_seed": 0,
+      "device": "cpu",
+      "dtype": "float32",
+      "model": "qwen3_0_6b",
+      "protocol4_calibration_path": null,
+      "protocol4_diagnostic_timing": false,
+      "protocol4_verdict_path": null,
+      "seed": 0,
+      "seq_len": 16,
+      "simple_calibration_path": null,
+      "weights": "random"
+     },
+     "config_hash": "18d3a0f70688d668",
+     "data_seed": 0,
+     "dtype": "float32",
+     "expected_site_counts": {
+      "attention": 2,
+      "qkv_norm_rope": 2,
+      "residual_rmsnorm": 4,
+      "swiglu_mlp": 2
+     },
+     "gradient_checkpointing": false,
+     "input_checksum": "3a0f0725a7f8d282:(1, 16)",
+     "layers": 2,
+     "model": "Qwen3-0.6B",
+     "name": "qwen3-0.6b.train.bs1.seq16.fp32.cpu.sdpa.17481814",
+     "seed": 0,
+     "tokens": 16,
+     "training": true,
+     "unit_name": "tokens",
+     "units_per_step": 16,
+     "use_cache": false,
+     "workload": "qwen3_next_token",
+     "workload_hash": "174818148aaba3ab",
+     "workload_id": "qwen3-0.6b.train.bs1.seq16.fp32.cpu.sdpa.17481814"
+    }
+   },
+   "results_digest": "2a09bdaa6c5bec2e252c3e9b9965502c43fb3706498777a949b5dcd1e9545985",
+   "sample_fingerprint": "a18f80582f2272986d04a63ad76a5477b07f0ee5e9d0ad3f32cd3863813ac476",
+   "thresholds": {
+    "golden/seed1": {
+     "grad:model.embed_tokens.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "grad:model.norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "out:logits": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     },
+     "out:loss": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed1"
+       ],
+       "trusted_compile": [
+        "golden/seed1"
+       ]
+      }
+     }
+    },
+    "golden/seed2": {
+     "grad:model.embed_tokens.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.0.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.input_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.down_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.gate_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.mlp.up_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.post_attention_layernorm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.k_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.o_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.q_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.layers.1.self_attn.v_proj.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "grad:model.norm.weight": {
+      "E2": 0.0002,
+      "Emax": 0.02,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 0.0001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.01,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "param_grad",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "out:logits": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     },
+     "out:loss": {
+      "E2": 2e-05,
+      "Emax": 0.002,
+      "components": {
+       "E2": {
+        "binding": "floor",
+        "floor": 1e-05,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       },
+       "Emax": {
+        "binding": "floor",
+        "floor": 0.001,
+        "gamma": 2.0,
+        "native_repeat": 0.0,
+        "trusted_compile": 0.0
+       }
+      },
+      "kind": "output",
+      "samples": {
+       "native_repeat": [
+        "golden/seed2"
+       ],
+       "trusted_compile": [
+        "golden/seed2"
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ "qwen3_5_capture": {
+  "corpus": {
+   "payloads": 334,
+   "records": "df384f244f049a5f7dd8a5fd26be2a07f6331bda0ba133dde2dc71b3ef7a3bd0",
+   "shards": [
+    "bdd3638f84be8471889e386269d62654728d35c380016548c5cb37dcb3783ab2"
+   ],
+   "storages": "63f57c96f86d04895e1e6767bbd9b578ef4185507528a4f2c418182afee9edc6"
+  },
+  "step_101": {
+   "grads": {
+    "model.embed_tokens.weight": "8274f9754b67d42d92c3308cbcb485b4b73be16884ac9eddf84d126035a7a824",
+    "model.layers.0.input_layernorm.weight": "a3c217e1693d34f800d62bdf38371268c79eeee09699dadce2476e4f766833df",
+    "model.layers.0.linear_attn.A_log": "0fc6a4e7d8e6fa6c565ca1bbc85f18bae8557969e946ad47638c9af100d4d2aa",
+    "model.layers.0.linear_attn.conv1d.weight": "b47925eaa3f9b183b15a5cf2a89bbf6fedc1720e847dcc97886dd33ffccea7ec",
+    "model.layers.0.linear_attn.dt_bias": "f670ea32877d9b52749ebadb3ba78fb8a5d1e4353216fec282f89d1f5496fe22",
+    "model.layers.0.linear_attn.in_proj_a.weight": "d3686a1a719512a9b094fefb41d46c05d01db1d2e2d068c34d46add141c90f02",
+    "model.layers.0.linear_attn.in_proj_b.weight": "e8e2e8b766e81095eb27f45b7d1b600fd4750c77d06ecab56b4120c2dcce6691",
+    "model.layers.0.linear_attn.in_proj_qkv.weight": "01b1523fb6671ecca0fabc8cb764c6413ebd2ea5b685d9e087a9d4495d8e9205",
+    "model.layers.0.linear_attn.in_proj_z.weight": "c96fb76dc0beb9caa8d5c1539b7a4daa65695cb198a23625a45d4f1d41d4f961",
+    "model.layers.0.linear_attn.norm.weight": "95721226b148251c3d6226c1a0d338bedc054dcaba35ab62992daa4550b3fae2",
+    "model.layers.0.linear_attn.out_proj.weight": "42eee3a496cc68fe1a1e48aca19c8ceb68819d020384d6d9732a6ed889cb8291",
+    "model.layers.0.mlp.down_proj.weight": "c9593c109e4dac4744e32a646a9a744c098102168ae3d864f4b85d98b9e51d40",
+    "model.layers.0.mlp.gate_proj.weight": "a1c3604259fde7bd3280f8b95a7cc2d50e3239d0bdbedf0d08d4182b76678e73",
+    "model.layers.0.mlp.up_proj.weight": "a3f79c97aea86254f52267de47ef9bf8c430f18b471abd10ae57931b4cbd627f",
+    "model.layers.0.post_attention_layernorm.weight": "c5cc58a1cd19e94d1f0e4cb9558c59ebd5889fa5a7fc5749c480947abf248459",
+    "model.layers.1.input_layernorm.weight": "b083f45198fba87c5dd5acc8cffaf9c53c650dd55f3f5080f4933f9286f225b7",
+    "model.layers.1.linear_attn.A_log": "4af1ed112a05a53b1e7234a8d5252475064de0e83bc5c867bf89870fc07be09d",
+    "model.layers.1.linear_attn.conv1d.weight": "85721ef542bab69e65c6e5f1649844e2ee808d3d22e2a97861c76b2d6779388d",
+    "model.layers.1.linear_attn.dt_bias": "18cde251176648b228feadfde50a8a731a2993eda05d4ef0b0c3ff330ce7a2bd",
+    "model.layers.1.linear_attn.in_proj_a.weight": "ceb6e2acb600923792be7c9719e0776886c3fb32b417b4030b7b7e597c0819aa",
+    "model.layers.1.linear_attn.in_proj_b.weight": "e55bffd435c4270284640511f337267f4d44db520ae5f70ed8cf61f4dd587ab9",
+    "model.layers.1.linear_attn.in_proj_qkv.weight": "a6a8810efd43e4f98ac626019b37f89512b5e475b24f6531a35c1fa8f1e5ba86",
+    "model.layers.1.linear_attn.in_proj_z.weight": "7a30fc8f39cadcc9eddb69210243db9d4be6f71372f53202ff9cc234f3cb553c",
+    "model.layers.1.linear_attn.norm.weight": "68d43237d8c768a2592d15f97a77064c0622b4eeae9c3a8f115f4a62e3a7cf5e",
+    "model.layers.1.linear_attn.out_proj.weight": "e6672387ee64f3b4697348f77f38bf72ab05ac7f50d73b392a2816d5d229d703",
+    "model.layers.1.mlp.down_proj.weight": "0e4ee6cbd4ef3015e48861027b1fb20a69b799700a24e4d66c8115fe55088ba5",
+    "model.layers.1.mlp.gate_proj.weight": "10aa98f23e048873a3579cce1edc7a48cc73b7543e6d9be2562aa4c1708cbbe8",
+    "model.layers.1.mlp.up_proj.weight": "971479460fcaeed441e19cfe113e828a487b518e161cf35cbc20ded42fca2149",
+    "model.layers.1.post_attention_layernorm.weight": "061e1437d00690d5ace63d847c993020c411229de0f42286330606f6d483e20c",
+    "model.layers.2.input_layernorm.weight": "7fb5db88a669a0bbcc33a37e90afe942e9564ce8404e1db0840cdcb9115f3ebf",
+    "model.layers.2.linear_attn.A_log": "f5df4e38b45c5ed6f3a8724c13635e999d1c2efe257359c614b1debedc13dcc5",
+    "model.layers.2.linear_attn.conv1d.weight": "c0b15563f5d299d59211926b48f1f2e9ade3fe897d51f9461b7f1edd5b9741a9",
+    "model.layers.2.linear_attn.dt_bias": "6f098bbf9259e751f2dcd87cd95cb776762f1ddae8a0a1fd04d6d5ff66b59183",
+    "model.layers.2.linear_attn.in_proj_a.weight": "0578f097d6eb893db335a80d2bcdf2353955ffaeea38faca48cd2c6aab6de867",
+    "model.layers.2.linear_attn.in_proj_b.weight": "36401866dc21cbace7502566320a8cf696aa6b058d009c0efe9c04d9ae29230c",
+    "model.layers.2.linear_attn.in_proj_qkv.weight": "a03ed3d9d11203441f080706c017624c2a1737d05581ee2048e073853e066a76",
+    "model.layers.2.linear_attn.in_proj_z.weight": "9acd2c488510f9bfccea8c31f00b78817c234a3d6b7f8fb192b87704d27b991b",
+    "model.layers.2.linear_attn.norm.weight": "3b8cff9b1939bd2957534db3bfa0aa556377d9934888b1844848e69ca46bf684",
+    "model.layers.2.linear_attn.out_proj.weight": "c8f2b982e40e8ed473e8e27aac5dbf4f8a73ece13473b81832e43ca4438f170c",
+    "model.layers.2.mlp.down_proj.weight": "0d21e7771231e4aa99042338dbdcf2b439243b4e4322256c08adaaf6c7922d6a",
+    "model.layers.2.mlp.gate_proj.weight": "00421737ce643c23c02e0a07a6a54ef009211a6ad35ea135a129ab394aba43d3",
+    "model.layers.2.mlp.up_proj.weight": "b2d5e7abe0c00e92b390b5b69d567c7458908b4e94251b99f515cc2eb2a6aa6d",
+    "model.layers.2.post_attention_layernorm.weight": "2d499760842e2fc2383fa04b8826496e5cab7b9598d805691a0c8fd337d0dee3",
+    "model.layers.3.input_layernorm.weight": "2990edabefb4f6993919d7c626cc03b5a1a52a38d835ec5b36c0bbf0a96b14d6",
+    "model.layers.3.mlp.down_proj.weight": "4cae5434a86937b9c64f3ff36c3627b8245d9055d5cb9172b5a91c3d90a255ec",
+    "model.layers.3.mlp.gate_proj.weight": "554ee2d6a1ddfd2648ba0f9d7d7e40e98777d1618162828a27df3f97d13baba3",
+    "model.layers.3.mlp.up_proj.weight": "7e745f255d9206fd631db270a63b90b7cb6c23ab7a83c7a9d429d86ef75ef8e2",
+    "model.layers.3.post_attention_layernorm.weight": "068eb16675efb4429108c8c49fb408be507b57ed7b1f3513cef972e61d40d077",
+    "model.layers.3.self_attn.k_norm.weight": "7d0b27b4a5edc662ffb49374c8729b291968aefb7a61e015f49fbf461328c8b4",
+    "model.layers.3.self_attn.k_proj.weight": "70557a7bf9cee486428b22580809c1eac20f473e1485098e111e3583d2964fa7",
+    "model.layers.3.self_attn.o_proj.weight": "780f994b41b540087089eb4488f12cd713e4c825c66fe94fe437a9b7141d9567",
+    "model.layers.3.self_attn.q_norm.weight": "4a97ea4f2853c968eb52dc858d2fd0a3a81c020d95617b6555f74565804606f9",
+    "model.layers.3.self_attn.q_proj.weight": "235e739113e0749dc557f0607ef1b9f590642273e37336ef30c353d07e96c60b",
+    "model.layers.3.self_attn.v_proj.weight": "95db6c76e57aee18cb6f3be7f342472774dc86138ebfecee1b7f4cd782beae58",
+    "model.layers.4.input_layernorm.weight": "95273ebd15fafbfdba23c6b5c373bd4337f8cf441d44544978b0a35619602c86",
+    "model.layers.4.linear_attn.A_log": "7e41aed3e871008b7deef46ed8758d4271437fa38cdd5bc3abab641e57020b24",
+    "model.layers.4.linear_attn.conv1d.weight": "9f8a516ee6b9cf27da83c4145d420c0c199593ab7f315f52e8d5d056d5b99724",
+    "model.layers.4.linear_attn.dt_bias": "85074ffb15de22589dedbf2007c9534e2fc430d36ae523437cf3cc4a108a0979",
+    "model.layers.4.linear_attn.in_proj_a.weight": "5d946f50365dd5ea9679cc96a497c3209dfe2ff78a1d5284c89751f03a47345e",
+    "model.layers.4.linear_attn.in_proj_b.weight": "54b7243a37172fc012e4638b0992cc3eed314ae7be32f82c06423bf3d031a32b",
+    "model.layers.4.linear_attn.in_proj_qkv.weight": "292310b40f5b71f48bb32a71cc52e1faa40c253400f4b68311b2ff58db51a2a5",
+    "model.layers.4.linear_attn.in_proj_z.weight": "2a5fe0e601e93b86638fa7c9b32892478195fd3ab5df47609fd7eb8cbc70122c",
+    "model.layers.4.linear_attn.norm.weight": "c2f5796981f8ec09f2f4a85cb2327b73e0df1ffb94348a30faea5a09eba7b45d",
+    "model.layers.4.linear_attn.out_proj.weight": "64f4d7d555cfdaa7ac5707041195d3e8013ef9fddff7f6248451f58a4075cb3b",
+    "model.layers.4.mlp.down_proj.weight": "8a1fa0e4de2e7cfe6c9a07a0643a493abdb3e751abee826a1751c529e26a2f89",
+    "model.layers.4.mlp.gate_proj.weight": "90722096314a2520b3086c2131c89ccf850c32ec4676ba5cc5860021c0bf3fc0",
+    "model.layers.4.mlp.up_proj.weight": "fec1976dfdfe996ea2c2dfc0c441b4100631d540d22db4758c53e02788ebde58",
+    "model.layers.4.post_attention_layernorm.weight": "d1d8fe21886dabfa442e2752fa1ec0d7fc5fba0f7b4cab1f730484e7874d3797",
+    "model.layers.5.input_layernorm.weight": "81278508c52c6ec9fad7e696f9b0bc1f930e2622a6b2c742ddc44e6917bd92f4",
+    "model.layers.5.linear_attn.A_log": "d6b92e0481b5800527bea1dba2d7a3f3cabf36f394ff8f1aeb0d041355ff9402",
+    "model.layers.5.linear_attn.conv1d.weight": "84531eeba0a9ee43ba4d1ab78d153f7b38c61c142b08a71f26b3d187e065d305",
+    "model.layers.5.linear_attn.dt_bias": "8c687f238837c7877a4101064361d67d8b1e71c0e5f29c0e0cea221644debeeb",
+    "model.layers.5.linear_attn.in_proj_a.weight": "5528b7405eb7de3d28807650703791c0278604366aeb2f7a5c5590d6da4b5745",
+    "model.layers.5.linear_attn.in_proj_b.weight": "4327321f0716c4940832499f6a09c2a19196346689b662b9a4bce0b0aa9db797",
+    "model.layers.5.linear_attn.in_proj_qkv.weight": "7fcd5af23efc2359924fef88c24a738f611361f99a18756c87726792f32604fb",
+    "model.layers.5.linear_attn.in_proj_z.weight": "50dda10a9e539c09896f8a5687b6810c88a361fd6ba4564dd5677e61c6707598",
+    "model.layers.5.linear_attn.norm.weight": "52dd3d3be10a9d4659e110517705ef87a5686082b1490ab0a30991d2aba2d7cb",
+    "model.layers.5.linear_attn.out_proj.weight": "a536ecadb10f1368ab37599c8e167a79df2dfa2d0c15b1ea516d039440fc062d",
+    "model.layers.5.mlp.down_proj.weight": "474e261a08b325089434b25c91bbda5ef4d9d8927e7f4243f6a4877f80ba0888",
+    "model.layers.5.mlp.gate_proj.weight": "8a2cd9de21bf6b927a1d65b8e92e31f115aedf306f5c385ad6dac8abcfd38d56",
+    "model.layers.5.mlp.up_proj.weight": "4505ca62e908786af7f0df2e3a97b1a023b481832326ad31426910836e81abeb",
+    "model.layers.5.post_attention_layernorm.weight": "8a66992f4ed2940978d8fef89bccca16d9d0a0fd58e371aac29b0e210160b12f",
+    "model.layers.6.input_layernorm.weight": "319957a0a8ee066ffb16da6e85284bf27ccff4a237be33630023711a836ce493",
+    "model.layers.6.linear_attn.A_log": "2d9de5998b356385908b190c7ccef7c9085c6d4dd38f457ee2477de0db31c843",
+    "model.layers.6.linear_attn.conv1d.weight": "98ed3d5f3d91545f7363a76dd9a5d7606f0f98a4d0733d37986e66918ea07164",
+    "model.layers.6.linear_attn.dt_bias": "25ed7754327057ea42f0b250d373c78c355dfc40d86b7912f184aa68a2bc2a14",
+    "model.layers.6.linear_attn.in_proj_a.weight": "df0e30dc6164ce0432768e72530d0690a9b6f4dd2b515f36ec6e363ee84ae8cf",
+    "model.layers.6.linear_attn.in_proj_b.weight": "96e4525f7dc089fd7ec09b85765ddd6294539c3156706461d00d72cf7c6e34bb",
+    "model.layers.6.linear_attn.in_proj_qkv.weight": "88c40496893dc8cc9002b9bb352796a8fbdb40d2aaa4985b0d69ea315944b950",
+    "model.layers.6.linear_attn.in_proj_z.weight": "d742189cf0ad6b7e0e7fdc3f3947945c6a7e76220883ceb35d53b2a0d6a2d695",
+    "model.layers.6.linear_attn.norm.weight": "76c803e7e2e05ca33f2951a068f0d21d2e47339b8a3543e3e2a997cdcd16418f",
+    "model.layers.6.linear_attn.out_proj.weight": "641c9086bb59dd960a482cfb6be9727be7949b4c288c3957b8444d769c78bf2a",
+    "model.layers.6.mlp.down_proj.weight": "c17b2030e4f322cdb9cc4e5d936f61f99306e10493bfa56db65cebee9e75b312",
+    "model.layers.6.mlp.gate_proj.weight": "8dd2ca2125eebcde1d97783bfde29e060d202261007c9bb4ee2878adbe950260",
+    "model.layers.6.mlp.up_proj.weight": "6b91c9b2cfed686f7da787ac7bdda8da9d8d269efc88c95d5435aa5c3c81e1e4",
+    "model.layers.6.post_attention_layernorm.weight": "746358e25dd2f039c5b5ed72a22a20b2699c86236f60c8863180b82485b38dc1",
+    "model.layers.7.input_layernorm.weight": "79cee6e794e450a18c1a742a8df7a2d4418299d72ed9fdf889def3be169775b5",
+    "model.layers.7.mlp.down_proj.weight": "f27969b89ea602e6d4446dfa83eb2573be148a20019b214dc26c0ff7fdad19fd",
+    "model.layers.7.mlp.gate_proj.weight": "d21da6c56e2262560b4f52deadddf27e73c6de9e8f674c46cfb61706c6ac45f0",
+    "model.layers.7.mlp.up_proj.weight": "f349585b35e8829bf8818342dbfe5bd87cccca2ab2ecd305895c4669780e36ef",
+    "model.layers.7.post_attention_layernorm.weight": "91595c7ae92d8086955cb58c6a730e28279a3d49aa5b204cfcff6b7d1d263cf0",
+    "model.layers.7.self_attn.k_norm.weight": "0836cc5f49d3d5aab52597182d43a9d4da0c42ed780c51d7c792e48faa02b62a",
+    "model.layers.7.self_attn.k_proj.weight": "77ffcb9b5e60d779c6b727dd4d39951685a72b527530decdad9cb12990d95004",
+    "model.layers.7.self_attn.o_proj.weight": "254b6db596cd34ffccf36c46d08de05011676999e6ec9a3ff084781755355c11",
+    "model.layers.7.self_attn.q_norm.weight": "4d97b41fd396f1d4cf35d2b55ca2b81d43ec50f922622bea602d2e49756a16fc",
+    "model.layers.7.self_attn.q_proj.weight": "004ea5015ba7296e09340a9c4d1a512e36360d7dfdb6f594aa5a6e91307f3d2a",
+    "model.layers.7.self_attn.v_proj.weight": "13d1bc270ec6e0e6bbc7a823a1b241aea46a8b4f57e158482df183e25e5aec87",
+    "model.norm.weight": "b7c4e6a4962515e1bca6b0d2cdc5ab969bb7ec9c3708baa7aac8ea9852ffe6e4"
+   },
+   "logits_digest": "91a6105a401bd5638c8f7b2aa951a63e1e6dd25dcf82547d2dfe7d33cb910488",
+   "loss_digest": "19cefe36578095d0ec42f0a09a14455db07266cf03c4125cefc67352b99e0388"
+  },
+  "step_303": {
+   "grads": {
+    "model.embed_tokens.weight": "9cfb9208f7fe0b6df635c20808fa6aa0e62d0b198dea65c70bab8200d1de5cde",
+    "model.layers.0.input_layernorm.weight": "8e054aa95592a52929cb8cb2a73dfb13f3a4522a7dedd3270ce879fe89594c9b",
+    "model.layers.0.linear_attn.A_log": "90c42efdd66c55541db05e70a5d5fe562c8c6c79aab539fe680637cff1f4e32d",
+    "model.layers.0.linear_attn.conv1d.weight": "b759d85767b001f6b6e3a96dd3f6b3c9042b5c880a96c20dd3f7c24d5c3217d8",
+    "model.layers.0.linear_attn.dt_bias": "e8e6139fdc6b778cb018b48f1bb0590ece35ed6b92dcbd8d123eec64afffb1d2",
+    "model.layers.0.linear_attn.in_proj_a.weight": "84c0987c81a953aff868e4ef1b2cea76455df7c8cba1222f214e1a0a87c11249",
+    "model.layers.0.linear_attn.in_proj_b.weight": "a187280349630b829eaa414334f94472849dddc0960ddaa8ce302eaa4757b85c",
+    "model.layers.0.linear_attn.in_proj_qkv.weight": "6e977b97cde140d9a083cc7fb7b8d9c9cec31c0438f61a85314581fe9fff5a17",
+    "model.layers.0.linear_attn.in_proj_z.weight": "8e01e72f9aae0b01e49eafcb2bcd3e621b7d601d82876a221463eaabc6ab884d",
+    "model.layers.0.linear_attn.norm.weight": "c89c6072d1957376d254dcbe0cde7caa54c8ba8f8ef56f7b60ac0f6bc8b6e2e1",
+    "model.layers.0.linear_attn.out_proj.weight": "0a7487a431581be7f967ba46b358f76e98098c3af31599d5e5fc2671d6de8b32",
+    "model.layers.0.mlp.down_proj.weight": "ea31b58ec883390928bfde8b353bcb5a24b201236d1412d34bd21331bdb0ffb3",
+    "model.layers.0.mlp.gate_proj.weight": "84446e13873c322d032ac169544b0fb578e838c965c658c29fa1a81975b54e67",
+    "model.layers.0.mlp.up_proj.weight": "806ce1adcfa627980bb692f143c59b6d3a2b8e051a3d95303034ed003d09f001",
+    "model.layers.0.post_attention_layernorm.weight": "59056f7f57f464588b4d35b505ab28e2dbb6d4dc9dd9bea7f87d7b38168cd9af",
+    "model.layers.1.input_layernorm.weight": "47c085adadafcbacc962118698e43d242f06e36fd9d974c91e48a56b08d90336",
+    "model.layers.1.linear_attn.A_log": "b65a0586e8fc63d7b4d4a1896a38a80d92b569146050b1406d3c9375db6390e6",
+    "model.layers.1.linear_attn.conv1d.weight": "d0d537b9cdbf8db593918412555f9c71f2ba406d49316cb4ecaff0178d9fd7f5",
+    "model.layers.1.linear_attn.dt_bias": "c447770eb09f7a1ef3e8f9f85f07ecf78c15d74ed3c03927fc7ae1642d8653a7",
+    "model.layers.1.linear_attn.in_proj_a.weight": "6ffb650b402f9d90cd180dc64e348fddc212bfc7532aa3afce1f8cdcdefce893",
+    "model.layers.1.linear_attn.in_proj_b.weight": "d6255ae6312af0a8f64161d758b1f34ef6ab25b12d7fe990c1165624bd732295",
+    "model.layers.1.linear_attn.in_proj_qkv.weight": "2d94f4ae9e7c549fdeb5646bc22814fc73fcfeacadc66ffd9a0fa196a6d84734",
+    "model.layers.1.linear_attn.in_proj_z.weight": "00aefd043979ecedac5a061529091c14c9a902c3cb5f5988a8b2b1c855361a40",
+    "model.layers.1.linear_attn.norm.weight": "b55d3529538783ccdb23f377f3295b6a2dab4d5aec8f14bcdee3c2ad481171ba",
+    "model.layers.1.linear_attn.out_proj.weight": "99cb8d1929c9cf06209cb44bf583d3f1e6d1e35e5ad2fda27bae1014f9090235",
+    "model.layers.1.mlp.down_proj.weight": "930ebb044ae3541f0b10ae540412626e096d0befc9c21dded4e8c8073844e45e",
+    "model.layers.1.mlp.gate_proj.weight": "326d105649f9143d8a820680a215230619a483b04b3461a39d8105544d66c271",
+    "model.layers.1.mlp.up_proj.weight": "1c881ad69dc53ed3ba0b6443779bf3551b90695f69f45183215403e021c55773",
+    "model.layers.1.post_attention_layernorm.weight": "8ba34db05c875330283cb082e5eb406ddf3b535d66ac02093ad0dd8a59c0f3a9",
+    "model.layers.2.input_layernorm.weight": "fce8bded7577cfa0e418e85a8606ac851c0229da3b95b97cdb9b2ad78c3e3b34",
+    "model.layers.2.linear_attn.A_log": "988f96c622d3721eeaf712dd012f8f8d268e21ac359bff906b41db71a91cf063",
+    "model.layers.2.linear_attn.conv1d.weight": "3c19ab0c7153438252ec3f4fb1ad0366f58617c4306e31aa89b0e52739100f1d",
+    "model.layers.2.linear_attn.dt_bias": "04b02f0a5fadc2bfb3ae58f5fa823218e3e4d841ef86b5ea13f7623a18d95328",
+    "model.layers.2.linear_attn.in_proj_a.weight": "d4f4f27a2f15babfcac96f85dd9bc7e96e0740723c06fd0e30d28508e91cf93a",
+    "model.layers.2.linear_attn.in_proj_b.weight": "c95dbf0e9aae044eb6cf5ba85735a14c305e8e5160b98fa697f6d645ac3b6462",
+    "model.layers.2.linear_attn.in_proj_qkv.weight": "5187017bb301922514faefdfa0f00e3b69c76a0b8563535548db0631fe1691d4",
+    "model.layers.2.linear_attn.in_proj_z.weight": "c995821ad0fdeb5f00413620d0c8c96fac3553594cb7679c4baafb0f277fcefb",
+    "model.layers.2.linear_attn.norm.weight": "15c1fbb7533059e542360ce76b9216e4a2d68791e1dc34f423b8419d0bf8e632",
+    "model.layers.2.linear_attn.out_proj.weight": "0e19db0c82bdd0e9fc38efc7e8b9e0f2f39f10e8fefbe11ff4a954c0083bc70d",
+    "model.layers.2.mlp.down_proj.weight": "8556f4954c0cfdef76c72d0122b253381484f01845216d5db9fe20321d685536",
+    "model.layers.2.mlp.gate_proj.weight": "9162a07ee5b9daffa50f3d7f2fdcb95f4aa90d19d03d797c0ae3a3bc98642742",
+    "model.layers.2.mlp.up_proj.weight": "b898fed93aa3f49dfcf38367472de543c82e85835029ebd36bfb35ea3e6af294",
+    "model.layers.2.post_attention_layernorm.weight": "2b69abc83552a0aaf7ae89ea34c6bb6758971dcd1bf0f7e2738e709420de09ca",
+    "model.layers.3.input_layernorm.weight": "bc79a467a507efe0c1cdc40880a484774ae1034ceaaf56fd5fe824621a0911fd",
+    "model.layers.3.mlp.down_proj.weight": "ddfd72e7aa159d95cb1fef466bbc3cba065d4bae948ead6a3c116a0ec73077d2",
+    "model.layers.3.mlp.gate_proj.weight": "bc1db881d081c93cf8cac72b1de9df486d40bfe9173d23e821f6c5c12fa13771",
+    "model.layers.3.mlp.up_proj.weight": "45323642a28428738fd0bf6e833b8170812f59cbd4d9989f32252e9fbb6b80ce",
+    "model.layers.3.post_attention_layernorm.weight": "73cdc6c92e6b6ba0ed2338ab204f874d33d662a12a681f6da54880744e4ab673",
+    "model.layers.3.self_attn.k_norm.weight": "8af2f2b0b61ad386e26d2858bd88e9d4b989aacecd0f38700ac506379881ddd8",
+    "model.layers.3.self_attn.k_proj.weight": "0f79d0327e8906047e61fa63c7b486a00ce3b4ab9e4ca979200393e447b7f0d6",
+    "model.layers.3.self_attn.o_proj.weight": "c79b72595c63ee4133dac2bca3932967518b100b4c82a9589a804fdef389d169",
+    "model.layers.3.self_attn.q_norm.weight": "78f8fa371156c0aa1d23dd14fbfeccc6589f0dfef9e3d92ef0566469f3d60d36",
+    "model.layers.3.self_attn.q_proj.weight": "3d7e534dd1f80af0ed71a8b52bf7271bcedcadfb711b76fcc3c9e0a1b842b612",
+    "model.layers.3.self_attn.v_proj.weight": "d77c4d728d62a6c7ec978b76f7613b4b9e3d975942b181f93e61a7ff8f97eb4e",
+    "model.layers.4.input_layernorm.weight": "51d8268ce6471ecddd5e3d7d79b3484d48ae967daa69a1356c20655f55866f32",
+    "model.layers.4.linear_attn.A_log": "eb77873ae863a136f7972e22736be70868ce755f0393dcd909c26da4916662aa",
+    "model.layers.4.linear_attn.conv1d.weight": "ecd5f98d5274ec75ce992886f0eb52df725b114bb9e140a31527f14456ddda0f",
+    "model.layers.4.linear_attn.dt_bias": "33644932d1a11dbe76820f8e9bdfd53579de66e6826875778a52d98134e67215",
+    "model.layers.4.linear_attn.in_proj_a.weight": "e274db857b1740971e7e699f7118041609f878d7c47488b57b0b4c7ee061cfe1",
+    "model.layers.4.linear_attn.in_proj_b.weight": "1bdb0f0fb3a0b49b52e5614b7609fc8c24eedb860354c18df17d80ecc11d96d2",
+    "model.layers.4.linear_attn.in_proj_qkv.weight": "59d984747087db489b83e3db297c7946f038aae3c097a69c2fc58a644b8f70b4",
+    "model.layers.4.linear_attn.in_proj_z.weight": "516cf223a4273087db22884ba8b1ac7a1bc7cb14f46a073df1bc25d749a5cf6f",
+    "model.layers.4.linear_attn.norm.weight": "cdeca526d4204db8f3d0ec8efedf914144d2bd749a8e35a57433f41fdcd06661",
+    "model.layers.4.linear_attn.out_proj.weight": "3fec942508e9d9913380d8fe20cd28c16eb64f16f0ad5d4a057f69f2d4616c58",
+    "model.layers.4.mlp.down_proj.weight": "a3a962819a3d923d4bae5e0aee97d109139da629642edeecf9fbe0f2f69bfa69",
+    "model.layers.4.mlp.gate_proj.weight": "f20bf464433b2f41b0558bcb7c95238657ea8f17f3cc45dcaea0bd83df9e3b0c",
+    "model.layers.4.mlp.up_proj.weight": "c74cd45fc065c8833ae48c8356384425d786482ab3b8c2ad5e146beb72661661",
+    "model.layers.4.post_attention_layernorm.weight": "9b926d76ee49b761f6f35413e657e16941ea442383bcadb65a0da32f44688d8e",
+    "model.layers.5.input_layernorm.weight": "2da783ba4ba84d67bbfd9d989153b1a78c2576ec71b2d1b8d2880a99defcdd9b",
+    "model.layers.5.linear_attn.A_log": "95845f3a00dc4b0558fbf2bb10b154836b2f11e8a8a564ff0d7539773ca8361f",
+    "model.layers.5.linear_attn.conv1d.weight": "b78d705e4be9765596c74d780a3c4f0f1f2d098ac124857c2c83c5e3e958f4e3",
+    "model.layers.5.linear_attn.dt_bias": "17dc06fe8a3a8a29fa5ae3228562c73039c24ffc364fa060a67112cedad8fbce",
+    "model.layers.5.linear_attn.in_proj_a.weight": "7e614fb8eab14af28fee6592c8b6e42703a404eb7322368d7bf0489f914bbeef",
+    "model.layers.5.linear_attn.in_proj_b.weight": "7fa46bf2b100f96938df4549bdc8d4a2db64e8240bf147f2ebd0cea8e09a6923",
+    "model.layers.5.linear_attn.in_proj_qkv.weight": "13854ece0a802ee049f3385d9298a5dcb7988b9aecb602d7652b4c8537cc29e6",
+    "model.layers.5.linear_attn.in_proj_z.weight": "2352807aa4a02f25043416333555d4997917aedae3489a651642132e518066f0",
+    "model.layers.5.linear_attn.norm.weight": "87193d8c1962cdfd1f4bba6cb6a99fe24a1a66b096aca6c3e5002e24dbc5c13a",
+    "model.layers.5.linear_attn.out_proj.weight": "a1d13c53f4d1f385590488818b6f4458f4020d68ab8a74dac044e2a6b5930767",
+    "model.layers.5.mlp.down_proj.weight": "9cd5b96b0e6fd5f00bee0f2de8813c25d50c9229c3ed49f8e24a96c7850e9ef3",
+    "model.layers.5.mlp.gate_proj.weight": "447f55178c9a3ca21c17e9e0ed61bca3ac37fd40ca5df2597dfce0ed5b8b3188",
+    "model.layers.5.mlp.up_proj.weight": "aec08f6f0fad47fee5c2e5c8c714a2d920bcac3c9ca55fc4571ae4d0b51bd459",
+    "model.layers.5.post_attention_layernorm.weight": "e5f4b33691cd2bbde3c250a7617d273ac3026c18ad5237094a966e10991bdc0f",
+    "model.layers.6.input_layernorm.weight": "cd1672991459752dafd436f82b886953f744ad0facfcf0f0fae1dfd1062ab055",
+    "model.layers.6.linear_attn.A_log": "9719025d30fdfb415a4fda12f03478dff7909beb6afdfe3ba5d395fd198bb07a",
+    "model.layers.6.linear_attn.conv1d.weight": "6a689c1e1515a38f4474dfd6faaaea4351010010b24c3c20367d2dd60575873c",
+    "model.layers.6.linear_attn.dt_bias": "f4e935b11cbdeacbc15326dd81c9e8c8656396d7540fc7c5b515aba5424ef14a",
+    "model.layers.6.linear_attn.in_proj_a.weight": "4ff92328cfd0fac74aae36f57fe0792b7c0a8bf2de88b68d77e023785baac67c",
+    "model.layers.6.linear_attn.in_proj_b.weight": "1ab884dd32c644b79998e529a8f735c7d4fb6603c724a2957e074f4e1613643d",
+    "model.layers.6.linear_attn.in_proj_qkv.weight": "34ca56279520c4c5e9696c699e21f2f1c86044cac87b8005189c27181c43996e",
+    "model.layers.6.linear_attn.in_proj_z.weight": "53d1b6d80609a66d657d031ba57fd2820b6f46360ddfca15e32c1d38b084a91c",
+    "model.layers.6.linear_attn.norm.weight": "e014cc1ccbdfce49a26222873def9f1f0c3a82648f44087eb77393c1bcd14f83",
+    "model.layers.6.linear_attn.out_proj.weight": "9691a18a3905690c0ba09565ebf35949be2ff4a2fd8328e65b090484dd83101d",
+    "model.layers.6.mlp.down_proj.weight": "935be7365512d86ff32e9a7c9d7f7fc0e42648cc48235a20c5f1577e2ad753e6",
+    "model.layers.6.mlp.gate_proj.weight": "1d2319dc259733a6b6f8f8157c2dd05087977729135f24a2736cc28aa2fffda2",
+    "model.layers.6.mlp.up_proj.weight": "9e73f319a793cfa39ca3b551076143809e470e8c6da4d8b3ff70c4b616019c77",
+    "model.layers.6.post_attention_layernorm.weight": "569eafcb91a5ca951a49f16bcf2c16c646b3736817d5ae40bd7b0885cfc62b6e",
+    "model.layers.7.input_layernorm.weight": "6e3c4f6eb55a41a3306dbc4a7d68e037886a14feae29bbd56b79f330d89c84f1",
+    "model.layers.7.mlp.down_proj.weight": "426710a07b22d3c01cd7aaffdc7fd9c3e9776ec4c00b3e85200b084a0bc7b163",
+    "model.layers.7.mlp.gate_proj.weight": "d9ef00f034b2355aac9f06ff6614d346eef7e0d2994d53dc76bdf162af7156ee",
+    "model.layers.7.mlp.up_proj.weight": "431a2058f33c1e39a0fb9f6a2c7fd5653cff860c9946446a7d48779466dc909f",
+    "model.layers.7.post_attention_layernorm.weight": "7aa08d78c561b7cf729a3e24ce34d2bed5558c196dfc1971fcbf43cc3fa9094a",
+    "model.layers.7.self_attn.k_norm.weight": "575a1f2d1c4f0eb6934fc4e9348e922bc9dae509a0a839d40c8aeb6a71d857cc",
+    "model.layers.7.self_attn.k_proj.weight": "8b0c1316f68b678fc0c3cae4654755c2c1c0e1ce20a2b30edd8f3c7c4ddc9374",
+    "model.layers.7.self_attn.o_proj.weight": "b654111cb5617e28a18e3ad4e9bc9dcf0da31ad635297ac82e369a7fb9ce7e9c",
+    "model.layers.7.self_attn.q_norm.weight": "a3646b3523a9dc90e56eaffd668b7066ad036d44e2fc523a5f8f47221fea2d62",
+    "model.layers.7.self_attn.q_proj.weight": "9dc40bbeb718479b44bbe02538ba6ad4898c5633b91293d0c02b3fe7c29e3de8",
+    "model.layers.7.self_attn.v_proj.weight": "54654bceb3cbd8e57a454a5cd0e861250be97a0144170a27ef2eb33d0211bec3",
+    "model.norm.weight": "e9b2558ac2d44a6d986e554fbf514f3e151b8c908eedc3a2b56299e56f13b0eb"
+   },
+   "logits_digest": "1e3ebe716df71da3ca0d5d9519b5eb2d17733788f879d0f21fe4e7781d185e54",
+   "loss_digest": "c48d6e4a18755b1ffc144cf118ace5b2600abaebd6a21920f62fe0e9b67dee02"
+  }
+ },
+ "qwen3_capture": {
+  "corpus": {
+   "payloads": 86,
+   "records": "2a56eca35fcf2b89e533af16cc6a331554787d77232e9aa3f00f8cc7c5040f5f",
+   "shards": [
+    "6fe0a824b6dde4b582644c7e439bef1c8404b7813cd00cb17c5cb3ecfd494378"
+   ],
+   "storages": "372a22e98af40a9567aac86c850f4a16c36aab98d1de1eb6d5bb7e63eb881cbe"
+  },
+  "state": {
+   "parameters": 24,
+   "state_sha256": "cc9c2c7d9429f210eec1d9ca93c7a7e0937b237dda38f198197470df852ba9dc",
+   "tied_lm_head": true
+  },
+  "step_101": {
+   "grads": {
+    "model.embed_tokens.weight": "bed8e7fc101d17a5e86337c073070d00f49d473d72890f52ea6a9e1b811ca8a1",
+    "model.layers.0.input_layernorm.weight": "971dbd075ff9f8b774e3f3af56502c2a42643156ad45c6dc54dd4b6ce8d3ae71",
+    "model.layers.0.mlp.down_proj.weight": "383d90f7fb4460401400bbd18f9f9ddb263b8c47be9aa808be92c450195e01f6",
+    "model.layers.0.mlp.gate_proj.weight": "2b4ef825122059f5b4afd6a1e5b9b18e7e05bc3597097319baebb427ca79c780",
+    "model.layers.0.mlp.up_proj.weight": "5165194b1a8027607e62e6885d1207f50e6386a6a24efa8f3ec18921f17ae0fd",
+    "model.layers.0.post_attention_layernorm.weight": "e9b0bb8e1064ea6e719bb4192244a38dc15483b06e4c291ca72ae861bf38a21b",
+    "model.layers.0.self_attn.k_norm.weight": "a7b39b76fbd5bc246d14acb57ee501295b8f4355f43534ea28a4f658a8e5b4f8",
+    "model.layers.0.self_attn.k_proj.weight": "e5df5b5e950058394c726e9bf63fc83862e1163437d521e256eb5ecf78f7716a",
+    "model.layers.0.self_attn.o_proj.weight": "25dbc9004896333b5fa463240fba8506fede7f2fe09b04c7a42beec6f6ab5a3e",
+    "model.layers.0.self_attn.q_norm.weight": "12f075efc0066bebc7c21dba0365973fd9302d036ae51155b18e921143971370",
+    "model.layers.0.self_attn.q_proj.weight": "0504f0d9e9ba56f7f6e4569ef8ecef11ebf20e7d8ed7c8834201ac873c6170fa",
+    "model.layers.0.self_attn.v_proj.weight": "bedffd69f67165b79a2898d8cd1d023583f6d118ae4c924f43c1a9a8c03e8379",
+    "model.layers.1.input_layernorm.weight": "83fe34c1f94052eabf46962ceb6497fa7c4e10c48f29dc000eab7539bdfc3c12",
+    "model.layers.1.mlp.down_proj.weight": "b12e8a47f0c6e12826c25bbc5599dc6a644c50a968b2493f824b95bb0d2d69ed",
+    "model.layers.1.mlp.gate_proj.weight": "a40c89c93272bb2752e96b721333c528e7015b06852b91a2f11e7c50a26d5ec8",
+    "model.layers.1.mlp.up_proj.weight": "81e7c8c0496947c12d825ac2e012f4a8d729f6bde508e9e9cb0c228613ca3355",
+    "model.layers.1.post_attention_layernorm.weight": "036537c74748c585e77845bf5c71cabc5880f05a6d0c90acf879a447d20834a2",
+    "model.layers.1.self_attn.k_norm.weight": "082e47d01ff2fdf69ad93e85dd46e4087946cc7c6eb1ac02a7743ecb9aabf1c2",
+    "model.layers.1.self_attn.k_proj.weight": "7655eb9aa7413801897dba58665e027e4f54148d00f30cb04d359adea2892220",
+    "model.layers.1.self_attn.o_proj.weight": "9a50d912e47c25a7dff40ccd8a2b3f0ab817f1c07d3f06e5890bb6889841a555",
+    "model.layers.1.self_attn.q_norm.weight": "4388fdea409598762ddd92785849694886432668a61059599b8646797ca288c0",
+    "model.layers.1.self_attn.q_proj.weight": "dfa83df0e6c4651042f2932f79257488aa3de6db70adc002c3c2245ef6a1cd82",
+    "model.layers.1.self_attn.v_proj.weight": "2bc4056b025eba71e2658f69650d00be88df2f09b512f8819f4647bc40c8857e",
+    "model.norm.weight": "ddca793e88f9b9aee6bf1fe079430da854199b3f9cbd89f61bb4a84df9dfcbcb"
+   },
+   "logits_digest": "ec7c1e79aac9e53caa7d0bab9703412842b04343aff997d12c2c1b1e034e19c6",
+   "loss_digest": "a1499cbd7d5c28c7d14b9c417da43e0129a7c790a05c6d5d322e15c7d33e23ed"
+  },
+  "step_303": {
+   "grads": {
+    "model.embed_tokens.weight": "d55c0077a0a37996519e99af40014d7667c1acbd427637a1abb74980bdf5a305",
+    "model.layers.0.input_layernorm.weight": "265920d57b637dbf31ac2b927ddf5ac85f7e1b468e3905b9e8685fae9bb6747e",
+    "model.layers.0.mlp.down_proj.weight": "e6f64f32c46b9f072237695619b1ff98345d35059d2802e61e921d3eb65a9288",
+    "model.layers.0.mlp.gate_proj.weight": "90388c95adc416a85d8626273217053fed1c111dd4620e76fdfae4ee6c3ca224",
+    "model.layers.0.mlp.up_proj.weight": "80d567421fc5ebeb1c0edb439994cab3de5bacdc08d94828bead040d9f53fbda",
+    "model.layers.0.post_attention_layernorm.weight": "293e56952a36ad750b984e57c01433912a8ec88f7dcd0ec78605e75c561c9a02",
+    "model.layers.0.self_attn.k_norm.weight": "c41c973febe437bd29c842596a74845cdfde7d4ac0148b0d3bce920d74b8da1f",
+    "model.layers.0.self_attn.k_proj.weight": "0114a640c66dd3491e7de64b03c5db77ab5ddc05f375baa514d7c20bc17108c8",
+    "model.layers.0.self_attn.o_proj.weight": "f85b0d820bf8d40da059f99f7615f96ead3d46fe78fcb7839e3672f9be091228",
+    "model.layers.0.self_attn.q_norm.weight": "fef7f569f6c89c60a9a9710edfee612713f06f8a8ae30cbac11bc3cdd82c82e6",
+    "model.layers.0.self_attn.q_proj.weight": "60f3c4156ab906c59e950d975277262404f2bd6678be1578b662a5a681c77b0e",
+    "model.layers.0.self_attn.v_proj.weight": "ff164ddaaff8a63a9a097a3644a71106fd5ebb4c5a670fef05175b0eb2f15cc3",
+    "model.layers.1.input_layernorm.weight": "a687d15395acf6065fa3a3d705b94c0fbf7aa8decbd531e06af27f45850c4b55",
+    "model.layers.1.mlp.down_proj.weight": "010304ce1534f5ce2f95981a68dc3dc6698b3721cc793a1113dabc5a19a897d4",
+    "model.layers.1.mlp.gate_proj.weight": "ba71afffe6d95420c85563dad43e2e8cebbe6a74e08855101a6c138f459749f1",
+    "model.layers.1.mlp.up_proj.weight": "c2edc18834fca90b306b3c5925da364c0ba04688dcb2fff4a5972c317d16cca0",
+    "model.layers.1.post_attention_layernorm.weight": "cb4ed03b847e57f97945bc6ef69ff9052084927b7076906fefd436e69facc0c9",
+    "model.layers.1.self_attn.k_norm.weight": "e3a841fdce83d14cc39d5480bf58c944deb12dcdd71b4fbfc258394dad726a8e",
+    "model.layers.1.self_attn.k_proj.weight": "e335017d0704a81e642bec732b9c0a4d8f81d85e07b71a48c4c47f51d15dbf68",
+    "model.layers.1.self_attn.o_proj.weight": "a7533a9f679cefebd4f82a83c2ac3073350fee02f70a7efc9f7adf0e5e1b1454",
+    "model.layers.1.self_attn.q_norm.weight": "f4b5e9ebaef16f5a20a30fb6242004f2c097ff3ed907fdbeb340dc649c7b8a51",
+    "model.layers.1.self_attn.q_proj.weight": "d02fdbb2f61b70a488122544d2d04872c99450c54c5d56aed558b2d439159d4f",
+    "model.layers.1.self_attn.v_proj.weight": "3e2dccb6ae479c82e595ce90918ea3995a0878cdc940908a2248e4119a216a59",
+    "model.norm.weight": "b2a988c45a276b66db4464fde3e0da2296502afbf65e12e91ffbf3031bbef722"
+   },
+   "logits_digest": "0c9a79e24e815c3c3053fbeeaad0f68fcd1c05e86c79c86507befd0530c2456f",
+   "loss_digest": "c94acdb85441f9cfcd6103cebda72def02871fb1122ff65f5de38eff2b11b742"
+  }
+ }
+}
