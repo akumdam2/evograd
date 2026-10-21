@@ -75,6 +75,29 @@ class WorkloadSpec(_WorkloadSpec):
     attn_implementation: str = "sdpa"
     #: Which kernel runs the experts; see the module docstring.
     experts_implementation: str = CANONICAL_EXPERTS
+    #: ``"random"`` or ``"pretrained:<repo>@<revision>"`` (a pinned local checkpoint).
+    weights: str = "random"
+    #: ``"synthetic"`` or ``"wikitext-2-raw:<revision>"`` (packed as for Qwen3-0.6B).
+    data: str = "synthetic"
+
+    @property
+    def pretrained(self) -> bool:
+        return self.weights.startswith("pretrained:")
+
+    @property
+    def pretrained_repo(self) -> tuple[str, str]:
+        """``(repo, revision)`` of a pretrained checkpoint; raises otherwise."""
+        if not self.pretrained:
+            raise WorkloadSpecError(f"weights are {self.weights!r}, not pretrained")
+        repo, _, revision = self.weights[len("pretrained:"):].partition("@")
+        if not repo or not revision:
+            raise WorkloadSpecError(
+                f"pretrained weights must be 'pretrained:<repo>@<revision>', got {self.weights!r}")
+        return repo, revision
+
+    @property
+    def real_text(self) -> bool:
+        return self.data != "synthetic"
 
     @property
     def workload_id(self) -> str:
@@ -82,11 +105,19 @@ class WorkloadSpec(_WorkloadSpec):
         so two runs that differ only in it are told apart at a glance."""
         base = super().workload_id
         head, _, digest = base.rpartition(".")
+        if self.pretrained or self.real_text:
+            head = (f"{head}.{'pretrained' if self.pretrained else 'random'}."
+                    f"{'realtext' if self.real_text else 'synthetic'}")
         return f"{head}.{self.experts_implementation}.{digest}"
 
     def to_dict(self) -> dict[str, Any]:
         payload = super().to_dict()
         payload["experts_implementation"] = self.experts_implementation
+        # Only when non-default, so the canonical synthetic hash is unchanged.
+        if self.weights != "random":
+            payload["weights"] = self.weights
+        if self.data != "synthetic":
+            payload["data"] = self.data
         return payload
 
     def validate(self) -> "WorkloadSpec":

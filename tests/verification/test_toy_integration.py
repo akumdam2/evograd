@@ -109,6 +109,21 @@ class ToyIntegration(unittest.TestCase):
         self.assertIn("reused_policy", report["gate2_operator_calibration"]["evidence"])
         self.assertFalse(again["candidates"][self.T.CASE_ID]["accepted"])
 
+    def test_without_model_gates_level2_is_judged_by_gate1_and_operator_gate2(self):
+        import dataclasses
+
+        from evograd.verification.integrations.gates import verify
+
+        root = Path(self.tmp.name)
+        model = dataclasses.replace(self.model, model_gates=False)
+        with self.T.toy_environment():
+            verdict = verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest,
+                             root / "no_model_gates", device="cpu", compile_backend=FAST,
+                             log=lambda *a: None)
+        self.assertIn("not_applicable", verdict["model"])
+        self.assertTrue(verdict["candidates"][self.T.CASE_ID]["accepted"])
+        self.assertFalse((root / "no_model_gates" / "gate3.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

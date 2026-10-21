@@ -72,7 +72,7 @@ def _spec_from_config(config: dict[str, Any]) -> WorkloadSpec:
     overrides = {
         key: config[key]
         for key in ("batch_size", "seq_len", "dtype", "device", "attn_implementation", "seed",
-                    "experts_implementation")
+                    "experts_implementation", "weights", "data")
         if key in config and config[key] is not None
     }
     arch = config.get("arch_overrides") or {}
@@ -111,6 +111,10 @@ class OlmoeWorkload:
     data_seed: int = 0
     #: Reduced architectures for tests and debug depths (``--layers``).
     arch_overrides: dict[str, Any] = field(default_factory=dict)
+    #: ``"random"`` or ``"pretrained:<repo>@<revision>"`` (see the spec).
+    weights: str = "random"
+    #: ``"synthetic"`` or ``"wikitext-2-raw:<revision>"`` (see the spec).
+    data: str = "synthetic"
 
     unit_name = "tokens"
 
@@ -135,6 +139,9 @@ class OlmoeWorkload:
             "seed": self.seed,
             "data_seed": self.data_seed,
             "arch_overrides": dict(self.arch_overrides),
+            # Only when non-default, so the canonical configuration is unchanged.
+            **({"weights": self.weights} if self.weights != "random" else {}),
+            **({"data": self.data} if self.data != "synthetic" else {}),
         }
 
     @classmethod
@@ -186,9 +193,51 @@ class OlmoeWorkload:
         return model, provenance
 
     def batch_for(self, *, seed: int):
-        """Deterministic ``(input_ids, labels)``; ``labels = input_ids.clone()``."""
+        """Deterministic ``(input_ids, labels)``; ``labels = input_ids.clone()``.
+
+        On real text, the first training batch of data order ``data_seed + seed``.
+        """
+        if self.spec.real_text:
+            return self.train_batches(self.data_seed + seed).batch(0)
         spec = self.spec.replace(seed=self.data_seed + seed)
         return make_inputs(spec)
+
+    # ── real text (Qwen3-0.6B's WikiText-2 packing, this model's tokenizer) ──
+
+    def _text(self):
+        if not self.spec.real_text:
+            raise ValueError(f"{self.spec.workload_id} has synthetic data")
+        if getattr(self, "_text_cache", None) is None:
+            import os
+
+            from transformers import AutoTokenizer
+
+            from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
+            from evograd.benchmark.topdown.olmoe_1b_7b.levels.level3.model import pretrained_snapshot
+            from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+            if not self.spec.pretrained:
+                raise ValueError("real text needs the pinned checkpoint's tokenizer")
+            snapshot = pretrained_snapshot(self.spec)
+            tokenizer = AutoTokenizer.from_pretrained(snapshot)
+            cache_dir = hf_cache_dir(MODEL_KEY)
+            train = textdata.pack_split("train", tokenizer, block_len=self.seq_len, cache_dir=cache_dir)
+            validation = textdata.pack_split("validation", tokenizer, block_len=self.seq_len,
+                                             cache_dir=cache_dir)
+            identity = textdata.data_identity(
+                train, validation, block_len=self.seq_len,
+                tokenizer_sha256=textdata.file_sha256(os.path.join(snapshot, "tokenizer.json")))
+            self._text_cache = {"train": train, "validation": validation, "identity": identity}
+        return self._text_cache
+
+    def train_batches(self, seed: int):
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+        return textdata.TextBatches(self._text()["train"], batch_size=self.batch_size,
+                                    seed=seed, device=self.device)
+
+    def data_identity(self) -> dict[str, Any]:
+        return dict(self._text()["identity"])
 
     def loss(self, model, batch) -> torch.Tensor:
         """The causal-LM loss plus the load-balancing auxiliary loss: what

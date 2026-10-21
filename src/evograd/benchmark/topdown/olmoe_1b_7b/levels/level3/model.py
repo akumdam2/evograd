@@ -72,8 +72,60 @@ def build_config(spec: WorkloadSpec):
 
 
 def build_model(spec: WorkloadSpec):
-    """The randomly-initialised reference model, on ``spec.device``, in train mode."""
-    return _common.build_model(spec, CLASSES)
+    """The reference model, on ``spec.device``, in train mode.
+
+    Random initialisation goes through the shared builder; pinned weights are
+    loaded (:func:`_load_pretrained`) with the spec's experts kernel and
+    ``output_router_logits`` pinned on, as the declared architecture says.
+    """
+    if not spec.pretrained:
+        return _common.build_model(spec, CLASSES)
+    spec.validate()
+    require_transformers()
+    model = _load_pretrained(spec).to(device=spec.device)
+    model.train()
+    model.gradient_checkpointing_disable()
+    model.config.use_cache = spec.use_cache
+    return model
+
+
+def pretrained_snapshot(spec: WorkloadSpec) -> str:
+    """The local directory of the pinned checkpoint. Local-only, never fetched here."""
+    from huggingface_hub import snapshot_download
+
+    from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
+
+    repo, revision = spec.pretrained_repo
+    return snapshot_download(repo, revision=revision, local_files_only=True,
+                             cache_dir=hf_cache_dir("olmoe_1b_7b"),
+                             allow_patterns=["*.json", "*.safetensors", "*.txt"])
+
+
+def _load_pretrained(spec: WorkloadSpec):
+    """The pinned checkpoint, validated against the declared architecture."""
+    from transformers import OlmoeForCausalLM
+
+    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import rope_settings
+
+    model = OlmoeForCausalLM.from_pretrained(
+        pretrained_snapshot(spec), dtype=DTYPES[spec.dtype],
+        attn_implementation=spec.attn_implementation,
+        experts_implementation=spec.experts_implementation, use_cache=spec.use_cache,
+        output_router_logits=spec.arch["output_router_logits"])
+    loaded = model.config
+    rope_keys = {"rope_theta", "rope_scaling"}
+    mismatched = {key: (getattr(loaded, key, None), value)
+                  for key, value in spec.arch.items()
+                  if key not in rope_keys and getattr(loaded, key, None) != value}
+    if rope_settings(loaded) != rope_settings(dict(spec.arch)):
+        mismatched["rope"] = (rope_settings(loaded), rope_settings(dict(spec.arch)))
+    if mismatched:
+        raise RuntimeError("the pinned checkpoint's architecture disagrees with the declared "
+                           f"workload: {mismatched}")
+    other = sorted({str(p.dtype) for p in model.parameters()} - {str(DTYPES[spec.dtype])})
+    if other:
+        raise RuntimeError(f"parameters loaded in {other}, spec says {spec.dtype}")
+    return model
 
 
 def modeling():
@@ -124,5 +176,5 @@ def check_olmoe_settings(effective: dict[str, Any], spec: WorkloadSpec) -> list[
 
 __all__ = ["CLASSES", "DTYPES", "MIN_TRANSFORMERS", "MODELING", "TESTED_TRANSFORMERS",
            "build_config", "build_model", "check_olmoe_settings", "experts_settings",
-           "make_inputs", "modeling", "olmoe_effective_settings", "require_transformers",
-           "training_step"]
+           "make_inputs", "modeling", "olmoe_effective_settings", "pretrained_snapshot",
+           "require_transformers", "training_step"]
