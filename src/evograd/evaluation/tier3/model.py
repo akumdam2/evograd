@@ -94,6 +94,37 @@ class TrainingWorkload(Protocol):
         """Whatever identifies this workload in the report."""
 
 
+class VerifiableWorkload(TrainingWorkload, Protocol):
+    """What the verification gates additionally need, on real training data.
+
+    See :mod:`evograd.verification.integrations`. Every batch is real data
+    in a fixed *data order*: an integer naming one deterministic sequence of
+    batches (calibration and acceptance use different orders).
+
+    * ``train_batches(order)`` -- the sequence: ``.batch(i)`` for any ``i``
+      (epochs reshuffled deterministically), ``.describe()``;
+    * ``batch_for(seed=order)`` -- ``train_batches(order).batch(0)``;
+    * ``data_identity()`` -- pins of the data (dataset, revision, file hashes,
+      preprocessing), independent of the order.
+
+    A next-token language model needs nothing more: the gates read its
+    logits and token-mean NLL. Any other workload also declares
+
+    * ``primary_output(model, batch) -> (loss, primary)`` -- the scalar
+      ``loss(model, batch)`` returns, bit for bit, and one output beside it;
+    * ``primary_output_name`` and ``objective_definition`` (bound into policies);
+    * ``expected_site_calls() -> {site: calls}`` per forward and backward
+      (with activation checkpointing off, as verification requires);
+    * ``data_recipe() -> dict`` -- batch geometry for the Gate 3 binding.
+    """
+
+    def train_batches(self, order: int) -> Any:
+        """The batch sequence of one data order."""
+
+    def data_identity(self) -> dict[str, Any]:
+        """Pins of the real data."""
+
+
 def site_registry_for(workload: TrainingWorkload) -> SiteRegistry:
     """The registry a workload owns, refusing to guess when it declares none.
 

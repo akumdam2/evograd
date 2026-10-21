@@ -117,6 +117,53 @@ class WorkloadSpec(_WorkloadSpec):
     dtype: str = "bfloat16"
     device: str = "cuda"
     attn_implementation: str = "sdpa"
+    #: Where the parameters come from. ``"random"`` is ``nn.init`` under
+    #: ``seed``; ``"pretrained:<repo>@<revision>"`` loads that pinned
+    #: checkpoint from a local Hugging Face cache (the repository is gated;
+    #: nothing is downloaded).
+    weights: str = "random"
+    #: Where the tokens come from. ``"synthetic"`` draws them from ``seed``;
+    #: ``"wikitext-2-raw:<revision>"`` is real text, packed as for Qwen3-0.6B.
+    data: str = "synthetic"
+
+    @property
+    def pretrained(self) -> bool:
+        return self.weights.startswith("pretrained:")
+
+    @property
+    def pretrained_repo(self) -> tuple[str, str]:
+        """``(repo, revision)`` of a pretrained checkpoint; raises otherwise."""
+        if not self.pretrained:
+            raise WorkloadSpecError(f"weights are {self.weights!r}, not pretrained")
+        repo, _, revision = self.weights[len("pretrained:"):].partition("@")
+        if not repo or not revision:
+            raise WorkloadSpecError(
+                f"pretrained weights must be 'pretrained:<repo>@<revision>', got "
+                f"{self.weights!r}")
+        return repo, revision
+
+    @property
+    def real_text(self) -> bool:
+        return self.data != "synthetic"
+
+    @property
+    def workload_id(self) -> str:
+        base = super().workload_id
+        if not (self.pretrained or self.real_text):
+            return base
+        head, _, digest = base.rpartition(".")
+        return (f"{head}.{'pretrained' if self.pretrained else 'random'}."
+                f"{'realtext' if self.real_text else 'synthetic'}.{digest}")
+
+    def to_dict(self) -> dict[str, Any]:
+        # Only when non-default, so the canonical synthetic hash -- the binding
+        # of every stored calibration -- does not depend on these two fields.
+        payload = super().to_dict()
+        if self.weights != "random":
+            payload["weights"] = self.weights
+        if self.data != "synthetic":
+            payload["data"] = self.data
+        return payload
 
 
 #: The reference execution. Every Llama-3 number comes from a run whose spec

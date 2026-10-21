@@ -15,9 +15,10 @@ import importlib
 PACKAGES = {
     "qwen3_0_6b": "qwen3_0_6b",
     "qwen3_5_4b": "qwen3_5_4b",
+    "llama_3_2_1b": "llama3_2_1b",
 }
-#: Other spellings accepted on the command line.
-ALIASES: dict[str, str] = {}
+#: Other spellings accepted on the command line (package names).
+ALIASES: dict[str, str] = {"llama3_2_1b": "llama_3_2_1b"}
 
 
 def load(name: str):
