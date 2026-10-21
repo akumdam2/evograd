@@ -272,3 +272,16 @@ def check_effective_settings(effective: dict[str, Any], spec: WorkloadSpec) -> l
     if effective["training_mode"] != spec.training:
         problems.append(f"model.training is {effective['training_mode']}, expected {spec.training}")
     return problems
+
+
+def rope_settings(config_like) -> tuple[float | None, str]:
+    """``(theta, type)`` from either RoPE spelling, so equal rotations compare equal."""
+    get = (config_like.get if isinstance(config_like, dict)
+           else lambda key, default=None: getattr(config_like, key, default))
+    scaling = get("rope_scaling") or {}
+    theta = scaling.get("rope_theta") if isinstance(scaling, dict) else None
+    if theta is None:
+        theta = get("rope_theta")
+    rope_type = (scaling.get("rope_type") or scaling.get("type") or "default") \
+        if isinstance(scaling, dict) else "default"
+    return (None if theta is None else float(theta), str(rope_type))

@@ -27,6 +27,7 @@ from ....common.model import (  # noqa: F401  (re-export)
     check_effective_settings,
     effective_settings,
     make_inputs,
+    rope_settings,
     training_step,
 )
 from ....common import model as _common
@@ -104,8 +105,6 @@ def pretrained_snapshot(spec: WorkloadSpec) -> str:
 def _load_pretrained(spec: WorkloadSpec):
     """The pinned checkpoint, validated against the declared architecture."""
     from transformers import OlmoeForCausalLM
-
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import rope_settings
 
     model = OlmoeForCausalLM.from_pretrained(
         pretrained_snapshot(spec), dtype=DTYPES[spec.dtype],

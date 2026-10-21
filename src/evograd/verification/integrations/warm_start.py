@@ -8,7 +8,7 @@ deterministic initialization trained for ``steps`` AdamW updates on real data
 order ``order`` (never a calibration, acceptance or Gate 3 order), under the
 verification's deterministic settings, saved in float32 with its recipe.
 
-    CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.common.generated.warm_start \\
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.warm_start \\
         --model dit_s_2 --out PATH [--steps 1000 --lr 1e-4 --order 909]
 """
 

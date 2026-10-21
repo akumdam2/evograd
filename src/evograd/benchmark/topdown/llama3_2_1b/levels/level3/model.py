@@ -19,6 +19,7 @@ from ....common.model import (  # noqa: F401  (re-export)
     check_effective_settings,
     effective_settings,
     make_inputs,
+    rope_settings,
     training_step,
 )
 from ....common import model as _common
@@ -103,8 +104,6 @@ def _load_pretrained(spec: WorkloadSpec):
     model = LlamaForCausalLM.from_pretrained(
         pretrained_snapshot(spec), dtype=DTYPES[spec.dtype],
         attn_implementation=spec.attn_implementation, use_cache=spec.use_cache)
-    from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import rope_settings
-
     loaded = model.config
     # RoPE has two spellings (Transformers 5 keeps ``rope_theta`` inside
     # ``rope_scaling``): compared as (theta, type) plus every declared factor.

@@ -23,6 +23,7 @@ from ....common.model import (  # noqa: F401  (re-export)
     check_effective_settings,
     effective_settings,
     make_inputs,
+    rope_settings,
     training_step,
 )
 from ....common import model as _common
@@ -83,19 +84,6 @@ def pretrained_snapshot(spec: WorkloadSpec) -> str:
         cache_dir=hf_cache_dir("qwen3_0_6b"),
         allow_patterns=["*.json", "*.safetensors", "merges.txt", "vocab.json"],
     )
-
-
-def rope_settings(config_like) -> tuple[float | None, str]:
-    """``(theta, type)`` from either RoPE spelling, so equal rotations compare equal."""
-    get = (config_like.get if isinstance(config_like, dict)
-           else lambda key, default=None: getattr(config_like, key, default))
-    scaling = get("rope_scaling") or {}
-    theta = scaling.get("rope_theta") if isinstance(scaling, dict) else None
-    if theta is None:
-        theta = get("rope_theta")
-    rope_type = (scaling.get("rope_type") or scaling.get("type") or "default") \
-        if isinstance(scaling, dict) else "default"
-    return (None if theta is None else float(theta), str(rope_type))
 
 
 def _load_pretrained(spec: WorkloadSpec):
