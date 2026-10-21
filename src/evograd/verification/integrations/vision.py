@@ -142,7 +142,11 @@ def invocations(capture: VisionCapture, model, cases: Sequence[Case]) -> Iterato
     def call(path, kind):
         seen[path] = seen.get(path, 0) + 1
         unique = path if seen[path] == 1 else f"{path}#{seen[path]}"
-        return {"path": unique, "layer": None, "role": role_of(path), "kind": kind}
+        # ``component`` resolves configurations the harvest separated by how the
+        # model's tensor became the task's view (ConvNeXt's stem norm takes a
+        # copy, its block norms a view): same task inputs, named by module role.
+        return {"path": unique, "layer": None, "role": role_of(path), "component": role_of(path),
+                "kind": kind}
 
     for r in capture.calls:
         task, args, cotangents, outputs, notes = _level1(r)

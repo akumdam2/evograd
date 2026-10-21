@@ -221,7 +221,10 @@ def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
 
     hits = [c for c in cases if c.task == task and binds(c)]
     if len(hits) > 1 and component is not None:
-        hits = [c for c in hits if case_component(c) == component]
+        # The role picks among cases that only the harvest tells apart (how the
+        # model's tensor became the task's view); a role no tied case carries
+        # (a module merged into another's configuration) leaves them all.
+        hits = [c for c in hits if case_component(c) == component] or hits
     def static_match(case: Case) -> bool:
         # Static parameters the configuration records (``Provenance.free``, e.g.
         # a norm's eps) must equal the call's scalar arguments of that name.

@@ -223,6 +223,9 @@ class CaseTableTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "2 observed cases"):
             case_for(cases, "rope", args)
         self.assertEqual(case_for(cases, "rope", args, component="rope_kv").case_id, "rope/rope_kv")
+        # A role no tied case carries does not eliminate them all.
+        with self.assertRaisesRegex(KeyError, "2 observed cases"):
+            case_for(cases, "rope", args, component="rope_merged_elsewhere")
 
 
 class PythonRandomTests(unittest.TestCase):
