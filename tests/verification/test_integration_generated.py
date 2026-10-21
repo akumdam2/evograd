@@ -181,3 +181,37 @@ class TinyDiT(_Tiny, unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WarmStart(unittest.TestCase):
+    """A frozen initial state replaces the initialization exactly, and after a
+    few updates DiT's blocks receive gradient (they do not at the init)."""
+
+    def test_initial_state_is_loaded_and_identified(self):
+        from evograd.benchmark.topdown.common.generated.spec import canonical
+        from evograd.evaluation.tier3.patch import KernelSet
+        from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
+        from evograd.verification import gate3
+
+        spec = canonical("dit_s_2").replace(device="cpu", **TINY["dit_s_2"])
+        cold = GeneratedWorkload(spec)
+        model = cold.build(KernelSet(registry=cold.site_registry))
+        optimizer = gate3.adamw(lr=1e-2).build(model)
+        for step in range(3):
+            optimizer.zero_grad(set_to_none=True)
+            cold.loss(model, cold.batch_for(seed=step)).backward()
+            optimizer.step()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "warm.pt"
+            torch.save({"schema": "evograd-generated-init-state/1", "model": "dit_s_2",
+                        "recipe": {"steps": 3}, "state_dict": model.state_dict()}, path)
+            warm = GeneratedWorkload(spec, init_checkpoint=str(path))
+            again = warm.build(KernelSet(registry=warm.site_registry))
+            for (name, a), b in zip(model.state_dict().items(), again.state_dict().values()):
+                self.assertTrue(torch.equal(a, b), name)
+            identity = warm.describe()["init_checkpoint"]
+            self.assertEqual(identity["recipe"], {"steps": 3})
+            self.assertEqual(len(identity["sha256"]), 64)
+            again.zero_grad(set_to_none=True)
+            warm.loss(again, warm.batch_for(seed=9)).backward()
+            self.assertTrue(bool(again.blocks[0].fc1.weight.grad.abs().sum() > 0))

@@ -90,6 +90,10 @@ class GeneratedWorkload:
     #: its whole sequence -- Criteo rows for DLRM, a frozen VAE-latent pool
     #: with per-step noise for DiT. Off by default; then nothing changes.
     stream: bool = False
+    #: A frozen model state loaded after the deterministic initialization
+    #: (DiT's warm start: adaLN-Zero gates are zero at the init, so no gradient
+    #: reaches its blocks there). Its SHA-256 is part of ``describe()``.
+    init_checkpoint: str | None = None
 
     def __post_init__(self):
         if self.stream and (self.spec.input_mode != "real" or self.data_path):
@@ -112,14 +116,16 @@ class GeneratedWorkload:
 
     def to_config(self):
         return {**self.spec.to_config(), "calibration": self.calibration, "data_path": self.data_path,
-                **({"stream": True} if self.stream else {})}
+                **({"stream": True} if self.stream else {}),
+                **({"init_checkpoint": self.init_checkpoint} if self.init_checkpoint else {})}
 
     @classmethod
     def from_config(cls, config):
         base = canonical(config["model"]).to_config()
         base.update({k: v for k, v in config.items() if k in GeneratedSpec.__dataclass_fields__})
         return cls(GeneratedSpec(**base), config.get("calibration"), config.get("data_path"),
-                   stream=bool(config.get("stream", False)))
+                   stream=bool(config.get("stream", False)),
+                   init_checkpoint=config.get("init_checkpoint"))
 
     def units_per_step(self):
         return self.spec.batch_size
@@ -131,6 +137,8 @@ class GeneratedWorkload:
         if kernels.registry.name != self.spec.model:
             raise ValueError("kernel registry does not match model")
         model = build_model(self.spec)
+        if self.init_checkpoint:
+            model.load_state_dict(self.initial_state()[0], strict=True)
         paths = {}
         for site in kernels.patched:
             fn = kernels.kernel_for(site)
@@ -157,6 +165,23 @@ class GeneratedWorkload:
         return model, PatchProvenance("module_surgery", tuple(kernels.patched),
                                       tuple(sorted(paths)),
                                       {k: tuple(v) for k, v in paths.items()})
+
+    def initial_state(self):
+        """``(state_dict, identity)`` of ``init_checkpoint``, read once."""
+        if getattr(self, "_initial", None) is None:
+            from pathlib import Path
+
+            path = Path(self.init_checkpoint)
+            data = torch.load(path, map_location="cpu", weights_only=True)
+            if data.get("schema") != "evograd-generated-init-state/1" or data.get("model") != self.spec.model:
+                raise ValueError(f"{path} is not an initial state of {self.spec.model}")
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1 << 20), b""):
+                    digest.update(block)
+            identity = {"sha256": digest.hexdigest(), "recipe": data.get("recipe")}
+            self._initial = (data["state_dict"], identity)
+        return self._initial
 
     def batch_for(self, *, seed):
         if self.stream:
@@ -264,7 +289,9 @@ class GeneratedWorkload:
                 "workload_hash": self.spec.workload_hash, "config": self.to_config(),
                 "canonical": self.spec.is_canonical, "execution_scope": "model",
                 "benchmark_level": 3, "unit_name": self.unit_name,
-                "units_per_step": self.units_per_step(), "weights": "random",
+                "units_per_step": self.units_per_step(),
+                "weights": "random" if not self.init_checkpoint else "warm_start",
+                **({"init_checkpoint": self.initial_state()[1]} if self.init_checkpoint else {}),
                 "data": ("streamed_real_data" if self.stream else "pinned_real_data"
                          if self.spec.input_mode == "real" else "seeded_generated"),
                 **real_source,
