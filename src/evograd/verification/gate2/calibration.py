@@ -36,7 +36,9 @@ Rules this module enforces:
 * a control must qualify (executes, finite, the native contract, the same
   parameters and weights, every replaced site called as declared, and -- for
   ``torch.compile`` -- the compiler backend actually invoked at every
-  replaced site). A disqualified or missing control yields no policy;
+  replaced site and a second run reproducing the first bit for bit). A
+  disqualified or missing control yields no policy. Whether the native
+  repeats were bitwise is recorded per sample (``repeatability``);
 * each tensor keeps its own thresholds, matched by stable name (and, for
   ``matched_inputs``, by sample);
 * the policy binds scope, sample protocol, case identity, numerics,
@@ -603,7 +605,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
 
     Per calibration sample: one native reference, ``native_repeats - 1``
     further independent native runs, and one ``torch.compile`` control at the
-    replaced sites, every one on the reference's exact content. With
+    replaced sites (run twice; the second must reproduce the first bit for
+    bit), every one on the reference's exact content. With
     ``boundaries=True`` every call recorded at a replaced site under the
     compile control gets its own thresholds too, from the native site
     implementation run twice and the compiled one, on the call's own inputs
@@ -730,6 +733,21 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         got, problems = _qualify(contract, reference, ctl, TRUSTED_COMPILE)
         measurements.extend(got)
         result.findings.extend(problems)
+        # The compile term has no repeat of its own in the budget, so the
+        # control must reproduce itself bit for bit. A native repeat that is
+        # not bitwise is kept in the budget and recorded here.
+        again = execute(adapter, control, sample)
+        executions.append(again.execution_id)
+        identity["executions"]["compile_repeat"] = again.execution_id
+        identity["repeatability"] = {
+            "native_bitwise": all(d == reference.results_digest
+                                  for d in identity["control_results_digests"]["native_repeats"]),
+            "compile_bitwise": not again.error and again.results_digest == ctl.results_digest}
+        if not ctl.error and not identity["repeatability"]["compile_bitwise"]:
+            result.findings.append(missing("control_disqualified",
+                                           "the torch.compile control did not reproduce its own "
+                                           "results bit for bit", subject=sid))
+        del again
         del reference  # boundary checks use the control's captured local payloads
         uncompiled = sorted(site for site, n in graphs.items() if n < 1)
         if uncompiled and not ctl.error:

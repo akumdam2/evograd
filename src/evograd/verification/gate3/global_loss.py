@@ -207,6 +207,7 @@ def calibrate_global_loss(controls: Sequence[TrainingControl], *, floor_rms: flo
             if repeat["overflow"] or compiled["overflow"]:
                 raise ValueError("a control difference overflowed")
             evidence.append({"compile_identity": deployment["identity"],
+                             "native_repeat_bitwise": series["native_b"] == series["native_a"],
                              "native_repeat": {m: repeat[m] for m in METRICS}
                              | {"max_abs_step": repeat["max_abs_step"]},
                              "trusted_compile": {m: compiled[m] for m in METRICS}

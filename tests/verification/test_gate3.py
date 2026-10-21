@@ -90,6 +90,19 @@ class TestContinuousTraining(unittest.TestCase):
         self.assertIn("evaluator_used_candidate", {f.code for f in run.findings})
         self.assertFalse(run.completed)
 
+    def test_site_that_does_not_run_fails(self):
+        # The model drops the installed site and keeps the native one: the loss
+        # stays native, so only the call count can tell.
+        fallback = gate3.site_model_training(
+            lambda sites: F.TinyLM({**sites, "norm": F.norm_site}), F.NATIVE_SITES,
+            train_data=[F.lm_batch(100 + i) for i in range(12)], validation_data=[F.lm_batch(900)],
+            optimizer=gate3.adamw(lr=1e-2), logits_of=lambda model, ids: model(ids)["logits"])
+        run = gate3.measure_training(fallback, candidate("c", {"norm": F.norm_site}),
+                                     gate3.TrainingPlan(steps=3, window=3, checkpoints=()))
+        self.assertEqual([f.code for f in run.findings], ["site_not_called"])
+        self.assertFalse(run.completed)
+        self.assertEqual(run.verdict()[0], "failed")
+
     def test_non_finite_candidate_loss(self):
         run = gate3.measure_training(adapter(), candidate("nan", {"norm": F.norm_nan}), PLAN)
         self.assertEqual([f.code for f in run.findings], ["non_finite_training_loss"])

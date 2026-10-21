@@ -5,7 +5,7 @@ native training step: the exact argument tensors the model passed (values,
 dtypes, shapes, strides, storage offsets, aliases), its scalar arguments, and
 the output cotangents the training objective's backward delivered to it. The
 corpus is model-independent; a workload's capture code decides what a call and
-a case are (``evograd.evaluation.tier3.workloads.qwen3_0_6b.payloads`` for Qwen3-0.6B).
+a case are (``evograd.verification.integrations.qwen3_0_6b`` for Qwen3-0.6B).
 
 Storage: every tensor's whole untyped storage is written once, keyed by the
 SHA-256 of its bytes, into raw shard files; a tensor record names its storage

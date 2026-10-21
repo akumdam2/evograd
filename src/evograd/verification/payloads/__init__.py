@@ -5,7 +5,7 @@
     cli.py      ``python -m evograd.verification.payloads.cli gate1 ...``: one artifact, one split
 
 A model workload provides the capture (for Qwen3-0.6B:
-``evograd.evaluation.tier3.workloads.qwen3_0_6b.payloads``). The Gate 2 operator scope on
+``evograd.verification.integrations.qwen3_0_6b``). The Gate 2 operator scope on
 a corpus is ``evograd.verification.gate2.adapters.payload.PayloadOperatorScope``.
 
 Input provenance vocabulary used in reports:

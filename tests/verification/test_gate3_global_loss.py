@@ -62,6 +62,9 @@ class TestGlobalPolicy(unittest.TestCase):
         data = self.policy.to_dict()
         self.assertEqual(data["controls"][0]["trusted_compile"]["max_abs_step"], 2)
         self.assertEqual(data["controls"][0]["native_repeat"]["rms"], 0.0)
+        self.assertTrue(data["controls"][0]["native_repeat_bitwise"])
+        noisy = calibrate(native_b=[2.0, 2.0, 2.001, 2.0]).policy.to_dict()
+        self.assertFalse(noisy["controls"][0]["native_repeat_bitwise"])
 
     def test_sign_cancellation_does_not_hide_error(self):
         # Mean loss difference is zero, but R = .03 > T_R = .02.

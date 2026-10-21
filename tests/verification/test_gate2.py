@@ -459,6 +459,34 @@ class TestControls(unittest.TestCase):
         self.assertIsNone(missing.policy)
         self.assertEqual([f.code for f in missing.findings], ["control_unavailable"])
 
+    def test_control_repeatability_is_recorded(self):
+        result = calibrate(F.toy_module_scope(), patch_set=("norm",), samples=samples("rep", [1]),
+                           compile_backend=FAST)
+        self.assertIsNotNone(result.policy, result.findings)
+        self.assertEqual(result.policy.sample_identities["rep/seed1"]["repeatability"],
+                         {"native_bitwise": True, "compile_bitwise": True})
+
+    def test_compile_control_that_does_not_reproduce_itself_gives_no_policy(self):
+        from unittest import mock
+
+        from evograd.verification.gate2 import calibration as cal
+
+        real, runs = cal.execute, []
+
+        def second_compile_differs(adapter, deployment, sample, **kwargs):
+            ex = real(adapter, deployment, sample, **kwargs)
+            if deployment.role == "control":
+                runs.append(sample.sample_id)
+                if len(runs) == 2:
+                    ex.results_digest = "not-the-first-run"
+            return ex
+
+        with mock.patch.object(cal, "execute", second_compile_differs):
+            result = calibrate(F.toy_module_scope(), patch_set=("norm",),
+                               samples=samples("rep", [1]), compile_backend=FAST)
+        self.assertIsNone(result.policy)
+        self.assertEqual([f.code for f in result.findings], ["control_disqualified"])
+
     def test_calibration_inputs_are_checked(self):
         scope = F.toy_module_scope()
         for kwargs in ({"patch_set": ()}, {"patch_set": ("nope",)}, {"samples": []},

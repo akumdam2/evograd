@@ -227,6 +227,7 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
             for step in range(1, plan.steps + 1):
                 stage = f"step {step}"
                 batch = adapter.train_batch(step - 1)
+                calls_before = dict(hooks.counts)
                 optimizer.zero_grad(set_to_none=True)
                 loss_sum, weight = adapter.train_loss(model, batch)
                 value, weight = float(loss_sum.detach()), float(weight)
@@ -239,6 +240,15 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                                                 f"step {step}", step=step))
                     return run
                 objective.backward()
+                # A replaced site that did not run leaves the loss native, so a
+                # matching loss would prove nothing: every site runs every step.
+                idle = [site for site in deployment.patch_set
+                        if hooks.counts.get(site, 0) == calls_before.get(site, 0)]
+                if idle:
+                    run.findings.append(problem("site_not_called",
+                                                f"replaced sites {idle} did not run at step {step}",
+                                                step=step, sites=idle))
+                    return run
                 optimizer.step()
                 run.train_steps.append({"step": step, "loss_sum": value, "weight": weight,
                                         "mean_loss": value / weight,

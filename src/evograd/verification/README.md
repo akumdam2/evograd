@@ -22,6 +22,7 @@ reference implementations, and policies explicitly.
 | `gate2/` | Actual autograd integration, calibrated tensor errors, operator/model adapters |
 | `gate3/` | Continuous training measurement and calibrated loss-trajectory acceptance |
 | `payloads/` | Generic storage and loading of recorded training calls, with exact layouts and frozen splits |
+| `integrations/` | Per-model capture, model reference and gate drivers (Qwen3-0.6B) |
 
 Model dependencies are imported inside the adapters that need them. The CPU
 core tests do not require a checkpoint, real dataset, GPU, or LLM service.
@@ -108,9 +109,12 @@ epsilon = 1e-30
 ```
 
 Each required result must satisfy both frozen limits. Calibration runs at least
-two native executions and one identified `torch.compile` control. Controls
-must execute valid, finite results with the required structure, state and
-replacement coverage; the compiler backend must actually be invoked.
+two native executions and one identified `torch.compile` control, run twice.
+Controls must execute valid, finite results with the required structure, state
+and replacement coverage; the compiler backend must actually be invoked, and the
+compile control must reproduce itself bit for bit. The native-repeat term stays
+in the budget; whether the native repeats were bitwise is recorded per sample
+(`repeatability`).
 
 ```text
 T = gamma * max(native-repeat error, compile-native error, floor)
@@ -154,8 +158,19 @@ python -m evograd.verification.payloads.cli gate1 \
   --corpus corpus/manifest.json --case CASE_ID --split acceptance --out report.json
 ```
 
-Model-specific capture tools, datasets and formal evaluator routing are separate
-integrations. They are not included in this foundational commit.
+Model-specific capture and gate drivers live in `integrations/`. For Qwen3-0.6B,
+`integrations/qwen3_0_6b` records every L1 call and L2 boundary of real
+WikiText-2 training steps of the pinned checkpoint as payloads of the model's
+observed cases, re-declares each case's task with the model's own computation
+as the reference (`reference.py`), and runs Gate 1, operator and model Gate 2,
+and Gate 3 for candidate artifacts (`gates.py`). Level-1 candidates get Gate 1
+and operator Gate 2 only. Evaluator routing is not changed.
+
+```bash
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b verify \
+  --corpus CORPUS/manifest.json --out DIR --candidate qwen3_swiglu_mlp/swiglu_mlp=candidate.py
+```
 
 ## Gate 3: continuous training and global loss
 
@@ -191,12 +206,13 @@ separately; there is no cancellation by averaging repetitions or removing steps.
 Missing, reordered, truncated or non-finite records cannot pass. A calibration
 execution is not independent candidate-verification evidence.
 
-This core checks finite losses and complete step records. It records site calls
-but does not itself enforce full per-step deployment coverage or scan all
-parameters, gradients and optimizer-state tensors for finiteness. Applications
-can add those checks through `on_step`; recording state digests is not equivalent
-to validating health. Deterministic settings and control-repeat qualification
-beyond the numerical policy remain application responsibilities.
+This core checks finite losses, complete step records, and that every replaced
+site runs in every step (a site that did not run leaves the loss native). It
+does not scan parameters, gradients and optimizer-state tensors for finiteness;
+a non-finite gradient reaches the next step's loss through the optimizer update.
+Applications can add such checks through `on_step`. Calibration records whether
+the native repeat was bitwise (`native_repeat_bitwise`). Deterministic settings
+remain application responsibilities.
 
 Historical window and stepwise policies remain available through separate
 schemas for compatibility. `verify_training` dispatches by schema; it never
