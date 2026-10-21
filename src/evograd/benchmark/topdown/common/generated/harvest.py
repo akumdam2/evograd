@@ -141,22 +141,16 @@ def collect(spec, batch=None):
 
 
 def snapshot(manifest):
-    groups = {1: {}, 2: {}}
-    for row in manifest["records"]:
-        entry = groups[row["level"]].setdefault(row["task"], {})
-        identity = {k: row[k] for k in ("dims", "dtype", "inputs", "strides", "provenance", "input_adapter")}
-        key = digest(identity)
-        if key not in entry:
-            entry[key] = {**identity, "config_id": key, "frequency": 0, "module_paths": []}
-        entry[key]["frequency"] += 1
-        entry[key]["module_paths"].append(row["path"])
+    from evograd.benchmark.topdown.common.harvest_roles import group_configurations
+
+    groups = {level: group_configurations(manifest["records"], level, digest) for level in (1, 2)}
     payload = {"schema_version": f"evograd-{manifest['config']['model']}-snapshot/1",
                "manifest_hash": digest(manifest), "workload_id": manifest["workload_id"],
                "config": manifest["config"], "canonical": manifest["canonical"],
                "not_bound": manifest["not_bound"], "level1": {}, "tasks": {}}
     for level, name in ((1, "level1"), (2, "tasks")):
-        payload[name] = {task: {"configurations": list(configs.values()),
-                                "frequency": sum(c["frequency"] for c in configs.values())}
+        payload[name] = {task: {"configurations": configs,
+                                "frequency": sum(c["frequency"] for c in configs)}
                          for task, configs in groups[level].items()}
     expected = ({"linear", "spatial_conv2d"} if manifest["config"]["model"] == "dit_s_2"
                 else {"linear", "embedding_bag"})

@@ -85,9 +85,16 @@ class GeneratedWorkload:
     spec: GeneratedSpec
     calibration: str | None = None
     data_path: str | None = None
+    #: Real data streamed per data order (verification): ``batch_for(seed)`` is
+    #: the first batch of order ``data_seed + seed`` and ``train_batches(order)``
+    #: its whole sequence -- Criteo rows for DLRM, a frozen VAE-latent pool
+    #: with per-step noise for DiT. Off by default; then nothing changes.
+    stream: bool = False
 
     def __post_init__(self):
-        if self.spec.input_mode == "real" and not self.data_path:
+        if self.stream and (self.spec.input_mode != "real" or self.data_path):
+            raise ValueError("a streamed workload is real-input and has no prepared artifact")
+        if self.spec.input_mode == "real" and not self.data_path and not self.stream:
             raise ValueError("real generated-model workload requires prepared inputs")
         self.name = self.spec.workload_id
         self.unit_name = "latents" if self.spec.model == "dit_s_2" else "examples"
@@ -104,13 +111,15 @@ class GeneratedWorkload:
         self.site_registry = SiteRegistry(self.spec.model, sites)
 
     def to_config(self):
-        return {**self.spec.to_config(), "calibration": self.calibration, "data_path": self.data_path}
+        return {**self.spec.to_config(), "calibration": self.calibration, "data_path": self.data_path,
+                **({"stream": True} if self.stream else {})}
 
     @classmethod
     def from_config(cls, config):
         base = canonical(config["model"]).to_config()
         base.update({k: v for k, v in config.items() if k in GeneratedSpec.__dataclass_fields__})
-        return cls(GeneratedSpec(**base), config.get("calibration"), config.get("data_path"))
+        return cls(GeneratedSpec(**base), config.get("calibration"), config.get("data_path"),
+                   stream=bool(config.get("stream", False)))
 
     def units_per_step(self):
         return self.spec.batch_size
@@ -150,6 +159,8 @@ class GeneratedWorkload:
                                       {k: tuple(v) for k, v in paths.items()})
 
     def batch_for(self, *, seed):
+        if self.stream:
+            return self.train_batches(self.spec.data_seed + seed).batch(0)
         if self.data_path:
             if not hasattr(self, "_prepared_batches"):
                 self._prepared_batches = self.load_data(self)[0]["batches"]
@@ -175,9 +186,55 @@ class GeneratedWorkload:
     def loss(self, model, batch):
         return self.forward(model, batch)[0]
 
+    # ── what the verification gates read (VerifiableWorkload) ──────────────
+
+    @property
+    def primary_output_name(self):
+        return "prediction" if self.spec.model == "dit_s_2" else "click_logit"
+
+    @property
+    def objective_definition(self):
+        if self.spec.model == "dit_s_2":
+            return ("guided-diffusion loss: epsilon MSE plus the learned-range variational bound, "
+                    "mean over the batch (evograd generated.model.diffusion_loss)")
+        return "binary cross entropy with logits of the click logit, mean over the batch"
+
+    def primary_output(self, model, batch):
+        """``(loss, primary)``: the loss ``loss`` returns and the model output beside it."""
+        return self.forward(model, batch)
+
+    def expected_site_calls(self):
+        if self.spec.model == "dit_s_2":
+            return {"dit_modulation": self.spec.arch["depth"], "dit_mlp": self.spec.arch["depth"]}
+        return {"embedding_bag": self.spec.arch["num_sparse_features"], "dlrm_interaction": 1}
+
+    def data_recipe(self):
+        return {"batch_size": self.spec.batch_size, "dtype": self.spec.dtype}
+
+    def train_batches(self, order):
+        if not self.stream:
+            raise ValueError("train_batches needs a streamed real-input workload")
+        if self.spec.model == "dit_s_2":
+            from evograd.benchmark.topdown.common.generated.data import LatentStream
+            return LatentStream(self.spec, order)
+        from evograd.benchmark.topdown.common.generated.dlrm_data import CriteoStream
+        return CriteoStream(self.spec, order)
+
+    def data_identity(self):
+        if not self.stream:
+            raise ValueError("data_identity needs a streamed real-input workload")
+        if self.spec.model == "dit_s_2":
+            from evograd.benchmark.topdown.common.generated.data import pool_identity
+            return pool_identity()
+        from evograd.benchmark.topdown.common.generated.dlrm_data import stream_identity
+        return stream_identity(self.spec)
+
     def input_checksum(self):
         h = hashlib.sha256()
-        batch = self.load_data(self)[0]["batches"][0] if self.data_path else self.generated_batch_cpu(0)
+        if self.stream:
+            batch = {k: v.cpu() for k, v in self.batch_for(seed=0).items()}
+        else:
+            batch = self.load_data(self)[0]["batches"][0] if self.data_path else self.generated_batch_cpu(0)
         for key, value in sorted(batch.items()):
             h.update(key.encode())
             h.update(value.contiguous().view(torch.uint8).numpy().tobytes())
@@ -185,7 +242,9 @@ class GeneratedWorkload:
 
     def describe(self):
         real_source = {}
-        if self.spec.input_mode == "real":
+        if self.stream:
+            real_source = {"stream": self.data_identity()}
+        elif self.spec.input_mode == "real":
             if self.spec.model == "dit_s_2":
                 from evograd.benchmark.topdown.common.generated.data import DATASET, VAE
                 real_source = {"dataset_repo": DATASET[0], "dataset_revision": DATASET[1],
@@ -206,7 +265,8 @@ class GeneratedWorkload:
                 "canonical": self.spec.is_canonical, "execution_scope": "model",
                 "benchmark_level": 3, "unit_name": self.unit_name,
                 "units_per_step": self.units_per_step(), "weights": "random",
-                "data": "pinned_real_data" if self.spec.input_mode == "real" else "seeded_generated",
+                "data": ("streamed_real_data" if self.stream else "pinned_real_data"
+                         if self.spec.input_mode == "real" else "seeded_generated"),
                 **real_source,
                 "all_parameters_trainable": True,
                 "input_checksum": self.input_checksum(), "architecture": self.spec.arch,

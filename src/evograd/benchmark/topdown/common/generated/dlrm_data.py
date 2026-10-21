@@ -184,3 +184,73 @@ def load_data(workload):
         for chunk in iter(lambda: stream.read(1 << 20), b""):
             h.update(chunk)
     return data, h.hexdigest()
+
+
+# ── verification: batches of one data order, streamed from the training half ──
+
+STREAM_RULE = ("batch i of data order o: random.Random(f'criteo-train-first-half/order{o}/batch{i}')"
+               ".sample(range(train_rows), batch_size) rows of the labeled first half; sparse ids "
+               "per_feature_modulo_table_size")
+
+
+def _file_sha256(directory):
+    """The arrays' SHA-256 from the preprocessing job's ``SHA256SUMS``, when present."""
+    sums = Path(directory) / "SHA256SUMS"
+    if not sums.is_file():
+        return None
+    out = {}
+    for line in sums.read_text().splitlines():
+        digest_, _, name = line.partition("  ")
+        if name in FILES:
+            out[name] = digest_
+    return out if set(out) == set(FILES) else None
+
+
+class CriteoStream:
+    """The batch sequence of one data order (verification real data).
+
+    Batch ``i`` is ``batch_size`` distinct rows of the labeled first half,
+    drawn by a generator seeded from ``(order, i)``: any batch is available
+    without the ones before it, and a data order never changes.
+    """
+
+    def __init__(self, spec, order, source_dir=None):
+        if spec.model != "torchrec_dlrm" or spec.input_mode != "real":
+            raise ValueError("a Criteo stream needs the real-input DLRM workload")
+        self.spec, self.order = spec, int(order)
+        self.directory = _source_dir(source_dir)
+        self._arrays = _arrays(self.directory)
+        self.train_rows = (len(self._arrays[0]) + 1) // 2
+        self.sizes = np.asarray(spec.arch["num_embeddings_per_feature"], dtype=np.int64)
+
+    def rows(self, index):
+        rng = random.Random(f"criteo-train-first-half/order{self.order}/batch{int(index)}")
+        return sorted(rng.sample(range(self.train_rows), self.spec.batch_size))
+
+    def batch(self, index):
+        dense, sparse, labels = self._arrays
+        selected = self.rows(index)
+        raw_dense = np.array(dense[selected], dtype=np.float32, copy=True)
+        raw_sparse = np.array(sparse[selected], dtype=np.int64, copy=True)
+        raw_labels = np.array(labels[selected, 0], dtype=np.int64, copy=True)
+        mapped = np.remainder(raw_sparse, self.sizes).T[:, :, None].copy()
+        dtype, device = getattr(torch, self.spec.dtype), self.spec.device
+        return {"dense": torch.from_numpy(raw_dense).to(device=device, dtype=dtype),
+                "sparse_ids": torch.from_numpy(mapped).to(device),
+                "labels": torch.from_numpy(raw_labels.astype(np.float32)).to(device=device,
+                                                                             dtype=dtype)}
+
+    def describe(self):
+        return {"source": "criteo_kaggle train first half", "order": self.order,
+                "batch_size": self.spec.batch_size, "rule": STREAM_RULE}
+
+
+def stream_identity(spec, source_dir=None):
+    """Pins of the streamed Criteo data, independent of the data order."""
+    directory = _source_dir(source_dir)
+    dense = _arrays(directory)[0]
+    return {"dataset": list(DATASET), "mapping": MAPPING,
+            "table_sizes": spec.arch["num_embeddings_per_feature"],
+            "train_rows": (len(dense) + 1) // 2, "rule": STREAM_RULE,
+            "files": {name: {"bytes": (directory / name).stat().st_size} for name in FILES},
+            "files_sha256": _file_sha256(directory)}

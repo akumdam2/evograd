@@ -244,17 +244,9 @@ def collect(spec):
 
 
 def snapshot(manifest):
-    groups = {1: {}, 2: {}}
-    for row in manifest["records"]:
-        entry = groups[row["level"]].setdefault(row["task"], {})
-        identity = {
-            k: row[k] for k in ("dims", "dtype", "inputs", "strides", "provenance", "input_adapter")
-        }
-        key = digest(identity)
-        if key not in entry:
-            entry[key] = {**identity, "config_id": key, "frequency": 0, "module_paths": []}
-        entry[key]["frequency"] += 1
-        entry[key]["module_paths"].append(row["path"])
+    from evograd.benchmark.topdown.common.harvest_roles import group_configurations
+
+    groups = {level: group_configurations(manifest["records"], level, digest) for level in (1, 2)}
     payload = {
         "schema_version": f"evograd-{manifest['config']['model']}-snapshot/1",
         "manifest_hash": digest(manifest),
@@ -268,8 +260,8 @@ def snapshot(manifest):
     for level, key in ((1, "level1"), (2, "tasks")):
         payload[key] = {
             task: {
-                "configurations": list(configs.values()),
-                "frequency": sum(c["frequency"] for c in configs.values()),
+                "configurations": configs,
+                "frequency": sum(c["frequency"] for c in configs),
             }
             for task, configs in groups[level].items()
         }

@@ -16,6 +16,8 @@ PACKAGES = {
     "qwen3_0_6b": "qwen3_0_6b",
     "qwen3_5_4b": "qwen3_5_4b",
     "llama_3_2_1b": "llama3_2_1b",
+    "torchrec_dlrm": "torchrec_dlrm",
+    "dit_s_2": "dit_s_2",
 }
 #: Other spellings accepted on the command line (package names).
 ALIASES: dict[str, str] = {"llama3_2_1b": "llama_3_2_1b"}

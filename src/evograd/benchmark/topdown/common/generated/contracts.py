@@ -32,7 +32,10 @@ def _observed(model, name):
     if not has_snapshot(model):
         return ()
     return tuple(Workload(dims=c["dims"], dtype=c["dtype"],
-                          provenance=Provenance(model=model, component=name, source="execution",
+                          provenance=Provenance(model=model,
+                                                component=(c.get("provenance") or {}).get("component",
+                                                                                          name),
+                                                source="execution",
                                                 note=f"Observed {c['config_id']}"))
                  for c in load_snapshot(model)["tasks"].get(name, {}).get("configurations", ()))
 

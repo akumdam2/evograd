@@ -228,3 +228,163 @@ def load_data(workload):
         for chunk in iter(lambda: stream.read(1 << 20), b""):
             h.update(chunk)
     return data, h.hexdigest()
+
+
+# ── verification: a frozen latent pool and per-step batches of one data order ──
+
+POOL_SCHEMA = "evograd-dit-latent-pool/1"
+POOL_RULE = ("every Imagenette 320px train row: RGB, _crop to 256, mirrored iff "
+             "sha256('dit-pool/flip/<row>')[0] is odd, VAE posterior mean + std * N(0, 1) drawn "
+             "from torch.Generator('cpu').manual_seed(row), times 0.18215; encoded 8 rows at a "
+             "time in float32")
+STREAM_RULE = ("data order o, step i: epoch e = i // (n // B) is torch.randperm(n) under the seed "
+               "of 'dit/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B); "
+               "noise ~ N(0, 1), timesteps ~ U{0..steps-1} and drop_mask ~ Bernoulli("
+               "class_dropout_prob) come from a generator under the seed of 'dit/order<o>/step<i>'")
+
+
+def seed_of(text):
+    """A 63-bit generator seed from a name: stable across processes and machines."""
+    return int.from_bytes(hashlib.sha256(text.encode()).digest()[:8], "little") & (2**63 - 1)
+
+
+def default_pool_path():
+    return Path(os.environ.get("EVOGRAD_DIT_LATENT_POOL",
+                               Path(prepared_dir("dit_s_2")) / "latent_pool.pt"))
+
+
+def read_imagenette():
+    """``[(row, image bytes, label index)]`` of the pinned shard, read with pyarrow."""
+    import json
+
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(_dataset_file())
+    features = json.loads((table.schema.metadata or {}).get(b"huggingface", b"{}"))
+    names = tuple(features.get("info", {}).get("features", {}).get("label", {}).get("names", ()))
+    if names != CLASS_NAMES:
+        raise ValueError(f"Imagenette ClassLabel order changed: {names}")
+    images, labels = table.column("image").to_pylist(), table.column("label").to_pylist()
+    return [(i, image["bytes"], int(label)) for i, (image, label) in enumerate(zip(images, labels))]
+
+
+def build_latent_pool(path=None, *, device="cuda", chunk=8):
+    """Encode every training image once with the pinned VAE; write the pool atomically."""
+    import io
+
+    import numpy as np
+    from diffusers.models import AutoencoderKL
+    from PIL import Image, ImageOps
+
+    path = Path(path) if path is not None else default_pool_path()
+    rows = read_imagenette()
+    vae = AutoencoderKL.from_pretrained(str(_vae_path()), local_files_only=True,
+                                       use_safetensors=True).to(device).eval()
+    vae.requires_grad_(False)
+    latents, selection = [], []
+    try:
+        for start in range(0, len(rows), chunk):
+            pixels, eps = [], []
+            for row, data, label in rows[start:start + chunk]:
+                image = Image.open(io.BytesIO(data)).convert("RGB")
+                image_hash = hashlib.sha256(image.tobytes()).hexdigest()
+                image = _crop(image)
+                flipped = bool(hashlib.sha256(f"dit-pool/flip/{row}".encode()).digest()[0] & 1)
+                if flipped:
+                    image = ImageOps.mirror(image)
+                pixels.append(torch.from_numpy(np.array(image, copy=True)).permute(2, 0, 1))
+                eps.append(torch.randn((4, 32, 32), generator=torch.Generator("cpu").manual_seed(row)))
+                selection.append({"row": row, "label": label, "image_sha256": image_hash,
+                                  "flipped": flipped})
+            x = torch.stack(pixels).to(device=device, dtype=torch.float32).div_(127.5).sub_(1)
+            with torch.no_grad():
+                dist = vae.encode(x).latent_dist
+                z = (dist.mean + dist.std * torch.stack(eps).to(device)) * 0.18215
+            latents.append(z.float().cpu())
+    finally:
+        del vae
+        if str(device).startswith("cuda"):
+            torch.cuda.empty_cache()
+    pool = {"schema": POOL_SCHEMA, "dataset": list(DATASET), "vae": list(VAE), "vae_scale": 0.18215,
+            "rule": POOL_RULE, "latents": torch.cat(latents),
+            "labels": torch.tensor([CLASS_IDS[s["label"]] for s in selection]),
+            "selection": selection}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".pt", delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        torch.save(pool, temporary)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return str(path)
+
+
+_POOLS = {}
+
+
+def load_latent_pool(path=None):
+    path = Path(path) if path is not None else default_pool_path()
+    key = str(path.resolve())
+    if key not in _POOLS:
+        if not path.is_file():
+            raise FileNotFoundError(f"no DiT latent pool at {path}; build it with "
+                                    "build_latent_pool() on a GPU")
+        pool = torch.load(path, map_location="cpu", weights_only=True)
+        if (pool.get("schema") != POOL_SCHEMA or tuple(pool.get("dataset", ())) != DATASET
+                or tuple(pool.get("vae", ())) != VAE or pool.get("rule") != POOL_RULE
+                or pool["latents"].shape[1:] != (4, 32, 32)
+                or pool["labels"].shape != (pool["latents"].shape[0],)):
+            raise ValueError(f"{path} is not a DiT latent pool of the pinned contract")
+        digest_ = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1 << 20), b""):
+                digest_.update(block)
+        _POOLS[key] = (pool, digest_.hexdigest())
+    return _POOLS[key]
+
+
+class LatentStream:
+    """The batch sequence of one data order: a fresh draw at every step."""
+
+    def __init__(self, spec, order, pool_path=None):
+        if spec.model != "dit_s_2" or spec.input_mode != "real":
+            raise ValueError("a latent stream needs the real-input DiT workload")
+        self.spec, self.order = spec, int(order)
+        self.pool, self.pool_sha256 = load_latent_pool(pool_path)
+        self.rows = int(self.pool["latents"].shape[0])
+        self.per_epoch = self.rows // spec.batch_size
+        if self.per_epoch < 1:
+            raise ValueError(f"pool of {self.rows} rows is smaller than one batch")
+        self._epoch = None
+
+    def indices(self, index):
+        epoch, offset = divmod(int(index), self.per_epoch)
+        if self._epoch is None or self._epoch[0] != epoch:
+            g = torch.Generator("cpu").manual_seed(seed_of(f"dit/order{self.order}/epoch{epoch}"))
+            self._epoch = (epoch, torch.randperm(self.rows, generator=g))
+        b = self.spec.batch_size
+        return self._epoch[1][offset * b:(offset + 1) * b]
+
+    def batch(self, index):
+        a, b = self.spec.arch, self.spec.batch_size
+        idx = self.indices(index)
+        g = torch.Generator("cpu").manual_seed(seed_of(f"dit/order{self.order}/step{int(index)}"))
+        shape = (b, a["in_channels"], a["input_size"], a["input_size"])
+        noise = torch.randn(shape, generator=g)
+        timesteps = torch.randint(a["diffusion_steps"], (b,), generator=g)
+        drop_mask = (torch.rand(b, generator=g) < a["class_dropout_prob"]).long()
+        dtype, device = getattr(torch, self.spec.dtype), self.spec.device
+        return {"latent": self.pool["latents"][idx].to(device=device, dtype=dtype),
+                "noise": noise.to(device=device, dtype=dtype), "timesteps": timesteps.to(device),
+                "labels": self.pool["labels"][idx].to(device), "drop_mask": drop_mask.to(device)}
+
+    def describe(self):
+        return {"source": "imagenette latent pool", "order": self.order,
+                "batch_size": self.spec.batch_size, "rule": STREAM_RULE}
+
+
+def pool_identity(pool_path=None):
+    pool, sha = load_latent_pool(pool_path)
+    return {"dataset": list(DATASET), "vae": list(VAE), "pool_sha256": sha,
+            "rows": int(pool["latents"].shape[0]), "pool_rule": POOL_RULE, "rule": STREAM_RULE}

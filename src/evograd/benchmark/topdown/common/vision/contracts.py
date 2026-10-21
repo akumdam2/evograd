@@ -49,7 +49,7 @@ def observed(model, task):
             dtype=c["dtype"],
             provenance=Provenance(
                 model=model,
-                component=task,
+                component=(c.get("provenance") or {}).get("component", task),
                 source="execution",
                 note=f"Execution observed: {c['config_id']}; see hashed harvest snapshot",
                 strides=tuple((k, tuple(v)) for k, v in c["strides"].items()),
