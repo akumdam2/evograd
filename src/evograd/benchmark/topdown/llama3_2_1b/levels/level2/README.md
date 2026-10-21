@@ -188,30 +188,30 @@ Per boundary — `qkv_rope` shown, the other three are identical in shape:
 
 ```bash
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope derive \
-    --source results/llama3-level4/layer16.pt \
-    --metadata-out results/llama3-level4/layer16-qkv.json
+    --source results/llama3-level3/layer16.pt \
+    --metadata-out results/llama3-level3/layer16-qkv.json
 
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope verify \
-    --source results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/layer16-qkv-verify.json
+    --source results/llama3-level3/layer16.pt \
+    --report results/llama3-level3/layer16-qkv-verify.json
 
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope calibrate \
-    --source results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/llama3_qkv_rope-tolerance.json
+    --source results/llama3-level3/layer16.pt \
+    --report results/llama3-level3/llama3_qkv_rope-tolerance.json
 ```
 
 Then the two cross-cutting ones:
 
 ```bash
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.calibrate inventory \
-    --artifact results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/l2-inventory.json
+    --artifact results/llama3-level3/layer16.pt \
+    --report results/llama3-level3/l2-inventory.json
 
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.negative_controls \
-    --report results/llama3-level4/l2-negative-controls.json
+    --report results/llama3-level3/l2-negative-controls.json
 ```
 
-`--source` already defaults to `results/llama3-level4/layer16.pt` in all four
+`--source` already defaults to `results/llama3-level3/layer16.pt` in all four
 boundary modules. `attention verify` takes `--skip-dense-reference`: the
 materialized-score reference needs several GiB at the canonical shape.
 
@@ -222,7 +222,7 @@ on any machine:
 ```bash
 PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope calibrate \
     --skip-canonical --device cpu \
-    --report results/llama3-level4/llama3_qkv_rope-grid-tolerance.json
+    --report results/llama3-level3/llama3_qkv_rope-grid-tolerance.json
 ```
 
 That is the run that found the tolerances inherited from Qwen3 were wrong for
@@ -233,7 +233,7 @@ those measurements plus a 1.5x margin.
 ## What each entry point needs
 
 Everything except `calibrate --skip-canonical` consumes
-`results/llama3-level4/layer16.pt` — produced by the layer capture — and
+`results/llama3-level3/layer16.pt` — produced by the layer capture — and
 `harvest/snapshot.json`. A stage with no artifact **refuses by name** rather
 than substituting synthetic tensors.
 

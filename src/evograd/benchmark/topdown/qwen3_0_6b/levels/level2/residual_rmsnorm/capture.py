@@ -9,16 +9,16 @@ implementation is good enough -- that is
 Derive and verify ``fused_add_rms_norm`` from the canonical Layer-14 artifact.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm derive \
-        --source results/qwen3-level4/layer14.pt \
-        --metadata-out results/qwen3-level4/layer14-residual.json
+        --source results/qwen3-level3/layer14.pt \
+        --metadata-out results/qwen3-level3/layer14-residual.json
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm verify \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/layer14-residual-verify.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/layer14-residual-verify.json
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/fused_add_rms_norm-tolerance.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/fused_add_rms_norm-tolerance.json
 
 ``layer14.pt`` stays the only tensor artifact; the boundary is re-derived by
 replaying the layer and hooking it, and only JSON is written.

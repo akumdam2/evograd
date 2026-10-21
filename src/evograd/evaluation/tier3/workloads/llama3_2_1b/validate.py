@@ -1,7 +1,7 @@
 """Proving the Llama-3 tier-3 sites are drop-in, before anything is timed.
 
     PYTHONPATH=src python -m evograd.evaluation.tier3.workloads.llama3_2_1b.validate \
-        structural --report results/llama3-level4/t3-structural.json
+        structural --report results/llama3-level3/t3-structural.json
 
 Two checks, and they answer different questions.
 

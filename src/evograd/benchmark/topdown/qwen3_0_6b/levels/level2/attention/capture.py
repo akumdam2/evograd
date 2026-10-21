@@ -10,18 +10,18 @@ Derive and verify ``qwen3_attention`` from the canonical Layer-14 artifact.
 
     # describe the derived invocation (metadata only -- no tensors are written)
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention derive \
-        --source results/qwen3-level4/layer14.pt \
-        --metadata-out results/qwen3-level4/layer14-attention.json
+        --source results/qwen3-level3/layer14.pt \
+        --metadata-out results/qwen3-level3/layer14-attention.json
 
     # check both spellings against what Transformers computed
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention verify \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/layer14-attention-verify.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/layer14-attention-verify.json
 
     # measure what tolerance a correct implementation actually needs
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/qwen3_attention-tolerance.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/qwen3_attention-tolerance.json
 
 Like the MLP task, nothing here writes a second tensor file. ``layer14.pt``
 already holds every number this boundary needs; the invocation is re-derived by

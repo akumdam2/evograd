@@ -2,9 +2,9 @@
 """What is the most a single MegaFold site could possibly be worth?
 
     PYTHONPATH=/path/to/MegaFold:src python scripts/megafold_site_headroom.py \
-        --residues 384 --t2-dir results/megafold-level4/t2 \
-        --calls results/megafold-level4/site_dtypes_identity.json \
-        --out results/megafold-level4/headroom_model.json
+        --residues 384 --t2-dir results/megafold-level3/t2 \
+        --calls results/megafold-level3/site_dtypes_identity.json \
+        --out results/megafold-level3/headroom_model.json
 
 The MegaFold port of ``scripts/site_headroom.py``, model scope only (there is
 no captured MegaFold block yet). Same method: each site is replaced by a

@@ -1,7 +1,7 @@
 """Harvest the canonical Llama-3 training step into a workload manifest.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \
-        --out results/llama3-level4/harvest.json
+        --out results/llama3-level3/harvest.json
 
 This is the Level-3 smoke run with an observer attached. It reuses the same
 build, the same inputs, the same step and the same gradient validation -- the

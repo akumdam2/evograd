@@ -79,7 +79,7 @@ what the Hub served that day or on a node having network access.
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b \
-    --out results/llama3-level4/canonical.json
+    --out results/llama3-level3/canonical.json
 ```
 
 Exit code 0 means the step ran and every check passed. `--print-spec` resolves

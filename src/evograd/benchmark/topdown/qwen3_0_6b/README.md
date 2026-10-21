@@ -64,9 +64,6 @@ PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
 evograd tier3-bench --model qwen3_0_6b --help
 ```
 
-Historical `results/qwen3-level4/` and external cache paths are not moved. Only
-new runs use the new layout.
-
 Qwen T3 numerical thresholds must be calibrated and frozen from trusted
 references, repeated noise, and metric-specific floors before a candidate is
 run, then enforced on an independent holdout. Training behavior remains

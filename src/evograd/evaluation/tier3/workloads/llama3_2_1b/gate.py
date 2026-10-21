@@ -59,9 +59,9 @@ STAGES = (
 )
 
 #: Where the calibration lives. Tracked as a *result*, not as code, and per
-#: model: Qwen3's file at ``results/qwen3-level4/`` describes Qwen3's noise
+#: model: Qwen3's file at ``results/qwen3-level3/`` describes Qwen3's noise
 #: floor and cannot stand in for this one.
-DEFAULT_ARTIFACT = Path("results/llama3-level4/t3-numerics-calibration.json")
+DEFAULT_ARTIFACT = Path("results/llama3-level3/t3-numerics-calibration.json")
 
 
 class CalibrationUnavailable(RuntimeError):

@@ -1,7 +1,7 @@
 """Negative controls: does the calibrated gate still reject a wrong model?
 
     PYTHONPATH=src python -m evograd.evaluation.tier3.workloads.llama3_2_1b.controls \
-        --report results/llama3-level4/t3-negative-controls.json
+        --report results/llama3-level3/t3-negative-controls.json
 
 The envelope is derived from reference runs only, which is what makes it honest
 and also what makes it untested: nothing in its derivation ever saw a wrong

@@ -1,7 +1,7 @@
 """Proving the Qwen3 tier-3 sites are drop-in, before anything is timed.
 
     PYTHONPATH=src python -m evograd.evaluation.tier3.workloads.qwen3_0_6b.validate \
-        structural --report results/qwen3-level4/t3-structural.json
+        structural --report results/qwen3-level3/t3-structural.json
 
 Two checks, and they answer different questions.
 

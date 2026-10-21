@@ -539,7 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def source_args(sp):
         sp.add_argument(
-            "--source", type=Path, default=Path("results/qwen3-level4/layer14.pt")
+            "--source", type=Path, default=Path("results/qwen3-level3/layer14.pt")
         )
         sp.add_argument("--device", default="cuda")
         return sp

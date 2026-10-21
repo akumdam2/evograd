@@ -10,18 +10,18 @@ Extract and verify ``llama3_swiglu_mlp`` from the verified Layer-16 replay.
 
     # describe the derived invocation (metadata only -- no tensors are written)
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp derive \
-        --source results/llama3-level4/layer8.pt \
-        --metadata-out results/llama3-level4/layer8-mlp.json
+        --source results/llama3-level3/layer8.pt \
+        --metadata-out results/llama3-level3/layer8-mlp.json
 
     # check the Level-2 declaration's reference against what the model computed
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp verify \
-        --source results/llama3-level4/layer8.pt \
-        --report results/llama3-level4/layer8-mlp-verify.json
+        --source results/llama3-level3/layer8.pt \
+        --report results/llama3-level3/layer8-mlp-verify.json
 
     # measure what tolerance a correct BF16 implementation actually needs
     PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp calibrate \
-        --source results/llama3-level4/layer8.pt \
-        --report results/llama3-level4/llama3_swiglu_mlp-tolerance.json
+        --source results/llama3-level3/layer8.pt \
+        --report results/llama3-level3/llama3_swiglu_mlp-tolerance.json
 
 The source is deliberately the *replay*, not the full model. The Layer-16
 artifact has already been shown to reproduce the full model bitwise, so a

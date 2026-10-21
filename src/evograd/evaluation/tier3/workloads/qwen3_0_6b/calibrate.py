@@ -1,7 +1,7 @@
 """Measure the canonical Qwen3 model's own numerical noise, then bound it.
 
     PYTHONPATH=src python -m evograd.evaluation.tier3.workloads.qwen3_0_6b.calibrate run \
-        --report results/qwen3-level4/t3-numerics-calibration.json
+        --report results/qwen3-level3/t3-numerics-calibration.json
 
 Three comparisons, on the canonical workload, in isolated child processes --
 which is how tier-3 providers run, so the calibration is measured under the

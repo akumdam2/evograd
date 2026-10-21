@@ -14,9 +14,9 @@ not authored: it comes out of a harvest, and nobody has run one for Llama-3.
 Until someone does::
 
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
-        --out results/llama3-level4/harvest.json
+        --out results/llama3-level3/harvest.json
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot \\
-        --harvest results/llama3-level4/harvest.json --write
+        --harvest results/llama3-level3/harvest.json --write
 
 Level-1 mapping is the shared decoder one unchanged: every role Llama presents
 -- ``q_proj``, ``o_proj``, ``gate_proj``, ``down_proj``, ``lm_head``,
@@ -153,9 +153,9 @@ A snapshot is derived from a harvest, not authored, and no Llama-3 harvest has
 been run. On a machine with a GPU:
 
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
-        --out results/llama3-level4/harvest.json
+        --out results/llama3-level3/harvest.json
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot \\
-        --harvest results/llama3-level4/harvest.json --write
+        --harvest results/llama3-level3/harvest.json --write
 
 Nothing here can synthesise one, and a hand-written snapshot would defeat its
 purpose: the shapes are meant to be what a real training step ran."""
@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--harvest", type=Path,
-                        default=Path("results/llama3-level4/harvest.json"),
+                        default=Path("results/llama3-level3/harvest.json"),
                         help="the harvest manifest to derive from")
     parser.add_argument("--layer", type=int, default=REPRESENTATIVE_LAYER,
                         help="the representative decoder layer to describe")

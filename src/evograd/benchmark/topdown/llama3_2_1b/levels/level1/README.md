@@ -127,21 +127,21 @@ names itself.
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping mapping \
-    --report results/llama3-level4/l1-mapping.json
+    --report results/llama3-level3/l1-mapping.json
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping calibrate \
     --op causal_gqa_attention \
-    --report results/llama3-level4/causal_gqa_attention-tolerance.json
+    --report results/llama3-level3/causal_gqa_attention-tolerance.json
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping verify \
-    --source results/llama3-level4/layer16.pt \
-    --report results/llama3-level4/layer16-sdpa-verify.json
+    --source results/llama3-level3/layer16.pt \
+    --report results/llama3-level3/layer16-sdpa-verify.json
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping loss \
-    --report results/llama3-level4/l1-loss.json
+    --report results/llama3-level3/l1-loss.json
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping cross-entropy \
-    --report results/llama3-level4/l1-cross-entropy.json
+    --report results/llama3-level3/l1-cross-entropy.json
 ```
 
 - **`mapping`** prints the six-task table with each configuration's id,

@@ -64,7 +64,7 @@ contexts; `fast`/`fair` are measurement modes.
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b --print-spec
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b \
-  --out results/llama3-level4/canonical.json
+  --out results/llama3-level3/canonical.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \
   --out results/benchmark/topdown/llama3_2_1b/harvest.json
 evograd tier3-bench --model llama_3_2_1b --help
@@ -72,9 +72,6 @@ evograd tier3-bench --model llama_3_2_1b --help
 
 The smoke entry point takes no subcommand: `--out` and the override flags go
 directly to `python -m evograd.benchmark.topdown.llama3_2_1b`.
-
-Historical `results/llama3-level4/` and external cache paths are not moved, on
-the same rule Qwen3 follows. Only new runs use the new layout.
 
 ## Not present, because each must be derived from a run
 
