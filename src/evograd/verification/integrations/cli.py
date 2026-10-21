@@ -1,5 +1,9 @@
 """The command line every model integration shares:
-``python -m evograd.verification.integrations.<model> {capture,fidelity,verify}``."""
+``python -m evograd.verification.integrations <model> {capture,fidelity,verify}``
+(or ``python -m evograd.verification.integrations.<package> ...``).
+
+``verify`` exits 0 when every candidate is accepted, 1 when one is not, and 3
+when ``--deadline-min`` stopped it: rerun the same command to continue."""
 
 from __future__ import annotations
 
@@ -20,7 +24,12 @@ def main(model, argv=None) -> int:
     p.add_argument("--corpus", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--candidate", action="append", required=True, metavar="CASE_ID=PROGRAM.py")
-    p.add_argument("--controls", default=None, help="Gate 3 control runs to reuse (default DIR/controls)")
+    p.add_argument("--state", "--controls", dest="state", default=None,
+                   help="candidate-independent results to reuse: Gate 3 control runs and Gate 2 "
+                        "calibrations (default DIR/controls)")
+    p.add_argument("--deadline-min", type=float, default=None,
+                   help="stop after this many minutes at the next stage boundary or Gate 3 "
+                        "checkpoint; exit 3; rerun the same command to continue")
     args = parser.parse_args(argv)
 
     def log(*parts):
@@ -42,7 +51,11 @@ def main(model, argv=None) -> int:
     from .gates import verify
 
     candidates = dict(item.split("=", 1) for item in args.candidate)
-    verdict = verify(model, candidates, args.corpus, args.out, controls=args.controls, log=log)
+    verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
+                     deadline_min=args.deadline_min)
+    if verdict.get("suspended"):
+        print(json.dumps({"suspended": verdict["suspended"]}))
+        return 3
     print(json.dumps({case: entry["accepted"] for case, entry in verdict["candidates"].items()}))
     return 0 if all(entry["accepted"] for entry in verdict["candidates"].values()) else 1
 

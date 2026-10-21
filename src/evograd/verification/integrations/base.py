@@ -391,7 +391,7 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
                 "sha256": sha_file(importlib.import_module(model.live_capture.__module__).__file__)}}
 
 
-def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print) -> Path:
+def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: str = "cuda") -> Path:
     """Capture the corpus: one fresh initial model per data order, fidelity per order."""
     import gc
 
@@ -414,7 +414,7 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print) -> Path:
     state = None
     for order in orders:
         t0 = time.time()
-        batch_now = to_device(batches[order], "cuda")
+        batch_now = to_device(batches[order], device)
         net = build_model(workload)
         state_now = objective.parameter_state(net)
         state = state or state_now
@@ -423,7 +423,8 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print) -> Path:
         plain = record(net, *objective.capture_step(net, batch_now), primary)
         del net
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         net = build_model(workload)
         recorder = model.live_capture(net).install()
         try:
@@ -449,7 +450,8 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print) -> Path:
             f"{writer.bytes_written / 2**30:.1f} GiB written")
         del recorder, net
         gc.collect()
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     payloads = writer.payloads
     covered = coverage(cases, payloads)
     if not covered["complete"]:

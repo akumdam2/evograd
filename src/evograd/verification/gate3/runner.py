@@ -88,6 +88,10 @@ class TrainingMeasurement:
     #: Distinguishes two executions even when their records are bitwise equal
     #: (deterministic repeats); provenance only, never part of the binding.
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    #: Saved at its checkpoint's deadline; the same call continues it later.
+    suspended: bool = False
+    #: Provenance of a checkpointed run's processes; never part of the binding.
+    segments: list[dict[str, Any]] = field(default_factory=list)
 
     def verdict(self) -> tuple[str, bool]:
         """Never ``passed``: acceptance is not configured in this phase."""
@@ -105,6 +109,9 @@ class TrainingMeasurement:
             "train_steps": self.train_steps, "train_windows": self.train_windows,
             "validation": self.validation, "state": self.state, "site_calls": self.site_calls,
             "findings": [f.to_dict() for f in self.findings], "seconds": self.seconds,
+            # Only a checkpointed run carries these; every other record is unchanged.
+            **({"suspended": self.suspended, "segments": self.segments}
+               if self.suspended or self.segments else {}),
         })
 
 
@@ -132,7 +139,8 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                      seed: int = 0, record_state: bool = False, acceptance: Any = None,
                      progress: Callable[[str], None] | None = None,
                      on_step: StepCallback | None = None,
-                     protocol_context: Mapping[str, Any] | None = None) -> TrainingMeasurement:
+                     protocol_context: Mapping[str, Any] | None = None,
+                     checkpoint: Any = None) -> TrainingMeasurement:
     """Train ``deployment`` for ``plan.steps`` steps and measure both curves.
 
     ``seed`` fixes every random stream inside the run (dropout and the like);
@@ -150,6 +158,14 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
     numerical settings. It must be common to native/control/candidate, and
     exclude sample seeds, data order and candidate-specific implementation IDs.
     Missing context is allowed for measurement but cannot yield a policy/pass.
+
+    ``checkpoint`` (:class:`~evograd.verification.gate3.checkpoint.RunCheckpoint`)
+    makes the run resumable: its state is saved every ``checkpoint.every``
+    steps, and when ``checkpoint.deadline`` passes the run is saved and
+    returned ``suspended`` (not completed). Called again with the same
+    checkpoint, it continues from the saved step; a checkpoint of another run
+    (identity or deployment differ) is moved aside and the run starts over.
+    The result is the run that never stopped: same records, identity, run id.
     """
     if acceptance is not None:
         raise NotImplementedError(ACCEPTANCE_NOT_CONFIGURED)
@@ -219,12 +235,16 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                         module_state_digest(_model_of(model))), "optimizer": optimizer_summary(optimizer)}
                 say(f"step {step} validation {record['mean_loss']}")
 
-            stage = "validation"
-            if 0 in plan.checkpoints:
-                validate(0)
             windows = WindowAccumulator(plan)
             run.train_windows = windows.windows      # filled as the run goes
-            for step in range(1, plan.steps + 1):
+            first = 1
+            if checkpoint is not None:
+                stage = "resume"
+                first = _resume(checkpoint, run, model, optimizer, windows, hooks, adapter.device)
+            stage = "validation"
+            if 0 in plan.checkpoints and first == 1:
+                validate(0)
+            for step in range(first, plan.steps + 1):
                 stage = f"step {step}"
                 batch = adapter.train_batch(step - 1)
                 calls_before = dict(hooks.counts)
@@ -260,12 +280,71 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                 if step in plan.checkpoints:
                     stage = f"validation {step}"
                     validate(step)
+                if checkpoint is not None and step < plan.steps and (
+                        (checkpoint.every and step % checkpoint.every == 0) or checkpoint.expired()):
+                    stage = f"checkpoint {step}"
+                    _save(checkpoint, run, model, optimizer, hooks, adapter.device, step)
+                    if checkpoint.expired():
+                        run.suspended = True
+                        run.segments[-1]["suspended_after_step"] = step
+                        say(f"suspended after step {step}")
+                        return run
             run.site_calls = {"total": dict(hooks.counts)}
             # Every step and checkpoint ran, and nothing invalidated a number.
             run.completed = not run.findings
+            if checkpoint is not None and run.completed:
+                run.segments[-1]["completed_at_step"] = plan.steps
+                from evograd.verification.gate3 import checkpoint as ckpt
+
+                ckpt.remove(checkpoint)
     except Exception as exc:
         run.findings.append(problem("training_runtime_error", f"{type(exc).__name__} at {stage}",
                                     trace=traceback.format_exc(limit=8)))
     finally:
         run.seconds = time.perf_counter() - started
     return run
+
+
+# ── checkpointed runs ────────────────────────────────────────────────────────
+
+
+def _save(checkpoint: Any, run: TrainingMeasurement, model: torch.nn.Module,
+          optimizer: torch.optim.Optimizer, hooks: SiteHooks, device: str, step: int) -> None:
+    from evograd.verification.gate3 import checkpoint as ckpt
+
+    ckpt.save(checkpoint, {
+        "identity_hash": stable_hash(run.identity), "deployment": run.deployment,
+        "run_id": run.run_id, "step": step, "model": _model_of(model).state_dict(),
+        "optimizer": optimizer.state_dict(), "rng": ckpt.rng_state(device),
+        "train_steps": list(run.train_steps), "validation": dict(run.validation),
+        "state": dict(run.state), "site_calls": dict(hooks.counts),
+        "segments": list(run.segments)})
+
+
+def _resume(checkpoint: Any, run: TrainingMeasurement, model: torch.nn.Module,
+            optimizer: torch.optim.Optimizer, windows: WindowAccumulator, hooks: SiteHooks,
+            device: str) -> int:
+    """Restore a saved run in place; returns the next step to run."""
+    from evograd.verification.gate3 import checkpoint as ckpt
+
+    data = ckpt.load(checkpoint)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    if data is not None and (data["identity_hash"] != stable_hash(run.identity)
+                             or data["deployment"] != run.deployment):
+        run.segments.append({"discarded_checkpoint": ckpt.discard(checkpoint, "another run")})
+        data = None
+    if data is None:
+        run.segments.append({"started_at_step": 1, "time": stamp})
+        return 1
+    _model_of(model).load_state_dict(data["model"], strict=True)
+    optimizer.load_state_dict(data["optimizer"])
+    run.train_steps.extend(data["train_steps"])
+    for record in run.train_steps:
+        windows.add(record["step"], record["loss_sum"], record["weight"])
+    run.validation.update(data["validation"])
+    run.state.update(data["state"])
+    hooks.counts.update(data["site_calls"])
+    run.run_id = data["run_id"]
+    run.segments = list(data["segments"]) + [{"resumed_at_step": data["step"] + 1, "time": stamp}]
+    ckpt.restore_rng(data["rng"], device)
+    return int(data["step"]) + 1
