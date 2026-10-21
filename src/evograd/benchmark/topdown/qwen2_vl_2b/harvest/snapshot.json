@@ -1,0 +1,1742 @@
+{
+  "schema_version": "evograd-qwen2_vl_2b-snapshot/1",
+  "manifest_hash": "51695d486b066d081f57ba2a5dd017188d02963930d677455a9ec59c92027ac5",
+  "workload_id": "qwen2_vl_2b-ea18483043dc8dd2",
+  "config": {
+    "model": "qwen2_vl_2b",
+    "batch_size": 1,
+    "seq_len": 512,
+    "image_size": 224,
+    "dtype": "bfloat16",
+    "device": "cuda",
+    "seed": 0,
+    "data_seed": 0,
+    "attn_implementation": "sdpa",
+    "arch_overrides": {},
+    "weights": "random"
+  },
+  "canonical": true,
+  "not_bound": [
+    "attention (vision and causal text)",
+    "multimodal RoPE",
+    "Conv3D patch embedding",
+    "SwiGLU activation",
+    "cross entropy"
+  ],
+  "level1": {
+    "layernorm": {
+      "configurations": [
+        {
+          "dims": {
+            "rows": 256,
+            "hidden": 1280
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1280,
+              1
+            ],
+            "weight": [
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.norm1",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "36f3462600f1c3a9c325cbaa470c4d025c5599362c56d006db938de2796b0a74",
+          "frequency": 65,
+          "module_paths": [
+            "model.visual.blocks.0.norm1",
+            "model.visual.blocks.0.norm2",
+            "model.visual.blocks.1.norm1",
+            "model.visual.blocks.1.norm2",
+            "model.visual.blocks.2.norm1",
+            "model.visual.blocks.2.norm2",
+            "model.visual.blocks.3.norm1",
+            "model.visual.blocks.3.norm2",
+            "model.visual.blocks.4.norm1",
+            "model.visual.blocks.4.norm2",
+            "model.visual.blocks.5.norm1",
+            "model.visual.blocks.5.norm2",
+            "model.visual.blocks.6.norm1",
+            "model.visual.blocks.6.norm2",
+            "model.visual.blocks.7.norm1",
+            "model.visual.blocks.7.norm2",
+            "model.visual.blocks.8.norm1",
+            "model.visual.blocks.8.norm2",
+            "model.visual.blocks.9.norm1",
+            "model.visual.blocks.9.norm2",
+            "model.visual.blocks.10.norm1",
+            "model.visual.blocks.10.norm2",
+            "model.visual.blocks.11.norm1",
+            "model.visual.blocks.11.norm2",
+            "model.visual.blocks.12.norm1",
+            "model.visual.blocks.12.norm2",
+            "model.visual.blocks.13.norm1",
+            "model.visual.blocks.13.norm2",
+            "model.visual.blocks.14.norm1",
+            "model.visual.blocks.14.norm2",
+            "model.visual.blocks.15.norm1",
+            "model.visual.blocks.15.norm2",
+            "model.visual.blocks.16.norm1",
+            "model.visual.blocks.16.norm2",
+            "model.visual.blocks.17.norm1",
+            "model.visual.blocks.17.norm2",
+            "model.visual.blocks.18.norm1",
+            "model.visual.blocks.18.norm2",
+            "model.visual.blocks.19.norm1",
+            "model.visual.blocks.19.norm2",
+            "model.visual.blocks.20.norm1",
+            "model.visual.blocks.20.norm2",
+            "model.visual.blocks.21.norm1",
+            "model.visual.blocks.21.norm2",
+            "model.visual.blocks.22.norm1",
+            "model.visual.blocks.22.norm2",
+            "model.visual.blocks.23.norm1",
+            "model.visual.blocks.23.norm2",
+            "model.visual.blocks.24.norm1",
+            "model.visual.blocks.24.norm2",
+            "model.visual.blocks.25.norm1",
+            "model.visual.blocks.25.norm2",
+            "model.visual.blocks.26.norm1",
+            "model.visual.blocks.26.norm2",
+            "model.visual.blocks.27.norm1",
+            "model.visual.blocks.27.norm2",
+            "model.visual.blocks.28.norm1",
+            "model.visual.blocks.28.norm2",
+            "model.visual.blocks.29.norm1",
+            "model.visual.blocks.29.norm2",
+            "model.visual.blocks.30.norm1",
+            "model.visual.blocks.30.norm2",
+            "model.visual.blocks.31.norm1",
+            "model.visual.blocks.31.norm2",
+            "model.visual.merger.ln_q"
+          ]
+        }
+      ],
+      "frequency": 65
+    },
+    "linear": {
+      "configurations": [
+        {
+          "dims": {
+            "M": 256,
+            "K": 1280,
+            "N": 3840
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                3840,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                3840
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1280,
+              1
+            ],
+            "weight": [
+              1280,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.attn.qkv",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "4feeea70c5ffca653c3cfcf908df943d367c5581ad444428aaded0aa7dfa5a3b",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.attn.qkv",
+            "model.visual.blocks.1.attn.qkv",
+            "model.visual.blocks.2.attn.qkv",
+            "model.visual.blocks.3.attn.qkv",
+            "model.visual.blocks.4.attn.qkv",
+            "model.visual.blocks.5.attn.qkv",
+            "model.visual.blocks.6.attn.qkv",
+            "model.visual.blocks.7.attn.qkv",
+            "model.visual.blocks.8.attn.qkv",
+            "model.visual.blocks.9.attn.qkv",
+            "model.visual.blocks.10.attn.qkv",
+            "model.visual.blocks.11.attn.qkv",
+            "model.visual.blocks.12.attn.qkv",
+            "model.visual.blocks.13.attn.qkv",
+            "model.visual.blocks.14.attn.qkv",
+            "model.visual.blocks.15.attn.qkv",
+            "model.visual.blocks.16.attn.qkv",
+            "model.visual.blocks.17.attn.qkv",
+            "model.visual.blocks.18.attn.qkv",
+            "model.visual.blocks.19.attn.qkv",
+            "model.visual.blocks.20.attn.qkv",
+            "model.visual.blocks.21.attn.qkv",
+            "model.visual.blocks.22.attn.qkv",
+            "model.visual.blocks.23.attn.qkv",
+            "model.visual.blocks.24.attn.qkv",
+            "model.visual.blocks.25.attn.qkv",
+            "model.visual.blocks.26.attn.qkv",
+            "model.visual.blocks.27.attn.qkv",
+            "model.visual.blocks.28.attn.qkv",
+            "model.visual.blocks.29.attn.qkv",
+            "model.visual.blocks.30.attn.qkv",
+            "model.visual.blocks.31.attn.qkv"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 1280,
+            "N": 1280
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1280,
+              1
+            ],
+            "weight": [
+              1280,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.attn.proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "3bd39fdb365b83a49123f801899a9020b59182b0516360a57081d45691024df0",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.attn.proj",
+            "model.visual.blocks.1.attn.proj",
+            "model.visual.blocks.2.attn.proj",
+            "model.visual.blocks.3.attn.proj",
+            "model.visual.blocks.4.attn.proj",
+            "model.visual.blocks.5.attn.proj",
+            "model.visual.blocks.6.attn.proj",
+            "model.visual.blocks.7.attn.proj",
+            "model.visual.blocks.8.attn.proj",
+            "model.visual.blocks.9.attn.proj",
+            "model.visual.blocks.10.attn.proj",
+            "model.visual.blocks.11.attn.proj",
+            "model.visual.blocks.12.attn.proj",
+            "model.visual.blocks.13.attn.proj",
+            "model.visual.blocks.14.attn.proj",
+            "model.visual.blocks.15.attn.proj",
+            "model.visual.blocks.16.attn.proj",
+            "model.visual.blocks.17.attn.proj",
+            "model.visual.blocks.18.attn.proj",
+            "model.visual.blocks.19.attn.proj",
+            "model.visual.blocks.20.attn.proj",
+            "model.visual.blocks.21.attn.proj",
+            "model.visual.blocks.22.attn.proj",
+            "model.visual.blocks.23.attn.proj",
+            "model.visual.blocks.24.attn.proj",
+            "model.visual.blocks.25.attn.proj",
+            "model.visual.blocks.26.attn.proj",
+            "model.visual.blocks.27.attn.proj",
+            "model.visual.blocks.28.attn.proj",
+            "model.visual.blocks.29.attn.proj",
+            "model.visual.blocks.30.attn.proj",
+            "model.visual.blocks.31.attn.proj"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 1280,
+            "N": 5120
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1280,
+              1
+            ],
+            "weight": [
+              1280,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.mlp.fc1",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "50050fc4fa418958ca0fc3dd5902277532bcd863496bd136604a0e7d8f73ed05",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.mlp.fc1",
+            "model.visual.blocks.1.mlp.fc1",
+            "model.visual.blocks.2.mlp.fc1",
+            "model.visual.blocks.3.mlp.fc1",
+            "model.visual.blocks.4.mlp.fc1",
+            "model.visual.blocks.5.mlp.fc1",
+            "model.visual.blocks.6.mlp.fc1",
+            "model.visual.blocks.7.mlp.fc1",
+            "model.visual.blocks.8.mlp.fc1",
+            "model.visual.blocks.9.mlp.fc1",
+            "model.visual.blocks.10.mlp.fc1",
+            "model.visual.blocks.11.mlp.fc1",
+            "model.visual.blocks.12.mlp.fc1",
+            "model.visual.blocks.13.mlp.fc1",
+            "model.visual.blocks.14.mlp.fc1",
+            "model.visual.blocks.15.mlp.fc1",
+            "model.visual.blocks.16.mlp.fc1",
+            "model.visual.blocks.17.mlp.fc1",
+            "model.visual.blocks.18.mlp.fc1",
+            "model.visual.blocks.19.mlp.fc1",
+            "model.visual.blocks.20.mlp.fc1",
+            "model.visual.blocks.21.mlp.fc1",
+            "model.visual.blocks.22.mlp.fc1",
+            "model.visual.blocks.23.mlp.fc1",
+            "model.visual.blocks.24.mlp.fc1",
+            "model.visual.blocks.25.mlp.fc1",
+            "model.visual.blocks.26.mlp.fc1",
+            "model.visual.blocks.27.mlp.fc1",
+            "model.visual.blocks.28.mlp.fc1",
+            "model.visual.blocks.29.mlp.fc1",
+            "model.visual.blocks.30.mlp.fc1",
+            "model.visual.blocks.31.mlp.fc1"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 5120,
+            "N": 1280
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              5120,
+              1
+            ],
+            "weight": [
+              5120,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.mlp.fc2",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "b2d36133081072622c907cb10f9263b856b97b20463fc502d4ced32f2503ee0f",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.mlp.fc2",
+            "model.visual.blocks.1.mlp.fc2",
+            "model.visual.blocks.2.mlp.fc2",
+            "model.visual.blocks.3.mlp.fc2",
+            "model.visual.blocks.4.mlp.fc2",
+            "model.visual.blocks.5.mlp.fc2",
+            "model.visual.blocks.6.mlp.fc2",
+            "model.visual.blocks.7.mlp.fc2",
+            "model.visual.blocks.8.mlp.fc2",
+            "model.visual.blocks.9.mlp.fc2",
+            "model.visual.blocks.10.mlp.fc2",
+            "model.visual.blocks.11.mlp.fc2",
+            "model.visual.blocks.12.mlp.fc2",
+            "model.visual.blocks.13.mlp.fc2",
+            "model.visual.blocks.14.mlp.fc2",
+            "model.visual.blocks.15.mlp.fc2",
+            "model.visual.blocks.16.mlp.fc2",
+            "model.visual.blocks.17.mlp.fc2",
+            "model.visual.blocks.18.mlp.fc2",
+            "model.visual.blocks.19.mlp.fc2",
+            "model.visual.blocks.20.mlp.fc2",
+            "model.visual.blocks.21.mlp.fc2",
+            "model.visual.blocks.22.mlp.fc2",
+            "model.visual.blocks.23.mlp.fc2",
+            "model.visual.blocks.24.mlp.fc2",
+            "model.visual.blocks.25.mlp.fc2",
+            "model.visual.blocks.26.mlp.fc2",
+            "model.visual.blocks.27.mlp.fc2",
+            "model.visual.blocks.28.mlp.fc2",
+            "model.visual.blocks.29.mlp.fc2",
+            "model.visual.blocks.30.mlp.fc2",
+            "model.visual.blocks.31.mlp.fc2"
+          ]
+        },
+        {
+          "dims": {
+            "M": 64,
+            "K": 5120,
+            "N": 5120
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                64,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              5120,
+              1
+            ],
+            "weight": [
+              5120,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.merger.mlp",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "6252304658be5f432508dd3d8449f791e60a31685de0a4490face238ab96d6c5",
+          "frequency": 1,
+          "module_paths": [
+            "model.visual.merger.mlp.0"
+          ]
+        },
+        {
+          "dims": {
+            "M": 64,
+            "K": 5120,
+            "N": 1536
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                64,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              5120,
+              1
+            ],
+            "weight": [
+              5120,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.merger.mlp_2",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "8b5af96ecda8a12ea0761c13041d8156a103fb23465c8c1b356e5da33651aba8",
+          "frequency": 1,
+          "module_paths": [
+            "model.visual.merger.mlp.2"
+          ]
+        },
+        {
+          "dims": {
+            "M": 512,
+            "K": 1536,
+            "N": 1536
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.self_attn.q_proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "c23c08ffc66ad34b57a487d0bfc791af9babad38e0c1069739b91363762a3bfe",
+          "frequency": 28,
+          "module_paths": [
+            "model.language_model.layers.0.self_attn.q_proj",
+            "model.language_model.layers.1.self_attn.q_proj",
+            "model.language_model.layers.2.self_attn.q_proj",
+            "model.language_model.layers.3.self_attn.q_proj",
+            "model.language_model.layers.4.self_attn.q_proj",
+            "model.language_model.layers.5.self_attn.q_proj",
+            "model.language_model.layers.6.self_attn.q_proj",
+            "model.language_model.layers.7.self_attn.q_proj",
+            "model.language_model.layers.8.self_attn.q_proj",
+            "model.language_model.layers.9.self_attn.q_proj",
+            "model.language_model.layers.10.self_attn.q_proj",
+            "model.language_model.layers.11.self_attn.q_proj",
+            "model.language_model.layers.12.self_attn.q_proj",
+            "model.language_model.layers.13.self_attn.q_proj",
+            "model.language_model.layers.14.self_attn.q_proj",
+            "model.language_model.layers.15.self_attn.q_proj",
+            "model.language_model.layers.16.self_attn.q_proj",
+            "model.language_model.layers.17.self_attn.q_proj",
+            "model.language_model.layers.18.self_attn.q_proj",
+            "model.language_model.layers.19.self_attn.q_proj",
+            "model.language_model.layers.20.self_attn.q_proj",
+            "model.language_model.layers.21.self_attn.q_proj",
+            "model.language_model.layers.22.self_attn.q_proj",
+            "model.language_model.layers.23.self_attn.q_proj",
+            "model.language_model.layers.24.self_attn.q_proj",
+            "model.language_model.layers.25.self_attn.q_proj",
+            "model.language_model.layers.26.self_attn.q_proj",
+            "model.language_model.layers.27.self_attn.q_proj"
+          ]
+        },
+        {
+          "dims": {
+            "M": 512,
+            "K": 1536,
+            "N": 256
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                256,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                256
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.self_attn.k_proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "deb69f21ea8a8155b5f2aecd369db41626d565393c685f6723d894f34973a574",
+          "frequency": 56,
+          "module_paths": [
+            "model.language_model.layers.0.self_attn.k_proj",
+            "model.language_model.layers.0.self_attn.v_proj",
+            "model.language_model.layers.1.self_attn.k_proj",
+            "model.language_model.layers.1.self_attn.v_proj",
+            "model.language_model.layers.2.self_attn.k_proj",
+            "model.language_model.layers.2.self_attn.v_proj",
+            "model.language_model.layers.3.self_attn.k_proj",
+            "model.language_model.layers.3.self_attn.v_proj",
+            "model.language_model.layers.4.self_attn.k_proj",
+            "model.language_model.layers.4.self_attn.v_proj",
+            "model.language_model.layers.5.self_attn.k_proj",
+            "model.language_model.layers.5.self_attn.v_proj",
+            "model.language_model.layers.6.self_attn.k_proj",
+            "model.language_model.layers.6.self_attn.v_proj",
+            "model.language_model.layers.7.self_attn.k_proj",
+            "model.language_model.layers.7.self_attn.v_proj",
+            "model.language_model.layers.8.self_attn.k_proj",
+            "model.language_model.layers.8.self_attn.v_proj",
+            "model.language_model.layers.9.self_attn.k_proj",
+            "model.language_model.layers.9.self_attn.v_proj",
+            "model.language_model.layers.10.self_attn.k_proj",
+            "model.language_model.layers.10.self_attn.v_proj",
+            "model.language_model.layers.11.self_attn.k_proj",
+            "model.language_model.layers.11.self_attn.v_proj",
+            "model.language_model.layers.12.self_attn.k_proj",
+            "model.language_model.layers.12.self_attn.v_proj",
+            "model.language_model.layers.13.self_attn.k_proj",
+            "model.language_model.layers.13.self_attn.v_proj",
+            "model.language_model.layers.14.self_attn.k_proj",
+            "model.language_model.layers.14.self_attn.v_proj",
+            "model.language_model.layers.15.self_attn.k_proj",
+            "model.language_model.layers.15.self_attn.v_proj",
+            "model.language_model.layers.16.self_attn.k_proj",
+            "model.language_model.layers.16.self_attn.v_proj",
+            "model.language_model.layers.17.self_attn.k_proj",
+            "model.language_model.layers.17.self_attn.v_proj",
+            "model.language_model.layers.18.self_attn.k_proj",
+            "model.language_model.layers.18.self_attn.v_proj",
+            "model.language_model.layers.19.self_attn.k_proj",
+            "model.language_model.layers.19.self_attn.v_proj",
+            "model.language_model.layers.20.self_attn.k_proj",
+            "model.language_model.layers.20.self_attn.v_proj",
+            "model.language_model.layers.21.self_attn.k_proj",
+            "model.language_model.layers.21.self_attn.v_proj",
+            "model.language_model.layers.22.self_attn.k_proj",
+            "model.language_model.layers.22.self_attn.v_proj",
+            "model.language_model.layers.23.self_attn.k_proj",
+            "model.language_model.layers.23.self_attn.v_proj",
+            "model.language_model.layers.24.self_attn.k_proj",
+            "model.language_model.layers.24.self_attn.v_proj",
+            "model.language_model.layers.25.self_attn.k_proj",
+            "model.language_model.layers.25.self_attn.v_proj",
+            "model.language_model.layers.26.self_attn.k_proj",
+            "model.language_model.layers.26.self_attn.v_proj",
+            "model.language_model.layers.27.self_attn.k_proj",
+            "model.language_model.layers.27.self_attn.v_proj"
+          ]
+        }
+      ],
+      "frequency": 214
+    },
+    "quick_gelu": {
+      "configurations": [
+        {
+          "dims": {
+            "rows": 256,
+            "hidden": 5120
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              5120,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.blocks.mlp.act",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "e4a88a0b2453dac70cc5e63f90c54539d707968e4bb665776204c18712810c55",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.mlp.act",
+            "model.visual.blocks.1.mlp.act",
+            "model.visual.blocks.2.mlp.act",
+            "model.visual.blocks.3.mlp.act",
+            "model.visual.blocks.4.mlp.act",
+            "model.visual.blocks.5.mlp.act",
+            "model.visual.blocks.6.mlp.act",
+            "model.visual.blocks.7.mlp.act",
+            "model.visual.blocks.8.mlp.act",
+            "model.visual.blocks.9.mlp.act",
+            "model.visual.blocks.10.mlp.act",
+            "model.visual.blocks.11.mlp.act",
+            "model.visual.blocks.12.mlp.act",
+            "model.visual.blocks.13.mlp.act",
+            "model.visual.blocks.14.mlp.act",
+            "model.visual.blocks.15.mlp.act",
+            "model.visual.blocks.16.mlp.act",
+            "model.visual.blocks.17.mlp.act",
+            "model.visual.blocks.18.mlp.act",
+            "model.visual.blocks.19.mlp.act",
+            "model.visual.blocks.20.mlp.act",
+            "model.visual.blocks.21.mlp.act",
+            "model.visual.blocks.22.mlp.act",
+            "model.visual.blocks.23.mlp.act",
+            "model.visual.blocks.24.mlp.act",
+            "model.visual.blocks.25.mlp.act",
+            "model.visual.blocks.26.mlp.act",
+            "model.visual.blocks.27.mlp.act",
+            "model.visual.blocks.28.mlp.act",
+            "model.visual.blocks.29.mlp.act",
+            "model.visual.blocks.30.mlp.act",
+            "model.visual.blocks.31.mlp.act"
+          ]
+        }
+      ],
+      "frequency": 32
+    },
+    "gelu": {
+      "configurations": [
+        {
+          "dims": {
+            "rows": 64,
+            "hidden": 5120
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                64,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              5120,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.visual.merger.mlp",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "1dc04096fecdb1a910d36adaf4cbb5149a18bf6169601842d22cce70c24a1685",
+          "frequency": 1,
+          "module_paths": [
+            "model.visual.merger.mlp.1"
+          ]
+        }
+      ],
+      "frequency": 1
+    },
+    "rmsnorm": {
+      "configurations": [
+        {
+          "dims": {
+            "rows": 512,
+            "hidden": 1536
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.input_layernorm",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "17f5e685aa346c9d8ba608f12af06f0fa00ed036f9a2916fffc31207ad1b86fc",
+          "frequency": 57,
+          "module_paths": [
+            "model.language_model.layers.0.input_layernorm",
+            "model.language_model.layers.0.post_attention_layernorm",
+            "model.language_model.layers.1.input_layernorm",
+            "model.language_model.layers.1.post_attention_layernorm",
+            "model.language_model.layers.2.input_layernorm",
+            "model.language_model.layers.2.post_attention_layernorm",
+            "model.language_model.layers.3.input_layernorm",
+            "model.language_model.layers.3.post_attention_layernorm",
+            "model.language_model.layers.4.input_layernorm",
+            "model.language_model.layers.4.post_attention_layernorm",
+            "model.language_model.layers.5.input_layernorm",
+            "model.language_model.layers.5.post_attention_layernorm",
+            "model.language_model.layers.6.input_layernorm",
+            "model.language_model.layers.6.post_attention_layernorm",
+            "model.language_model.layers.7.input_layernorm",
+            "model.language_model.layers.7.post_attention_layernorm",
+            "model.language_model.layers.8.input_layernorm",
+            "model.language_model.layers.8.post_attention_layernorm",
+            "model.language_model.layers.9.input_layernorm",
+            "model.language_model.layers.9.post_attention_layernorm",
+            "model.language_model.layers.10.input_layernorm",
+            "model.language_model.layers.10.post_attention_layernorm",
+            "model.language_model.layers.11.input_layernorm",
+            "model.language_model.layers.11.post_attention_layernorm",
+            "model.language_model.layers.12.input_layernorm",
+            "model.language_model.layers.12.post_attention_layernorm",
+            "model.language_model.layers.13.input_layernorm",
+            "model.language_model.layers.13.post_attention_layernorm",
+            "model.language_model.layers.14.input_layernorm",
+            "model.language_model.layers.14.post_attention_layernorm",
+            "model.language_model.layers.15.input_layernorm",
+            "model.language_model.layers.15.post_attention_layernorm",
+            "model.language_model.layers.16.input_layernorm",
+            "model.language_model.layers.16.post_attention_layernorm",
+            "model.language_model.layers.17.input_layernorm",
+            "model.language_model.layers.17.post_attention_layernorm",
+            "model.language_model.layers.18.input_layernorm",
+            "model.language_model.layers.18.post_attention_layernorm",
+            "model.language_model.layers.19.input_layernorm",
+            "model.language_model.layers.19.post_attention_layernorm",
+            "model.language_model.layers.20.input_layernorm",
+            "model.language_model.layers.20.post_attention_layernorm",
+            "model.language_model.layers.21.input_layernorm",
+            "model.language_model.layers.21.post_attention_layernorm",
+            "model.language_model.layers.22.input_layernorm",
+            "model.language_model.layers.22.post_attention_layernorm",
+            "model.language_model.layers.23.input_layernorm",
+            "model.language_model.layers.23.post_attention_layernorm",
+            "model.language_model.layers.24.input_layernorm",
+            "model.language_model.layers.24.post_attention_layernorm",
+            "model.language_model.layers.25.input_layernorm",
+            "model.language_model.layers.25.post_attention_layernorm",
+            "model.language_model.layers.26.input_layernorm",
+            "model.language_model.layers.26.post_attention_layernorm",
+            "model.language_model.layers.27.input_layernorm",
+            "model.language_model.layers.27.post_attention_layernorm",
+            "model.language_model.norm"
+          ]
+        }
+      ],
+      "frequency": 57
+    },
+    "linear_no_bias": {
+      "configurations": [
+        {
+          "dims": {
+            "M": 512,
+            "K": 1536,
+            "N": 1536
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.self_attn.o_proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "e4d292e88121479a630fd077c5cb18601acc46ec8b8500d281b7b7944ddf6c17",
+          "frequency": 28,
+          "module_paths": [
+            "model.language_model.layers.0.self_attn.o_proj",
+            "model.language_model.layers.1.self_attn.o_proj",
+            "model.language_model.layers.2.self_attn.o_proj",
+            "model.language_model.layers.3.self_attn.o_proj",
+            "model.language_model.layers.4.self_attn.o_proj",
+            "model.language_model.layers.5.self_attn.o_proj",
+            "model.language_model.layers.6.self_attn.o_proj",
+            "model.language_model.layers.7.self_attn.o_proj",
+            "model.language_model.layers.8.self_attn.o_proj",
+            "model.language_model.layers.9.self_attn.o_proj",
+            "model.language_model.layers.10.self_attn.o_proj",
+            "model.language_model.layers.11.self_attn.o_proj",
+            "model.language_model.layers.12.self_attn.o_proj",
+            "model.language_model.layers.13.self_attn.o_proj",
+            "model.language_model.layers.14.self_attn.o_proj",
+            "model.language_model.layers.15.self_attn.o_proj",
+            "model.language_model.layers.16.self_attn.o_proj",
+            "model.language_model.layers.17.self_attn.o_proj",
+            "model.language_model.layers.18.self_attn.o_proj",
+            "model.language_model.layers.19.self_attn.o_proj",
+            "model.language_model.layers.20.self_attn.o_proj",
+            "model.language_model.layers.21.self_attn.o_proj",
+            "model.language_model.layers.22.self_attn.o_proj",
+            "model.language_model.layers.23.self_attn.o_proj",
+            "model.language_model.layers.24.self_attn.o_proj",
+            "model.language_model.layers.25.self_attn.o_proj",
+            "model.language_model.layers.26.self_attn.o_proj",
+            "model.language_model.layers.27.self_attn.o_proj"
+          ]
+        },
+        {
+          "dims": {
+            "M": 512,
+            "K": 1536,
+            "N": 8960
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                8960,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.mlp.gate_proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "bff85da00eeec065aebef31178c9559ba449a395cb72ae60ede484609bc2348a",
+          "frequency": 56,
+          "module_paths": [
+            "model.language_model.layers.0.mlp.gate_proj",
+            "model.language_model.layers.0.mlp.up_proj",
+            "model.language_model.layers.1.mlp.gate_proj",
+            "model.language_model.layers.1.mlp.up_proj",
+            "model.language_model.layers.2.mlp.gate_proj",
+            "model.language_model.layers.2.mlp.up_proj",
+            "model.language_model.layers.3.mlp.gate_proj",
+            "model.language_model.layers.3.mlp.up_proj",
+            "model.language_model.layers.4.mlp.gate_proj",
+            "model.language_model.layers.4.mlp.up_proj",
+            "model.language_model.layers.5.mlp.gate_proj",
+            "model.language_model.layers.5.mlp.up_proj",
+            "model.language_model.layers.6.mlp.gate_proj",
+            "model.language_model.layers.6.mlp.up_proj",
+            "model.language_model.layers.7.mlp.gate_proj",
+            "model.language_model.layers.7.mlp.up_proj",
+            "model.language_model.layers.8.mlp.gate_proj",
+            "model.language_model.layers.8.mlp.up_proj",
+            "model.language_model.layers.9.mlp.gate_proj",
+            "model.language_model.layers.9.mlp.up_proj",
+            "model.language_model.layers.10.mlp.gate_proj",
+            "model.language_model.layers.10.mlp.up_proj",
+            "model.language_model.layers.11.mlp.gate_proj",
+            "model.language_model.layers.11.mlp.up_proj",
+            "model.language_model.layers.12.mlp.gate_proj",
+            "model.language_model.layers.12.mlp.up_proj",
+            "model.language_model.layers.13.mlp.gate_proj",
+            "model.language_model.layers.13.mlp.up_proj",
+            "model.language_model.layers.14.mlp.gate_proj",
+            "model.language_model.layers.14.mlp.up_proj",
+            "model.language_model.layers.15.mlp.gate_proj",
+            "model.language_model.layers.15.mlp.up_proj",
+            "model.language_model.layers.16.mlp.gate_proj",
+            "model.language_model.layers.16.mlp.up_proj",
+            "model.language_model.layers.17.mlp.gate_proj",
+            "model.language_model.layers.17.mlp.up_proj",
+            "model.language_model.layers.18.mlp.gate_proj",
+            "model.language_model.layers.18.mlp.up_proj",
+            "model.language_model.layers.19.mlp.gate_proj",
+            "model.language_model.layers.19.mlp.up_proj",
+            "model.language_model.layers.20.mlp.gate_proj",
+            "model.language_model.layers.20.mlp.up_proj",
+            "model.language_model.layers.21.mlp.gate_proj",
+            "model.language_model.layers.21.mlp.up_proj",
+            "model.language_model.layers.22.mlp.gate_proj",
+            "model.language_model.layers.22.mlp.up_proj",
+            "model.language_model.layers.23.mlp.gate_proj",
+            "model.language_model.layers.23.mlp.up_proj",
+            "model.language_model.layers.24.mlp.gate_proj",
+            "model.language_model.layers.24.mlp.up_proj",
+            "model.language_model.layers.25.mlp.gate_proj",
+            "model.language_model.layers.25.mlp.up_proj",
+            "model.language_model.layers.26.mlp.gate_proj",
+            "model.language_model.layers.26.mlp.up_proj",
+            "model.language_model.layers.27.mlp.gate_proj",
+            "model.language_model.layers.27.mlp.up_proj"
+          ]
+        },
+        {
+          "dims": {
+            "M": 512,
+            "K": 8960,
+            "N": 1536
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                8960
+              ],
+              "stride": [
+                8960,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                8960
+              ],
+              "stride": [
+                8960,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              8960,
+              1
+            ],
+            "weight": [
+              8960,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "model.language_model.layers.mlp.down_proj",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "1466172ebe0a63ca124f19a3276a183e2673e126bd1e1352d398c3aecdd1c39d",
+          "frequency": 28,
+          "module_paths": [
+            "model.language_model.layers.0.mlp.down_proj",
+            "model.language_model.layers.1.mlp.down_proj",
+            "model.language_model.layers.2.mlp.down_proj",
+            "model.language_model.layers.3.mlp.down_proj",
+            "model.language_model.layers.4.mlp.down_proj",
+            "model.language_model.layers.5.mlp.down_proj",
+            "model.language_model.layers.6.mlp.down_proj",
+            "model.language_model.layers.7.mlp.down_proj",
+            "model.language_model.layers.8.mlp.down_proj",
+            "model.language_model.layers.9.mlp.down_proj",
+            "model.language_model.layers.10.mlp.down_proj",
+            "model.language_model.layers.11.mlp.down_proj",
+            "model.language_model.layers.12.mlp.down_proj",
+            "model.language_model.layers.13.mlp.down_proj",
+            "model.language_model.layers.14.mlp.down_proj",
+            "model.language_model.layers.15.mlp.down_proj",
+            "model.language_model.layers.16.mlp.down_proj",
+            "model.language_model.layers.17.mlp.down_proj",
+            "model.language_model.layers.18.mlp.down_proj",
+            "model.language_model.layers.19.mlp.down_proj",
+            "model.language_model.layers.20.mlp.down_proj",
+            "model.language_model.layers.21.mlp.down_proj",
+            "model.language_model.layers.22.mlp.down_proj",
+            "model.language_model.layers.23.mlp.down_proj",
+            "model.language_model.layers.24.mlp.down_proj",
+            "model.language_model.layers.25.mlp.down_proj",
+            "model.language_model.layers.26.mlp.down_proj",
+            "model.language_model.layers.27.mlp.down_proj"
+          ]
+        },
+        {
+          "dims": {
+            "M": 512,
+            "K": 1536,
+            "N": 151936
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                512,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                151936,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "lm_head",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "8719d6f97730d53c7688a1d6cb60b6d2f06addb81aa19b86c68c02b67420dbfd",
+          "frequency": 1,
+          "module_paths": [
+            "lm_head"
+          ]
+        }
+      ],
+      "frequency": 113
+    }
+  },
+  "tasks": {
+    "qwen2_vl_2b_vision_mlp": {
+      "configurations": [
+        {
+          "dims": {
+            "T": 256,
+            "H": 1280,
+            "I": 5120
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120,
+                1280
+              ],
+              "stride": [
+                1280,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                5120
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280,
+                5120
+              ],
+              "stride": [
+                5120,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1280
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1280,
+              1
+            ],
+            "up_weight": [
+              1280,
+              1
+            ],
+            "up_bias": [
+              1
+            ],
+            "down_weight": [
+              5120,
+              1
+            ],
+            "down_bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "model.visual.blocks.mlp",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "f434918e3f52cb509c2bb73e29aef07152f43143eb034507d45f1dfda10e715c",
+          "frequency": 32,
+          "module_paths": [
+            "model.visual.blocks.0.mlp",
+            "model.visual.blocks.1.mlp",
+            "model.visual.blocks.2.mlp",
+            "model.visual.blocks.3.mlp",
+            "model.visual.blocks.4.mlp",
+            "model.visual.blocks.5.mlp",
+            "model.visual.blocks.6.mlp",
+            "model.visual.blocks.7.mlp",
+            "model.visual.blocks.8.mlp",
+            "model.visual.blocks.9.mlp",
+            "model.visual.blocks.10.mlp",
+            "model.visual.blocks.11.mlp",
+            "model.visual.blocks.12.mlp",
+            "model.visual.blocks.13.mlp",
+            "model.visual.blocks.14.mlp",
+            "model.visual.blocks.15.mlp",
+            "model.visual.blocks.16.mlp",
+            "model.visual.blocks.17.mlp",
+            "model.visual.blocks.18.mlp",
+            "model.visual.blocks.19.mlp",
+            "model.visual.blocks.20.mlp",
+            "model.visual.blocks.21.mlp",
+            "model.visual.blocks.22.mlp",
+            "model.visual.blocks.23.mlp",
+            "model.visual.blocks.24.mlp",
+            "model.visual.blocks.25.mlp",
+            "model.visual.blocks.26.mlp",
+            "model.visual.blocks.27.mlp",
+            "model.visual.blocks.28.mlp",
+            "model.visual.blocks.29.mlp",
+            "model.visual.blocks.30.mlp",
+            "model.visual.blocks.31.mlp"
+          ]
+        }
+      ],
+      "frequency": 32
+    },
+    "qwen2_vl_2b_text_mlp": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 1,
+            "T": 512,
+            "H": 1536,
+            "I": 8960
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                1,
+                512,
+                1536
+              ],
+              "stride": [
+                786432,
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                8960,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                8960,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                8960
+              ],
+              "stride": [
+                8960,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              786432,
+              1536,
+              1
+            ],
+            "gate_weight": [
+              1536,
+              1
+            ],
+            "up_weight": [
+              1536,
+              1
+            ],
+            "down_weight": [
+              8960,
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "model.language_model.layers.mlp",
+            "free": {},
+            "source": "execution"
+          },
+          "config_id": "2bcc9a5e1023903033fb2d89a229c2ffd5aaabc53bd89ddece12beb74f077a7f",
+          "frequency": 28,
+          "module_paths": [
+            "model.language_model.layers.0.mlp",
+            "model.language_model.layers.1.mlp",
+            "model.language_model.layers.2.mlp",
+            "model.language_model.layers.3.mlp",
+            "model.language_model.layers.4.mlp",
+            "model.language_model.layers.5.mlp",
+            "model.language_model.layers.6.mlp",
+            "model.language_model.layers.7.mlp",
+            "model.language_model.layers.8.mlp",
+            "model.language_model.layers.9.mlp",
+            "model.language_model.layers.10.mlp",
+            "model.language_model.layers.11.mlp",
+            "model.language_model.layers.12.mlp",
+            "model.language_model.layers.13.mlp",
+            "model.language_model.layers.14.mlp",
+            "model.language_model.layers.15.mlp",
+            "model.language_model.layers.16.mlp",
+            "model.language_model.layers.17.mlp",
+            "model.language_model.layers.18.mlp",
+            "model.language_model.layers.19.mlp",
+            "model.language_model.layers.20.mlp",
+            "model.language_model.layers.21.mlp",
+            "model.language_model.layers.22.mlp",
+            "model.language_model.layers.23.mlp",
+            "model.language_model.layers.24.mlp",
+            "model.language_model.layers.25.mlp",
+            "model.language_model.layers.26.mlp",
+            "model.language_model.layers.27.mlp"
+          ]
+        }
+      ],
+      "frequency": 28
+    }
+  },
+  "snapshot_hash": "e06bdfbcf8dcfd35486431873e0e72b987dfd91bedaec50cc0abc19d5fd98b31"
+}

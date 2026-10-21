@@ -1,0 +1,1008 @@
+{
+  "schema_version": "evograd-dit_s_2-snapshot/1",
+  "manifest_hash": "b988e4ecd8bad4e991a997612cefe6daf32ed5671a4cd2e79b40ed1c102b5898",
+  "workload_id": "dit_s_2-5e002af8cc5eaa54",
+  "config": {
+    "model": "dit_s_2",
+    "batch_size": 256,
+    "dtype": "float32",
+    "device": "cuda",
+    "seed": 0,
+    "data_seed": 0,
+    "input_mode": "generated",
+    "arch_overrides": {}
+  },
+  "canonical": true,
+  "not_bound": [
+    "attention",
+    "affine-free layer norm",
+    "SiLU",
+    "tanh-approximate GELU",
+    "diffusion loss",
+    "residual modulation"
+  ],
+  "level1": {
+    "spatial_conv2d": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 256,
+            "C": 4,
+            "Y": 32,
+            "X": 32,
+            "O": 384,
+            "CG": 4,
+            "K": 2,
+            "OY": 16,
+            "OX": 16,
+            "S": 2,
+            "P": 0,
+            "G": 1
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                4,
+                32,
+                32
+              ],
+              "stride": [
+                4096,
+                1024,
+                32,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": false
+            },
+            {
+              "shape": [
+                384,
+                4,
+                2,
+                2
+              ],
+              "stride": [
+                16,
+                4,
+                2,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              4096,
+              1024,
+              32,
+              1
+            ],
+            "weight": [
+              16,
+              4,
+              2,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "patch",
+            "free": {},
+            "source": "execution",
+            "note": ""
+          },
+          "config_id": "8c2f01926aad645142c2ec9a285fb5b1eb4824e49dd78f182a2fe32fb4b5da88",
+          "frequency": 1,
+          "module_paths": [
+            "patch"
+          ]
+        }
+      ],
+      "frequency": 1
+    },
+    "linear": {
+      "configurations": [
+        {
+          "dims": {
+            "M": 256,
+            "K": 256,
+            "N": 384
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": false
+            },
+            {
+              "shape": [
+                384,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              256,
+              1
+            ],
+            "weight": [
+              256,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "t_embedder",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "330fb5dcd6c40c279860d889cb8a508915de06c37bb3cec5ecddbdaadfa61276",
+          "frequency": 1,
+          "module_paths": [
+            "t_embedder.0.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 384,
+            "N": 384
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "t_embedder_2",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "95733b4fcdd4be582ce7972eb16b083b1514a6e8cb8c41412085b3ed364713bc",
+          "frequency": 1,
+          "module_paths": [
+            "t_embedder.2.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 384,
+            "N": 2304
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                2304,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                2304
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "blocks.mod",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "09b30929d3c39144a58df6a037008820384e54be54582bfb4d8e5d25ea3fbc4f",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.mod.weight",
+            "blocks.1.mod.weight",
+            "blocks.2.mod.weight",
+            "blocks.3.mod.weight",
+            "blocks.4.mod.weight",
+            "blocks.5.mod.weight",
+            "blocks.6.mod.weight",
+            "blocks.7.mod.weight",
+            "blocks.8.mod.weight",
+            "blocks.9.mod.weight",
+            "blocks.10.mod.weight",
+            "blocks.11.mod.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 65536,
+            "K": 384,
+            "N": 1152
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                65536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1152,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1152
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "blocks.qkv",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "585db00b2815791445694ddbc506de5a3e134c3fffba37438d45360a7092e8d3",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.qkv.weight",
+            "blocks.1.qkv.weight",
+            "blocks.2.qkv.weight",
+            "blocks.3.qkv.weight",
+            "blocks.4.qkv.weight",
+            "blocks.5.qkv.weight",
+            "blocks.6.qkv.weight",
+            "blocks.7.qkv.weight",
+            "blocks.8.qkv.weight",
+            "blocks.9.qkv.weight",
+            "blocks.10.qkv.weight",
+            "blocks.11.qkv.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 65536,
+            "K": 384,
+            "N": 384
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                65536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "blocks.proj",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "2ef6bb01e9fc3e10f5f5eecf88c758348a64e32398730737f5c6d3d7fe8fd424",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.proj.weight",
+            "blocks.1.proj.weight",
+            "blocks.2.proj.weight",
+            "blocks.3.proj.weight",
+            "blocks.4.proj.weight",
+            "blocks.5.proj.weight",
+            "blocks.6.proj.weight",
+            "blocks.7.proj.weight",
+            "blocks.8.proj.weight",
+            "blocks.9.proj.weight",
+            "blocks.10.proj.weight",
+            "blocks.11.proj.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 65536,
+            "K": 384,
+            "N": 1536
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                65536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "blocks.fc1",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "12d69533af2a7662def1ef1144538d1002bdba64279690c42103d9a35c94dff2",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.fc1.weight",
+            "blocks.1.fc1.weight",
+            "blocks.2.fc1.weight",
+            "blocks.3.fc1.weight",
+            "blocks.4.fc1.weight",
+            "blocks.5.fc1.weight",
+            "blocks.6.fc1.weight",
+            "blocks.7.fc1.weight",
+            "blocks.8.fc1.weight",
+            "blocks.9.fc1.weight",
+            "blocks.10.fc1.weight",
+            "blocks.11.fc1.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 65536,
+            "K": 1536,
+            "N": 384
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                65536,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              1536,
+              1
+            ],
+            "weight": [
+              1536,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "blocks.fc2",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "d89614f4de2b252d8df8739d89b02d6d74163b4a9234255a6a8255baaef4abd4",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.fc2.weight",
+            "blocks.1.fc2.weight",
+            "blocks.2.fc2.weight",
+            "blocks.3.fc2.weight",
+            "blocks.4.fc2.weight",
+            "blocks.5.fc2.weight",
+            "blocks.6.fc2.weight",
+            "blocks.7.fc2.weight",
+            "blocks.8.fc2.weight",
+            "blocks.9.fc2.weight",
+            "blocks.10.fc2.weight",
+            "blocks.11.fc2.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 256,
+            "K": 384,
+            "N": 768
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "final_mod",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "3923ed821705d9b488b74ce6bfd9d0adae5abd576faca6f17f707a8bd615b80c",
+          "frequency": 1,
+          "module_paths": [
+            "final_mod.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 65536,
+            "K": 384,
+            "N": 32
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                65536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                32,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                32
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "final_linear",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "d48401c6519d8a18416554ca52a0937e6f045edf7757543355ece130007276dc",
+          "frequency": 1,
+          "module_paths": [
+            "final_linear.weight"
+          ]
+        }
+      ],
+      "frequency": 64
+    }
+  },
+  "tasks": {
+    "dit_s_2_dit_modulation": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 256,
+            "H": 384,
+            "J": 2304
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                2304,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                2304
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "c": [
+              384,
+              1
+            ],
+            "weight": [
+              384,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "blocks.modulation",
+            "free": {},
+            "source": "execution",
+            "note": ""
+          },
+          "config_id": "17a9bb6856cce52d03db18cc5a20aa467d839b9311cec7613650306e239e399c",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.modulation",
+            "blocks.1.modulation",
+            "blocks.2.modulation",
+            "blocks.3.modulation",
+            "blocks.4.modulation",
+            "blocks.5.modulation",
+            "blocks.6.modulation",
+            "blocks.7.modulation",
+            "blocks.8.modulation",
+            "blocks.9.modulation",
+            "blocks.10.modulation",
+            "blocks.11.modulation"
+          ]
+        }
+      ],
+      "frequency": 12
+    },
+    "dit_s_2_dit_mlp": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 256,
+            "T": 256,
+            "H": 384,
+            "I": 1536
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                256,
+                256,
+                384
+              ],
+              "stride": [
+                98304,
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536,
+                384
+              ],
+              "stride": [
+                384,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1536
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384,
+                1536
+              ],
+              "stride": [
+                1536,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              98304,
+              384,
+              1
+            ],
+            "w1": [
+              384,
+              1
+            ],
+            "b1": [
+              1
+            ],
+            "w2": [
+              1536,
+              1
+            ],
+            "b2": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "blocks.mlp",
+            "free": {},
+            "source": "execution",
+            "note": ""
+          },
+          "config_id": "223874af376809199ef28df3e983bc44907b5a68fd8233d1dfed19646bb2d04a",
+          "frequency": 12,
+          "module_paths": [
+            "blocks.0.mlp",
+            "blocks.1.mlp",
+            "blocks.2.mlp",
+            "blocks.3.mlp",
+            "blocks.4.mlp",
+            "blocks.5.mlp",
+            "blocks.6.mlp",
+            "blocks.7.mlp",
+            "blocks.8.mlp",
+            "blocks.9.mlp",
+            "blocks.10.mlp",
+            "blocks.11.mlp"
+          ]
+        }
+      ],
+      "frequency": 12
+    }
+  },
+  "snapshot_hash": "6ba59f3d77743e2c249b72c397d3bc496e169633c043bf87ccea538ce0d5259c"
+}

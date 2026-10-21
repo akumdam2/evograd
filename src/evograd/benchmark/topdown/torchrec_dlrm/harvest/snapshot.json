@@ -1,0 +1,609 @@
+{
+  "schema_version": "evograd-torchrec_dlrm-snapshot/1",
+  "manifest_hash": "810613fd359861d04cd27d891364eb849c50979a34bd20b64dfe0fc53671f652",
+  "workload_id": "torchrec_dlrm-78ed17ef9e635402",
+  "config": {
+    "model": "torchrec_dlrm",
+    "batch_size": 32,
+    "dtype": "float32",
+    "device": "cuda",
+    "seed": 0,
+    "data_seed": 0,
+    "input_mode": "generated",
+    "arch_overrides": {}
+  },
+  "canonical": true,
+  "not_bound": [
+    "ReLU",
+    "binary cross entropy",
+    "distributed sharding and fused sparse optimizer"
+  ],
+  "level1": {
+    "linear": {
+      "configurations": [
+        {
+          "dims": {
+            "M": 32,
+            "K": 13,
+            "N": 512
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                13
+              ],
+              "stride": [
+                13,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": false
+            },
+            {
+              "shape": [
+                512,
+                13
+              ],
+              "stride": [
+                13,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                512
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              13,
+              1
+            ],
+            "weight": [
+              13,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "dense_layers",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "e8f3d296a5c3cf15b6e5edffdf6156570a15e4434e6016f2d71d1df51030e3c9",
+          "frequency": 1,
+          "module_paths": [
+            "dense_layers.0.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 32,
+            "K": 512,
+            "N": 256
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                512
+              ],
+              "stride": [
+                512,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                256,
+                512
+              ],
+              "stride": [
+                512,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                256
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              512,
+              1
+            ],
+            "weight": [
+              512,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "dense_layers_2",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "cd40eaa0e1dd8229635f1fe63a40abc481252e5a9c0caba4fc71f51a8b529112",
+          "frequency": 2,
+          "module_paths": [
+            "dense_layers.1.weight",
+            "over_layers.2.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 32,
+            "K": 256,
+            "N": 64
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                64,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                64
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              256,
+              1
+            ],
+            "weight": [
+              256,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "dense_layers_3",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "d7730eab04bd0afd1f8c0e268d2acc4bcf7cc0d6b4130a4fd38056adcde02b65",
+          "frequency": 1,
+          "module_paths": [
+            "dense_layers.2.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 32,
+            "K": 415,
+            "N": 512
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                415
+              ],
+              "stride": [
+                415,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                512,
+                415
+              ],
+              "stride": [
+                415,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                512
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              415,
+              1
+            ],
+            "weight": [
+              415,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "over_layers",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "6dc8ea006f9a3ccdc04c1e9b57cb4d90869d2a3d75e52b3c4ff8c8640fefef80",
+          "frequency": 1,
+          "module_paths": [
+            "over_layers.0.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 32,
+            "K": 512,
+            "N": 512
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                512
+              ],
+              "stride": [
+                512,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                512,
+                512
+              ],
+              "stride": [
+                512,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                512
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              512,
+              1
+            ],
+            "weight": [
+              512,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "over_layers_2",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "ff955684019c441c609ff0732989ee8ae17deac7a7d4f50a3454ed14069a5c0a",
+          "frequency": 1,
+          "module_paths": [
+            "over_layers.1.weight"
+          ]
+        },
+        {
+          "dims": {
+            "M": 32,
+            "K": 256,
+            "N": 1
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1,
+                256
+              ],
+              "stride": [
+                256,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                1
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              256,
+              1
+            ],
+            "weight": [
+              256,
+              1
+            ],
+            "bias": [
+              1
+            ]
+          },
+          "input_adapter": "flatten_leading_view",
+          "provenance": {
+            "component": "over_layers_3",
+            "free": {},
+            "source": "execution",
+            "note": "leading dimensions flattened for Level-1 contract"
+          },
+          "config_id": "b7994daeae47e7299a8eddd0b6c5fe60d4cdb8e11de8684270a24803d10953f7",
+          "frequency": 1,
+          "module_paths": [
+            "over_layers.3.weight"
+          ]
+        }
+      ],
+      "frequency": 7
+    },
+    "embedding_bag": {
+      "configurations": [
+        {
+          "dims": {
+            "N": 100000,
+            "D": 64,
+            "B": 32,
+            "M": 1,
+            "L": 32
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                100000,
+                64
+              ],
+              "stride": [
+                64,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                32
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.int64",
+              "requires_grad": false
+            },
+            {
+              "shape": [
+                32
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.int64",
+              "requires_grad": false
+            }
+          ],
+          "strides": {
+            "weight": [
+              64,
+              1
+            ],
+            "indices": [
+              1
+            ],
+            "offsets": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "tables",
+            "free": {},
+            "source": "execution",
+            "note": ""
+          },
+          "config_id": "4527dfa11580e58f7ed1f66f95b4becaa38700f4b915a7cc04cd8775e8734eb6",
+          "frequency": 26,
+          "module_paths": [
+            "tables.0",
+            "tables.1",
+            "tables.2",
+            "tables.3",
+            "tables.4",
+            "tables.5",
+            "tables.6",
+            "tables.7",
+            "tables.8",
+            "tables.9",
+            "tables.10",
+            "tables.11",
+            "tables.12",
+            "tables.13",
+            "tables.14",
+            "tables.15",
+            "tables.16",
+            "tables.17",
+            "tables.18",
+            "tables.19",
+            "tables.20",
+            "tables.21",
+            "tables.22",
+            "tables.23",
+            "tables.24",
+            "tables.25"
+          ]
+        }
+      ],
+      "frequency": 26
+    }
+  },
+  "tasks": {
+    "torchrec_dlrm_dlrm_interaction": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 32,
+            "S": 26,
+            "D": 64,
+            "O": 415
+          },
+          "dtype": "float32",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                64
+              ],
+              "stride": [
+                64,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                32,
+                26,
+                64
+              ],
+              "stride": [
+                1664,
+                64,
+                1
+              ],
+              "dtype": "torch.float32",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "dense": [
+              64,
+              1
+            ],
+            "sparse": [
+              1664,
+              64,
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "interaction",
+            "free": {},
+            "source": "execution",
+            "note": ""
+          },
+          "config_id": "e58ffb08f50be74a7bd3d812eed7b5baaabd030453da3c1e9965f4008663c3b3",
+          "frequency": 1,
+          "module_paths": [
+            "interaction"
+          ]
+        }
+      ],
+      "frequency": 1
+    }
+  },
+  "snapshot_hash": "d5c575c9f4f736d66e1213e48e2c768654a2b88d7da3075474a2231d3876b1a7"
+}
