@@ -163,15 +163,23 @@ def isolated_rng(seed: int | None, device: str | torch.device | None = None):
     """Seed every generator for the block, and restore all of them afterwards.
 
     What runs inside cannot move the caller's random stream, and two runs that
-    start from the same seed consume identical randomness.
+    start from the same seed consume identical randomness. Python's ``random``
+    is included: some training steps draw from it (MegaFold's recycle count).
     """
+    import random
+
     kind = torch.device(device).type if device is not None else "cpu"
     devices = [torch.device(device).index or 0] if kind == "cuda" and torch.cuda.is_available() else []
-    # An empty device list forks only the CPU generator and never touches CUDA.
-    with torch.random.fork_rng(devices=devices):
-        if seed is not None:
-            torch.manual_seed(int(seed))
-        yield
+    python_state = random.getstate()
+    try:
+        # An empty device list forks only the CPU generator and never touches CUDA.
+        with torch.random.fork_rng(devices=devices):
+            if seed is not None:
+                torch.manual_seed(int(seed))
+                random.seed(int(seed))
+            yield
+    finally:
+        random.setstate(python_state)
 
 
 def synchronize(device: str | torch.device | None) -> None:

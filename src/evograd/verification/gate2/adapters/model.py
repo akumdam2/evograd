@@ -183,3 +183,82 @@ class WorkloadModelScope(ScopeBase):
     def cotangents(self, outputs: Mapping[str, Any], invocation: Invocation,
                    sample: Sample) -> dict[str, torch.Tensor]:
         return {"loss": torch.ones_like(outputs["loss"])}
+
+
+class _PrimaryOutputModule(torch.nn.Module):
+    """``model`` behind the workload's own step: ``forward(batch) -> (loss, primary)``."""
+
+    def __init__(self, workload: Any, model: torch.nn.Module):
+        super().__init__()
+        self.model = model
+        self._workload = workload           # a plain attribute, not a submodule
+
+    def forward(self, batch: Mapping[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+        loss, primary = self._workload.primary_output(self.model, batch)
+        return loss, primary
+
+
+class ObjectiveModelScope(WorkloadModelScope):
+    """A tier-3 ``TrainingWorkload`` whose objective is its own (not next-token NLL).
+
+    For classification, diffusion and recommendation models (ConvNeXt V2,
+    Qwen2-VL, DiT, DLRM). The workload supplies, besides the tier-3 protocol:
+
+    * ``primary_output(model, batch) -> (loss, primary)``: the scalar its
+      training step differentiates (equal bit for bit to ``loss(model, batch)``)
+      and one model output beside it (class logits, the diffusion prediction,
+      the click logit), named ``primary_output_name``;
+    * ``objective_definition``: what that loss is, in words (bound into the policy);
+    * ``expected_site_calls() -> {site: calls}``: calls per forward and backward.
+
+    The outputs compared are ``<primary>`` and ``loss``; every trainable
+    parameter's gradient is compared too (see ``integration_contract``). The
+    backward is seeded with ``d loss = 1``, as training does. The batch is the
+    module's one keyword argument, so its every tensor is content-identified
+    and checked for mutation. Parameter names carry the wrapper's ``model.``
+    prefix.
+    """
+
+    def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None):
+        super().__init__(workload, native_sites=native_sites)
+        self.primary = str(workload.primary_output_name)
+
+    def identity(self) -> dict[str, Any]:
+        return {"scope": self.scope, "bridge": "tier3.TrainingWorkload.primary_output",
+                "workload": dict(self.workload.describe()),
+                "outputs": [self.primary, "loss"],
+                "loss": str(self.workload.objective_definition),
+                "site_references": self.site_references()}
+
+    def reference_parts(self) -> dict[str, Any]:
+        return {"workload_class": type(self.workload),
+                "primary_output": type(self.workload).primary_output,
+                "native_sites": {site: self.native_site(site) for site in self.sites()}}
+
+    def build(self, deployment: Deployment, sample: Sample, hooks: SiteHooks) -> torch.nn.Module:
+        from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
+
+        kernels = KernelSet(registry=self.registry)
+        for site, fn in deployment.sites.items():
+            kernels = patch(kernels, site, hooks.wrap(site, fn), source=KernelSource(
+                site, self.registry.require(site).op, None, f"verification:{deployment.name}"))
+        model, _provenance = self.workload.build_patched(kernels)
+        expected = dict(self.workload.expected_site_calls())
+        self._expected = {site: int(expected[site]) for site in deployment.sites}
+        return _PrimaryOutputModule(self.workload, model).train(self.training)
+
+    def invocation(self, sample: Sample, module: torch.nn.Module) -> Invocation:
+        return Invocation(kwargs={"batch": dict(self.workload.batch_for(seed=int(sample.seed)))})
+
+    def output_specs(self, invocation: Invocation) -> tuple[C.ResultSpec, ...]:
+        return (C.ResultSpec(f"out:{self.primary}", C.OUTPUT), C.ResultSpec("out:loss", C.OUTPUT))
+
+    def outputs(self, result: Any, invocation: Invocation, sample: Sample) -> dict[str, Any]:
+        if not (isinstance(result, tuple) and len(result) == 2):
+            raise OutputStructureError("primary_output must return (loss, primary)")
+        loss, primary = result
+        if not (torch.is_tensor(loss) and loss.dim() == 0):
+            raise OutputStructureError("the workload loss must be a scalar tensor")
+        if not torch.is_tensor(primary):
+            raise OutputStructureError(f"the primary output {self.primary!r} is not a tensor")
+        return {self.primary: primary, "loss": loss}

@@ -86,12 +86,32 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
 def model_scope(model, workload):
     """The whole model, every site's native being its model reference."""
     from evograd.opdecl.oracle import resolve_runtime_forward
-    from evograd.verification.gate2.adapters.model import WorkloadModelScope
+
+    from .base import objective_of
 
     registry = workload.site_registry
-    return WorkloadModelScope(workload, native_sites={
+    return objective_of(model).model_scope(workload, {
         site: resolve_runtime_forward(model.reference_op(registry.require(site).op))
         for site in registry.names})
+
+
+def site_for_case(registry, case) -> str:
+    """The model site a Level-2 case's candidate is installed at.
+
+    One site per task, except where one task serves several sites at different
+    configurations (ConvNeXt's four stages): then the site whose declared
+    preflight workloads include the case's dims and dtype.
+    """
+    sites = [s for s in registry.names if registry.require(s).op == case.task]
+    if len(sites) > 1:
+        def serves(site) -> bool:
+            return any(dict(w.dims) == dict(case.workload.dims) and w.dtype == case.workload.dtype
+                       for w in (registry.require(site).preflight or ()))
+
+        sites = [s for s in sites if serves(s)]
+    if len(sites) != 1:
+        raise ValueError(f"{case.case_id}: {len(sites)} model sites serve this case")
+    return sites[0]
 
 
 def deployment_for(model, level2, workload):
@@ -101,7 +121,9 @@ def deployment_for(model, level2, workload):
 
     registry, sites, programs = workload.site_registry, {}, {}
     for case, module in level2:
-        (site,) = [s for s in registry.names if registry.require(s).op == case.task]
+        site = site_for_case(registry, case)
+        if site in sites:
+            raise ValueError(f"two candidates for model site {site}")
         single = OperatorScope(model.reference_op(case.task), case.workload).candidate(module)
         sites[site], programs[case.case_id] = single.sites[SITE], dict(single.identity)
     return candidate("candidate", sites, programs=programs)
@@ -120,12 +142,12 @@ def judge_model(model, deployment, workload, *, compile_backend: str = "inductor
 
 def training_context(model, workload, patch_set) -> dict[str, Any]:
     """What every run of one Gate 3 group shares (bound into the policy)."""
-    from .base import determinism_record
+    from .base import determinism_record, objective_of
 
     return {"reference": {"contract": model.contract, **model.source_identity(),
                           "model": f"unpatched {model.name} at {model.workload_config.get('weights')}"},
-            "data_recipe": {"train_order": TRAIN_ORDER, "batch_size": workload.batch_size,
-                            "seq_len": workload.seq_len, "data": workload.data_identity()},
+            "data_recipe": {"train_order": TRAIN_ORDER, **objective_of(model).data_recipe(workload),
+                            "data": workload.data_identity()},
             "patch_set": sorted(patch_set), "numerics": determinism_record()}
 
 
@@ -135,10 +157,12 @@ def train(model, path: Path, deployment, workload, patch_set, *, reuse: bool,
     from there when an earlier session completed it. A candidate always runs."""
     from evograd.verification import gate3
 
+    from .base import objective_of
+
     if reuse and path.exists():
         return json.loads(path.read_text())
-    adapter = gate3.workload_training(workload, train_data=workload.train_batches(TRAIN_ORDER),
-                                      optimizer=gate3.adamw(lr=LR))
+    adapter = objective_of(model).training(workload, train_data=workload.train_batches(TRAIN_ORDER),
+                                           optimizer=gate3.adamw(lr=LR))
     plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False)
     run = gate3.measure_training(adapter, deployment, plan, seed=TRAIN_SEED, progress=log,
                                  protocol_context=training_context(model, workload, patch_set))
@@ -222,7 +246,10 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
         log(case_id, {name: _status(r) for name, r in reports.items()})
         if case.level == 2:
             level2.append((case, module))
-    if level2:
+    if level2 and not model.model_gates:
+        verdict["model"] = {"not_applicable": f"{model.name} has no model-scope gates yet; Level-2 "
+                                              "candidates are judged by Gate 1 and operator Gate 2"}
+    elif level2:
         workload = model.load_workload()
         deployment = deployment_for(model, level2, workload)
         reports = judge_model(model, deployment, workload, compile_backend=compile_backend)
@@ -237,7 +264,7 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
         log("model", verdict["model"])
     for entry in verdict["candidates"].values():
         gates = [entry["gate1_generated"], entry["gate1_payloads"], entry["gate2_operator"]]
-        if entry["level"] == 2:
+        if entry["level"] == 2 and model.model_gates:
             gates += [verdict["model"]["gate2_model"], verdict["model"]["gate3"]]
         entry["accepted"] = all(g == "passed" for g in gates)
     _write(out / "verdict.json", verdict)

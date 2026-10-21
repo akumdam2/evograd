@@ -13,7 +13,10 @@ here, as one explicit adapter for next-token language models:
   sequence serves;
 * :func:`workload_training` -- the same over a tier-3 ``TrainingWorkload``
   (Qwen3, Llama): the workload builds the patched model and the trusted
-  evaluator (``eager_evaluator``); this installs replaced sites.
+  evaluator (``eager_evaluator``); this installs replaced sites;
+* :func:`workload_objective_training` -- a training-only adapter for a
+  workload with its own objective (``primary_output``): vision, diffusion,
+  recommendation.
 """
 
 from __future__ import annotations
@@ -196,6 +199,87 @@ def workload_training(workload: Any, *, train_data: Any, optimizer: OptimizerSpe
         train_count=train_count, optimizer=optimizer,
         device=str(getattr(getattr(workload, "spec", None), "device", "cpu")),
         config={"workload": workload.describe()})
+
+
+def _workload_build(workload: Any) -> Callable[[Deployment, SiteHooks], torch.nn.Module]:
+    """The workload's model with the deployment's sites installed through ``hooks``."""
+    from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
+
+    registry = workload.site_registry
+
+    def build(deployment: Deployment, hooks: SiteHooks) -> torch.nn.Module:
+        kernels = KernelSet(registry=registry)
+        for site, fn in deployment.sites.items():
+            kernels = patch(kernels, site, hooks.wrap(site, fn), source=KernelSource(
+                site, registry.require(site).op, None, f"verification:{deployment.name}"))
+        model, _ = workload.build_patched(kernels)
+        return model
+
+    return build
+
+
+@dataclass
+class WorkloadObjectiveTraining:
+    """Training-only Gate 3 adapter for a workload with its own objective.
+
+    For workloads that are not next-token language models (classification,
+    diffusion, recommendation). The step differentiates exactly the loss
+    ``workload.primary_output(model, batch)`` returns, with weight 1, so the
+    recorded objective is that loss. There is no held-out evaluation: plans
+    must be ``validation=False``.
+    """
+
+    workload: Any
+    train_data: Any
+    optimizer: OptimizerSpec
+    train_count: int | None = None
+    device: str = "cpu"
+
+    def __post_init__(self) -> None:
+        self._build = _workload_build(self.workload)
+
+    def identity(self) -> dict[str, Any]:
+        return {"objective": str(self.workload.objective_definition),
+                "backward": "the workload loss as returned (weight 1)",
+                "config": {"workload": self.workload.describe()}}
+
+    def data_identity(self) -> dict[str, Any]:
+        return {"train": _describe(self.train_data, self.train_count), "validation": None}
+
+    def optimizer_config(self) -> dict[str, Any]:
+        return dict(self.optimizer.config)
+
+    def build_model(self, deployment: Deployment, hooks: SiteHooks) -> torch.nn.Module:
+        return self._build(deployment, hooks).train()
+
+    def build_optimizer(self, model: torch.nn.Module) -> torch.optim.Optimizer:
+        return self.optimizer.build(model)
+
+    def build_evaluator(self) -> torch.nn.Module:
+        raise NotImplementedError("a workload-objective adapter serves training-only plans")
+
+    def train_batch(self, index: int) -> Any:
+        if self.train_count is not None and index >= self.train_count:
+            raise IndexError(f"training batch {index} beyond the declared {self.train_count}")
+        return _batch(self.train_data, index)
+
+    def train_loss(self, model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, float]:
+        loss, _primary = self.workload.primary_output(model, batch)
+        return loss, 1.0
+
+    def validation_batches(self) -> Sequence[Any]:
+        return []
+
+    def validation_loss(self, evaluator: torch.nn.Module, batch: Any) -> tuple[float, float]:
+        raise NotImplementedError("a workload-objective adapter serves training-only plans")
+
+
+def workload_objective_training(workload: Any, *, train_data: Any, optimizer: OptimizerSpec,
+                                train_count: int | None = None) -> WorkloadObjectiveTraining:
+    """A tier-3 workload with ``primary_output`` as a training-only Gate 3 adapter."""
+    return WorkloadObjectiveTraining(
+        workload=workload, train_data=train_data, optimizer=optimizer, train_count=train_count,
+        device=str(getattr(getattr(workload, "spec", None), "device", "cpu")))
 
 
 @dataclass(frozen=True)

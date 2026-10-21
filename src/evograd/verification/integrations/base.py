@@ -61,6 +61,20 @@ class Model:
     modeling_modules: tuple[str, ...] = field(default_factory=tuple)
     #: Gate 3 horizon (AdamW updates per training run).
     gate3_steps: int = 1000
+    #: How a training step is run, recorded and judged
+    #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
+    objective: Any = None
+    #: Whether Level-2 candidates also get model-scope Gate 2 and Gate 3. A
+    #: model without a well-posed whole-model comparison yet (OLMoE: routed
+    #: experts) is verified by Gate 1 and operator Gate 2 only.
+    model_gates: bool = True
+
+
+def objective_of(model: Model):
+    """The model's objective, the causal-LM one by default."""
+    from .objectives import NextTokenLM
+
+    return model.objective if model.objective is not None else NextTokenLM()
 
 
 def configure() -> dict[str, Any]:
@@ -131,6 +145,17 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
         cases += [Case(f"{task}/{w.provenance.component}", task, 1, w, int(c["frequency"]))
                   for w, c in zip(workloads, configs)]
     for task, entry in snapshot["tasks"].items():
+        if "configurations" in entry:
+            # A harvest that observes each L2 boundary per configuration (vision,
+            # generated models): one case per configuration, like Level 1.
+            workloads = get_task(task).benchmark_suites[model.suite]
+            configs = entry["configurations"]
+            if len(workloads) != len(configs) or any(dict(w.dims) != c["dims"]
+                                                     for w, c in zip(workloads, configs)):
+                raise ValueError(f"{task}: suite {model.suite} does not follow the snapshot")
+            cases += [Case(f"{task}/{w.provenance.component}", task, 2, w, int(c["frequency"]))
+                      for w, c in zip(workloads, configs)]
+            continue
         (workload,) = get_task(task).benchmark_suites[model.suite]
         # A Level-2 entry's ``frequency`` counts its anchor op; the boundary's
         # own calls per step are the fusion sites or the observed invocations.
@@ -139,11 +164,25 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
                      or entry["frequency"])
         cases.append(Case(f"{task}/{workload.provenance.component}", task, 2, workload,
                           int(frequency)))
+    ids = [c.case_id for c in cases]
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"{model.name}: case ids repeat {sorted({i for i in ids if ids.count(i) > 1})}; "
+                         "each configuration's provenance component must name its role")
     return tuple(cases)
 
 
-def case_for(cases: Sequence[Case], task: str, args: dict[str, Any]) -> Case:
-    """The one case of ``task`` whose declared shapes and dtypes ``args`` bind."""
+def case_component(case: Case) -> str:
+    """The role half of ``task/component``."""
+    return case.case_id.split("/", 1)[1]
+
+
+def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
+             component: str | None = None) -> Case:
+    """The one case of ``task`` whose declared shapes and dtypes ``args`` bind.
+
+    When several cases bind the same shapes (OLMoE's q and k rope share every
+    dimension), ``component`` names the recorded call's role and decides.
+    """
     import torch
 
     from evograd.benchmark import get_task
@@ -167,16 +206,24 @@ def case_for(cases: Sequence[Case], task: str, args: dict[str, Any]) -> Case:
         return True
 
     hits = [c for c in cases if c.task == task and binds(c)]
+    if len(hits) > 1 and component is not None:
+        hits = [c for c in hits if case_component(c) == component]
     if len(hits) != 1:
         shapes = {a.name: tuple(args[a.name].shape) for a in shaped}
-        raise KeyError(f"{task}: {len(hits)} observed cases match {shapes}")
+        raise KeyError(f"{task}: {len(hits)} observed cases match {shapes}"
+                       + (f" and component {component!r}" if component is not None else ""))
     return hits[0]
 
 
 def invocation(cases: Sequence[Case], task: str, level: int, call: dict, args: dict,
                cotangents: dict, live_outputs: dict, notes: dict | None = None) -> dict[str, Any]:
-    """One recorded call as an invocation of its case."""
-    return {"case_id": case_for(cases, task, args).case_id, "task": task, "level": level,
+    """One recorded call as an invocation of its case.
+
+    ``call["component"]``, when a recorder sets it, resolves cases whose shapes
+    coincide (and stays in the payload's call record).
+    """
+    case = case_for(cases, task, args, component=call.get("component"))
+    return {"case_id": case.case_id, "task": task, "level": level,
             "call": call, "args": args, "cotangents": cotangents,
             "live_outputs": live_outputs, "notes": notes or {}}
 
@@ -337,7 +384,8 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
             "parameter_state": state,
             "parameter_state_note": "every capture rebuilds the model at this initial pretrained state; "
                                     "the corpus samples that state, not later optimizer states",
-            "data": batch_identity, "loss": LOSS_DEFINITION, "execution": settings,
+            "data": batch_identity, "loss": objective_of(model).loss_definition,
+            "execution": settings,
             "capture_implementation": {
                 "module": model.live_capture.__module__,
                 "sha256": sha_file(importlib.import_module(model.live_capture.__module__).__file__)}}
@@ -351,44 +399,51 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print) -> Path:
 
     from evograd.verification.payloads.corpus import CorpusWriter, sha256_text
 
+    from .objectives import step_record as record, to_device
+
     settings = configure()
     cases = observed_cases(model)
     workload = model.load_workload()
+    objective = objective_of(model)
+    if hasattr(objective, "bind"):
+        objective = objective.bind(workload)
+    primary = objective.primary
     batches, batch_identity = model.train_batches(workload, orders)
     writer = CorpusWriter(out)
     fidelity: dict[str, Any] = {}
     state = None
     for order in orders:
         t0 = time.time()
-        ids, labels = (t.to("cuda") for t in batches[order])
+        batch_now = to_device(batches[order], "cuda")
         net = build_model(workload)
-        state_now = parameter_state(net)
+        state_now = objective.parameter_state(net)
         state = state or state_now
         if state_now != state:
             raise RuntimeError("the initial parameter state differs between captures")
-        plain = step_record(net, run_step(net, ids, labels))
+        plain = record(net, *objective.capture_step(net, batch_now), primary)
         del net
         gc.collect()
         torch.cuda.empty_cache()
         net = build_model(workload)
         recorder = model.live_capture(net).install()
         try:
-            output = run_step(net, ids, labels)
+            loss, output = objective.capture_step(net, batch_now)
         finally:
             recorder.remove()
-        instrumented = step_record(net, output)
+        instrumented = record(net, loss, output, primary)
+        key = f"{primary}_digest"
         differing = sorted(n for n in plain["grads"] if plain["grads"][n] != instrumented["grads"][n])
         fidelity[str(order)] = {
             "loss_uninstrumented": plain["loss"], "loss_instrumented": instrumented["loss"],
             "loss_bitwise": plain["loss_digest"] == instrumented["loss_digest"],
-            "logits_bitwise": plain["logits_digest"] == instrumented["logits_digest"],
+            f"{primary}_bitwise": plain[key] == instrumented[key],
             "grads_compared": len(plain["grads"]), "grads_differing": differing,
             "identical": (plain["loss_digest"] == instrumented["loss_digest"]
-                          and plain["logits_digest"] == instrumented["logits_digest"] and not differing)}
+                          and plain[key] == instrumented[key] and not differing)}
         if not fidelity[str(order)]["identical"]:
             raise RuntimeError(f"order {order}: instrumentation changed the step: {fidelity[str(order)]}")
-        del output
-        batch = {"order": order, "sha256": batch_identity["batches"][str(order)]["input_ids_sha256"]}
+        del loss, output
+        batch = {"order": order, "sha256": batch_identity["batches"][str(order)][objective.batch_key]}
         count = record_step(writer, model.invocations(recorder, net, cases), batch)
         log(f"order {order}: {count} payloads, {time.time() - t0:.1f}s, "
             f"{writer.bytes_written / 2**30:.1f} GiB written")

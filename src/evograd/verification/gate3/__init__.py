@@ -29,7 +29,9 @@ from evograd.verification.gate3.adapters import (
     SeedBatches,
     adamw,
     next_token_nll,
+    WorkloadObjectiveTraining,
     site_model_training,
+    workload_objective_training,
     workload_training,
 )
 from evograd.verification.gate3.metrics import (
@@ -73,7 +75,8 @@ __all__ = [
     "ACCEPTANCE_NOT_CONFIGURED", "CurveComparison", "Deployment", "LanguageModelTraining",
     "OptimizerSpec", "PROTOCOL", "SeedBatches", "TrainingMeasurement", "TrainingPlan", "adamw",
     "candidate", "compare_curves", "measure_training", "next_token_nll", "optimizer_summary",
-    "site_model_training", "workload_training",
+    "site_model_training", "workload_training", "WorkloadObjectiveTraining",
+    "workload_objective_training",
     "SAFETY_FACTOR_GAMMA", "TrainingControl", "TrainingVerdict", "WindowCalibration",
     "WindowLossPolicy", "calibrate_window_loss", "verify_training",
     "StepCalibration", "StepLossPolicy", "StepVerdict", "calibrate_step_loss", "verify_step_loss",
