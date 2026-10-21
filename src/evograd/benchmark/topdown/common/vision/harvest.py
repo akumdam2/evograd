@@ -157,7 +157,7 @@ def collect(spec):
                     ["x", "weight", "bias"],
                     {"eps": m.eps},
                 )
-            elif kind == "Qwen2RMSNorm":
+            elif kind in ("Qwen2RMSNorm", "Qwen2VLRMSNorm"):
                 record(
                     1,
                     "rmsnorm",
@@ -181,6 +181,7 @@ def collect(spec):
         if isinstance(module, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.LayerNorm)) or kind in (
             "ConvNextV2GRN",
             "Qwen2RMSNorm",
+            "Qwen2VLRMSNorm",
             "GELUActivation",
             "GELU",
             "QuickGELUActivation",

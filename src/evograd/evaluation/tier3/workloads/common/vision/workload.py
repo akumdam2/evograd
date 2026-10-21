@@ -35,11 +35,18 @@ class VisionWorkload:
     spec: VisionSpec
     calibration: str | None = None
     data_path: str | None = None
+    #: Real data streamed per data order (verification): ``batch_for(seed)`` is
+    #: the first batch of order ``data_seed + seed`` and ``train_batches(order)``
+    #: its sequence over the model's frozen pool (:mod:`...vision.stream`).
+    #: Off by default; then nothing changes.
+    stream: bool = False
 
     def __post_init__(self):
         from evograd.evaluation.tier3.patch import Site, SiteRegistry
 
-        if self.spec.weights == "pretrained" and not self.data_path:
+        if self.stream and (self.spec.weights != "pretrained" or self.data_path):
+            raise ValueError("a streamed vision workload is pretrained and has no prepared artifact")
+        if self.spec.weights == "pretrained" and not self.data_path and not self.stream:
             raise ValueError("pretrained vision workload requires pinned real-data batches")
 
         self.name = self.spec.workload_id
@@ -64,6 +71,7 @@ class VisionWorkload:
             **self.spec.to_config(),
             "calibration": self.calibration,
             "data_path": self.data_path,
+            **({"stream": True} if self.stream else {}),
         }
 
     @classmethod
@@ -72,6 +80,7 @@ class VisionWorkload:
             VisionSpec(**{k: v for k, v in config.items() if k in VisionSpec.__dataclass_fields__}),
             calibration=config.get("calibration"),
             data_path=config.get("data_path"),
+            stream=bool(config.get("stream", False)),
         )
 
     def units_per_step(self):
@@ -99,6 +108,8 @@ class VisionWorkload:
         return model, provenance
 
     def batch_for(self, *, seed):
+        if self.stream:
+            return self.train_batches(self.spec.data_seed + seed).batch(0)
         if self.data_path:
             batches = torch.load(self.data_path, map_location="cpu", weights_only=True)["batches"]
             if not batches:
@@ -108,6 +119,50 @@ class VisionWorkload:
 
     def loss(self, model, batch):
         return forward(model, batch, self.spec.model).loss
+
+    # ── what the verification gates read (VerifiableWorkload) ──────────────
+
+    primary_output_name = "logits"
+
+    @property
+    def objective_definition(self):
+        if self.spec.model == "convnextv2_tiny":
+            return ("the HF image-classification loss: cross entropy over the 1000 ImageNet "
+                    "logits, mean over the batch")
+        return ("the HF causal-LM loss of Qwen2-VL: next-token cross entropy over the labelled "
+                "answer tokens, mean over valid tokens")
+
+    def primary_output(self, model, batch):
+        """``(loss, logits)``: the loss ``loss`` returns and the logits beside it."""
+        output = forward(model, batch, self.spec.model)
+        return output.loss, output.logits
+
+    def expected_site_calls(self):
+        arch = self.spec.arch
+        if self.spec.model == "convnextv2_tiny":
+            return {f"convnext_mlp_stage{i}": depth for i, depth in enumerate(arch["depths"])}
+        return {"text_mlp": arch["num_hidden_layers"], "vision_mlp": arch["vision_config"]["depth"]}
+
+    def data_recipe(self):
+        recipe = {"batch_size": self.spec.batch_size, "image_size": self.spec.image_size,
+                  "dtype": self.spec.dtype}
+        if self.spec.model == "qwen2_vl_2b":
+            recipe["seq_len"] = self.spec.seq_len
+        return recipe
+
+    def train_batches(self, order):
+        if not self.stream:
+            raise ValueError("train_batches needs a streamed real-data workload")
+        from evograd.benchmark.topdown.common.vision.stream import PoolStream
+
+        return PoolStream(self.spec, order)
+
+    def data_identity(self):
+        if not self.stream:
+            raise ValueError("data_identity needs a streamed real-data workload")
+        from evograd.benchmark.topdown.common.vision.stream import pool_identity
+
+        return pool_identity(self.spec)
 
     def describe(self):
         return {
@@ -122,7 +177,10 @@ class VisionWorkload:
             "units_per_step": self.units_per_step(),
             "weights": self.spec.weights,
             "checkpoint_revision": REVISIONS[self.spec.model] if self.spec.weights == "pretrained" else None,
-            "data": "pinned_real_data" if self.spec.weights == "pretrained" else ("prepared_data" if self.data_path else "synthetic"),
+            "data": ("streamed_real_data" if self.stream else "pinned_real_data"
+                     if self.spec.weights == "pretrained"
+                     else ("prepared_data" if self.data_path else "synthetic")),
+            **({"stream": self.data_identity()} if self.stream else {}),
             "all_parameters_trainable": True,
             "gradient_checkpointing": False,
             "use_cache": False,
@@ -132,11 +190,14 @@ class VisionWorkload:
         }
 
     def input_checksum(self):
-        batch = (
-            torch.load(self.data_path, map_location="cpu", weights_only=True)["batches"][0]
-            if self.data_path
-            else make_inputs(self.spec.replace(device="cpu"), 0)
-        )
+        if self.stream:
+            batch = {k: v.cpu() for k, v in self.batch_for(seed=0).items()}
+        else:
+            batch = (
+                torch.load(self.data_path, map_location="cpu", weights_only=True)["batches"][0]
+                if self.data_path
+                else make_inputs(self.spec.replace(device="cpu"), 0)
+            )
         digest = hashlib.sha256()
         for key, value in sorted(batch.items()):
             digest.update(key.encode())

@@ -74,8 +74,8 @@ def build_model(spec):
     from packaging.version import Version
 
     version = Version(transformers.__version__)
-    if not (Version("4.57.0") <= version < Version("4.58.0")):
-        raise RuntimeError("Vision workloads require transformers>=4.57,<4.58 (tested: 4.57.6)")
+    if version < Version("4.57.0"):
+        raise RuntimeError("Vision workloads require transformers>=4.57 (tested: 4.57.6, 5.16.1)")
     if spec.model == "convnextv2_tiny":
         config_cls = transformers.ConvNextV2Config
         model_cls = transformers.ConvNextV2ForImageClassification
@@ -156,6 +156,9 @@ def make_inputs(spec, seed=0):
                 dtype=dtype,
             ),
             "image_grid_thw": torch.tensor([[1, grid, grid]] * spec.batch_size),
+            # Transformers 5 computes M-RoPE positions from the token modalities
+            # (what its processor returns): 1 at image tokens, 0 elsewhere.
+            "mm_token_type_ids": (ids == a["image_token_id"]).long(),
         }
     return {key: value.to(spec.device) for key, value in batch.items()}
 

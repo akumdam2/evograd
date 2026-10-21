@@ -180,8 +180,10 @@ def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
              component: str | None = None) -> Case:
     """The one case of ``task`` whose declared shapes and dtypes ``args`` bind.
 
-    When several cases bind the same shapes (OLMoE's q and k rope share every
-    dimension), ``component`` names the recorded call's role and decides.
+    When several cases bind the same shapes, ``component`` (the recorded
+    call's role, e.g. OLMoE's q and k rope), then the argument layouts
+    (recorded strides, else contiguous), then the static parameters the
+    configuration records (``Provenance.free``) decide.
     """
     import torch
 
@@ -205,9 +207,36 @@ def case_for(cases: Sequence[Case], task: str, args: dict[str, Any], *,
                 return False
         return True
 
+    def laid_out(case: Case) -> bool:
+        # A case records the strides of every argument not laid out contiguously
+        # (``Provenance.strides``); every other shaped argument is contiguous.
+        recorded = dict(getattr(getattr(case.workload, "provenance", None), "strides", None) or ())
+        for arg in shaped:
+            value = args[arg.name]
+            expected = tuple(recorded.get(arg.name) or
+                             torch.empty(tuple(value.shape), device="meta").stride())
+            if tuple(value.stride()) != expected:
+                return False
+        return True
+
     hits = [c for c in cases if c.task == task and binds(c)]
     if len(hits) > 1 and component is not None:
         hits = [c for c in hits if case_component(c) == component]
+    def static_match(case: Case) -> bool:
+        # Static parameters the configuration records (``Provenance.free``, e.g.
+        # a norm's eps) must equal the call's scalar arguments of that name.
+        free = dict(getattr(getattr(case.workload, "provenance", None), "free", None) or {})
+        return all(free[name] == value for name, value in args.items()
+                   if name in free and not torch.is_tensor(value))
+
+    if len(hits) > 1:
+        # Same shapes and dtypes, different layouts (ConvNeXt's channels-first
+        # stem norm against its blocks' norms): the layout decides.
+        hits = [c for c in hits if laid_out(c)]
+    if len(hits) > 1:
+        # Same layout too, different static parameters (a block norm's eps
+        # 1e-6 against the final norm's 1e-12).
+        hits = [c for c in hits if static_match(c)]
     if len(hits) != 1:
         shapes = {a.name: tuple(args[a.name].shape) for a in shaped}
         raise KeyError(f"{task}: {len(hits)} observed cases match {shapes}"
