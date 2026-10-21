@@ -190,9 +190,68 @@ class Qwen3_5Workload:
         return model, provenance
 
     def batch_for(self, *, seed: int):
-        """Deterministic ``(input_ids, labels)``; ``labels = input_ids.clone()``."""
+        """Deterministic ``(input_ids, labels)``; ``labels = input_ids.clone()``.
+
+        On real text, the first training batch of data order ``data_seed + seed``
+        (as for Qwen3-0.6B), so single-step gates and training see the same tokens.
+        """
+        if self.spec.real_text:
+            return self.train_batches(self.data_seed + seed).batch(0)
         spec = self.spec.replace(seed=self.data_seed + seed)
         return make_inputs(spec)
+
+    # ── real text (Qwen3-0.6B's WikiText-2 packing, this model's tokenizer) ──
+
+    def _text(self):
+        """Tokenizer and packed splits, built once per workload instance."""
+        if not self.spec.real_text:
+            raise ValueError(f"{self.spec.workload_id} has synthetic data")
+        if getattr(self, "_text_cache", None) is None:
+            import os
+
+            from transformers import AutoTokenizer
+
+            from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
+            from evograd.benchmark.topdown.qwen3_5_4b.levels.level3.model import (
+                pretrained_snapshot,
+            )
+            from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+            snapshot = pretrained_snapshot(self.spec)
+            tokenizer = AutoTokenizer.from_pretrained(snapshot)
+            cache_dir = hf_cache_dir("qwen3_5_4b")
+            train = textdata.pack_split("train", tokenizer, block_len=self.seq_len,
+                                        cache_dir=cache_dir)
+            validation = textdata.pack_split("validation", tokenizer, block_len=self.seq_len,
+                                             cache_dir=cache_dir)
+            identity = textdata.data_identity(
+                train, validation, block_len=self.seq_len,
+                tokenizer_sha256=textdata.file_sha256(os.path.join(snapshot, "tokenizer.json")))
+            self._text_cache = {"tokenizer": tokenizer, "train": train, "validation": validation,
+                                "identity": identity, "snapshot": snapshot}
+        return self._text_cache
+
+    def train_batches(self, seed: int):
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+        return textdata.TextBatches(self._text()["train"], batch_size=self.batch_size,
+                                    seed=seed, device=self.device)
+
+    def validation_batches(self):
+        """The held-out set in one fixed order -- the same for every provider."""
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+        return textdata.TextBatches(self._text()["validation"], batch_size=self.batch_size,
+                                    seed=0, device=self.device)
+
+    def eager_evaluator(self):
+        """A fresh unpatched model: the trusted evaluator for validation NLL."""
+        model = build_model(self.spec)
+        model.eval()
+        return model
+
+    def data_identity(self) -> dict[str, Any]:
+        return dict(self._text()["identity"])
 
     def loss(self, model, batch) -> torch.Tensor:
         input_ids, labels = batch

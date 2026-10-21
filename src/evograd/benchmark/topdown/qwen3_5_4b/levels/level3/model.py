@@ -9,10 +9,12 @@ floor, and one more thing to read back: the import-time kernel dispatch of
 if those packages are importable; :func:`dispatch_settings` reports what they
 resolved to, and the declaration pins both to ``"torch"``.
 
-Only random weights are built. ``Qwen3_5ForCausalLM._from_config`` runs
-``post_init``, so every parameter is initialized by the model's own
-``_init_weights`` (``dt_bias = 1``, ``A_log = log U(0.01, 16)``, ``(1 + w)``
-norms at 0) under ``spec.seed``, on the CPU.
+Random weights: ``Qwen3_5ForCausalLM._from_config`` runs ``post_init``, so
+every parameter is initialized by the model's own ``_init_weights``
+(``dt_bias = 1``, ``A_log = log U(0.01, 16)``, ``(1 + w)`` norms at 0) under
+``spec.seed``, on the CPU. A pinned checkpoint (``spec.weights``) loads the
+text model of the published (vision-language) checkpoint; Transformers drops
+its vision tower and MTP head and maps ``model.language_model.*``.
 
 Transformers is optional: nothing here imports it at module import time.
 """
@@ -69,12 +71,58 @@ def build_config(spec: WorkloadSpec):
 
 
 def build_model(spec: WorkloadSpec):
-    """The randomly-initialised reference model, on ``spec.device``, in train mode."""
-    if spec.pretrained or spec.real_text:
-        raise NotImplementedError(
-            "Qwen3.5-4B implements random weights and synthetic tokens only; "
-            f"weights={spec.weights!r} data={spec.data!r} are reserved")
-    return _common.build_model(spec, CLASSES)
+    """The reference model, on ``spec.device``, in train mode.
+
+    Random initialisation goes through the shared builder; a spec whose
+    ``weights`` name a pinned checkpoint loads it (:func:`_load_pretrained`)
+    and leaves it in the state the shared builder leaves a model in.
+    """
+    if not spec.pretrained:
+        return _common.build_model(spec, CLASSES)
+    spec.validate()
+    require_transformers()
+    model = _load_pretrained(spec).to(device=spec.device)
+    model.train()
+    model.gradient_checkpointing_disable()
+    model.config.use_cache = spec.use_cache
+    return model
+
+
+def pretrained_snapshot(spec: WorkloadSpec) -> str:
+    """The local directory of the pinned checkpoint. Local-only, never fetched here."""
+    from huggingface_hub import snapshot_download
+    from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
+
+    repo, revision = spec.pretrained_repo
+    return snapshot_download(
+        repo, revision=revision, local_files_only=True, cache_dir=hf_cache_dir("qwen3_5_4b"),
+        allow_patterns=["*.json", "*.safetensors", "merges.txt", "vocab.json"])
+
+
+def _load_pretrained(spec: WorkloadSpec):
+    """The checkpoint's text model, validated against the declared architecture.
+
+    Every declared field must equal the loaded config, and every parameter
+    must be in ``spec.dtype``: the checkpoint stores ``A_log`` and the gated
+    norm weights in float32, and the declared cases are bfloat16.
+    """
+    from transformers import Qwen3_5ForCausalLM
+
+    model = Qwen3_5ForCausalLM.from_pretrained(
+        pretrained_snapshot(spec), dtype=DTYPES[spec.dtype],
+        attn_implementation=spec.attn_implementation, use_cache=spec.use_cache)
+    mismatched = {key: (getattr(model.config, key, None), value)
+                  for key, value in spec.arch.items() if getattr(model.config, key, None) != value}
+    if mismatched:
+        raise RuntimeError("the pinned checkpoint's architecture disagrees with the declared "
+                           f"workload: {mismatched}")
+    other = sorted({str(p.dtype) for p in model.parameters()} - {str(DTYPES[spec.dtype])})
+    if other:
+        raise RuntimeError(f"parameters loaded in {other}, spec says {spec.dtype}")
+    tied = model.get_output_embeddings().weight is model.get_input_embeddings().weight
+    if spec.arch.get("tie_word_embeddings") and not tied:
+        raise RuntimeError("declared tie_word_embeddings=True but the loaded head is untied")
+    return model
 
 
 def modeling():
@@ -111,5 +159,5 @@ def check_qwen3_5_settings(effective: dict[str, Any], spec: WorkloadSpec) -> lis
 
 __all__ = ["CLASSES", "DTYPES", "MIN_TRANSFORMERS", "MODELING", "PINNED_DISPATCH",
            "TESTED_TRANSFORMERS", "build_config", "build_model", "check_qwen3_5_settings",
-           "dispatch_settings", "make_inputs", "modeling", "qwen3_5_effective_settings",
-           "require_transformers", "training_step"]
+           "dispatch_settings", "make_inputs", "modeling", "pretrained_snapshot",
+           "qwen3_5_effective_settings", "require_transformers", "training_step"]

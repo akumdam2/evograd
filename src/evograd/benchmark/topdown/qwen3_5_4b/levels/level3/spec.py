@@ -65,18 +65,29 @@ class WorkloadSpec(_WorkloadSpec):
     dtype: str = CANONICAL_DTYPE
     device: str = "cuda"
     attn_implementation: str = "sdpa"
-    #: Where the parameters come from. Only ``"random"`` (``nn.init`` under
-    #: ``seed``, through the model's own ``post_init``) is implemented; a pinned
-    #: ``"pretrained:<repo>@<revision>"`` is reserved, as for Qwen3-0.6B, and
-    #: refused by the builder until a later step loads one.
+    #: Where the parameters come from. ``"random"`` is ``nn.init`` under
+    #: ``seed``, through the model's own ``post_init``; ``"pretrained:<repo>@<revision>"``
+    #: loads that pinned checkpoint's text model, as for Qwen3-0.6B.
     weights: str = "random"
-    #: Where the tokens come from. Only ``"synthetic"`` (drawn from ``seed``) is
-    #: implemented; real text is reserved.
+    #: Where the tokens come from. ``"synthetic"`` draws them from ``seed``;
+    #: ``"wikitext-2-raw:<revision>"`` is real text, packed as for Qwen3-0.6B.
     data: str = "synthetic"
 
     @property
     def pretrained(self) -> bool:
         return self.weights.startswith("pretrained:")
+
+    @property
+    def pretrained_repo(self) -> tuple[str, str]:
+        """``(repo, revision)`` of a pretrained checkpoint; raises otherwise."""
+        if not self.pretrained:
+            raise WorkloadSpecError(f"weights are {self.weights!r}, not pretrained")
+        repo, _, revision = self.weights[len("pretrained:"):].partition("@")
+        if not repo or not revision:
+            raise WorkloadSpecError(
+                f"pretrained weights must be 'pretrained:<repo>@<revision>', got "
+                f"{self.weights!r}")
+        return repo, revision
 
     @property
     def real_text(self) -> bool:

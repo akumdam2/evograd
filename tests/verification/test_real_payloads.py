@@ -94,6 +94,47 @@ class CorpusRoundTripTests(unittest.TestCase):
             writer = CorpusWriter(Path(tmp))
             with self.assertRaises(UnsupportedLayout):
                 writer.put(torch.randn(1, 4).expand(3, 4))
+            with self.assertRaises(UnsupportedLayout):
+                writer.put(torch.randn(16).as_strided((4, 4), (2, 1)))     # rows overlap
+
+    def test_freed_temporaries_are_not_mistaken_for_each_other(self):
+        # A derived tensor written and dropped frees its address; the next one of
+        # the same size may get that address and must still be stored as itself.
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = CorpusWriter(Path(tmp))
+            writer.new_step()
+            for i in range(6):
+                t = torch.full((4096,), float(i))
+                writer.add_payload({"payload_id": f"p{i}", "case_id": "c", "task": "t", "level": 1,
+                                    "batch": {"order": 101}, "call": {"path": f"p{i}"},
+                                    "args": {"x": writer.put(t)}, "cotangents": {}})
+                del t
+            corpus = Corpus.open(writer.finish(identity={"name": "t"},
+                                               splits={"calibration": [], "acceptance": [],
+                                                       "development": []},
+                                               coverage={}))
+            for i in range(6):
+                self.assertEqual(float(corpus.load(f"p{i}", device="cpu")["x"][0]), float(i))
+
+    def test_a_view_whose_content_differs_from_its_digest_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = _write_corpus(Path(tmp), [("c", 101, {"x": torch.randn(3, 4)}, {"dy": torch.randn(3, 4)})])
+            corpus = Corpus.open(manifest)
+            record = dict(corpus.payloads()[0])
+            record["args"] = {"x": {**record["args"]["x"], "digest": "0" * 64}}
+            with self.assertRaises(CorpusError):
+                corpus.load(record, device="cpu")
+
+    def test_gapped_view_survives(self):
+        # One half of each head of a projection output, flattened to rows: gaps, no overlap.
+        out = torch.randn(1, 5, 3, 8)
+        half = out[..., 4:].reshape(-1, 4)
+        self.assertFalse(half.is_contiguous())
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = _write_corpus(Path(tmp), [("c", 101, {"x": half}, {"dy": half.clone()})])
+            loaded = Corpus.open(manifest).load(Corpus.open(manifest).payloads()[0], device="cpu")
+            self.assertEqual(loaded["x"].stride(), half.stride())
+            self.assertTrue(torch.equal(loaded["x"], half))
 
     def test_corrupt_shard_and_tampered_manifest_are_errors(self):
         with tempfile.TemporaryDirectory() as tmp:

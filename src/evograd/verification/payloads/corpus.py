@@ -79,12 +79,35 @@ def cotangent_stats(t) -> dict[str, Any]:
 # ── writing ──────────────────────────────────────────────────────────────────
 
 
+def _may_overlap(t) -> bool:
+    """Whether two elements of ``t`` may share an address.
+
+    PyTorch answers "too hard" for any layout that is not dense, which includes
+    a gapped view (e.g. one head-half of a projection's output). Then the
+    layout is accepted only if, with dimensions sorted by stride, each stride
+    exceeds the farthest offset the smaller dimensions reach -- a sufficient
+    condition for distinct addresses.
+    """
+    import torch
+
+    verdict = torch._debug_has_internal_overlap(t)
+    if verdict != 2:
+        return verdict == 1
+    reach = 0
+    for stride, size in sorted((s, n) for s, n in zip(t.stride(), t.shape) if n > 1):
+        if stride <= reach:
+            return True
+        reach += stride * (size - 1)
+    return False
+
+
 class CorpusWriter:
     """Streams storages to sharded files with content deduplication.
 
-    Use ``new_step()`` between independent executions: the live-storage
-    shortcut (same device pointer => same storage) is only valid while the
-    tensors of one execution are alive.
+    Use ``new_step()`` between independent executions. The live-storage
+    shortcut (same device pointer => same storage) holds each storage it has
+    seen until then, so a temporary that was written and freed cannot have its
+    address reused by another tensor and be mistaken for it.
     """
 
     def __init__(self, root: str | Path, *, shard_bytes: int = 4 << 30):
@@ -95,7 +118,7 @@ class CorpusWriter:
         self.shard_bytes = int(shard_bytes)
         self.storages: dict[str, dict[str, Any]] = {}
         self.payloads: list[dict[str, Any]] = []
-        self._live: dict[tuple[str, int, int], str] = {}
+        self._live: dict[tuple[str, int, int], tuple[str, Any]] = {}
         self._shard_index = -1
         self._shard_handle = None
         self._shard_size = 0
@@ -127,7 +150,7 @@ class CorpusWriter:
         nbytes = storage.nbytes()
         live = (device, storage.data_ptr(), nbytes)
         if nbytes and live in self._live:
-            return self._live[live]
+            return self._live[live][0]
         flat = torch.empty(0, dtype=torch.uint8, device=device).set_(storage, 0, (nbytes,), (1,))
         host = flat.detach().cpu().numpy()
         key = hashlib.sha256(memoryview(host)).hexdigest()
@@ -137,7 +160,7 @@ class CorpusWriter:
             shard, offset = self._write(memoryview(host))
             self.storages[key] = {"shard": shard, "offset": offset, "nbytes": nbytes}
         if nbytes:
-            self._live[live] = key
+            self._live[live] = (key, storage)      # keeps the address from being reused
         return key
 
     def put(self, t) -> dict[str, Any]:
@@ -149,7 +172,7 @@ class CorpusWriter:
         if t.layout != torch.strided:
             raise UnsupportedLayout(f"layout {t.layout} is not supported")
         t = t.detach()
-        if t.numel() and torch._debug_has_internal_overlap(t) != 0:
+        if t.numel() and _may_overlap(t):
             raise UnsupportedLayout(f"internally overlapping layout {tuple(t.shape)} / {t.stride()}")
         logical = t.numel() * t.element_size()
         storage = t.untyped_storage()
@@ -311,9 +334,12 @@ class Corpus:
              names: Iterable[str] | None = None) -> dict[str, Any]:
         """The payload's arguments and cotangents by name, with their exact layouts.
 
-        Tensors that shared a storage at capture share one storage here.
+        Tensors that shared a storage at capture share one storage here. Every
+        tensor's content must equal the digest recorded at capture.
         """
         import torch
+
+        from evograd.verification.common.tensors import tensor_digest
 
         record = self.payload(payload) if isinstance(payload, str) else payload
         entries = {**record["args"], **record["cotangents"]}
@@ -333,5 +359,8 @@ class Corpus:
                 storages[key], int(entry["storage_offset"]), tuple(entry["shape"]), tuple(entry["stride"]))
             if list(t.stride()) != list(entry["stride"]) or t.storage_offset() != entry["storage_offset"]:
                 raise CorpusError(f"{record['payload_id']}:{name}: layout not reproduced")
+            if "digest" in entry and tensor_digest(t) != entry["digest"]:
+                raise CorpusError(f"{record['payload_id']}:{name}: content differs from the "
+                                  "tensor recorded at capture")
             out[name] = t
         return out

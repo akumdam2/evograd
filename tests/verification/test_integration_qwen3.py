@@ -39,7 +39,7 @@ def tiny_cases():
     """The tiny model's cases, every dimension distinct so each call has one."""
     from evograd.benchmark import get_task
     from evograd.opdecl.activity import Workload
-    from evograd.verification.integrations.qwen3_0_6b import capture as Q
+    from evograd.verification.integrations.base import Case
 
     n, bf = B * T, "bfloat16"
     rows = [
@@ -64,7 +64,7 @@ def tiny_cases():
         ("qwen3_swiglu_mlp", "mlp", {"B": B, "T": T, "H": H, "I": I}, bf, LAYERS),
         ("fused_add_rms_norm", "residual", {"rows": n, "cols": H}, bf, 2 * LAYERS),
     ]
-    return tuple(Q.Case(f"{task}/{slug}", task, get_task(task).level, Workload(dims=dims, dtype=dtype),
+    return tuple(Case(f"{task}/{slug}", task, get_task(task).level, Workload(dims=dims, dtype=dtype),
                         freq) for task, slug, dims, dtype, freq in rows)
 
 
@@ -85,9 +85,10 @@ def linear_pair(scale: float):
 
 class ModelReference(unittest.TestCase):
     def test_every_case_task_is_redeclared_under_the_contract(self):
-        from evograd.verification.integrations.qwen3_0_6b import capture, reference
+        from evograd.verification.integrations.base import observed_cases
+        from evograd.verification.integrations.qwen3_0_6b import MODEL, reference
 
-        for task in sorted({c.task for c in capture.observed_cases()}):
+        for task in sorted({c.task for c in observed_cases(MODEL)}):
             op = reference.reference_op(task)
             self.assertEqual(op.reference_contract, reference.CONTRACT)
             self.assertIsNone(op.runtime_forward)
@@ -112,9 +113,10 @@ class ModelReference(unittest.TestCase):
 
     def test_rmsnorm_generated_inputs_use_the_model_eps(self):
         from evograd.opdecl.inputs import make_case_inputs
-        from evograd.verification.integrations.qwen3_0_6b import capture, reference
+        from evograd.verification.integrations.base import observed_cases
+        from evograd.verification.integrations.qwen3_0_6b import MODEL, reference
 
-        case = next(c for c in capture.observed_cases() if c.case_id == "rmsnorm/k_head_norm")
+        case = next(c for c in observed_cases(MODEL) if c.case_id == "rmsnorm/k_head_norm")
         op = reference.reference_op("rmsnorm")
         small = type(case.workload)(dims={"rows": 4, "hidden": 8}, dtype="float32",
                                     provenance=case.workload.provenance)
@@ -123,9 +125,10 @@ class ModelReference(unittest.TestCase):
 
 class RealCaseTable(unittest.TestCase):
     def test_observed_cases_follow_registry_and_snapshot(self):
-        from evograd.verification.integrations.qwen3_0_6b import capture as Q
+        from evograd.verification.integrations.base import observed_cases
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
 
-        cases = {c.case_id: c for c in Q.observed_cases()}
+        cases = {c.case_id: c for c in observed_cases(MODEL)}
         self.assertEqual(sum(c.level == 1 for c in cases.values()), 14)
         self.assertEqual(sum(c.level == 2 for c in cases.values()), 4)
         self.assertEqual(cases["rmsnorm/rmsnorm"].frequency, 57)
@@ -145,10 +148,11 @@ class TinyCaptureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
-        from evograd.verification.integrations.qwen3_0_6b import capture as Q
+        from evograd.verification.integrations import base as Q
+        from evograd.verification.integrations.qwen3_0_6b import capture as C
         from evograd.verification.payloads import Corpus, CorpusWriter
 
-        cls.Q = Q
+        cls.Q, cls.C = Q, C
         workload = Qwen3Workload(device="cpu", dtype="bfloat16", batch_size=B, seq_len=T,
                                  arch_overrides=ARCH)
         cls.ids = torch.randint(0, V, (B, T), generator=torch.Generator().manual_seed(7))
@@ -168,25 +172,27 @@ class TinyCaptureTests(unittest.TestCase):
         cls.plain = Q.step_record(plain_model, Q.run_step(plain_model, cls.ids, cls.ids.clone()))
         del plain_model
         cls.model = build()
-        cls.recorder = Q.LiveCapture(cls.model).install()
+        cls.recorder = C.LiveCapture(cls.model).install()
         try:
             output = Q.run_step(cls.model, cls.ids, cls.ids.clone())
         finally:
             cls.recorder.remove()
         cls.instrumented = Q.step_record(cls.model, output)
         cls.cases = tiny_cases()
-        cls.invocations = list(Q.invocations(cls.recorder, cls.model, cls.cases))
+        cls.invocations = list(C.invocations(cls.recorder, cls.model, cls.cases))
         cls.tmp = tempfile.TemporaryDirectory()
         writer = CorpusWriter(Path(cls.tmp.name))
-        Q.record_step(writer, cls.recorder, cls.model, cls.cases, {"order": 101, "sha256": "b"})
+        Q.record_step(writer, C.invocations(cls.recorder, cls.model, cls.cases),
+                      {"order": 101, "sha256": "b"})
         # A second data order, so payloads split into calibration (101) and acceptance (303).
         other = build()
-        other_recorder = Q.LiveCapture(other).install()
+        other_recorder = C.LiveCapture(other).install()
         try:
             Q.run_step(other, held_out, held_out.clone())
         finally:
             other_recorder.remove()
-        Q.record_step(writer, other_recorder, other, cls.cases, {"order": 303, "sha256": "c"})
+        Q.record_step(writer, C.invocations(other_recorder, other, cls.cases),
+                      {"order": 303, "sha256": "c"})
         del other, other_recorder
         cls.coverage = Q.coverage(cls.cases, writer.payloads)
         cls.corpus = Corpus.open(writer.finish(identity={"name": "tiny"}, splits=Q.splits(writer.payloads),
@@ -225,7 +231,7 @@ class TinyCaptureTests(unittest.TestCase):
     def test_unmapped_call_is_an_error(self):
         cases = tuple(c for c in self.cases if c.case_id != "linear_no_bias/lm_head")
         with self.assertRaises(KeyError):
-            list(self.Q.invocations(self.recorder, self.model, cases))
+            list(self.C.invocations(self.recorder, self.model, cases))
 
     def test_cotangent_layouts_survive(self):
         qkv = next(r for r in self.corpus.payloads()
@@ -287,11 +293,12 @@ class TinyCaptureTests(unittest.TestCase):
                                  f"{record['payload_id']}:{name}")
 
     def test_gate1_and_operator_gate2_judge_a_candidate_on_payloads(self):
-        from evograd.verification.integrations.qwen3_0_6b.gates import judge_case
+        from evograd.verification.integrations.gates import judge_case
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
 
         case = next(c for c in self.cases if c.case_id == "linear_no_bias/q")
         for scale, expected in ((1.0, "passed"), (1.05, "failed")):
-            reports = judge_case(case, linear_pair(scale), self.corpus, device="cpu",
+            reports = judge_case(MODEL, case, linear_pair(scale), self.corpus, device="cpu",
                                  compile_backend="aot_eager")
             status = {name: r.status for name, r in reports.items()}
             self.assertEqual(status, {"gate1_generated": expected, "gate1_payloads": expected,

@@ -22,7 +22,7 @@ reference implementations, and policies explicitly.
 | `gate2/` | Actual autograd integration, calibrated tensor errors, operator/model adapters |
 | `gate3/` | Continuous training measurement and calibrated loss-trajectory acceptance |
 | `payloads/` | Generic storage and loading of recorded training calls, with exact layouts and frozen splits |
-| `integrations/` | Per-model capture, model reference and gate drivers (Qwen3-0.6B) |
+| `integrations/` | Shared capture, replay and gate drivers; per-model recorders and references (Qwen3-0.6B, Qwen3.5-4B) |
 
 Model dependencies are imported inside the adapters that need them. The CPU
 core tests do not require a checkpoint, real dataset, GPU, or LLM service.
@@ -144,8 +144,10 @@ and candidate saved states need not match the reference.
 
 The generic `payloads` package stores recorded call arguments and output
 cotangents with content hashes, strides, storage offsets, aliases and frozen
-splits. It loads samples lazily and rejects corruption or invalid split
-membership. Local reference outputs and gradients are recomputed for checking;
+splits. It loads samples lazily and rejects corruption, invalid split
+membership, and any tensor whose loaded content differs from the digest
+recorded at capture. Gapped (non-dense, non-overlapping) views are stored as
+they are. Local reference outputs and gradients are recomputed for checking;
 they are not supplied as candidate answers.
 
 `payloads.payload_cases` provides Gate 1 cases. `PayloadOperatorScope` provides
@@ -158,13 +160,18 @@ python -m evograd.verification.payloads.cli gate1 \
   --corpus corpus/manifest.json --case CASE_ID --split acceptance --out report.json
 ```
 
-Model-specific capture and gate drivers live in `integrations/`. For Qwen3-0.6B,
-`integrations/qwen3_0_6b` records every L1 call and L2 boundary of real
-WikiText-2 training steps of the pinned checkpoint as payloads of the model's
-observed cases, re-declares each case's task with the model's own computation
-as the reference (`reference.py`), and runs Gate 1, operator and model Gate 2,
-and Gate 3 for candidate artifacts (`gates.py`). Level-1 candidates get Gate 1
-and operator Gate 2 only. Evaluator routing is not changed.
+Model integrations live in `integrations/`. A model (`integrations/<model>/`)
+supplies a `base.Model`: its pinned pretrained workload on real WikiText-2, a
+recorder of its training calls (`capture.py`), and its model reference
+(`reference.py`: each observed case's task re-declared with the model's own
+computation). The capture loop, replay and fidelity (`base.py`), the gates
+(`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
+boundary of one training step per data order becomes a payload of the case
+its shapes bind. Gate 1 runs on generated inputs and acceptance payloads,
+operator Gate 2 calibrates on orders 101/202 and judges 303/404; Level-2
+candidates then get model Gate 2 and Gate 3 (`Model.gate3_steps`). Level-1
+candidates get Gate 1 and operator Gate 2 only. Integrated: Qwen3-0.6B and
+Qwen3.5-4B. Evaluator routing is not changed.
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS

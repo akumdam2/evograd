@@ -93,11 +93,21 @@ class TestSpecAndSmoke(unittest.TestCase):
                   if "dispatch" in p]
         self.assertEqual(len(pinned), 1)
 
-    def test_a_reserved_weights_spec_is_refused_by_the_builder(self):
+    def test_a_pretrained_spec_is_loaded_from_the_local_cache_only(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        from huggingface_hub.errors import LocalEntryNotFoundError
+
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level3.model import build_model
 
-        with self.assertRaises(NotImplementedError):
-            build_model(tiny_spec(weights="pretrained:Qwen/Qwen3.5-4B@main"))
+        spec = tiny_spec(weights="pretrained:Qwen/Qwen3.5-4B@main")
+        self.assertEqual(spec.pretrained_repo, ("Qwen/Qwen3.5-4B", "main"))
+        with tempfile.TemporaryDirectory() as empty, \
+                mock.patch.dict(os.environ, {"EVOGRAD_HF_CACHE": empty}):
+            with self.assertRaises(LocalEntryNotFoundError):     # never fetched
+                build_model(spec)
 
 
 class TestHarvest(unittest.TestCase):

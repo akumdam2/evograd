@@ -724,6 +724,9 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
     for sample in samples:
         case = CaseReport(case_id=sample.sample_id, evidence={"sample": sample.to_dict()})
         report.cases.append(case)
+        # The previous sample's executions hold its results (for a whole model,
+        # every parameter gradient); release them before running the next one.
+        reference = cand = None
         reference = execute(adapter, Deployment.native(), sample)
         case.evidence["reference"] = reference.evidence()
         if reference.error:
