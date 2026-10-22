@@ -12,22 +12,27 @@ against the model reference (``Model.reference_op``):
 * Gate 2, operator scope -- thresholds from native repeats and
   ``torch.compile`` on the calibration payloads (orders 101/202), judged on the
   acceptance payloads through the artifact's deployment entry.
+* Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
+  one forward/backward of the pretrained model on the first real TRAIN batch of
+  each order in :data:`MODEL_ORDERS`; per-sample thresholds from native repeats
+  and compile at the same site; every site call replayed at its boundary.
 
-Level-2 candidates are then installed together at their model sites:
+A Level-1 candidate is accepted when Gate 1 and operator Gate 2 pass; a
+Level-2 candidate also needs its single-site model Gate 2.
 
-* Gate 2, model scope -- one forward/backward of the pretrained model on the
-  first real TRAIN batch of each order in :data:`MODEL_ORDERS`; per-sample
-  thresholds from native repeats and compile at the same sites; every site call
-  replayed at its boundary.
+The **combination** -- the Level-2 candidates deployed together -- is then
+judged once more:
+
+* Gate 2, model scope, on the combined patch set;
 * Gate 3 -- ``Model.gate3_steps`` AdamW updates from the pretrained state on
   real TRAIN order :data:`TRAIN_ORDER`; thresholds from native/native/compile
   trajectories.
 
-Level-1 candidates get Gate 1 and operator Gate 2 only: the model's Level-3
-run installs Level-2 sites. A candidate is accepted when every gate that
-applies to it passed. Gate 3 control runs do not depend on the candidate and
-are kept under ``DIR/controls`` (or ``--controls``) for reuse; the candidate's
-own runs never are. Every report is written to ``DIR``.
+``verify`` combines every accepted Level-2 candidate; ``evaluate``
+(:mod:`.evaluate`) combines those whose single-site training step is faster.
+Gate 3 control runs and Gate 2 calibrations do not depend on the candidate and
+are kept under ``--state`` (default ``DIR/controls``) for reuse; the
+candidate's own runs never are. Every report is written to ``DIR``.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ import importlib.util
 import json
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -244,22 +250,28 @@ def train(model, path: Path, deployment, workload, patch_set, *, reuse: bool,
     """One training run, written to ``path`` when it completes.
 
     A control (``reuse``) is read back from ``path`` when an earlier session
-    completed it; a candidate run only when it was this very deployment. A run
+    completed it for the same workload description; a candidate run only when
+    it was also this very deployment. A run
     interrupted by ``deadline`` is checkpointed beside ``path`` and continued
     by the next call (:class:`~evograd.verification.gate3.checkpoint.RunCheckpoint`).
     """
     from evograd.verification import gate3
+    from evograd.verification.common.reports import jsonable
     from evograd.verification.gate3.checkpoint import RunCheckpoint
 
     from .base import objective_of
 
-    if path.exists():
-        done = json.loads(path.read_text())
-        if reuse or (done.get("completed")
-                     and done.get("deployment") == _jsonable(deployment.describe())):
-            return done
     adapter = objective_of(model).training(workload, train_data=workload.train_batches(TRAIN_ORDER),
                                            optimizer=gate3.adamw(lr=LR))
+    if path.exists():
+        done = json.loads(path.read_text())
+        # A run of another workload description (an older checkout's) is
+        # never reused: the verdict would refuse the pair as differently bound.
+        same_run = ((done.get("identity") or {}).get("adapter")
+                    == _jsonable(jsonable(dict(adapter.identity()))))
+        if same_run and (reuse or (done.get("completed")
+                                   and done.get("deployment") == _jsonable(deployment.describe()))):
+            return done
     plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False)
     run = gate3.measure_training(adapter, deployment, plan, seed=TRAIN_SEED, progress=log,
                                  protocol_context=training_context(model, workload, patch_set),
@@ -315,11 +327,152 @@ def _status(report) -> str:
     return getattr(report, "status", None) or report.to_dict()["status"]
 
 
+@dataclass
+class Run:
+    """What every stage of one verify (or evaluate) run shares."""
+
+    model: Any
+    out: Path
+    state: Path
+    corpus: Any
+    corpus_path: Path
+    cases: dict[str, Any]
+    programs: dict[str, str]
+    paths: dict[str, str]
+    modules: dict[str, Any]
+    device: str = "cuda"
+    compile_backend: str = "inductor"
+    log: Callable = print
+    deadline: float | None = None
+    _workload: Any = None
+
+    @property
+    def workload(self):
+        if self._workload is None:
+            self._workload = self.model.load_workload()
+        return self._workload
+
+
+def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,
+             controls: str | Path | None = None, state: str | Path | None = None,
+             device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
+             deadline_min: float | None = None) -> Run:
+    """Load the corpus and the candidate programs; refuse cases the model does not have."""
+    from evograd.verification.payloads import Corpus
+
+    from .base import observed_cases, sha_file
+
+    out = Path(out)
+    state = Path(state) if state is not None else (
+        Path(controls) if controls is not None else out / "controls")
+    cases = {c.case_id: c for c in observed_cases(model)}
+    unknown = sorted(set(candidates) - set(cases))
+    if unknown:
+        raise ValueError(f"not observed cases: {unknown}; known: {sorted(cases)}")
+    return Run(model=model, out=out, state=state, corpus=Corpus.open(corpus_path),
+               corpus_path=Path(corpus_path), cases=cases,
+               programs={cid: sha_file(path) for cid, path in candidates.items()},
+               paths={cid: str(path) for cid, path in candidates.items()},
+               modules={cid: load_program(path) for cid, path in sorted(candidates.items())},
+               device=device, compile_backend=compile_backend, log=log,
+               deadline=None if deadline_min is None else time.time() + 60.0 * float(deadline_min))
+
+
+def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) -> dict[str, str]:
+    """Statuses of a stage: an earlier report of the same inputs, else ``judge()``'s."""
+    done = _stage(path, key)
+    if done is not None:
+        return dict(done["statuses"])
+    _check_deadline(run.deadline, path.stem)
+    reports = judge()
+    statuses = {name: _status(r) for name, r in reports.items()}
+    _write(path, {"stage_key": key, "statuses": statuses,
+                  **{name: r.to_dict() for name, r in reports.items()}})
+    del reports
+    _release_device_memory()
+    return statuses
+
+
+def verify_cases(run: Run) -> dict[str, Any]:
+    """Gate 1 and operator Gate 2 for every candidate, and the single-site model
+    Gate 2 for every Level-2 candidate; each candidate's ``accepted``."""
+    from evograd.opdecl.oracle import reference_identity
+
+    model = run.model
+    verdict: dict[str, Any] = {"corpus": run.corpus.binding(), "candidates": {}}
+    for case_id in sorted(run.modules):
+        case, module = run.cases[case_id], run.modules[case_id]
+        key = {"case": case_id, "program_sha256": run.programs[case_id],
+               "corpus": run.corpus.binding(),
+               "reference": reference_identity(model.reference_op(case.task)),
+               "compile_backend": run.compile_backend}
+        statuses = _judged_stage(
+            run, run.out / "cases" / f"{case_id.replace('/', '__')}.json", key,
+            lambda: judge_case(model, case, module, run.corpus, device=run.device,
+                               compile_backend=run.compile_backend, state=run.state))
+        entry = {"program": run.paths[case_id], "program_sha256": run.programs[case_id],
+                 "level": case.level, **statuses}
+        if case.level == 2 and model.model_gates:
+            deployment = deployment_for(model, [(case, module)], run.workload)
+            key = {"programs": {case_id: run.programs[case_id]},
+                   "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
+                   "model": model.name, "workload": model.workload_config}
+            entry.update(_judged_stage(
+                run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
+                lambda: judge_model(model, deployment, run.workload,
+                                    compile_backend=run.compile_backend, state=run.state)))
+        entry["accepted"] = accepted(model, entry)
+        verdict["candidates"][case_id] = entry
+        run.log(case_id, {k: v for k, v in entry.items() if k not in ("program", "program_sha256")})
+    return verdict
+
+
+def accepted(model, entry: Mapping[str, Any]) -> bool:
+    """Gate 1 (both input sources) and operator Gate 2; for Level 2 also the
+    single-site model Gate 2, where the model has model-scope gates."""
+    gates = [entry.get("gate1_generated"), entry.get("gate1_payloads"), entry.get("gate2_operator")]
+    if entry.get("level") == 2 and model.model_gates:
+        gates.append(entry.get("gate2_model"))
+    return all(g == "passed" for g in gates)
+
+
+def verify_combination(run: Run, case_ids) -> dict[str, Any]:
+    """Model Gate 2 and Gate 3 of the given accepted Level-2 candidates deployed together."""
+    model = run.model
+    case_ids = sorted(case_ids)
+    if not model.model_gates:
+        return {"cases": case_ids, "accepted": False,
+                "not_applicable": f"{model.name} has no model-scope gates yet; Level-2 candidates "
+                                  "are judged by Gate 1 and operator Gate 2"}
+    if not case_ids:
+        return {"cases": [], "accepted": False, "empty": "no Level-2 candidate was selected"}
+    level2 = [(run.cases[cid], run.modules[cid]) for cid in case_ids]
+    out = run.out / "combination"
+    deployment = deployment_for(model, level2, run.workload)
+    key = {"programs": {cid: run.programs[cid] for cid in case_ids},
+           "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
+           "model": model.name, "workload": model.workload_config}
+    statuses = _judged_stage(run, out / "gate2_model.json", key,
+                             lambda: judge_model(model, deployment, run.workload,
+                                                 compile_backend=run.compile_backend,
+                                                 state=run.state))
+    training = judge_training(model, deployment, run.workload, out, run.state,
+                              compile_backend=run.compile_backend, log=run.log,
+                              deadline=run.deadline)
+    _write(out / "gate3.json", {name: r.to_dict() for name, r in training.items()})
+    statuses.update({name: _status(r) for name, r in training.items()})
+    result = {"cases": case_ids, "patch_set": list(deployment.patch_set), **statuses,
+              "accepted": statuses.get("gate2_model") == "passed" and statuses.get("gate3") == "passed"}
+    run.log("combination", result)
+    return result
+
+
 def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,
            controls: str | Path | None = None, state: str | Path | None = None,
            device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
            deadline_min: float | None = None) -> dict[str, Any]:
-    """Every gate that applies to each candidate; writes ``DIR/verdict.json``.
+    """Every gate that applies to each candidate, then the combination of every
+    accepted Level-2 candidate; writes ``DIR/verdict.json``.
 
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
     what does not depend on the candidate -- Gate 3 control runs and Gate 2
@@ -331,84 +484,20 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     stops after that many minutes at the next stage boundary or Gate 3
     checkpoint and returns a partial verdict with ``suspended`` set.
     """
-    from evograd.opdecl.oracle import reference_identity
-    from evograd.verification.payloads import Corpus
+    from .base import configure
 
-    from .base import configure, observed_cases, sha_file
-
-    out = Path(out)
-    state = Path(state) if state is not None else (
-        Path(controls) if controls is not None else out / "controls")
-    deadline = None if deadline_min is None else time.time() + 60.0 * float(deadline_min)
     settings = configure()
-    corpus = Corpus.open(corpus_path)
-    cases = {c.case_id: c for c in observed_cases(model)}
-    unknown = sorted(set(candidates) - set(cases))
-    if unknown:
-        raise ValueError(f"not observed cases: {unknown}; known: {sorted(cases)}")
-    verdict: dict[str, Any] = {"corpus": corpus.binding(), "execution": settings,
-                               "candidates": {}, "model": None}
-    programs = {case_id: sha_file(path) for case_id, path in candidates.items()}
+    run = open_run(model, candidates, corpus_path, out, controls=controls, state=state,
+                   device=device, compile_backend=compile_backend, log=log,
+                   deadline_min=deadline_min)
+    verdict: dict[str, Any] = {"execution": settings, "candidates": {}, "combination": None}
     try:
-        level2 = []
-        for case_id, path in sorted(candidates.items()):
-            case, module = cases[case_id], load_program(path)
-            key = {"case": case_id, "program_sha256": programs[case_id], "corpus": corpus.binding(),
-                   "reference": reference_identity(model.reference_op(case.task)),
-                   "compile_backend": compile_backend}
-            report_path = out / "cases" / f"{case_id.replace('/', '__')}.json"
-            done = _stage(report_path, key)
-            if done is None:
-                _check_deadline(deadline, case_id)
-                reports = judge_case(model, case, module, corpus, device=device,
-                                     compile_backend=compile_backend, state=state)
-                statuses = {name: _status(r) for name, r in reports.items()}
-                _write(report_path, {"stage_key": key, "statuses": statuses,
-                                     **{name: r.to_dict() for name, r in reports.items()}})
-                _release_device_memory()
-            else:
-                statuses = done["statuses"]
-            verdict["candidates"][case_id] = {"program": str(path), "level": case.level, **statuses}
-            log(case_id, statuses)
-            if case.level == 2:
-                level2.append((case, module))
-        if level2 and not model.model_gates:
-            verdict["model"] = {"not_applicable": f"{model.name} has no model-scope gates yet; "
-                                                  "Level-2 candidates are judged by Gate 1 and "
-                                                  "operator Gate 2"}
-        elif level2:
-            workload = model.load_workload()
-            deployment = deployment_for(model, level2, workload)
-            key = {"programs": {c.case_id: programs[c.case_id] for c, _ in level2},
-                   "patch_set": list(deployment.patch_set), "compile_backend": compile_backend,
-                   "model": model.name, "workload": model.workload_config}
-            done = _stage(out / "gate2_model.json", key)
-            if done is None:
-                _check_deadline(deadline, "model-scope Gate 2")
-                reports = judge_model(model, deployment, workload, compile_backend=compile_backend,
-                                      state=state)
-                statuses = {name: _status(r) for name, r in reports.items()}
-                _write(out / "gate2_model.json", {"stage_key": key, "statuses": statuses,
-                                                  **{name: r.to_dict() for name, r in reports.items()}})
-                del reports
-            else:
-                statuses = dict(done["statuses"])
-            _release_device_memory()
-            training = judge_training(model, deployment, workload, out, state,
-                                      compile_backend=compile_backend, log=log, deadline=deadline)
-            _write(out / "gate3.json", {name: r.to_dict() for name, r in training.items()})
-            statuses.update({name: _status(r) for name, r in training.items()})
-            verdict["model"] = {"patch_set": list(deployment.patch_set), **statuses}
-            log("model", verdict["model"])
+        verdict.update(verify_cases(run))
+        chosen = [cid for cid, entry in verdict["candidates"].items()
+                  if entry["level"] == 2 and entry["accepted"]]
+        verdict["combination"] = verify_combination(run, chosen)
     except Suspended as stop:
         verdict["suspended"] = str(stop)
         log("suspended:", stop, "-- rerun the same command to continue")
-        _write(out / "verdict.json", verdict)
-        return verdict
-    for entry in verdict["candidates"].values():
-        gates = [entry["gate1_generated"], entry["gate1_payloads"], entry["gate2_operator"]]
-        if entry["level"] == 2 and model.model_gates:
-            gates += [verdict["model"]["gate2_model"], verdict["model"]["gate3"]]
-        entry["accepted"] = all(g == "passed" for g in gates)
-    _write(out / "verdict.json", verdict)
+    _write(run.out / "verdict.json", verdict)
     return verdict

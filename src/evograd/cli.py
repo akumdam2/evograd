@@ -11,6 +11,8 @@
     evograd tier2-bench --op layernorm --candidate best.py
     evograd tier3-bench --model qwen3_0_6b
     evograd suite --candidates programs/ --out results/  # cross-operator report
+    evograd evaluate qwen3_0_6b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
+    evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json  # the benchmark protocol
 """
 
 from __future__ import annotations
@@ -182,6 +184,19 @@ def _tier3_bench(argv: list[str]) -> int:
     return main(argv)
 
 
+def _evaluate(argv: list[str]) -> int:
+    """``evograd evaluate MODEL ...``: the benchmark protocol for one model's candidates."""
+    from evograd.evaluation.protocol import main
+
+    return main(argv)
+
+
+def _summarize(argv: list[str]) -> int:
+    from evograd.evaluation.protocol import summarize_main
+
+    return summarize_main(argv)
+
+
 def _run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="evograd run")
     parser.add_argument("--op", required=True)
@@ -307,6 +322,8 @@ _COMMANDS = {
     # because it is in published docs and in people's shell history.
     "fair-bench": _tier1_bench,
     "suite": _suite,
+    "evaluate": _evaluate,
+    "summarize": _summarize,
     "dispatch": _dispatch,
     "ncu": _ncu,
 }
