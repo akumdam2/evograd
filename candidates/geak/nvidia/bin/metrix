@@ -1,0 +1,17 @@
+#!/bin/bash
+# NVIDIA stand-in for the `metrix` profiler GEAK's profile_kernel.sh can call.
+#
+# profile_kernel.sh runs   metrix $METRIX_ARGS bash -c "<benchmark>"   with
+# METRIX_OUTPUT_DIR set, and accepts any non-empty CSV it leaves there. This
+# profiles the same command with Nsight Compute and writes its raw CSV, so the
+# profile_engineer reads NCU metrics where it would read AMD counters.
+# Select it with PROFILER_PRIORITY=metrix (candidates/geak/run.py does).
+#
+# Env: NCU (default: ncu on PATH), NCU_SET (default: basic), NCU_LAUNCH_COUNT
+# (default: 50 kernel launches).
+set -euo pipefail
+out="${METRIX_OUTPUT_DIR:-$PWD}"
+mkdir -p "$out"
+exec "${NCU:-ncu}" --target-processes all --set "${NCU_SET:-basic}" \
+    --launch-count "${NCU_LAUNCH_COUNT:-50}" --csv --page raw \
+    --log-file "$out/ncu_raw.csv" "$@"
