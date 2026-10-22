@@ -248,20 +248,41 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                 validate(0)
             for step in range(first, plan.steps + 1):
                 stage = f"step {step}"
-                batch = adapter.train_batch(step - 1)
                 calls_before = dict(hooks.counts)
                 optimizer.zero_grad(set_to_none=True)
-                loss_sum, weight = adapter.train_loss(model, batch)
-                value, weight = float(loss_sum.detach()), float(weight)
-                # The objective differentiated below, and its scalar as recorded.
-                objective = loss_sum / weight
-                objective_value = float(objective.detach())
-                if not (math.isfinite(value) and math.isfinite(objective_value)) or not weight > 0:
-                    run.findings.append(problem("non_finite_training_loss",
-                                                f"training loss sum {value} (weight {weight}) at "
-                                                f"step {step}", step=step))
-                    return run
-                objective.backward()
+                if plan.accumulation == 1:
+                    batch = adapter.train_batch(step - 1)
+                    loss_sum, weight = adapter.train_loss(model, batch)
+                    value, weight = float(loss_sum.detach()), float(weight)
+                    # The objective differentiated below, and its scalar as recorded.
+                    objective = loss_sum / weight
+                    objective_value = float(objective.detach())
+                    if not (math.isfinite(value) and math.isfinite(objective_value)) or not weight > 0:
+                        run.findings.append(problem("non_finite_training_loss",
+                                                    f"training loss sum {value} (weight {weight}) at "
+                                                    f"step {step}", step=step))
+                        return run
+                    objective.backward()
+                else:
+                    # Micro-batches (step-1)*k .. step*k-1: the recorded objective is
+                    # the mean of their objectives, the one the summed backwards differentiate.
+                    value = weight = objective_value = 0.0
+                    for micro in range((step - 1) * plan.accumulation, step * plan.accumulation):
+                        loss_sum, part = adapter.train_loss(model, adapter.train_batch(micro))
+                        part_value, part = float(loss_sum.detach()), float(part)
+                        objective = loss_sum / part
+                        part_objective = float(objective.detach())
+                        if not (math.isfinite(part_value) and math.isfinite(part_objective)) \
+                                or not part > 0:
+                            run.findings.append(problem(
+                                "non_finite_training_loss",
+                                f"training loss sum {part_value} (weight {part}) at step {step}, "
+                                f"batch {micro}", step=step))
+                            return run
+                        (objective / plan.accumulation).backward()
+                        value, weight = value + part_value, weight + part
+                        objective_value += part_objective
+                    objective_value /= plan.accumulation
                 # A replaced site that did not run leaves the loss native, so a
                 # matching loss would prove nothing: every site runs every step.
                 idle = [site for site in deployment.patch_set

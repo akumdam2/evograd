@@ -256,18 +256,20 @@ def train(model, path: Path, deployment, workload, patch_set, *, reuse: bool,
     from .base import objective_of
 
     optimizer = gate3.adamw(**{"lr": LR, **dict(model.gate3_optimizer)})
+    plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False,
+                              accumulation=model.gate3_accumulation)
     context = training_context(model, workload, patch_set)
     if path.exists():
         done = json.loads(path.read_text())
         identity = done.get("identity") or {}
         same_run = (identity.get("optimizer") == _jsonable(jsonable(dict(optimizer.config)))
+                    and identity.get("plan") == _jsonable(jsonable(plan.to_dict()))
                     and identity.get("protocol_context") == _jsonable(jsonable(context)))
         if same_run and (reuse or (done.get("completed")
                                    and done.get("deployment") == _jsonable(deployment.describe()))):
             return done
     adapter = objective_of(model).training(workload, train_data=workload.train_batches(TRAIN_ORDER),
                                            optimizer=optimizer)
-    plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False)
     run = gate3.measure_training(adapter, deployment, plan, seed=TRAIN_SEED, progress=log,
                                  protocol_context=context,
                                  checkpoint=RunCheckpoint(path.with_suffix(".ckpt"), every=CHECKPOINT_EVERY,
@@ -289,10 +291,11 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
 
     patch_set = deployment.patch_set
     group = controls / "gate3" / "+".join(patch_set)
-    if model.gate3_optimizer:
-        # Controls of another optimizer live beside, not over, the protocol's.
-        group = group / "_".join(f"{key}={value}" for key, value
-                                 in sorted(dict(model.gate3_optimizer).items()))
+    settings = {**dict(model.gate3_optimizer),
+                **({"accumulation": model.gate3_accumulation} if model.gate3_accumulation != 1 else {})}
+    if settings:
+        # Controls of other training settings live beside, not over, the protocol's.
+        group = group / "_".join(f"{key}={value}" for key, value in sorted(settings.items()))
     native_a = train(model, group / "native_a.json", Deployment.native(), workload, patch_set,
                      reuse=True, log=log, deadline=deadline)
     native_b = train(model, group / "native_b.json", Deployment.native(), workload, patch_set,

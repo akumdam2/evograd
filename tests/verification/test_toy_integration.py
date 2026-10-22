@@ -137,6 +137,15 @@ class ToyIntegration(unittest.TestCase):
             verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest, root / "warmup2",
                    state=state, device="cpu", compile_backend=FAST, log=lambda *a: None)
         self.assertEqual(json.loads(beside.read_text())["run_id"], trained["run_id"])
+        # Gradient accumulation is a training setting too: its own controls, judged as usual.
+        model = dataclasses.replace(self.model, gate3_accumulation=2)
+        with self.T.toy_environment():
+            accumulated = verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest,
+                                 root / "accumulated", state=state, device="cpu",
+                                 compile_backend=FAST, log=lambda *a: None)
+        run = json.loads((control.parent / "accumulation=2" / "native_a.json").read_text())
+        self.assertEqual(run["identity"]["plan"]["accumulation"], 2)
+        self.assertEqual(accumulated["model"]["gate3"], "passed")
 
     def test_a_cached_control_of_another_optimizer_is_not_reused(self):
         from evograd.verification.integrations import gates

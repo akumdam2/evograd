@@ -33,6 +33,10 @@ def main(model, argv=None) -> int:
     p.add_argument("--gate3-optimizer", type=json.loads, default=None, metavar="JSON",
                    help="Gate 3 optimizer settings over the model's own, as gate3.adamw keywords, "
                         "e.g. '{\"warmup_steps\": 100, \"clip_grad_norm\": 1.0}'")
+    p.add_argument("--gate3-accumulation", type=int, default=None, metavar="K",
+                   help="training batches per Gate 3 update (gradient accumulation)")
+    p.add_argument("--gate3-steps", type=int, default=None, metavar="N",
+                   help="Gate 3 updates per training run")
     args = parser.parse_args(argv)
 
     def log(*parts):
@@ -54,11 +58,15 @@ def main(model, argv=None) -> int:
     from .gates import verify
 
     candidates = dict(item.split("=", 1) for item in args.candidate)
-    if args.gate3_optimizer:
-        import dataclasses
+    import dataclasses
 
+    if args.gate3_optimizer:
         model = dataclasses.replace(model, gate3_optimizer={**dict(model.gate3_optimizer),
                                                             **args.gate3_optimizer})
+    if args.gate3_accumulation is not None:
+        model = dataclasses.replace(model, gate3_accumulation=args.gate3_accumulation)
+    if args.gate3_steps is not None:
+        model = dataclasses.replace(model, gate3_steps=args.gate3_steps)
     verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
                      deadline_min=args.deadline_min)
     if verdict.get("suspended"):

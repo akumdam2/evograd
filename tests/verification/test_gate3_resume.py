@@ -4,8 +4,8 @@ Tiny random Llama on CPU, AdamW, six steps: suspended after a step and resumed
 in a fresh build, the native run, a bound candidate and an ``aot_eager``
 compile control each reproduce every objective, the run id and the run digest
 of an unbroken run. A checkpoint of another run is set aside, never resumed.
-Warmup and gradient clipping resume the same way, and leave a constant-rate,
-unclipped run exactly as it was.
+Warmup, gradient clipping and gradient accumulation resume the same way, and
+leave a constant-rate, unclipped, one-batch-per-update run exactly as it was.
 """
 
 from __future__ import annotations
@@ -61,10 +61,10 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
         cls.workload = Llama3Workload.from_config({
             "device": "cpu", "dtype": "float32", "batch_size": 1, "seq_len": 32,
             "arch_overrides": ARCH})
-        cls.data = SyntheticBatches(cls.workload, offset=1000, count=STEPS, role="train")
+        cls.data = SyntheticBatches(cls.workload, offset=1000, count=2 * STEPS, role="train")
 
     def adapter(self, **optimizer):
-        return gate3.workload_training(self.workload, train_data=self.data, train_count=STEPS,
+        return gate3.workload_training(self.workload, train_data=self.data, train_count=2 * STEPS,
                                        optimizer=gate3.adamw(lr=1e-3, **optimizer))
 
     def deployments(self):
@@ -79,13 +79,13 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
                 "bound": candidate("bound", {"swiglu_mlp": bound_eager("llama3_swiglu_mlp")}),
                 "compile": compiled}
 
-    def run_split(self, deployment, after, path, **optimizer):
-        first = gate3.measure_training(self.adapter(**optimizer), deployment, PLAN, seed=0,
+    def run_split(self, deployment, after, path, plan=PLAN, **optimizer):
+        first = gate3.measure_training(self.adapter(**optimizer), deployment, plan, seed=0,
                                        checkpoint=StopAfter(path, every=0, after=after))
         self.assertTrue(first.suspended, [f.to_dict() for f in first.findings])
         self.assertFalse(first.completed)
         self.assertEqual(len(first.train_steps), after)
-        second = gate3.measure_training(self.adapter(**optimizer), deployment, PLAN, seed=0,
+        second = gate3.measure_training(self.adapter(**optimizer), deployment, plan, seed=0,
                                         checkpoint=RunCheckpoint(path, every=2))
         self.assertTrue(second.completed, [f.to_dict() for f in second.findings])
         self.assertFalse(path.exists(), "a completed run removes its checkpoint")
@@ -151,6 +151,32 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
         self.assertEqual(plain.train_steps[0]["objective"], unbroken.train_steps[0]["objective"])
         self.assertNotEqual(plain.train_steps[1]["objective"], unbroken.train_steps[1]["objective"])
         self.assertNotEqual(plain.identity, unbroken.identity)
+
+    def test_accumulation_averages_consecutive_batches_and_resumes(self):
+        import torch
+
+        plan = gate3.TrainingPlan(steps=3, window=1, checkpoints=(), validation=False,
+                                  accumulation=2)
+        self.assertEqual(plan.to_dict()["accumulation"], 2)
+        self.assertNotIn("accumulation", PLAN.to_dict())
+        with tempfile.TemporaryDirectory() as tmp:
+            unbroken = gate3.measure_training(self.adapter(), Deployment.native(), plan, seed=0)
+            self.assertTrue(unbroken.completed, [f.to_dict() for f in unbroken.findings])
+            self.assertEqual(unbroken.identity["plan"]["accumulation"], 2)
+            first, resumed = self.run_split(Deployment.native(), 2, Path(tmp) / "run.ckpt", plan)
+            self.assertEqual(resumed.train_steps, unbroken.train_steps)
+        # Step 1 reads batches 0 and 1 before any update: its objective is their mean loss.
+        adapter = self.adapter()
+        from evograd.verification.common.execution import SiteHooks
+
+        model = adapter.build_model(Deployment.native(), SiteHooks())
+        with torch.no_grad():
+            losses = [float(adapter.train_loss(model, adapter.train_batch(i))[0]
+                            / adapter.train_loss(model, adapter.train_batch(i))[1]) for i in (0, 1)]
+        self.assertAlmostEqual(unbroken.train_steps[0]["objective"], sum(losses) / 2, places=5)
+        plain = gate3.measure_training(self.adapter(), Deployment.native(), PLAN, seed=0)
+        self.assertNotAlmostEqual(plain.train_steps[1]["objective"],
+                                  unbroken.train_steps[1]["objective"], places=6)
 
 
 if __name__ == "__main__":

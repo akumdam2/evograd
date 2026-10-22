@@ -65,6 +65,9 @@ class Model:
     #: (``gate3.adamw`` keywords: ``lr``, ``warmup_steps``, ``clip_grad_norm``).
     #: Empty is the protocol default; whatever is set enters every run identity.
     gate3_optimizer: Mapping[str, Any] = field(default_factory=dict)
+    #: Training batches per Gate 3 update (gradient accumulation), for a model
+    #: whose batch is too small to carry a stable update but must keep its shape.
+    gate3_accumulation: int = 1
     #: How a training step is run, recorded and judged
     #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
     objective: Any = None

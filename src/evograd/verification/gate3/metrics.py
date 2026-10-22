@@ -42,9 +42,14 @@ class TrainingPlan:
     window: int
     checkpoints: tuple[int, ...]
     validation: bool = True
+    #: Training batches per update. Each step differentiates the mean of the
+    #: objectives of ``accumulation`` consecutive batches (each backward is
+    #: scaled by ``1/accumulation``), so a model whose batch must keep its
+    #: shape can still take each update from more data.
+    accumulation: int = 1
 
     def __post_init__(self) -> None:
-        for name in ("steps", "window"):
+        for name in ("steps", "window", "accumulation"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive int, got {value!r}")
@@ -68,8 +73,11 @@ class TrainingPlan:
         return self.steps // self.window
 
     def to_dict(self) -> dict[str, Any]:
-        return {"steps": self.steps, "window": self.window, "checkpoints": list(self.checkpoints),
+        plan = {"steps": self.steps, "window": self.window, "checkpoints": list(self.checkpoints),
                 "validation_enabled": self.validation}
+        if self.accumulation != 1:      # only when set, so a plain plan keeps its identity
+            plan["accumulation"] = self.accumulation
+        return plan
 
 
 class WindowAccumulator:

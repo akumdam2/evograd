@@ -27,4 +27,10 @@ MODEL = Model(
     contract=reference.CONTRACT,
     source_identity=reference.source_identity,
     modeling_modules=("transformers.models.llama.modeling_llama",),
+    # At the protocol's constant 1e-4 the pretrained model's training is
+    # chaotic: any perturbation (a compiled site included) ends 2-5 nats away
+    # whatever its size, so Gate 3 cannot resolve a fault. Warmup, clipping and
+    # 3e-5 keep it stable; compile then drifts R 0.015 and a 5% gradient fault
+    # at one site is rejected (gate3 optimizer probe, 2026-10-22).
+    gate3_optimizer={"warmup_steps": 100, "clip_grad_norm": 1.0, "lr": 3e-5},
 )
