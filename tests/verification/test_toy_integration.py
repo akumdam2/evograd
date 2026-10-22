@@ -109,8 +109,10 @@ class ToyIntegration(unittest.TestCase):
         self.assertIn("reused_policy", report["gate2_operator_calibration"]["evidence"])
         self.assertFalse(again["candidates"][self.T.CASE_ID]["accepted"])
 
-    def test_gate3_controls_are_reused_only_under_the_same_optimizer(self):
+    def test_gate3_controls_are_kept_per_optimizer(self):
         import dataclasses
+
+        from evograd.verification.integrations.gates import verify
 
         root = Path(self.tmp.name)
         state = root / "state_opt"
@@ -118,24 +120,40 @@ class ToyIntegration(unittest.TestCase):
         control = next((state / "gate3").rglob("native_a.json"))
         constant = json.loads(control.read_text())
         self.assertEqual(constant["identity"]["optimizer"]["schedule"], "constant")
-        # Same state, another optimizer: the control is trained again, not reused.
+        # Another optimizer trains its own controls beside the protocol's ones.
         model = dataclasses.replace(self.model, gate3_optimizer={"warmup_steps": 2,
                                                                  "clip_grad_norm": 1.0})
         with self.T.toy_environment():
-            from evograd.verification.integrations.gates import verify
-
             warm = verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest,
                           root / "warmup", state=state, device="cpu", compile_backend=FAST,
                           log=lambda *a: None)
-            redone = json.loads(control.read_text())
-            self.assertNotEqual(redone["run_id"], constant["run_id"])
-            self.assertEqual(redone["identity"]["optimizer"]["warmup_steps"], 2)
-            self.assertIn("lr", redone["train_steps"][0])
+            beside = control.parent / "clip_grad_norm=1.0_warmup_steps=2" / "native_a.json"
+            trained = json.loads(beside.read_text())
+            self.assertEqual(trained["identity"]["optimizer"]["warmup_steps"], 2)
+            self.assertIn("lr", trained["train_steps"][0])
             self.assertEqual(warm["model"]["gate3"], "passed")
-            # And under the same optimizer again it is read back.
+            self.assertEqual(json.loads(control.read_text())["run_id"], constant["run_id"])
+            # Under the same optimizer again, both are read back.
             verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest, root / "warmup2",
                    state=state, device="cpu", compile_backend=FAST, log=lambda *a: None)
-        self.assertEqual(json.loads(control.read_text())["run_id"], redone["run_id"])
+        self.assertEqual(json.loads(beside.read_text())["run_id"], trained["run_id"])
+
+    def test_a_cached_control_of_another_optimizer_is_not_reused(self):
+        from evograd.verification.integrations import gates
+
+        root = Path(self.tmp.name)
+        state = root / "state_stale"
+        self.verify(1.0, root / "stale", state=state)
+        control = next((state / "gate3").rglob("native_a.json"))
+        cached = json.loads(control.read_text())
+        # A control file whose recorded optimizer differs (as if written by
+        # other code) is trained again rather than trusted.
+        cached["identity"]["optimizer"]["lr"] = 123.0
+        control.write_text(json.dumps(cached))
+        self.verify(1.0, root / "stale2", state=state)
+        again = json.loads(control.read_text())
+        self.assertNotEqual(again["run_id"], cached["run_id"])
+        self.assertEqual(again["identity"]["optimizer"]["lr"], gates.LR)
 
     def test_without_model_gates_level2_is_judged_by_gate1_and_operator_gate2(self):
         import dataclasses

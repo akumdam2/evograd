@@ -289,6 +289,10 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
 
     patch_set = deployment.patch_set
     group = controls / "gate3" / "+".join(patch_set)
+    if model.gate3_optimizer:
+        # Controls of another optimizer live beside, not over, the protocol's.
+        group = group / "_".join(f"{key}={value}" for key, value
+                                 in sorted(dict(model.gate3_optimizer).items()))
     native_a = train(model, group / "native_a.json", Deployment.native(), workload, patch_set,
                      reuse=True, log=log, deadline=deadline)
     native_b = train(model, group / "native_b.json", Deployment.native(), workload, patch_set,
