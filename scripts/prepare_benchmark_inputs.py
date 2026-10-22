@@ -30,7 +30,8 @@ CRITEO_HF_FILE = "dac.tar.gz"
 CRITEO_HF_SIZE = 4_576_820_670
 CRITEO_HF_SHA256 = "ffb2ecbbc4ca478d2e87cc5168cca29f35a51ac5132c3a8fdea78c378c4e4c33"
 BENCHMARKS = (
-    "convnextv2_tiny", "qwen2_vl_2b", "dit_s_2", "torchrec_dlrm", "qwen3_0_6b"
+    "convnextv2_tiny", "qwen2_vl_2b", "dit_s_2", "torchrec_dlrm", "qwen3_0_6b",
+    "llama_3_2_1b",
 )
 
 
@@ -95,6 +96,41 @@ def _hf_sources(benchmark: str, cache_dir: str | None) -> None:
             hf_hub_download(DATASET_REPO, filename, repo_type="dataset",
                             revision=DATASET_REVISION, cache_dir=cache_dir)
             dataset_file(split, cache_dir=cache_dir)
+    elif benchmark == "llama_3_2_1b":
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.model import pretrained_snapshot
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
+            CANONICAL, PRETRAINED, REAL_TEXT,
+        )
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.textdata import (
+            DATASET_CONFIG, DATASET_REPO, DATASET_REVISION, dataset_file,
+        )
+
+        if REAL_TEXT != f"wikitext-2-raw:{DATASET_REVISION}":
+            raise RuntimeError("Llama's pinned WikiText revision differs from the shared loader's")
+        model, revision = PRETRAINED.removeprefix("pretrained:").split("@", 1)
+        print(f"Downloading checkpoint {model}@{revision} (gated)", flush=True)
+        try:
+            snapshot_download(model, revision=revision, cache_dir=cache_dir,
+                              allow_patterns=["*.json", "*.safetensors"],
+                              ignore_patterns=["original/*"])
+        except Exception as exc:
+            raise RuntimeError(
+                f"cannot download {model}@{revision}: {type(exc).__name__}: {exc}\n"
+                "The repository is gated: accept Meta's Llama 3.2 license on "
+                "huggingface.co with your account, then `huggingface-cli login` "
+                "(or set HF_TOKEN). On an offline node, run this on a machine with "
+                "network access and copy the cache, passing --hf-cache."
+            ) from exc
+        for split in ("train", "validation"):
+            filename = f"{DATASET_CONFIG}/{split}-00000-of-00001.parquet"
+            print(f"Downloading dataset {DATASET_REPO}@{DATASET_REVISION}/{filename}",
+                  flush=True)
+            hf_hub_download(DATASET_REPO, filename, repo_type="dataset",
+                            revision=DATASET_REVISION, cache_dir=cache_dir)
+            dataset_file(split, cache_dir=cache_dir)
+        # The same local-only resolution the benchmark uses, so a cache that
+        # prepares but would not load fails here rather than on a GPU node.
+        pretrained_snapshot(CANONICAL.replace(weights=PRETRAINED, data=REAL_TEXT))
 
 
 def _download_criteo(raw_dir: Path, url: str, archive_path: Path | None = None) -> None:

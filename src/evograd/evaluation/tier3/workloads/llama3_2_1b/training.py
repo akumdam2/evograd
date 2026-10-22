@@ -4,12 +4,15 @@ The loop itself is :mod:`evograd.evaluation.tier3.gate.training` -- the same one
 Qwen3 uses. Only two things are Llama's own here, and both are consequences of
 this workload's identity rather than choices made for convenience:
 
-**The tokens are synthetic.** This workload is randomly initialized and its data
-is a deterministic pseudo-random token stream (``WorkloadSpec.data``), not text.
-A loss curve over it says whether a patched model *executes and optimizes* like
-the unpatched one; it says nothing about language-model quality, and its
-absolute value is not comparable with a real-text run's. Every result this
-module produces carries that label so a report cannot lose it.
+**On the canonical workload the tokens are synthetic.** It is randomly
+initialized and its data is a deterministic pseudo-random token stream
+(``WorkloadSpec.data``), not text. A loss curve over it says whether a patched
+model *executes and optimizes* like the unpatched one; it says nothing about
+language-model quality, and its absolute value is not comparable with a
+real-text run's. Every result this module produces carries that label so a
+report cannot lose it. On the real-text workload (``--real-text``) both streams
+come from WikiText-2 instead: the training split in the order ``data_seed``
+fixes, and the validation split, a different parquet file, in one fixed order.
 
 **Train and validation batches are disjoint by construction.** Both are drawn
 from the same generator, separated by a wide gap in the seed space: training
@@ -71,13 +74,23 @@ class SyntheticBatches:
         }
 
 
-def train_batches(workload, steps: int) -> SyntheticBatches:
+def train_batches(workload, steps: int):
+    """Synthetic batches, or on real text the WikiText training split.
+
+    The real-text stream cycles when ``steps`` exceeds one epoch, so ``steps``
+    bounds only the synthetic one.
+    """
+    if workload.spec.real_text:
+        return workload.train_batches(workload.data_seed)
     return SyntheticBatches(workload, offset=workload.data_seed + TRAIN_SEED_OFFSET,
                             count=steps, role="training")
 
 
-def validation_batches(workload, count: int = VALIDATION_BATCHES) -> SyntheticBatches:
-    """Held out from training by construction: a disjoint region of the seed space."""
+def validation_batches(workload, count: int = VALIDATION_BATCHES):
+    """Held out from training by construction: a disjoint region of the seed space,
+    or on real text the published validation split."""
+    if workload.spec.real_text:
+        return workload.validation_batches()
     return SyntheticBatches(workload, offset=workload.data_seed + VALIDATION_SEED_OFFSET,
                             count=count, role="validation (disjoint synthetic batches)")
 

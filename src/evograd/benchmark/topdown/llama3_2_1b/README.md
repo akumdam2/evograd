@@ -98,11 +98,48 @@ In the order they unblock each other:
    python -m evograd.evaluation.tier3.workloads.llama3_2_1b.calibrate run
    ```
 
+## Real text: the pinned checkpoint on WikiText-2
+
+The canonical workload above is random weights on synthetic tokens. A second,
+separate workload identity trains the pinned `meta-llama/Llama-3.2-1B`
+checkpoint (`spec.PRETRAINED`) on WikiText-2 raw (`spec.REAL_TEXT`, the same
+revision Qwen3 uses). Its workload id carries `.pretrained.realtext`, so no
+synthetic calibration or snapshot binds to it, and it exists only at the
+published architecture (`--layers` is refused).
+
+The checkpoint is gated. Accept Meta's Llama 3.2 license on the Hub with your
+account and log in once; the preparation step is then the only thing that
+touches the network. Benchmark runs read the local cache
+(`data/llama_3_2_1b/hf_cache`, or `EVOGRAD_HF_CACHE`).
+
+```bash
+pip install -e ".[llama3]"
+huggingface-cli login
+python scripts/prepare_benchmark_inputs.py --benchmark llama_3_2_1b
+
+python -m evograd.evaluation.tier3.workloads.llama3_2_1b.calibrate run \
+  --real-text --report results/llama3-level3/real-text-calibration.json
+python -m evograd.evaluation.tier3.cli --model llama_3_2_1b --real-text \
+  --calibration results/llama3-level3/real-text-calibration.json \
+  --structural-identity --identity-control --baseline none \
+  --providers eager,structural_identity,eager_through_bind \
+  --out results/llama3-level3/real-text-identity.json
+```
+
+Non-empty WikiText lines are tokenised with the checkpoint's tokenizer, joined
+with its EOS token and packed into `seq_len` blocks; the trailing partial block
+is dropped. Training batches follow a seeded permutation of the train split
+(the single-step gates use the first batch of order `data_seed + seed`);
+validation is the published validation split in one fixed order. Reports record
+the dataset revision, parquet and tokenizer hashes and block counts
+(`data_identity`). `controls --real-text` and `scripts/llama_training_study.py
+--real-text` run the fault controls and the training curve on the same identity.
+
 ## Not inherited from Qwen3
 
 The simplified numerics policy (`simple.py` / `calibrate_simple.py`) and the
-four-part real-text protocol (`protocol4.py`, `prediction.py`, `training.py`,
-`textdata.py`). Two different reasons:
+four-part real-text protocol (`protocol4.py`, `prediction.py`). Two different
+reasons:
 
 - The simplified policy was declined while its trusted reference was
   `bound_pair`, which recomputes through the same `runtime_forward` and drives
@@ -111,6 +148,6 @@ four-part real-text protocol (`protocol4.py`, `prediction.py`, `training.py`,
   and defaults to `torch_compile`, which is genuinely different arithmetic. The
   original objection therefore no longer applies, and this is an open decision
   rather than a settled one. It needs no harvest and no pretrained weights.
-- The real-text protocol needs a pinned pretrained checkpoint and tokenizer.
-  Meta-Llama-3-8B is a gated repository, so adopting it would forfeit the
-  "no Hub token" property above. That is a design decision, not a port.
+- The four-part protocol's policy and holdout-verdict machinery remain
+  Qwen3's. Llama's real text (above) runs through Llama's own calibrated
+  whole-model gate instead; porting the protocol is a separate decision.

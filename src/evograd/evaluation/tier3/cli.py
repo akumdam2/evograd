@@ -155,9 +155,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--real-text", action="store_true",
-        help="the pinned pretrained checkpoint on real text (Qwen3-0.6B on "
-             "WikiText-2 raw), where the workload accepts it. A distinct workload "
-             "identity; no synthetic calibration binds to it",
+        help="the pinned pretrained checkpoint on real text (WikiText-2 raw), "
+             "where the workload accepts it (qwen3_0_6b, llama_3_2_1b). A distinct "
+             "workload identity; no synthetic calibration binds to it",
     )
     parser.add_argument(
         "--protocol4-calibration", type=Path, default=None,

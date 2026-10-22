@@ -23,7 +23,7 @@ dev = ["black", "pytest>=7"]
 # the milestone was developed and measured against 5.16.1. Llama predates
 # that, but 4.51 is the floor the rest of the harness targets.
 qwen3 = ["transformers>=4.51"]
-llama3 = ["transformers>=4.51"]
+llama3 = ["transformers>=4.51", "huggingface_hub>=0.34", "pyarrow>=17", "safetensors"]
 workloads = ["transformers>=4.51"]
 # OLMoE-1B-7B's sites address the Transformers-5 experts layout (one 3-D tensor
 # per projection, dispatched through experts_implementation); developed and

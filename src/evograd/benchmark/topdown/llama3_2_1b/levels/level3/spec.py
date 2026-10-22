@@ -10,8 +10,10 @@ The architecture is Llama-3.2-1B's published configuration, written out rather
 than downloaded. Two reasons, and the second is the one that matters here: a
 reference must be reproducible on a node with no network, and the Llama
 repositories are **gated** -- fetching a config would require an authenticated
-Hub token. The workload never needs one, because it builds from this
-configuration with random weights and no tokenizer.
+Hub token. The canonical workload never needs one, because it builds from this
+configuration with random weights and no tokenizer. The separate real-text
+identity (:data:`PRETRAINED` on :data:`REAL_TEXT`) loads the pinned checkpoint
+from a local cache that a one-time preparation step fills.
 
 **Why 1B rather than the 8B this package was written around.** Meta-Llama-3-8B
 does not fit a single 95 GiB card under AdamW: 8.03B parameters cost ~64 GiB in
@@ -101,6 +103,14 @@ LLAMA_3_2_1B: Mapping[str, Any] = {
 
 MODEL_NAME = "Llama-3.2-1B"
 
+#: The real-text workload's two pins. The checkpoint is gated: downloading it
+#: needs a Hub account that accepted Meta's license, so only the preparation
+#: step (``scripts/prepare_benchmark_inputs.py --benchmark llama_3_2_1b``) ever
+#: needs a token. The canonical synthetic workload still needs none.
+PRETRAINED = "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08"
+#: The same WikiText-2 raw revision Qwen3 packs (``qwen3_0_6b.textdata``).
+REAL_TEXT = "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+
 
 @dataclass(frozen=True)
 class WorkloadSpec(_WorkloadSpec):
@@ -117,6 +127,64 @@ class WorkloadSpec(_WorkloadSpec):
     dtype: str = "bfloat16"
     device: str = "cuda"
     attn_implementation: str = "sdpa"
+    #: Where the parameters come from: ``"random"`` (``nn.init`` under ``seed``,
+    #: the canonical workload) or :data:`PRETRAINED`. Part of the identity, so a
+    #: calibration taken on random weights can never bind to pretrained ones.
+    weights: str = "random"
+    #: Where the tokens come from: ``"synthetic"`` (drawn from ``seed``) or
+    #: :data:`REAL_TEXT`, tokenised with the checkpoint's own tokenizer.
+    data: str = "synthetic"
+
+    @property
+    def pretrained(self) -> bool:
+        return self.weights == PRETRAINED
+
+    @property
+    def real_text(self) -> bool:
+        return self.data == REAL_TEXT
+
+    @property
+    def pretrained_repo(self) -> tuple[str, str]:
+        """``(repo, revision)`` of the pinned checkpoint; raises otherwise."""
+        if not self.pretrained:
+            raise WorkloadSpecError(f"weights are {self.weights!r}, not pretrained")
+        repo, _, revision = self.weights[len("pretrained:"):].partition("@")
+        return repo, revision
+
+    def validate(self) -> "WorkloadSpec":
+        super().validate()
+        # Exactly two identities. Real text needs the checkpoint's tokenizer, and
+        # pretrained weights on random token ids measure nothing a report could
+        # name, so the pins travel together.
+        if (self.weights, self.data) not in (("random", "synthetic"), (PRETRAINED, REAL_TEXT)):
+            raise WorkloadSpecError(
+                f"weights={self.weights!r}, data={self.data!r}: Llama real text "
+                f"requires the pinned checkpoint and WikiText-2 together "
+                f"(weights={PRETRAINED!r}, data={REAL_TEXT!r}), or neither")
+        if self.pretrained and self.arch != dict(LLAMA_3_2_1B):
+            raise WorkloadSpecError(
+                "the pinned checkpoint exists only at the published architecture; "
+                "a reduced-layer or reshaped run cannot load it")
+        return self
+
+    @property
+    def workload_id(self) -> str:
+        """The shared slug, with ``.pretrained.realtext`` before the hash on real text."""
+        base = super().workload_id
+        if not self.real_text:
+            return base
+        head, _, digest = base.rpartition(".")
+        return f"{head}.pretrained.realtext.{digest}"
+
+    def to_dict(self) -> dict[str, Any]:
+        # Only when non-default, so the canonical synthetic hash -- the binding of
+        # the tracked harvest snapshot and every stored calibration -- is unchanged.
+        payload = super().to_dict()
+        if self.weights != "random":
+            payload["weights"] = self.weights
+        if self.data != "synthetic":
+            payload["data"] = self.data
+        return payload
 
 
 #: The reference execution. Every Llama-3 number comes from a run whose spec

@@ -22,10 +22,12 @@ wrong cannot flatter its own validation number. Training and validation streams
 are disjoint by construction (``data_seed + 1000 + step`` against
 ``data_seed + 900000 + index``).
 
-**Llama's tokens are synthetic and its weights are seeded.** The NLL curve says
-whether a patched model executes and optimizes like the unpatched one. It is
-not a language-model quality result and is not comparable with Qwen's real-text
-losses. Every result this writes carries that label.
+**By default Llama's tokens are synthetic and its weights are seeded.** The NLL
+curve then says whether a patched model executes and optimizes like the
+unpatched one. It is not a language-model quality result and is not comparable
+with Qwen's real-text losses. Every result this writes carries that label.
+``--real-text`` instead trains the pinned checkpoint on WikiText-2 and scores
+the published validation split.
 
 Run one provider per process, as the report did, so nothing a provider leaves
 resident reaches the next one.
@@ -74,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-seed", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--real-text", action="store_true",
+                        help="the pinned Llama-3.2-1B checkpoint on WikiText-2 raw "
+                             "instead of random weights on synthetic tokens")
     parser.add_argument("--record-norms", action="store_true",
                         help="also record gradient and update norms at step 1 and checkpoints")
     parser.add_argument("--out", type=Path, required=True)
@@ -91,9 +96,13 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         parser.error(f"unknown sites {unknown}; Llama's are {list(SITES)}")
 
-    workload = Llama3Workload.from_config({
-        "device": args.device, "seed": args.seed, "data_seed": args.data_seed,
-    })
+    config = {"device": args.device, "seed": args.seed, "data_seed": args.data_seed}
+    if args.real_text:
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
+            PRETRAINED, REAL_TEXT)
+
+        config.update(weights=PRETRAINED, data=REAL_TEXT)
+    workload = Llama3Workload.from_config(config)
     plan = TrainingPlan(
         steps=args.steps, window=args.window,
         checkpoints=tuple(int(c) for c in args.checkpoints.split(",") if c != ""),

@@ -135,6 +135,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--layers", type=int, default=None)
+    parser.add_argument("--real-text", action="store_true",
+                        help="the real-text identity (pinned checkpoint on WikiText-2); "
+                             "--calibration must then be a real-text calibration")
     parser.add_argument("--magnitudes", default=None,
                         help="comma-separated fault magnitudes for the scaled "
                              "kinds; the catalogue's three by default")
@@ -155,6 +158,11 @@ def _workload_config(args) -> dict[str, Any]:
                               "calibration_path": str(args.calibration)}
     if args.layers is not None:
         config["arch_overrides"] = {"num_hidden_layers": args.layers}
+    if args.real_text:
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
+            PRETRAINED, REAL_TEXT)
+
+        config.update(weights=PRETRAINED, data=REAL_TEXT)
     return config
 
 
@@ -270,6 +278,22 @@ def run_positive_controls(*, seed: int, policy, workload, references
     return out
 
 
+def _bound_policy(args, config: dict[str, Any]):
+    """The calibration, refused unless it was measured on this workload.
+
+    A synthetic calibration applied to the real-text workload (or the reverse)
+    would judge the controls against another identity's noise floor.
+    """
+    policy = load_policy(args.calibration)
+    expected = Llama3Workload.from_config(config).spec.workload_id
+    if policy.workload_id != expected:
+        raise SystemExit(
+            f"{args.calibration} calibrates {policy.workload_id}, but these controls "
+            f"run {expected}. Calibrate this workload first"
+            + (" (calibrate run --real-text)." if args.real_text else "."))
+    return policy
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     config = _workload_config(args)
@@ -282,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.seed is not None:
         # Each child handles one control. A fault's OOM or timeout cannot poison
         # the CUDA context used by later controls or by the positive controls.
-        policy = load_policy(args.calibration)
+        policy = _bound_policy(args, config)
         workload = Llama3Workload.from_config(config)
         references = build_references(workload, policy=policy, data_seed=args.seed)
         if args.positive_only:
@@ -308,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.result_json).write_text(json.dumps(records), encoding="utf-8")
         return 0
 
-    policy = load_policy(args.calibration)
+    policy = _bound_policy(args, config)
     seeds = [int(s) for s in args.seeds.split(",")]
     results: list[dict[str, Any]] = []
     for seed in seeds:
@@ -338,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
                 child += ["--magnitudes", str(args.magnitudes)]
             if args.layers is not None:
                 child += ["--layers", str(args.layers)]
+            if args.real_text:
+                child.append("--real-text")
             positives = _isolated([*child, "--positive-only"])
             results += positives if isinstance(positives, list) else [positives]
             for index, fault in enumerate(faults):
