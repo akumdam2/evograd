@@ -65,6 +65,8 @@ class TrainingAdapter(Protocol):
     def optimizer_config(self) -> Mapping[str, Any]: ...
     def build_model(self, deployment: Deployment, hooks: SiteHooks) -> torch.nn.Module: ...
     def build_optimizer(self, model: torch.nn.Module) -> torch.optim.Optimizer: ...
+    # Optional: ``before_update(optimizer, model, step) -> dict`` clips and
+    # schedules each update; what it returns is added to the step record.
     def build_evaluator(self) -> torch.nn.Module: ...
     def train_batch(self, index: int) -> Any: ...
     def train_loss(self, model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, float]: ...
@@ -269,10 +271,14 @@ def measure_training(adapter: TrainingAdapter, deployment: Deployment, plan: Tra
                                                 f"replaced sites {idle} did not run at step {step}",
                                                 step=step, sites=idle))
                     return run
+                # Gradient clipping and the learning-rate schedule, when the
+                # optimizer has them (recorded on the step: grad_norm, lr).
+                before_update = getattr(adapter, "before_update", None)
+                extra = before_update(optimizer, model, step) if before_update else {}
                 optimizer.step()
                 run.train_steps.append({"step": step, "loss_sum": value, "weight": weight,
                                         "mean_loss": value / weight,
-                                        "objective": objective_value})
+                                        "objective": objective_value, **extra})
                 windows.add(step, value, weight)
                 if on_step is not None:
                     stage = f"on_step {step}"

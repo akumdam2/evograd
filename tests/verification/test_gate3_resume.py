@@ -4,6 +4,8 @@ Tiny random Llama on CPU, AdamW, six steps: suspended after a step and resumed
 in a fresh build, the native run, a bound candidate and an ``aot_eager``
 compile control each reproduce every objective, the run id and the run digest
 of an unbroken run. A checkpoint of another run is set aside, never resumed.
+Warmup and gradient clipping resume the same way, and leave a constant-rate,
+unclipped run exactly as it was.
 """
 
 from __future__ import annotations
@@ -61,9 +63,9 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
             "arch_overrides": ARCH})
         cls.data = SyntheticBatches(cls.workload, offset=1000, count=STEPS, role="train")
 
-    def adapter(self):
+    def adapter(self, **optimizer):
         return gate3.workload_training(self.workload, train_data=self.data, train_count=STEPS,
-                                       optimizer=gate3.adamw(lr=1e-3))
+                                       optimizer=gate3.adamw(lr=1e-3, **optimizer))
 
     def deployments(self):
         from tests.verification.test_bridges import bound_eager
@@ -77,13 +79,13 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
                 "bound": candidate("bound", {"swiglu_mlp": bound_eager("llama3_swiglu_mlp")}),
                 "compile": compiled}
 
-    def run_split(self, deployment, after, path):
-        first = gate3.measure_training(self.adapter(), deployment, PLAN, seed=0,
+    def run_split(self, deployment, after, path, **optimizer):
+        first = gate3.measure_training(self.adapter(**optimizer), deployment, PLAN, seed=0,
                                        checkpoint=StopAfter(path, every=0, after=after))
         self.assertTrue(first.suspended, [f.to_dict() for f in first.findings])
         self.assertFalse(first.completed)
         self.assertEqual(len(first.train_steps), after)
-        second = gate3.measure_training(self.adapter(), deployment, PLAN, seed=0,
+        second = gate3.measure_training(self.adapter(**optimizer), deployment, PLAN, seed=0,
                                         checkpoint=RunCheckpoint(path, every=2))
         self.assertTrue(second.completed, [f.to_dict() for f in second.findings])
         self.assertFalse(path.exists(), "a completed run removes its checkpoint")
@@ -122,6 +124,33 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
         run = gate3.measure_training(self.adapter(), Deployment.native(), PLAN, seed=0)
         self.assertNotIn("segments", run.to_dict())
         self.assertNotIn("suspended", run.to_dict())
+        # Constant rate, no clipping: neither the configuration nor a step record mentions them.
+        self.assertEqual(run.identity["optimizer"]["schedule"], "constant")
+        self.assertNotIn("warmup_steps", run.identity["optimizer"])
+        self.assertNotIn("clip_grad_norm", run.identity["optimizer"])
+        self.assertFalse({"lr", "grad_norm"} & set(run.train_steps[0]))
+
+    def test_warmup_and_clipping_are_recorded_and_resume(self):
+        settings = {"warmup_steps": 4, "clip_grad_norm": 1e-3}
+        with tempfile.TemporaryDirectory() as tmp:
+            unbroken = gate3.measure_training(self.adapter(**settings), Deployment.native(), PLAN,
+                                              seed=0)
+            self.assertTrue(unbroken.completed, [f.to_dict() for f in unbroken.findings])
+            self.assertEqual(unbroken.identity["optimizer"]["schedule"], "linear_warmup")
+            self.assertEqual(unbroken.identity["optimizer"]["warmup_steps"], 4)
+            self.assertEqual(unbroken.identity["optimizer"]["clip_grad_norm"], 1e-3)
+            self.assertEqual([s["lr"] for s in unbroken.train_steps],
+                             [1e-3 * min(1.0, t / 4) for t in range(1, STEPS + 1)])
+            self.assertTrue(all(s["grad_norm"] > 1e-3 for s in unbroken.train_steps))
+            first, resumed = self.run_split(Deployment.native(), 3, Path(tmp) / "run.ckpt",
+                                            **settings)
+            self.assertEqual(resumed.train_steps, unbroken.train_steps)
+            self.assertEqual(resumed.identity, unbroken.identity)
+        plain = gate3.measure_training(self.adapter(), Deployment.native(), PLAN, seed=0)
+        # Same first loss (read before any update), then the schedule and the clip change the run.
+        self.assertEqual(plain.train_steps[0]["objective"], unbroken.train_steps[0]["objective"])
+        self.assertNotEqual(plain.train_steps[1]["objective"], unbroken.train_steps[1]["objective"])
+        self.assertNotEqual(plain.identity, unbroken.identity)
 
 
 if __name__ == "__main__":

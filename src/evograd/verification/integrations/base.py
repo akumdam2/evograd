@@ -61,6 +61,10 @@ class Model:
     modeling_modules: tuple[str, ...] = field(default_factory=tuple)
     #: Gate 3 horizon (AdamW updates per training run).
     gate3_steps: int = 1000
+    #: Gate 3 optimizer settings beyond the protocol's constant-rate AdamW
+    #: (``gate3.adamw`` keywords: ``lr``, ``warmup_steps``, ``clip_grad_norm``).
+    #: Empty is the protocol default; whatever is set enters every run identity.
+    gate3_optimizer: Mapping[str, Any] = field(default_factory=dict)
     #: How a training step is run, recorded and judged
     #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
     objective: Any = None

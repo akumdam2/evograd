@@ -244,25 +244,32 @@ def train(model, path: Path, deployment, workload, patch_set, *, reuse: bool,
     """One training run, written to ``path`` when it completes.
 
     A control (``reuse``) is read back from ``path`` when an earlier session
-    completed it; a candidate run only when it was this very deployment. A run
-    interrupted by ``deadline`` is checkpointed beside ``path`` and continued
-    by the next call (:class:`~evograd.verification.gate3.checkpoint.RunCheckpoint`).
+    completed it under the same optimizer and protocol context; a candidate
+    run only when it was also this very deployment. A run interrupted by
+    ``deadline`` is checkpointed beside ``path`` and continued by the next
+    call (:class:`~evograd.verification.gate3.checkpoint.RunCheckpoint`).
     """
     from evograd.verification import gate3
+    from evograd.verification.common.reports import jsonable
     from evograd.verification.gate3.checkpoint import RunCheckpoint
 
     from .base import objective_of
 
+    optimizer = gate3.adamw(**{"lr": LR, **dict(model.gate3_optimizer)})
+    context = training_context(model, workload, patch_set)
     if path.exists():
         done = json.loads(path.read_text())
-        if reuse or (done.get("completed")
-                     and done.get("deployment") == _jsonable(deployment.describe())):
+        identity = done.get("identity") or {}
+        same_run = (identity.get("optimizer") == _jsonable(jsonable(dict(optimizer.config)))
+                    and identity.get("protocol_context") == _jsonable(jsonable(context)))
+        if same_run and (reuse or (done.get("completed")
+                                   and done.get("deployment") == _jsonable(deployment.describe()))):
             return done
     adapter = objective_of(model).training(workload, train_data=workload.train_batches(TRAIN_ORDER),
-                                           optimizer=gate3.adamw(lr=LR))
+                                           optimizer=optimizer)
     plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False)
     run = gate3.measure_training(adapter, deployment, plan, seed=TRAIN_SEED, progress=log,
-                                 protocol_context=training_context(model, workload, patch_set),
+                                 protocol_context=context,
                                  checkpoint=RunCheckpoint(path.with_suffix(".ckpt"), every=CHECKPOINT_EVERY,
                                                           deadline=deadline))
     data = run.to_dict()

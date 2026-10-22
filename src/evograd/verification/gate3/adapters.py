@@ -38,18 +38,55 @@ class OptimizerSpec:
     name: str
     config: Mapping[str, Any]
     factory: Callable[[Any], torch.optim.Optimizer]
+    #: Linear warmup: update ``t`` (1-based) runs at ``lr * min(1, t / warmup_steps)``.
+    warmup_steps: int = 0
+    #: The global gradient norm is clipped to this before each update (``None``: never).
+    clip_grad_norm: float | None = None
 
     def build(self, model: torch.nn.Module) -> torch.optim.Optimizer:
         return self.factory(model.parameters())
 
+    def before_update(self, optimizer: torch.optim.Optimizer, model: torch.nn.Module,
+                      step: int) -> dict[str, float]:
+        """Clip and schedule update ``step``; returns what the step record adds.
+
+        The learning rate is a function of the step alone, so a resumed run
+        needs no scheduler state. With neither setting this does nothing and
+        the step record is unchanged.
+        """
+        record: dict[str, float] = {}
+        if self.clip_grad_norm is not None:
+            norm = torch.nn.utils.clip_grad_norm_(model.parameters(), self.clip_grad_norm,
+                                                  foreach=False)
+            record["grad_norm"] = float(norm)
+        if self.warmup_steps:
+            lr = float(self.config["lr"]) * min(1.0, step / self.warmup_steps)
+            for group in optimizer.param_groups:
+                group["lr"] = lr
+            record["lr"] = lr
+        return record
+
 
 def adamw(*, lr: float, betas: tuple[float, float] = (0.9, 0.999), eps: float = 1e-8,
-          weight_decay: float = 0.01) -> OptimizerSpec:
-    """``torch.optim.AdamW`` with every setting stated (constant learning rate)."""
+          weight_decay: float = 0.01, warmup_steps: int = 0,
+          clip_grad_norm: float | None = None) -> OptimizerSpec:
+    """``torch.optim.AdamW`` with every setting stated.
+
+    The learning rate is constant unless ``warmup_steps`` ramps it linearly
+    over the first updates; ``clip_grad_norm`` clips the global gradient norm
+    before each update. Either appears in the configuration only when set, so
+    a constant-rate, unclipped run keeps its identity.
+    """
     config = {"optimizer": "AdamW", "lr": lr, "betas": list(betas), "eps": eps,
               "weight_decay": weight_decay, "schedule": "constant", "foreach": False}
+    if warmup_steps:
+        config.update(schedule="linear_warmup", warmup_steps=int(warmup_steps))
+    if clip_grad_norm is not None:
+        config["clip_grad_norm"] = float(clip_grad_norm)
     return OptimizerSpec("AdamW", config, lambda params: torch.optim.AdamW(
-        params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, foreach=False))
+        params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, foreach=False),
+        warmup_steps=int(warmup_steps),
+        clip_grad_norm=None if clip_grad_norm is None else float(clip_grad_norm))
 
 
 def next_token_nll(logits: torch.Tensor, labels: torch.Tensor, *,
@@ -127,6 +164,10 @@ class LanguageModelTraining:
 
     def build_optimizer(self, model: torch.nn.Module) -> torch.optim.Optimizer:
         return self.optimizer.build(model)
+
+    def before_update(self, optimizer: torch.optim.Optimizer, model: torch.nn.Module,
+                      step: int) -> dict[str, float]:
+        return self.optimizer.before_update(optimizer, model, step)
 
     def build_evaluator(self) -> torch.nn.Module:
         return self.build_native()
@@ -254,6 +295,10 @@ class WorkloadObjectiveTraining:
 
     def build_optimizer(self, model: torch.nn.Module) -> torch.optim.Optimizer:
         return self.optimizer.build(model)
+
+    def before_update(self, optimizer: torch.optim.Optimizer, model: torch.nn.Module,
+                      step: int) -> dict[str, float]:
+        return self.optimizer.before_update(optimizer, model, step)
 
     def build_evaluator(self) -> torch.nn.Module:
         raise NotImplementedError("a workload-objective adapter serves training-only plans")

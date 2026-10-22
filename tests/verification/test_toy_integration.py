@@ -109,6 +109,34 @@ class ToyIntegration(unittest.TestCase):
         self.assertIn("reused_policy", report["gate2_operator_calibration"]["evidence"])
         self.assertFalse(again["candidates"][self.T.CASE_ID]["accepted"])
 
+    def test_gate3_controls_are_reused_only_under_the_same_optimizer(self):
+        import dataclasses
+
+        root = Path(self.tmp.name)
+        state = root / "state_opt"
+        self.verify(1.0, root / "constant", state=state)
+        control = next((state / "gate3").rglob("native_a.json"))
+        constant = json.loads(control.read_text())
+        self.assertEqual(constant["identity"]["optimizer"]["schedule"], "constant")
+        # Same state, another optimizer: the control is trained again, not reused.
+        model = dataclasses.replace(self.model, gate3_optimizer={"warmup_steps": 2,
+                                                                 "clip_grad_norm": 1.0})
+        with self.T.toy_environment():
+            from evograd.verification.integrations.gates import verify
+
+            warm = verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest,
+                          root / "warmup", state=state, device="cpu", compile_backend=FAST,
+                          log=lambda *a: None)
+            redone = json.loads(control.read_text())
+            self.assertNotEqual(redone["run_id"], constant["run_id"])
+            self.assertEqual(redone["identity"]["optimizer"]["warmup_steps"], 2)
+            self.assertIn("lr", redone["train_steps"][0])
+            self.assertEqual(warm["model"]["gate3"], "passed")
+            # And under the same optimizer again it is read back.
+            verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest, root / "warmup2",
+                   state=state, device="cpu", compile_backend=FAST, log=lambda *a: None)
+        self.assertEqual(json.loads(control.read_text())["run_id"], redone["run_id"])
+
     def test_without_model_gates_level2_is_judged_by_gate1_and_operator_gate2(self):
         import dataclasses
 
