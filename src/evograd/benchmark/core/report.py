@@ -62,9 +62,8 @@ class TaskResult:
     """One operator's contribution to the suite."""
 
     op: str
-    #: Task hierarchy: 1 primitive, 2 composite, 3 architectural-block
-    #: integration, 4 whole-model workload. What kind of task
-    #: this is. Not to be confused with `tier`.
+    #: Task hierarchy: 1 primitive, 2 composite, 3 whole-model workload.
+    #: What kind of task this is. Not to be confused with `tier`.
     level: int
     family: str
     baseline: str
@@ -273,7 +272,7 @@ class SuiteReport:
     #: What was measured — a candidate directory, or a reviewed baseline
     #: standing in as the candidate. A suite result is unreadable without it:
     #: "1.6x at level 1" means something entirely different when the thing
-    #: being timed is Liger than when it is a generated kernel.
+    #: being timed is a library pair than when it is a generated kernel.
     candidate_source: str = "unspecified"
     #: Which timing protocol produced the samples. The suite's own aggregation
     #: is identical either way, but the numbers are not comparable across the

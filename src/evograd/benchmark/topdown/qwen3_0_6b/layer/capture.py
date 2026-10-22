@@ -2,8 +2,8 @@
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.layer.capture \
         --layer 14 \
-        --harvest results/qwen3-level4/harvest.json \
-        --out results/qwen3-level4/layer14.pt
+        --harvest results/qwen3-level3/harvest.json \
+        --out results/qwen3-level3/layer14.pt
 
 The layer is selected *from the harvest manifest*, not by index alone: the
 manifest is checked for self-consistency, checked against the workload the
@@ -440,7 +440,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--harvest",
         type=Path,
-        default=Path("results/qwen3-level4/harvest.json"),
+        default=Path("results/qwen3-level3/harvest.json"),
         help="the harvest manifest the layer is selected from",
     )
     parser.add_argument("--out", type=Path, required=True, help="write the .pt artifact here")

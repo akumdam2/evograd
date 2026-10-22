@@ -12,7 +12,10 @@ class TestBaselineNone(unittest.TestCase):
         self.assertEqual(self._names(["--baseline", "none"]), ["eager", "torch_compile"])
 
     def test_a_real_baseline_is_still_offered(self):
-        self.assertEqual(self._names(["--baseline", "liger"]), ["eager", "torch_compile", "liger"])
+        self.assertEqual(self._names(["--baseline", "fla"]), ["eager", "torch_compile", "fla"])
+
+    def test_the_default_is_no_baseline(self):
+        self.assertEqual(self._names([]), ["eager", "torch_compile"])
 
     def test_no_compile_still_honoured(self):
         self.assertEqual(self._names(["--baseline", "none", "--no-compile"]), ["eager"])

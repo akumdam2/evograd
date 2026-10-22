@@ -250,7 +250,7 @@ class TestVerify(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestBaselineSchema(unittest.TestCase):
-    def test_liger_does_not_claim_pytorch_metrics(self):
+    def test_a_pair_baseline_does_not_claim_pytorch_metrics(self):
         from evograd.evaluation.tier1.fast import _add_pytorch_autograd_aliases
 
         report = {
@@ -259,7 +259,7 @@ class TestBaselineSchema(unittest.TestCase):
             "speedup_vs_baseline_backward": 1.5,
             "speedup_vs_baseline_full_step": 1.25,
         }
-        result = _add_pytorch_autograd_aliases(report, "liger")
+        result = _add_pytorch_autograd_aliases(report, "cublas_pair")
         self.assertNotIn("pytorch_autograd_backward_ms", result)
         self.assertNotIn("speedup_vs_pytorch_autograd_backward", result)
 
@@ -355,7 +355,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
             return dout
 
         baseline = PairProvider(
-            "liger", forward, backward, "hash", "stock_liger_pair"
+            "cublas_pair", forward, backward, "hash", "declared_cublas_pair_pair"
         )
         identity = renamed_provider(baseline, "candidate")
         self.assertIs(identity.forward, baseline.forward)

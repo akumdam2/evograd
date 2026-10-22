@@ -43,7 +43,6 @@ from evograd.evaluation.common.provider import (  # noqa: F401  (re-export)
     candidate_provider,
     clone_values,
     declared_provider,
-    liger_provider,
     pytorch_autograd_provider,
     renamed_provider,
     saved_state_report,
@@ -232,7 +231,6 @@ def environment_fingerprint() -> dict[str, Any]:
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
         "triton": _package_version("triton"),
-        "liger_kernel": _package_version("liger-kernel"),
     }
 
 
@@ -380,8 +378,6 @@ def benchmark_case_fair(
             ),
             "backward": _summary(backward),
             "pair_full": full_summary,
-            # Backward-compatible alias retained for existing LayerNorm reports.
-            "liger_compatible_raw_fused_full": full_summary,
             "saved_state": saved_reports[provider.name],
             "source_hash": provider.source_hash,
             "adapter_kind": provider.adapter_kind,
@@ -397,14 +393,6 @@ def benchmark_case_fair(
             "backward": (
                 summaries[baseline_name]["backward"]["median_ms"]
                 / summaries[candidate_name]["backward"]["median_ms"]
-            ),
-            "liger_compatible_raw_fused_full": (
-                summaries[baseline_name]["liger_compatible_raw_fused_full"][
-                    "median_ms"
-                ]
-                / summaries[candidate_name]["liger_compatible_raw_fused_full"][
-                    "median_ms"
-                ]
             ),
             "pair_full": (
                 summaries[baseline_name]["pair_full"]["median_ms"]
@@ -453,15 +441,11 @@ def run_fair_benchmarks(
         case["providers"][baseline.name]["forward"]["median_ms"] for case in cases
     )
     candidate_full = sum(
-        case["providers"][candidate.name]["liger_compatible_raw_fused_full"][
-            "median_ms"
-        ]
+        case["providers"][candidate.name]["pair_full"]["median_ms"]
         for case in cases
     )
     baseline_full = sum(
-        case["providers"][baseline.name]["liger_compatible_raw_fused_full"][
-            "median_ms"
-        ]
+        case["providers"][baseline.name]["pair_full"]["median_ms"]
         for case in cases
     )
     backward_ci = _block_bootstrap_speedup(
@@ -511,11 +495,6 @@ def run_fair_benchmarks(
             "baseline_backward_ms": baseline_backward,
             "speedup_backward": baseline_backward / candidate_backward,
             "speedup_backward_ci95": backward_ci,
-            "candidate_liger_compatible_raw_fused_full_ms": candidate_full,
-            "baseline_liger_compatible_raw_fused_full_ms": baseline_full,
-            "speedup_liger_compatible_raw_fused_full": baseline_full
-            / candidate_full,
-            "speedup_liger_compatible_raw_fused_full_ci95": full_ci,
             "candidate_pair_full_ms": candidate_full,
             "baseline_pair_full_ms": baseline_full,
             "speedup_pair_full": baseline_full / candidate_full,

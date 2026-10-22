@@ -301,8 +301,8 @@ class TestResidualRmsnormEpsilon(unittest.TestCase):
         eps_arg = next(arg for arg in self.op.args if arg.name == "eps")
         self.assertEqual(eps_arg.default, decl.GRID_EPS)
 
-    def test_the_liger_pair_baseline_is_declared(self):
-        self.assertIn("liger", self.op.performance_baselines)
+    def test_no_pair_baseline_is_declared(self):
+        self.assertFalse(self.op.performance_baselines)
 
 
 class TestLevel1Mapping(unittest.TestCase):

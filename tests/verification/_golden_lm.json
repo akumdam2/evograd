@@ -30,14 +30,17 @@
        "attn_implementation": "sdpa",
        "batch_size": 1,
        "calibration_path": null,
+       "data": "synthetic",
        "data_seed": 0,
        "device": "cpu",
        "dtype": "float32",
        "model": "llama_3_2_1b",
        "seed": 0,
-       "seq_len": 32
+       "seq_len": 32,
+       "weights": "random"
       },
       "config_hash": "65d9eb5b4c106423",
+      "data": "synthetic",
       "data_seed": 0,
       "dtype": "float32",
       "expected_site_counts": {
@@ -57,6 +60,7 @@
       "unit_name": "tokens",
       "units_per_step": 32,
       "use_cache": false,
+      "weights": "random",
       "workload": "llama3_next_token",
       "workload_hash": "fc7f97b13080cc60",
       "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
@@ -106,7 +110,7 @@
    },
    "seed": 0
   },
-  "identity_hash": "052a68e4a14ba839906bdc59de8fafe3f741d0a224d0833c183b55aa1453a80f",
+  "identity_hash": "da9ce89cd3d24b8a9a95a94cbed45be16b2745c87504f17e508fe4f9e3658fe4",
   "objectives": [
    4.911254405975342,
    4.904953479766846,
@@ -887,14 +891,17 @@
       "attn_implementation": "sdpa",
       "batch_size": 1,
       "calibration_path": null,
+      "data": "synthetic",
       "data_seed": 0,
       "device": "cpu",
       "dtype": "float32",
       "model": "llama_3_2_1b",
       "seed": 0,
-      "seq_len": 32
+      "seq_len": 32,
+      "weights": "random"
      },
      "config_hash": "65d9eb5b4c106423",
+     "data": "synthetic",
      "data_seed": 0,
      "dtype": "float32",
      "expected_site_counts": {
@@ -914,6 +921,7 @@
      "unit_name": "tokens",
      "units_per_step": 32,
      "use_cache": false,
+     "weights": "random",
      "workload": "llama3_next_token",
      "workload_hash": "fc7f97b13080cc60",
      "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"

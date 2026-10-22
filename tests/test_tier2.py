@@ -106,29 +106,33 @@ class TestDeclaredOperators(unittest.TestCase):
 
 class TestProviderComposition(unittest.TestCase):
     def test_the_default_set_is_the_four_the_paper_compares(self):
-        specs = default_provider_specs(candidate_module=object(), baseline="liger")
+        specs = default_provider_specs(candidate_module=object(), baseline="cublas_pair")
         self.assertEqual(
             [(s.name, s.kind) for s in specs],
             [
                 ("eager", "eager"),
                 ("torch_compile", "compile"),
-                ("liger", "baseline_pair"),
+                ("cublas_pair", "baseline_pair"),
                 ("candidate", "candidate_pair"),
             ],
         )
 
     def test_without_a_candidate_the_set_is_the_reference_line(self):
-        specs = default_provider_specs(baseline="liger")
+        specs = default_provider_specs(baseline="cublas_pair")
         self.assertNotIn("candidate", [s.name for s in specs])
+
+    def test_no_pair_baseline_by_default(self):
+        specs = default_provider_specs(candidate_module=object())
+        self.assertEqual([s.name for s in specs], ["eager", "torch_compile", "candidate"])
 
     def test_compile_can_be_dropped(self):
         specs = default_provider_specs(compile_baseline=False, baseline=None)
         self.assertEqual([s.name for s in specs], ["eager"])
 
-    def test_a_declared_baseline_other_than_liger_is_reachable(self):
-        specs = default_provider_specs(baseline="cublas_pair")
+    def test_any_declared_baseline_is_reachable(self):
+        specs = default_provider_specs(baseline="fla")
         self.assertIn(
-            ProviderSpec(name="cublas_pair", kind="baseline_pair", baseline="cublas_pair"),
+            ProviderSpec(name="fla", kind="baseline_pair", baseline="fla"),
             specs,
         )
 

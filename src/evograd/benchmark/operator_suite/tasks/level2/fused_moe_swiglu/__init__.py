@@ -1,4 +1,4 @@
-"""Operator declaration: Liger fused MoE grouped-GEMM + SwiGLU."""
+"""Operator declaration: fused MoE grouped-GEMM + SwiGLU (Liger's benchmark grid)."""
 
 from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
 
@@ -16,7 +16,6 @@ _PROVENANCE = Provenance(
         "experts, top-2) with hidden/intermediate scaled down to fit one GPU"
     ),
 )
-from evograd.benchmark.operator_suite.tasks.level2.fused_moe_swiglu.liger import measure_liger_baseline
 
 
 _DIMS = ("T", "H", "E", "G", "I", "K")
@@ -132,8 +131,7 @@ op = declare_op(
     ),
     coverage=_benchmark_workloads(),
     benchmark=_benchmark_workloads(),
-    benchmark_suites={"liger_moe_bf16": _benchmark_workloads()},
-    performance_baselines={"liger": measure_liger_baseline},
+    benchmark_suites={"moe_bf16": _benchmark_workloads()},
     memory_inputs=("x", "gate_up_proj", "down_proj", "top_k_weights"),
     tolerances={"bfloat16": (3e-1, 1e-1)},
     tolerance_multipliers={

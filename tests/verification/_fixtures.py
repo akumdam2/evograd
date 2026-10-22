@@ -1,4 +1,4 @@
-"""Small CPU declarations, candidates, blocks and models for the verification tests.
+"""Small CPU declarations, candidates and models for the verification tests.
 
 Everything here is synthetic and deterministic. Declarations point their
 ``forward`` at functions in this module, so ``tests`` must be importable
@@ -293,7 +293,7 @@ def _init(generator, *shape, scale=0.3):
     return nn.Parameter(torch.randn(*shape, generator=generator) * scale)
 
 
-class ToyBlock(nn.Module):
+class ToyModel(nn.Module):
     """Two residual layers; returns ``(y, aux, tag)`` -- ``tag`` is exact metadata."""
 
     def __init__(self, sites: Mapping[str, Any], width: int = 16, layers: int = 2,
@@ -317,24 +317,24 @@ class ToyBlock(nn.Module):
         return x, x.pow(2).mean(-1), torch.tensor(tag)
 
 
-def block_invocation(sample: Sample, device: str) -> Invocation:
+def toy_invocation(sample: Sample, device: str) -> Invocation:
     g = torch.Generator().manual_seed(int(sample.seed))
     x = torch.randn(3, 5, 16, generator=g).to(device)
     return Invocation(args=(x,), kwargs={"tag": 7}, differentiable_inputs={"x": "args[0]"})
 
 
-def block_outputs(result, invocation, sample):
+def toy_outputs(result, invocation, sample):
     return {"y": result[0], "aux": result[1], "tag": result[2]}
 
 
 def toy_module_scope(*, device="cpu", factory=None, calls=None):
-    """The toy network at model scope (Gate 2 has no block scope)."""
+    """The toy network at model scope."""
     from evograd.verification.gate2.adapters.module import ModuleScope
 
     return ModuleScope(
-        scope="model", name="toy_block",
-        factory=factory or (lambda sites: ToyBlock(sites)), native_sites=dict(NATIVE_SITES),
-        make_invocation=block_invocation, select_outputs=block_outputs,
+        scope="model", name="toy_model",
+        factory=factory or (lambda sites: ToyModel(sites)), native_sites=dict(NATIVE_SITES),
+        make_invocation=toy_invocation, select_outputs=toy_outputs,
         output_names=("y", "aux", "tag"), metadata_outputs=("tag",),
         calls_per_execution=calls or {"norm": 2, "mix": 2},
         config={"width": 16, "layers": 2, "batch": [3, 5]}, device=device)

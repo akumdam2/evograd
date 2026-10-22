@@ -65,7 +65,6 @@ from evograd.evaluation.tier3.patch import (  # noqa: F401  (re-export)
 from evograd.evaluation.tier3.report import (  # noqa: F401  (re-export)
     MODEL_LEVEL,
     SCOPE_MODEL,
-    TIER3_MODEL_PROTOCOL_V2,
     ProviderRow,
     Tier3Identity,
     UnknownTier3Report,
@@ -102,7 +101,6 @@ __all__ = [
     "EXECUTION_SCOPE_MODEL",
     "MODEL_LEVEL",
     "SCOPE_MODEL",
-    "TIER3_MODEL_PROTOCOL_V2",
     "ProviderRow",
     "Tier3Identity",
     "UnknownTier3Report",

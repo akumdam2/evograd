@@ -6,9 +6,7 @@ at Qwen3.5's widths, under this model's own key, cases and provenance.
 """
 
 from evograd.opdecl import Active, Workload, declare_op
-from evograd.ops._common import make_pair_baseline
 
-from .. import library
 from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
 
 #: Calibrated: see the calibrated-tolerances block below.
@@ -129,8 +127,5 @@ op = declare_op(
     tolerances=CALIBRATED_TOLERANCES,
     tolerance_multipliers=CALIBRATED_MULTIPLIERS,
     tolerance_hook=CALIBRATED_HOOK,
-    performance_baselines={"liger": make_pair_baseline(
-        library.liger_swiglu_mlp, ("x", "gate_weight", "up_weight", "down_weight"),
-        ("gate_weight", "up_weight", "down_weight"))},
     make_inputs=make_swiglu_mlp_inputs,
 )

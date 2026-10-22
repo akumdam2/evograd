@@ -76,6 +76,8 @@ class TestRegistration(unittest.TestCase):
         self.assertEqual(
             adapter.options,
             frozenset({"structural_identity", "layers", "data_seed", "calibration",
+                       # the pinned checkpoint on WikiText-2: its own workload identity
+                       "real_text",
                        # generic providers built by tier3.providers; declaring
                        # them is how a workload says it offers them
                        "compile_site", "patch_set",

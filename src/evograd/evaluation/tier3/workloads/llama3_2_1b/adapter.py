@@ -54,6 +54,13 @@ def build(args) -> Any:
     # all, rather than having to overwrite the canonical file.
     if getattr(args, "calibration", None) is not None:
         config["calibration_path"] = str(args.calibration)
+    # Real text is a different workload identity: the pinned checkpoint on
+    # WikiText-2, so it needs a calibration measured on that identity.
+    if getattr(args, "real_text", False):
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
+            PRETRAINED, REAL_TEXT)
+
+        config["weights"], config["data"] = PRETRAINED, REAL_TEXT
     return Llama3Workload.from_config(config)
 
 
@@ -90,7 +97,7 @@ ADAPTER = Tier3Adapter(
     build=build,
     providers=providers,
     options=frozenset({"structural_identity", "layers", "data_seed", "calibration",
-                       "compile_site", "patch_set", "whole_model_compile"}),
+                       "real_text", "compile_site", "patch_set", "whole_model_compile"}),
     summary=(
         "Llama-3.2-1B, 16 layers, the canonical training step "
         "(~9 GiB of weights, grads and AdamW moments; fits at full depth)"

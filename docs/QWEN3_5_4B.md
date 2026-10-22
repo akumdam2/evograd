@@ -4,7 +4,7 @@ The text model of Qwen3.5-4B at every level: the whole training step (L3) at
 B1 x T2048 on one GH200, seven composite sites (L2) and ten bound primitives
 (L1). Layer 14 (Gated DeltaNet) and layer 15 (gated full attention), captured
 or config-derived, are where the L2 sites take their real invocations from;
-they are not a level (the block level was removed on 2026-10-13).
+they are not a level.
 The package README (`src/evograd/benchmark/topdown/qwen3_5_4b/README.md`)
 describes the cases; this page says how to run them and what is deferred.
 
@@ -21,7 +21,7 @@ host memory.
 | model | text only (`Qwen3_5ForCausalLM`); no ViT, MTP, decode/KV cache, padding, FP8 |
 | hardware | the timed workload is one GH200: no offload, no multi-GPU |
 | shape | canonical **B1 x T2048** (B2 does not fit eagerly; B1 is the per-GPU workload of 2-GPU DDP at global batch 2) |
-| baselines | recorded, no bar is chosen (eager, site and whole-model compile, Liger / FLA) |
+| baselines | recorded, no bar is chosen (eager, site and whole-model compile, FLA) |
 | tolerances | every L2 task and every primitive this model adds is calibrated on Qwen3.5 populations (below) |
 | L3 gate | no whole-model gate yet: provider rows say `evaluation_complete: false` and why |
 
@@ -34,8 +34,8 @@ host memory.
 | 14 | `gdn_norm_out` | `qwen3_5_gdn_norm_out` | `fla` (`FusedRMSNormGated` + out_proj, sidecar) |
 | 15 | `qkv_norm_partial_rope` | `qwen3_5_qkv_norm_partial_rope` | none |
 | 15 | `gated_attention` | `qwen3_5_gated_attention` | none |
-| both | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | `liger` (`LigerFusedAddRMSNorm`, offset 1, gemma) |
-| both | `swiglu_mlp` | `qwen3_5_swiglu_mlp` | `liger` (Liger's SiLU-mul between the model's GEMMs) |
+| both | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | none |
+| both | `swiglu_mlp` | `qwen3_5_swiglu_mlp` | none |
 
 FLA lives outside the environment (`~/.cache/evograd-fla/0.5.2`, never on
 `PYTHONPATH`); only a baseline's own child imports it, after `modeling_qwen3_5`
@@ -145,7 +145,7 @@ a bfloat16 base atol set by the outputs, per-dtype multipliers at 1.5x the grid
 need, and `ReductionScaledAtol` gains that carry them to the model's size.
 Nothing flagged, no noise-floor violations; worst real-size over-grant 9.3x at
 L2 and 3.0x at L1. With these tolerances every T2 provider -- eager,
-torch.compile, FLA, Liger -- passes at the observed case
+torch.compile, FLA (and Liger, since retired) -- passes at the observed case
 (`results/experiments/qwen3_5_4b_cases/20261011_step2/t2/`), where the
 provisional ones refused eager on five tasks.
 

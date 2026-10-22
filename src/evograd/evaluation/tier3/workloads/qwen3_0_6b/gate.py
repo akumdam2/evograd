@@ -55,7 +55,7 @@ STAGES = (
 )
 
 #: Where the calibration lives. Tracked as a result, not as code.
-DEFAULT_ARTIFACT = Path("results/qwen3-level4/t3-numerics-calibration.json")
+DEFAULT_ARTIFACT = Path("results/qwen3-level3/t3-numerics-calibration.json")
 
 
 class CalibrationUnavailable(RuntimeError):

@@ -222,7 +222,7 @@ class TestWorkloadProtocol(unittest.TestCase):
 
 
 class TestLibraryProviders(unittest.TestCase):
-    """FLA and Liger as tier-3 providers at Qwen3.5's whole-model sites."""
+    """FLA as a tier-3 provider at Qwen3.5's whole-model sites."""
 
     def test_baseline_providers_cover_their_sites(self):
         from evograd.evaluation.tier3.cli import _baseline_kernels
@@ -232,22 +232,19 @@ class TestLibraryProviders(unittest.TestCase):
         kernels, covered = _baseline_kernels("fla", TASKS, registry)
         self.assertEqual(sorted(covered), ["gated_delta_rule", "gdn_norm_out"])
         self.assertEqual(kernel_sidecars(kernels), ("fla",))
-        kernels, covered = _baseline_kernels("liger", TASKS, registry)
-        self.assertEqual(sorted(covered), ["residual_rmsnorm", "swiglu_mlp"])
-        self.assertEqual(kernel_sidecars(kernels), ())
 
     def test_a_patch_set_names_any_declared_library(self):
         from evograd.evaluation.tier3.providers import kernels_from_patches
         from evograd.opdecl.baselines import kernel_sidecars
 
         registry = sites.qwen3_5_sites()
-        kernels = kernels_from_patches({"gated_delta_rule": "fla", "residual_rmsnorm": "liger"},
+        kernels = kernels_from_patches({"gated_delta_rule": "fla", "gdn_norm_out": "fla"},
                                        registry)
         self.assertEqual(sorted(src.origin for src in kernels.sources),
-                         ["baseline:fla", "baseline:liger"])
+                         ["baseline:fla", "baseline:fla"])
         self.assertEqual(kernel_sidecars(kernels), ("fla",))
         with self.assertRaises(ValueError):
-            kernels_from_patches({"gdn_in_proj": "liger"}, registry)
+            kernels_from_patches({"gdn_in_proj": "fla"}, registry)
 
 
 if __name__ == "__main__":

@@ -342,7 +342,7 @@ def from_tier2_report(
     Tier 2 measures three or four providers at once, where tiers 1 and 3 measure
     two. A suite row still compares exactly two, so the pairing is chosen here:
     ``from_tier2_report(..., candidate="candidate", baseline="eager")`` and
-    ``baseline="liger"`` read the same measurement two ways, at no extra GPU
+    ``baseline="cublas_pair"`` read the same measurement two ways, at no extra GPU
     cost. Both names are required rather than inferred — guessing which provider
     is the reference is how a report ends up quoting the wrong one plausibly.
 

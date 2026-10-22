@@ -43,7 +43,7 @@ from .protocol4 import (
     load_policy,
     step_distances,
 )
-# The provider routes (compile | liger | a program path) are the shared
+# The provider routes (compile | a declared baseline | a program path) are the shared
 # tier-3 ones; only the PatchSet-shaped trusted provider is this policy's own.
 from evograd.evaluation.tier3.providers import kernels_from_patches, parse_patch_specs
 
@@ -88,7 +88,7 @@ def sites_of(args) -> tuple[str, ...]:
 
 
 def patches_of(args) -> dict[str, str]:
-    """The candidate provider's ``{site: compile|liger|PATH}``; legacy --candidate = QKV path."""
+    """The candidate provider's ``{site: compile|BASELINE|PATH}``; legacy --candidate = QKV path."""
     patches = parse_patch_specs(getattr(args, "patch", None) or ())
     if not patches and getattr(args, "candidate", None):
         patches = {sites_of(args)[0]: args.candidate}
@@ -554,7 +554,7 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--candidate", default=None)
         p.add_argument("--sites", default=",".join(DEFAULT_SITES),
                        help="comma-separated patch set the compile reference and the candidate cover")
-        p.add_argument("--patch", action="append", default=[], metavar="SITE=compile|liger|PATH",
+        p.add_argument("--patch", action="append", default=[], metavar="SITE=compile|BASELINE|PATH",
                        help="the candidate provider's route per site (repeatable)")
         p.add_argument("--screening", action="store_true",
                        help="A/B/C only: no training runs; the policy carries SCREENING_PLAN")

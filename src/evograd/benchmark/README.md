@@ -13,9 +13,8 @@ execution and correctness checks belong to
 | L2 | composite | A boundary composed from multiple adjacent primitives |
 | L3 | whole-model workload | A complete model-training workload |
 
-The architectural-block level was removed on 2026-10-13. The decoder layer a
-model's L2 sites take their real invocations from is a data source
-(`topdown/<model>/layer`), not a level.
+The decoder layer a model's L2 sites take their real invocations from is a
+data source (`topdown/<model>/layer`), not a level.
 
 A Level is the integration scope of an optimization, not the strength of a
 measurement. An L2 task may be evaluated in T1, T2, or T3; Level and Tier are
@@ -82,7 +81,7 @@ to run and evaluation to run it, which is composition rather than definition,
 so it lives at the root in `evograd.suite_cli`. Nothing under `benchmark`
 imports `evaluation`, and the dependency-direction test carries no exemption.
 
-Reviewed pair baselines (`liger.py`, `cublas.py`, `triton_tutorial.py`) stay
+Reviewed pair baselines (`cublas.py`, `megafold_pair.py`, `triton_tutorial.py`) stay
 beside the task or primitive whose contract they implement. That is deliberate:
 an adapter is an implementation of one declaration, discovered through the
 declaration that names it, not a case collection.
@@ -106,8 +105,7 @@ kernels patched into their sites. They are `WorkloadDecl`s, never `OpDecl`s.
 
 ## Two benchmark families
 
-- The operator suite selects tasks from the existing Liger-derived and other
-  declared operators, then aggregates coverage, full-step speedup, and retained
+- The operator suite selects tasks from the declared operators, then aggregates coverage, full-step speedup, and retained
   state by family and Level.
 - The top-down benchmark starts from a real L3 workload and traces through a
   harvest and frozen snapshot to L2/L1.

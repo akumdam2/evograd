@@ -235,20 +235,20 @@ class TestModuleScope(unittest.TestCase):
         self.assertEqual(failing(misrouted), ["grad:norm_w.0", "grad:norm_w.1"])
 
     def test_insufficient_coverage(self):
-        broken = F.toy_module_scope(factory=lambda sites: F.ToyBlock(sites, skip_last_norm=True))
+        broken = F.toy_module_scope(factory=lambda sites: F.ToyModel(sites, skip_last_norm=True))
         report = self.verify(lambda x, w: F.norm_site(x, w), scope=broken)
         self.assertEqual(report.status, FAILED)
         self.assertIn("coverage_mismatch", codes(report))
 
     def test_no_optimizer_step_and_untouched_initial_state(self):
-        fresh = F.ToyBlock(F.NATIVE_SITES)
+        fresh = F.ToyModel(F.NATIVE_SITES)
         before = module_state_digest(fresh)
         torch.manual_seed(5)
         rng = torch.get_rng_state()
         report = self.verify(lambda x, w: F.norm_site(x, w))
         self.assertEqual(report.status, PASSED)
         self.assertTrue(torch.equal(torch.get_rng_state(), rng))
-        self.assertEqual(module_state_digest(F.ToyBlock(F.NATIVE_SITES)), before)
+        self.assertEqual(module_state_digest(F.ToyModel(F.NATIVE_SITES)), before)
         self.assertEqual(report.cases[0].evidence["candidate"]["state_changed"], [])
 
     def test_report_first_keeps_the_failure(self):

@@ -15,6 +15,13 @@ with no weight or tokenizer download -- Llama-3 is a gated repository and this
 needs no Hub token. It is not re-specified here; it is ``spec.CANONICAL``, and
 ``build_model``/``make_inputs`` are the same functions level 3 uses.
 
+**Real text** is a second identity, selected by ``weights=PRETRAINED,
+data=REAL_TEXT`` (``--real-text`` on the CLIs): the pinned Llama-3.2-1B
+checkpoint, trained on WikiText-2 raw tokenised by its own tokenizer and packed
+exactly as Qwen3's is (:mod:`..qwen3_0_6b.textdata`). Both are read from the
+local cache only. Its workload id carries ``.pretrained.realtext``, so no
+synthetic calibration can bind to it.
+
 One thing is new relative to the spec: a **data seed** separate from the
 workload's own. The tier needs a fresh batch per loss-trajectory step, and
 drawing those from the workload seed would change the canonical identity. So the
@@ -34,6 +41,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -116,9 +124,9 @@ class Llama3Workload:
     arch_overrides: dict[str, Any] = field(default_factory=dict)
     #: Where the numerics calibration lives. ``None`` uses the default path.
     calibration_path: str | None = None
-    #: ``"random"`` or ``"pretrained:<repo>@<revision>"`` (see the spec).
+    #: ``"random"``/``"synthetic"`` is the canonical workload; ``PRETRAINED`` and
+    #: ``REAL_TEXT`` together are the real-text one. See ``spec.WorkloadSpec``.
     weights: str = "random"
-    #: ``"synthetic"`` or ``"wikitext-2-raw:<revision>"`` (see the spec).
     data: str = "synthetic"
 
     unit_name = "tokens"
@@ -146,9 +154,8 @@ class Llama3Workload:
             "data_seed": self.data_seed,
             "arch_overrides": dict(self.arch_overrides),
             "calibration_path": self.calibration_path,
-            # Only when non-default, so the canonical configuration is unchanged.
-            **({"weights": self.weights} if self.weights != "random" else {}),
-            **({"data": self.data} if self.data != "synthetic" else {}),
+            "weights": self.weights,
+            "data": self.data,
         }
 
     @classmethod
@@ -212,23 +219,24 @@ class Llama3Workload:
 
         The tier passes a per-step seed; it is combined with this workload's
         ``data_seed`` so a run can move the token stream without changing the
-        workload's own identity or its weights. On real text, the first
-        training batch of data order ``data_seed + seed`` (as for Qwen3-0.6B).
+        workload's own identity or its weights. On real text the batch is the
+        *first training batch* of that data order -- the batch step 1 of a
+        training run would see -- so the single-step gates and the training run
+        look at the same tokens.
         """
         if self.spec.real_text:
             return self.train_batches(self.data_seed + seed).batch(0)
         spec = self.spec.replace(seed=self.data_seed + seed)
         return make_inputs(spec)
 
-    # ── real text (Qwen3-0.6B's WikiText-2 packing, this model's tokenizer) ──
+    # ── real text ─────────────────────────────────────────────────────────
 
-    def _text(self):
-        """Tokenizer and packed splits, built once per workload instance."""
+    def _text(self) -> dict[str, Any]:
+        """Tokenizer and packed WikiText splits, built once per workload instance."""
         if not self.spec.real_text:
             raise ValueError(f"{self.spec.workload_id} has synthetic data")
-        if getattr(self, "_text_cache", None) is None:
-            import os
-
+        cached = getattr(self, "_text_cache", None)
+        if cached is None:
             from transformers import AutoTokenizer
 
             from evograd.benchmark.topdown.common.data_paths import hf_cache_dir
@@ -237,37 +245,47 @@ class Llama3Workload:
             )
             from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
 
-            if not self.spec.pretrained:
-                raise ValueError("real text needs the pinned checkpoint's tokenizer")
+            if self.spec.data != f"wikitext-2-raw:{textdata.DATASET_REVISION}":
+                raise ValueError(
+                    f"{self.spec.data!r} is not the WikiText revision the shared "
+                    f"loader reads ({textdata.DATASET_REVISION})")
             snapshot = pretrained_snapshot(self.spec)
-            tokenizer = AutoTokenizer.from_pretrained(snapshot)
+            tokenizer = AutoTokenizer.from_pretrained(snapshot, local_files_only=True)
             cache_dir = hf_cache_dir(MODEL_KEY)
             train = textdata.pack_split("train", tokenizer, block_len=self.seq_len,
                                         cache_dir=cache_dir)
-            validation = textdata.pack_split("validation", tokenizer, block_len=self.seq_len,
-                                             cache_dir=cache_dir)
+            validation = textdata.pack_split("validation", tokenizer,
+                                             block_len=self.seq_len, cache_dir=cache_dir)
             identity = textdata.data_identity(
                 train, validation, block_len=self.seq_len,
-                tokenizer_sha256=textdata.file_sha256(os.path.join(snapshot, "tokenizer.json")))
-            self._text_cache = {"tokenizer": tokenizer, "train": train, "validation": validation,
-                                "identity": identity, "snapshot": snapshot}
-        return self._text_cache
+                tokenizer_sha256=textdata.file_sha256(str(Path(snapshot) / "tokenizer.json")))
+            cached = {"tokenizer": tokenizer, "train": train, "validation": validation,
+                      "identity": identity, "snapshot": snapshot}
+            self._text_cache = cached
+        return cached
 
     def train_batches(self, seed: int):
+        """The training split in the block order data seed ``seed`` fixes."""
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
 
         return textdata.TextBatches(self._text()["train"], batch_size=self.batch_size,
                                     seed=seed, device=self.device)
 
     def validation_batches(self):
-        """The held-out set in one fixed order -- the same for every provider."""
+        """The held-out split in one fixed order -- the same for every provider."""
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
 
         return textdata.TextBatches(self._text()["validation"], batch_size=self.batch_size,
                                     seed=0, device=self.device)
 
     def data_identity(self) -> dict[str, Any]:
+        """Dataset revision, parquet and tokenizer hashes, packing rule, block counts."""
         return dict(self._text()["identity"])
+
+    def data_identity_digest(self) -> str:
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+        return textdata.identity_digest(self.data_identity())
 
     def eager_evaluator(self):
         """A fresh unpatched model: the trusted evaluator for validation NLL.
@@ -288,7 +306,7 @@ class Llama3Workload:
         return model(input_ids=input_ids, labels=labels, use_cache=False).loss
 
     def describe(self) -> dict[str, Any]:
-        return {
+        report = {
             "workload": "llama3_next_token",
             "name": self.name,
             "workload_id": self.spec.workload_id,
@@ -313,7 +331,12 @@ class Llama3Workload:
             "expected_site_counts": expected_counts(
                 self.spec.arch["num_hidden_layers"]
             ),
+            "weights": self.spec.weights,
+            "data": self.spec.data,
         }
+        if self.spec.real_text:
+            report["data_identity"] = self.data_identity()
+        return report
 
     # ── what a report should be able to state ────────────────────────────
 
@@ -325,9 +348,14 @@ class Llama3Workload:
         data would otherwise look identical in the report.
         """
         if self.spec.real_text:
-            ids = self.batch_for(seed=seed)[0].cpu()
+            from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
+
+            ids, _labels = textdata.TextBatches(
+                self._text()["train"], batch_size=self.batch_size,
+                seed=self.data_seed + seed, device="cpu").batch(0)
         else:
-            ids, _labels = make_inputs(self.spec.replace(seed=self.data_seed + seed, device="cpu"))
+            spec = self.spec.replace(seed=self.data_seed + seed, device="cpu")
+            ids, _labels = make_inputs(spec)
         digest = hashlib.sha256(ids.numpy().tobytes()).hexdigest()
         return f"{digest[:16]}:{tuple(ids.shape)}"
 

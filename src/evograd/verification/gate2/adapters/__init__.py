@@ -5,7 +5,6 @@
     module.py    ModuleScope -- any model built from named sites (model scope)
     model.py     model_scope(...) (generic, loss-seeded), WorkloadModelScope (next-token LM
                  bridge), ObjectiveModelScope (a workload's own loss and primary output)
-    block.py     deprecated shim: Gate 2 has no block scope
 
 Model packages are imported inside the methods that need them.
 """

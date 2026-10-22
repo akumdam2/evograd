@@ -1,7 +1,7 @@
 """Measure the canonical Llama-3 model's own numerical noise, then bound it.
 
     PYTHONPATH=src python -m evograd.evaluation.tier3.workloads.llama3_2_1b.calibrate run \
-        --report results/llama3-level4/t3-numerics-calibration.json
+        --report results/llama3-level3/t3-numerics-calibration.json
 
 Three comparisons, on the canonical workload, in isolated child processes --
 which is how tier-3 providers run, so the calibration is measured under the
@@ -437,6 +437,11 @@ def summarize_comparison(cells, comparison: str) -> dict[str, Any]:
 
 def _workload(args) -> Llama3Workload:
     config: dict[str, Any] = {"device": args.device, "dtype": args.dtype}
+    if args.real_text:
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import (
+            PRETRAINED, REAL_TEXT)
+
+        config.update(weights=PRETRAINED, data=REAL_TEXT)
     if args.layers is not None:
         config["arch_overrides"] = {"num_hidden_layers": args.layers}
     if args.tokens is not None:
@@ -457,6 +462,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="exploratory reduced-layer pass; thresholds must "
                              "come from the full canonical workload")
     parser.add_argument("--tokens", type=int, default=None)
+    parser.add_argument("--real-text", action="store_true",
+                        help="calibrate the real-text identity: the pinned checkpoint "
+                             "on WikiText-2 raw. Its policy binds only to that identity")
     parser.add_argument("--repeats", type=int, default=REPEATS)
     parser.add_argument("--seeds", default=None,
                         help="comma-separated override for the calibration seeds")
@@ -501,6 +509,8 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     child = ["cell", "--seed", str(seed), "--repeat", str(repeat),
                              "--device", args.device, "--dtype", args.dtype]
+                    if args.real_text:
+                        child.append("--real-text")
                     if want_curves:
                         child.append("--trajectories")
                     if args.layers is not None:

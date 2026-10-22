@@ -73,7 +73,7 @@ def _evolve(argv: list[str]) -> int:
         default="auto",
         help=(
             "auto, pytorch_autograd (eager), torch_compile, "
-            "torch_compile_max_autotune, or a declaration baseline such as liger"
+            "torch_compile_max_autotune, or a declaration baseline such as cublas_pair"
         ),
     )
     parser.add_argument(

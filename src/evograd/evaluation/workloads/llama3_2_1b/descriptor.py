@@ -9,7 +9,7 @@ from evograd.evaluation.workloads.common import EvalWorkload
 WORKLOAD = EvalWorkload(
     name="llama_3_2_1b",
     topdown_package="evograd.benchmark.topdown.llama3_2_1b",
-    results_dir=Path("results/llama3-level4"),
+    results_dir=Path("results/llama3-level3"),
     schema_prefix="evograd-llama3",
     # Mid-stack of 32, as Qwen3 uses 14 of 28.
     representative_layer=8,

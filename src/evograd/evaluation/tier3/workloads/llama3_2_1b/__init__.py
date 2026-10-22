@@ -49,11 +49,13 @@ objection therefore does *not* apply here unchanged, and adopting it is an open
 decision rather than a settled one. It needs no harvest and no pretrained
 weights.
 
-The four-part real-text protocol (``protocol4.py``, ``prediction.py``,
-``training.py``, ``textdata.py``) needs a pinned pretrained checkpoint and
-tokenizer. The Llama repositories are gated, so adopting it would forfeit
-the "no Hub token" property this workload is built around. A design decision,
-not a port.
+**Real text** is a separate workload identity (``--real-text`` on the tier-3
+CLI, ``calibrate``, ``controls`` and ``scripts/llama_training_study.py``): the
+pinned Llama-3.2-1B checkpoint on WikiText-2 raw, packed by Qwen3's
+``textdata``. The canonical synthetic workload keeps its "no Hub token"
+property; only the one-time download of the gated checkpoint needs one. It runs
+through Llama's own calibrated whole-model gate. Qwen3's four-part protocol
+(``protocol4.py``, ``prediction.py``) and its holdout verdicts are not ported.
 
 **State.** Everything in this package is written and importable. What none of it
 can do yet is *run against a calibrated gate*, because a calibration is measured

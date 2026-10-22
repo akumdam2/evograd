@@ -8,7 +8,7 @@ unmeasured.
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
 from evograd.opdecl.models import LLAMA_3_8B, MODELS
-from evograd.ops._common import is_head_major_view, make_pair_baseline
+from evograd.ops._common import is_head_major_view
 
 _DIMS = ("B", "n_heads", "T", "head_dim")
 
@@ -65,12 +65,6 @@ def make_rope_inputs(torch, op, workload, device="cuda"):
     # The rotated output carries the input's layout, so its gradient does too.
     dy = draw()
     return {"x": x, "cos": cos, "sin": sin, "dy": dy}
-
-
-def _liger_factory():
-    from evograd.ops.level1.rope.liger import make_liger_rope_autograd_pair_fns
-
-    return make_liger_rope_autograd_pair_fns()
 
 
 #: Both tensors one Qwen3-0.6B layer rotates: 16 query heads and 8 key heads,
@@ -138,15 +132,12 @@ op = declare_op(
         "the point."
     ),
     correctness=_CORRECTNESS,
-    performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("x", "cos", "sin"))
-    },
     # Verified against the new `runtime_forward` rather than re-derived.
     # `level1 calibrate --op rope` measures the oracle-vs-Transformers
     # disagreement at worst 6.0e-03 (bfloat16, the observed 16-head case),
     # 6.5e-04 (float16) and exactly 0.0 (float32) -- 13x, 77x and unbounded
     # margins against the pair below. They are left alone because the same pair
-    # gates the reviewed Liger rope baseline and the historical Llama grid;
+    # gates the historical Llama grid;
     # tightening them is a separate change with its own blast radius.
     tolerances={
         "float32": (2e-5, 2e-5),

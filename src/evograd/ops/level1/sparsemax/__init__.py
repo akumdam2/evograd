@@ -1,7 +1,7 @@
 """Operator declaration: sparsemax."""
 
 from evograd.opdecl import Active, declare_op
-from evograd.ops._common import dtype_for, make_pair_baseline, workloads_2d
+from evograd.ops._common import dtype_for, workloads_2d
 
 _TOLERANCES = {"float32": (2e-5, 2e-5)}
 
@@ -14,12 +14,6 @@ def _inputs(torch, op, workload, device="cuda"):
         "x": torch.randn((rows, cols), device=device, dtype=dtype),
         "dout": torch.randn((rows, cols), device=device, dtype=dtype),
     }
-
-
-def _liger_factory():
-    from evograd.ops.level1.sparsemax.liger import make_liger_sparsemax_autograd_pair_fns
-
-    return make_liger_sparsemax_autograd_pair_fns()
 
 
 op = declare_op(
@@ -42,6 +36,5 @@ op = declare_op(
         tolerances=_TOLERANCES,
     ),
     tolerances=_TOLERANCES,
-    performance_baselines={"liger": make_pair_baseline(_liger_factory, ("x",))},
     make_inputs=_inputs,
 )

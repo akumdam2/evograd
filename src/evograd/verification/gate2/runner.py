@@ -22,7 +22,6 @@ happen to overlap):
   other context, cotangents, initial weights, module mode, seed) must match the
   calibrated sample's fingerprint.
 
-There is no block scope.
 
 **Comparison, every result.** :func:`judge` settles structure, presence and
 finiteness, then computes ``E2`` and ``Emax`` in float64 and holds them to the

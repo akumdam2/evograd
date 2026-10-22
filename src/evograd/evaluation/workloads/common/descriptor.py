@@ -34,7 +34,7 @@ class EvalWorkload:
     #: Dotted path of the benchmark package that owns this model's cases.
     topdown_package: str
     #: Where this model's run artifacts and reports live, e.g.
-    #: ``results/llama3-level4``. A local directory, never tracked.
+    #: ``results/llama3-level3``. A local directory, never tracked.
     results_dir: Path
     #: Report schema prefix, e.g. ``"evograd-llama3"``. Each report appends its
     #: own suffix, so a Llama report cannot be mistaken for another model's.
@@ -110,7 +110,7 @@ class EvalWorkload:
 
     @property
     def artifact_path(self) -> Path | None:
-        """Default layer capture, e.g. ``results/llama3-level4/layer8.pt``;
+        """Default layer capture, e.g. ``results/llama3-level3/layer8.pt``;
         ``None`` for a model that has no captured layer."""
         if self.representative_layer is None:
             return None

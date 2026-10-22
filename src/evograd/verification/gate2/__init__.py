@@ -2,7 +2,7 @@
 
 Two scopes: ``operator`` (generated inputs, disjoint calibration/validation
 samples) and ``model`` (fixed real samples, matched inputs: calibrated and
-judged on the same content, per-sample thresholds). There is no block scope.
+judged on the same content, per-sample thresholds).
 
     from evograd.verification import gate2
     from evograd.verification.gate2.adapters.operator import OperatorScope

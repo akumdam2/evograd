@@ -1,7 +1,7 @@
 """Harvest the canonical Qwen3 training step into a workload manifest.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
-        --out results/qwen3-level4/harvest.json
+        --out results/qwen3-level3/harvest.json
 
 This is the Level-3 smoke run with an observer attached. It reuses the same
 build, the same inputs, the same step and the same gradient validation -- the

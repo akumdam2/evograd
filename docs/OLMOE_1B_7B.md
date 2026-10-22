@@ -21,7 +21,7 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 | shape | canonical **B2 x T2048**, confirmed on a GH200 (run `20261016_gpu1`): 28.2 GiB for the L3 step, 64.5 GiB with AdamW at Tier 3 |
 | tolerances | **provisional** on every L2 site, and **too tight at the observed size**: in run `20261016_gpu1` every site's weight-gradient reductions over 4,096 tokens fail the 8e-2 bfloat16 gate by one bf16 unit at the reference magnitude while every forward output and activation gradient passes with headroom under 0.4. The calibration inventory and fit are the next step |
 | L3 gate | none yet: provider rows say `evaluation_complete: false` and why |
-| library lines | none for the experts site (liger-kernel 0.5.9 has no fused MoE); Liger's fused add+RMSNorm is a candidate for `residual_rmsnorm` once wired |
+| library lines | none |
 
 ## Sites and tasks
 
@@ -102,7 +102,5 @@ The write-up is `docs/experiments/olmoe_session_20261016.md`.
    tier-3 per-site and whole-model compile rows and the tier-2 timings the
    provisional gate currently refuses.
 2. The L3 whole-model gate; negative controls and faults.
-3. A fused-MoE library line (a liger-kernel upgrade) and Liger's fused
-   add+RMSNorm line for `residual_rmsnorm`.
-4. Pretrained `allenai/OLMoE-1B-7B-0924` weights and real text.
-5. Seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.
+3. Pretrained `allenai/OLMoE-1B-7B-0924` weights and real text.
+4. Seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.

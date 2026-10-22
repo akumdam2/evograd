@@ -9,7 +9,7 @@ from evograd.evaluation.workloads.common import EvalWorkload
 WORKLOAD = EvalWorkload(
     name="qwen3_0_6b",
     topdown_package="evograd.benchmark.topdown.qwen3_0_6b",
-    results_dir=Path("results/qwen3-level4"),
+    results_dir=Path("results/qwen3-level3"),
     schema_prefix="evograd-qwen3",
     # Mid-stack of 28.
     representative_layer=14,

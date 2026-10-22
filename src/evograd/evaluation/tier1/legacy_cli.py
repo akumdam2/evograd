@@ -40,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "auto, pytorch_autograd (eager), torch_compile, "
             "torch_compile_max_autotune, or a declaration-provided baseline such "
-            "as liger"
+            "as cublas_pair"
         ),
     )
     parser.add_argument(

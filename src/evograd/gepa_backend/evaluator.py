@@ -56,7 +56,7 @@ class ShapeBatchEvaluator:
         seed_path: str | Path,
         cache_dir: str | Path,
         op_name: str = "layernorm",
-        baseline: str = "liger",
+        baseline: str = "pytorch_autograd",
         warmup: int = 3,
         reps: int = 10,
         timeout: int = 850,

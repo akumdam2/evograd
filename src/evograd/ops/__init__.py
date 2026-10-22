@@ -22,7 +22,7 @@ frozen snapshot, an evaluation policy or the benchmark itself, why importing it
 in a fresh interpreter loads none of them, and why the executable task registry
 is :data:`evograd.benchmark.TASKS` rather than this one.
 
-Reviewed pair baselines (``liger.py``, ``cublas.py``) stay in the primitive
+Reviewed pair baselines (``cublas.py``, ``megafold_pair.py``) stay in the primitive
 package. An adapter implements *this* contract and is discovered through the
 declaration that names it, so co-locating it is the arrangement, not an
 oversight.

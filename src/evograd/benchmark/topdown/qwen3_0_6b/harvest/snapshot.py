@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--harvest",
         type=Path,
-        default=Path("results/qwen3-level4/harvest.json"),
+        default=Path("results/qwen3-level3/harvest.json"),
         help="the harvest manifest to derive from",
     )
     parser.add_argument("--layer", type=int, default=14)

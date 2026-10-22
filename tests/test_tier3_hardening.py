@@ -396,12 +396,12 @@ class TestFiniteLosses(unittest.TestCase):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestMeasurementIntegrity(unittest.TestCase):
     def test_provider_order_is_seeded_and_reproducible(self):
-        names = ["eager", "eager_through_bind", "liger", "candidate"]
+        names = ["eager", "eager_through_bind", "cublas_pair", "candidate"]
         self.assertEqual(provider_order(names, seed=7), provider_order(names, seed=7))
         self.assertCountEqual(provider_order(names, seed=7), names)
 
     def test_some_seed_reorders_the_providers(self):
-        names = ["eager", "eager_through_bind", "liger", "candidate"]
+        names = ["eager", "eager_through_bind", "cublas_pair", "candidate"]
         self.assertTrue(
             any(provider_order(names, seed=s) != names for s in range(8)),
             "the order is never shuffled; clock drift would be indistinguishable "

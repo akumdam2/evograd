@@ -9,16 +9,16 @@ implementation is good enough -- that is
 Derive and verify ``qwen3_qkv_norm_rope`` from the canonical Layer-14 artifact.
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope derive \
-        --source results/qwen3-level4/layer14.pt \
-        --metadata-out results/qwen3-level4/layer14-qkv.json
+        --source results/qwen3-level3/layer14.pt \
+        --metadata-out results/qwen3-level3/layer14-qkv.json
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope verify \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/layer14-qkv-verify.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/layer14-qkv-verify.json
 
     PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope calibrate \
-        --source results/qwen3-level4/layer14.pt \
-        --report results/qwen3-level4/qwen3_qkv_norm_rope-tolerance.json
+        --source results/qwen3-level3/layer14.pt \
+        --report results/qwen3-level3/qwen3_qkv_norm_rope-tolerance.json
 
 ``layer14.pt`` stays the only tensor artifact. This boundary's inputs and
 outputs already live inside it, so they are re-derived by replaying the layer

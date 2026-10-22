@@ -254,39 +254,5 @@ class TestQwenProvenance(unittest.TestCase):
         self.assertEqual(residual_module.declaration_problems(), [])
 
 
-class TestLigerProvider(unittest.TestCase):
-    """Liger's kernel already implements the corrected contract; the adapter
-    used to throw half of it away."""
-
-    def test_the_adapter_returns_both_outputs_and_consumes_dsummed(self):
-        import inspect
-
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm import liger
-        source = inspect.getsource(liger.make_liger_fused_add_rms_norm_autograd_pair_fns)
-        self.assertIn("return (output, summed)", source)
-        self.assertIn("dout, dsummed = output_grads", source)
-        self.assertIn("dsummed.contiguous()", source)
-        self.assertNotIn("torch.zeros_like", source)
-
-    def test_the_underlying_kernel_accepts_the_summed_gradient(self):
-        """Not an assumption: Liger's own signature has the slot, and its own
-        autograd Function takes two output gradients."""
-        try:
-            import liger_kernel.ops.fused_add_rms_norm as module
-        except Exception as exc:  # pragma: no cover - depends on the machine
-            self.skipTest(f"liger-kernel not importable: {exc}")
-        import inspect
-
-        backward = inspect.signature(module.fused_add_rms_norm_backward)
-        self.assertIn("dS_out", backward.parameters)
-        function_backward = inspect.signature(
-            module.LigerFusedAddRMSNormFunction.backward
-        )
-        self.assertIn("dS_out", function_backward.parameters)
-
-    def test_the_baseline_is_still_declared(self):
-        self.assertIn("liger", OP.performance_baselines)
-
-
 if __name__ == "__main__":
     unittest.main()

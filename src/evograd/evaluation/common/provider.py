@@ -10,7 +10,7 @@ compared is the kernel rather than the glue around it.
     forward(values)             -> (output, saved)
     backward(dout, saved, values) -> gradients per ``op.grad_names()``
 
-and nothing else. A candidate seed, a declared Liger pair, and eager PyTorch
+and nothing else. A candidate seed, a declared library pair, and eager PyTorch
 autograd all reduce to it, after which the protocol driving them cannot tell
 them apart — which is the property that makes the division fair.
 
@@ -124,10 +124,9 @@ def candidate_provider(op: OpDecl, module) -> PairProvider:
 def declared_provider(op: OpDecl, name: str) -> PairProvider:
     """Wrap any declaration-provided pair baseline in the common boundary.
 
-    Named rather than hard-coded to ``liger``: the protein trunk block is
-    meant to be compared against MegaFold's kernels, and ``matmul`` already
-    declares a cuBLAS pair, so the final-report protocol has to reach every
-    declared baseline rather than one privileged name.
+    Any declared name: the protein trunk block is compared against MegaFold's
+    kernels, ``matmul`` declares a cuBLAS pair, and the Qwen3.5 sites declare
+    FLA's.
     """
     try:
         hook = op.performance_baselines[name]
@@ -158,26 +157,13 @@ def declared_provider(op: OpDecl, name: str) -> PairProvider:
             *(values[name_] for name_ in backward_extras),
         )
 
-    # layernorm's adapter calls Liger's shipped entry points directly rather
-    # than through a declaration-local wrapper; the report records which, so a
-    # reader can tell how much glue sat between the kernel and the timer.
-    if name == "liger":
-        kind = "stock_liger_pair" if op.name == "layernorm" else "declared_liger_pair"
-    else:
-        kind = f"declared_{name}_pair"
-
     return PairProvider(
         name=name,
         forward=forward,
         backward=backward,
         source_hash=_callable_hash(forward_fn, backward_fn),
-        adapter_kind=kind,
+        adapter_kind=f"declared_{name}_pair",
     )
-
-
-def liger_provider(op: OpDecl) -> PairProvider:
-    """Backwards-compatible alias for the Liger baseline."""
-    return declared_provider(op, "liger")
 
 
 def candidate_autograd_provider(op: OpDecl, module) -> PairProvider:
@@ -185,8 +171,8 @@ def candidate_autograd_provider(op: OpDecl, module) -> PairProvider:
 
     ``candidate_provider`` above calls the pair's ``backward_from_saved``
     directly, with no engine in between -- which is what tier 1 is *for*, and
-    is the right measurement when the baseline is also a raw pair (liger,
-    cublas_pair). It is the wrong one against ``pytorch_autograd`` or
+    is the right measurement when the baseline is also a raw pair (cublas_pair,
+    fla). It is the wrong one against ``pytorch_autograd`` or
     ``torch_compile``, whose backwards run ``torch.autograd.grad``: the
     baseline is then charged for engine traversal and gradient accumulation and
     the candidate is not, and the reported speedup includes that difference.

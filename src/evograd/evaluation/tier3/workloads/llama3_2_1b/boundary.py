@@ -494,8 +494,7 @@ def declared_case_for(op, live_dtype: str):
     The observed suite may not exist at all: it comes from a harvest. That is
     a *weaker* gate, not a broken one -- the declaration's own correctness
     grid still applies -- so it falls back rather than refusing, and the
-    model-scope report's ``suite_used`` says which. Shared by the model scope
-    and the block scope, so both judge a live tensor by the same case.
+    model-scope report's ``suite_used`` says which.
     """
     from .sites import OBSERVED_SUITE
 

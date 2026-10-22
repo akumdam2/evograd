@@ -216,9 +216,13 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
     def test_baseline_discovery_walks_the_workloads_registry(self):
         from evograd.evaluation.tier3.cli import _baseline_kernels
 
-        kernels, covered = _baseline_kernels("liger", TASKS, SAMPLE_SITES)
+        registry = SiteRegistry(
+            name="toy",
+            sites=(Site("mm", "matmul", print), Site("attn", "qwen3_attention", print)),
+        )
+        kernels, covered = _baseline_kernels("cublas_pair", TASKS, registry)
         self.assertIsNotNone(kernels)
-        self.assertTrue(set(covered) <= set(SAMPLE_SITES.names))
+        self.assertEqual(covered, ["mm"])
 
     def test_a_registry_whose_ops_have_no_such_baseline_finds_nothing(self):
         from evograd.evaluation.tier3.cli import _baseline_kernels
@@ -226,7 +230,7 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
         registry = SiteRegistry(
             name="toy", sites=(Site("only", "qwen3_attention", print),)
         )
-        kernels, covered = _baseline_kernels("liger", TASKS, registry)
+        kernels, covered = _baseline_kernels("cublas_pair", TASKS, registry)
         self.assertIsNone(kernels)
         self.assertEqual(covered, [])
 
@@ -518,7 +522,7 @@ class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
 
         with _stub_adapter() as name:
             args = _parser().parse_args(
-                ["--model", name, "--identity-control", "--baseline", "liger",
+                ["--model", name, "--identity-control",
                  "--providers", "eager_through_bind,eager"]
             )
             providers = build_providers(args, quiet=True)
@@ -537,13 +541,10 @@ class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
         from evograd.evaluation.tier3.cli import _parser, build_providers
 
         with _stub_adapter() as name:
-            args = _parser().parse_args(
-                ["--model", name, "--identity-control", "--baseline", "liger"]
-            )
+            args = _parser().parse_args(["--model", name, "--identity-control"])
             providers = build_providers(args, quiet=True)
-            self.assertEqual(
-                sorted(providers), ["eager", "eager_through_bind", "liger"]
-            )
+            # No pair baseline unless one is named.
+            self.assertEqual(sorted(providers), ["eager", "eager_through_bind"])
             for kernels in providers.values():
                 self.assertIs(kernels.registry, SAMPLE_SITES)
 

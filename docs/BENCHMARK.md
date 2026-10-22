@@ -10,8 +10,7 @@ describe how an implementation is executed.
 | L3 | Whole model | Model forward, loss, backward and optimizer step |
 
 L3 is measured by Tier 3 (`evograd tier3-bench --model <name>`): loss,
-backward, AdamW and gradient reset. The architectural-block level (one decoder
-layer, forward plus VJP) was removed on 2026-10-13; the decoder layer a model's
+backward, AdamW and gradient reset. The decoder layer a model's
 L2 sites take their real invocations from is a data source
 (`topdown/<model>/layer`), not a level.
 
@@ -44,8 +43,8 @@ monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
 - `benchmark/operator_suite/` is the implementation-neutral operator suite. It
   owns the fused tasks that belong to no single model, under
-  `operator_suite/tasks/level2/`, and aggregates by family and Level. Trusted
-  Liger adapters remain co-located with the task that uses them for now.
+  `operator_suite/tasks/level2/`, and aggregates by family and Level. Liger is
+  not a baseline; its former adapters are under `src/evograd/legacy/liger/`.
 - `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
   snapshots. It currently contains `qwen3_0_6b`, `llama3_8b`, `megafold`, and
   the retired AlphaFold3 declaration, and owns the Level-2 tasks whose identity

@@ -15,12 +15,6 @@ def _inputs(torch, op, workload, device="cuda"):
     }
 
 
-def _liger_factory():
-    from evograd.ops.level1.swiglu.liger import make_liger_swiglu_autograd_pair_fns
-
-    return make_liger_swiglu_autograd_pair_fns()
-
-
 def _megafold_factory():
     from evograd.ops.level1.swiglu.megafold_pair import make_megafold_swiglu_autograd_pair_fns
 
@@ -51,7 +45,6 @@ op = declare_op(
     correctness=standard_correctness(),
     tolerances=STANDARD_TOLERANCES,
     performance_baselines={
-        "liger": make_pair_baseline(_liger_factory, ("a", "b")),
         "megafold": make_pair_baseline(_megafold_factory, ("a", "b"))
     },
     make_inputs=_inputs,

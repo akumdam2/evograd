@@ -3,7 +3,7 @@
 The Tier-3 runner and patcher are architecture-independent.  This registry is
 the only place that maps a public ``--model`` name to model-specific build and
 provider hooks. Tier 3 has one scope, the whole-model training step (benchmark
-Level 3); the block scope was removed on 2026-10-13.
+Level 3).
 """
 
 from __future__ import annotations

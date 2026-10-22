@@ -53,7 +53,7 @@ def _case(speedup, ok=True, dims=None):
     }
 
 
-def _report(cases, saved=100.0, inputs=200.0, baseline="liger", error=None):
+def _report(cases, saved=100.0, inputs=200.0, baseline="cublas_pair", error=None):
     cases = [
         {**case, "saved_bytes": saved, "input_bytes": inputs} if case["ok"] else case
         for case in cases
@@ -75,7 +75,7 @@ def _task(op, level, family, speedups, cases_total=None, **kw):
         op=op,
         level=level,
         family=family,
-        baseline="liger",
+        baseline="cublas_pair",
         speedups=speedups,
         cases_ok=len(speedups),
         cases_total=cases_total if cases_total is not None else len(speedups),
