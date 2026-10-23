@@ -22,7 +22,7 @@ reference implementations, and policies explicitly.
 | `gate2/` | Actual autograd integration, calibrated tensor errors, operator/model adapters |
 | `gate3/` | Continuous training measurement and calibrated loss-trajectory acceptance |
 | `payloads/` | Generic storage and loading of recorded training calls, with exact layouts and frozen splits |
-| `integrations/` | Shared capture, replay and gate drivers; per-model recorders and references (Qwen3-0.6B, Qwen3.5-4B) |
+| `integrations/` | Shared capture, replay and gate drivers; per-model recorders and references (every model in `integrations.PACKAGES`) |
 
 Model dependencies are imported inside the adapters that need them. The CPU
 core tests do not require a checkpoint, real dataset, GPU, or LLM service.
@@ -167,10 +167,13 @@ computation). The capture loop, replay and fidelity (`base.py`), the gates
 (`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
 boundary of one training step per data order becomes a payload of the case
 its shapes bind. Gate 1 runs on generated inputs and acceptance payloads,
-operator Gate 2 calibrates on orders 101/202 and judges 303/404; Level-2
-candidates then get model Gate 2 and Gate 3 (`Model.gate3_steps`). Level-1
-candidates get Gate 1 and operator Gate 2 only. Integrated: Qwen3-0.6B and
-Qwen3.5-4B. Evaluator routing is not changed.
+operator Gate 2 calibrates on orders 101/202 and judges 303/404; a Level-2
+candidate also gets model Gate 2 alone at its site. A candidate passing every
+gate that applies is accepted. The combination of Level-2 candidates then gets
+model Gate 2 on the combined patch set and Gate 3 (`Model.gate3_steps`):
+`verify` combines every accepted Level-2 candidate, the benchmark protocol
+(`evograd evaluate`, `evaluation/protocol.py`) those whose single-site training
+step is faster.
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS

@@ -37,3 +37,7 @@ artifacts/
 /scripts
 /references
 /docs
+# Downloaded benchmark inputs (checkpoints, datasets, prepared batches)
+/data/
+# GEAK working copy built by candidates/geak/setup.sh
+/candidates/geak/.work/

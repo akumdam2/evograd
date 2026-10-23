@@ -1,5 +1,47 @@
 # Evaluation
 
+## The benchmark protocol
+
+Every submission is evaluated the same way, whoever generated it
+(`protocol.py`):
+
+```bash
+CUBLAS_WORKSPACE_CONFIG=:4096:8 evograd evaluate qwen3_0_6b --corpus CORPUS/manifest.json \
+  --out RUN --candidate qwen3_swiglu_mlp/swiglu_mlp=candidate.py [--candidate ...]
+evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
+```
+
+1. **Verify** each candidate on the model's real training payloads: Gate 1
+   and operator Gate 2; a Level-2 candidate also gets model Gate 2 alone at its
+   site. Passing every gate that applies makes a candidate *accepted*.
+2. **Tier 1** times every *executable* candidate, accepted or not, at its
+   case's configuration: against eager and `torch.compile` through autograd,
+   against a declared library pair directly. Executable means one forward and
+   backward raises nothing, returns the declared outputs and gradients with the
+   eager shapes and dtypes, and leaves the inputs unchanged.
+3. **Tier 3** times the training step with each executable Level-2 candidate
+   alone at its site, against eager.
+4. The **combination** is every accepted Level-2 candidate whose single-site
+   Tier 3 speedup has a 95% interval above one. It gets model Gate 2 and
+   Gate 3, then is timed at Tier 3 against eager and whole-model
+   `torch.compile`.
+5. The **summary** reports, per level, the geometric-mean speedup over
+   accepted configurations (configuration, then task, then family), coverage
+   (accepted configurations over all observed ones) and the funnel
+   (submitted, executable, Gate 1, accepted); Level 3 reports each model's
+   combination with its speedup and peak-memory ratio. There is no single
+   overall score. Gate verdicts sit beside every runtime, so a rejected
+   candidate's numbers are visible but counted nowhere.
+
+Verification runs deterministic; timing runs with deterministic algorithms
+off. Every stage is saved under `RUN` and reused on rerun; `--deadline-min`
+suspends at a stage boundary (exit 3).
+
+The tier commands below (`tier1-bench`, `tier2-bench`, `tier3-bench`, `suite`)
+remain as diagnostics; Tier 2 is not part of the protocol.
+
+## Tiers as diagnostics
+
 **Tier 2 checks an operator before timing it. Tier 3 measures the operator
 inside the whole model's training step, recording numerical differences
 alongside performance.**

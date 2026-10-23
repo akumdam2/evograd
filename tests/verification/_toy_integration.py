@@ -52,6 +52,13 @@ class Batches:
 class ToyWorkload(_Base):
     """The tier-3 toy plus the real-data verification interface."""
 
+    def build_patched(self, kernels):
+        # Tier 3 timing reads a patch provenance; the toy's sites are patched
+        # by construction.
+        from evograd.evaluation.tier3.patch import by_construction_provenance
+
+        return super().build_patched(kernels)[0], by_construction_provenance(kernels)
+
     def batch_for_order(self, order: int, index: int):
         g = torch.Generator().manual_seed(order * 1000 + index)
         return {"x": torch.randn(ROWS, 12, generator=g),

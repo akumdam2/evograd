@@ -5,8 +5,9 @@ On the toy classifier of :mod:`tests.verification._toy_integration` (CPU):
 * capture records every site call with its cotangent, instrumentation changes
   nothing, and the corpus names its batches by content;
 * ``verify`` accepts the native-equivalent candidate through Gate 1, operator
-  Gate 2, model-scope Gate 2 (loss, logits, parameter gradients) and Gate 3,
-  and rejects a 5% gradient fault;
+  Gate 2 and its single-site model Gate 2 (loss, logits, parameter gradients),
+  passes its combination through model Gate 2 and Gate 3, and rejects a 5%
+  gradient fault (which then leaves no combination to judge);
 * a verify stopped by its deadline inside Gate 3 continues on rerun to the
   verdict of a run that never stopped; finished stages are reused, Gate 2
   calibrations come back from ``--state``.
@@ -69,9 +70,12 @@ class ToyIntegration(unittest.TestCase):
         root = Path(self.tmp.name)
         good = self.verify(1.0, root / "good")
         entry = good["candidates"][self.T.CASE_ID]
-        self.assertTrue(entry["accepted"], (entry, good["model"]))
-        self.assertEqual(good["model"]["gate2_model"], "passed")
-        self.assertEqual(good["model"]["gate3"], "passed")
+        self.assertTrue(entry["accepted"], (entry, good["combination"]))
+        self.assertEqual(entry["gate2_model"], "passed")
+        self.assertEqual(good["combination"]["cases"], [self.T.CASE_ID])
+        self.assertEqual(good["combination"]["gate2_model"], "passed")
+        self.assertEqual(good["combination"]["gate3"], "passed")
+        self.assertTrue(good["combination"]["accepted"])
         bad = self.verify(1.05, root / "bad")
         entry = bad["candidates"][self.T.CASE_ID]
         self.assertFalse(entry["accepted"])
@@ -96,9 +100,9 @@ class ToyIntegration(unittest.TestCase):
         second = self.verify(1.0, out, state=root / "state_b")
         self.assertNotIn("suspended", second)
         self.assertEqual(second["candidates"], unbroken["candidates"])
-        self.assertEqual(second["model"], unbroken["model"])
-        resumed = json.loads((out / "gate3_candidate.json").read_text())
-        straight = json.loads((root / "unbroken" / "gate3_candidate.json").read_text())
+        self.assertEqual(second["combination"], unbroken["combination"])
+        resumed = json.loads((out / "combination" / "gate3_candidate.json").read_text())
+        straight = json.loads((root / "unbroken" / "combination" / "gate3_candidate.json").read_text())
         self.assertEqual([s["objective"] for s in resumed["train_steps"]],
                          [s["objective"] for s in straight["train_steps"]])
         # The calibrations were saved under --state and are reused by a new candidate.
@@ -131,7 +135,7 @@ class ToyIntegration(unittest.TestCase):
             trained = json.loads(beside.read_text())
             self.assertEqual(trained["identity"]["optimizer"]["warmup_steps"], 2)
             self.assertIn("lr", trained["train_steps"][0])
-            self.assertEqual(warm["model"]["gate3"], "passed")
+            self.assertEqual(warm["combination"]["gate3"], "passed")
             self.assertEqual(json.loads(control.read_text())["run_id"], constant["run_id"])
             # Under the same optimizer again, both are read back.
             verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest, root / "warmup2",
@@ -145,7 +149,7 @@ class ToyIntegration(unittest.TestCase):
                                  compile_backend=FAST, log=lambda *a: None)
         run = json.loads((control.parent / "accumulation=2" / "native_a.json").read_text())
         self.assertEqual(run["identity"]["plan"]["accumulation"], 2)
-        self.assertEqual(accumulated["model"]["gate3"], "passed")
+        self.assertEqual(accumulated["combination"]["gate3"], "passed")
 
     def test_a_cached_control_of_another_optimizer_is_not_reused(self):
         from evograd.verification.integrations import gates
@@ -164,6 +168,20 @@ class ToyIntegration(unittest.TestCase):
         self.assertNotEqual(again["run_id"], cached["run_id"])
         self.assertEqual(again["identity"]["optimizer"]["lr"], gates.LR)
 
+    def test_a_cached_control_of_another_workload_description_is_not_reused(self):
+        root = Path(self.tmp.name)
+        state = root / "state_rebound"
+        self.verify(1.0, root / "rebound", state=state)
+        control = next((state / "gate3").rglob("native_a.json"))
+        cached = json.loads(control.read_text())
+        # Written by an older checkout whose workload described itself differently.
+        cached["identity"]["adapter"]["config"] = {"workload": {"older": True}}
+        control.write_text(json.dumps(cached))
+        verdict = self.verify(1.0, root / "rebound2", state=state)
+        again = json.loads(control.read_text())
+        self.assertNotEqual(again["run_id"], cached["run_id"])
+        self.assertEqual(verdict["combination"]["gate3"], "passed")
+
     def test_without_model_gates_level2_is_judged_by_gate1_and_operator_gate2(self):
         import dataclasses
 
@@ -175,9 +193,10 @@ class ToyIntegration(unittest.TestCase):
             verdict = verify(model, {self.T.CASE_ID: self.programs[1.0]}, self.manifest,
                              root / "no_model_gates", device="cpu", compile_backend=FAST,
                              log=lambda *a: None)
-        self.assertIn("not_applicable", verdict["model"])
+        self.assertIn("not_applicable", verdict["combination"])
         self.assertTrue(verdict["candidates"][self.T.CASE_ID]["accepted"])
-        self.assertFalse((root / "no_model_gates" / "gate3.json").exists())
+        self.assertNotIn("gate2_model", verdict["candidates"][self.T.CASE_ID])
+        self.assertFalse((root / "no_model_gates" / "combination").exists())
 
 
 if __name__ == "__main__":
