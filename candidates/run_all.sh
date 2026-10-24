@@ -10,8 +10,8 @@
 #
 # Environment: OPENAI_API_KEY, ADBENCH_MODEL (default gpt-5.6-sol),
 # ADBENCH_API_BASE (default https://api.openai.com/v1), AGENTS (default
-# "evograd openevolve gepa kernelagent geak"), CLAUDE_MODEL (GEAK only),
-# TIME_LIMIT (seconds per agent, default 21600).
+# "evograd openevolve gepa kernelagent codex claude_code geak"), CLAUDE_MODEL
+# (Claude Code and GEAK only), TIME_LIMIT (seconds per agent, default 21600).
 #
 # Agents run one after another on the same GPU (CUDA_VISIBLE_DEVICES), so no
 # two share a device while timing. A failed agent does not stop the others.
@@ -22,7 +22,7 @@ OP="${1:?usage: run_all.sh OP [DTYPE] [BUDGET] [OUT]}"
 DTYPE="${2:-bfloat16}"
 BUDGET="${3:-30}"
 OUT="${4:-$REPO/results/adbench_tools/$OP}"
-AGENTS="${AGENTS:-evograd openevolve gepa kernelagent geak}"
+AGENTS="${AGENTS:-evograd openevolve gepa kernelagent codex claude_code geak}"
 TIME_LIMIT="${TIME_LIMIT:-21600}"
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 
@@ -36,7 +36,9 @@ for agent in $AGENTS; do
     run="$OUT/runs/${agent}_${STAMP}"
     echo "=== $agent -> $run"
     extra=()
-    [ "$agent" = geak ] && [ -n "${CLAUDE_MODEL:-}" ] && extra+=(--claude-model "$CLAUDE_MODEL")
+    case "$agent" in
+        geak|claude_code) [ -n "${CLAUDE_MODEL:-}" ] && extra+=(--claude-model "$CLAUDE_MODEL") ;;
+    esac
     timeout --signal=INT "$TIME_LIMIT" \
         python "$HERE/$agent/run.py" --task "$TASK" --run-dir "$run" --budget "$BUDGET" "${extra[@]}" \
         2>&1 | tee "$OUT/runs/${agent}_${STAMP}.log"

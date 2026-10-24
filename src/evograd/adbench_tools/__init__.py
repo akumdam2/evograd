@@ -2,8 +2,8 @@
 
 This package is the agent-neutral part of that comparison. It uses the
 benchmark and evaluator; it changes neither. Everything specific to one agent
-(GEPA, GEAK, OpenEvolve without the frontend, KernelAgent, and evograd itself)
-lives outside the package, under ``candidates/<agent>/``.
+(GEPA, GEAK, OpenEvolve without the frontend, KernelAgent, Claude Code, Codex,
+and evograd itself) lives outside the package, under ``candidates/<agent>/``.
 
 The fairness protocol it implements, in the order a run meets it:
 
@@ -28,8 +28,9 @@ The fairness protocol it implements, in the order a run meets it:
 4. **One evaluator** (:mod:`.evaluate`). In-loop feedback and the final score
    both come from ``evograd.evolve.evaluator_entry`` with the environment
    ``evograd evolve`` sets, run in a killable child. Agents with their own
-   harness (GEAK's unittest, KernelAgent's test file) call this module's CLI
-   from inside that harness, so the verdict is never theirs.
+   harness (GEAK's unittest, KernelAgent's test file, the coding agents'
+   evaluate.py) call this module's CLI from inside that harness, so the
+   verdict is never theirs.
 5. **One ledger and one final measurement** (:mod:`.ledger`, :mod:`.score`).
    Every evaluation an agent requests is appended to ``evaluations.jsonl``,
    LLM usage is recorded where the agent exposes it, and the final program is

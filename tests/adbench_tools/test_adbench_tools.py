@@ -7,10 +7,14 @@ forward, every line an agent writes is under the evaluator's static rules, and
 nothing outside the evolve block survives into the final measurement.
 """
 
+import argparse
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -251,3 +255,101 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
     step = _module(op_task / "baseline_src/reference_step.py", "adbench_tools_geak_baseline")
     frozen = torch.cat([t.float().reshape(-1) for t in step.reference_step(*inputs)])
     assert torch.allclose(frozen, eager)
+
+
+# ── coding-agent glue (candidates/claude_code, candidates/codex) ─────────────
+
+
+@pytest.fixture(scope="module")
+def coding_agents():
+    sys.path.insert(0, str(REPO / "candidates"))
+    try:
+        claude = _module(REPO / "candidates/claude_code/run.py", "adbench_tools_claude_code")
+        codex = _module(REPO / "candidates/codex/run.py", "adbench_tools_codex")
+    finally:
+        sys.path.remove(str(REPO / "candidates"))
+    return claude, codex
+
+
+def test_the_coding_agents_work_against_a_metered_evaluator(small_task, coding_agents, tmp_path):
+    from evograd.adbench_tools.ledger import RunLedger
+
+    shared = coding_agents[1]._coding_agent
+    ledger = RunLedger(tmp_path / "run", agent="codex", task=small_task, config={})
+    args = argparse.Namespace(workspace=tmp_path / "workspace", budget=2, eval_timeout=60)
+    workspace = shared.Workspace(small_task, ledger, "codex", args)
+    assert sorted(p.name for p in workspace.root.iterdir()) == [
+        "TASK.md", "adbench_primitives.py", "candidate.py", "evaluate.py"]
+    prompt = (ledger.root / shared.PROMPT).read_text()
+    assert prompt.endswith(small_task.statement) and "at most 2 evaluations" in prompt
+    for origin in ("codex", "gepa", "codex"):
+        ledger.log_evaluation({"kind": "full", "origin": origin, "correct": False})
+    refused = subprocess.run([sys.executable, "evaluate.py", "--correctness"],
+                             cwd=workspace.root, capture_output=True, text=True)
+    assert refused.returncode == 3 and "BUDGET EXHAUSTED" in refused.stdout
+    best, extra = workspace.collect()
+    assert best is None and extra["deliverable"] == "none" and extra["oracle_intact"]
+    assert (ledger.root / "workspace" / "evaluate.py").is_file()
+
+
+def test_the_coding_agents_deliverable_is_their_own_verified_choice(small_task, coding_agents,
+                                                                     tmp_path):
+    from evograd.adbench_tools.ledger import RunLedger
+
+    choose = coding_agents[0]._coding_agent.choose
+    ledger = RunLedger(tmp_path / "run", agent="claude_code", task=small_task, config={})
+    final = tmp_path / "candidate.py"
+
+    def evaluated(source, score, correct=True, kind="full"):
+        program = prepare_program(small_task, source, ledger.root / "programs", origin="claude_code")
+        ledger.log_evaluation({"kind": kind, "origin": "claude_code", "correct": correct,
+                               "combined_score": score, "program": str(program)})
+        return program
+
+    assert choose(small_task, ledger, "claude_code", final) == (None, "none")
+    final.write_text((small_task.root / "skeleton.py").read_text())
+    assert choose(small_task, ledger, "claude_code", final) == (None, "none")
+    final.write_text(SWIGLU)
+    assert choose(small_task, ledger, "claude_code", final) == (final, "final_unverified")
+    faster = evaluated(SWIGLU + "\nFASTER = 1\n", 2.0)
+    evaluated(SWIGLU + "\nWRONG = 1\n", 9.0, correct=False)
+    evaluated(SWIGLU + "\nCHECKED = 1\n", None, kind="correctness")
+    assert choose(small_task, ledger, "claude_code", final) == (faster, "best_evaluated")
+    evaluated(SWIGLU, 1.0, kind="correctness")
+    assert choose(small_task, ledger, "claude_code", final) == (final, "final")
+
+
+def test_codex_runs_on_the_shared_model_and_endpoint(coding_agents, tmp_path):
+    claude, codex = coding_agents
+    command = codex.command(argparse.Namespace(model="gpt-x", api_base="https://gw.example/v1",
+                                               effort="high"), tmp_path, tmp_path / "last.txt")
+    assert command[:2] == ["codex", "exec"] and command[-1] == "-"
+    assert command[command.index("-m") + 1] == "gpt-x"
+    assert 'openai_base_url="https://gw.example/v1"' in command
+    assert 'model_reasoning_effort="high"' in command
+    default = codex.command(argparse.Namespace(model="gpt-x", api_base=codex.OPENAI_API_BASE,
+                                               effort=None), tmp_path, tmp_path / "last.txt")
+    assert not any(part.startswith(("openai_base_url", "model_reasoning")) for part in default)
+    command = claude.command(argparse.Namespace(claude_model="opus", effort=None), "PROMPT")
+    assert command[:3] == ["claude", "-p", "PROMPT"]
+    assert command[command.index("--model") + 1] == "opus" and "--effort" not in command
+    assert codex._coding_agent.cli_version(sys.executable).startswith("Python 3")
+    assert codex._coding_agent.cli_version(str(tmp_path / "missing")) is None
+
+
+def test_a_coding_agent_session_leaves_nothing_running(coding_agents, tmp_path):
+    """Whatever the agent started is killed before the final measurement times anything."""
+    launch = coding_agents[0]._coding_agent.launch
+    started = time.time()
+    status = launch(["bash", "-c", "(trap '' INT; exec sleep 600) & echo $! > pid; wait"],
+                    tmp_path, dict(os.environ), tmp_path / "log.jsonl", time_limit=2)
+    assert status == "time_limit" and time.time() - started < 30
+    pid = int((tmp_path / "pid").read_text())
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(f"the agent's background process {pid} survived the session")

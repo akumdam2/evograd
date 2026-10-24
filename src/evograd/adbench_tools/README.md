@@ -31,11 +31,17 @@ against `torch.autograd` and faster than PyTorch eager.
 | **GEPA** | `gepa.optimize_anything`: reflective, Pareto-based text evolution | active |
 | **KernelAgent** (Meta) | `TritonKernelAgent` parallel generation, then `OptimizationManager` beam search | active |
 | **GEAK v4** (AMD) | Claude Code `kernel_workflow`, author mode, adapted to NVIDIA | implemented, parked |
+| **Claude Code** (Anthropic) | The `claude` CLI, headless, in a workspace with a metered evaluator | implemented, separate model |
+| **Codex** (OpenAI) | The `codex` CLI, headless, in the same workspace | active |
 
 The current round runs only agents on OpenAI models: evograd, raw OpenEvolve,
-GEPA and KernelAgent. GEAK runs on Claude Code's model, so it can't share the
-same model. Its driver is kept and works the same way, but it is left out of
-`run_openai.sh`.
+GEPA, KernelAgent and Codex. GEAK and Claude Code run on Claude Code's model,
+so they can't share the same model. Their drivers work the same way, but they
+are left out of `run_openai.sh`.
+
+Claude Code and Codex are the general-purpose coding agents: no kernel-specific
+loop, only a shell, a file editor and the evaluator. They show what an
+off-the-shelf agent does with the same statement and budget.
 
 Raw OpenEvolve is the key ablation. It is evograd minus the frontend: same
 backend, same configuration, same evaluator, same budget. The gap between the
@@ -89,6 +95,11 @@ two is what the frontend contributes.
   wrapper is just the pair. KernelAgent's own bans (e.g. no `torch.sigmoid`)
   are stricter than ours and are left on, as part of that agent.
 - **GEAK** targets AMD GPUs and runs on Claude Code's model (see §2.5).
+- **Claude Code and Codex have a shell on the GPU node** (see §2.6). Their
+  own sandboxes would block the GPU, so they run with permissions bypassed.
+  Only the prompt keeps them inside their workspace, which is a fresh
+  directory outside the repository. Whether they edited `evaluate.py` is
+  recorded. Claude Code runs on a Claude model.
 - **Library access.** evograd's frontend keeps matrix multiplications and
   convolutions in cuBLAS/cuDNN calls. So with `--library auto` (the default),
   every agent may call a trusted `vendor_gemm` (cuBLAS) primitive whenever the
@@ -164,7 +175,23 @@ already single operators.
 | Code from reply | None to extract: Claude Code agents write `kernel_src/candidate.py` with their file tools |
 | Why parked | It can't use the same OpenAI model as the other agents |
 
-### 2.6 Shared requirements
+### 2.6 Claude Code and Codex: `candidates/claude_code/`, `candidates/codex/`
+
+Both run through `candidates/_coding_agent.py`, which builds the same workspace
+and prompt for each, launches the CLI and picks the program to measure.
+
+| | |
+|---|---|
+| Needs | Claude Code: the `claude` CLI (`curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.310`) and `ANTHROPIC_API_KEY` or a `claude` login. Codex: the `codex` CLI (`npm install -g @openai/codex@0.149.1`) and `OPENAI_API_KEY`. Both are native CLIs, not pip packages (see `pyproject.toml`). `run.json` records the version each run used, and Claude Code's self-updater is off during a run |
+| Input | A workspace with `TASK.md`, `candidate.py` (the skeleton), `adbench_primitives.py` (if granted) and an `evaluate.py` it may not edit. The prompt (`prompt.md` in the run) is one paragraph on the workspace, the budget and the deliverable, followed by `TASK.md` verbatim. It is the same for both agents |
+| Loop | The agent's own: `claude -p` (stream-JSON output) or `codex exec --json`, headless, permissions bypassed, until it stops or `--time-limit` (default 6 h) |
+| Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
+| Model | Claude Code: `--claude-model`. Codex: `--model` at `--api-base` (set as `openai_base_url`, Responses API), with `OPENAI_API_KEY` passed as `CODEX_API_KEY`. `--effort` sets either agent's reasoning effort |
+| Feedback | `evaluate.py` runs our evaluator (full, or `--correctness`) on `candidate.py` or a given path, one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and the evaluations left |
+| Code from reply | None to extract: the agent writes `candidate.py` with its file tools |
+| Output | `candidate.py` if `evaluate.py` passed exactly that module (the agent's choice). Otherwise, the best correct module it evaluated (full evaluations by `combined_score` first, then the latest). Otherwise, `candidate.py` as it is, unless it is still the skeleton. `run.json` records which rule applied (`deliverable`) |
+
+### 2.7 Shared requirements
 
 - An NVIDIA GPU with CUDA, Triton and `evograd[gpu,llm]` installed.
 - `OPENAI_API_KEY`. Optionally `ADBENCH_MODEL` (default `gpt-5.6-sol`) and
@@ -187,6 +214,7 @@ translated as follows:
 | GEPA | `max_evals = N + 1` (one evaluation goes to its first candidate) | 31 evaluations |
 | KernelAgent | Generation: 4 workers × ⌈N/2/4⌉ rounds (stops at the first pass). Optimization: max(1, ⌊N/2/4⌋) beam-search rounds | 4 × 4 rounds, then 3 rounds |
 | GEAK | `budget = max(2, N // 5)` optimization directions | 6 directions |
+| Claude Code, Codex | At most N calls of `evaluate.py`, full or correctness-only. Call N+1 is refused | 30 evaluations |
 
 Every evaluation an agent actually requests is logged, and `compare` reports
 the count.
@@ -196,8 +224,8 @@ Other limits:
 | Setting | Value |
 |---|---|
 | Final measurement | 25 warmup / 100 repetitions (in-loop runs use the evaluator's defaults) |
-| Per-evaluation timeout | 900 s (GEPA, the CLI), 1200 s (KernelAgent test) |
-| Per-agent wall time in `run_all.sh` | `TIME_LIMIT`, default 21600 s (6 h) |
+| Per-evaluation timeout | 900 s (GEPA, the CLI, the coding agents' `evaluate.py`), 1200 s (KernelAgent test) |
+| Per-agent wall time in `run_all.sh` | `TIME_LIMIT`, default 21600 s (6 h); the coding agents also stop at `--time-limit` (default 6 h) |
 | Smoke run (`run_openai.sh`) | budget 2 per agent; KernelAgent 8 with `--skip-optimization`; 1 h each |
 | Task configuration | The operator's first timed benchmark case (`--case benchmark`), or the first correctness case if none is declared |
 
@@ -234,11 +262,13 @@ neither. Anything specific to one agent lives in `candidates/<agent>/`.
 | `gepa/run.py` | GEPA driver |
 | `kernelagent/run.py` | KernelAgent driver: writes `problem.py`, the test file and the problem description, then runs generation and optimization |
 | `geak/setup.sh`, `prepare.py`, `run.py`, `nvidia/` | GEAK working copy, its op task folder, the Claude Code launch, and the NVIDIA overlay (GPU probe, `metrix` → `ncu` shim) |
+| `_coding_agent.py` | What Claude Code and Codex share: the workspace, the metered `evaluate.py`, the prompt, the launch, and the choice of deliverable |
+| `claude_code/run.py`, `codex/run.py` | The two CLI launches and their usage records |
 | `run_all.sh` | Builds the task pack, runs the chosen agents one after another on one GPU, then `compare` |
-| `run_openai.sh` | The four OpenAI-model agents, end to end: setup, unit tests, task pack, sanity check without an LLM, smoke run, full run |
+| `run_openai.sh` | The OpenAI-model agents (`AGENTS`, default all five), end to end: setup, unit tests, task pack, sanity check without an LLM, smoke run, full run |
 | `README.md` | Commands |
 
-Tests: `tests/adbench_tools/test_adbench_tools.py` (21 tests, CPU-only).
+Tests: `tests/adbench_tools/test_adbench_tools.py` (25 tests, CPU-only).
 
 ### 4.3 Data flow
 
@@ -314,6 +344,7 @@ slot:
 | KernelAgent | `problem_description` (+ harness section) |
 | raw OpenEvolve | system message |
 | GEAK | `TASK.md` file in its op task folder (+ one steering sentence) |
+| Claude Code, Codex | their CLI prompt, after one paragraph on the workspace (+ `TASK.md` in the workspace) |
 | evograd | doesn't read it; gets section 1 natively, plus its seed |
 
 `python -m evograd.adbench_tools statement TASK_DIR` prints it, and
@@ -349,8 +380,8 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
 
 | Depth | Runs | Used by |
 |---|---|---|
-| **full** | `evograd.evolve.evaluator_entry` in a child process, with the environment `run_evolve` sets: scoped declaration, forward override, scoring policy, performance baseline, baseline timing cache, granted primitives. It runs static rules → import → correctness of every output and gradient → a run at the timed shape → timing → `combined_score` | evograd, raw OpenEvolve, GEPA, final score |
-| **correctness** | The same up to the timed-shape run, without timing (`_check.py`) | KernelAgent's test, GEAK's `--correctness` mode |
+| **full** | `evograd.evolve.evaluator_entry` in a child process, with the environment `run_evolve` sets: scoped declaration, forward override, scoring policy, performance baseline, baseline timing cache, granted primitives. It runs static rules → import → correctness of every output and gradient → a run at the timed shape → timing → `combined_score` | evograd, raw OpenEvolve, GEPA, GEAK, Claude Code, Codex, final score |
+| **correctness** | The same up to the timed-shape run, without timing (`_check.py`) | KernelAgent's test, GEAK's and the coding agents' `--correctness` mode |
 
 - `EvalRecord.feedback()` renders the verdict in the format OpenEvolve shows
   its model. Every agent gets this text.
@@ -372,7 +403,7 @@ Each run directory has:
 |---|---|
 | `run.json` | Agent, task id, statement hash, config (budget translation, model, commits), status, wall time, best program |
 | `evaluations.jsonl` | One line per evaluation requested: kind, origin, correct, score, program path, seconds, failure type |
-| `llm.jsonl` | LLM usage where the agent exposes it (GEPA metadata; Claude Code cost for GEAK) |
+| `llm.jsonl` | LLM usage where the agent exposes it (GEPA metadata; Claude Code's session cost and usage for GEAK and Claude Code; Codex's per-turn tokens) |
 | `programs/` | Every packaged program evaluated through adbench-tools |
 
 Lines are appended with single `O_APPEND` writes, so parallel workers
@@ -429,8 +460,9 @@ Results go to `results/adbench_tools/<op>/`:
 
 ## 7. Open items
 
-- No real GPU + LLM run has completed yet for GEPA, raw OpenEvolve or
-  KernelAgent. The first smoke run is the end-to-end test.
+- No real GPU + LLM run has completed yet for GEPA, raw OpenEvolve,
+  KernelAgent, Codex or Claude Code. The first smoke run is the end-to-end
+  test.
 - GEAK is parked until there is a way to run it on the same model (e.g. an
   OpenAI-compatible gateway for Claude Code), or until it is reported as a
   separate data point.

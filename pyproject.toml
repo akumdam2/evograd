@@ -51,6 +51,18 @@ af3 = ["alphafold3-pytorch>=0.8.3,<0.9"]
 #
 # Without it the megafold workload reports as uncovered, which is the same
 # thing every unmet `requires` does.
+#
+# The coding-agent baselines (candidates/claude_code, candidates/codex) have no
+# extra either: Claude Code and Codex are native CLIs, not Python
+# distributions. Each driver needs its CLI on PATH and records the version it
+# ran in run.json. Developed and measured against Claude Code 2.1.310 and
+# codex-cli 0.149.1:
+#
+#     curl -fsSL https://claude.ai/install.sh | bash -s 2.1.310   # ~/.local/bin/claude
+#     npm install -g @openai/codex@0.149.1                         # or a release binary
+#
+# Claude Code authenticates with ANTHROPIC_API_KEY or a `claude` login, Codex
+# with OPENAI_API_KEY.
 
 [project.scripts]
 evograd = "evograd.cli:main"

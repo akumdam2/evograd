@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test and run the OpenAI-model agents (evograd, raw OpenEvolve, GEPA,
-# KernelAgent) on one operator, end to end. GEAK is left out.
+# KernelAgent, Codex) on one operator, end to end. GEAK and Claude Code are
+# left out.
 #
 #   bash candidates/run_openai.sh [OP] [DTYPE] [BUDGET]
 #
@@ -16,7 +17,8 @@
 #   smoke   every agent with a tiny budget; checks the plumbing
 #   full    every agent with BUDGET, one after another, then the comparison table
 #
-# Environment: OPENAI_API_KEY (required for smoke/full), ADBENCH_MODEL
+# Environment: OPENAI_API_KEY (required for smoke/full), AGENTS (default
+# "evograd openevolve gepa kernelagent codex"), ADBENCH_MODEL
 # (default gpt-5.6-sol), ADBENCH_API_BASE (default https://api.openai.com/v1),
 # CUDA_VISIBLE_DEVICES (default 0), TIME_LIMIT (seconds per agent in the full
 # run, default 21600), OUT (default results/adbench_tools/<OP>).
@@ -29,7 +31,7 @@ OP="${1:-llama3_swiglu_mlp}"
 DTYPE="${2:-bfloat16}"
 BUDGET="${3:-30}"
 STAGES="${STAGES:-setup unit task sanity smoke full}"
-AGENTS="evograd openevolve gepa kernelagent"
+AGENTS="${AGENTS:-evograd openevolve gepa kernelagent codex}"
 OUT="${OUT:-$REPO/results/adbench_tools/$OP}"
 TASK="$OUT/task"
 STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -42,6 +44,7 @@ KERNELAGENT_COMMIT=e0647170da36ef9b059ac0bd3d60103aa4ed378b
 GEPA_COMMIT=8f287de942f41a6d1e0e7e5b2d576247c4bedee9
 
 want() { [[ " $STAGES " == *" $1 "* ]]; }
+uses() { [[ " $AGENTS " == *" $1 "* ]]; }
 banner() { echo; echo "=============== $* ==============="; }
 die() { echo "FAILED: $*" >&2; exit 1; }
 
@@ -62,9 +65,16 @@ fi
 
 if want smoke || want full; then
     [ -n "${OPENAI_API_KEY:-}" ] || die "OPENAI_API_KEY is not set"
-    python -c "import gepa" 2>/dev/null || die "gepa is not installed (rerun with SETUP=1)"
-    python -c "import triton_kernel_agent" 2>/dev/null || die "KernelAgent is not installed (rerun with SETUP=1)"
-    [ -d references/KernelAgent/examples/configs ] || die "references/KernelAgent checkout missing (rerun with SETUP=1)"
+    if uses gepa; then
+        python -c "import gepa" 2>/dev/null || die "gepa is not installed (rerun with SETUP=1)"
+    fi
+    if uses kernelagent; then
+        python -c "import triton_kernel_agent" 2>/dev/null || die "KernelAgent is not installed (rerun with SETUP=1)"
+        [ -d references/KernelAgent/examples/configs ] || die "references/KernelAgent checkout missing (rerun with SETUP=1)"
+    fi
+    if uses codex; then
+        command -v codex >/dev/null || die "the codex CLI is not on PATH (npm install -g @openai/codex)"
+    fi
 fi
 
 if want unit; then
