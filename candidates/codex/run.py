@@ -22,7 +22,8 @@ exactly (see ``_coding_agent``).
 Difference that cannot be removed, and is recorded: Codex runs with
 ``--dangerously-bypass-approvals-and-sandbox`` and a shell on the GPU node.
 Its own sandbox blocks the GPU and the Triton cache, so the node is its
-sandbox, and nothing but the prompt keeps it inside the workspace.
+sandbox. Nothing it is given names the repository (see ``_coding_agent``), but
+as the same user it could still search for it.
 """
 
 from __future__ import annotations
@@ -40,11 +41,11 @@ AGENT = "codex"
 OPENAI_API_BASE = "https://api.openai.com/v1"
 
 
-def command(args, workspace: Path, last_message: Path) -> list[str]:
+def command(args, workspace: Path) -> list[str]:
     """``codex exec`` on the prompt read from stdin."""
     command = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
                "--skip-git-repo-check", "--ignore-user-config", "-C", str(workspace),
-               "-m", args.model, "-o", str(last_message)]
+               "-m", args.model]
     if args.api_base.rstrip("/") != OPENAI_API_BASE:
         command += ["-c", f"openai_base_url={json.dumps(args.api_base)}"]
     if args.effort:
@@ -52,17 +53,22 @@ def command(args, workspace: Path, last_message: Path) -> list[str]:
     return [*command, "-"]
 
 
-def usage_events(log: Path) -> list[dict]:
-    """Every event of the JSONL stream that reports token usage (one per turn)."""
-    events = []
+def read_events(log: Path) -> tuple[list[dict], str | None]:
+    """The stream's usage events (one per turn) and the agent's last message."""
+    usage, reply = [], None
     for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             event = json.loads(line)
         except ValueError:
             continue
-        if isinstance(event, dict) and isinstance(event.get("usage"), dict):
-            events.append(event)
-    return events
+        if not isinstance(event, dict):
+            continue
+        if isinstance(event.get("usage"), dict):
+            usage.append(event)
+        item = event.get("item") or {}
+        if event.get("type") == "item.completed" and item.get("type") == "agent_message":
+            reply = item.get("text")
+    return usage, reply
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -78,18 +84,17 @@ def main(argv: list[str] | None = None) -> int:
 
     workspace = _coding_agent.Workspace(task, ledger, AGENT, args)
     log = ledger.root / "codex_events.jsonl"
-    last_message = ledger.root / "codex_last_message.txt"
     env = workspace.environment(args.gpu)
     if env.get("OPENAI_API_KEY") and not env.get("CODEX_API_KEY"):
         env["CODEX_API_KEY"] = env["OPENAI_API_KEY"]
-    status = _coding_agent.launch(command(args, workspace.root, last_message), workspace.root,
-                                  env, log, args.time_limit,
-                                  stdin=ledger.root / _coding_agent.PROMPT)
+    prompt = (ledger.root / _coding_agent.PROMPT).read_text(encoding="utf-8")
+    status = _coding_agent.launch(command(args, workspace.root), workspace.root, env, log,
+                                  args.time_limit, input_text=prompt)
 
-    for event in usage_events(log):
+    usage, reply = read_events(log)
+    for event in usage:
         ledger.log_llm({"source": "codex", "event": event.get("type"), "usage": event["usage"]})
     best, extra = workspace.collect()
-    reply = last_message.read_text(encoding="utf-8") if last_message.is_file() else None
     return _common.finish(args, task, ledger, best, status=None if status == "completed" else status,
                           reply=reply, **extra)
 

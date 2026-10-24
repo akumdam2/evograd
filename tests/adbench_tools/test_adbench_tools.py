@@ -271,25 +271,48 @@ def coding_agents():
     return claude, codex
 
 
-def test_the_coding_agents_work_against_a_metered_evaluator(small_task, coding_agents, tmp_path):
+def test_the_coding_agents_work_against_a_metered_evaluator_that_hides_the_repository(
+        small_task, coding_agents, tmp_path, monkeypatch):
     from evograd.adbench_tools.ledger import RunLedger
 
     shared = coding_agents[1]._coding_agent
     ledger = RunLedger(tmp_path / "run", agent="codex", task=small_task, config={})
-    args = argparse.Namespace(workspace=tmp_path / "workspace", budget=2, eval_timeout=60)
+    args = argparse.Namespace(workspace=tmp_path / "workspace", budget=3, eval_timeout=300)
     workspace = shared.Workspace(small_task, ledger, "codex", args)
+    hidden = (str(REPO), str(ledger.root), str(small_task.root))
     assert sorted(p.name for p in workspace.root.iterdir()) == [
         "TASK.md", "adbench_primitives.py", "candidate.py", "evaluate.py"]
+    for path in workspace.root.iterdir():
+        assert not any(h in path.read_text() for h in hidden), path.name
     prompt = (ledger.root / shared.PROMPT).read_text()
-    assert prompt.endswith(small_task.statement) and "at most 2 evaluations" in prompt
+    assert prompt.endswith(small_task.statement) and "at most 3 evaluations" in prompt
+
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(REPO / "src"), "/elsewhere"]))
+    monkeypatch.setenv("SLURM_SUBMIT_DIR", str(REPO))
+    env = workspace.environment("0")
+    assert env["PYTHONPATH"] == "/elsewhere" and "SLURM_SUBMIT_DIR" not in env
+    assert env["PWD"] == str(workspace.root)
+    assert not any(h in value for value in env.values() for h in hidden)
+
+    def evaluate(*args, cwd=workspace.root):
+        return subprocess.run([sys.executable, "evaluate.py", *args], cwd=cwd, env=env,
+                              capture_output=True, text=True)
+
     for origin in ("codex", "gepa", "codex"):
         ledger.log_evaluation({"kind": "full", "origin": origin, "correct": False})
-    refused = subprocess.run([sys.executable, "evaluate.py", "--correctness"],
-                             cwd=workspace.root, capture_output=True, text=True)
+    once = evaluate("--correctness")  # the skeleton: incorrect, on a GPU or not
+    assert once.returncode == 1 and "INCORRECT" in once.stdout, once.stdout + once.stderr
+    assert "evaluations remaining: 0 of 3" in once.stdout
+    assert not any(h in once.stdout for h in hidden)
+    refused = evaluate()
     assert refused.returncode == 3 and "BUDGET EXHAUSTED" in refused.stdout
+    traceback = f'File "{ledger.root}/programs/a.py" from "{REPO}/src/b.py", {small_task.root}'
+    assert workspace.evaluator.redact(traceback) == \
+        'File "<run>/programs/a.py" from "<evograd>/src/b.py", <task>'
     best, extra = workspace.collect()
     assert best is None and extra["deliverable"] == "none" and extra["oracle_intact"]
-    assert (ledger.root / "workspace" / "evaluate.py").is_file()
+    gone = evaluate(cwd=ledger.root / "workspace")
+    assert gone.returncode == 1 and "not reachable" in gone.stdout
 
 
 def test_the_coding_agents_deliverable_is_their_own_verified_choice(small_task, coding_agents,
@@ -322,19 +345,25 @@ def test_the_coding_agents_deliverable_is_their_own_verified_choice(small_task, 
 def test_codex_runs_on_the_shared_model_and_endpoint(coding_agents, tmp_path):
     claude, codex = coding_agents
     command = codex.command(argparse.Namespace(model="gpt-x", api_base="https://gw.example/v1",
-                                               effort="high"), tmp_path, tmp_path / "last.txt")
-    assert command[:2] == ["codex", "exec"] and command[-1] == "-"
+                                               effort="high"), tmp_path)
+    assert command[:2] == ["codex", "exec"] and command[-1] == "-" and "-o" not in command
     assert command[command.index("-m") + 1] == "gpt-x"
     assert 'openai_base_url="https://gw.example/v1"' in command
     assert 'model_reasoning_effort="high"' in command
     default = codex.command(argparse.Namespace(model="gpt-x", api_base=codex.OPENAI_API_BASE,
-                                               effort=None), tmp_path, tmp_path / "last.txt")
+                                               effort=None), tmp_path)
     assert not any(part.startswith(("openai_base_url", "model_reasoning")) for part in default)
     command = claude.command(argparse.Namespace(claude_model="opus", effort=None), "PROMPT")
     assert command[:3] == ["claude", "-p", "PROMPT"]
     assert command[command.index("--model") + 1] == "opus" and "--effort" not in command
     assert codex._coding_agent.cli_version(sys.executable).startswith("Python 3")
     assert codex._coding_agent.cli_version(str(tmp_path / "missing")) is None
+    log = tmp_path / "events.jsonl"
+    log.write_text('{"type":"item.completed","item":{"type":"agent_message","text":"first"}}\n'
+                   'not json\n{"type":"turn.completed","usage":{"input_tokens":3}}\n'
+                   '{"type":"item.completed","item":{"type":"agent_message","text":"last"}}\n')
+    usage, reply = codex.read_events(log)
+    assert reply == "last" and [e["usage"]["input_tokens"] for e in usage] == [3]
 
 
 def test_a_coding_agent_session_leaves_nothing_running(coding_agents, tmp_path):

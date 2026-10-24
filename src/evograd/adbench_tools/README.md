@@ -97,9 +97,9 @@ two is what the frontend contributes.
 - **GEAK** targets AMD GPUs and runs on Claude Code's model (see §2.5).
 - **Claude Code and Codex have a shell on the GPU node** (see §2.6). Their
   own sandboxes would block the GPU, so they run with permissions bypassed.
-  Only the prompt keeps them inside their workspace, which is a fresh
-  directory outside the repository. Whether they edited `evaluate.py` is
-  recorded. Claude Code runs on a Claude model.
+  Nothing they are given names the repository, but they run as the same
+  user, so a filesystem or process search could still find it. Whether they
+  edited `evaluate.py` is recorded. Claude Code runs on a Claude model.
 - **Library access.** evograd's frontend keeps matrix multiplications and
   convolutions in cuBLAS/cuDNN calls. So with `--library auto` (the default),
   every agent may call a trusted `vendor_gemm` (cuBLAS) primitive whenever the
@@ -185,9 +185,9 @@ and prompt for each, launches the CLI and picks the program to measure.
 | Needs | Claude Code: the `claude` CLI (`curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.310`) and `ANTHROPIC_API_KEY` or a `claude` login. Codex: the `codex` CLI (`npm install -g @openai/codex@0.149.1`) and `OPENAI_API_KEY`. Both are native CLIs, not pip packages (see `pyproject.toml`). `run.json` records the version each run used, and Claude Code's self-updater is off during a run |
 | Input | A workspace with `TASK.md`, `candidate.py` (the skeleton), `adbench_primitives.py` (if granted) and an `evaluate.py` it may not edit. The prompt (`prompt.md` in the run) is one paragraph on the workspace, the budget and the deliverable, followed by `TASK.md` verbatim. It is the same for both agents |
 | Loop | The agent's own: `claude -p` (stream-JSON output) or `codex exec --json`, headless, permissions bypassed, until it stops or `--time-limit` (default 6 h) |
-| Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
+| Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). Nothing the agent is given names the repository, the run or the task pack: `evaluate.py` holds only a socket address (Linux abstract namespace, this user only); the driver's evaluation server owns the budget and the ledger and replaces those paths in its feedback with `<evograd>`, `<run>` and `<task>`; and environment variables naming them are dropped (`PWD`, `SLURM_SUBMIT_DIR`) or pruned (`PYTHONPATH`). The agent runs as the same user, so a filesystem or process search could still find the repository; only a container would close that. User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
 | Model | Claude Code: `--claude-model`. Codex: `--model` at `--api-base` (set as `openai_base_url`, Responses API), with `OPENAI_API_KEY` passed as `CODEX_API_KEY`. `--effort` sets either agent's reasoning effort |
-| Feedback | `evaluate.py` runs our evaluator (full, or `--correctness`) on `candidate.py` or a given path, one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and the evaluations left |
+| Feedback | `evaluate.py` sends `candidate.py` or a given path to the driver's evaluation server, which runs our evaluator (full, or `--correctness`), one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and the evaluations left |
 | Code from reply | None to extract: the agent writes `candidate.py` with its file tools |
 | Output | `candidate.py` if `evaluate.py` passed exactly that module (the agent's choice). Otherwise, the best correct module it evaluated (full evaluations by `combined_score` first, then the latest). Otherwise, `candidate.py` as it is, unless it is still the skeleton. `run.json` records which rule applied (`deliverable`) |
 
@@ -460,9 +460,13 @@ Results go to `results/adbench_tools/<op>/`:
 
 ## 7. Open items
 
-- No real GPU + LLM run has completed yet for GEPA, raw OpenEvolve,
-  KernelAgent, Codex or Claude Code. The first smoke run is the end-to-end
-  test.
+- No real GPU + LLM run has completed yet for GEPA, raw OpenEvolve or
+  KernelAgent. The first smoke run is the end-to-end test. Codex and Claude
+  Code each completed one trial (budget 5, `llama3_swiglu_mlp` bf16).
+- In its trial, Claude Code followed the repository path `evaluate.py` then
+  embedded and read evograd's scoring and timing source. The path is now
+  hidden, but an agent running as the same user can still search for the
+  repository. Running the coding agents in a container would close that.
 - GEAK is parked until there is a way to run it on the same model (e.g. an
   OpenAI-compatible gateway for Claude Code), or until it is reported as a
   separate data point.

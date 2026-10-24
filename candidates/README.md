@@ -119,10 +119,16 @@ neither of them:
   For model parity, run every agent on the same model through an
   OpenAI-compatible gateway, or report GEAK as a separate point.
 - **Claude Code and Codex have a shell on the GPU node.** Their own
-  sandboxes block the GPU, so they run with permissions bypassed. The
-  workspace is a fresh directory outside the repository, but only the prompt
-  keeps them in it. `run.json` records `oracle_intact` (whether `evaluate.py`
-  was edited) and `deliverable` (which rule chose the measured program).
+  sandboxes block the GPU, so they run with permissions bypassed. Nothing
+  they are given names the repository, the run or the task pack: the
+  workspace is a fresh directory outside the repository, `evaluate.py`
+  reaches the evaluator through a Unix socket served by the driver (which
+  redacts those paths from its feedback), and their environment is scrubbed
+  of them. They run as the same user, though, so a filesystem or process
+  search could still find the repository (the first Claude Code trial read
+  evograd's scoring source through the path `evaluate.py` then embedded).
+  `run.json` records `oracle_intact` (whether `evaluate.py` was edited) and
+  `deliverable` (which rule chose the measured program).
   Claude Code runs on `--claude-model`, like GEAK. Codex runs on `--model`,
   but through the Responses API, so a gateway given as `--api-base` must serve
   `/responses`.

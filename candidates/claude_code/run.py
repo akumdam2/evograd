@@ -22,8 +22,8 @@ Differences that cannot be removed, and are recorded:
   For model parity run all agents on the same model, or report it as a
   separate point, as for GEAK.
 * It runs with ``--dangerously-skip-permissions`` and a shell on the GPU node:
-  the node is its sandbox, and nothing but the prompt keeps it inside the
-  workspace.
+  the node is its sandbox. Nothing it is given names the repository (see
+  ``_coding_agent``), but as the same user it could still search for it.
 """
 
 from __future__ import annotations
