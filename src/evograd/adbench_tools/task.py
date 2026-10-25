@@ -39,8 +39,10 @@ REFERENCE_FILE = "reference.py"
 STATEMENT_FILE = "TASK.md"
 SKELETON_FILE = "skeleton.py"
 
-#: Library primitives a task may grant (``evograd.pipelines.shared.primitives``).
-LIBRARY_POLICIES = ("auto", "none", "vendor_gemm")
+#: Library policies: ``auto`` follows the unified frontend (what Inductor hands
+#: to a vendor library is granted), ``none`` grants nothing, or an explicit
+#: comma-separated list of ``evograd.pipelines.shared.primitives`` names.
+LIBRARY_POLICIES = ("auto", "none", "vendor_gemm", "vendor_sdpa", "vendor_gemm,vendor_sdpa")
 #: Which declared configuration a task targets when no dims are given.
 CASE_SELECTIONS = ("benchmark", "correctness")
 
@@ -51,8 +53,10 @@ CASE_SELECTIONS = ("benchmark", "correctness")
 _CONTRACTIONS = frozenset({
     "linear", "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "conv1d", "conv2d",
     "conv3d", "conv_transpose1d", "conv_transpose2d", "conv_transpose3d", "tensordot",
-    "scaled_dot_product_attention",
 })
+#: Fused attention, which Inductor likewise leaves to a library (cuDNN) and the
+#: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference calls it.
+_ATTENTION = frozenset({"scaled_dot_product_attention"})
 
 
 @dataclass(frozen=True)
@@ -226,16 +230,22 @@ def reference_closure(forward_spec: str) -> tuple[str, str]:
     return source, name
 
 
-def _uses_contraction(source: str) -> bool:
+def _called_leaves(source: str) -> set[str]:
+    """Every function name the reference calls, plus ``@`` as ``matmul``."""
+    leaves: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.MatMult):
-            return True
+            leaves.add("matmul")
         if isinstance(node, ast.Call):
             func = node.func
             leaf = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-            if leaf in _CONTRACTIONS:
-                return True
-    return False
+            if leaf:
+                leaves.add(leaf)
+    return leaves
+
+
+def _uses_contraction(source: str) -> bool:
+    return bool(_called_leaves(source) & _CONTRACTIONS)
 
 
 def resolve_library(policy: str, reference_source: str) -> tuple[tuple[str, ...], str]:
@@ -243,14 +253,23 @@ def resolve_library(policy: str, reference_source: str) -> tuple[tuple[str, ...]
         raise ValueError(f"library policy must be one of {LIBRARY_POLICIES}, got {policy!r}")
     if policy == "none":
         return (), "requested: no library primitives"
-    if policy == "vendor_gemm":
-        return ("vendor_gemm",), "requested: vendor_gemm"
-    if _uses_contraction(reference_source):
-        return ("vendor_gemm",), (
-            "auto: the reference contains a contraction, which the unified frontend "
-            "keeps in a vendor library call; vendor_gemm gives agents the same access"
-        )
-    return (), "auto: the reference contains no contraction"
+    if policy != "auto":
+        names = tuple(sorted(policy.split(",")))
+        return names, f"requested: {', '.join(names)}"
+    leaves = _called_leaves(reference_source)
+    granted, reasons = [], []
+    if leaves & _CONTRACTIONS:
+        granted.append("vendor_gemm")
+        reasons.append("a contraction (vendor_gemm)")
+    if leaves & _ATTENTION:
+        granted.append("vendor_sdpa")
+        reasons.append("fused attention (vendor_sdpa)")
+    if not granted:
+        return (), "auto: the reference contains no contraction or fused attention"
+    return tuple(granted), (
+        f"auto: the reference contains {' and '.join(reasons)}, which the unified frontend "
+        "keeps in a vendor library call; the primitive gives agents the same access"
+    )
 
 
 # ── the ABI, as data ─────────────────────────────────────────────────────────
@@ -312,8 +331,44 @@ def _task_id(op_name: str, workload) -> str:
     return f"{op_name}.{short}.{dims}"
 
 
+# ── a model's observed case ──────────────────────────────────────────────────
+
+
+def observed_case(model_name: str, case_id: str):
+    """``(model, case)`` of one observed benchmark case, as the gates see it."""
+    from evograd.verification.integrations import load as load_model
+    from evograd.verification.integrations.base import observed_cases
+
+    model = load_model(model_name)
+    cases = {c.case_id: c for c in observed_cases(model)}
+    if case_id not in cases:
+        raise ValueError(f"{model_name} has no observed case {case_id!r}; known: {sorted(cases)}")
+    return model, cases[case_id]
+
+
+def _write_model_declaration(path: Path, model_name: str, task: str, workload) -> None:
+    """The model's reference declaration, scoped to the observed case.
+
+    The base is ``Model.reference_op(task)``: the task re-declared with the
+    model's own computation as forward, under its model-reference contract,
+    which is what every gate of ``evograd evaluate`` judges against.
+    """
+    source = f'''"""The observed configuration of {model_name}'s case {task}, under its model reference."""
+from pathlib import Path
+from evograd.opdecl.activity import Workload
+from evograd.pipelines.unified.synthesize import scoped_op
+from evograd.verification.integrations import load
+
+_base = load({model_name!r}).reference_op({task!r})
+_case = Workload(dims={dict(workload.dims)!r}, dtype={workload.dtype!r},
+                 atol={workload.atol!r}, rtol={workload.rtol!r})
+op = scoped_op(_base, _case, declaration=str(Path(__file__).resolve()) + ":op")
+'''
+    path.write_text(source, encoding="utf-8")
+
+
 def build_task(
-    op_name: str,
+    op_name: str | None,
     output_dir: str | Path,
     *,
     declaration: str | None = None,
@@ -323,12 +378,20 @@ def build_task(
     scoring: str = "speed_memory",
     performance_baseline: str = "auto",
     case: str = "benchmark",
+    model: str | None = None,
+    case_id: str | None = None,
 ) -> AgentTask:
     """Write a task pack for one operator configuration and return it loaded.
 
     ``case="benchmark"`` (default) targets the operator's first declared timed
     case of ``dtype``; ``case="correctness"`` reproduces ``evograd seed
     unified``'s default, the first correctness case. Explicit ``dims`` win.
+
+    With ``model`` and ``case_id`` the task is that model's observed case
+    (``evograd evaluate``'s unit): the configuration the model trains at and
+    the model's own reference computation, so what the agent optimizes is what
+    the gates judge. ``op_name``, ``declaration``, ``dtype``, ``dims`` and
+    ``case`` are then taken from the case.
     """
     from dataclasses import replace
 
@@ -348,35 +411,54 @@ def build_task(
     )
 
     get_policy(scoring)
-    dims_given = dims is not None
-    if case not in CASE_SELECTIONS:
-        raise ValueError(f"case must be one of {CASE_SELECTIONS}, got {case!r}")
-    base = load_task(declaration) if declaration else get_task(op_name)
-    if base.name != op_name:
-        raise ValueError(f"declaration name {base.name!r} does not match {op_name!r}")
-    if declaration:
-        path, _, attribute = declaration.partition(":")
-        base = replace(base, declaration=f"{Path(path).resolve()}:{attribute}")
-    selection = "explicit dims" if dims_given else case
-    if dims is None and case == "benchmark":
-        timed = [w for w in base.benchmark_workloads() if dtype is None or w.dtype == dtype]
-        if timed:
-            dims, dtype = dict(timed[0].dims), timed[0].dtype
-        else:
-            # Nothing timed is declared (an operator kept for correctness
-            # coverage); the frontend's own default is all there is.
-            selection = "correctness (no declared benchmark case" + (
-                f" of dtype {dtype})" if dtype else ")")
-    # With explicit dims this is exactly `evograd seed unified --dims ... --dtype ...`.
-    workload = select_workload(base, dtype=dtype, dims=dims)
+    observed = None
+    if (model is None) != (case_id is None):
+        raise ValueError("model and case_id go together")
+    if model is not None:
+        if declaration or dtype or dims or case != "benchmark":
+            raise ValueError("a model's observed case fixes the declaration and configuration")
+        model_obj, observed = observed_case(model, case_id)
+        base, workload = model_obj.reference_op(observed.task), observed.workload
+        op_name = base.name
+        selection = f"observed case {case_id} of {model}"
+    else:
+        if op_name is None:
+            raise ValueError("op_name is required without a model")
+        dims_given = dims is not None
+        if case not in CASE_SELECTIONS:
+            raise ValueError(f"case must be one of {CASE_SELECTIONS}, got {case!r}")
+        base = load_task(declaration) if declaration else get_task(op_name)
+        if base.name != op_name:
+            raise ValueError(f"declaration name {base.name!r} does not match {op_name!r}")
+        if declaration:
+            path, _, attribute = declaration.partition(":")
+            base = replace(base, declaration=f"{Path(path).resolve()}:{attribute}")
+        selection = "explicit dims" if dims_given else case
+        if dims is None and case == "benchmark":
+            timed = [w for w in base.benchmark_workloads() if dtype is None or w.dtype == dtype]
+            if timed:
+                dims, dtype = dict(timed[0].dims), timed[0].dtype
+            else:
+                # Nothing timed is declared (an operator kept for correctness
+                # coverage); the frontend's own default is all there is.
+                selection = "correctness (no declared benchmark case" + (
+                    f" of dtype {dtype})" if dtype else ")")
+        # With explicit dims this is exactly `evograd seed unified --dims ... --dtype ...`.
+        workload = select_workload(base, dtype=dtype, dims=dims)
 
     root = Path(output_dir).resolve()
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
     root.mkdir(parents=True, exist_ok=True)
 
-    # The frontend's own scoped declaration, written by the frontend's writer.
-    _write_declaration(root / DECLARATION_FILE, base, workload)
+    if observed is not None:
+        # The model reference, scoped to the case; the pack's own declaration
+        # is then the base every agent (and evograd's seed) starts from.
+        _write_model_declaration(root / DECLARATION_FILE, model, observed.task, workload)
+        base = replace(base, declaration=f"{(root / DECLARATION_FILE).resolve()}:op")
+    else:
+        # The frontend's own scoped declaration, written by the frontend's writer.
+        _write_declaration(root / DECLARATION_FILE, base, workload)
     reference, entry = reference_closure(base.forward)
     (root / REFERENCE_FILE).write_text(reference, encoding="utf-8")
     allowed, library_reason = resolve_library(library, reference)
@@ -385,15 +467,18 @@ def build_task(
     baseline = resolve_performance_baseline(scoped, performance_baseline)
     spec: dict[str, Any] = {
         "schema": TASK_SCHEMA,
-        "task_id": _task_id(op_name, workload),
+        "task_id": (f"{model}.{case_id.replace('/', '.')}" if observed is not None
+                    else _task_id(op_name, workload)),
         "op": op_name,
         "base_declaration": base.declaration,
         "forward": base.forward,
         "reference_entry": entry,
-        "level": base.level,
+        "level": observed.level if observed is not None else base.level,
         "family": base.family,
         "workload": {"dims": dict(workload.dims), "dtype": workload.dtype},
         "case_selection": selection,
+        **({"model": model, "case_id": case_id, "frequency": observed.frequency,
+            "reference_contract": base.reference_contract} if observed is not None else {}),
         "abi": describe_abi(scoped, workload),
         "semantics": {
             "forward": scoped.forward_semantics,

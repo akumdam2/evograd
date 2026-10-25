@@ -100,11 +100,15 @@ two is what the frontend contributes.
   Nothing they are given names the repository, but they run as the same
   user, so a filesystem or process search could still find it. Whether they
   edited `evaluate.py` is recorded. Claude Code runs on a Claude model.
-- **Library access.** evograd's frontend keeps matrix multiplications and
-  convolutions in cuBLAS/cuDNN calls. So with `--library auto` (the default),
-  every agent may call a trusted `vendor_gemm` (cuBLAS) primitive whenever the
-  reference contains a matrix multiplication. Every other contraction must be
-  written in Triton.
+- **Library access.** evograd's frontend preserves what Inductor hands to a
+  vendor library: matrix multiplications and convolutions (cuBLAS/cuDNN) and
+  fused attention (cuDNN SDPA). So with `--library auto` (the default), every
+  agent may call a trusted `vendor_gemm` primitive whenever the reference
+  contains a matrix multiplication, and the `vendor_sdpa_forward` /
+  `vendor_sdpa_backward` pair whenever it calls
+  `scaled_dot_product_attention`. Every other contraction must be written in
+  Triton. A case whose reference is one preserved call (a bare projection, a
+  bare attention) leaves nothing to evolve: its candidate equals the baseline.
 
 ---
 
@@ -252,11 +256,16 @@ neither. Anything specific to one agent lives in `candidates/<agent>/`.
 | `score.py` | **Final measurement** and `compare` (§5.6) |
 | `_example_TASK.md` | A generated `TASK.md` for `llama3_swiglu_mlp`, bf16, B=2 T=2048 H=2048 I=8192, for reading |
 
+`task --model M --case-id TASK/COMPONENT` builds the pack of one of a verified
+model's *observed cases* (§7) instead of an operator's declared configuration.
+
 ### 4.2 `candidates/`: one folder per agent
 
 | Path | Role |
 |---|---|
 | `_common.py` | Flags shared by all drivers (`--task --run-dir --budget --model --api-base --seed --no-score`), ledger setup, final scoring, importing OpenEvolve's program archive into the ledger |
+| `bench.py` | **The benchmark run** (§7): task packs per observed case, the agent on each, `evograd evaluate`, the per-level summary |
+| `seed/run.py` | evograd's frontend alone (the unified seed, no LLM): the no-LLM pipeline check and the "frontend only" reference point |
 | `evograd/run.py` | Our agent: unified seed, then `run_evolve` |
 | `openevolve/run.py` | Raw OpenEvolve: skeleton seed, `TASK.md` as the system message |
 | `gepa/run.py` | GEPA driver |
@@ -411,8 +420,12 @@ Lines are appended with single `O_APPEND` writes, so parallel workers
 
 ### 5.6 The final measurement and comparison (`score.py`)
 
+**Diagnostic.** `score` and `compare` measure one configuration with seed
+acceptance and Tier 1 only; the benchmark's judgement is `evograd evaluate`
+(§7), which `candidates/bench.py` runs and the drivers skip with `--no-score`.
+
 `python -m evograd.adbench_tools score --task T --run-dir R PROGRAM` (every
-driver calls it at the end):
+driver calls it at the end unless told `--no-score`):
 
 1. **Rebuild** the program from the code inside its block, with fresh wrapper
    code. `fixed_code_intact` records whether the agent had changed anything
@@ -458,7 +471,47 @@ Results go to `results/adbench_tools/<op>/`:
 
 ---
 
-## 7. Open items
+## 7. The benchmark run
+
+The comparison the paper reports is not `score`/`compare` but the benchmark's
+evaluation protocol, `evograd evaluate` (`src/evograd/evaluation/protocol.py`),
+run by `candidates/bench.py` on every agent in the same way:
+
+```bash
+export ADBENCH_ROOT=...            # default results/adbench; results go to $ADBENCH_ROOT/<model>
+python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm ...
+python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 30
+python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json --deadline-min 50
+python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd openevolve gepa kernelagent
+```
+
+1. **Tasks are a model's observed cases.** A case is one configuration a
+   verified model trains at (`evograd.verification.integrations.base.observed_cases`),
+   and its task pack carries the model's own reference computation
+   (`Model.reference_op`) at that configuration: what the agent optimizes is
+   what the gates judge. The agent still sees kernel-scope information only
+   (the forward's source, shapes, dtypes, tolerances); nothing about the model.
+2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
+   Its best program is rebuilt from its evolve block into `submission.py`
+   (`fixed_code_intact` is recorded).
+3. **Every submission goes through the protocol**: the static rules
+   (`check_source`; a violation is neither verified nor timed), then the gates
+   on the model's real training payloads -- Level 1: Gate 1 and operator
+   Gate 2; Level 2: also model Gate 2 alone at its site -- then Tier 1 for every
+   executable candidate, Tier 3 for each Level-2 candidate alone, and the
+   combination of the accepted Level-2 candidates whose single-site speedup is
+   clearly above one, which gets model Gate 2 and Gate 3 (Level 3) and the
+   Tier 3 step against eager and whole-model `torch.compile`.
+4. **`summarize`** reports, per agent and level, the funnel (submitted,
+   violation, executable, Gate 1, accepted), coverage, the geometric-mean
+   speedup over accepted configurations against eager and `torch.compile`, the
+   Level-3 combination, and the cost from the ledgers (evaluations, LLM calls,
+   wall time).
+
+Gate 3 controls and Gate 2 calibrations live in `$ADBENCH_ROOT/<model>/state`,
+shared by every agent; `evaluate` is resumable (`--deadline-min`, exit 3).
+
+## 8. Open items
 
 - No real GPU + LLM run has completed yet for GEPA, raw OpenEvolve or
   KernelAgent. The first smoke run is the end-to-end test. Codex and Claude

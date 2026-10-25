@@ -1,6 +1,6 @@
 """python -m evograd.adbench_tools <command>
 
-    task       build a task pack for one operator configuration
+    task       build a task pack for one operator configuration or a model's observed case
     statement  print a task pack's shared problem statement
     package    wrap an agent module into an evaluable artifact
     evaluate   evaluate one candidate (see evograd.adbench_tools.evaluate)
@@ -32,7 +32,12 @@ def _task(argv: list[str]) -> int:
 
     parser = argparse.ArgumentParser(prog="python -m evograd.adbench_tools task",
                                      description="Build a task pack (see evograd.adbench_tools.task).")
-    parser.add_argument("--op", required=True)
+    parser.add_argument("--op", default=None)
+    parser.add_argument("--model", default=None,
+                        help="with --case-id: a verified model's observed case, under the model's "
+                             "reference (what `evograd evaluate` judges); replaces --op and the "
+                             "configuration flags")
+    parser.add_argument("--case-id", default=None, metavar="TASK/COMPONENT")
     parser.add_argument("--declaration", default=None, help="external path.py:op declaration")
     parser.add_argument("--dtype", choices=("float32", "float16", "bfloat16"))
     parser.add_argument("--dims", nargs="+", metavar="NAME=SIZE",
@@ -46,9 +51,12 @@ def _task(argv: list[str]) -> int:
     parser.add_argument("--performance-baseline", default="auto")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
+    if (args.op is None) == (args.model is None):
+        parser.error("give --op, or --model with --case-id")
     task = build_task(args.op, args.output_dir, declaration=args.declaration, dtype=args.dtype,
                       dims=_dims(args.dims), library=args.library, scoring=args.scoring,
-                      performance_baseline=args.performance_baseline, case=args.case)
+                      performance_baseline=args.performance_baseline, case=args.case,
+                      model=args.model, case_id=args.case_id)
     print(f"task {task.task_id}: {task.root}")
     print(f"  configuration: {task.workload}")
     print(f"  library primitives: {list(task.allowed_primitives)} "

@@ -257,6 +257,56 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
     assert torch.allclose(frozen, eager)
 
 
+# ── a model's observed case ──────────────────────────────────────────────────
+
+
+def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
+    """The pack `evograd evaluate` judges: the case's configuration and the
+    model's own reference computation, both read from the verification side."""
+    from evograd.adbench_tools.task import observed_case
+
+    model, case = observed_case("qwen3_0_6b", "rmsnorm/rmsnorm")
+    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
+    reference = model.reference_op("rmsnorm")
+    op = task.op()
+    assert task.task_id == "qwen3_0_6b.rmsnorm.rmsnorm"
+    assert task.spec["model"] == "qwen3_0_6b" and task.spec["case_id"] == "rmsnorm/rmsnorm"
+    assert task.spec["level"] == case.level and task.spec["frequency"] == case.frequency
+    assert task.workload == {"dims": dict(case.workload.dims), "dtype": case.workload.dtype}
+    assert op.forward == reference.forward != get_task_forward("rmsnorm")
+    assert op.reference_contract == reference.reference_contract
+    assert op.correctness == op.benchmark == op.coverage
+    assert (op.correctness[0].dims, op.correctness[0].dtype) == (case.workload.dims,
+                                                                 case.workload.dtype)
+    assert task.spec["base_declaration"] == f"{task.root / 'declaration.py'}:op"
+    assert f"Source: {reference.forward}" in task.reference_source
+    with pytest.raises(ValueError, match="no observed case"):
+        build_task(None, tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
+    with pytest.raises(ValueError, match="fixes the declaration"):
+        build_task(None, tmp_path / "mixed", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                   dtype="float32")
+
+
+def get_task_forward(name: str) -> str:
+    from evograd.benchmark import get_task
+
+    return get_task(name).forward
+
+
+def test_auto_library_follows_what_the_frontend_preserves():
+    from evograd.adbench_tools.task import resolve_library
+
+    gemm = "def f(x, w):\n    return torch.nn.functional.linear(x, w)\n"
+    sdpa = "def f(q, k, v):\n    return F.scaled_dot_product_attention(q, k, v, is_causal=True)\n"
+    both = gemm + sdpa
+    assert resolve_library("auto", gemm)[0] == ("vendor_gemm",)
+    assert resolve_library("auto", sdpa)[0] == ("vendor_sdpa",)
+    assert resolve_library("auto", both)[0] == ("vendor_gemm", "vendor_sdpa")
+    assert resolve_library("auto", "def f(x):\n    return x * 2\n")[0] == ()
+    assert resolve_library("vendor_gemm,vendor_sdpa", "")[0] == ("vendor_gemm", "vendor_sdpa")
+    assert resolve_library("none", both)[0] == ()
+
+
 # ── coding-agent glue (candidates/claude_code, candidates/codex) ─────────────
 
 
