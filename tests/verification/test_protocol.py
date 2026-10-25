@@ -41,6 +41,24 @@ def backward_from_saved(dc, saved):
     raise RuntimeError("illegal memory access")
 '''
 
+#: The toy pair spelled within the static rules (no torch.nn.functional).
+RULED = '''
+import torch
+
+
+def forward_with_saved(a, b):
+    return a * torch.sigmoid(a) * b, (a, b)
+
+
+def backward_from_saved(dc, saved):
+    a, b = saved
+    s = torch.sigmoid(a)
+    return dc * b * (s * (1 + a * (1 - s))), dc * a * s
+'''
+
+#: A submission's shape: its module inside one evolve block.
+BLOCK = "# EVOLVE-BLOCK-START\n{}\n# EVOLVE-BLOCK-END\n"
+
 
 def fixed_timer(speedup):
     def time_tier1(op, module, workload):
@@ -77,7 +95,9 @@ class Evaluate(unittest.TestCase):
             cls.manifest = base.capture(cls.model, root / "corpus", device="cpu", log=lambda *a: None)
         cls.programs = {}
         for name, source in (("good", T.CANDIDATE.format(scale=1.0)),
-                             ("fault", T.CANDIDATE.format(scale=1.05)), ("raises", RAISES)):
+                             ("fault", T.CANDIDATE.format(scale=1.05)), ("raises", RAISES),
+                             ("violates", BLOCK.format(T.CANDIDATE.format(scale=1.0))),
+                             ("ruled", BLOCK.format(RULED))):
             path = root / f"{name}.py"
             path.write_text(source)
             cls.programs[name] = str(path)
@@ -86,7 +106,10 @@ class Evaluate(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def evaluate(self, program, out, *, timer=fixed_timer(1.5), intervals=faster_than_eager):
+    def evaluate(self, program, out, *, timer=fixed_timer(1.5), intervals=faster_than_eager,
+                 rules=False):
+        """The toy pair is a bare module, not an artifact: the static rules are
+        off unless a test asks for them."""
         from evograd.evaluation.protocol import evaluate
 
         with self.T.toy_environment(), \
@@ -94,7 +117,7 @@ class Evaluate(unittest.TestCase):
             return evaluate(self.model, {self.T.CASE_ID: self.programs[program]}, self.manifest,
                             out, state=Path(self.tmp.name) / "state", device="cpu",
                             compile_backend=FAST, log=lambda *a: None, tier3_options=TIER3,
-                            time_tier1=timer, isolate_tier3=False)
+                            time_tier1=timer, isolate_tier3=False, rules=rules)
 
     def test_an_accepted_candidate_is_timed_combined_and_counted(self):
         out = Path(self.tmp.name) / "good"
@@ -113,8 +136,8 @@ class Evaluate(unittest.TestCase):
         self.assertAlmostEqual(summary["level2"]["speedup"]["eager"]["geomean"], 1.5)
         self.assertAlmostEqual(summary["level2"]["speedup"]["torch_compile"]["geomean"], 0.75)
         self.assertEqual(summary["level2"]["funnel"],
-                         {"configurations": 1, "submitted": 1, "executable": 1, "gate1": 1,
-                          "accepted": 1})
+                         {"configurations": 1, "submitted": 1, "violation": 0, "executable": 1,
+                          "gate1": 1, "accepted": 1})
         self.assertEqual(summary["level3"]["coverage"], 1.0)
         self.assertIsNotNone(summary["level3"]["models"]["toy"]["speedup"])
         self.assertTrue((out / "evaluation.json").exists())
@@ -155,6 +178,33 @@ class Evaluate(unittest.TestCase):
         self.assertNotIn("tier3_single_site", case)
         self.assertFalse(case["accepted"])
         self.assertEqual(result["summary"]["level2"]["funnel"]["executable"], 0)
+
+    def test_a_submission_breaking_the_static_rules_is_neither_verified_nor_timed(self):
+        def never(*args, **kwargs):
+            raise AssertionError("a violating candidate was timed")
+
+        # The toy pair calls torch.nn.functional, which the rules deny.
+        result = self.evaluate("violates", Path(self.tmp.name) / "violates", timer=never,
+                               rules=True)
+        case = result["cases"][self.T.CASE_ID]
+        self.assertIn("nn.functional", case["violation"])
+        self.assertFalse(case["accepted"] or case["executable"])
+        for key in ("gate1_payloads", "gate2_operator", "tier1", "tier3_single_site"):
+            self.assertNotIn(key, case)
+        self.assertEqual(result["tier3"]["combination"]["cases"], [])
+        funnel = result["summary"]["level2"]["funnel"]
+        self.assertEqual((funnel["violation"], funnel["executable"]), (1, 0))
+
+        # A bare module has no block for the rules to span.
+        bare = self.evaluate("good", Path(self.tmp.name) / "bare", timer=never, rules=True)
+        self.assertIn("EVOLVE-BLOCK", bare["cases"][self.T.CASE_ID]["violation"])
+
+        # The same math spelled within the rules goes on to be verified and timed.
+        ruled = self.evaluate("ruled", Path(self.tmp.name) / "ruled", rules=True)
+        case = ruled["cases"][self.T.CASE_ID]
+        self.assertNotIn("violation", case)
+        self.assertTrue(case["executable"])
+        self.assertIn("gate1_payloads", case)
 
     def test_an_interval_that_reaches_one_leaves_the_candidate_out_of_the_combination(self):
         def straddles(report, reference="eager", *, seed=0):

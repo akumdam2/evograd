@@ -144,7 +144,7 @@ class _Tiny:
             reports = judge_case(self.MODEL, case, linear_pair(scale), self.corpus, device="cpu",
                                  compile_backend="aot_eager")
             status = {name: r.status for name, r in reports.items()}
-            self.assertEqual(status, {"gate1_generated": expected, "gate1_payloads": expected,
+            self.assertEqual(status, {"gate1_payloads": expected,
                                       "gate2_operator_calibration": "calibrated",
                                       "gate2_operator": expected}, (case.case_id, scale))
 

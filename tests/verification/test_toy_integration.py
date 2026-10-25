@@ -201,3 +201,20 @@ class ToyIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGate1Envelope(unittest.TestCase):
+    def test_gate1_envelope_names_gradients_as_gate1_does(self):
+        from types import SimpleNamespace
+
+        from evograd.benchmark import get_task
+        from evograd.verification.integrations.gates import gate1_envelope
+
+        op = get_task("qwen3_qkv_norm_rope")
+        policy = SimpleNamespace(thresholds={
+            "out:q": {"envelope": 0.75}, "grad:q_weight": {"envelope": 0.0039},
+            "grad_in:x": {"envelope": 0.0001}, "grad:v_weight": {"E2": 1.0}})   # no envelope
+        self.assertEqual(gate1_envelope(op, policy),
+                         {"out:q": 0.75, "grad_in:dq_weight": 0.0039, "grad_in:dx": 0.0001})
+        self.assertEqual(gate1_envelope(op, None), {})
+

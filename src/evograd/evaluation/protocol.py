@@ -6,9 +6,15 @@
 
 Every submission follows the same steps, whoever generated it:
 
-1. **Verification** (:func:`evograd.verification.integrations.gates.verify_cases`): Gate 1 and operator Gate 2
-   for every candidate, and the single-site model Gate 2 for every Level-2
-   candidate. A candidate passing every gate that applies is *accepted*.
+0. **Static rules** (:func:`check_rules`): the submission is a packaged
+   artifact whose ``EVOLVE-BLOCK`` obeys the primitive rules
+   (:func:`evograd.pipelines.shared.primitives.check_source`): no library
+   contraction, normalization, attention or autograd call that the run did
+   not grant. A *violation* is recorded and the candidate goes no further:
+   neither verified nor timed.
+1. **Verification** (:func:`evograd.verification.integrations.gates.verify_cases`): Gate 1 on the
+   model's real training payloads and operator Gate 2 for every candidate, and
+   the single-site model Gate 2 for every Level-2 candidate. A candidate passing every gate that applies is *accepted*.
 2. **Tier 1** for every *executable* candidate, accepted or not: the
    forward--backward pair at the case's configuration, against eager PyTorch
    and ``torch.compile`` through autograd, and against any declared library
@@ -79,6 +85,40 @@ def timing_mode() -> dict[str, Any]:
     torch.use_deterministic_algorithms(False)
     torch.backends.cudnn.deterministic = False
     return determinism_record()
+
+
+# ── static rules ─────────────────────────────────────────────────────────────
+
+
+def check_rules(op, module, path: str | Path) -> str | None:
+    """The static rules on a submission's source; the violation, or ``None``.
+
+    The granted primitives are the ones the artifact's own ``ARTIFACT_CONTRACT``
+    records, as every later consumer of the artifact reads them. A direct
+    deployment artifact also gets the deployment-layer checks
+    (:func:`~evograd.pipelines.shared.artifact.validate_artifact`); a bare pair
+    only its evolve block. A module without an ``EVOLVE-BLOCK`` is a violation:
+    the rules have nothing to span.
+    """
+    from evograd.pipelines.shared.artifact import (
+        ArtifactError,
+        deployment_entry,
+        validate_artifact,
+    )
+    from evograd.pipelines.shared.primitives import PrimitiveViolation, check_source, normalize
+
+    source = Path(path).read_text(encoding="utf-8")
+    declared = getattr(module, "ARTIFACT_CONTRACT", None)
+    allowed = normalize((declared or {}).get("allowed_primitives", ())
+                        if isinstance(declared, dict) else ())
+    try:
+        if deployment_entry(module) is not None:
+            validate_artifact(op, module, source=source, allowed_primitives=allowed)
+        else:
+            check_source(source, allowed=allowed)
+    except (ArtifactError, PrimitiveViolation, SyntaxError) as exc:
+        return f"{type(exc).__name__}: {exc}"
+    return None
 
 
 # ── Tier 1 ───────────────────────────────────────────────────────────────────
@@ -321,12 +361,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              deadline_min: float | None = None,
              tier1_options: Mapping[str, Any] = TIER1_OPTIONS,
              tier3_options: Mapping[str, Any] = TIER3_OPTIONS,
-             time_tier1: Callable | None = None, isolate_tier3: bool = True) -> dict[str, Any]:
+             time_tier1: Callable | None = None, isolate_tier3: bool = True,
+             rules: bool = True) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
 
     ``time_tier1(op, module, workload)`` replaces :func:`time_case` (a CPU test
     has no CUDA events to time with); ``isolate_tier3=False`` runs the Tier 3
-    providers in this process (a test model cannot be loaded by name).
+    providers in this process (a test model cannot be loaded by name);
+    ``rules=False`` skips the static rules (a toy pair is not an artifact).
     """
     from evograd.benchmark import get_task
 
@@ -347,6 +389,18 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                   for c in observed_cases(model)},
     }
     try:
+        # 0. Static rules: a violating submission is neither verified nor timed.
+        for case_id in sorted(run.modules) if rules else ():
+            violation = check_rules(model.reference_op(run.cases[case_id].task),
+                                    run.modules[case_id], run.paths[case_id])
+            if violation is None:
+                continue
+            result["cases"][case_id].update({
+                "program": run.paths.pop(case_id), "program_sha256": run.programs.pop(case_id),
+                "violation": violation, "accepted": False, "executable": False})
+            del run.modules[case_id]
+            log(case_id, "violation", violation)
+
         # 1. Verification.
         verdict = verify_cases(run)
         result["corpus"] = verdict["corpus"]
@@ -447,9 +501,10 @@ def _level_summary(rows: list[dict[str, Any]], level: int) -> dict[str, Any]:
     rows = [r for r in rows if r["level"] == level]
     funnel = {"configurations": len(rows),
               "submitted": sum(bool(r.get("submitted")) for r in rows),
+              "violation": sum("violation" in r for r in rows),
               "executable": sum(bool(r.get("executable")) for r in rows),
-              "gate1": sum(bool(r.get("executable")) and r.get("gate1_generated") == "passed"
-                           and r.get("gate1_payloads") == "passed" for r in rows),
+              "gate1": sum(bool(r.get("executable")) and r.get("gate1_payloads") == "passed"
+                           for r in rows),
               "accepted": sum(bool(r.get("executable")) and bool(r.get("accepted")) for r in rows)}
     speedups: dict[str, dict[str, Any]] = {}
     for baseline in ENGINE_BASELINES:

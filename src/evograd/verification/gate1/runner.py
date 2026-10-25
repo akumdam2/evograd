@@ -14,10 +14,13 @@ operands' real dtypes; ``reference_dtype`` is refused there. The report's
 (:func:`evograd.opdecl.oracle.reference_identity`).
 
 **How.** Per element, per result:
-``|candidate_i - reference_i| <= atol_z(c) + rtol_z(c) * |reference_i|``, with
-model-reference tasks using fixed ``torch.testing.assert_close`` dtype defaults
-from PyTorch 2.11 for each reference result. Declaration overrides, multipliers
-and shape hooks do not apply to model tasks. Generic tasks retain
+``|candidate_i - reference_i| <= max(atol_z + rtol_z * |reference_i|, envelope_z)``,
+with model-reference tasks using fixed ``torch.testing.assert_close`` dtype
+defaults from PyTorch 2.11 for each reference result and ``envelope_z`` gamma
+times the largest elementwise deviation the trusted ``torch.compile`` control
+showed on that result over the calibration payloads (passed in by the caller
+from the operator Gate 2 policy; absent, 0). Declaration overrides,
+multipliers and shape hooks do not apply to model tasks. Generic tasks retain
 ``op.tolerance_for(workload, result)``. Computed in float64.
 
 **What this core adds to the earlier verifiers** (all listed in the package
@@ -165,8 +168,13 @@ def verify_pair(
     mode: str = ORACLE,
     input_mutation: str = REJECT,
     observers: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
+    envelope: Mapping[str, float] | None = None,
 ) -> VerificationReport:
     """Run ``candidate`` on every case and judge it against the oracle.
+
+    ``envelope`` maps a result name (``out:q``) to the least allowance of any
+    of its elements: gamma times the trusted compile control's largest
+    elementwise deviation on that result (see :mod:`.tolerances`).
 
     ``candidate`` is a :class:`PairUnderTest`, a seed module exposing
     ``forward_with_saved``/``backward_from_saved`` (generic or op-prefixed), or
@@ -195,7 +203,8 @@ def verify_pair(
                  "device": str(device), "mode": mode, "input_mutation": input_mutation,
                  "reference": reference_identity(op),
                  "tolerance_policy": policy_identity(op),
-                 "comparison": "|c-r| <= atol + rtol*|r| per element, float64",
+                 "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+                 "envelope": dict(envelope or {}),
                  "cases": [c.case_id for c in selected]},
     )
     ids = [c.case_id for c in selected]
@@ -207,12 +216,14 @@ def verify_pair(
                                                      "this is not a numerical verification"))
     for case in selected:
         report.cases.append(_run_case(op, pair, case, device=device, mode=mode,
-                                      input_mutation=input_mutation, observers=observers or {}))
+                                      input_mutation=input_mutation, observers=observers or {},
+                                      envelope=envelope))
     return report
 
 
 def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, mode: str,
-              input_mutation: str, observers: Mapping[str, Callable]) -> CaseReport:
+              input_mutation: str, observers: Mapping[str, Callable],
+              envelope: Mapping[str, float] | None = None) -> CaseReport:
     report = CaseReport(case_id=case.case_id, role=case.role,
                         evidence={"dims": dict(case.workload.dims), "dtype": case.workload.dtype,
                                   "provenance": dict(case.provenance)})
@@ -307,7 +318,8 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
 
     # 4. compare, by name.
     if mode == ORACLE:
-        report.results.extend(compare_results(op, case.workload, contract, candidate, reference))
+        report.results.extend(compare_results(op, case.workload, contract, candidate, reference,
+                                              envelope=envelope))
     else:
         report.results.extend(_smoke_results(contract, candidate))
 
@@ -320,7 +332,8 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
 
 
 def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
-                    candidate: Mapping[str, Any], reference: Mapping[str, Any]) -> list[ResultCheck]:
+                    candidate: Mapping[str, Any], reference: Mapping[str, Any],
+                    envelope: Mapping[str, float] | None = None) -> list[ResultCheck]:
     """One :class:`ResultCheck` per contract entry, in contract order."""
     pairs, presence = C.match_results(contract, candidate, reference)
     by_name = {spec.name: ResultCheck(spec.name, spec.kind) for spec in contract.specs}
@@ -344,13 +357,15 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
             continue
         try:
             atol, rtol = result_tolerances(op, workload, declared_name(pair.spec.name), pair.reference)
-            err = elementwise_error(pair.candidate, pair.reference, atol=atol, rtol=rtol)
+            floor = float((envelope or {}).get(pair.spec.name, 0.0))
+            err = elementwise_error(pair.candidate, pair.reference, atol=atol, rtol=rtol,
+                                    abs_floor=floor)
         except Exception as exc:  # no tolerance for this dtype, or an invalid one
             check.findings.append(missing("tolerance_unavailable", f"{type(exc).__name__}: {exc}",
                                           subject=pair.spec.name))
             continue
         check.compared = True
-        check.limits = {"atol": atol, "rtol": rtol}
+        check.limits = {"atol": atol, "rtol": rtol, "envelope": floor}
         check.metrics = err.to_dict()
         unbounded = [k for k, v in check.metrics.items()
                      if isinstance(v, float) and not math.isfinite(v)]
@@ -361,8 +376,8 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
         if not err.ok:
             check.findings.append(failure(
                 "tolerance_exceeded",
-                f"{err.violations}/{err.elements} elements outside atol={atol:g} + rtol={rtol:g}*|ref| "
-                f"(max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
+                f"{err.violations}/{err.elements} elements outside max(atol={atol:g} + rtol={rtol:g}*|ref|, "
+                f"{floor:.3g}) (max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
                 violations=err.violations,
                 subject=pair.spec.name))
     return [by_name[s.name] for s in contract.specs] + extra

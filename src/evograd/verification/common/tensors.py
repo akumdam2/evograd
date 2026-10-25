@@ -274,6 +274,9 @@ class ElementwiseError:
     worst_index: list[int] | None
     atol: float
     rtol: float
+    #: The least allowance of any element (0: assert_close's rule alone; the
+    #: model policy passes gamma x compile's largest deviation on the result).
+    abs_floor: float = 0.0
 
     @property
     def ok(self) -> bool:
@@ -284,18 +287,28 @@ class ElementwiseError:
 
 
 def elementwise_error(candidate: torch.Tensor, reference: torch.Tensor, *,
-                      atol: float, rtol: float) -> ElementwiseError:
-    """Count elements outside ``atol + rtol * |reference|``, computed in float64."""
+                      atol: float, rtol: float, abs_floor: float = 0.0) -> ElementwiseError:
+    """Count elements outside ``max(atol + rtol * |reference|, abs_floor)``, in float64.
+
+    With ``abs_floor`` 0 this is ``torch.testing.assert_close``'s rule. The
+    model policy passes gamma times the largest elementwise deviation the
+    trusted ``torch.compile`` control showed on this result: where the
+    reference element is the difference of two larger terms (a rotary
+    embedding), one bf16 rounding of the operands moves it by more than
+    ``rtol`` of itself, and the compiler's own implementation does the same.
+    """
     if candidate.shape != reference.shape:
         raise ValueError(f"shape {tuple(candidate.shape)} != {tuple(reference.shape)}")
     if not (math.isfinite(atol) and math.isfinite(rtol)) or atol < 0 or rtol < 0:
         raise ValueError(f"tolerances must be finite and non-negative, got atol={atol}, rtol={rtol}")
+    if not math.isfinite(abs_floor) or abs_floor < 0:
+        raise ValueError(f"abs_floor must be finite and non-negative, got {abs_floor}")
     violations = 0
     max_abs = max_rel = headroom = 0.0
     worst_flat = None
     for c, r, start in _chunks(candidate, reference):
         d = (c - r).abs()
-        allowance = atol + rtol * r.abs()
+        allowance = (atol + rtol * r.abs()).clamp_min(abs_floor)
         bad = d > allowance
         violations += int(bad.sum())
         if d.numel():
@@ -315,4 +328,5 @@ def elementwise_error(candidate: torch.Tensor, reference: torch.Tensor, *,
     return ElementwiseError(violations=violations, elements=reference.numel(),
                             max_abs_err=max_abs, max_rel_err=max_rel,
                             headroom=headroom if math.isfinite(headroom) else float("inf"),
-                            worst_index=worst, atol=float(atol), rtol=float(rtol))
+                            worst_index=worst, atol=float(atol), rtol=float(rtol),
+                            abs_floor=float(abs_floor))

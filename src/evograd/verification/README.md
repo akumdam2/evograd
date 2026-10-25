@@ -61,8 +61,10 @@ assert report.status == "passed", report.to_dict()
 
 The candidate backward receives its own forward's saved state. Every declared
 output and required gradient is checked by name, structure, shape, dtype,
-finiteness, and the elementwise rule `abs(c-r) <= atol + rtol*abs(r)`.
-Comparisons use float64. Candidate input mutation fails unless the declaration
+finiteness, and the elementwise rule `abs(c-r) <= max(atol + rtol*abs(r), envelope)`,
+where `envelope` is gamma times the largest elementwise deviation the trusted
+`torch.compile` control showed on that result over the operator Gate 2
+calibration payloads (0 for a generic task). Comparisons use float64. Candidate input mutation fails unless the declaration
 explicitly allows it; allowed content overwrites must preserve layout.
 
 Generic tasks use the declaration's effective tolerance. Model-reference tasks
@@ -76,9 +78,9 @@ use a fixed, versioned table based on the reference result's dtype:
 | float64 | 1e-7 | 1e-7 |
 
 The table in `gate1/tolerances.py` is frozen from PyTorch 2.11's
-`torch.testing.assert_close` defaults. Model tasks bypass declaration overrides,
-result multipliers, and shape scaling. The policy identity is recorded in the
-report. This is the selected numerical policy, not a proof that all meaningful
+`torch.testing.assert_close` defaults, or the compile envelope where that is
+larger. Model tasks bypass declaration overrides, result multipliers, and shape
+scaling. The policy identity is recorded in the report. This is the selected numerical policy, not a proof that all meaningful
 errors are detected; tiny gradients can still fall below the absolute floor.
 
 Callers may supply `Gate1Case` values, lazy recorded payloads, or declaration-
@@ -166,9 +168,10 @@ recorder of its training calls (`capture.py`), and its model reference
 computation). The capture loop, replay and fidelity (`base.py`), the gates
 (`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
 boundary of one training step per data order becomes a payload of the case
-its shapes bind. Gate 1 runs on generated inputs and acceptance payloads,
+its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only),
 operator Gate 2 calibrates on orders 101/202 and judges 303/404; a Level-2
-candidate also gets model Gate 2 alone at its site. A candidate passing every
+candidate also gets model Gate 2 alone at its site (budgets pooled over the
+four batches, gamma 3). A candidate passing every
 gate that applies is accepted. The combination of Level-2 candidates then gets
 model Gate 2 on the combined patch set and Gate 3 (`Model.gate3_steps`):
 `verify` combines every accepted Level-2 candidate, the benchmark protocol

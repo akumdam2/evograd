@@ -139,7 +139,7 @@ class MatchedCase(unittest.TestCase):
         self.addCleanup(_STATE.clear)
 
 
-# ── 1, 2, 3: fresh executions of the same samples, per-sample budgets ────────
+# ── 1, 2, 3: fresh executions of the same samples, budgets pooled over them ──
 
 
 class TestPerSampleBudgets(MatchedCase):
@@ -172,29 +172,42 @@ class TestPerSampleBudgets(MatchedCase):
                                 c.evidence["candidate"]["execution_id"])}
         self.assertFalse(executions & set(self.policy.calibration_executions))
 
-    def test_each_sample_has_its_own_thresholds_matching_an_independent_computation(self):
+    def test_the_budget_is_pooled_over_the_samples_and_matches_an_independent_computation(self):
         tables = {s.sample_id: self.policy.thresholds_for(s.sample_id) for s in self.samples}
         a, b = (tables[s.sample_id] for s in self.samples)
-        self.assertNotEqual(a["out:logits"]["E2"], b["out:logits"]["E2"])
+        self.assertEqual(a, b)                                       # one table, every sample
         floors = self.policy.floors
+        worst: dict[tuple[str, str], float] = {}
         for sample in self.samples:
             native = gate2.execute(self.scope, Deployment.native(), sample)
             again = gate2.execute(self.scope, Deployment.native(), sample)
             compiled = gate2.execute(self.scope, self.control, sample)
-            for name, entry in tables[sample.sample_id].items():
-                family = C.FLOOR_FAMILY[entry["kind"]]
+            for name in a:
                 e_rep = relative_error(again.results[name], native.results[name]).to_dict()
                 e_cmp = relative_error(compiled.results[name], native.results[name]).to_dict()
                 for metric in ("E2", "Emax"):
-                    expected = 2.0 * max(e_rep[metric], e_cmp[metric], floors[family][metric])
-                    self.assertEqual(entry[metric], expected, (sample.sample_id, name, metric))
+                    worst[name, metric] = max(worst.get((name, metric), 0.0), e_rep[metric],
+                                              e_cmp[metric])
+        for name, entry in a.items():
+            family = C.FLOOR_FAMILY[entry["kind"]]
+            for metric in ("E2", "Emax"):
+                expected = 2.0 * max(worst[name, metric], floors[family][metric])
+                self.assertEqual(entry[metric], expected, (name, metric))
+        # The pooled budget is at least each sample's own, and larger for some.
+        own = {}
+        for sample in self.samples:
+            native = gate2.execute(self.scope, Deployment.native(), sample)
+            compiled = gate2.execute(self.scope, self.control, sample)
+            own[sample.sample_id] = {name: relative_error(compiled.results[name], native.results[name])
+                                     .to_dict()["E2"] for name in a}
+        self.assertTrue(any(own[x][n] != own[y][n] for x in own for y in own for n in a))
 
     def test_fresh_compile_meets_its_own_budget_with_gamma_applied_once(self):
         for order in (self.samples, list(reversed(self.samples))):
             report = gate2.verify_integration(self.scope, self.control, policy=self.policy,
                                               samples=order)
             self.assertEqual(report.status, PASSED, codes(report))
-            bound = 0
+            bound, exact = 0, []
             for case in report.cases:
                 own = self.policy.thresholds_for(case.case_id)
                 for result in case.results:
@@ -205,9 +218,13 @@ class TestPerSampleBudgets(MatchedCase):
                     for metric in ("E2", "Emax"):
                         if entry["components"][metric]["binding"] == "trusted_compile":
                             bound += 1
-                            # exactly 1/gamma: the sample's own budget, gamma once
-                            self.assertEqual(result.metrics[metric] / result.limits[metric], 0.5)
+                            # at most 1/gamma: the pooled budget is gamma times the
+                            # largest compile drift over the samples, applied once
+                            ratio = result.metrics[metric] / result.limits[metric]
+                            self.assertLessEqual(ratio, 0.5 + 1e-12)
+                            exact.append(ratio == 0.5)
             self.assertGreater(bound, 0)
+            self.assertTrue(any(exact))                      # the sample that set the budget
 
     def test_candidate_results_cannot_move_the_frozen_thresholds(self):
         before = (self.policy.policy_hash, self.policy.to_dict())
@@ -222,6 +239,30 @@ class TestPerSampleBudgets(MatchedCase):
 
 
 # ── 4, 5: content, not ids, binds the budget ─────────────────────────────────
+
+
+class TestCompileRepeatConditions(MatchedCase):
+    def test_the_compile_repeat_runs_under_the_same_boundary_recording(self):
+        """Recording hands the site identity views of its inputs; a repeat without
+        it recompiles, and a recompiled graph need not be bitwise the first."""
+        from unittest import mock
+
+        from evograd.verification.gate2 import calibration as C2
+
+        seen = []
+        real = C2.execute
+
+        def spy(adapter, deployment, sample, **kwargs):
+            seen.append((deployment.role, kwargs.get("record_boundaries", False)))
+            return real(adapter, deployment, sample, **kwargs)
+
+        with mock.patch.object(C2, "execute", spy):
+            result = calibrate(lm_scope(), patch_set=("norm",), samples=fixed(),
+                               compile_backend=FAST, boundaries=True)
+        self.assertEqual(result.status, "calibrated", result.to_dict())
+        controls = [rec for role, rec in seen if role == "control"]
+        self.assertGreaterEqual(len(controls), 2)
+        self.assertTrue(all(controls), controls)          # every compile run recorded
 
 
 class TestContentBinding(MatchedCase):

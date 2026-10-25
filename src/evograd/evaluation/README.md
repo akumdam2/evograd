@@ -11,6 +11,10 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8 evograd evaluate qwen3_0_6b --corpus CORPUS/mani
 evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
 ```
 
+0. **Static rules**: a submission is a packaged artifact whose `EVOLVE-BLOCK`
+   passes `check_source` (no library contraction, normalization, attention or
+   autograd call the run did not grant). A violation is recorded and the
+   candidate is neither verified nor timed.
 1. **Verify** each candidate on the model's real training payloads: Gate 1
    and operator Gate 2; a Level-2 candidate also gets model Gate 2 alone at its
    site. Passing every gate that applies makes a candidate *accepted*.
@@ -28,7 +32,7 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
 5. The **summary** reports, per level, the geometric-mean speedup over
    accepted configurations (configuration, then task, then family), coverage
    (accepted configurations over all observed ones) and the funnel
-   (submitted, executable, Gate 1, accepted); Level 3 reports each model's
+   (submitted, violation, executable, Gate 1, accepted); Level 3 reports each model's
    combination with its speedup and peak-memory ratio. There is no single
    overall score. Gate verdicts sit beside every runtime, so a rejected
    candidate's numbers are visible but counted nowhere.

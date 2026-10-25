@@ -12,16 +12,20 @@ Two sample protocols, one per scope, recorded in the policy
 
   and judged on validation samples disjoint from them (id, seed, content).
 
-* ``matched_inputs`` (model scope). Per fixed sample ``x``::
+* ``matched_inputs`` (model scope). Pooled over the fixed samples ``x``::
 
-      T[x, z, m] = gamma * max( max_r E_m(native repeat_r[x], native[x]),
-                                E_m(trusted compile[x], native[x]),
-                                floor[z, m] )
+      T[z, m] = gamma * max( max_x max_r E_m(native repeat_r[x], native[x]),
+                             max_x E_m(trusted compile[x], native[x]),
+                             floor[z, m] )
 
   and judged on fresh executions of the *same* samples: a sample is used only
   when its content fingerprint (inputs, labels and other context, cotangents,
-  initial weights, module mode, seed) equals the calibrated one. No sample's
-  budget is borrowed by another.
+  initial weights, module mode, seed) equals the calibrated one. The budget of
+  a tensor is the largest drift the controls showed on it over the calibrated
+  inputs (the operator scope's formula over its calibration payloads): a
+  per-sample budget was a single draw of compile's rounding on that tensor,
+  and a candidate whose rounding differs from compile's exceeded it on a few
+  scattered tensors per sample for no fault of its own.
 
 ``gamma`` is the named safety factor
 :data:`SAFETY_FACTOR_GAMMA` (initially 2); floors are the starting values
@@ -110,6 +114,8 @@ DEFAULT_FLOORS: dict[str, dict[str, float]] = {
     "gradient": {"E2": 1e-4, "Emax": 1e-2},
 }
 
+#: The calibration procedure, for stage caches that judged under an earlier one.
+CALIBRATION_PROCEDURE = "gate2-calibration/2: compile repeat under the first run's boundary recording"
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE)
@@ -161,8 +167,13 @@ class ControlMeasurement:
     kind: str
     E2: float
     Emax: float
+    #: Largest elementwise |control - native|; Gate 1's envelope is built from it.
+    max_abs: float = 0.0
 
     def __post_init__(self) -> None:
+        if not (isinstance(self.max_abs, float) and math.isfinite(self.max_abs) and self.max_abs >= 0):
+            raise CalibrationError(f"{self.result}: max_abs={self.max_abs!r} is not a finite "
+                                   "non-negative measurement")
         if self.source not in CONTROL_SOURCES:
             raise CalibrationError(f"{self.result}: {self.source!r} is not a trusted control "
                                    f"source {CONTROL_SOURCES}")
@@ -214,6 +225,8 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                                            "binding": max((native, "native_repeat"),
                                                           (compiled, "trusted_compile"),
                                                           (floor[metric], "floor"))[1]}
+        # Gate 1's envelope for this result: gamma x compile's largest elementwise deviation.
+        entry["envelope"] = gamma * max(m.max_abs for m in groups[TRUSTED_COMPILE])
         entry["samples"] = {s: sorted({m.sample_id for m in groups[s]}) for s in CONTROL_SOURCES}
         out[name] = entry
     return out
@@ -297,8 +310,8 @@ PROTOCOL_FIELDS = {DISJOINT: ("thresholds",), MATCHED: ("thresholds_by_sample",)
 FORMULAS = {
     DISJOINT: "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), "
               "max_c E_m(compile_c, native_c), floor[z,m])",
-    MATCHED: "T[x,z,m] = gamma * max(max_r E_m(native_repeat_r[x], native[x]), "
-             "E_m(compile[x], native[x]), floor[z,m])",
+    MATCHED: "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
+             "max_x E_m(compile[x], native[x]), floor[z,m]), judged on the calibrated samples x",
 }
 
 
@@ -519,7 +532,8 @@ def _qualify(contract: C.ResultContract, reference: Execution, control: Executio
     for check in checks:
         if check.metrics:
             out.append(ControlMeasurement(source, control.sample.sample_id, check.name, check.kind,
-                                          float(check.metrics["E2"]), float(check.metrics["Emax"])))
+                                          float(check.metrics["E2"]), float(check.metrics["Emax"]),
+                                          float(check.metrics.get("diff_max", 0.0))))
     return out, []
 
 
@@ -735,8 +749,14 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         result.findings.extend(problems)
         # The compile term has no repeat of its own in the budget, so the
         # control must reproduce itself bit for bit. A native repeat that is
-        # not bitwise is kept in the budget and recorded here.
-        again = execute(adapter, control, sample)
+        # not bitwise is kept in the budget and recorded here. The repeat runs
+        # under the same boundary recording as the first run: recording hands
+        # the site identity views of its inputs, and a run without it makes
+        # Dynamo recompile; in a process that has compiled another site the
+        # recompiled graph can differ at rounding level (Qwen3-0.6B qkv_norm_rope
+        # after residual_rmsnorm, 2026-10-23), which is the compiler's cache
+        # behaviour, not the kernels' determinism this check is about.
+        again = execute(adapter, control, sample, record_boundaries=boundaries)
         executions.append(again.execution_id)
         identity["executions"]["compile_repeat"] = again.execution_id
         identity["repeatability"] = {
@@ -782,17 +802,17 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             result.findings.append(missing("no_reference", "no calibration sample produced a reference"))
         return result
     try:
+        union: dict[str, str] = {}
+        for table in kinds.values():
+            union.update(table)
+        table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors)
         if protocol == MATCHED:
-            by_sample = {sid: derive_thresholds([m for m in measurements if m.sample_id == sid],
-                                                results=kinds[sid], gamma=gamma, floors=floors)
-                         for sid in kinds}
+            # Pooled over the matched samples; the per-sample layout says which
+            # samples the policy judges (each by its content identity).
+            by_sample = {sid: table for sid in kinds}
             pooled = None
         else:
-            union: dict[str, str] = {}
-            for table in kinds.values():
-                union.update(table)
-            pooled = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors)
-            by_sample = None
+            pooled, by_sample = table, None
     except CalibrationError as exc:
         result.findings.append(missing("insufficient_calibration", str(exc)))
         return result

@@ -14,8 +14,10 @@ against the model reference (``Model.reference_op``):
   acceptance payloads through the artifact's deployment entry.
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
-  each order in :data:`MODEL_ORDERS`; per-sample thresholds from native repeats
-  and compile at the same site; every site call replayed at its boundary.
+  each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
+  native repeats and compile at the same site, with :data:`GATE2_MODEL_GAMMA`
+  (a whole model judges a thousand propagated reductions per batch, the
+  operator scope a handful of results); every site call replayed at its boundary.
 
 A Level-1 candidate is accepted when Gate 1 and operator Gate 2 pass; a
 Level-2 candidate also needs its single-site model Gate 2.
@@ -47,6 +49,13 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 MODEL_ORDERS = (101, 202, 303, 404)
+#: Gate 2 safety factor at model scope (the operator scope keeps the
+#: calibration default, 2): the smallest integer at which every frontend seed
+#: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
+#: residual_rmsnorm seed needs 3.3 (pooled budgets, one sample, two norm/proj
+#: weight gradients); the x1.01 fault exceeds four times the budget on 401
+#: comparisons in every data order.
+GATE2_MODEL_GAMMA = 4.0
 TRAIN_ORDER, TRAIN_SEED = 707, 0
 GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
@@ -105,12 +114,12 @@ def _stage(path: Path, key: Mapping[str, Any]) -> dict[str, Any] | None:
     return data if data.get("stage_key") == _jsonable(key) else None
 
 
-def _cached_policy(path: Path | None, scope, deployment, judged):
+def _cached_policy(path: Path | None, scope, deployment, judged, gamma: float):
     """A Gate 2 calibration saved under ``--state``, if it still binds to this run.
 
     A policy whose binding (scope, case, reference, environment, numerics,
-    patch set, samples) does not match is recalibrated, never reinterpreted;
-    ``verify_integration`` would withhold its thresholds anyway.
+    patch set, samples, formula, gamma) does not match is recalibrated, never
+    reinterpreted; ``verify_integration`` would withhold its thresholds anyway.
     """
     from evograd.verification.gate2.calibration import (
         BINDING_CODES,
@@ -126,6 +135,11 @@ def _cached_policy(path: Path | None, scope, deployment, judged):
         policy = Gate2Policy.from_dict(json.loads(path.read_text())["policy"])
     except (CalibrationError, KeyError, ValueError):
         return None
+    if float(policy.gamma) != float(gamma):
+        return None
+    # An operator policy frozen before Gate 1's compile envelope existed carries none.
+    if any("envelope" not in entry for entry in (policy.to_dict().get("thresholds") or {}).values()):
+        return None
     if {f.code for f in policy_findings(policy, scope, deployment, judged)} & BINDING_CODES:
         return None
     return CalibrationResult(policy=policy, evidence={"reused_policy": str(path)})
@@ -135,8 +149,10 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
     """Gate 2 calibration, reused from ``cache`` when it binds to the ``judged``
     samples; saved there when made."""
     from evograd.verification import gate2
+    from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
 
-    reused = _cached_policy(cache, scope, deployment, judged)
+    reused = _cached_policy(cache, scope, deployment, judged,
+                            options.get("gamma", SAFETY_FACTOR_GAMMA))
     if reused is not None:
         return reused
     calibration = gate2.calibrate(scope, patch_set=deployment.patch_set, **options)
@@ -148,27 +164,53 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
 # ── per case: Gate 1 and operator Gate 2 ─────────────────────────────────────
 
 
+def gate1_envelope(op, policy) -> dict[str, float]:
+    """Gate 1's elementwise envelope per result, from the operator Gate 2 policy.
+
+    Gate 2 names a gradient by its argument (``grad:q_weight``, ``grad_in:x``);
+    Gate 1 by the declared gradient name (``grad_in:dq_weight``, ``grad_in:dx``).
+    An uncalibrated case (no policy) keeps assert_close's rule alone.
+    """
+    if policy is None:
+        return {}
+    grads = {a.name: a.grad_name for a in op.active_args()}
+    envelope = {}
+    for name, entry in (policy.thresholds or {}).items():
+        if "envelope" not in entry:
+            continue
+        prefix, _, rest = name.partition(":")
+        if prefix in ("grad", "grad_in") and rest in grads:
+            name = f"grad_in:{grads[rest]}"
+        envelope[name] = float(entry["envelope"])
+    return envelope
+
+
 def judge_case(model, case, module, corpus, *, device: str = "cuda",
                compile_backend: str = "inductor", state: Path | None = None) -> dict[str, Any]:
-    """Gate 1 and operator Gate 2. With ``state``, the operator calibration
-    (which never depends on the candidate) is saved there and reused."""
+    """Gate 1 on the case's real payloads and operator Gate 2. With ``state``,
+    the operator calibration (which never depends on the candidate) is saved
+    there and reused.
+
+    Gate 1 takes the recorded training payloads only: generated inputs at the
+    same shape add no coverage, and the fixed dtype tolerance judges them at a
+    magnitude the model never trains at (user decision 2026-10-23)."""
     from evograd.verification import gate1, gate2
     from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
     from evograd.verification.payloads import payload_cases
 
     op = model.reference_op(case.task)
-    generated = gate1.verify_pair(op, module, workloads=[case.workload], device=device)
-    payloads = gate1.verify_pair(op, module, device=device, cases=payload_cases(
-        op, case.workload, corpus, case_id=case.case_id, split="acceptance", device=device))
     scope = PayloadOperatorScope(op, case.workload, corpus, case.case_id, device=device)
     deployment = scope.candidate(module)
     cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
              / f"{case.case_id.replace('/', '__')}.json")
     calibration = _calibrate(scope, deployment, scope.samples("acceptance"), cache,
                              samples=scope.samples("calibration"), compile_backend=compile_backend)
+    envelope = gate1_envelope(op, calibration.policy)
+    payloads = gate1.verify_pair(op, module, device=device, envelope=envelope, cases=payload_cases(
+        op, case.workload, corpus, case_id=case.case_id, split="acceptance", device=device))
     operator = gate2.verify_integration(scope, deployment, policy=calibration.policy,
                                         samples=scope.samples("acceptance"))
-    return {"gate1_generated": generated, "gate1_payloads": payloads,
+    return {"gate1_payloads": payloads,
             "gate2_operator_calibration": calibration, "gate2_operator": operator}
 
 
@@ -230,9 +272,24 @@ def judge_model(model, deployment, workload, *, compile_backend: str = "inductor
     cache = (None if state is None
              else state / "gate2" / "model" / f"{'+'.join(deployment.patch_set)}.json")
     calibration = _calibrate(scope, deployment, samples, cache, samples=samples, boundaries=True,
-                             compile_backend=compile_backend)
+                             compile_backend=compile_backend, gamma=GATE2_MODEL_GAMMA)
     report = gate2.verify_integration(scope, deployment, policy=calibration.policy, samples=samples)
     return {"gate2_model_calibration": calibration, "gate2_model": report}
+
+
+def _gate1_policy(op) -> dict[str, Any]:
+    """What a cached Gate 1 verdict was judged under."""
+    from evograd.verification.gate1.tolerances import policy_identity
+
+    return policy_identity(op)
+
+
+def _gate2_model_rule() -> dict[str, Any]:
+    """What a cached model-scope Gate 2 verdict was judged under."""
+    from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS, MATCHED
+
+    return {"gamma": GATE2_MODEL_GAMMA, "formula": FORMULAS[MATCHED],
+            "calibration": CALIBRATION_PROCEDURE}
 
 
 def training_context(model, workload, patch_set) -> dict[str, Any]:
@@ -419,6 +476,7 @@ def verify_cases(run: Run) -> dict[str, Any]:
         key = {"case": case_id, "program_sha256": run.programs[case_id],
                "corpus": run.corpus.binding(),
                "reference": reference_identity(model.reference_op(case.task)),
+               "gate1_policy": _gate1_policy(model.reference_op(case.task)),
                "compile_backend": run.compile_backend}
         statuses = _judged_stage(
             run, run.out / "cases" / f"{case_id.replace('/', '__')}.json", key,
@@ -430,7 +488,8 @@ def verify_cases(run: Run) -> dict[str, Any]:
             deployment = deployment_for(model, [(case, module)], run.workload)
             key = {"programs": {case_id: run.programs[case_id]},
                    "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
-                   "model": model.name, "workload": model.workload_config}
+                   "model": model.name, "workload": model.workload_config,
+                   "gate2_model": _gate2_model_rule()}
             entry.update(_judged_stage(
                 run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
                 lambda: judge_model(model, deployment, run.workload,
@@ -442,9 +501,9 @@ def verify_cases(run: Run) -> dict[str, Any]:
 
 
 def accepted(model, entry: Mapping[str, Any]) -> bool:
-    """Gate 1 (both input sources) and operator Gate 2; for Level 2 also the
+    """Gate 1 on real payloads and operator Gate 2; for Level 2 also the
     single-site model Gate 2, where the model has model-scope gates."""
-    gates = [entry.get("gate1_generated"), entry.get("gate1_payloads"), entry.get("gate2_operator")]
+    gates = [entry.get("gate1_payloads"), entry.get("gate2_operator")]
     if entry.get("level") == 2 and model.model_gates:
         gates.append(entry.get("gate2_model"))
     return all(g == "passed" for g in gates)
@@ -465,7 +524,8 @@ def verify_combination(run: Run, case_ids) -> dict[str, Any]:
     deployment = deployment_for(model, level2, run.workload)
     key = {"programs": {cid: run.programs[cid] for cid in case_ids},
            "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
-           "model": model.name, "workload": model.workload_config}
+           "model": model.name, "workload": model.workload_config,
+           "gate2_model": _gate2_model_rule()}
     statuses = _judged_stage(run, out / "gate2_model.json", key,
                              lambda: judge_model(model, deployment, run.workload,
                                                  compile_backend=run.compile_backend,
