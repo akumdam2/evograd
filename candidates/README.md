@@ -8,6 +8,7 @@ Each agent is judged on the same terms:
 
 | Agent | What runs | Directory |
 |---|---|---|
+| **seed** (reference point) | evograd's frontend alone, no LLM | `seed/` |
 | **evograd** (ours) | unified frontend (PyTorch forward → Triton seed), then OpenEvolve | `evograd/` |
 | **OpenEvolve, raw** | the same OpenEvolve backend, without the frontend | `openevolve/` |
 | **GEPA** | `gepa.optimize_anything`, reflective Pareto search | `gepa/` |
@@ -24,6 +25,23 @@ neither of them:
 - packaging an agent's code;
 - the evaluator every agent goes through;
 - the ledger and the final score.
+
+## The benchmark run
+
+The comparison that counts is the benchmark's protocol, `evograd evaluate`
+(real-payload gates per level, Tier 1, Tier 3, the Level-3 combination), run
+on every agent's submissions by `bench.py`; `score`/`compare` below are
+single-configuration diagnostics. See
+[`adbench_tools/README.md` §7](../src/evograd/adbench_tools/README.md#7-the-benchmark-run).
+
+```bash
+export ADBENCH_ROOT=...     # results under $ADBENCH_ROOT/<model>
+python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm
+python candidates/bench.py run       --model qwen3_0_6b --agent seed            # frontend only, no LLM
+python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 30
+python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json
+python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
+```
 
 ## Fairness protocol
 

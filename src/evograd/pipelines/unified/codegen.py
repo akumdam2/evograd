@@ -44,6 +44,62 @@ def _tuple_expr(values: list[str]) -> str:
     return "(" + ", ".join(values) + ("," if len(values) == 1 else "") + ")"
 
 
+#: Fused attention externs, by the backend Inductor captured. Whichever it was,
+#: the seed calls one fixed helper that picks the backend the way eager's
+#: dispatcher does: flash under deterministic algorithms (verification), cuDNN
+#: otherwise (training, timing). Both backends return the same tuple layouts.
+_SDPA_FORWARD = {
+    "torch.ops.aten._scaled_dot_product_cudnn_attention.default": "cudnn",
+    "torch.ops.aten._scaled_dot_product_flash_attention.default": "flash",
+}
+_SDPA_BACKWARD = {
+    "torch.ops.aten._scaled_dot_product_cudnn_attention_backward.default": "cudnn",
+    "torch.ops.aten._scaled_dot_product_flash_attention_backward.default": "flash",
+}
+UNIFIED_SDPA_SOURCE = '''\
+def _unified_sdpa_forward(q, k, v, attn_bias=None, compute_log_sumexp=True, dropout_p=0.0,
+                          is_causal=False, return_debug_mask=False, scale=None):
+    """Fused attention forward, cuDNN argument order (a captured call omits trailing
+    defaults); flash under deterministic algorithms."""
+    if torch.are_deterministic_algorithms_enabled():
+        return torch.ops.aten._scaled_dot_product_flash_attention.default(
+            q, k, v, dropout_p, is_causal, return_debug_mask, scale=scale)
+    return torch.ops.aten._scaled_dot_product_cudnn_attention.default(
+        q, k, v, attn_bias, compute_log_sumexp, dropout_p, is_causal, return_debug_mask, scale=scale)
+
+
+def _unified_sdpa_backward(grad_out, q, k, v, out, logsumexp, philox_seed, philox_offset, attn_bias,
+                           cum_seq_q, cum_seq_k, max_q, max_k, dropout_p, is_causal, scale=None):
+    """Fused attention backward, cuDNN argument order; flash under deterministic algorithms."""
+    if torch.are_deterministic_algorithms_enabled():
+        return torch.ops.aten._scaled_dot_product_flash_attention_backward.default(
+            grad_out, q, k, v, out, logsumexp, cum_seq_q, cum_seq_k, max_q, max_k, dropout_p,
+            is_causal, philox_seed, philox_offset, scale=scale)
+    return torch.ops.aten._scaled_dot_product_cudnn_attention_backward.default(
+        grad_out, q, k, v, out, logsumexp, philox_seed, philox_offset, attn_bias, cum_seq_q,
+        cum_seq_k, max_q, max_k, dropout_p, is_causal, scale=scale)
+'''
+
+
+def _sdpa_call(kernel: str, args: list[str], kwargs: list[str]) -> str:
+    """The captured attention call, re-expressed on the dispatching helper."""
+    if kernel in _SDPA_FORWARD:
+        if _SDPA_FORWARD[kernel] == "flash":
+            # (q, k, v, dropout_p=0., is_causal=False, return_debug_mask=False): a
+            # captured call may omit the trailing defaults.
+            q, k, v, *rest = args
+            defaults = ["0.0", "False", "False"]
+            dropout_p, is_causal, debug = [*rest, *defaults[len(rest):]]
+            args = [q, k, v, "None", "True", dropout_p, is_causal, debug]
+        return f"_unified_sdpa_forward({', '.join([*args, *kwargs])})"
+    if _SDPA_BACKWARD[kernel] == "flash":
+        # (grad_out, q, k, v, out, lse, cum_seq_q, cum_seq_k, max_q, max_k, dropout_p,
+        #  is_causal, philox_seed, philox_offset)
+        g, q, k, v, out, lse, cq, ck, mq, mk, dropout_p, is_causal, seed, offset = args
+        args = [g, q, k, v, out, lse, seed, offset, "None", cq, ck, mq, mk, dropout_p, is_causal]
+    return f"_unified_sdpa_backward({', '.join([*args, *kwargs])})"
+
+
 def _external_wrapper(side: str, node: dict) -> tuple[str, str, dict]:
     kernel = node["external_kernel"]
     target = node["target"]
@@ -69,15 +125,18 @@ def _external_wrapper(side: str, node: dict) -> tuple[str, str, dict]:
     # Exact positional and named arguments also handle tuple-returning
     # convolution backward, without guessing a tensor-only call signature.
     args = [argument(entry) for entry in node["positional_args"]]
-    args += [f"{key}={argument(value)}" for key, value in node.get("kwargs_ordered", {}).items()]
+    kwargs = [f"{key}={argument(value)}" for key, value in node.get("kwargs_ordered", {}).items()]
     callee = kernel.replace("extern_kernels.", "_unified_extern_kernels.", 1)
     prefix = f"def {name}({', '.join(names.values())}):\n    with torch.no_grad():\n"
-    if kernel in {"extern_kernels.mm", "extern_kernels.bmm", "extern_kernels.addmm"}:
+    if kernel in _SDPA_FORWARD or kernel in _SDPA_BACKWARD:
+        source = prefix + f"        return {_sdpa_call(kernel, args, kwargs)}\n"
+    elif kernel in {"extern_kernels.mm", "extern_kernels.bmm", "extern_kernels.addmm"}:
+        args += kwargs
         shape, dtype = tuple(node["output_shape"]), node["output_dtype"]
         source = (prefix + f"        out = torch.empty({shape!r}, device=arg0.device, dtype={dtype})\n"
                   + f"        {callee}({', '.join(args)}, out=out)\n        return out\n")
     else:
-        source = prefix + f"        return {callee}({', '.join(args)})\n"
+        source = prefix + f"        return {callee}({', '.join([*args, *kwargs])})\n"
     metadata = {"side": side, "node_name": node["name"], "target": target,
                 "kernel": kernel, "wrapper": name}
     runtime = [_pyname(ref) for ref in names]
@@ -217,6 +276,25 @@ def _audit_primitive_library(tree: ast.AST) -> None:
                 raise UnsupportedSemanticNode(f"hidden tensor math in primitive library: {node.func.attr}")
 
 
+def _sdpa_state_outputs(forward_graph: dict, n_outputs: int) -> set[str]:
+    """Forward outputs (saved state) that a preserved attention kernel produced.
+
+    Its logsumexp and rng state are the backend's own and go straight back into
+    the backend's backward; their layout differs between cuDNN and flash, so the
+    seed's configuration guards must not pin them to the captured backend's.
+    """
+    nodes = {n["name"]: n for n in forward_graph["nodes"] if "name" in n}
+    state: set[str] = set()
+    for value in _outputs(forward_graph)[n_outputs:]:
+        node = nodes.get(value) if isinstance(value, str) else None
+        while node is not None and "getitem" in str(node.get("target", "")):
+            source = (node.get("positional_args") or node.get("args_ordered") or [{}])[0]
+            node = nodes.get(source.get("name")) if source.get("kind") in {"node", "sym_node"} else None
+        if node is not None and node.get("external_kernel") in _SDPA_FORWARD:
+            state.add(value)
+    return state
+
+
 def _pair_source(op: OpDecl, workload: Workload, captured: Any) -> str:
     pair = captured.pair
     tensor_args = [arg for arg in op.args if getattr(arg, "shape", None) is not None]
@@ -267,12 +345,24 @@ def _pair_source(op: OpDecl, workload: Workload, captured: Any) -> str:
     if len(upstream_names) > 1:
         unpack = [f"    {', '.join(upstream_names)} = {upstream_param}"]
     picked = [f"_grads[{index}]" for index in pair.grad_indices]
+    saved_names = _outputs(captured.forward_graph)[n_outputs:]
+    backend_state = _sdpa_state_outputs(captured.forward_graph, n_outputs)
     backward_guards = []
     for (kind, index), node in zip(pair.backward_arg_spec, bwd_placeholders):
         value = f"saved_tensors[{index}]" if kind == "s" else upstream_names[index]
         backward_guards.extend([
             f"    if not isinstance({value}, torch.Tensor) or not {value}.is_cuda:",
             "        raise ValueError('unified backward requires CUDA tensors')",
+        ])
+        if kind == "s" and saved_names[index] in backend_state:
+            # The attention backend's own state (logsumexp, rng): its layout is
+            # the backend's, and the backend chosen at run time may not be the
+            # captured one.
+            backward_guards.append(
+                f"    if {value}.device != torch.device({pair.device!r}):\n"
+                "        raise ValueError('unified backward configuration mismatch')")
+            continue
+        backward_guards.extend([
             f"    if tuple({value}.shape) != {tuple(node['shape'])!r} or {value}.dtype != {node['dtype']} or {value}.device != torch.device({pair.device!r}):",
             "        raise ValueError('unified backward configuration mismatch')",
         ])
@@ -337,6 +427,8 @@ def generate_unified_seed(op: OpDecl, workload: Workload, captured: Any) -> str:
         "from torch._inductor.select_algorithm import extern_kernels as _unified_extern_kernels",
         f"UNIFIED_EXTERNAL_REGIONS = {regions!r}",
         f"UNIFIED_DEPLOYMENT_CONFIG = {{'dims': {workload.dims!r}, 'dtype': {workload.dtype!r}, 'device': {captured.pair.device!r}, 'family': {op.family!r}, 'dynamic': False}}",
+        *([UNIFIED_SDPA_SOURCE] if any(r["kernel"] in _SDPA_FORWARD or r["kernel"] in _SDPA_BACKWARD
+                                       for r in regions) else []),
         *wrappers,
         "# EVOLVE-BLOCK-START",
         library, *drivers, _pair_source(op, workload, captured),

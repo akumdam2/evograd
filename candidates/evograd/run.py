@@ -19,7 +19,6 @@ so ``iterations = budget``.
 from __future__ import annotations
 
 import sys
-from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -38,31 +37,14 @@ def main(argv: list[str] | None = None) -> int:
         "frontend": "unified", "backend": "openevolve", "iterations": args.budget,
     })
 
-    from evograd.benchmark import get_task, load_task
     from evograd.evolve.run import run_evolve
     from evograd.pipelines.unified.contract import CONTRACT_FILE
-    from evograd.pipelines.unified.synthesize import (
-        UnifiedSeedConfig,
-        select_workload,
-        synthesize_unified_seed,
-    )
 
     spec = task.spec
-    if spec["base_declaration"]:
-        # As `evograd seed unified --declaration` does: keep the absolute reference.
-        base = replace(load_task(spec["base_declaration"]), declaration=spec["base_declaration"])
-    else:
-        base = get_task(task.op_name)
-    workload = select_workload(base, dtype=spec["workload"]["dtype"], dims=spec["workload"]["dims"])
-    seed_dir = ledger.root / "seed"
-    status = synthesize_unified_seed(UnifiedSeedConfig(
-        op=base, workload=workload, output_dir=seed_dir, eval_timeout=args.eval_timeout))
-    seed = seed_dir / "initial_program_autograd_pair.py"
-    if status != 0 or not seed.is_file():
+    seed = _common.unified_seed(task, ledger, eval_timeout=args.eval_timeout)
+    if seed is None:
         return _common.finish(args, task, ledger, None, status="seed_failed",
-                              failure=str(seed_dir / "failure.json"))
-    ledger.log_evaluation({"kind": "seed_acceptance", "origin": "unified", "correct": True,
-                           "program": str(seed)})
+                              failure=str(ledger.root / "seed" / "failure.json"))
 
     evolve_dir = ledger.root / "evolve"
     best = evolve_dir / "evolved_best_program.py"

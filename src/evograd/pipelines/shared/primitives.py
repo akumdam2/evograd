@@ -118,6 +118,68 @@ def vendor_gemm(a, b):
 '''
 
 
+VENDOR_SDPA_SOURCE = '''
+
+# ── trusted primitive: vendor_sdpa ───────────────────────────────────────────
+# Fixed, outside the evolve block, and checked byte-for-byte against
+# evograd.pipelines.shared.primitives. Evolution may call it; it may not
+# change it. The fused-attention kernel eager PyTorch itself runs, chosen the
+# way its dispatcher chooses it: cuDNN in a training configuration, flash
+# under torch.use_deterministic_algorithms (cuDNN's backward is not
+# reproducible, so the deterministic dispatcher excludes it). Verification
+# runs deterministic and compares flash with flash; timing runs as training
+# does and compares cuDNN with cuDNN.
+
+def _vendor_sdpa_deterministic():
+    return torch.are_deterministic_algorithms_enabled()
+
+
+def vendor_sdpa_forward(q, k, v, is_causal=True, scale=None):
+    """Fused scaled-dot-product attention, forward.
+
+    ``q`` is ``[B, HQ, T, D]``; ``k`` and ``v`` are ``[B, HK, T, D]`` with
+    ``HK`` dividing ``HQ`` (grouped-query attention is the kernel's own). No
+    mask, no dropout. Returns ``(out, logsumexp)``; ``logsumexp`` is what the
+    backward needs and is the caller's to save (its layout is the backend's;
+    pass it back unchanged). ``no_grad`` because the pair differentiates itself.
+    """
+    if q.dim() != 4 or k.dim() != 4 or v.dim() != 4:
+        raise ValueError("vendor_sdpa_forward takes [B, H, T, D] tensors")
+    with torch.no_grad():
+        if _vendor_sdpa_deterministic():
+            out, logsumexp, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
+                q, k, v, 0.0, bool(is_causal), False, scale=scale)
+        else:
+            out, logsumexp, *_ = torch.ops.aten._scaled_dot_product_cudnn_attention(
+                q, k, v, None, True, 0.0, bool(is_causal), False, scale=scale)
+    return out, logsumexp
+
+
+def vendor_sdpa_backward(dout, q, k, v, out, logsumexp, is_causal=True, scale=None):
+    """Fused scaled-dot-product attention, backward.
+
+    Takes the forward's inputs and both of its results, from the same mode
+    (deterministic or not) as the forward; returns ``(dq, dk, dv)`` with the
+    shapes of ``q``, ``k`` and ``v``.
+    """
+    if dout.shape != out.shape:
+        raise ValueError(f"vendor_sdpa_backward: dout {tuple(dout.shape)} vs out {tuple(out.shape)}")
+    # No dropout, no mask, dense [B, H, T, D] inputs: philox state, attn_bias
+    # and the nested-layout cum_seq tensors stay undefined (None). A defined
+    # cum_seq tensor would select the ragged layout.
+    with torch.no_grad():
+        if _vendor_sdpa_deterministic():
+            dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(
+                dout, q, k, v, out, logsumexp, None, None, q.shape[2], k.shape[2], 0.0,
+                bool(is_causal), None, None, scale=scale)
+        else:
+            dq, dk, dv = torch.ops.aten._scaled_dot_product_cudnn_attention_backward(
+                dout, q, k, v, out, logsumexp, None, None, None, None, None,
+                q.shape[2], k.shape[2], 0.0, bool(is_causal), scale=scale)
+    return dq, dk, dv
+'''
+
+
 REGISTRY: dict[str, TrustedPrimitive] = {
     "vendor_gemm": TrustedPrimitive(
         name="vendor_gemm",
@@ -125,6 +187,18 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         source=VENDOR_GEMM_SOURCE,
         uses=("mm",),
         summary="2-D row-major GEMM through cuBLAS (torch.mm), no autograd",
+    ),
+    "vendor_sdpa": TrustedPrimitive(
+        name="vendor_sdpa",
+        symbols=("_vendor_sdpa_deterministic", "vendor_sdpa_forward", "vendor_sdpa_backward"),
+        source=VENDOR_SDPA_SOURCE,
+        uses=("_scaled_dot_product_cudnn_attention",
+              "_scaled_dot_product_cudnn_attention_backward",
+              "_scaled_dot_product_flash_attention",
+              "_scaled_dot_product_flash_attention_backward"),
+        summary=("fused causal (grouped-query) attention through the vendor kernel eager runs "
+                 "(cuDNN; flash under deterministic algorithms), as an explicit "
+                 "forward/backward pair, no autograd"),
     ),
 }
 
@@ -185,9 +259,30 @@ def evolve_span(source: str) -> tuple[int, int]:
     return start + 1, end + 1
 
 
+#: Dynamic access that would let a name reach a denied attribute unseen.
+_DENIED_BUILTINS = frozenset({"getattr", "__import__", "eval", "exec", "vars", "globals"})
+
+
+def _denied_torch_path(rest: list[str] | tuple[str, ...], leaf: str) -> bool:
+    """A dotted path under ``torch`` that the rules deny, by prefix or leaf."""
+    return (any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES)
+            or _denied_torch_leaf(leaf))
+
+
 def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
-    """Every denied construct under ``node``, named with its line."""
+    """Every denied construct under ``node``, named with its line.
+
+    The rules are checked wherever a denied name is *reached*, not only where it
+    is called: ``import torch.nn.functional as fn``, ``_f = F.silu`` and
+    ``getattr(torch, "matmul")`` each bind a library routine to a name the call
+    rule could not recognise later, so the import, the attribute read and the
+    dynamic lookup are violations themselves.
+    """
     found: list[str] = []
+    # Inner links of a dotted chain (``torch.nn`` inside ``torch.nn.functional.silu``)
+    # are judged with their chain, not again on their own.
+    inner = {id(child.value) for child in ast.walk(node)
+             if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Attribute)}
     for child in ast.walk(node):
         if isinstance(child, ast.BinOp) and isinstance(child.op, ast.MatMult):
             found.append(f"line {child.lineno}: the '@' matrix-multiply operator")
@@ -196,8 +291,12 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
             name = getattr(child, "module", None) or ""
             names = [a.name for a in child.names]
             for candidate in [name, *names]:
-                root = candidate.split(".")[0]
-                if root in _DENIED_ROOTS:
+                root, *rest = candidate.split(".")
+                if root in _DENIED_ROOTS or root in ("importlib", "builtins"):
+                    found.append(f"line {child.lineno}: import of {candidate!r}")
+                elif root == "torch" and rest and _denied_torch_path(rest, rest[-1]):
+                    # ``import torch.nn.functional as fn``: the alias would call
+                    # the denied namespace under a name the rules never see.
                     found.append(f"line {child.lineno}: import of {candidate!r}")
             if name.split(".")[0] == "torch":
                 # ``from torch import matmul`` would otherwise arrive as a bare
@@ -208,29 +307,36 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
                             f"line {child.lineno}: from {name} import {alias.name}"
                         )
             continue
+        if isinstance(child, ast.Attribute):
+            if id(child) in inner:
+                continue
+            path = _dotted(child)
+            if path is None:
+                # An attribute of a non-name receiver, e.g. ``f(x).matmul``.
+                if child.attr in _DENIED_METHODS:
+                    found.append(f"line {child.lineno}: .{child.attr}")
+                continue
+            root, *rest = path
+            leaf = path[-1]
+            if root in _DENIED_ROOTS:
+                found.append(f"line {child.lineno}: {'.'.join(path)}")
+            elif root == "torch":
+                if _denied_torch_path(rest, leaf):
+                    found.append(f"line {child.lineno}: {'.'.join(path)}")
+            elif leaf in _DENIED_METHODS:
+                # ``x.matmul`` on any receiver that is not the triton language.
+                found.append(f"line {child.lineno}: {'.'.join(path)}")
+            continue
         if not isinstance(child, ast.Call):
             continue
         path = _dotted(child.func)
-        if path is None:
-            # A call on a non-name receiver, e.g. ``f(x).matmul(y)``.
-            if isinstance(child.func, ast.Attribute) and child.func.attr in _DENIED_METHODS:
-                found.append(f"line {child.lineno}: .{child.func.attr}()")
-            continue
-        root, *rest = path
-        leaf = path[-1]
-        if root in _DENIED_ROOTS:
-            found.append(f"line {child.lineno}: {'.'.join(path)}")
-        elif root == "torch":
-            if any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES):
-                found.append(f"line {child.lineno}: {'.'.join(path)}")
-            elif _denied_torch_leaf(leaf):
-                found.append(f"line {child.lineno}: {'.'.join(path)}")
-        elif len(path) == 1:
-            if leaf in REGISTRY or leaf in granted:
-                continue
-        elif leaf in _DENIED_METHODS:
-            # ``x.matmul(y)`` on any receiver that is not the triton language.
-            found.append(f"line {child.lineno}: {'.'.join(path)}")
+        if path is None or len(path) != 1:
+            continue  # dotted callees were judged as attributes above
+        leaf = path[0]
+        if leaf in _DENIED_BUILTINS:
+            found.append(f"line {child.lineno}: {leaf}()")
+        elif leaf in _DENIED_ROOTS:
+            found.append(f"line {child.lineno}: {leaf}()")
     return found
 
 

@@ -161,11 +161,50 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
         self._rejects("from torch import matmul\nreturn matmul(x, w), (x,)",
                       "matmul")
 
+    def test_an_alias_or_attribute_read_does_not_launder_the_namespace(self):
+        # The rules bind to what a name reaches, not to the spelling at the call.
+        self._rejects("import torch.nn.functional as fn\nreturn fn.silu(x), (x,)",
+                      "torch.nn.functional")
+        self._rejects("_s = torch.nn.functional.silu\nreturn _s(x), (x,)", "torch.nn.functional")
+        self._rejects("_mm = torch.matmul\nreturn _mm(x, w), (x,)", "torch.matmul")
+        self._rejects("_mm = getattr(torch, 'matmul')\nreturn _mm(x, w), (x,)", "getattr")
+        self._rejects("_f = __import__('torch.nn.functional')\nreturn x, (x,)", "__import__")
+        self._rejects("import importlib\nreturn x, (x,)", "importlib")
+        self._rejects("_m = x.matmul\nreturn _m(w), (x,)", "matmul")
+
     def test_triton_dot_is_the_kernels_own_arithmetic_and_stays_allowed(self):
         # `tl.dot` is what an evolved matmul kernel is made of; denying it would
         # forbid the search space rather than police it.
         usage = check_source(PURE_TRITON, allowed=())
         self.assertFalse(usage["uses_trusted_primitives"])
+
+
+class TestVendorSdpaCapability(unittest.TestCase):
+    """The attention grant: the same opt-in discipline as the GEMM one."""
+
+    PAIR = ("o, lse = vendor_sdpa_forward(x, w, w)\nreturn o, (x, w, o, lse)")
+
+    def test_the_pair_is_accepted_with_the_grant_and_rejected_without(self):
+        from evograd.pipelines.shared.primitives import VENDOR_SDPA_SOURCE
+
+        used = check_source(_with_body(self.PAIR, trusted=VENDOR_SDPA_SOURCE),
+                            allowed=("vendor_sdpa",))
+        self.assertTrue(used["uses_trusted_primitives"])
+        with self.assertRaises(PrimitiveViolation):
+            check_source(_with_body(self.PAIR), allowed=())
+
+    def test_the_grant_does_not_open_attention_spellings(self):
+        from evograd.pipelines.shared.primitives import VENDOR_SDPA_SOURCE
+
+        for body in ("return torch.nn.functional.scaled_dot_product_attention(x, w, w), (x,)",
+                     "return torch.ops.aten._scaled_dot_product_cudnn_attention(x, w, w, None, True)[0], (x,)"):
+            with self.assertRaises(PrimitiveViolation):
+                check_source(_with_body(body, trusted=VENDOR_SDPA_SOURCE), allowed=("vendor_sdpa",))
+
+    def test_both_grants_render_in_registry_order(self):
+        layer = render_primitive_layer(("vendor_sdpa", "vendor_gemm"))
+        self.assertLess(layer.index("def vendor_gemm"), layer.index("def vendor_sdpa_forward"))
+        self.assertIn("def vendor_sdpa_backward", layer)
 
 
 class TestExistingArtifactsAreUnaffected(unittest.TestCase):

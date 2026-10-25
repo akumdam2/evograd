@@ -83,6 +83,37 @@ def finish(args, task, ledger, best: Path | None, *, status: str | None = None,
     return 0 if result.get("accepted") and result.get("correct") else 1
 
 
+def unified_seed(task, ledger, *, eval_timeout: int = 180) -> Path | None:
+    """evograd's frontend on the task: ``evograd seed unified`` at the task's
+    exact configuration, from the pack's own declaration. No LLM call. Returns
+    the accepted seed artifact, or ``None`` (``<run>/seed/failure.json`` says why)."""
+    from dataclasses import replace
+
+    from evograd.benchmark import get_task, load_task
+    from evograd.pipelines.unified.synthesize import (
+        UnifiedSeedConfig,
+        select_workload,
+        synthesize_unified_seed,
+    )
+
+    spec = task.spec
+    if spec["base_declaration"]:
+        # As `evograd seed unified --declaration` does: keep the absolute reference.
+        base = replace(load_task(spec["base_declaration"]), declaration=spec["base_declaration"])
+    else:
+        base = get_task(task.op_name)
+    workload = select_workload(base, dtype=spec["workload"]["dtype"], dims=spec["workload"]["dims"])
+    seed_dir = ledger.root / "seed"
+    status = synthesize_unified_seed(UnifiedSeedConfig(
+        op=base, workload=workload, output_dir=seed_dir, eval_timeout=eval_timeout))
+    seed = seed_dir / "initial_program_autograd_pair.py"
+    if status != 0 or not seed.is_file():
+        return None
+    ledger.log_evaluation({"kind": "seed_acceptance", "origin": "unified", "correct": True,
+                           "program": str(seed)})
+    return seed
+
+
 def import_evaluations_from_archive(ledger, archive: Path, origin: str) -> int:
     """Copy an OpenEvolve program archive's index into the run ledger."""
     from evograd.adbench_tools.ledger import read_lines

@@ -141,6 +141,81 @@ class TestSemanticCapture(unittest.TestCase):
                 _audit_primitive_library(ast.parse(source))
 
 
+class TestPreservedAttention(unittest.TestCase):
+    """cuDNN's fused attention is preserved the way cuBLAS GEMMs are."""
+
+    def test_the_cudnn_attention_externs_render_as_fixed_wrappers(self):
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        forward = 'torch.ops.aten._scaled_dot_product_cudnn_attention.default'
+        backward = 'torch.ops.aten._scaled_dot_product_cudnn_attention_backward.default'
+        self.assertEqual(_SUPPORTED_EXTERNALS[forward], 'aten._scaled_dot_product_cudnn_attention.default')
+        self.assertEqual(_SUPPORTED_EXTERNALS[backward],
+                         'aten._scaled_dot_product_cudnn_attention_backward.default')
+        node = {
+            'name': 'attn', 'external_kernel': forward, 'target': _SUPPORTED_EXTERNALS[forward],
+            'positional_args': [{'kind': 'node', 'name': 'q'}, {'kind': 'node', 'name': 'k'},
+                                {'kind': 'node', 'name': 'v'}, {'kind': 'scalar', 'value': None},
+                                {'kind': 'scalar', 'value': True}, {'kind': 'scalar', 'value': 0.0},
+                                {'kind': 'scalar', 'value': True}, {'kind': 'scalar', 'value': False}],
+            'kwargs_ordered': {'scale': {'kind': 'scalar', 'value': None}},
+        }
+        source, call, metadata = _external_wrapper('forward', node)
+        from evograd.pipelines.unified.codegen import _pyname
+
+        wrapper = f'_unified_external_forward_{_pyname("attn")}'
+        self.assertIn(f'def {wrapper}(arg0, arg1, arg2):', source)
+        self.assertIn('with torch.no_grad():', source)
+        self.assertIn('return _unified_sdpa_forward(arg0, arg1, arg2, None, True, 0.0, True, False, '
+                      'scale=None)', source)
+        self.assertEqual(call, f'{wrapper}({_pyname("q")}, {_pyname("k")}, {_pyname("v")})')
+        self.assertEqual(metadata['kernel'], forward)
+        compile(source, '<wrapper>', 'exec')
+
+    def test_the_attention_kernels_own_saved_state_is_not_pinned_to_one_backend(self):
+        from evograd.pipelines.unified.codegen import _sdpa_state_outputs
+
+        forward = 'torch.ops.aten._scaled_dot_product_cudnn_attention.default'
+        graph = {'nodes': [
+            {'op': 'placeholder', 'name': 'q'},
+            {'op': 'call_function', 'name': 'attn', 'target': 'aten._scaled_dot_product_cudnn_attention.default',
+             'external_kernel': forward},
+            {'op': 'call_function', 'name': 'out', 'target': '<built-in function getitem>',
+             'positional_args': [{'kind': 'node', 'name': 'attn'}, {'kind': 'scalar', 'value': 0}]},
+            {'op': 'call_function', 'name': 'lse', 'target': '<built-in function getitem>',
+             'positional_args': [{'kind': 'node', 'name': 'attn'}, {'kind': 'scalar', 'value': 1}]},
+            {'op': 'call_function', 'name': 'other', 'target': 'aten.mul.Tensor',
+             'positional_args': [{'kind': 'node', 'name': 'q'}, {'kind': 'node', 'name': 'q'}]},
+            {'op': 'output', 'name': 'output', 'args': [['out', 'lse', 'q', 'other']]},
+        ]}
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'lse'})
+
+    def test_a_flash_capture_renders_on_the_same_helpers_in_cudnn_order(self):
+        from evograd.pipelines.unified.codegen import UNIFIED_SDPA_SOURCE, _sdpa_call
+
+        flash_fwd = 'torch.ops.aten._scaled_dot_product_flash_attention.default'
+        flash_bwd = 'torch.ops.aten._scaled_dot_product_flash_attention_backward.default'
+        self.assertEqual(_sdpa_call(flash_fwd, ['q', 'k', 'v', '0.0', 'True', 'False'], ['scale=0.1']),
+                         '_unified_sdpa_forward(q, k, v, None, True, 0.0, True, False, scale=0.1)')
+        # Trailing defaults the capture left out.
+        self.assertEqual(_sdpa_call(flash_fwd, ['q', 'k', 'v', '0.0', 'True'], []),
+                         '_unified_sdpa_forward(q, k, v, None, True, 0.0, True, False)')
+        self.assertEqual(
+            _sdpa_call(flash_bwd, ['g', 'q', 'k', 'v', 'o', 'lse', 'cq', 'ck', '2048', '2048', '0.0',
+                                   'True', 'seed', 'off'], ['scale=0.1']),
+            '_unified_sdpa_backward(g, q, k, v, o, lse, seed, off, None, cq, ck, 2048, 2048, 0.0, True, '
+            'scale=0.1)')
+        namespace = {'torch': torch}
+        exec(compile(UNIFIED_SDPA_SOURCE, '<sdpa>', 'exec'), namespace)
+        import inspect
+        # The cuDNN capture passes seven positionals (return_debug_mask left to its default).
+        forward = inspect.signature(namespace['_unified_sdpa_forward'])
+        forward.bind('q', 'k', 'v', None, True, 0.0, True, scale=0.1)
+        backward = inspect.signature(namespace['_unified_sdpa_backward'])
+        backward.bind(*range(15), scale=0.1)
+
+
 class TestFixedConfiguration(unittest.TestCase):
     def test_explicit_equal_dimensions_are_preserved_exactly(self):
         from evograd.pipelines.unified.synthesize import select_workload

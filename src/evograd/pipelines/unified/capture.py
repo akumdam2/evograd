@@ -42,6 +42,18 @@ _SUPPORTED_EXTERNALS = {
     "extern_kernels.addmm": "aten.addmm.default",
     "extern_kernels.convolution": "aten.convolution.default",
     "torch.ops.aten.convolution_backward.default": "aten.convolution_backward.default",
+    # Fused attention: Inductor keeps cuDNN's kernel (its default SDPA backend
+    # on Hopper) as a fallback call, forward and backward alike. The policy is
+    # the compiler's: what Inductor hands to a vendor library is preserved.
+    "torch.ops.aten._scaled_dot_product_cudnn_attention.default":
+        "aten._scaled_dot_product_cudnn_attention.default",
+    "torch.ops.aten._scaled_dot_product_cudnn_attention_backward.default":
+        "aten._scaled_dot_product_cudnn_attention_backward.default",
+    # The same under deterministic algorithms, where the dispatcher picks flash.
+    "torch.ops.aten._scaled_dot_product_flash_attention.default":
+        "aten._scaled_dot_product_flash_attention.default",
+    "torch.ops.aten._scaled_dot_product_flash_attention_backward.default":
+        "aten._scaled_dot_product_flash_attention_backward.default",
 }
 
 
