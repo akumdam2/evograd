@@ -7,8 +7,7 @@ Each candidate is an artifact for one observed case of the model
 (:func:`.base.observed_cases`, e.g. ``qwen3_swiglu_mlp/swiglu_mlp``), judged
 against the model reference (``Model.reference_op``):
 
-* Gate 1 -- the pair on the declaration's generated inputs at the case's
-  configuration, and on every acceptance payload (data orders 303/404).
+* Gate 1 -- the pair on every real acceptance payload (data orders 303/404).
 * Gate 2, operator scope -- thresholds from native repeats and
   ``torch.compile`` on the calibration payloads (orders 101/202), judged on the
   acceptance payloads through the artifact's deployment entry.
@@ -19,8 +18,11 @@ against the model reference (``Model.reference_op``):
   (a whole model judges a thousand propagated reductions per batch, the
   operator scope a handful of results); every site call replayed at its boundary.
 
+* Gate 3, single site (Level 2 only) -- continuous training with the candidate
+  alone at its model site, after all of its preceding gates pass.
+
 A Level-1 candidate is accepted when Gate 1 and operator Gate 2 pass; a
-Level-2 candidate also needs its single-site model Gate 2.
+Level-2 candidate also needs its single-site model Gate 2 and Gate 3.
 
 The **combination** -- the Level-2 candidates deployed together -- is then
 judged once more:
@@ -465,8 +467,8 @@ def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) ->
 
 
 def verify_cases(run: Run) -> dict[str, Any]:
-    """Gate 1 and operator Gate 2 for every candidate, and the single-site model
-    Gate 2 for every Level-2 candidate; each candidate's ``accepted``."""
+    """Gate 1 and operator Gate 2 for every candidate; Level 2 also needs its
+    single-site model Gate 2 and, after those pass, Gate 3."""
     from evograd.opdecl.oracle import reference_identity
 
     model = run.model
@@ -494,6 +496,19 @@ def verify_cases(run: Run) -> dict[str, Any]:
                 run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
                 lambda: judge_model(model, deployment, run.workload,
                                     compile_backend=run.compile_backend, state=run.state)))
+            if all(entry.get(gate) == "passed"
+                   for gate in ("gate1_payloads", "gate2_operator", "gate2_model")):
+                out = run.out / "gate3_single_site" / case_id.replace("/", "__")
+                _check_deadline(run.deadline, f"{case_id} single-site Gate 3")
+                training = judge_training(model, deployment, run.workload, out, run.state,
+                                          compile_backend=run.compile_backend, log=run.log,
+                                          deadline=run.deadline)
+                _write(out / "gate3.json", {name: r.to_dict() for name, r in training.items()})
+                entry.update({name: _status(r) for name, r in training.items()})
+                del training
+                _release_device_memory()
+            else:
+                entry["gate3"] = "skipped"
         entry["accepted"] = accepted(model, entry)
         verdict["candidates"][case_id] = entry
         run.log(case_id, {k: v for k, v in entry.items() if k not in ("program", "program_sha256")})
@@ -502,10 +517,10 @@ def verify_cases(run: Run) -> dict[str, Any]:
 
 def accepted(model, entry: Mapping[str, Any]) -> bool:
     """Gate 1 on real payloads and operator Gate 2; for Level 2 also the
-    single-site model Gate 2, where the model has model-scope gates."""
+    single-site model Gate 2 and Gate 3, where the model has model-scope gates."""
     gates = [entry.get("gate1_payloads"), entry.get("gate2_operator")]
     if entry.get("level") == 2 and model.model_gates:
-        gates.append(entry.get("gate2_model"))
+        gates.extend((entry.get("gate2_model"), entry.get("gate3")))
     return all(g == "passed" for g in gates)
 
 

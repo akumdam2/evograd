@@ -134,18 +134,20 @@ def compare(paths: list[Path]) -> str:
         return "-" if value is None else fmt.format(value)
 
     rows = ["| agent | accepted | correct | combined_score | bwd speedup | full-step speedup "
-            "| saved/input | evaluations | LLM calls | wall s |",
+            "| saved/input | evaluations | API requests | wall s |",
             "|---|---|---|---|---|---|---|---|---|---|"]
     for r in sorted(results, key=lambda r: -(r.get("combined_score") or float("-inf"))):
         metrics = r.get("metrics") or {}
         run = r.get("run") or {}
+        calls = run.get("llm_calls_recorded")
+        calls = "unmetered" if calls is None else str(calls)
         saved = (metrics["saved_bytes"] / metrics["input_bytes"]
                  if metrics.get("input_bytes") else None)
         rows.append(
             f"| {r['agent']} | {r.get('accepted')} | {r.get('correct')} "
             f"| {cell(r.get('combined_score'))} | {cell(metrics.get('speedup'))} "
             f"| {cell(metrics.get('full_step_speedup'))} | {cell(saved, '{:.2f}')} "
-            f"| {run.get('evaluations', '-')} | {run.get('llm_calls_recorded', '-')} "
+            f"| {run.get('evaluations', '-')} | {calls} "
             f"| {run.get('wall_seconds', '-')} |")
     return f"Task `{tasks.pop()}`\n\n" + "\n".join(rows) + "\n"
 

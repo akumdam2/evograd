@@ -168,15 +168,39 @@ recorder of its training calls (`capture.py`), and its model reference
 computation). The capture loop, replay and fidelity (`base.py`), the gates
 (`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
 boundary of one training step per data order becomes a payload of the case
-its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only),
-operator Gate 2 calibrates on orders 101/202 and judges 303/404; a Level-2
-candidate also gets model Gate 2 alone at its site (budgets pooled over the
-four batches, gamma 3). A candidate passing every
-gate that applies is accepted. The combination of Level-2 candidates then gets
-model Gate 2 on the combined patch set and Gate 3 (`Model.gate3_steps`):
-`verify` combines every accepted Level-2 candidate, the benchmark protocol
-(`evograd evaluate`, `evaluation/protocol.py`) those whose single-site training
-step is faster.
+its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only).
+Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
+Model Gate 2 runs the candidate alone at its site, pooling budgets over the
+four batches with gamma 4 and replaying every replaced call at its boundary.
+
+| Object | Required correctness gates |
+| --- | --- |
+| Level-1 candidate | Gate 1 + operator Gate 2 |
+| Level-2 candidate | Gate 1 + operator Gate 2 + single-site model Gate 2 + single-site Gate 3 |
+| Level-3 combination | Model Gate 2 on the combined patch set + Gate 3 |
+
+Single-site Gate 3 starts only after the preceding three gates pass; otherwise
+its stage is marked `skipped`. A candidate is accepted only when every
+applicable gate passes. Models without model-scope gates retain operator-only
+acceptance and report the combination as not applicable. Gate 3 uses the
+model's `Model.gate3_steps`, optimizer settings and accumulation for both the
+single-site and combined runs.
+
+`verify` combines every accepted Level-2 candidate. The benchmark protocol
+(`evograd evaluate`, `evaluation/protocol.py`) selects each agent's positive
+Level-2 candidates: accepted, with single-site Tier 3 speedup over eager whose
+95% bootstrap interval has a lower bound strictly above one. The resulting
+combination still needs its own model Gate 2 and Gate 3; individual passes do
+not establish combined correctness. This deployment path installs Level-2
+model sites, not independent Level-1 artifacts.
+
+Single-site training records are stored under `gate3_single_site/<case>/`,
+separately from `combination/`. Controls are shared through `--state` when their
+training identities and patch sets match. Candidate runs also bind to their
+own deployment, and interrupted Gate 3 runs resume from their checkpoints.
+The [evaluation protocol](../evaluation/README.md) reports accepted L1/L2
+results at Tier 2 through deployment and autograd, and whole-model results at
+Tier 3; Tier 1 remains search feedback and standalone pair diagnostics.
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS

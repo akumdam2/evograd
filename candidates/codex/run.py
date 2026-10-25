@@ -13,11 +13,11 @@ tools are untouched. ``~/.codex/config.toml`` is not loaded
 (``--ignore-user-config``), so a run does not depend on the account.
 
 Codex is the coding agent that shares the other agents' model: it runs on
-``--model`` at ``--api-base`` (``openai_base_url``) with ``$OPENAI_API_KEY``
-(passed as ``CODEX_API_KEY`` unless that is already set).
+``--model`` at the shared request-budget proxy, which forwards to ``--api-base``.
+An explicit HTTP Responses provider keeps inference on the metered endpoint.
 
-Budget mapping: ``--budget N`` evaluations through ``evaluate.py``, enforced
-exactly (see ``_coding_agent``).
+``--budget N`` caps model requests, including retries and context compaction.
+``--eval-budget`` optionally limits evaluator calls independently.
 
 Difference that cannot be removed, and is recorded: Codex runs with
 ``--dangerously-bypass-approvals-and-sandbox`` and a shell on the GPU node.
@@ -46,8 +46,19 @@ def command(args, workspace: Path) -> list[str]:
     command = ["codex", "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
                "--skip-git-repo-check", "--ignore-user-config", "-C", str(workspace),
                "-m", args.model]
-    if args.api_base.rstrip("/") != OPENAI_API_BASE:
-        command += ["-c", f"openai_base_url={json.dumps(args.api_base)}"]
+    settings = {
+        "model_provider": '"adbench"',
+        "model_providers.adbench.name": '"ADBench request budget"',
+        "model_providers.adbench.base_url": json.dumps(args.api_base),
+        "model_providers.adbench.env_key": '"OPENAI_API_KEY"',
+        "model_providers.adbench.wire_api": '"responses"',
+        "model_providers.adbench.requires_openai_auth": "false",
+        "model_providers.adbench.supports_websockets": "false",
+        # The CLI otherwise reconnects even after the proxy's terminal 402.
+        "model_providers.adbench.stream_max_retries": "0",
+    }
+    for name, value in settings.items():
+        command += ["-c", f"{name}={value}"]
     if args.effort:
         command += ["-c", f"model_reasoning_effort={json.dumps(args.effort)}"]
     return [*command, "-"]
@@ -79,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("the codex CLI is not on PATH")
     task, ledger = _common.start(args, AGENT, {
         "codex_version": _coding_agent.cli_version("codex"), "effort": args.effort,
-        "gpu": args.gpu, "evaluations": args.budget, "time_limit": args.time_limit,
+        "gpu": args.gpu, "evaluations": args.eval_budget, "time_limit": args.time_limit,
     })
 
     workspace = _coding_agent.Workspace(task, ledger, AGENT, args)

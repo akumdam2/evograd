@@ -20,7 +20,8 @@ budget. What differs is only what the frontend provides:
   ``--prompt evograd`` keeps evograd's system message alone -- the strict
   ablation, in which the rules arrive only as evaluator feedback.
 
-Budget mapping: ``iterations = budget``, as for evograd.
+The shared proxy caps actual model requests, including retries; native
+``iterations = budget`` remains an additional stopping limit, as for evograd.
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     evolve_dir = ledger.root / "evolve"
     best = evolve_dir / "evolved_best_program.py"
+    rc = 1
     try:
         rc = run_evolve(
             task.op(), seed_path=seed, output_dir=evolve_dir, scoring=task.spec["scoring"],
@@ -76,8 +78,14 @@ def main(argv: list[str] | None = None) -> int:
             performance_baseline=task.spec["performance_baseline"], save_programs=True,
             extra_env={"EVOGRAD_ALLOWED_PRIMITIVES": ",".join(task.allowed_primitives)},
         )
+    except Exception:
+        if not _common.budget_exhausted(args):
+            raise
     finally:
         _common.import_evaluations_from_archive(ledger, evolve_dir / "programs", "openevolve")
+    if _common.budget_exhausted(args):
+        return _common.finish(args, task, ledger, _common.best_evaluated(ledger,
+                              best if best.is_file() else None))
     if rc != 0 or not best.is_file():
         return _common.finish(args, task, ledger, None, status="evolve_failed")
     return _common.finish(args, task, ledger, best)

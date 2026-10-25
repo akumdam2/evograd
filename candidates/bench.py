@@ -41,8 +41,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
 if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
+
+from _common import DEFAULT_BUDGET, METERED_AGENTS  # noqa: E402
 
 SUBMISSION = "submission.py"
 SUBMISSION_RECORD = "submission.json"
@@ -140,6 +144,10 @@ def cmd_run(args) -> int:
     from evograd.adbench_tools.task import load
 
     driver = HERE / args.agent / "run.py"
+    if args.budget < 1:
+        raise SystemExit("--budget must be >= 1")
+    if any(flag == "--budget" or flag.startswith("--budget=") for flag in args.agent_args):
+        raise SystemExit("set --budget on bench.py, not in the agent flags")
     if not driver.is_file():
         raise SystemExit(f"no candidate driver {driver}")
     failures = 0
@@ -151,9 +159,19 @@ def cmd_run(args) -> int:
         run_json = run_dir / "run.json"
         done = run_json.is_file() and json.loads(run_json.read_text()).get("status") != "running"
         if done and not args.redo:
+            config = json.loads(run_json.read_text()).get("config", {})
+            if args.agent in METERED_AGENTS and (
+                    config.get("budget_unit") != "api_requests" or
+                    config.get("budget") != args.budget):
+                raise SystemExit(f"{run_dir} was not run with the requested {args.budget}-request "
+                                 "budget; use a fresh --root or explicitly --redo")
             print(f"[{args.agent}] {cid}: kept finished run at {run_dir}", flush=True)
         else:
             if run_dir.exists():
+                if not args.redo:
+                    raise SystemExit(f"{run_dir} contains an unfinished run; refusing to erase its "
+                                     "API budget ledger. Recover that run or use a fresh --root; "
+                                     "--redo explicitly starts a new trial.")
                 import shutil
                 shutil.rmtree(run_dir)
             run_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -218,12 +236,16 @@ def cost(root: Path, agent: str) -> dict:
     """What the agent spent over its runs, from the ledgers."""
     from evograd.adbench_tools.ledger import RunLedger
 
-    total = {"runs": 0, "evaluations": 0, "llm_calls_recorded": 0, "wall_seconds": 0.0}
+    total = {"runs": 0, "evaluations": 0, "llm_calls_recorded": 0,
+             "unmetered_runs": 0, "wall_seconds": 0.0}
     for run_json in sorted((root / "runs" / agent).glob("*/run.json")):
         summary = RunLedger(run_json.parent).summary()
         total["runs"] += 1
         total["evaluations"] += summary["evaluations"]
-        total["llm_calls_recorded"] += summary["llm_calls_recorded"]
+        if summary["llm_calls_recorded"] is None:
+            total["unmetered_runs"] += 1
+        else:
+            total["llm_calls_recorded"] += summary["llm_calls_recorded"]
         total["wall_seconds"] += float(summary.get("wall_seconds") or 0.0)
     return total
 
@@ -233,28 +255,44 @@ def _cell(value, fmt="{:.2f}"):
 
 
 def summary_table(rows: dict[str, dict]) -> str:
-    lines = ["| agent | level | submitted | violation | executable | gate 1 | accepted | coverage "
-             "| speedup vs eager | vs compile | evaluations | LLM calls | wall h |",
+    lines = ["| agent | level / tier | submitted | violation | executable | gate 1 | accepted | coverage "
+             "| speedup vs eager | vs compile | evaluations | API requests | wall h |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for agent, entry in rows.items():
         summary, spent = entry["summary"], entry["cost"]
+        calls = "unmetered" if spent.get("unmetered_runs") else str(spent["llm_calls_recorded"])
         for level in ("level1", "level2"):
             s = summary[level]
             f = s["funnel"]
             if not f["configurations"]:
                 continue
             lines.append(
-                f"| {agent} | {level[-1]} | {f['submitted']}/{f['configurations']} | {f['violation']} "
+                f"| {agent} | L{level[-1]} / T2 | {f['submitted']}/{f['configurations']} | {f['violation']} "
                 f"| {f['executable']} | {f['gate1']} | {f['accepted']} | {_cell(s['coverage'])} "
                 f"| {_cell(s['speedup']['eager']['geomean'])} "
                 f"| {_cell(s['speedup']['torch_compile']['geomean'])} "
-                f"| {spent['evaluations']} | {spent['llm_calls_recorded']} "
+                f"| {spent['evaluations']} | {calls} "
                 f"| {spent['wall_seconds'] / 3600:.2f} |")
         for model, m in summary["level3"]["models"].items():
             lines.append(
-                f"| {agent} | 3 ({model}) | {len(m['cases'])} combined | - | - | - "
+                f"| {agent} | L3 / T3 ({model}) | {len(m['cases'])} combined | - | - | - "
                 f"| {'yes' if m['accepted'] else 'no'} | - | {_cell(m['speedup'])} "
                 f"| {_cell(m['speedup_vs_torch_compile'])} | - | - | - |")
+    singles = []
+    for agent, entry in rows.items():
+        for model, cases in entry["summary"]["level2"].get("tier3_single_site", {}).items():
+            for cid, case in cases.items():
+                timed = case.get("tier3") or {}
+                interval = timed.get("ci95") or {}
+                ci = f"[{_cell(interval.get('low'))}, {_cell(interval.get('high'))}]"
+                singles.append(
+                    f"| {agent} | {model}: {cid} | {'yes' if case.get('accepted') else 'no'} "
+                    f"| {_cell(timed.get('step_ms'))} | {_cell(timed.get('speedup'))} | {ci} "
+                    f"| {'yes' if case.get('positive') else 'no'} |")
+    if singles:
+        lines += ["", "L2 single-site Tier 3 (against eager)", "",
+                  "| agent | case | accepted | step ms | speedup | 95% interval | positive |",
+                  "|---|---|---|---|---|---|---|", *singles]
     return "\n".join(lines) + "\n"
 
 
@@ -268,7 +306,11 @@ def cmd_summarize(args) -> int:
             print(f"{agent}: no {path}; run `evaluate` first", file=sys.stderr)
             continue
         evaluation = json.loads(path.read_text(encoding="utf-8"))
-        rows[agent] = {"summary": summarize([evaluation]), "cost": cost(args.root, agent),
+        try:
+            summary = summarize([evaluation])
+        except ValueError as exc:
+            raise SystemExit(f"{agent}: {exc}") from exc
+        rows[agent] = {"summary": summary, "cost": cost(args.root, agent),
                        "suspended": evaluation.get("suspended")}
     if not rows:
         return 1
@@ -301,10 +343,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("run", help="one agent on every task pack (or --case-id), no scoring")
     common(p)
     p.add_argument("--agent", required=True, help="a directory under candidates/")
-    p.add_argument("--budget", type=int, default=30)
+    p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
+                   help="OpenAI-compatible model API requests per agent/case "
+                        "(default $ADBENCH_BUDGET or 10; Anthropic: legacy native budget)")
     p.add_argument("--case-id", nargs="*", default=None)
     p.add_argument("--time-limit", type=int, default=0, help="seconds per case, 0 = none")
-    p.add_argument("--redo", action="store_true", help="rerun finished cases")
+    p.add_argument("--redo", action="store_true",
+                   help="start a new trial, replacing an existing run and its API ledger")
     p.add_argument("agent_args", nargs=argparse.REMAINDER,
                    help="flags for the agent's run.py, after --")
     p.set_defaults(run=cmd_run)

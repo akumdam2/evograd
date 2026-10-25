@@ -28,20 +28,46 @@ neither of them:
 
 ## The benchmark run
 
-The comparison that counts is the benchmark's protocol, `evograd evaluate`
-(real-payload gates per level, Tier 1, Tier 3, the Level-3 combination), run
+The [Qwen3-0.6B evaluation plan](EVALUATION_PLAN.md)
+fixes the first comparison's six cases, 10-request budget, gates, timing and reporting.
+
+The comparison that counts is `evograd evaluate` (`evograd-evaluation-v2`:
+real-payload gates, Tier 2, single-site Tier 3 and the Level-3 combination), run
 on every agent's submissions by `bench.py`; `score`/`compare` below are
 single-configuration diagnostics. See
 [`adbench_tools/README.md` §7](../src/evograd/adbench_tools/README.md#7-the-benchmark-run).
 
 ```bash
 export ADBENCH_ROOT=...     # results under $ADBENCH_ROOT/<model>
+export ADBENCH_MODEL=gpt-5.5
 python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm
 python candidates/bench.py run       --model qwen3_0_6b --agent seed            # frontend only, no LLM
-python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 30
+python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json
 python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
 ```
+
+| Level | Verification | Formal performance report |
+|---|---|---|
+| L1 | Gate 1 + operator Gate 2 | T2 |
+| L2 | Gate 1 + operator Gate 2 + single-site model Gate 2 + Gate 3 | T2 + single-site T3 |
+| L3 combination | Combined model Gate 2 + Gate 3 | Combined T3 |
+
+T2 runs the artifact's real deployment forward and `torch.autograd.grad`, with
+every baseline using the same autograd scope; it has no optimizer or `.grad`
+accumulation. Its fair timer retains warmup 10, repetitions 50 and 3 blocks.
+T1 remains search feedback or a separate pair diagnostic. Each agent's L3
+combination contains its accepted L2 candidates whose successful single-site
+T3 speedup over eager has a 95% interval with lower bound greater than 1.
+The summary retains these individual T3 results, gates and selection decisions;
+it does not average them into an end-to-end speedup. L3 is measured separately
+against eager and whole-model compile; its reported interval is against eager.
+
+Use a fresh run root for the new API-request budget. `bench.py run` refuses to
+reuse a metered agent's completed run if its budget unit or limit differs, and
+does not silently delete an unfinished run or reset its API ledger. `--redo`
+explicitly replaces that run as a new trial. Existing v1 evaluations must be rerun
+with `evaluate`; renaming old `tier1` results to `tier2` is not a migration.
 
 ## Fairness protocol
 
@@ -98,31 +124,36 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
    - OpenEvolve and evograd use the evaluator directly.
 
    No agent's own correctness check or timer decides anything.
-5. **Same final measurement.** `python -m evograd.adbench_tools score` re-packages
-   the agent's best program from its block body, so nothing the agent's loop did
-   outside the block survives (`fixed_code_intact` records whether it tried).
-   It then runs:
-   - the **seed-acceptance gate** the frontend's own seed must pass;
-   - the full evaluator, with 25 warmup and 100 repetitions.
-
-   The baseline timing is cached per task, GPU and measurement setting. So
-   every agent's speedup is divided by the same baseline measurement.
-6. **Same model and budget, as far as each agent allows.**
+5. **Same final measurement.** `bench.py` rebuilds each submission from its
+   block body (`fixed_code_intact` records outside edits), then runs the v2
+   protocol above. `adbench_tools score` is a separate single-configuration
+   diagnostic: seed acceptance and the search evaluator at 25 warmup / 100
+   repetitions, with a shared cached baseline.
+6. **Same model and model-request cap for the OpenAI agents.**
    - `--model` and `--api-base` are one OpenAI-compatible endpoint for every
      agent except GEAK and Claude Code.
-   - `--budget N` is the number of candidate programs the agent may have
-     evaluated, mapped onto each agent's own control (table below).
-   - Each run's `evaluations.jsonl` records every evaluation actually
-     requested; `compare` reports that count, recorded LLM usage and wall time.
+   - `--budget N` caps admitted model API requests per agent and case. The
+     default is `ADBENCH_BUDGET`, or 10. Initial generation, reflection,
+     retries, failed upstream requests and context compaction all consume it.
+   - The shared HTTP proxy records requests in `api_calls.jsonl` before
+     forwarding them and refuses request N+1. Native loop limits below are
+     additional stopping conditions, not alternative budget units.
+   - `evaluations.jsonl` independently records evaluator calls; `llm.jsonl`
+     holds agent-reported usage events, which need not correspond to requests.
 
-| Agent | `--budget N` becomes | Notes |
+| Agent | Model-request cap | Additional native stopping control |
 |---|---|---|
-| evograd | OpenEvolve `iterations = N` | the seed costs no LLM call |
-| raw OpenEvolve | `iterations = N` | starts from the unimplemented skeleton |
-| GEPA | `max_evals = N + 1` | seedless; one evaluation goes to GEPA's own first candidate |
-| KernelAgent | generation: 4 workers × ⌈N/8⌉ rounds; optimization: ⌊N/8⌋ beam rounds (4 workers) | early-exits at the first passing kernel |
-| GEAK | `budget = max(2, N // 5)` optimization directions | a direction is an engineer session that can test many times; the ledger counts every test |
-| Claude Code, Codex | at most N calls of `evaluate.py` (full or `--correctness`) | enforced: the N+1th call is refused; the agent's own scripts on the GPU are not counted |
+| evograd | N | OpenEvolve `iterations = N`; frontend seed uses no LLM |
+| raw OpenEvolve | N | `iterations = N`; starts from the skeleton |
+| GEPA | N | `max_evals = N + 1`; initial generation also consumes the API cap |
+| KernelAgent | N across all workers and stages | generation: 4 workers × ⌈N/8⌉ rounds; optimization: max(1, ⌊N/8⌋) beam rounds |
+| Codex | N | session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
+| GEAK | Unmetered (`legacy_native`) | `budget = max(2, N // 5)` optimization directions |
+| Claude Code | Unmetered (`legacy_native`) | N evaluator calls by default; `--eval-budget` can override |
+
+Claude Code and GEAK are separate data points: neither has the same enforced
+API-request cap. Their `llm_calls_recorded` is `null` and tables show
+`unmetered`; token or session usage events do not establish a request count.
 
 ## What cannot be equalised (and is recorded instead)
 
@@ -134,8 +165,7 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
     AMD-specific.
 
   GEAK also runs on Claude Code's model (`--claude-model`), not on `--model`.
-  For model parity, run every agent on the same model through an
-  OpenAI-compatible gateway, or report GEAK as a separate point.
+  Report it as a separate model and budget point.
 - **Claude Code and Codex have a shell on the GPU node.** Their own
   sandboxes block the GPU, so they run with permissions bypassed. Nothing
   they are given names the repository, the run or the task pack: the
@@ -147,9 +177,12 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
   evograd's scoring source through the path `evaluate.py` then embedded).
   `run.json` records `oracle_intact` (whether `evaluate.py` was edited) and
   `deliverable` (which rule chose the measured program).
-  Claude Code runs on `--claude-model`, like GEAK. Codex runs on `--model`,
-  but through the Responses API, so a gateway given as `--api-base` must serve
-  `/responses`.
+  Claude Code runs on `--claude-model`, like GEAK. Codex uses an explicit
+  `adbench` HTTP Responses provider pointed at the shared budget proxy, with
+  WebSockets and stream reconnection retries disabled, and a placeholder key
+  (`adbench-local`). Other request retries still consume the budget. The proxy holds
+  the upstream credential and forwards to `--api-base`; that endpoint must
+  support `/responses` and, when used, `/responses/compact`.
 - **KernelAgent times one callable.** So its `problem.py` presents the task as
   one training step (eager autograd of the reference), and the module must also
   define a fixed `kernel_function` wrapper around the pair. Our test checks the
@@ -163,8 +196,9 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed gepa
 
 ```bash
 pip install -e ".[gpu,llm]"                      # evograd (includes openevolve)
-export OPENAI_API_KEY=...                        # every agent but GEAK
-export ADBENCH_MODEL=gpt-5.6-sol              # default --model for every driver
+export OPENAI_API_KEY=...                        # OpenAI-model agents
+export ADBENCH_MODEL=gpt-5.5                      # this comparison; overrides the unchanged driver default
+export ADBENCH_BUDGET=10
 export ADBENCH_API_BASE=https://api.openai.com/v1
 
 # GEPA, at the commit the driver was written against
@@ -190,19 +224,19 @@ python -m evograd.adbench_tools task --op llama3_swiglu_mlp --dtype bfloat16 --o
 python -m evograd.adbench_tools statement $TASK | less      # what every agent is told
 ```
 
-Run each agent. Every command ends with the final measurement in
+Run each agent. Every command ends with the diagnostic measurement in
 `<run-dir>/final.json`:
 
 ```bash
 R=results/adbench_tools/llama3_swiglu_mlp/runs
-python candidates/evograd/run.py     --task $TASK --run-dir $R/evograd     --budget 30
-python candidates/openevolve/run.py  --task $TASK --run-dir $R/openevolve  --budget 30
-python candidates/gepa/run.py        --task $TASK --run-dir $R/gepa        --budget 30
-python candidates/kernelagent/run.py --task $TASK --run-dir $R/kernelagent --budget 30
-python candidates/geak/run.py        --task $TASK --run-dir $R/geak        --budget 30 \
+python candidates/evograd/run.py     --task $TASK --run-dir $R/evograd     --budget 10
+python candidates/openevolve/run.py  --task $TASK --run-dir $R/openevolve  --budget 10
+python candidates/gepa/run.py        --task $TASK --run-dir $R/gepa        --budget 10
+python candidates/kernelagent/run.py --task $TASK --run-dir $R/kernelagent --budget 10
+python candidates/geak/run.py        --task $TASK --run-dir $R/geak        --budget 10 \
     --claude-model claude-opus-5-5
-python candidates/codex/run.py       --task $TASK --run-dir $R/codex       --budget 30
-python candidates/claude_code/run.py --task $TASK --run-dir $R/claude_code --budget 30 \
+python candidates/codex/run.py       --task $TASK --run-dir $R/codex       --budget 10
+python candidates/claude_code/run.py --task $TASK --run-dir $R/claude_code --budget 10 \
     --claude-model claude-opus-5-5
 ```
 
@@ -215,7 +249,7 @@ python -m evograd.adbench_tools compare $R/*/final.json
 Or run everything for one operator, one agent after another on the same GPU:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash candidates/run_all.sh llama3_swiglu_mlp bfloat16 30
+CUDA_VISIBLE_DEVICES=0 bash candidates/run_all.sh llama3_swiglu_mlp bfloat16 10
 AGENTS="evograd gepa" bash candidates/run_all.sh llama3_attention        # a subset
 ```
 
@@ -224,7 +258,7 @@ To check and run the five OpenAI-model agents (no GEAK or Claude Code) in one go
 of the evaluator, a tiny-budget smoke run of each agent, then the full run:
 
 ```bash
-SETUP=1 bash candidates/run_openai.sh llama3_swiglu_mlp bfloat16 30   # first time: also installs GEPA/KernelAgent
+SETUP=1 bash candidates/run_openai.sh llama3_swiglu_mlp bfloat16 10   # first time: also installs GEPA/KernelAgent
 STAGES="sanity smoke" bash candidates/run_openai.sh                    # just the checks
 ```
 
@@ -237,9 +271,9 @@ python -m evograd.adbench_tools evaluate --task $TASK --correctness-only some_mo
 python -m evograd.adbench_tools score --task $TASK --run-dir $R/manual some_module.py
 ```
 
-The final program then goes through the deeper tiers like any evograd
-candidate (`final.json` → `follow_up` has the exact commands). Tier 2 runs the
-operator's own declared benchmark cases, the same for every agent:
+`final.json` → `follow_up` contains optional standalone tier diagnostics.
+Their declared-case checks and timers are separate from the formal v2 protocol
+run by `bench.py evaluate`:
 
 ```bash
 evograd tier2-bench --op llama3_swiglu_mlp --candidate $R/gepa/final_program.py \
@@ -251,8 +285,9 @@ evograd tier3-bench --model llama_3_2_1b --patch-set gepa:swiglu_mlp=$R/gepa/fin
 
 ```
 <run-dir>/
-  run.json             agent, task, statement hash, config (budget mapping, model), status, wall time
+  run.json             agent, task, statement hash, config (budget unit/limit, model), status, wall time
   evaluations.jsonl    every evaluation the agent requested (kind, verdict, score, program)
+  api_calls.jsonl      admitted model API requests, independently metered for OpenAI agents
   llm.jsonl            LLM usage, where the agent exposes it (GEPA metadata, Claude Code cost, Codex tokens)
   programs/            every packaged program evaluated through adbench-tools
   final_program.py     the re-packaged best program that was measured

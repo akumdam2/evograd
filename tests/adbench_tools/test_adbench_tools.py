@@ -327,7 +327,8 @@ def test_the_coding_agents_work_against_a_metered_evaluator_that_hides_the_repos
 
     shared = coding_agents[1]._coding_agent
     ledger = RunLedger(tmp_path / "run", agent="codex", task=small_task, config={})
-    args = argparse.Namespace(workspace=tmp_path / "workspace", budget=3, eval_timeout=300)
+    args = argparse.Namespace(workspace=tmp_path / "workspace", budget=10, eval_budget=3,
+                              eval_timeout=300)
     workspace = shared.Workspace(small_task, ledger, "codex", args)
     hidden = (str(REPO), str(ledger.root), str(small_task.root))
     assert sorted(p.name for p in workspace.root.iterdir()) == [
@@ -336,6 +337,7 @@ def test_the_coding_agents_work_against_a_metered_evaluator_that_hides_the_repos
         assert not any(h in path.read_text() for h in hidden), path.name
     prompt = (ledger.root / shared.PROMPT).read_text()
     assert prompt.endswith(small_task.statement) and "at most 3 evaluations" in prompt
+    assert "at most 10 model API requests" in prompt
 
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(REPO / "src"), "/elsewhere"]))
     monkeypatch.setenv("SLURM_SUBMIT_DIR", str(REPO))
@@ -398,11 +400,16 @@ def test_codex_runs_on_the_shared_model_and_endpoint(coding_agents, tmp_path):
                                                effort="high"), tmp_path)
     assert command[:2] == ["codex", "exec"] and command[-1] == "-" and "-o" not in command
     assert command[command.index("-m") + 1] == "gpt-x"
-    assert 'openai_base_url="https://gw.example/v1"' in command
+    assert 'model_providers.adbench.base_url="https://gw.example/v1"' in command
+    assert 'model_provider="adbench"' in command
+    assert 'model_providers.adbench.supports_websockets=false' in command
+    assert 'model_providers.adbench.requires_openai_auth=false' in command
+    assert 'model_providers.adbench.stream_max_retries=0' in command
     assert 'model_reasoning_effort="high"' in command
     default = codex.command(argparse.Namespace(model="gpt-x", api_base=codex.OPENAI_API_BASE,
                                                effort=None), tmp_path)
-    assert not any(part.startswith(("openai_base_url", "model_reasoning")) for part in default)
+    assert not any(part.startswith("model_reasoning") for part in default)
+    assert f'model_providers.adbench.base_url="{codex.OPENAI_API_BASE}"' in default
     command = claude.command(argparse.Namespace(claude_model="opus", effort=None), "PROMPT")
     assert command[:3] == ["claude", "-p", "PROMPT"]
     assert command[command.index("--model") + 1] == "opus" and "--effort" not in command

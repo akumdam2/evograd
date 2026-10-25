@@ -3,7 +3,8 @@
 ## The benchmark protocol
 
 Every submission is evaluated the same way, whoever generated it
-(`protocol.py`):
+(`protocol.py`, `evograd-evaluation-v2`). Evaluate each agent's submissions as
+one run; its Level-3 combination is selected only from that agent's candidates:
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 evograd evaluate qwen3_0_6b --corpus CORPUS/manifest.json \
@@ -16,21 +17,32 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    autograd call the run did not grant). A violation is recorded and the
    candidate is neither verified nor timed.
 1. **Verify** each candidate on the model's real training payloads: Gate 1
-   and operator Gate 2; a Level-2 candidate also gets model Gate 2 alone at its
-   site. Passing every gate that applies makes a candidate *accepted*.
-2. **Tier 1** times every *executable* candidate, accepted or not, at its
-   case's configuration: against eager and `torch.compile` through autograd,
-   against a declared library pair directly. Executable means one forward and
-   backward raises nothing, returns the declared outputs and gradients with the
-   eager shapes and dtypes, and leaves the inputs unchanged.
+   and operator Gate 2. A Level-2 candidate also gets model Gate 2 alone at its
+   site and, after those three gates pass, single-site Gate 3 continuous
+   training. Passing every applicable gate makes a candidate *accepted*;
+   a skipped, failed or incomplete required gate cannot pass acceptance.
+2. **Tier 2** times every *executable* Level-1/Level-2 candidate, accepted or
+   not, at its case's configuration. Candidate, eager, `torch.compile` and
+   declared library baselines all run forward through their deployment path
+   and backward through `torch.autograd.grad`, without an optimizer or `.grad`
+   accumulation. The candidate uses its artifact's deployment entry, or
+   `bind` for a legacy pair. Executable means this route raises nothing,
+   returns the declared outputs and gradients with the eager shapes and
+   dtypes, and leaves the inputs unchanged. The fair timer uses `warmup=10`,
+   `reps=50`, `blocks=3` and `seed=0`; it may reduce repetitions for expensive
+   calls. Providers receive identical seeded inputs at the observed case's
+   shape, dtype and scalars; correctness is judged separately on real payloads.
 3. **Tier 3** times the training step with each executable Level-2 candidate
    alone at its site, against eager.
-4. The **combination** is every accepted Level-2 candidate whose single-site
-   Tier 3 speedup has a 95% interval above one. It gets model Gate 2 and
-   Gate 3, then is timed at Tier 3 against eager and whole-model
+4. The **combination** contains that agent's positive Level-2 candidates:
+   *accepted* and single-site Tier 3 speedup over eager with a 95% bootstrap
+   interval whose lower bound is strictly above one. These candidates are
+   deployed together at their distinct model sites; Level-1 artifacts are not
+   independently installed by this path. The combination gets model Gate 2
+   and Gate 3 again, then Tier 3 timing against eager and whole-model
    `torch.compile`.
-5. The **summary** reports, per level, the geometric-mean speedup over
-   accepted configurations (configuration, then task, then family), coverage
+5. The **summary** reports, for Level 1 and Level 2, the Tier 2 geometric-mean
+   speedup over accepted configurations (configuration, then task, then family), coverage
    (accepted configurations over all observed ones) and the funnel
    (submitted, violation, executable, Gate 1, accepted); Level 3 reports each model's
    combination with its speedup and peak-memory ratio. There is no single
@@ -38,13 +50,21 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    candidate's numbers are visible but counted nowhere.
 
 Verification runs deterministic; timing runs with deterministic algorithms
-off. Every stage is saved under `RUN` and reused on rerun; `--deadline-min`
-suspends at a stage boundary (exit 3).
+off. Results are saved under `RUN` and reused on rerun when their bindings
+match. `--deadline-min` suspends at a stage boundary or a Gate 3 checkpoint
+(exit 3). Single-site Gate 3 records live in `gate3_single_site/<case>/`,
+separate from `combination/`; both reuse compatible controls under `--state`.
 
-The tier commands below (`tier1-bench`, `tier2-bench`, `tier3-bench`, `suite`)
-remain as diagnostics; Tier 2 is not part of the protocol.
+Tier 1 is used during search and for standalone pair diagnostics; it is not a
+final benchmark metric. Formal Tier 2 results use the `tier2` settings, cache
+and JSON fields. `summarize` requires v2 results: old v1 timings must be
+reevaluated, not relabeled as Tier 2.
 
-## Tiers as diagnostics
+The standalone commands below (`tier1-bench`, `tier2-bench`, `tier3-bench`,
+`suite`) remain diagnostics. Their admission rules and timing defaults are
+separate from `evograd evaluate` above.
+
+## Standalone tier diagnostics
 
 **Tier 2 checks an operator before timing it. Tier 3 measures the operator
 inside the whole model's training step, recording numerical differences
@@ -61,14 +81,14 @@ for the latest measurements and their limits.
 
 | Tier | Measured work |
 | --- | --- |
-| T1 | Call the forward/backward pair directly |
-| T2 | Run one operator through PyTorch autograd, without an optimizer |
+| T1 | Call the forward/backward pair directly; search and standalone diagnostics |
+| T2 | Run one operator's deployed forward and autograd backward, without an optimizer; the formal L1/L2 metric |
 | T3 | Run the full model: forward/loss, backward, AdamW update and gradient reset |
 
 Levels describe tasks: L1 primitive, L2 composite operator, L3 whole model.
 An L2 candidate can be evaluated at T2 and installed in the T3 model.
 
-## Tier 2: keep the declared correctness rules
+## Standalone Tier 2: keep the declared correctness rules
 
 Each provider receives identical generated inputs and copied weights. The
 reference, or **oracle**, is the declared PyTorch forward differentiated with
@@ -112,8 +132,8 @@ also has a generic grid. Eager uses the task's runtime implementation, compile
 compiles that provider, and both are timed baselines—not extra acceptance gates.
 The oracle can differ from the efficient runtime implementation, notably SDPA.
 
-Current T2 timing uses `measure_module` and `triton.testing.do_bench`: forward
-and forward+backward, 25 ms warmup and 500 ms measurement budgets by default,
+The standalone `tier2-bench` timing uses `measure_module` and
+`triton.testing.do_bench`: forward and forward+backward, 25 ms warmup and 500 ms measurement budgets by default,
 with median and 20/80 percentiles. Providers normally run in separate processes.
 Activation gradients are reset between training samples; parameter gradients
 accumulate. Older report headers may contain obsolete fixed-repetition fields;
@@ -137,7 +157,7 @@ fixed provider/deployment code and preserved call sites, then counts actual
 external-library calls in forward and backward. Unified numerical variants
 must pass before timing. NCU refinement inherits the same declaration and gates.
 
-## Tier 3: record differences and continue evaluation
+## Standalone Tier 3: record differences and continue evaluation
 
 Select `report-first` explicitly; the CLI default remains `strict`.
 

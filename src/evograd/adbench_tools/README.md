@@ -36,12 +36,13 @@ against `torch.autograd` and faster than PyTorch eager.
 
 The current round runs only agents on OpenAI models: evograd, raw OpenEvolve,
 GEPA, KernelAgent and Codex. GEAK and Claude Code run on Claude Code's model,
-so they can't share the same model. Their drivers work the same way, but they
-are left out of `run_openai.sh`.
+so they are separate data points and are left out of `run_openai.sh`. They also
+retain `legacy_native` budgets rather than the OpenAI agents' API-request cap.
 
 Claude Code and Codex are the general-purpose coding agents: no kernel-specific
 loop, only a shell, a file editor and the evaluator. They show what an
-off-the-shelf agent does with the same statement and budget.
+off-the-shelf agent does with the same task statement. Codex shares the metered
+OpenAI model budget; Claude Code's model and budget are reported separately.
 
 Raw OpenEvolve is the key ablation. It is evograd minus the frontend: same
 backend, same configuration, same evaluator, same budget. The gap between the
@@ -73,15 +74,15 @@ two is what the frontend contributes.
    written by us and call that evaluator. No agent's own checker or timer
    decides anything.
 5. **Same final measurement.** The agent's best program is rebuilt from the
-   code inside its block, so edits outside it are discarded. It must then pass
-   the seed-acceptance check evograd's own seed passes, and is timed with more
-   repetitions against a baseline measured once and shared by all agents.
-6. **Same model and budget, as far as each agent allows.**
+   code inside its block, so edits outside it are discarded. Every submission
+   goes through `evograd-evaluation-v2` (§7): the applicable real-payload gates,
+   formal T2 and model-scope T3. `score`/`compare` are separate diagnostics (§5.6).
+6. **Same model and API-request cap for the OpenAI agents.**
    - One `--model` / `--api-base` (an OpenAI-compatible endpoint) is used for
-     every LLM call.
-   - One `--budget N` is translated into each agent's own controls (§3).
-   - Every evaluation actually requested is logged, so differences in budget
-     use are visible rather than hidden.
+     every metered model request; GEAK and Claude Code are separate points.
+   - `--budget N` caps model requests per agent/case at a shared HTTP proxy (§3).
+   - API requests, evaluator calls and agent-reported usage events have separate
+     ledgers; native iteration limits are additional stopping conditions.
 
 ### 1.3 What cannot be made equal (and is recorded instead)
 
@@ -187,11 +188,11 @@ and prompt for each, launches the CLI and picks the program to measure.
 | | |
 |---|---|
 | Needs | Claude Code: the `claude` CLI (`curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.310`) and `ANTHROPIC_API_KEY` or a `claude` login. Codex: the `codex` CLI (`npm install -g @openai/codex@0.149.1`) and `OPENAI_API_KEY`. Both are native CLIs, not pip packages (see `pyproject.toml`). `run.json` records the version each run used, and Claude Code's self-updater is off during a run |
-| Input | A workspace with `TASK.md`, `candidate.py` (the skeleton), `adbench_primitives.py` (if granted) and an `evaluate.py` it may not edit. The prompt (`prompt.md` in the run) is one paragraph on the workspace, the budget and the deliverable, followed by `TASK.md` verbatim. It is the same for both agents |
+| Input | A workspace with `TASK.md`, `candidate.py` (the skeleton), `adbench_primitives.py` (if granted) and an `evaluate.py` it may not edit. The prompt (`prompt.md` in the run) describes the workspace, the applicable budget and the deliverable, followed by the same `TASK.md` verbatim |
 | Loop | The agent's own: `claude -p` (stream-JSON output) or `codex exec --json`, headless, permissions bypassed, until it stops or `--time-limit` (default 6 h) |
-| Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). Nothing the agent is given names the repository, the run or the task pack: `evaluate.py` holds only a socket address (Linux abstract namespace, this user only); the driver's evaluation server owns the budget and the ledger and replaces those paths in its feedback with `<evograd>`, `<run>` and `<task>`; and environment variables naming them are dropped (`PWD`, `SLURM_SUBMIT_DIR`) or pruned (`PYTHONPATH`). The agent runs as the same user, so a filesystem or process search could still find the repository; only a container would close that. User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
-| Model | Claude Code: `--claude-model`. Codex: `--model` at `--api-base` (set as `openai_base_url`, Responses API), with `OPENAI_API_KEY` passed as `CODEX_API_KEY`. `--effort` sets either agent's reasoning effort |
-| Feedback | `evaluate.py` sends `candidate.py` or a given path to the driver's evaluation server, which runs our evaluator (full, or `--correctness`), one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and the evaluations left |
+| Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). Nothing the agent is given names the repository, the run or the task pack: `evaluate.py` holds only a socket address (Linux abstract namespace, this user only); the driver's evaluation server owns evaluator limits and records and replaces those paths in its feedback with `<evograd>`, `<run>` and `<task>`; and environment variables naming them are dropped (`PWD`, `SLURM_SUBMIT_DIR`) or pruned (`PYTHONPATH`). The agent runs as the same user, so a filesystem or process search could still find the repository; only a container would close that. User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
+| Model | Claude Code: `--claude-model`. Codex: `--model` through a custom `adbench` HTTP Responses provider pointing to the shared budget proxy, with WebSockets disabled and `stream_max_retries=0`. Other request retries still consume budget. The CLI receives placeholder credentials (`adbench-local`); the proxy holds the upstream key and forwards to `--api-base`. `--effort` sets either agent's reasoning effort |
+| Feedback | `evaluate.py` sends `candidate.py` or a given path to the driver's evaluation server, which runs our evaluator (full, or `--correctness`), one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and any remaining evaluator budget. Codex has no evaluator-call cap unless `--eval-budget` is set |
 | Code from reply | None to extract: the agent writes `candidate.py` with its file tools |
 | Output | `candidate.py` if `evaluate.py` passed exactly that module (the agent's choice). Otherwise, the best correct module it evaluated (full evaluations by `combined_score` first, then the latest). Otherwise, `candidate.py` as it is, unless it is still the skeleton. `run.json` records which rule applied (`deliverable`) |
 
@@ -199,7 +200,10 @@ and prompt for each, launches the CLI and picks the program to measure.
 
 - An NVIDIA GPU with CUDA, Triton and `evograd[gpu,llm]` installed.
 - `OPENAI_API_KEY`. Optionally `ADBENCH_MODEL` (default `gpt-5.6-sol`) and
-  `ADBENCH_API_BASE` (default `https://api.openai.com/v1`).
+  `ADBENCH_API_BASE` (default `https://api.openai.com/v1`). Set
+  `ADBENCH_MODEL=gpt-5.5` for this comparison; the driver default is unchanged.
+  Codex's upstream endpoint must serve `/responses` and, when used,
+  `/responses/compact`.
 - `references/` is gitignored. The KernelAgent (and GEAK) checkouts must exist
   on the machine; `SETUP=1 bash candidates/run_openai.sh` creates them.
 
@@ -207,27 +211,47 @@ and prompt for each, launches the CLI and picks the program to measure.
 
 ## 3. Budgets
 
-The budget `--budget N` (default **30**) is *the number of candidate programs
-the agent may have evaluated*. Each agent counts work differently, so N is
-translated as follows:
+For evograd, raw OpenEvolve, GEPA, KernelAgent and Codex, `--budget N` is a hard
+cap on admitted **model API requests per agent and benchmark case**. The default
+is `ADBENCH_BUDGET`, or **10**. `_common.start` routes those agents through
+`LLMBudgetProxy`, which reserves a request in `api_calls.jsonl` before forwarding
+it. Initial generation, reflection, retries, failed upstream calls and context
+compaction all count. Parallel workers share one cap. Request N+1 is refused;
+the proxy does not retry upstream or follow redirects.
 
-| Agent | `--budget N` becomes | At N = 30 |
+The proxy meters `/chat/completions`, `/completions`, `/responses` and
+`/responses/compact`. Model metadata reads do not consume the cap. Agents and
+their subprocesses receive the metered endpoint and placeholder credentials;
+the upstream key remains in the proxy. This routing is not a filesystem or
+network sandbox for an agent running as the same user.
+
+Native stopping limits remain in place:
+
+| Agent | Request cap | Additional stopping control |
 |---|---|---|
-| evograd | OpenEvolve `iterations = N` (the seed costs no LLM call) | 30 iterations |
-| raw OpenEvolve | `iterations = N` | 30 iterations |
-| GEPA | `max_evals = N + 1` (one evaluation goes to its first candidate) | 31 evaluations |
-| KernelAgent | Generation: 4 workers × ⌈N/2/4⌉ rounds (stops at the first pass). Optimization: max(1, ⌊N/2/4⌋) beam-search rounds | 4 × 4 rounds, then 3 rounds |
-| GEAK | `budget = max(2, N // 5)` optimization directions | 6 directions |
-| Claude Code, Codex | At most N calls of `evaluate.py`, full or correctness-only. Call N+1 is refused | 30 evaluations |
+| evograd | N | OpenEvolve `iterations = N`; frontend seed uses no LLM |
+| raw OpenEvolve | N | OpenEvolve `iterations = N` |
+| GEPA | N | `max_evals = N + 1`; first candidate generation also consumes the API cap |
+| KernelAgent | N across generation and optimization | 4 generation workers × ⌈N/8⌉ rounds, stopping on first pass; max(1, ⌊N/8⌋) optimization rounds |
+| Codex | N | Session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
+| GEAK | Unmetered (`legacy_native`) | `max(2, N // 5)` optimization directions unless `--geak-budget` overrides |
+| Claude Code | Unmetered (`legacy_native`) | N calls of `evaluate.py` by default, or `--eval-budget` if set |
 
-Every evaluation an agent actually requests is logged, and `compare` reports
-the count.
+These native limits can stop a run before N model requests. They do not grant
+extra requests. GEAK and Claude Code do not have an equal API-request budget
+and must be reported separately.
+
+`evaluations.jsonl` counts evaluator calls independently; `llm.jsonl` stores
+token/session usage events. `llm_calls_recorded` comes from `api_calls.jsonl`
+for metered agents, is 0 for the frontend-only seed, and is `null`/`unmetered`
+when request count is unknown. Usage-event counts cannot replace API counts.
 
 Other limits:
 
 | Setting | Value |
 |---|---|
-| Final measurement | 25 warmup / 100 repetitions (in-loop runs use the evaluator's defaults) |
+| Diagnostic `score` measurement | 25 warmup / 100 repetitions (in-loop runs use the evaluator's defaults) |
+| Formal v2 T2 measurement | warmup 10 / repetitions 50 / 3 fair-timing blocks (§7) |
 | Per-evaluation timeout | 900 s (GEPA, the CLI, the coding agents' `evaluate.py`), 1200 s (KernelAgent test) |
 | Per-agent wall time in `run_all.sh` | `TIME_LIMIT`, default 21600 s (6 h); the coding agents also stop at `--time-limit` (default 6 h) |
 | Smoke run (`run_openai.sh`) | budget 2 per agent; KernelAgent 8 with `--skip-optimization`; 1 h each |
@@ -252,7 +276,8 @@ neither. Anything specific to one agent lives in `candidates/<agent>/`.
 | `artifact.py` | **Packaging** (§5.3): extracts code from a reply, checks the module, wraps it into an evograd artifact, unwraps it; renders the skeleton and `adbench_primitives.py` |
 | `evaluate.py` | **The evaluator every agent goes through** (§5.4): full or correctness-only, in a child process that can be killed; Python API and command line |
 | `_check.py` | The correctness-only child: static rules, import, correctness and a run at the timed shape, no timing |
-| `ledger.py` | **Run log** (§5.5): `run.json`, `evaluations.jsonl`, `llm.jsonl` |
+| `ledger.py` | **Run log** (§5.5): `run.json`, `evaluations.jsonl`, `llm.jsonl`, `api_calls.jsonl` |
+| `llm_budget.py` | Shared HTTP proxy that reserves and enforces model API requests independently of evaluator calls |
 | `score.py` | **Final measurement** and `compare` (§5.6) |
 | `_example_TASK.md` | A generated `TASK.md` for `llama3_swiglu_mlp`, bf16, B=2 T=2048 H=2048 I=8192, for reading |
 
@@ -263,7 +288,7 @@ model's *observed cases* (§7) instead of an operator's declared configuration.
 
 | Path | Role |
 |---|---|
-| `_common.py` | Flags shared by all drivers (`--task --run-dir --budget --model --api-base --seed --no-score`), ledger setup, final scoring, importing OpenEvolve's program archive into the ledger |
+| `_common.py` | Shared flags, request-budget proxy and ledger setup, diagnostic scoring, importing OpenEvolve's program archive into the ledger |
 | `bench.py` | **The benchmark run** (§7): task packs per observed case, the agent on each, `evograd evaluate`, the per-level summary |
 | `seed/run.py` | evograd's frontend alone (the unified seed, no LLM): the no-LLM pipeline check and the "frontend only" reference point |
 | `evograd/run.py` | Our agent: unified seed, then `run_evolve` |
@@ -277,7 +302,7 @@ model's *observed cases* (§7) instead of an operator's declared configuration.
 | `run_openai.sh` | The OpenAI-model agents (`AGENTS`, default all five), end to end: setup, unit tests, task pack, sanity check without an LLM, smoke run, full run |
 | `README.md` | Commands |
 
-Tests: `tests/adbench_tools/test_adbench_tools.py` (25 tests, CPU-only).
+Tests: `PYTHONPATH=src python -m pytest tests/adbench_tools -q` (CPU-only).
 
 ### 4.3 Data flow
 
@@ -410,13 +435,15 @@ Each run directory has:
 
 | File | Content |
 |---|---|
-| `run.json` | Agent, task id, statement hash, config (budget translation, model, commits), status, wall time, best program |
+| `run.json` | Agent, task id, statement hash, config (budget limit and unit, model, commits), status, wall time, best program, final request-budget usage |
 | `evaluations.jsonl` | One line per evaluation requested: kind, origin, correct, score, program path, seconds, failure type |
+| `api_calls.jsonl` | One line per admitted model API request for metered agents; request metadata only, no credentials or prompt/response content |
 | `llm.jsonl` | LLM usage where the agent exposes it (GEPA metadata; Claude Code's session cost and usage for GEAK and Claude Code; Codex's per-turn tokens) |
 | `programs/` | Every packaged program evaluated through adbench-tools |
 
-Lines are appended with single `O_APPEND` writes, so parallel workers
-(KernelAgent) don't interleave.
+Evaluation and usage lines are appended with single `O_APPEND` writes, so
+parallel workers do not interleave. API reservations use a lock and durable
+append before forwarding, so workers share the same limit.
 
 ### 5.6 The final measurement and comparison (`score.py`)
 
@@ -455,7 +482,9 @@ table, sorted by `combined_score`, with columns:
 
 ```bash
 export OPENAI_API_KEY=...
-SETUP=1 bash candidates/run_openai.sh llama3_swiglu_mlp bfloat16 30     # first time
+export ADBENCH_MODEL=gpt-5.5
+export ADBENCH_BUDGET=10
+SETUP=1 bash candidates/run_openai.sh llama3_swiglu_mlp bfloat16 10     # first time
 STAGES="unit task sanity smoke" bash candidates/run_openai.sh           # checks only
 ```
 
@@ -479,8 +508,9 @@ run by `candidates/bench.py` on every agent in the same way:
 
 ```bash
 export ADBENCH_ROOT=...            # default results/adbench; results go to $ADBENCH_ROOT/<model>
+export ADBENCH_MODEL=gpt-5.5
 python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm ...
-python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 30
+python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json --deadline-min 50
 python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd openevolve gepa kernelagent
 ```
@@ -494,22 +524,45 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
 2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
    Its best program is rebuilt from its evolve block into `submission.py`
    (`fixed_code_intact` is recorded).
-3. **Every submission goes through the protocol**: the static rules
+3. **Every submission goes through `evograd-evaluation-v2`**: the static rules
    (`check_source`; a violation is neither verified nor timed), then the gates
    on the model's real training payloads -- Level 1: Gate 1 and operator
-   Gate 2; Level 2: also model Gate 2 alone at its site -- then Tier 1 for every
-   executable candidate, Tier 3 for each Level-2 candidate alone, and the
-   combination of the accepted Level-2 candidates whose single-site speedup is
-   clearly above one, which gets model Gate 2 and Gate 3 (Level 3) and the
-   Tier 3 step against eager and whole-model `torch.compile`.
+   Gate 2; Level 2: also model Gate 2 and Gate 3 alone at its site. Every
+   executable L1/L2 candidate gets formal T2; each executable L2 candidate also
+   gets single-site T3 against eager. Each agent's positive L2 candidates are
+   combined: positive means accepted and a successful single-site T3 speedup
+   whose 95% interval lower bound is greater than 1. That combination gets
+   model Gate 2 and Gate 3 (L3), then T3 against eager and whole-model compile.
+   Rejected candidates' timings remain diagnostic and do not enter aggregates.
 4. **`summarize`** reports, per agent and level, the funnel (submitted,
-   violation, executable, Gate 1, accepted), coverage, the geometric-mean
-   speedup over accepted configurations against eager and `torch.compile`, the
-   Level-3 combination, and the cost from the ledgers (evaluations, LLM calls,
-   wall time).
+   violation, executable, Gate 1, accepted), correctness coverage
+   (accepted/observed) and T2 geometric-mean speedups over accepted configurations
+   against eager and compile. Each baseline separately records how many
+   configurations were timed. L2 single-site T3 is retained per model/case,
+   including all gate statuses, runtime, speedup and interval, `positive` and
+   `selected_for_combination`; these speeds are not averaged into a model result.
+   L3 reports the measured combination and the cost ledgers distinguish API
+   requests, evaluator calls and wall time. The L3 interval is against eager;
+   its compile-relative speedup is a separate point estimate.
+
+Formal T2 measures the artifact's actual deployment forward followed by
+`torch.autograd.grad`, without an optimizer or `.grad` accumulation. Eager,
+compile and declared library baselines all use that autograd scope and the
+existing fair timer (warmup 10, repetitions 50, 3 blocks). Real-payload gates
+determine correctness separately; the standalone `tier2-bench` declared-input
+gate and timer are not substituted into this protocol. T1 is search feedback
+or an independent pair diagnostic, not the formal eager/compile result.
 
 Gate 3 controls and Gate 2 calibrations live in `$ADBENCH_ROOT/<model>/state`,
 shared by every agent; `evaluate` is resumable (`--deadline-min`, exit 3).
+The request cap applies to each independent agent/case run, not to evaluation.
+`bench.py run` refuses to reuse a metered agent's completed run with an old
+budget unit or different limit, and refuses to silently delete an unfinished
+run and reset its API ledger. Use a fresh `--root`, or `--redo` to replace the
+run as a new trial.
+Direct drivers likewise require a fresh `--run-dir`. Old v1 evaluations must
+be rerun with `evaluate`; `summarize` rejects them, and renaming `tier1` fields
+to `tier2` does not make them v2 measurements.
 
 ## 8. Open items
 
@@ -523,5 +576,6 @@ shared by every agent; `evaluate` is resumable (`--deadline-min`, exit 3).
 - GEAK is parked until there is a way to run it on the same model (e.g. an
   OpenAI-compatible gateway for Claude Code), or until it is reported as a
   separate data point.
-- Each comparison uses one task configuration per operator. Tier 2/3 results
-  on the final programs are follow-ups, not part of `compare`.
+- The diagnostic `compare` uses one task configuration per operator. Its
+  standalone Tier 2/3 follow-ups remain separate; the formal benchmark runs
+  observed cases and includes T2/T3 through `bench.py evaluate` (§7).

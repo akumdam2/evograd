@@ -3,7 +3,7 @@
 ``evaluate`` verifies, then times every executable candidate, then judges and
 times the combination:
 
-* a native-equivalent candidate is accepted, timed at Tier 1 and Tier 3, and
+* a native-equivalent candidate is accepted, timed at Tier 2 and Tier 3, and
   -- when its single-site interval is above one -- forms the combination that
   passes model Gate 2 and Gate 3 and is counted at every level;
 * a 5% gradient fault is executable, so it is timed, but it is not accepted:
@@ -11,7 +11,7 @@ times the combination:
 * a candidate that raises is not executable and is not timed;
 * rerunning the same command reuses every stage.
 
-Tier 1 needs CUDA events, so a fixed timer stands in for it; Tier 3 runs for
+Tier 2 needs CUDA events, so a fixed timer stands in for it; Tier 3 runs for
 real on the toy model.
 """
 
@@ -61,11 +61,11 @@ BLOCK = "# EVOLVE-BLOCK-START\n{}\n# EVOLVE-BLOCK-END\n"
 
 
 def fixed_timer(speedup):
-    def time_tier1(op, module, workload):
+    def time_tier2(op, module, workload):
         return {"eager": {"route": "autograd", "speedup": speedup, "ci95": [speedup, speedup]},
                 "torch_compile": {"route": "autograd", "speedup": speedup / 2,
                                   "ci95": [speedup / 2, speedup / 2]}}
-    return time_tier1
+    return time_tier2
 
 
 def faster_than_eager(report, reference="eager", *, seed=0):
@@ -117,14 +117,21 @@ class Evaluate(unittest.TestCase):
             return evaluate(self.model, {self.T.CASE_ID: self.programs[program]}, self.manifest,
                             out, state=Path(self.tmp.name) / "state", device="cpu",
                             compile_backend=FAST, log=lambda *a: None, tier3_options=TIER3,
-                            time_tier1=timer, isolate_tier3=False, rules=rules)
+                            time_tier2=timer, isolate_tier3=False, rules=rules)
 
     def test_an_accepted_candidate_is_timed_combined_and_counted(self):
         out = Path(self.tmp.name) / "good"
+        legacy_cache = out / "tier1" / f"{self.T.CASE_ID.replace('/', '__')}.json"
+        legacy_cache.parent.mkdir(parents=True, exist_ok=True)
+        legacy_cache.write_text(json.dumps({"result": {"tier1": {"eager": {"speedup": 999}}}}))
         result = self.evaluate("good", out)
         case = result["cases"][self.T.CASE_ID]
         self.assertTrue(case["accepted"] and case["executable"], case)
-        self.assertEqual(case["tier1"]["eager"]["speedup"], 1.5)
+        self.assertEqual(case["tier2"]["eager"]["speedup"], 1.5)
+        self.assertNotIn("tier1", case)
+        self.assertNotIn("tier1", result["settings"])
+        cache = json.loads((out / "tier2" / legacy_cache.name).read_text())
+        self.assertEqual(cache["stage_key"]["protocol"], result["protocol"])
         self.assertTrue(case["tier3_single_site"]["ok"], case["tier3_single_site"])
         combination = result["tier3"]["combination"]
         self.assertEqual(combination["cases"], [self.T.CASE_ID])
@@ -138,6 +145,10 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(summary["level2"]["funnel"],
                          {"configurations": 1, "submitted": 1, "violation": 0, "executable": 1,
                           "gate1": 1, "accepted": 1})
+        single = summary["level2"]["tier3_single_site"]["toy"][self.T.CASE_ID]
+        self.assertTrue(single["positive"] and single["selected_for_combination"])
+        self.assertEqual(single["gate3"], "passed")
+        self.assertEqual(single["tier3"], case["tier3_single_site"])
         self.assertEqual(summary["level3"]["coverage"], 1.0)
         self.assertIsNotNone(summary["level3"]["models"]["toy"]["speedup"])
         self.assertTrue((out / "evaluation.json").exists())
@@ -156,7 +167,7 @@ class Evaluate(unittest.TestCase):
         self.assertTrue(case["executable"])
         self.assertFalse(case["accepted"])
         self.assertEqual(case["gate2_operator"], "failed")
-        self.assertEqual(case["tier1"]["eager"]["speedup"], 1.5)
+        self.assertEqual(case["tier2"]["eager"]["speedup"], 1.5)
         self.assertIn("tier3_single_site", case)
         self.assertEqual(result["tier3"]["combination"]["cases"], [])
         summary = result["summary"]
@@ -174,7 +185,7 @@ class Evaluate(unittest.TestCase):
         case = result["cases"][self.T.CASE_ID]
         self.assertFalse(case["executable"])
         self.assertIn("illegal memory access", case["error"])
-        self.assertNotIn("tier1", case)
+        self.assertNotIn("tier2", case)
         self.assertNotIn("tier3_single_site", case)
         self.assertFalse(case["accepted"])
         self.assertEqual(result["summary"]["level2"]["funnel"]["executable"], 0)
@@ -189,7 +200,7 @@ class Evaluate(unittest.TestCase):
         case = result["cases"][self.T.CASE_ID]
         self.assertIn("nn.functional", case["violation"])
         self.assertFalse(case["accepted"] or case["executable"])
-        for key in ("gate1_payloads", "gate2_operator", "tier1", "tier3_single_site"):
+        for key in ("gate1_payloads", "gate2_operator", "tier2", "tier3_single_site"):
             self.assertNotIn(key, case)
         self.assertEqual(result["tier3"]["combination"]["cases"], [])
         funnel = result["summary"]["level2"]["funnel"]
@@ -226,13 +237,146 @@ class Evaluate(unittest.TestCase):
         good = self.evaluate("good", Path(self.tmp.name) / "pooled")
         other = json.loads(json.dumps(good))
         other["model"] = "toy2"
-        other["cases"][self.T.CASE_ID]["tier1"]["eager"]["speedup"] = 6.0
+        other["cases"][self.T.CASE_ID]["tier2"]["eager"]["speedup"] = 6.0
         pooled = summarize([good, other])
         self.assertEqual(pooled["models"], ["toy", "toy2"])
         self.assertEqual(pooled["level2"]["funnel"]["configurations"], 2)
         # One task: the geometric mean of 1.5 and 6.0.
         self.assertAlmostEqual(pooled["level2"]["speedup"]["eager"]["geomean"], 3.0)
         self.assertEqual(pooled["level3"]["speedup"]["models_covered"], 2)
+
+
+class Tier2Timing(unittest.TestCase):
+    def test_eager_compile_and_library_use_the_same_deployment_autograd_route(self):
+        from dataclasses import replace
+        import types
+
+        import torch
+
+        from evograd.benchmark import get_task
+        from evograd.evaluation.common.provider import clone_values, pytorch_autograd_provider
+        from evograd.evaluation.protocol import TIER2_OPTIONS, time_case
+        from evograd.opdecl.activity import Workload
+        from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
+        from evograd.pipelines.shared.artifact import render_deployment_layer
+        from tests.verification import _toy_integration as T
+
+        op = get_task("swiglu")
+        module = types.ModuleType("tier2_direct_deployment")
+        source = (T.CANDIDATE.format(scale=1.0)
+                  + f"\n{op.forward_fn_name} = forward_with_saved\n"
+                  + f"{op.backward_fn_name} = backward_from_saved\n"
+                  + render_deployment_layer(op))
+        exec(compile(source, "<tier2-test>", "exec"), module.__dict__)
+        hook = types.SimpleNamespace(
+            pair_factory=lambda: (module.forward_with_saved, module.backward_from_saved),
+            forward_args=("a", "b"), backward_extras=())
+        op = replace(op, performance_baselines={"library": hook})
+        workload = Workload(dims={"rows": 4, "cols": 8}, dtype="float32")
+        measured = []
+
+        def measure(op, candidate, baseline, *, workloads, device, **options):
+            self.assertEqual(options, TIER2_OPTIONS)
+            self.assertEqual(candidate.adapter_kind, "candidate_direct_deployment_autograd")
+            self.assertIn("autograd", baseline.adapter_kind)
+            values = make_case_inputs(op, workloads[0], device=device)
+            outputs, gradients = [], []
+            for provider in (candidate, baseline):
+                own = clone_values(values)
+                output, saved = provider.forward(own)
+                self.assertIsNotNone(output.grad_fn)
+                outputs.append(output)
+                gradients.append(provider.backward(upstream_grad_values(op, own), saved, own))
+            torch.testing.assert_close(outputs[0], outputs[1])
+            for actual, expected in zip(*gradients):
+                torch.testing.assert_close(actual, expected)
+            measured.append(baseline.name)
+            return {"aggregate": {
+                "speedup_pair_full": 1.2, "speedup_pair_full_ci95": {"low": 1.1, "high": 1.3},
+                "candidate_pair_full_ms": 1.0, "baseline_pair_full_ms": 1.2,
+                "speedup_forward": 1.1, "speedup_backward": 1.3}}
+
+        with mock.patch("evograd.evaluation.tier1.fair.run_fair_benchmarks", measure), \
+                mock.patch("evograd.evaluation.common.provider.torch_compile_provider",
+                           side_effect=lambda op, **kwargs: pytorch_autograd_provider(op)), \
+                mock.patch("evograd.opdecl.baselines.verify_performance_baseline"), \
+                mock.patch("torch.autograd.grad", wraps=torch.autograd.grad) as backward:
+            result = time_case(op, module, workload, device="cpu")
+        self.assertEqual(set(result), {"eager", "torch_compile", "library"})
+        self.assertEqual(len(measured), 3, result)
+        self.assertEqual(backward.call_count, 6)
+        for row in result.values():
+            self.assertEqual(row["route"], "autograd")
+            self.assertEqual(row["speedup"], 1.2)
+
+    def test_summary_rejects_legacy_tier1_instead_of_relabeling_it(self):
+        from evograd.evaluation.protocol import summarize
+
+        with self.assertRaisesRegex(ValueError, "Legacy Tier 1"):
+            summarize([{"protocol": "evograd-evaluation-v1", "model": "legacy", "cases": {}}])
+
+
+class Summary(unittest.TestCase):
+    def evaluation(self, *, selected=True):
+        from evograd.evaluation.protocol import PROTOCOL
+
+        return {"protocol": PROTOCOL, "model": "toy", "cases": {
+            "swiglu/site": {"task": "swiglu", "level": 2, "family": "activation",
+                            "submitted": True, "executable": True, "accepted": True,
+                            "gate1_payloads": "passed", "gate2_operator": "passed",
+                            "gate2_model": "passed", "gate3": "passed",
+                            "tier2": {"eager": {"error": "timer failed"},
+                                      "torch_compile": {"error": "compile failed"}},
+                            "tier3_single_site": {"ok": True, "speedup": 1.2, "step_ms": 10,
+                                                  "ci95": {"low": 1.1, "high": 1.3}}}},
+                "tier3": {"combination": {"cases": ["swiglu/site"] if selected else []}}}
+
+    def test_correctness_coverage_does_not_require_successful_tier2_timing(self):
+        from evograd.evaluation.protocol import summarize
+
+        level2 = summarize([self.evaluation()])["level2"]
+        self.assertEqual(level2["coverage"], 1.0)
+        self.assertEqual(level2["funnel"]["accepted"], 1)
+        for baseline in ("eager", "torch_compile"):
+            self.assertEqual(level2["speedup"][baseline]["configurations_covered"], 0)
+            self.assertIsNone(level2["speedup"][baseline]["geomean"])
+
+    def test_single_sites_keep_gates_intervals_and_selection_without_pooling(self):
+        from evograd.evaluation.protocol import summarize
+
+        good = self.evaluation()
+        other = self.evaluation(selected=False)
+        other["model"] = "other"
+        single = summarize([good, other])["level2"]["tier3_single_site"]
+        self.assertEqual(set(single), {"toy", "other"})
+        for model in single:
+            row = single[model]["swiglu/site"]
+            self.assertTrue(row["accepted"] and row["positive"])
+            self.assertEqual(row["selected_for_combination"], model == "toy")
+            self.assertEqual(row["tier3"]["ci95"], {"low": 1.1, "high": 1.3})
+            for gate in ("gate1_payloads", "gate2_operator", "gate2_model", "gate3"):
+                self.assertEqual(row[gate], "passed")
+        self.assertNotIn("geomean", single)
+
+    def test_rejected_or_unproven_single_sites_are_not_positive(self):
+        from evograd.evaluation.protocol import summarize
+
+        for condition in ("rejected", "interval_touches_one", "timing_failed", "not_submitted"):
+            with self.subTest(condition=condition):
+                evaluation = self.evaluation(selected=False)
+                row = evaluation["cases"]["swiglu/site"]
+                if condition == "rejected":
+                    row.update(accepted=False, gate3="failed")
+                elif condition == "interval_touches_one":
+                    row["tier3_single_site"]["ci95"]["low"] = 1.0
+                elif condition == "timing_failed":
+                    row["tier3_single_site"] = {"ok": False, "error": "timing failed"}
+                else:
+                    row = evaluation["cases"]["swiglu/site"] = {
+                        "task": "swiglu", "level": 2, "family": "activation", "submitted": False}
+                single = summarize([evaluation])["level2"]["tier3_single_site"]["toy"]["swiglu/site"]
+                self.assertFalse(single["positive"] or single["selected_for_combination"])
+                self.assertEqual(single["tier3"], row.get("tier3_single_site", {}))
 
 
 class Executable(unittest.TestCase):

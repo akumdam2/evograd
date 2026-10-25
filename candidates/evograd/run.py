@@ -12,8 +12,8 @@
    always does for a unified seed).
 3. The final measurement shared by every agent, with the unified contract.
 
-Budget mapping: one OpenEvolve iteration = one LLM proposal = one evaluation,
-so ``iterations = budget``.
+The shared proxy caps actual model requests at ``budget``, including retries.
+``iterations = budget`` is an additional native stopping limit.
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
 
     evolve_dir = ledger.root / "evolve"
     best = evolve_dir / "evolved_best_program.py"
+    rc = 1
     try:
         rc = run_evolve(
             task.op(), seed_path=seed, output_dir=evolve_dir,
@@ -56,8 +57,14 @@ def main(argv: list[str] | None = None) -> int:
             api_base=args.api_base, performance_baseline=spec["performance_baseline"],
             save_programs=True,
         )
+    except Exception:
+        if not _common.budget_exhausted(args):
+            raise
     finally:
         _common.import_evaluations_from_archive(ledger, evolve_dir / "programs", "openevolve")
+    if _common.budget_exhausted(args):
+        return _common.finish(args, task, ledger, _common.best_evaluated(ledger, seed),
+                              contract=evolve_dir / CONTRACT_FILE, seed=str(seed))
     if rc != 0 or not best.is_file():
         return _common.finish(args, task, ledger, None, status="evolve_failed")
     return _common.finish(args, task, ledger, best, contract=evolve_dir / CONTRACT_FILE,

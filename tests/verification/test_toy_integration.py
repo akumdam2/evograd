@@ -5,8 +5,9 @@ On the toy classifier of :mod:`tests.verification._toy_integration` (CPU):
 * capture records every site call with its cotangent, instrumentation changes
   nothing, and the corpus names its batches by content;
 * ``verify`` accepts the native-equivalent candidate through Gate 1, operator
-  Gate 2 and its single-site model Gate 2 (loss, logits, parameter gradients),
-  passes its combination through model Gate 2 and Gate 3, and rejects a 5%
+  Gate 2, its single-site model Gate 2 (loss, logits, parameter gradients),
+  and single-site Gate 3; passes its combination through model Gate 2 and
+  Gate 3, and rejects a 5%
   gradient fault (which then leaves no combination to judge);
 * a verify stopped by its deadline inside Gate 3 continues on rerun to the
   verdict of a run that never stopped; finished stages are reused, Gate 2
@@ -72,14 +73,43 @@ class ToyIntegration(unittest.TestCase):
         entry = good["candidates"][self.T.CASE_ID]
         self.assertTrue(entry["accepted"], (entry, good["combination"]))
         self.assertEqual(entry["gate2_model"], "passed")
+        self.assertEqual(entry["gate3"], "passed")
+        self.assertTrue((root / "good" / "gate3_single_site" / "swiglu__act" / "gate3.json").exists())
         self.assertEqual(good["combination"]["cases"], [self.T.CASE_ID])
         self.assertEqual(good["combination"]["gate2_model"], "passed")
         self.assertEqual(good["combination"]["gate3"], "passed")
         self.assertTrue(good["combination"]["accepted"])
-        bad = self.verify(1.05, root / "bad")
+        with mock.patch("evograd.verification.integrations.gates.judge_training") as training:
+            bad = self.verify(1.05, root / "bad")
+        training.assert_not_called()
         entry = bad["candidates"][self.T.CASE_ID]
         self.assertFalse(entry["accepted"])
         self.assertEqual(entry["gate2_operator"], "failed")
+        self.assertEqual(entry["gate3"], "skipped")
+        self.assertFalse((root / "bad" / "gate3_single_site").exists())
+
+    def test_single_site_gate3_failure_prevents_acceptance_and_combination(self):
+        failed = mock.Mock(status="failed")
+        failed.to_dict.return_value = {"status": "failed"}
+        with mock.patch("evograd.verification.integrations.gates.judge_training",
+                        return_value={"gate3": failed}) as training:
+            verdict = self.verify(1.0, Path(self.tmp.name) / "training_fault")
+        training.assert_called_once()
+        entry = verdict["candidates"][self.T.CASE_ID]
+        for gate in ("gate1_payloads", "gate2_operator", "gate2_model"):
+            self.assertEqual(entry[gate], "passed")
+        self.assertEqual(entry["gate3"], "failed")
+        self.assertFalse(entry["accepted"])
+        self.assertEqual(verdict["combination"]["cases"], [])
+
+    def test_finished_single_site_training_is_reused_on_rerun(self):
+        out = Path(self.tmp.name) / "reused_training"
+        first = self.verify(1.0, out)
+        with mock.patch("evograd.verification.gate3.measure_training",
+                        side_effect=AssertionError("a finished training run was repeated")):
+            second = self.verify(1.0, out)
+        self.assertEqual(first["candidates"], second["candidates"])
+        self.assertEqual(first["combination"], second["combination"])
 
     def test_deadline_suspends_and_rerun_continues_to_the_same_verdict(self):
         from evograd.verification.gate3 import checkpoint
@@ -89,6 +119,8 @@ class ToyIntegration(unittest.TestCase):
         calls = []
 
         def expire_after_two(self_):
+            if "gate3_single_site" not in self_.path.parts:
+                return False
             calls.append(1)
             return len(calls) > 2
 
@@ -97,12 +129,19 @@ class ToyIntegration(unittest.TestCase):
             first = self.verify(1.0, out, state=root / "state_b", deadline_min=60)
         self.assertIn("suspended", first)
         self.assertTrue((out / "cases" / "swiglu__act.json").exists())
+        single_site = Path("gate3_single_site") / "swiglu__act"
+        self.assertTrue((out / single_site / "gate3_candidate.ckpt").exists())
+        self.assertFalse((out / "combination").exists())
         second = self.verify(1.0, out, state=root / "state_b")
         self.assertNotIn("suspended", second)
         self.assertEqual(second["candidates"], unbroken["candidates"])
         self.assertEqual(second["combination"], unbroken["combination"])
         resumed = json.loads((out / "combination" / "gate3_candidate.json").read_text())
         straight = json.loads((root / "unbroken" / "combination" / "gate3_candidate.json").read_text())
+        self.assertEqual([s["objective"] for s in resumed["train_steps"]],
+                         [s["objective"] for s in straight["train_steps"]])
+        resumed = json.loads((out / single_site / "gate3_candidate.json").read_text())
+        straight = json.loads((root / "unbroken" / single_site / "gate3_candidate.json").read_text())
         self.assertEqual([s["objective"] for s in resumed["train_steps"]],
                          [s["objective"] for s in straight["train_steps"]])
         # The calibrations were saved under --state and are reused by a new candidate.
@@ -196,6 +235,7 @@ class ToyIntegration(unittest.TestCase):
         self.assertIn("not_applicable", verdict["combination"])
         self.assertTrue(verdict["candidates"][self.T.CASE_ID]["accepted"])
         self.assertNotIn("gate2_model", verdict["candidates"][self.T.CASE_ID])
+        self.assertNotIn("gate3", verdict["candidates"][self.T.CASE_ID])
         self.assertFalse((root / "no_model_gates" / "combination").exists())
 
 

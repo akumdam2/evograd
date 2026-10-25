@@ -14,11 +14,12 @@ Every submission follows the same steps, whoever generated it:
    neither verified nor timed.
 1. **Verification** (:func:`evograd.verification.integrations.gates.verify_cases`): Gate 1 on the
    model's real training payloads and operator Gate 2 for every candidate, and
-   the single-site model Gate 2 for every Level-2 candidate. A candidate passing every gate that applies is *accepted*.
-2. **Tier 1** for every *executable* candidate, accepted or not: the
-   forward--backward pair at the case's configuration, against eager PyTorch
-   and ``torch.compile`` through autograd, and against any declared library
-   pair called directly. A candidate is executable when one forward and
+   the single-site model Gate 2 and Gate 3 for every Level-2 candidate. A candidate
+   passing every gate that applies is *accepted*.
+2. **Tier 2** for every *executable* candidate, accepted or not: the
+   deployed forward and autograd backward at the case's configuration, against
+   eager PyTorch, ``torch.compile`` and any declared library baseline, all
+   through the autograd engine. A candidate is executable when one forward and
    backward through the timed route raises nothing, returns the declared
    number of outputs and gradients with the eager shapes and dtypes, and leaves
    its inputs unchanged; anything else is not timed.
@@ -58,14 +59,14 @@ from evograd.verification.integrations.gates import (
     verify_combination,
 )
 
-PROTOCOL = "evograd-evaluation-v1"
+PROTOCOL = "evograd-evaluation-v2"
 REFERENCE = "eager"
-TIER1_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
+TIER2_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0}
 COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager "
                     "has a 95% bootstrap interval with its lower bound above 1")
-#: Engine-mediated baselines: the candidate is timed through autograd against them.
+#: Baselines included in the per-level aggregate; every T2 baseline uses autograd.
 ENGINE_BASELINES = ("eager", "torch_compile")
 
 
@@ -121,7 +122,7 @@ def check_rules(op, module, path: str | Path) -> str | None:
     return None
 
 
-# ── Tier 1 ───────────────────────────────────────────────────────────────────
+# ── Tier 2 ───────────────────────────────────────────────────────────────────
 
 
 def _shape_dtype(values) -> list[tuple[tuple[int, ...], str] | None]:
@@ -131,7 +132,7 @@ def _shape_dtype(values) -> list[tuple[tuple[int, ...], str] | None]:
 
 
 def check_executable(op, module, workload, *, device: str = "cuda") -> None:
-    """One forward and backward through the route Tier 1 times; raises
+    """One forward and backward through the route Tier 2 times; raises
     :class:`NotExecutable` with the reason."""
     from evograd.evaluation.common.provider import (
         assert_tensors_unchanged,
@@ -170,17 +171,22 @@ def check_executable(op, module, workload, *, device: str = "cuda") -> None:
 
 
 def time_case(op, module, workload, *, device: str = "cuda",
-              options: Mapping[str, Any] = TIER1_OPTIONS) -> dict[str, Any]:
-    """Tier 1: the candidate against every baseline of its case, one fair run each."""
+              options: Mapping[str, Any] = TIER2_OPTIONS) -> dict[str, Any]:
+    """Tier 2: deployed forward and autograd backward, one fair run per baseline.
+
+    Every provider runs its differentiable deployment and ``torch.autograd.grad``;
+    this operator scope includes neither an optimizer nor ``.grad`` accumulation.
+    The shared fair timer does not determine correctness: real-payload gate
+    verdicts are produced separately by :func:`verify_cases`.
+    """
     from evograd.evaluation.common.provider import (
         candidate_autograd_provider,
-        candidate_provider,
-        declared_provider,
         pytorch_autograd_provider,
+        renamed_provider,
         torch_compile_provider,
     )
     from evograd.evaluation.tier1.fair import run_fair_benchmarks
-    from evograd.opdecl.baselines import verify_performance_baseline
+    from evograd.opdecl.baselines import baseline_candidate_module, verify_performance_baseline
 
     baselines: dict[str, Callable[[], Any]] = {
         "eager": lambda: pytorch_autograd_provider(op),
@@ -189,16 +195,15 @@ def time_case(op, module, workload, *, device: str = "cuda",
     for name in sorted(op.performance_baselines):
         def declared(name=name):
             verify_performance_baseline(op, name, device=device)
-            return declared_provider(op, name)
+            return renamed_provider(
+                candidate_autograd_provider(op, baseline_candidate_module(op, name)), name)
 
         baselines[name] = declared
     results: dict[str, Any] = {}
     for name, make_baseline in baselines.items():
-        engine = name in ENGINE_BASELINES
         try:
             baseline = make_baseline()
-            candidate = (candidate_autograd_provider(op, module) if engine
-                         else candidate_provider(op, module))
+            candidate = candidate_autograd_provider(op, module)
             report = run_fair_benchmarks(op, candidate, baseline, workloads=(workload,),
                                          device=device, **dict(options))
         except Exception as exc:  # one baseline must not cost the others
@@ -206,7 +211,7 @@ def time_case(op, module, workload, *, device: str = "cuda",
             continue
         aggregate = report["aggregate"]
         results[name] = {
-            "route": "autograd" if engine else "pair",
+            "route": "autograd",
             "speedup": aggregate["speedup_pair_full"],
             "ci95": aggregate["speedup_pair_full_ci95"],
             "candidate_ms": aggregate["candidate_pair_full_ms"],
@@ -334,6 +339,14 @@ def _tier3_row(report: Mapping[str, Any], name: str) -> dict[str, Any]:
     return row
 
 
+def _positive(case: Mapping[str, Any]) -> bool:
+    """Accepted and faster than eager with the single-site 95% interval above one."""
+    timed = case.get("tier3_single_site") or {}
+    lower = (timed.get("ci95") or {}).get("low")
+    return (bool(case.get("accepted")) and bool(timed.get("ok"))
+            and isinstance(lower, (int, float)) and math.isfinite(lower) and lower > 1)
+
+
 # ── stages ───────────────────────────────────────────────────────────────────
 
 
@@ -359,13 +372,13 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              state: str | Path | None = None, device: str = "cuda",
              compile_backend: str = "inductor", log: Callable = print,
              deadline_min: float | None = None,
-             tier1_options: Mapping[str, Any] = TIER1_OPTIONS,
+             tier2_options: Mapping[str, Any] = TIER2_OPTIONS,
              tier3_options: Mapping[str, Any] = TIER3_OPTIONS,
-             time_tier1: Callable | None = None, isolate_tier3: bool = True,
+             time_tier2: Callable | None = None, isolate_tier3: bool = True,
              rules: bool = True) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
 
-    ``time_tier1(op, module, workload)`` replaces :func:`time_case` (a CPU test
+    ``time_tier2(op, module, workload)`` replaces :func:`time_case` (a CPU test
     has no CUDA events to time with); ``isolate_tier3=False`` runs the Tier 3
     providers in this process (a test model cannot be loaded by name);
     ``rules=False`` skips the static rules (a toy pair is not an artifact).
@@ -374,15 +387,15 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
 
     from evograd.verification.integrations.base import configure, observed_cases
 
-    time_tier1 = time_tier1 or (lambda op, module, workload: time_case(
-        op, module, workload, device=device, options=tier1_options))
+    time_tier2 = time_tier2 or (lambda op, module, workload: time_case(
+        op, module, workload, device=device, options=tier2_options))
     verification_settings = configure()
     run = open_run(model, candidates, corpus_path, out, state=state, device=device,
                    compile_backend=compile_backend, log=log, deadline_min=deadline_min)
     result: dict[str, Any] = {
         "protocol": PROTOCOL, "model": model.name, "workload": dict(model.workload_config),
         "environment": _environment(), "reference": REFERENCE,
-        "settings": {"verification": verification_settings, "tier1": dict(tier1_options),
+        "settings": {"verification": verification_settings, "tier2": dict(tier2_options),
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
                               "frequency": c.frequency, "submitted": c.case_id in candidates}
@@ -407,26 +420,27 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         for case_id, entry in verdict["candidates"].items():
             result["cases"][case_id].update(entry)
 
-        # 2. Tier 1, every executable candidate.
+        # 2. Tier 2, every executable candidate.
         result["settings"]["timing"] = timing_mode()
         for case_id in sorted(run.modules):
             case, module = run.cases[case_id], run.modules[case_id]
             op = model.reference_op(case.task)
-            key = {"case": case_id, "program_sha256": run.programs[case_id],
-                   "options": dict(tier1_options), "environment": result["environment"]}
+            key = {"protocol": PROTOCOL, "case": case_id,
+                   "program_sha256": run.programs[case_id],
+                   "options": dict(tier2_options), "environment": result["environment"]}
 
-            def tier1(op=op, module=module, case=case):
+            def tier2(op=op, module=module, case=case):
                 try:
                     check_executable(op, module, case.workload, device=device)
                 except NotExecutable as exc:
                     return {"executable": False, "error": str(exc)}
-                return {"executable": True, "tier1": time_tier1(op, module, case.workload)}
+                return {"executable": True, "tier2": time_tier2(op, module, case.workload)}
 
-            timed = _cached(run.out / "tier1" / f"{case_id.replace('/', '__')}.json", key, tier1,
+            timed = _cached(run.out / "tier2" / f"{case_id.replace('/', '__')}.json", key, tier2,
                             run.deadline)
             result["cases"][case_id].update(timed)
-            log(case_id, "tier1", {k: v.get("speedup", v.get("error")) for k, v in
-                                   (timed.get("tier1") or {}).items()} or timed.get("error"))
+            log(case_id, "tier2", {k: v.get("speedup", v.get("error")) for k, v in
+                                   (timed.get("tier2") or {}).items()} or timed.get("error"))
 
         # 3. Tier 3, each executable Level-2 candidate alone.
         level2 = [cid for cid in sorted(run.modules)
@@ -450,8 +464,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                                       for cid, row in single["rows"].items()})
 
         # 4. The combination: its gates, then its training step.
-        chosen = [cid for cid in level2 if result["cases"][cid].get("accepted")
-                  and (tier3.get("single_site", {}).get(cid, {}).get("ci95") or {}).get("low", 0) > 1]
+        chosen = [cid for cid in level2 if _positive(result["cases"][cid])]
         configure()
         combination = verify_combination(run, chosen)
         result["settings"]["timing"] = timing_mode()
@@ -514,7 +527,7 @@ def _level_summary(rows: list[dict[str, Any]], level: int) -> dict[str, Any]:
         for r in rows:
             families[r["task"]] = r["family"]
             totals[r["task"]] = totals.get(r["task"], 0) + 1
-            value = ((r.get("tier1") or {}).get(baseline) or {}).get("speedup")
+            value = ((r.get("tier2") or {}).get(baseline) or {}).get("speedup")
             if r.get("executable") and r.get("accepted") and _finite(value):
                 by_task.setdefault(r["task"], []).append(value)
         tasks = [TaskResult(op=task, level=level, family=families[task], baseline=baseline,
@@ -523,22 +536,38 @@ def _level_summary(rows: list[dict[str, Any]], level: int) -> dict[str, Any]:
         covered = sum(t.cases_ok for t in tasks)
         speedups[baseline] = {"geomean": _pool_by_family(tasks) if covered else None,
                               "configurations_covered": covered}
-    covered = speedups[REFERENCE]["configurations_covered"]
     return {"funnel": funnel, "speedup": speedups,
-            "coverage": covered / len(rows) if rows else None}
+            "coverage": funnel["accepted"] / len(rows) if rows else None}
 
 
 def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Per level: speedup over the accepted configurations (geometric mean over
     configurations, then tasks, then families), coverage and the verification
-    funnel; Level 3: each model's combination, its speedup and peak memory."""
+    funnel. Level 2 also retains each site's model-scope measurement without
+    pooling it; Level 3 reports each model's combination, speedup and peak memory."""
     from evograd.benchmark.core.report import geomean
 
+    for ev in evaluations:
+        if ev.get("protocol") != PROTOCOL:
+            raise ValueError(
+                f"{ev.get('model', 'evaluation')}: protocol {ev.get('protocol')!r} is not "
+                f"{PROTOCOL!r}; rerun evaluate to obtain formal Tier 2 results. "
+                "Legacy Tier 1 measurements cannot be relabeled or pooled as Tier 2.")
     rows = [dict(row) for ev in evaluations for row in ev["cases"].values()]
-    models = {}
+    models, single_sites = {}, {}
     for ev in evaluations:
         combination = (ev.get("tier3") or {}).get("combination") or {}
         timed = combination.get("tier3") or {}
+        selected = set(combination.get("cases", ()))
+        single_sites[ev["model"]] = {
+            cid: {"task": row["task"], "submitted": bool(row.get("submitted")),
+                  "executable": bool(row.get("executable")),
+                  "accepted": bool(row.get("accepted")),
+                  **{gate: row.get(gate) for gate in
+                     ("gate1_payloads", "gate2_operator", "gate2_model", "gate3")},
+                  "positive": _positive(row), "selected_for_combination": cid in selected,
+                  "tier3": dict(row.get("tier3_single_site") or {})}
+            for cid, row in sorted(ev["cases"].items()) if row["level"] == 2}
         models[ev["model"]] = {
             "cases": combination.get("cases", []),
             "accepted": bool(combination.get("accepted")),
@@ -552,7 +581,7 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     return {
         "models": sorted(models),
         "level1": _level_summary(rows, 1),
-        "level2": _level_summary(rows, 2),
+        "level2": {**_level_summary(rows, 2), "tier3_single_site": single_sites},
         "level3": {"models": models,
                    "speedup": {"geomean": geomean([m["speedup"] for m in counted]) if counted else None,
                                "models_covered": len(counted)},

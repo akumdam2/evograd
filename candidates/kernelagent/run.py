@@ -30,7 +30,9 @@ from the task pack's ``adbench_primitives`` (packaging strips the import).
 KernelAgent's own static bans (no ``torch.sigmoid`` etc.) are stricter than
 evograd's and stay on: they are part of the agent.
 
-Budget mapping: half to each stage. Generation runs ``--gen-workers`` (default
+The shared proxy caps actual model requests, including concurrent workers and
+retries. Native stopping controls split the budget between stages:
+generation runs ``--gen-workers`` (default
 4, KernelAgent's default) workers for ``ceil(budget / 2 / workers)`` rounds;
 optimization runs ``max(1, budget // 2 // 4)`` rounds of beam search (4 workers
 per round). The ledger counts every evaluation either stage requested.
@@ -249,15 +251,21 @@ def main(argv: list[str] | None = None) -> int:
     agent = TritonKernelAgent(num_workers=args.gen_workers, max_rounds=gen_rounds,
                               log_dir=str(ledger.root / "generation"), model_name=args.model,
                               test_timeout_s=args.test_timeout)
+    generated = {}
     try:
         generated = agent.generate_kernel(problem_description=description, test_code=test,
                                           generate_default_test=False)
+    except Exception:
+        if not _common.budget_exhausted(args):
+            raise
     finally:
         agent.cleanup()
     (ledger.root / "generation.json").write_text(
         json.dumps({k: v for k, v in generated.items() if k != "kernel_code"}, indent=2,
                    default=str), encoding="utf-8")
     if not generated.get("success"):
+        if _common.budget_exhausted(args):
+            return _common.finish(args, task, ledger, _common.best_evaluated(ledger))
         return _common.finish(args, task, ledger, None, status="generation_failed")
     best = ledger.root / "generated_kernel.py"
     best.write_text(generated["kernel_code"], encoding="utf-8")
@@ -271,8 +279,13 @@ def main(argv: list[str] | None = None) -> int:
             database_path=ledger.root / "optimization" / "program_db.json",
             openai_model=args.model, gpu_name=args.gpu_name,
         )
-        optimized = manager.run_optimization(initial_kernel=generated["kernel_code"],
-                                             problem_file=problem, test_code=[test])
+        try:
+            optimized = manager.run_optimization(initial_kernel=generated["kernel_code"],
+                                                 problem_file=problem, test_code=[test])
+        except Exception:
+            if not _common.budget_exhausted(args):
+                raise
+            optimized = {"success": False, "stop_reason": "api_budget"}
         (ledger.root / "optimization.json").write_text(
             json.dumps({k: v for k, v in optimized.items() if k != "kernel_code"}, indent=2,
                        default=str), encoding="utf-8")

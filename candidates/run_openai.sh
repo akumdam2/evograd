@@ -29,7 +29,7 @@ cd "$REPO"
 
 OP="${1:-llama3_swiglu_mlp}"
 DTYPE="${2:-bfloat16}"
-BUDGET="${3:-30}"
+BUDGET="${3:-${ADBENCH_BUDGET:-10}}"
 STAGES="${STAGES:-setup unit task sanity smoke full}"
 AGENTS="${AGENTS:-evograd openevolve gepa kernelagent codex}"
 OUT="${OUT:-$REPO/results/adbench_tools/$OP}"

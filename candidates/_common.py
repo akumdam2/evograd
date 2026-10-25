@@ -7,17 +7,16 @@ Each ``candidates/<agent>/run.py`` is::
     best = <run the agent; return the path of its best module or None>
     finish(args, task, ledger, best)         # final.json via evograd.adbench_tools.score
 
-The common flags are the parity knobs. ``--budget`` is the number of candidate
-programs the agent may have evaluated; each driver maps it onto its agent's own
-control (iterations, max_evals, workers x rounds, directions) and records the
-mapping and the actual consumption, because the agents do not all count the
-same unit. ``--model`` and ``--api-base`` select one OpenAI-compatible
-endpoint for every agent that can use one.
+For OpenAI-compatible agents, ``--budget`` caps actual model API requests,
+including initialization, reflection and retries, through a shared local proxy.
+Native iteration/evaluation limits remain stopping controls, not API counters.
+Anthropic drivers retain their separately labelled legacy budgets.
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import os
 import sys
@@ -29,6 +28,8 @@ if str(REPO / "src") not in sys.path:
 
 DEFAULT_MODEL = os.environ.get("ADBENCH_MODEL", "gpt-5.6-sol")
 DEFAULT_API_BASE = os.environ.get("ADBENCH_API_BASE", "https://api.openai.com/v1")
+DEFAULT_BUDGET = int(os.environ.get("ADBENCH_BUDGET", "10"))
+METERED_AGENTS = frozenset({"evograd", "openevolve", "gepa", "kernelagent", "codex"})
 
 
 def parser(description: str) -> argparse.ArgumentParser:
@@ -36,8 +37,9 @@ def parser(description: str) -> argparse.ArgumentParser:
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--task", type=Path, required=True, help="task pack (python -m evograd.adbench_tools task)")
     p.add_argument("--run-dir", type=Path, required=True, help="fresh directory for this run")
-    p.add_argument("--budget", type=int, default=30,
-                   help="candidate programs the agent may have evaluated (default 30)")
+    p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
+                   help="model API request cap per case (default $ADBENCH_BUDGET or 10; "
+                        "Anthropic drivers retain their legacy native budget)")
     p.add_argument("--model", default=DEFAULT_MODEL, help="LLM for every agent call")
     p.add_argument("--api-base", default=DEFAULT_API_BASE,
                    help="OpenAI-compatible endpoint (key from $OPENAI_API_KEY)")
@@ -56,15 +58,64 @@ def start(args, agent: str, config: dict):
         raise SystemExit(f"{args.run_dir} already holds a run; use a fresh --run-dir")
     if args.budget < 1:
         raise SystemExit("--budget must be >= 1")
-    config = {"budget": args.budget, "model": args.model, "api_base": args.api_base,
+    config = {"budget": args.budget,
+              "budget_unit": "api_requests" if agent in METERED_AGENTS else
+                             "none" if agent == "seed" else "legacy_native",
+              "model": args.model, "api_base": args.api_base,
               "seed": args.seed, **config}
     ledger = RunLedger(args.run_dir, agent=agent, task=task, config=config)
+    if agent in METERED_AGENTS:
+        from evograd.adbench_tools.llm_budget import LLMBudgetProxy
+
+        args._budget_proxy = LLMBudgetProxy(
+            args.api_base, args.budget, ledger.root / "api_calls.jsonl",
+            api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY"))
+        args._budget_proxy.start()
+        args._upstream_api_base = args.api_base
+        args.api_base = args._budget_proxy.base_url
+        # Drivers and their subprocesses only receive the metered endpoint and
+        # a placeholder credential. The upstream key stays in the proxy.
+        environment = {"OPENAI_API_KEY": "adbench-local", "CODEX_API_KEY": "adbench-local",
+                       "OPENAI_BASE_URL": args.api_base, "OPENAI_API_BASE": args.api_base,
+                       "ADBENCH_API_BASE": args.api_base}
+        for name in ("NO_PROXY", "no_proxy"):
+            environment[name] = ",".join(filter(None, (os.environ.get(name), "127.0.0.1", "localhost")))
+        args._budget_environment = {name: os.environ.get(name) for name in environment}
+        os.environ.update(environment)
+        atexit.register(close_budget, args)
     print(f"[{agent}] task {task.task_id} -> {ledger.root}", flush=True)
     return task, ledger
 
 
+def budget_exhausted(args) -> bool:
+    proxy = getattr(args, "_budget_proxy", None)
+    return proxy is not None and proxy.rejected_requests > 0
+
+
+def close_budget(args) -> dict:
+    proxy = getattr(args, "_budget_proxy", None)
+    if proxy is None:
+        return {}
+    proxy.close()
+    record = {"limit": args.budget, "used": proxy.calls_used,
+              "rejected": proxy.rejected_requests, "unit": "api_requests"}
+    for name, value in args._budget_environment.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+    args.api_base = args._upstream_api_base
+    args._budget_proxy = None
+    return record
+
+
 def finish(args, task, ledger, best: Path | None, *, status: str | None = None,
            contract: Path | None = None, **extra) -> int:
+    if budget_exhausted(args):
+        status = "budget_exhausted"
+    budget = close_budget(args)
+    if budget:
+        extra["llm_budget"] = budget
     status = status or ("completed" if best else "no_program")
     ledger.finish(status=status, best_program=best, **extra)
     if best is None:
@@ -81,6 +132,21 @@ def finish(args, task, ledger, best: Path | None, *, status: str | None = None,
                       ("agent", "accepted", "correct", "combined_score", "metrics")},
                      indent=2, default=str), flush=True)
     return 0 if result.get("accepted") and result.get("correct") else 1
+
+
+def best_evaluated(ledger, fallback: Path | None = None) -> Path | None:
+    """Recover a correct artifact, the native fallback, or the last attempted one."""
+    from evograd.adbench_tools.ledger import EVALUATIONS_FILE, read_lines
+
+    attempted = [entry for entry in read_lines(ledger.root / EVALUATIONS_FILE)
+                 if entry.get("program") and Path(entry["program"]).is_file()]
+    choices = [entry for entry in attempted if entry.get("correct")]
+    if choices:
+        entry = max(choices, key=lambda e: float(e.get("combined_score") or 0.0))
+        return Path(entry["program"])
+    if fallback is not None and fallback.is_file():
+        return fallback
+    return Path(attempted[-1]["program"]) if attempted else None
 
 
 def unified_seed(task, ledger, *, eval_timeout: int = 180) -> Path | None:

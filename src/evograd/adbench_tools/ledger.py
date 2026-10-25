@@ -4,7 +4,8 @@ A run directory holds:
 
     run.json            agent, model, budget, task, start/end, outcome
     evaluations.jsonl   one line per evaluation the agent requested
-    llm.jsonl           one line per LLM call, where the agent exposes it
+    llm.jsonl           agent usage events (which may span multiple requests)
+    api_calls.jsonl     one line per admitted model API request (metered agents)
 
 Appends are single ``write`` calls of one line, so the agent's own worker
 processes (KernelAgent, GEAK's unittest) can append concurrently.
@@ -22,6 +23,7 @@ from typing import Any
 RUN_FILE = "run.json"
 EVALUATIONS_FILE = "evaluations.jsonl"
 LLM_FILE = "llm.jsonl"
+API_CALLS_FILE = "api_calls.jsonl"
 
 
 def _now() -> str:
@@ -96,6 +98,8 @@ class RunLedger:
     def summary(self) -> dict[str, Any]:
         evaluations = read_lines(self.root / EVALUATIONS_FILE)
         llm = read_lines(self.root / LLM_FILE)
+        metered = self.record.get("config", {}).get("budget_unit") == "api_requests"
+        no_llm = self.record.get("agent") == "seed"
         tokens: dict[str, int] = {}
         for entry in llm:
             for key, value in (entry.get("usage") or {}).items():
@@ -105,7 +109,11 @@ class RunLedger:
             "evaluations": len(evaluations),
             "correct_evaluations": sum(1 for e in evaluations if e.get("correct")),
             "evaluation_kinds": sorted({e.get("kind", "full") for e in evaluations}),
-            "llm_calls_recorded": len(llm),
+            # CLI usage events can represent whole turns/sessions, not requests.
+            "llm_calls_recorded": len(read_lines(self.root / API_CALLS_FILE)) if metered
+                                  else 0 if no_llm else None,
+            "llm_usage_events": len(llm),
+            "llm_budget": self.record.get("llm_budget"),
             "llm_tokens_recorded": tokens,
             "wall_seconds": self.record.get("wall_seconds"),
             "status": self.record.get("status"),

@@ -19,9 +19,9 @@ dataset), with its own reflection prompt:
   non-negative scale); ``side_info`` carries the verdict, metrics and
   artifacts.
 
-Budget mapping: ``max_evals = budget + 1`` -- GEPA spends one evaluation on
-its starting candidate before its first proposal, as OpenEvolve does on its
-seed; cached re-evaluations of an identical candidate are free in both.
+The shared proxy caps actual model requests at ``budget``, including the
+initial candidate, reflection and retries. ``max_evals = budget + 1`` remains
+a native stopping limit; it does not define the API budget.
 """
 
 from __future__ import annotations
@@ -65,11 +65,12 @@ def main(argv: list[str] | None = None) -> int:
     from evograd.adbench_tools.artifact import extract_code
     from evograd.adbench_tools.evaluate import evaluate_source
 
-    best = {"score": -1.0, "source": None}
+    best = {"score": -1.0, "source": None, "last_source": None}
 
     def evaluator(candidate):
         source = extract_code(candidate if isinstance(candidate, str)
                               else next(iter(candidate.values())), task)
+        best["last_source"] = source
         record = evaluate_source(task, source, run_dir=ledger.root, origin=AGENT,
                                  timeout=args.eval_timeout)
         score = record.agent_score()
@@ -103,8 +104,17 @@ def main(argv: list[str] | None = None) -> int:
                            "reflection_lm_kwargs": lm_kwargs},
         },
     )
-    result = optimize_anything(seed, evaluator=evaluator, objective=objective(task),
-                               background=task.statement, config=config)
+    try:
+        result = optimize_anything(seed, evaluator=evaluator, objective=objective(task),
+                                   background=task.statement, config=config)
+    except Exception:
+        if not _common.budget_exhausted(args):
+            raise
+        source = best["source"] or best["last_source"]
+        final = ledger.root / "best.py" if source else None
+        if final is not None:
+            final.write_text(source, encoding="utf-8")
+        return _common.finish(args, task, ledger, final)
 
     chosen = result.best_candidate
     chosen = chosen if isinstance(chosen, str) else next(iter(chosen.values()))
