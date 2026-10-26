@@ -77,9 +77,9 @@ Gate 1 uses real acceptance payloads to check forward/backward structure, shapes
 | Operator Gate 2 | Calibration orders 101/202, acceptance orders 303/404; actual autograd deployment; gamma=2 |
 | Model Gate 2 | One L2 candidate installed at its model site; the first TRAIN batch of each order 101/202/303/404; one whole-model forward/backward per sample, without an optimizer update; gamma=4 |
 | Model error budget | Pool maxima per result tensor over the four samples, then verify fresh executions of the same sample contents; this is a matched-input check, not an independent holdout |
-| Boundary replay | Check local outputs, gradients, and agreement with live execution for every replaced call; check actual replacement coverage |
+| Coverage and side effects | Every declared site call is actually replaced; inputs and parameters are not modified. No per-call boundary replay at model scope (amended 2026-10-25): its local check duplicated operator Gate 2 on the same calls with per-call budgets and rejected rounding-level candidates on single bf16 ULP flips |
 
-Gate 2 checks both relative L2 error E2 and normalized maximum error Emax. Budgets are calibrated from native-repeat error, compile-native error, and fixed floors. Model Gate 2 supplements the local checks rather than replacing them; Gate 3's scalar loss also cannot replace output and gradient checks.
+Gate 2 checks both relative L2 error E2 and normalized maximum error Emax. Budgets are calibrated from native-repeat error, compile-native error, and fixed floors. Model Gate 2 judges the whole model's outputs and parameter gradients; the local checks of each call stay with operator Gate 2, which pools its budgets over every call of the site. Gate 3's scalar loss cannot replace output and gradient checks.
 
 ### Gate 3
 

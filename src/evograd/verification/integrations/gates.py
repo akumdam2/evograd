@@ -16,7 +16,8 @@ against the model reference (``Model.reference_op``):
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
   native repeats and compile at the same site, with :data:`GATE2_MODEL_GAMMA`
   (a whole model judges a thousand propagated reductions per batch, the
-  operator scope a handful of results); every site call replayed at its boundary.
+  operator scope a handful of results); coverage and input/parameter side
+  effects checked, no per-call boundary replay (:data:`GATE2_MODEL_BOUNDARIES`).
 
 * Gate 3, single site (Level 2 only) -- continuous training with the candidate
   alone at its model site, after all of its preceding gates pass.
@@ -58,6 +59,11 @@ MODEL_ORDERS = (101, 202, 303, 404)
 #: weight gradients); the x1.01 fault exceeds four times the budget on 401
 #: comparisons in every data order.
 GATE2_MODEL_GAMMA = 4.0
+#: Model-scope Gate 2 judges the whole model's outputs and parameter gradients, plus
+#: coverage and input/parameter side effects. Per-call boundary replay is off: its
+#: local check duplicates operator Gate 2 (the same calls on the same orders) with
+#: per-call budgets, and failed rounding-level candidates on single bf16 ULP flips.
+GATE2_MODEL_BOUNDARIES = False
 TRAIN_ORDER, TRAIN_SEED = 707, 0
 GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
@@ -155,7 +161,8 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
 
     reused = _cached_policy(cache, scope, deployment, judged,
                             options.get("gamma", SAFETY_FACTOR_GAMMA))
-    if reused is not None:
+    # A policy calibrated with boundary replay on (or off) does not judge a run without (with) it.
+    if reused is not None and bool(reused.policy.boundaries) == bool(options.get("boundaries", False)):
         return reused
     calibration = gate2.calibrate(scope, patch_set=deployment.patch_set, **options)
     if cache is not None and calibration.policy is not None:
@@ -273,7 +280,8 @@ def judge_model(model, deployment, workload, *, compile_backend: str = "inductor
     samples = scope.samples(MODEL_ORDERS)
     cache = (None if state is None
              else state / "gate2" / "model" / f"{'+'.join(deployment.patch_set)}.json")
-    calibration = _calibrate(scope, deployment, samples, cache, samples=samples, boundaries=True,
+    calibration = _calibrate(scope, deployment, samples, cache, samples=samples,
+                             boundaries=GATE2_MODEL_BOUNDARIES,
                              compile_backend=compile_backend, gamma=GATE2_MODEL_GAMMA)
     report = gate2.verify_integration(scope, deployment, policy=calibration.policy, samples=samples)
     return {"gate2_model_calibration": calibration, "gate2_model": report}
@@ -291,7 +299,7 @@ def _gate2_model_rule() -> dict[str, Any]:
     from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS, MATCHED
 
     return {"gamma": GATE2_MODEL_GAMMA, "formula": FORMULAS[MATCHED],
-            "calibration": CALIBRATION_PROCEDURE}
+            "calibration": CALIBRATION_PROCEDURE, "boundaries": GATE2_MODEL_BOUNDARIES}
 
 
 def training_context(model, workload, patch_set) -> dict[str, Any]:

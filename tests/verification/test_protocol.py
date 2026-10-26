@@ -97,7 +97,10 @@ class Evaluate(unittest.TestCase):
         for name, source in (("good", T.CANDIDATE.format(scale=1.0)),
                              ("fault", T.CANDIDATE.format(scale=1.05)), ("raises", RAISES),
                              ("violates", BLOCK.format(T.CANDIDATE.format(scale=1.0))),
-                             ("ruled", BLOCK.format(RULED))):
+                             ("ruled", BLOCK.format(RULED)),
+                             ("unimportable", "import adbench_no_such_module\n"),
+                             ("flags", "import torch\ntorch.backends.cudnn.benchmark = True\n"
+                                       + T.CANDIDATE.format(scale=1.0))):
             path = root / f"{name}.py"
             path.write_text(source)
             cls.programs[name] = str(path)
@@ -216,6 +219,28 @@ class Evaluate(unittest.TestCase):
         self.assertNotIn("violation", case)
         self.assertTrue(case["executable"])
         self.assertIn("gate1_payloads", case)
+
+    def test_a_submission_that_cannot_be_imported_is_neither_verified_nor_timed(self):
+        def never(*args, **kwargs):
+            raise AssertionError("an unimportable candidate was timed")
+
+        result = self.evaluate("unimportable", Path(self.tmp.name) / "unimportable", timer=never)
+        case = result["cases"][self.T.CASE_ID]
+        self.assertIn("adbench_no_such_module", case["import_error"])
+        self.assertTrue(case["submitted"])
+        self.assertFalse(case["accepted"] or case["executable"])
+        for key in ("gate1_payloads", "gate2_operator", "tier2", "tier3_single_site"):
+            self.assertNotIn(key, case)
+        funnel = result["summary"]["level2"]["funnel"]
+        self.assertEqual((funnel["submitted"], funnel["executable"]), (1, 0))
+
+    def test_a_submission_cannot_change_the_verification_settings_at_import(self):
+        import torch
+
+        result = self.evaluate("flags", Path(self.tmp.name) / "flags")
+        self.assertFalse(result["settings"]["verification"]["cudnn_benchmark"])
+        self.assertFalse(torch.backends.cudnn.benchmark)
+        self.assertTrue(result["cases"][self.T.CASE_ID]["accepted"])
 
     def test_an_interval_that_reaches_one_leaves_the_candidate_out_of_the_combination(self):
         def straddles(report, reference="eager", *, seed=0):

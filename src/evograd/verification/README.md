@@ -133,7 +133,7 @@ Policies bind scope, reference, environment, numerical configuration, patch set,
 samples and result contracts. Candidate errors never set the budget. Missing or
 incompatible calibration withholds numerical judgement.
 
-With `boundaries=True`, replay each replaced call using native and candidate
+With `boundaries=True` (not used by the model-scope gate since 2026-10-25), replay each replaced call using native and candidate
 implementations on that call's local inputs and external cotangents. Check
 replay outputs/gradients, candidate repeat, and consistency with live execution.
 These are tolerance checks, not a general bitwise determinism guarantee.
@@ -171,7 +171,9 @@ boundary of one training step per data order becomes a payload of the case
 its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only).
 Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
-four batches with gamma 4 and replaying every replaced call at its boundary.
+four batches with gamma 4, on the whole model's outputs and parameter gradients
+plus coverage and side effects. Per-call boundary replay is off at model scope
+(`GATE2_MODEL_BOUNDARIES`): the local checks of each call belong to operator Gate 2.
 
 | Object | Required correctness gates |
 | --- | --- |

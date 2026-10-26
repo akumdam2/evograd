@@ -267,7 +267,12 @@ class {c.function_cls}(torch.autograd.Function):
     @staticmethod
     def forward(ctx, {args}):
         {forward_capture} = {c.forward_fn}({args})
-        ctx.save_for_backward(*saved)
+        # save_for_backward takes tensors (or None) only; the pair's saved state may
+        # also hold plain Python values (shapes, block sizes), kept on ctx in order.
+        saved = tuple(saved) if isinstance(saved, (tuple, list)) else (saved,)
+        ctx.saved_values = tuple((i, v) for i, v in enumerate(saved)
+                                 if v is not None and not torch.is_tensor(v))
+        ctx.save_for_backward(*(v for v in saved if v is None or torch.is_tensor(v)))
 {scalar_store}
         {forward_return}
 
@@ -279,8 +284,12 @@ class {c.function_cls}(torch.autograd.Function):
         # refuse anything else, so the copy is made here, once, inside this
         # candidate's own backward; a contiguous gradient passes through as is.
 {upstream_fix}
+        saved = list(ctx.saved_tensors)
+        for index, value in ctx.saved_values:
+            saved.insert(index, value)
+        saved = tuple(saved)
         {grad_unpack} = {c.backward_fn}(
-            {upstream_arg}, ctx.saved_tensors{backward_scalars}
+            {upstream_arg}, saved{backward_scalars}
         )
         # One value per forward argument, `None` for every inactive one.
         return {grad_terms}

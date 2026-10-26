@@ -148,8 +148,31 @@ class TestGeneratedBehaviour(unittest.TestCase):
         op = get_task(STRUCTURED)
         module = build(op)
         source = module.__source__
-        self.assertIn("ctx.save_for_backward(*saved)", source)
+        self.assertIn("ctx.save_for_backward(", source)
         self.assertIn("ctx.saved_tensors", source)
+
+    def test_plain_values_in_the_saved_state_reach_backward_in_order(self):
+        # The statement allows "a tuple of tensors and/or immutable Python scalars";
+        # save_for_backward rejects anything but tensors once an input requires grad.
+        op = get_task(SINGLE)
+        module = build(op, forward_body=(
+            "    y = x * 2\n"
+            "    return y, (x.shape[0], x, 7, weight, None, (2, 3))\n"))
+        seen = {}
+
+        def backward(dy, saved, eps=1e-5):
+            seen["saved"] = saved
+            return torch.zeros_like(saved[1]), torch.zeros_like(saved[3])
+
+        module.rmsnorm_backward_from_saved = backward
+        x = torch.ones(4, 3, requires_grad=True)
+        w = torch.ones(3, requires_grad=True)
+        y = module.rmsnorm_deployment(x, w, 1e-5)
+        y.backward(torch.ones_like(y))
+        saved = seen["saved"]
+        self.assertEqual(len(saved), 6)
+        self.assertEqual((saved[0], saved[2], saved[4], saved[5]), (4, 7, None, (2, 3)))
+        self.assertTrue(torch.equal(saved[1], x) and torch.equal(saved[3], w))
 
 
 class TestNoForwardingAliases(unittest.TestCase):

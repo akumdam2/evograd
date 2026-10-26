@@ -122,6 +122,35 @@ def check_rules(op, module, path: str | Path) -> str | None:
     return None
 
 
+def unimportable(candidates: Mapping[str, str], *, timeout: int = 600) -> dict[str, dict[str, Any]]:
+    """Submissions whose module cannot be imported, each checked in a process of its own.
+
+    Such a submission is neither verified nor timed; the rest of the agent's
+    cases are judged as usual instead of the whole evaluation failing at import.
+    """
+    import subprocess
+    import sys
+
+    from evograd.verification.integrations.base import sha_file
+
+    check = ("import importlib.util, sys\n"
+             "spec = importlib.util.spec_from_file_location('submission_import_check', sys.argv[1])\n"
+             "spec.loader.exec_module(importlib.util.module_from_spec(spec))\n")
+    failed = {}
+    for case_id, path in sorted(candidates.items()):
+        try:
+            done = subprocess.run([sys.executable, "-c", check, str(path)], capture_output=True,
+                                  text=True, timeout=timeout)
+            error = None if done.returncode == 0 else (
+                (done.stderr or done.stdout).strip().splitlines() or [f"exit {done.returncode}"])[-1]
+        except subprocess.TimeoutExpired:
+            error = f"import did not finish within {timeout}s"
+        if error is not None:
+            failed[case_id] = {"program": str(path), "program_sha256": sha_file(path),
+                               "import_error": error}
+    return failed
+
+
 # ── Tier 2 ───────────────────────────────────────────────────────────────────
 
 
@@ -375,13 +404,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              tier2_options: Mapping[str, Any] = TIER2_OPTIONS,
              tier3_options: Mapping[str, Any] = TIER3_OPTIONS,
              time_tier2: Callable | None = None, isolate_tier3: bool = True,
-             rules: bool = True) -> dict[str, Any]:
+             rules: bool = True, check_imports: bool = True) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
 
     ``time_tier2(op, module, workload)`` replaces :func:`time_case` (a CPU test
     has no CUDA events to time with); ``isolate_tier3=False`` runs the Tier 3
     providers in this process (a test model cannot be loaded by name);
-    ``rules=False`` skips the static rules (a toy pair is not an artifact).
+    ``rules=False`` skips the static rules (a toy pair is not an artifact);
+    ``check_imports=False`` skips importing each submission in a process of its own first.
     """
     from evograd.benchmark import get_task
 
@@ -390,8 +420,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     time_tier2 = time_tier2 or (lambda op, module, workload: time_case(
         op, module, workload, device=device, options=tier2_options))
     verification_settings = configure()
+    observed = {c.case_id for c in observed_cases(model)}
+    unloadable = unimportable({cid: path for cid, path in candidates.items() if cid in observed}
+                              ) if check_imports else {}
+    candidates = {cid: path for cid, path in candidates.items() if cid not in unloadable}
     run = open_run(model, candidates, corpus_path, out, state=state, device=device,
                    compile_backend=compile_backend, log=log, deadline_min=deadline_min)
+    # A submission's top-level code must not change the frozen verification settings.
+    verification_settings = configure()
     result: dict[str, Any] = {
         "protocol": PROTOCOL, "model": model.name, "workload": dict(model.workload_config),
         "environment": _environment(), "reference": REFERENCE,
@@ -401,6 +437,10 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                               "frequency": c.frequency, "submitted": c.case_id in candidates}
                   for c in observed_cases(model)},
     }
+    for case_id, failure in unloadable.items():
+        result["cases"][case_id].update({**failure, "submitted": True, "accepted": False,
+                                         "executable": False})
+        log(case_id, "import failed", failure["import_error"])
     try:
         # 0. Static rules: a violating submission is neither verified nor timed.
         for case_id in sorted(run.modules) if rules else ():
