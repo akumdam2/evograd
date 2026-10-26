@@ -8,6 +8,8 @@ semantics (e.g. evoattention's additive keep/drop mask) supply a
 
 from __future__ import annotations
 
+from functools import partial
+
 import torch
 
 from evograd.opdecl.activity import Active, OpDecl, Workload, bind_shape
@@ -108,6 +110,12 @@ def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> di
         out_dtype = resolve_dtype(arg_dtype_name(out, workload))
         values[out.grad_name] = torch.randn(out_shape, device=device, dtype=out_dtype) * 0.5
     return apply_recorded_strides(op, workload, values)
+
+
+def generated_inputs(op: OpDecl, workloads, device: str = "cuda") -> list:
+    """``(workload, load)`` pairs whose ``load()`` generates that workload's
+    inputs (:func:`make_case_inputs`), in the form the fair timer takes."""
+    return [(workload, partial(make_case_inputs, op, workload, device)) for workload in workloads]
 
 
 def upstream_grad_values(op, values):

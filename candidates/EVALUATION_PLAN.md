@@ -1,6 +1,6 @@
 # ADBench Qwen3-0.6B Evaluation Plan
 
-Date: 2026-10-25. Protocol: `evograd-evaluation-v2`.
+Date: 2026-10-25; Tier 2 inputs revised 2026-10-26. Protocol: `evograd-evaluation-v3` (v2, used by the 2026-10-25 `trial01` run, timed Tier 2 on generated inputs).
 
 This experiment compares evograd, Codex, and GEPA on generating forward/backward implementations from the same task inputs, using `gpt-5.5` with at most 10 model requests per case. The main comparison covers six core cases: two L1 and four L2. A frontend-only seed provides a zero-LLM reference. Each agent independently selects L2 candidates with a demonstrated whole-model benefit, combines them into its own L3 deployment, and verifies and times that combination.
 
@@ -20,7 +20,7 @@ The experiment asks three questions: does the candidate pass correctness verific
 | Request budget | `ADBENCH_BUDGET=10`; an explicit `--budget` overrides the environment, and formal runs fix it at 10 |
 | Trials | One search trial per agent and case in the first round, named `trial01` |
 | Main comparison size | 3 agents x 6 cases = 18 searches, at most 180 upstream model requests in total; seed uses 0 |
-| Protocol implementation | `src/evograd/evaluation/protocol.py`; results must use v2 |
+| Protocol implementation | `src/evograd/evaluation/protocol.py`; results must use v3 |
 
 This is not a coverage experiment over every observed Qwen configuration. Other L1 shapes, standalone GEMM, RoPE, CE, and other operators are outside the six search tasks. Raw OpenEvolve and KernelAgent can be added later under the same protocol. Claude Code and GEAK use different model and budget semantics and must be reported separately. A second model, additional search trials, and frontend ablations are outside this experiment.
 
@@ -102,9 +102,9 @@ This compile control compiles the corresponding replacement sites; it is not the
 
 ### T2
 
-Time the candidate's actual deployment forward followed by `torch.autograd.grad` backward, without an optimizer or `.grad` accumulation. Eager, operator compile, and available declared library baselines use the same autograd scope. Every provider receives identical seeded inputs at the observed case's shapes, dtypes, and scalars. Real-payload Gates independently determine numerical acceptance.
+Time the candidate's actual deployment forward followed by `torch.autograd.grad` backward, without an optimizer or `.grad` accumulation. Eager, operator compile, and available declared library baselines use the same autograd scope. The inputs are the verification corpus's recorded calls of the case: every call in the TRAIN step of acceptance order 303, in call order (28 to 57 calls per core case), with their recorded arguments, weights and output gradients. Every provider, candidate and baselines alike, times its own copy of the same calls, made before timing with the recorded shapes, dtypes, strides, storage offsets and aliasing; the backward differentiates the provider's own forward, never a recorded output or saved state. The speedup is the ratio of per-call medians summed over the step, which keeps the case and the coverage denominator unchanged. A missing or incomplete step stops the evaluation before verification; nothing is generated in its place. Real-payload Gates independently determine numerical acceptance.
 
-Freeze the fair timer at warmup 10, reps 50, 3 blocks, and seed 0, retaining its adaptive reduction of repetitions for expensive calls. Formal results currently retain full forward+backward candidate/baseline latency, speedup, and a 95% interval, plus forward/backward speedups. They do not retain separate forward/backward absolute latencies, the actual adaptive repetition counts, or raw T2 blocks. Use eager/compile in the main table and other library comparisons in supplementary tables. An unavailable library must not discard available main-baseline results.
+Freeze the fair timer at warmup 10, reps 50, 3 blocks, and seed 0 (call k of the step orders its blocks with seed k), retaining its adaptive reduction of repetitions for expensive calls. Formal results currently retain full forward+backward candidate/baseline latency, speedup, and a 95% interval, plus forward/backward speedups. Candidate and baseline latencies are these sums over the step's calls, not single-call latencies. Formal results do not retain per-call timings, separate forward/backward absolute latencies, the actual adaptive repetition counts, or raw T2 blocks. Each case also records `tier2_inputs` (the selection rule, the corpus binding and the payload ids), and its T2 cache is bound to them. Use eager/compile in the main table and other library comparisons in supplementary tables. An unavailable library must not discard available main-baseline results.
 
 ### Single-site and combined T3
 
@@ -132,11 +132,11 @@ When no L2 candidate is positive, record L3 as empty with a reason. Do not force
 
 ### Freeze code and inputs
 
-Before formal runs, record the source revision, dependency versions, GPU/driver information, model and data revisions, and corpus manifest/hash. Pin a revision containing the v2 implementation; baseline `0512b69` alone does not include it. If running a dirty working tree, preserve the full diff and snapshots of untracked files so that the exact source can be reconstructed.
+Before formal runs, record the source revision, dependency versions, GPU/driver information, model and data revisions, and corpus manifest/hash. Pin a revision containing the v3 implementation; earlier revisions time Tier 2 on generated inputs. If running a dirty working tree, preserve the full diff and snapshots of untracked files so that the exact source can be reconstructed.
 
 Generate task packs in a new root and verify the six cases and all file hashes. Existing packs receive only limited checks from `tasks`, and model packs contain absolute declaration paths. Copying an old task directory is not sufficient to establish a frozen, valid input set. Keep code and task packs unchanged throughout formal runs.
 
-The existing Qwen corpus can be reused after confirming that its capture identity matches the current reference. Run fidelity or reuse an exactly matching fidelity report. Every agent uses the same corpus. Model or data updates invalidate earlier acceptance conclusions.
+The existing Qwen corpus can be reused after confirming that its capture identity matches the current reference. Run fidelity or reuse an exactly matching fidelity report. Every agent uses the same corpus, for the Gates and for formal T2. Model or data updates invalidate earlier acceptance conclusions and T2 results.
 
 ### Smoke validation
 
@@ -148,7 +148,7 @@ Complete smoke-driven configuration or infrastructure fixes before formal trials
 
 ### Formal search and evaluation
 
-1. Generate seed references for all six core cases. Old v1 seed results cannot enter the new main table; reevaluate them under v2.
+1. Generate seed references for all six core cases. Earlier v1 and v2 results cannot enter the new main table; reevaluate them under v3 in a new root.
 2. Run the six cases for evograd, Codex, and GEPA in that order. Count each case's budget independently. Schedule search by agent and case so that a job wall-time limit does not interrupt later cases.
 3. Collect each case's terminal status and submission hash. Freeze the code, then evaluate the agent's complete six-case set. Evaluation does not consume its 10-request search budget.
 4. Resume a suspended evaluation with the same command until all applicable Gates, T2, single-site T3, combination selection, and combination evaluation finish. Then summarize seed and all three agents.
@@ -283,7 +283,7 @@ The main report contains four groups:
 
 **Always state the coverage denominator.** The model registry contains 14 observed L1 configurations and four L2 configurations. `--case-id` does not change the formal summary's denominator; its numerator counts `executable && accepted`. The maximum full-model coverage for the selected L1 cases is `2/14`; for L2 it is `4/4`. Also report a "selected-case pass rate" using the same numerator divided by 2 for L1 and 4 for L2. Do not conflate these two measures. A performance geometric mean additionally requires a valid speedup for the corresponding baseline. Do not replace missing timings with 0x or 1x. Pure SDPA does not enter the core numerator, and unselected L1 cases are not candidate verification failures.
 
-Before delivery, check that all 18 searches and six core seeds have explicit terminal or failure records; every available candidate maps to a frozen submission; every metered run has at most 10 entries in `api_calls.jsonl`; seed and all three agents have been summarized over the full six-case set with no suspended v2 evaluation; and every L2 single-site and L3 verdict and timing is traceable. If an agent produces no submission for any of its six cases, evaluation will not produce a normal report. Add explicit failure rows to the research table, citing its run ledgers. Do not fabricate an evaluation file or omit the agent.
+Before delivery, check that all 18 searches and six core seeds have explicit terminal or failure records; every available candidate maps to a frozen submission; every metered run has at most 10 entries in `api_calls.jsonl`; seed and all three agents have been summarized over the full six-case set with no suspended v3 evaluation; and every L2 single-site and L3 verdict and timing is traceable. If an agent produces no submission for any of its six cases, evaluation will not produce a normal report. Add explicit failure rows to the research table, citing its run ledgers. Do not fabricate an evaluation file or omit the agent.
 
 Retain `run.json`, `submission.py/json`, request and evaluation ledgers, `evaluation.json`, detailed Gate reports, emitted T2 statistics, raw timing blocks in T3 caches, summaries, source/dependency/task-pack/corpus identities, and Slurm logs. Preserve shared state as calibration evidence, not as an agent's candidate result.
 

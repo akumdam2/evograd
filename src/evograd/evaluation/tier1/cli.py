@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         available_baselines,
         verify_performance_baseline,
     )
+    from evograd.opdecl.inputs import generated_inputs
     from evograd.opdecl.verify import verify
     from evograd.opdecl.compiled import BUILTIN_MODES
     from evograd.benchmark import get_task
@@ -155,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
         op,
         candidate,
         baseline,
-        workloads=workloads,
+        inputs=generated_inputs(op, workloads),
         warmup=args.warmup,
         reps=args.reps,
         blocks=args.blocks,

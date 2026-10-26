@@ -17,12 +17,14 @@ Every submission follows the same steps, whoever generated it:
    the single-site model Gate 2 and Gate 3 for every Level-2 candidate. A candidate
    passing every gate that applies is *accepted*.
 2. **Tier 2** for every *executable* candidate, accepted or not: the
-   deployed forward and autograd backward at the case's configuration, against
-   eager PyTorch, ``torch.compile`` and any declared library baseline, all
-   through the autograd engine. A candidate is executable when one forward and
-   backward through the timed route raises nothing, returns the declared
-   number of outputs and gradients with the eager shapes and dtypes, and leaves
-   its inputs unchanged; anything else is not timed.
+   deployed forward and autograd backward on every recorded call of the case
+   in one training step of the verification corpus (:data:`TIER2_INPUTS`),
+   against eager PyTorch, ``torch.compile`` and any declared library baseline,
+   all through the autograd engine and on the same calls. A candidate is
+   executable when one forward and backward through the timed route on the
+   first of those calls raises nothing, returns the declared number of outputs
+   and gradients with the eager shapes and dtypes, and leaves its inputs
+   unchanged; anything else is not timed.
 3. **Tier 3, single site**: the training step with each executable Level-2
    candidate alone at its model site, against eager.
 4. **Combination**: the accepted Level-2 candidates whose single-site speedup
@@ -43,9 +45,11 @@ from __future__ import annotations
 
 import json
 import math
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from evograd.verification.integrations.base import ACCEPTANCE_ORDERS
 from evograd.verification.integrations.gates import (
     Run,
     Suspended,
@@ -59,9 +63,16 @@ from evograd.verification.integrations.gates import (
     verify_combination,
 )
 
-PROTOCOL = "evograd-evaluation-v2"
+PROTOCOL = "evograd-evaluation-v3"
 REFERENCE = "eager"
 TIER2_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
+#: What Tier 2 times: recorded calls, fixed by the corpus and the same for every
+#: agent and provider. Call k of the step is timed with :data:`TIER2_OPTIONS`
+#: and seed ``seed + k`` for its block order.
+TIER2_INPUTS = {"source": "real_training_payload", "split": "acceptance",
+                "order": ACCEPTANCE_ORDERS[0],
+                "calls": "every call of the case in that order's training step, in call order",
+                "speedup": "sum of the baseline's per-call medians over the candidate's"}
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0}
 COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager "
@@ -154,57 +165,117 @@ def unimportable(candidates: Mapping[str, str], *, timeout: int = 600) -> dict[s
 # ── Tier 2 ───────────────────────────────────────────────────────────────────
 
 
+def tier2_payloads(corpus, op, case) -> list[dict[str, Any]]:
+    """The recorded calls Tier 2 times for ``case`` (:data:`TIER2_INPUTS`), in call order.
+
+    Raises :class:`~evograd.verification.payloads.CorpusError` when the corpus
+    does not hold every call of the case in that step: nothing is generated in
+    place of a missing call.
+    """
+    from evograd.verification.payloads import CorpusError
+    from evograd.verification.payloads.gate1 import check_payload_interface
+
+    order = TIER2_INPUTS["order"]
+    records = sorted((r for r in corpus.payloads(case_id=case.case_id, split=TIER2_INPUTS["split"])
+                      if (r.get("batch") or {}).get("order") == order),
+                     key=lambda r: r["call"]["index_in_step"])
+    if not records or len(records) != case.frequency:
+        raise CorpusError(f"corpus {corpus.corpus_id} records {len(records)} calls of "
+                          f"{case.case_id!r} in the step of order {order}; the model makes "
+                          f"{case.frequency} per step and Tier 2 times recorded calls only")
+    problems = [p for r in records for p in check_payload_interface(op, r)]
+    if problems:
+        raise CorpusError("; ".join(problems[:5]))
+    return records
+
+
+def tier2_binding(corpus, records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """What a Tier 2 result is bound to: the rule, the corpus and the very calls."""
+    return {**TIER2_INPUTS, "corpus": corpus.binding(),
+            "payload_ids": [r["payload_id"] for r in records]}
+
+
 def _shape_dtype(values) -> list[tuple[tuple[int, ...], str] | None]:
     import torch
 
     return [(tuple(v.shape), str(v.dtype)) if torch.is_tensor(v) else None for v in values]
 
 
-def check_executable(op, module, workload, *, device: str = "cuda") -> None:
-    """One forward and backward through the route Tier 2 times; raises
-    :class:`NotExecutable` with the reason."""
+def _run_once(op, provider, values):
+    """One forward and backward of ``provider`` on its own copy of ``values``;
+    the outputs and gradients. Raises if it changes its inputs."""
+    from evograd.evaluation.common.provider import assert_tensors_unchanged, snapshot_tensors
+    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
+    from evograd.verification.common.tensors import isolate
+
+    own = isolate(values)
+    snapshot = snapshot_tensors(own, may_overwrite=tuple(op.backward_may_overwrite or ()))
+    output, saved = provider.forward(own)
+    grads = provider.backward(upstream_grad_values(op, own), saved, own)
+    assert_tensors_unchanged(own, snapshot, provider=provider.name)
+    return as_output_tuple(op, output), tuple(grads)
+
+
+def check_executable(op, module, values) -> None:
+    """One forward and backward through the route Tier 2 times, on ``values``
+    (one recorded call); raises :class:`NotExecutable` with the reason."""
     from evograd.evaluation.common.provider import (
-        assert_tensors_unchanged,
         candidate_autograd_provider,
-        clone_values,
         pytorch_autograd_provider,
-        snapshot_tensors,
     )
-    from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
     from evograd.pipelines.shared.artifact import deployment_entry, validate_artifact
 
     try:
         if deployment_entry(module) is not None:
             validate_artifact(op, module)
-        values = make_case_inputs(op, workload, device=device)
-        reference_values = clone_values(values)
-        snapshot = snapshot_tensors(values, may_overwrite=tuple(op.backward_may_overwrite or ()))
-        candidate = candidate_autograd_provider(op, module)
-        output, saved = candidate.forward(values)
-        grads = candidate.backward(upstream_grad_values(op, values), saved, values)
-        assert_tensors_unchanged(values, snapshot, provider="candidate")
-        eager = pytorch_autograd_provider(op)
-        ref_output, ref_saved = eager.forward(reference_values)
-        ref_grads = eager.backward(upstream_grad_values(op, reference_values), ref_saved,
-                                   reference_values)
+        output, grads = _run_once(op, candidate_autograd_provider(op, module), values)
+        ref_output, ref_grads = _run_once(op, pytorch_autograd_provider(op), values)
     except NotExecutable:
         raise
     except Exception as exc:
         raise NotExecutable(f"{type(exc).__name__}: {exc}") from exc
-    got = _shape_dtype(as_output_tuple(op, output)), _shape_dtype(grads)
-    want = _shape_dtype(as_output_tuple(op, ref_output)), _shape_dtype(ref_grads)
+    got = _shape_dtype(output), _shape_dtype(grads)
+    want = _shape_dtype(ref_output), _shape_dtype(ref_grads)
     if got[0] != want[0]:
         raise NotExecutable(f"outputs {got[0]}, the declaration's are {want[0]}")
     if got[1] != want[1]:
         raise NotExecutable(f"gradients {got[1]}, the declaration's are {want[1]}")
 
 
-def time_case(op, module, workload, *, device: str = "cuda",
-              options: Mapping[str, Any] = TIER2_OPTIONS) -> dict[str, Any]:
+def check_baseline(op, provider, values, workload) -> None:
+    """A declared library baseline must compute what eager does on ``values``
+    (one recorded call) before it is timed.
+
+    The declared tolerances are stated for unit-scale values, and recorded
+    gradients are far below an absolute tolerance (a baseline returning zeros
+    would pass), so each result is compared after dividing both sides by the
+    largest magnitude of eager's.
+    """
+    import torch
+
+    from evograd.evaluation.common.provider import pytorch_autograd_provider
+
+    output, grads = _run_once(op, provider, values)
+    ref_output, ref_grads = _run_once(op, pytorch_autograd_provider(op), values)
+    names = [*op.output_names, *op.grad_names()]
+    for name, got, ref in zip(names, (*output, *grads), (*ref_output, *ref_grads)):
+        atol, rtol = op.tolerance_for(workload, name)
+        scale = ref.detach().float().abs().amax().clamp_min(torch.finfo(torch.float32).tiny)
+        if (got.shape != ref.shape or got.dtype != ref.dtype
+                or not torch.allclose(got.float() / scale, ref.float() / scale,
+                                      atol=atol, rtol=rtol)):
+            raise RuntimeError(f"{op.name}: the {provider.name} baseline differs from eager in "
+                               f"{name!r} on a recorded call")
+
+
+def time_case(op, module, inputs, *, options: Mapping[str, Any] = TIER2_OPTIONS) -> dict[str, Any]:
     """Tier 2: deployed forward and autograd backward, one fair run per baseline.
 
-    Every provider runs its differentiable deployment and ``torch.autograd.grad``;
-    this operator scope includes neither an optimizer nor ``.grad`` accumulation.
+    ``inputs`` are the case's recorded calls as ``(workload, load)`` pairs
+    (:func:`~evograd.evaluation.tier1.fair.run_fair_benchmarks`); every
+    baseline is timed against the candidate on the same calls. Every provider
+    runs its differentiable deployment and ``torch.autograd.grad``; this
+    operator scope includes neither an optimizer nor ``.grad`` accumulation.
     The shared fair timer does not determine correctness: real-payload gate
     verdicts are produced separately by :func:`verify_cases`.
     """
@@ -215,7 +286,8 @@ def time_case(op, module, workload, *, device: str = "cuda",
         torch_compile_provider,
     )
     from evograd.evaluation.tier1.fair import run_fair_benchmarks
-    from evograd.opdecl.baselines import baseline_candidate_module, verify_performance_baseline
+    from evograd.opdecl.baselines import baseline_candidate_module
+    from evograd.verification.payloads import CorpusError
 
     baselines: dict[str, Callable[[], Any]] = {
         "eager": lambda: pytorch_autograd_provider(op),
@@ -223,9 +295,11 @@ def time_case(op, module, workload, *, device: str = "cuda",
     }
     for name in sorted(op.performance_baselines):
         def declared(name=name):
-            verify_performance_baseline(op, name, device=device)
-            return renamed_provider(
+            provider = renamed_provider(
                 candidate_autograd_provider(op, baseline_candidate_module(op, name)), name)
+            workload, load = inputs[0]
+            check_baseline(op, provider, load(), workload)
+            return provider
 
         baselines[name] = declared
     results: dict[str, Any] = {}
@@ -233,8 +307,9 @@ def time_case(op, module, workload, *, device: str = "cuda",
         try:
             baseline = make_baseline()
             candidate = candidate_autograd_provider(op, module)
-            report = run_fair_benchmarks(op, candidate, baseline, workloads=(workload,),
-                                         device=device, **dict(options))
+            report = run_fair_benchmarks(op, candidate, baseline, inputs=inputs, **dict(options))
+        except CorpusError:  # an unreadable recorded call is the corpus's fault, not the baseline's
+            raise
         except Exception as exc:  # one baseline must not cost the others
             results[name] = {"error": f"{type(exc).__name__}: {exc}"}
             continue
@@ -407,7 +482,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              rules: bool = True, check_imports: bool = True) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
 
-    ``time_tier2(op, module, workload)`` replaces :func:`time_case` (a CPU test
+    ``time_tier2(op, module, inputs)`` replaces :func:`time_case` (a CPU test
     has no CUDA events to time with); ``isolate_tier3=False`` runs the Tier 3
     providers in this process (a test model cannot be loaded by name);
     ``rules=False`` skips the static rules (a toy pair is not an artifact);
@@ -417,8 +492,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
 
     from evograd.verification.integrations.base import configure, observed_cases
 
-    time_tier2 = time_tier2 or (lambda op, module, workload: time_case(
-        op, module, workload, device=device, options=tier2_options))
+    time_tier2 = time_tier2 or (lambda op, module, inputs: time_case(
+        op, module, inputs, options=tier2_options))
     verification_settings = configure()
     observed = {c.case_id for c in observed_cases(model)}
     unloadable = unimportable({cid: path for cid, path in candidates.items() if cid in observed}
@@ -432,6 +507,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         "protocol": PROTOCOL, "model": model.name, "workload": dict(model.workload_config),
         "environment": _environment(), "reference": REFERENCE,
         "settings": {"verification": verification_settings, "tier2": dict(tier2_options),
+                     "tier2_inputs": dict(TIER2_INPUTS),
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
                               "frequency": c.frequency, "submitted": c.case_id in candidates}
@@ -454,6 +530,10 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             del run.modules[case_id]
             log(case_id, "violation", violation)
 
+        # Tier 2's recorded calls, checked before verification spends any time.
+        tier2_calls = {cid: tier2_payloads(run.corpus, model.reference_op(run.cases[cid].task),
+                                           run.cases[cid]) for cid in sorted(run.modules)}
+
         # 1. Verification.
         verdict = verify_cases(run)
         result["corpus"] = verdict["corpus"]
@@ -465,16 +545,20 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         for case_id in sorted(run.modules):
             case, module = run.cases[case_id], run.modules[case_id]
             op = model.reference_op(case.task)
+            binding = tier2_binding(run.corpus, tier2_calls[case_id])
             key = {"protocol": PROTOCOL, "case": case_id,
-                   "program_sha256": run.programs[case_id],
+                   "program_sha256": run.programs[case_id], "inputs": binding,
                    "options": dict(tier2_options), "environment": result["environment"]}
+            inputs = [(case.workload, partial(run.corpus.load, record, device=device))
+                      for record in tier2_calls[case_id]]
 
-            def tier2(op=op, module=module, case=case):
+            def tier2(op=op, module=module, inputs=inputs, binding=binding):
                 try:
-                    check_executable(op, module, case.workload, device=device)
+                    check_executable(op, module, inputs[0][1]())
                 except NotExecutable as exc:
-                    return {"executable": False, "error": str(exc)}
-                return {"executable": True, "tier2": time_tier2(op, module, case.workload)}
+                    return {"executable": False, "error": str(exc), "tier2_inputs": binding}
+                return {"executable": True, "tier2_inputs": binding,
+                        "tier2": time_tier2(op, module, inputs)}
 
             timed = _cached(run.out / "tier2" / f"{case_id.replace('/', '__')}.json", key, tier2,
                             run.deadline)
@@ -591,8 +675,8 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         if ev.get("protocol") != PROTOCOL:
             raise ValueError(
                 f"{ev.get('model', 'evaluation')}: protocol {ev.get('protocol')!r} is not "
-                f"{PROTOCOL!r}; rerun evaluate to obtain formal Tier 2 results. "
-                "Legacy Tier 1 measurements cannot be relabeled or pooled as Tier 2.")
+                f"{PROTOCOL!r}; rerun evaluate to obtain formal Tier 2 results. Earlier "
+                "protocols timed Tier 1 or generated inputs; they are not pooled with recorded calls.")
     rows = [dict(row) for ev in evaluations for row in ev["cases"].values()]
     models, single_sites = {}, {}
     for ev in evaluations:
@@ -686,8 +770,9 @@ def summarize_main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["evaluate", "summarize", "check_executable", "time_case", "NotExecutable",
-           "COMBINATION_RULE", "PROTOCOL", "main", "summarize_main"]
+__all__ = ["evaluate", "summarize", "check_executable", "check_baseline", "time_case",
+           "tier2_payloads", "tier2_binding", "NotExecutable", "COMBINATION_RULE", "PROTOCOL",
+           "TIER2_INPUTS", "main", "summarize_main"]
 
 
 if __name__ == "__main__":

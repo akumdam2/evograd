@@ -24,12 +24,13 @@ from __future__ import annotations
 import random
 import statistics
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import torch
 
 from evograd.opdecl.activity import OpDecl, Workload
-from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
+from evograd.opdecl.inputs import upstream_grad_values
+from evograd.verification.common.tensors import isolate
 
 # The provider boundary and the input-mutation guards live in bench.provider so
 # that protocols other than this one can reuse them. Re-exported here because
@@ -41,7 +42,6 @@ from evograd.evaluation.common.provider import (  # noqa: F401  (re-export)
     assert_tensors_unchanged,
     candidate_autograd_provider,
     candidate_provider,
-    clone_values,
     declared_provider,
     pytorch_autograd_provider,
     renamed_provider,
@@ -52,7 +52,7 @@ from evograd.evaluation.common.provider import (  # noqa: F401  (re-export)
 )
 from evograd.evaluation.common.provider import saved_state_report as _saved_state_report  # noqa: F401
 
-PROTOCOL_VERSION = "evograd-final-runtime-v1"
+PROTOCOL_VERSION = "evograd-final-runtime-v2"
 
 #: Wall-clock budget per timed loop, in milliseconds. ``triton.testing.do_bench``
 #: sizes its loops the same way (its ``rep`` argument is a duration, not a
@@ -243,35 +243,33 @@ def _block_bootstrap_speedup(
     iterations: int = 2000,
     seed: int = 0,
 ) -> dict[str, float | int]:
+    # Each block's median is fixed; only the resampling varies. Computing them
+    # once keeps a case of many recorded calls from costing a median per
+    # block per iteration.
+    medians = []
+    for case in cases:
+        per_provider = {
+            name: {
+                block["pair_index"]: statistics.median(block["samples_ms"][metric])
+                for block in case["raw_blocks"][name]
+            }
+            for name in (candidate_name, baseline_name)
+        }
+        pairs = sorted(per_provider[candidate_name].keys() & per_provider[baseline_name].keys())
+        medians.append((pairs, per_provider))
     rng = random.Random(seed)
     estimates = []
     for _ in range(iterations):
         candidate_total = 0.0
         baseline_total = 0.0
-        for case in cases:
-            per_provider = {}
-            candidate_blocks = {
-                block["pair_index"]: block
-                for block in case["raw_blocks"][candidate_name]
-            }
-            baseline_blocks = {
-                block["pair_index"]: block
-                for block in case["raw_blocks"][baseline_name]
-            }
-            pair_indices = sorted(candidate_blocks.keys() & baseline_blocks.keys())
+        for pair_indices, per_provider in medians:
             selected_pairs = [rng.choice(pair_indices) for _ in pair_indices]
-            for name, blocks_by_pair in (
-                (candidate_name, candidate_blocks),
-                (baseline_name, baseline_blocks),
-            ):
-                selected = [blocks_by_pair[pair] for pair in selected_pairs]
-                block_medians = [
-                    statistics.median(block["samples_ms"][metric])
-                    for block in selected
-                ]
-                per_provider[name] = statistics.median(block_medians)
-            candidate_total += per_provider[candidate_name]
-            baseline_total += per_provider[baseline_name]
+            totals = {
+                name: statistics.median(by_pair[pair] for pair in selected_pairs)
+                for name, by_pair in per_provider.items()
+            }
+            candidate_total += totals[candidate_name]
+            baseline_total += totals[baseline_name]
         estimates.append(baseline_total / candidate_total)
     return {
         "iterations": iterations,
@@ -284,17 +282,19 @@ def benchmark_case_fair(
     op: OpDecl,
     workload: Workload,
     providers: tuple[PairProvider, PairProvider],
+    canonical: dict[str, Any],
     *,
     warmup: int = 10,
     reps: int = 50,
     blocks: int = 3,
     seed: int = 0,
-    device: str = "cuda",
 ) -> dict[str, Any]:
-    canonical = make_case_inputs(op, workload, device=device)
-    values_by_provider = {
-        provider.name: clone_values(canonical) for provider in providers
-    }
+    """Both providers on ``canonical`` (the arguments and upstream gradients).
+
+    Each provider gets its own copy, made before anything is timed, with the
+    shapes, dtypes, strides, storage offsets and aliasing of ``canonical``.
+    """
+    values_by_provider = {provider.name: isolate(canonical) for provider in providers}
     # The exemption comes from the operator's declaration, so it applies to
     # every provider alike — a baseline cannot enjoy it while a candidate is
     # held to the stricter rule.
@@ -408,25 +408,28 @@ def run_fair_benchmarks(
     candidate: PairProvider,
     baseline: PairProvider,
     *,
-    workloads: tuple[Workload, ...],
+    inputs: Sequence[tuple[Workload, Callable[[], dict[str, Any]]]],
     warmup: int = 10,
     reps: int = 50,
     blocks: int = 3,
     seed: int = 0,
-    device: str = "cuda",
 ) -> dict[str, Any]:
+    """The pair over ``inputs``: ``(workload, load)`` pairs, ``load()`` giving
+    one case's values. The timer does not decide where inputs come from; every
+    speedup is the ratio of the per-case medians summed over the cases.
+    """
     cases = [
         benchmark_case_fair(
             op,
             workload,
             (candidate, baseline),
+            load(),
             warmup=warmup,
             reps=reps,
             blocks=blocks,
             seed=seed + index,
-            device=device,
         )
-        for index, workload in enumerate(workloads)
+        for index, (workload, load) in enumerate(inputs)
     ]
     candidate_backward = sum(
         case["providers"][candidate.name]["backward"]["median_ms"] for case in cases
@@ -484,6 +487,8 @@ def run_fair_benchmarks(
             "event_scheduling": "batched events with one synchronize per block",
             "provider_order": "paired randomized blocks",
             "mutation_check": "content and tensor metadata outside timed regions",
+            "inputs": "supplied by the caller; each provider times its own copy with "
+                      "the same strides, storage offsets and aliasing",
         },
         "environment": environment_fingerprint(),
         "aggregate": {

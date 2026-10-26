@@ -31,7 +31,7 @@ neither of them:
 The [Qwen3-0.6B evaluation plan](EVALUATION_PLAN.md)
 fixes the first comparison's six cases, 10-request budget, gates, timing and reporting.
 
-The comparison that counts is `evograd evaluate` (`evograd-evaluation-v2`:
+The comparison that counts is `evograd evaluate` (`evograd-evaluation-v3`:
 real-payload gates, Tier 2, single-site Tier 3 and the Level-3 combination), run
 on every agent's submissions by `bench.py`; `score`/`compare` below are
 single-configuration diagnostics. See
@@ -66,8 +66,8 @@ against eager and whole-model compile; its reported interval is against eager.
 Use a fresh run root for the new API-request budget. `bench.py run` refuses to
 reuse a metered agent's completed run if its budget unit or limit differs, and
 does not silently delete an unfinished run or reset its API ledger. `--redo`
-explicitly replaces that run as a new trial. Existing v1 evaluations must be rerun
-with `evaluate`; renaming old `tier1` results to `tier2` is not a migration.
+explicitly replaces that run as a new trial. Existing v1 and v2 evaluations must be
+rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migration.
 
 ## Fairness protocol
 
@@ -125,7 +125,7 @@ with `evaluate`; renaming old `tier1` results to `tier2` is not a migration.
 
    No agent's own correctness check or timer decides anything.
 5. **Same final measurement.** `bench.py` rebuilds each submission from its
-   block body (`fixed_code_intact` records outside edits), then runs the v2
+   block body (`fixed_code_intact` records outside edits), then runs the v3
    protocol above. `adbench_tools score` is a separate single-configuration
    diagnostic: seed acceptance and the search evaluator at 25 warmup / 100
    repetitions, with a shared cached baseline.
@@ -272,7 +272,7 @@ python -m evograd.adbench_tools score --task $TASK --run-dir $R/manual some_modu
 ```
 
 `final.json` → `follow_up` contains optional standalone tier diagnostics.
-Their declared-case checks and timers are separate from the formal v2 protocol
+Their declared-case checks and timers are separate from the formal v3 protocol
 run by `bench.py evaluate`:
 
 ```bash

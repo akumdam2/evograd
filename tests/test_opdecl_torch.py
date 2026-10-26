@@ -308,7 +308,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
     def test_final_protocol_has_stable_generic_version(self):
         from evograd.evaluation.tier1.fair import PROTOCOL_VERSION
 
-        self.assertEqual(PROTOCOL_VERSION, "evograd-final-runtime-v1")
+        self.assertEqual(PROTOCOL_VERSION, "evograd-final-runtime-v2")
 
     def test_pytorch_autograd_provider_matches_oracle(self):
         from evograd.evaluation.tier1.fair import pytorch_autograd_provider

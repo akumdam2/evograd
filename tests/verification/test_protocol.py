@@ -11,8 +11,9 @@ times the combination:
 * a candidate that raises is not executable and is not timed;
 * rerunning the same command reuses every stage.
 
-Tier 2 needs CUDA events, so a fixed timer stands in for it; Tier 3 runs for
-real on the toy model.
+Tier 2 needs CUDA events, so a fixed timer stands in for it; it still receives
+the recorded calls the protocol selected, and no stage generates inputs. Tier 3
+runs for real on the toy model.
 """
 
 from __future__ import annotations
@@ -60,8 +61,10 @@ def backward_from_saved(dc, saved):
 BLOCK = "# EVOLVE-BLOCK-START\n{}\n# EVOLVE-BLOCK-END\n"
 
 
-def fixed_timer(speedup):
-    def time_tier2(op, module, workload):
+def fixed_timer(speedup, seen=None):
+    def time_tier2(op, module, inputs):
+        if seen is not None:
+            seen.append([load() for _workload, load in inputs])
         return {"eager": {"route": "autograd", "speedup": speedup, "ci95": [speedup, speedup]},
                 "torch_compile": {"route": "autograd", "speedup": speedup / 2,
                                   "ci95": [speedup / 2, speedup / 2]}}
@@ -135,6 +138,11 @@ class Evaluate(unittest.TestCase):
         self.assertNotIn("tier1", result["settings"])
         cache = json.loads((out / "tier2" / legacy_cache.name).read_text())
         self.assertEqual(cache["stage_key"]["protocol"], result["protocol"])
+        self.assertEqual(cache["stage_key"]["inputs"], case["tier2_inputs"])
+        self.assertEqual(case["tier2_inputs"]["payload_ids"],
+                         [p["payload_id"] for p in self.recorded_step(303)])
+        self.assertEqual(case["tier2_inputs"]["corpus"], self.corpus().binding())
+        self.assertEqual(result["settings"]["tier2_inputs"]["order"], 303)
         self.assertTrue(case["tier3_single_site"]["ok"], case["tier3_single_site"])
         combination = result["tier3"]["combination"]
         self.assertEqual(combination["cases"], [self.T.CASE_ID])
@@ -163,6 +171,87 @@ class Evaluate(unittest.TestCase):
         again = self.evaluate("good", out, timer=never)
         self.assertEqual(again["cases"], result["cases"])
         self.assertEqual(again["summary"], result["summary"])
+
+    def corpus(self):
+        from evograd.verification.payloads import Corpus
+
+        return Corpus.open(self.manifest)
+
+    def recorded_step(self, order):
+        return sorted((p for p in self.corpus().payloads(case_id=self.T.CASE_ID)
+                       if p["batch"]["order"] == order), key=lambda p: p["call"]["index_in_step"])
+
+    def test_tier2_times_the_recorded_calls_and_nothing_generates_inputs(self):
+        from dataclasses import replace
+
+        import torch
+
+        from evograd.benchmark import get_task
+        from tests.verification.test_tier2_inputs import forbidden, layout, no_generator
+
+        seen = []
+        model = self.model
+        # Declaration-level input hooks are generators too.
+        self.model = replace(model, reference_op=lambda task: replace(get_task(task),
+                                                                      make_inputs=forbidden))
+        try:
+            with no_generator():
+                result = self.evaluate("good", Path(self.tmp.name) / "recorded",
+                                       timer=fixed_timer(1.5, seen))
+        finally:
+            self.model = model
+        self.assertTrue(result["cases"][self.T.CASE_ID]["accepted"])
+        (given,) = seen
+        step = self.recorded_step(303)
+        self.assertEqual(len(given), len(step))
+        for values, record in zip(given, step):
+            expected = self.corpus().load(record, device="cpu")
+            self.assertEqual(set(values), set(expected))
+            for name, want in expected.items():
+                if torch.is_tensor(want):
+                    self.assertEqual(layout(values[name]), layout(want))
+                    self.assertTrue(torch.equal(values[name], want))
+
+    def test_a_stale_or_differently_selected_tier2_result_is_not_reused(self):
+        from evograd.evaluation import protocol
+
+        out = Path(self.tmp.name) / "stale"
+        first = self.evaluate("good", out)["cases"][self.T.CASE_ID]
+        cache = out / "tier2" / f"{self.T.CASE_ID.replace('/', '__')}.json"
+
+        # A result cached under v2, which timed generated inputs.
+        stored = json.loads(cache.read_text())
+        key = {k: v for k, v in stored["stage_key"].items() if k != "inputs"}
+        cache.write_text(json.dumps({"stage_key": {**key, "protocol": "evograd-evaluation-v2"},
+                                     "result": {"executable": True,
+                                                "tier2": {"eager": {"speedup": 999}}}}))
+        again = self.evaluate("good", out)["cases"][self.T.CASE_ID]
+        self.assertEqual(again["tier2"]["eager"]["speedup"], 1.5)
+        self.assertEqual(again["tier2_inputs"], first["tier2_inputs"])
+
+        # Another selection rule names other calls and times them afresh.
+        with mock.patch.dict(protocol.TIER2_INPUTS, {"order": 404}):
+            moved = self.evaluate("good", out, timer=fixed_timer(2.0))["cases"][self.T.CASE_ID]
+        self.assertEqual(moved["tier2"]["eager"]["speedup"], 2.0)
+        self.assertEqual(moved["tier2_inputs"]["payload_ids"],
+                         [p["payload_id"] for p in self.recorded_step(404)])
+        self.assertNotEqual(moved["tier2_inputs"]["payload_ids"], first["tier2_inputs"]["payload_ids"])
+
+    def test_a_missing_tier2_step_stops_the_evaluation_before_verification(self):
+        from evograd.verification.payloads import Corpus, CorpusError
+
+        real = Corpus.payloads
+
+        def without_303(corpus, **kwargs):
+            return [p for p in real(corpus, **kwargs) if p["batch"]["order"] != 303]
+
+        def never(*args, **kwargs):
+            raise AssertionError("verification ran although Tier 2 had no recorded calls")
+
+        with mock.patch.object(Corpus, "payloads", without_303), \
+                mock.patch("evograd.evaluation.protocol.verify_cases", never), \
+                self.assertRaisesRegex(CorpusError, "records 0 calls"):
+            self.evaluate("good", Path(self.tmp.name) / "missing")
 
     def test_a_rejected_candidate_is_timed_but_counted_nowhere(self):
         result = self.evaluate("fault", Path(self.tmp.name) / "fault")
@@ -278,13 +367,16 @@ class Tier2Timing(unittest.TestCase):
 
         import torch
 
+        from functools import partial
+
         from evograd.benchmark import get_task
-        from evograd.evaluation.common.provider import clone_values, pytorch_autograd_provider
+        from evograd.evaluation.common.provider import pytorch_autograd_provider
         from evograd.evaluation.protocol import TIER2_OPTIONS, time_case
-        from evograd.opdecl.activity import Workload
-        from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
+        from evograd.opdecl.inputs import upstream_grad_values
         from evograd.pipelines.shared.artifact import render_deployment_layer
+        from evograd.verification.common.tensors import isolate
         from tests.verification import _toy_integration as T
+        from tests.verification.test_tier2_inputs import case, write_corpus
 
         op = get_task("swiglu")
         module = types.ModuleType("tier2_direct_deployment")
@@ -297,17 +389,20 @@ class Tier2Timing(unittest.TestCase):
             pair_factory=lambda: (module.forward_with_saved, module.backward_from_saved),
             forward_args=("a", "b"), backward_extras=())
         op = replace(op, performance_baselines={"library": hook})
-        workload = Workload(dims={"rows": 4, "cols": 8}, dtype="float32")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        corpus = write_corpus(Path(tmp.name) / "c", [(303, 0)])
+        inputs = [(case(1).workload, partial(corpus.load, corpus.payloads()[0], device="cpu"))]
         measured = []
 
-        def measure(op, candidate, baseline, *, workloads, device, **options):
+        def measure(op, candidate, baseline, *, inputs, **options):
             self.assertEqual(options, TIER2_OPTIONS)
             self.assertEqual(candidate.adapter_kind, "candidate_direct_deployment_autograd")
             self.assertIn("autograd", baseline.adapter_kind)
-            values = make_case_inputs(op, workloads[0], device=device)
+            values = inputs[0][1]()
             outputs, gradients = [], []
             for provider in (candidate, baseline):
-                own = clone_values(values)
+                own = isolate(values)
                 output, saved = provider.forward(own)
                 self.assertIsNotNone(output.grad_fn)
                 outputs.append(output)
@@ -324,21 +419,24 @@ class Tier2Timing(unittest.TestCase):
         with mock.patch("evograd.evaluation.tier1.fair.run_fair_benchmarks", measure), \
                 mock.patch("evograd.evaluation.common.provider.torch_compile_provider",
                            side_effect=lambda op, **kwargs: pytorch_autograd_provider(op)), \
-                mock.patch("evograd.opdecl.baselines.verify_performance_baseline"), \
                 mock.patch("torch.autograd.grad", wraps=torch.autograd.grad) as backward:
-            result = time_case(op, module, workload, device="cpu")
+            result = time_case(op, module, inputs)
         self.assertEqual(set(result), {"eager", "torch_compile", "library"})
         self.assertEqual(len(measured), 3, result)
-        self.assertEqual(backward.call_count, 6)
+        # Two per timed pair, and two for the library's check against eager.
+        self.assertEqual(backward.call_count, 8)
         for row in result.values():
             self.assertEqual(row["route"], "autograd")
             self.assertEqual(row["speedup"], 1.2)
 
-    def test_summary_rejects_legacy_tier1_instead_of_relabeling_it(self):
+    def test_summary_rejects_earlier_protocols_instead_of_relabeling_them(self):
         from evograd.evaluation.protocol import summarize
 
-        with self.assertRaisesRegex(ValueError, "Legacy Tier 1"):
-            summarize([{"protocol": "evograd-evaluation-v1", "model": "legacy", "cases": {}}])
+        # v1 timed Tier 1; v2 timed Tier 2 on generated inputs.
+        for protocol in ("evograd-evaluation-v1", "evograd-evaluation-v2"):
+            with self.subTest(protocol=protocol), \
+                    self.assertRaisesRegex(ValueError, "not pooled with recorded calls"):
+                summarize([{"protocol": protocol, "model": "legacy", "cases": {}}])
 
 
 class Summary(unittest.TestCase):
@@ -402,29 +500,6 @@ class Summary(unittest.TestCase):
                 single = summarize([evaluation])["level2"]["tier3_single_site"]["toy"]["swiglu/site"]
                 self.assertFalse(single["positive"] or single["selected_for_combination"])
                 self.assertEqual(single["tier3"], row.get("tier3_single_site", {}))
-
-
-class Executable(unittest.TestCase):
-    def test_wrong_output_shape_is_not_executable(self):
-        import types
-
-        from evograd.benchmark import get_task
-        from evograd.opdecl.activity import Workload
-        from evograd.evaluation.protocol import NotExecutable, check_executable
-
-        module = types.ModuleType("wrong_shape")
-        exec('''
-import torch
-def forward_with_saved(a, b):
-    return (torch.nn.functional.silu(a) * b)[:1], (a, b)
-def backward_from_saved(dc, saved):
-    a, b = saved
-    return torch.zeros_like(a), torch.zeros_like(b)
-''', module.__dict__)
-        op = get_task("swiglu")
-        with self.assertRaises(NotExecutable):
-            check_executable(op, module, Workload(dims={"rows": 4, "cols": 8}, dtype="float32"),
-                             device="cpu")
 
 
 if __name__ == "__main__":

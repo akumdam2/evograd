@@ -3,7 +3,7 @@
 ## The benchmark protocol
 
 Every submission is evaluated the same way, whoever generated it
-(`protocol.py`, `evograd-evaluation-v2`). Evaluate each agent's submissions as
+(`protocol.py`, `evograd-evaluation-v3`). Evaluate each agent's submissions as
 one run; its Level-3 combination is selected only from that agent's candidates:
 
 ```bash
@@ -22,16 +22,25 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    training. Passing every applicable gate makes a candidate *accepted*;
    a skipped, failed or incomplete required gate cannot pass acceptance.
 2. **Tier 2** times every *executable* Level-1/Level-2 candidate, accepted or
-   not, at its case's configuration. Candidate, eager, `torch.compile` and
+   not, on the recorded calls of its case: every call in the training step of
+   acceptance order 303 of the verification corpus, in call order. Candidate, eager, `torch.compile` and
    declared library baselines all run forward through their deployment path
    and backward through `torch.autograd.grad`, without an optimizer or `.grad`
    accumulation. The candidate uses its artifact's deployment entry, or
-   `bind` for a legacy pair. Executable means this route raises nothing,
-   returns the declared outputs and gradients with the eager shapes and
-   dtypes, and leaves the inputs unchanged. The fair timer uses `warmup=10`,
-   `reps=50`, `blocks=3` and `seed=0`; it may reduce repetitions for expensive
-   calls. Providers receive identical seeded inputs at the observed case's
-   shape, dtype and scalars; correctness is judged separately on real payloads.
+   `bind` for a legacy pair. Executable means this route, on the first of those
+   calls, raises nothing, returns the declared outputs and gradients with the
+   eager shapes and dtypes, and leaves the inputs unchanged. The fair timer
+   uses `warmup=10`, `reps=50`, `blocks=3` and `seed=0` (call k of the step
+   orders its blocks with seed k); it may reduce repetitions for expensive
+   calls. Every provider gets its own copy of
+   the call's recorded arguments, weights and output gradients, with the
+   recorded strides, storage offsets and aliasing, made before timing; the
+   backward differentiates the provider's own forward. The speedup is the
+   ratio of per-call medians summed over the step; `candidate_ms` and
+   `baseline_ms` are those sums, not single-call latencies. A missing or incomplete
+   step stops the evaluation before verification: nothing is generated in its
+   place. Results bind the corpus, the rule and the payload ids
+   (`tier2_inputs`). Correctness is judged separately by the gates.
 3. **Tier 3** times the training step with each executable Level-2 candidate
    alone at its site, against eager.
 4. The **combination** contains that agent's positive Level-2 candidates:
@@ -57,8 +66,8 @@ separate from `combination/`; both reuse compatible controls under `--state`.
 
 Tier 1 is used during search and for standalone pair diagnostics; it is not a
 final benchmark metric. Formal Tier 2 results use the `tier2` settings, cache
-and JSON fields. `summarize` requires v2 results: old v1 timings must be
-reevaluated, not relabeled as Tier 2.
+and JSON fields. `summarize` requires v3 results: v1 timed Tier 1 and v2 timed
+generated inputs; both must be reevaluated, not relabeled.
 
 The standalone commands below (`tier1-bench`, `tier2-bench`, `tier3-bench`,
 `suite`) remain diagnostics. Their admission rules and timing defaults are
@@ -200,7 +209,8 @@ Read the case's provenance, not just its suite name.
 
 | Scope | Inputs | Outputs and reference gradients |
 | --- | --- | --- |
-| T1/T2 operator | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
+| T1, standalone T2 operator | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
+| Formal T2 (`evograd evaluate`) | The verification corpus's recorded calls of the case in one training step: arguments, weights and output gradients | Candidate and every baseline on copies of the same calls; correctness is the gates' |
 | L2 real invocation (captured layer) | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
 | L2 real invocation (config-derived layer) | Seeded layer, inputs and external gradients | Native layer on that case |
 | Whole model | Checkpoint or seeded weights; real-text or synthetic token IDs and labels | Model logits and LM loss; backward supplies the intermediate and parameter gradients |

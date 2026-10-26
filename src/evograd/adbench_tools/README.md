@@ -75,7 +75,7 @@ two is what the frontend contributes.
    decides anything.
 5. **Same final measurement.** The agent's best program is rebuilt from the
    code inside its block, so edits outside it are discarded. Every submission
-   goes through `evograd-evaluation-v2` (§7): the applicable real-payload gates,
+   goes through `evograd-evaluation-v3` (§7): the applicable real-payload gates,
    formal T2 and model-scope T3. `score`/`compare` are separate diagnostics (§5.6).
 6. **Same model and API-request cap for the OpenAI agents.**
    - One `--model` / `--api-base` (an OpenAI-compatible endpoint) is used for
@@ -251,7 +251,7 @@ Other limits:
 | Setting | Value |
 |---|---|
 | Diagnostic `score` measurement | 25 warmup / 100 repetitions (in-loop runs use the evaluator's defaults) |
-| Formal v2 T2 measurement | warmup 10 / repetitions 50 / 3 fair-timing blocks (§7) |
+| Formal v3 T2 measurement | every recorded call of the case in the acceptance order-303 step; per call warmup 10 / repetitions 50 / 3 fair-timing blocks (§7) |
 | Per-evaluation timeout | 900 s (GEPA, the CLI, the coding agents' `evaluate.py`), 1200 s (KernelAgent test) |
 | Per-agent wall time in `run_all.sh` | `TIME_LIMIT`, default 21600 s (6 h); the coding agents also stop at `--time-limit` (default 6 h) |
 | Smoke run (`run_openai.sh`) | budget 2 per agent; KernelAgent 8 with `--skip-optimization`; 1 h each |
@@ -524,7 +524,7 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
 2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
    Its best program is rebuilt from its evolve block into `submission.py`
    (`fixed_code_intact` is recorded).
-3. **Every submission goes through `evograd-evaluation-v2`**: the static rules
+3. **Every submission goes through `evograd-evaluation-v3`**: the static rules
    (`check_source`; a violation is neither verified nor timed), then the gates
    on the model's real training payloads -- Level 1: Gate 1 and operator
    Gate 2; Level 2: also model Gate 2 and Gate 3 alone at its site. Every
@@ -548,7 +548,10 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
 Formal T2 measures the artifact's actual deployment forward followed by
 `torch.autograd.grad`, without an optimizer or `.grad` accumulation. Eager,
 compile and declared library baselines all use that autograd scope and the
-existing fair timer (warmup 10, repetitions 50, 3 blocks). Real-payload gates
+existing fair timer (warmup 10, repetitions 50, 3 blocks) on the same inputs:
+every recorded call of the case in the acceptance order-303 training step of
+the verification corpus, each provider on its own layout-exact copy, with the
+speedup the ratio of per-call medians summed over the step. Real-payload gates
 determine correctness separately; the standalone `tier2-bench` declared-input
 gate and timer are not substituted into this protocol. T1 is search feedback
 or an independent pair diagnostic, not the formal eager/compile result.
@@ -560,9 +563,9 @@ The request cap applies to each independent agent/case run, not to evaluation.
 budget unit or different limit, and refuses to silently delete an unfinished
 run and reset its API ledger. Use a fresh `--root`, or `--redo` to replace the
 run as a new trial.
-Direct drivers likewise require a fresh `--run-dir`. Old v1 evaluations must
-be rerun with `evaluate`; `summarize` rejects them, and renaming `tier1` fields
-to `tier2` does not make them v2 measurements.
+Direct drivers likewise require a fresh `--run-dir`. Old v1 and v2 evaluations
+must be rerun with `evaluate`; `summarize` rejects them. Renaming `tier1` fields
+to `tier2` does not make them v3 measurements, and v2 timed generated inputs.
 
 ## 8. Open items
 

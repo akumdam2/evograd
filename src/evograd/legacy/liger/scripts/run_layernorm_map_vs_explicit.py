@@ -40,6 +40,7 @@ def _fair_bench(op_name: str, candidate: Path, suite: str, out: Path) -> dict:
         run_fair_benchmarks,
     )
     from evograd.opdecl.baselines import verify_performance_baseline
+    from evograd.opdecl.inputs import generated_inputs
     from evograd.opdecl.verify import verify
     from evograd.benchmark import get_task
 
@@ -62,7 +63,7 @@ def _fair_bench(op_name: str, candidate: Path, suite: str, out: Path) -> dict:
         op,
         candidate_provider(op, module),
         liger_provider(op),
-        workloads=workloads,
+        inputs=generated_inputs(op, workloads),
         warmup=10,
         reps=50,
         blocks=3,
@@ -99,6 +100,7 @@ def _paired_fair_bench(
         renamed_provider,
         run_fair_benchmarks,
     )
+    from evograd.opdecl.inputs import generated_inputs
     from evograd.opdecl.verify import verify
     from evograd.benchmark import get_task
 
@@ -117,7 +119,7 @@ def _paired_fair_bench(
         op,
         renamed_provider(candidate_provider(op, map_module), "map"),
         renamed_provider(candidate_provider(op, explicit_module), "explicit"),
-        workloads=workloads,
+        inputs=generated_inputs(op, workloads),
         warmup=10,
         reps=50,
         blocks=3,

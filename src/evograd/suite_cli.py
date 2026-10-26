@@ -158,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         verify_pair_provider,
     )
     from evograd.evaluation.tier1.fast import DEFAULT_REPS, DEFAULT_WARMUP, run_benchmarks
+    from evograd.opdecl.inputs import generated_inputs
     from evograd.opdecl.baselines import (
         baseline_candidate_module,
         resolve_performance_baseline,
@@ -200,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
         else f"candidate programs under `{args.candidates}`"
     )
     timing_protocol = (
-        "evograd-final-runtime-v1 — L2 cleared before every timed region, "
+        "evograd-final-runtime-v2 — L2 cleared before every timed region, "
         "batched CUDA events with one synchronize, randomized provider order, "
         "inputs checked for mutation outside the timed regions, median of "
         "samples. Equivalent to triton.testing.do_bench plus the order "
@@ -289,8 +290,7 @@ def main(argv: list[str] | None = None) -> int:
                     op,
                     candidate_pv,
                     baseline_provider,
-                    workloads=workloads,
-                    device=args.device,
+                    inputs=generated_inputs(op, workloads, device=args.device),
                     # One block. What remains — L2 cleared before every timed
                     # region, batched events with a single synchronize, median
                     # of the samples — is exactly what triton.testing.do_bench

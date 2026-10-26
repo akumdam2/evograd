@@ -157,7 +157,7 @@ class SuiteCommandOutcomes(unittest.TestCase):
         for name in SELECTED:
             with self.subTest(op=name):
                 self.assertEqual(
-                    tuple(by_op[name]["kwargs"]["workloads"]),
+                    tuple(workload for workload, _load in by_op[name]["kwargs"]["inputs"]),
                     get_task(name).benchmark_workloads(suite=None),
                 )
 
@@ -168,7 +168,9 @@ class SuiteCommandOutcomes(unittest.TestCase):
         )
         for call in calls:
             with self.subTest(op=call["op"]):
-                self.assertEqual(call["kwargs"]["device"], "cpu")
+                # The device reaches the inputs the timer is handed.
+                self.assertEqual({load.args[-1] for _w, load in call["kwargs"]["inputs"]},
+                                 {"cpu"})
                 self.assertEqual(call["kwargs"]["warmup"], 7)
                 self.assertEqual(call["kwargs"]["reps"], 11)
                 # One block is the documented default of this command.
@@ -193,7 +195,7 @@ class SuiteCommandOutcomes(unittest.TestCase):
         for name in SELECTED:
             with self.subTest(op=name):
                 self.assertEqual(
-                    tuple(by_op[name]["kwargs"]["workloads"]),
+                    tuple(workload for workload, _load in by_op[name]["kwargs"]["inputs"]),
                     get_task(name).benchmark_workloads(suite="full"),
                 )
 

@@ -425,13 +425,6 @@ def renamed_provider(provider: PairProvider, name: str) -> PairProvider:
     )
 
 
-def clone_values(values: dict[str, Any]) -> dict[str, Any]:
-    return {
-        name: value.detach().clone() if isinstance(value, torch.Tensor) else value
-        for name, value in values.items()
-    }
-
-
 def snapshot_tensors(
     values: dict[str, Any], *, may_overwrite: tuple[str, ...] = ()
 ) -> tuple[TensorSnapshot, ...]:
