@@ -15,6 +15,7 @@ from evograd.benchmark import get_task
 from evograd.opdecl.activity import Workload
 from evograd.pipelines.d_inductor.capture import CapturedPair, SavedTensor
 from evograd.pipelines.d_inductor.seed_codegen import (
+    _legalize_launch_code,
     _named_parameters,
     _split_top_level,
     _split_module,
@@ -26,6 +27,11 @@ from evograd.pipelines.d_inductor.synthesize import (
     _with_distinct_dims,
     select_capture_workloads,
 )
+from evograd.pipelines.shared.artifact import (
+    evolvable_region_covers_pair,
+    find_forwarding_aliases,
+)
+from evograd.pipelines.shared.primitives import PrimitiveViolation, check_source
 
 Q = "'" * 3
 
@@ -61,9 +67,15 @@ call = runner.call
 # async_compile.triton, carrying its own imports and both decorators.
 _TRITON_TEMPLATE = """import torch
 from torch._inductor.async_compile import AsyncCompile
+from torch._inductor.select_algorithm import extern_kernels
 from torch._C import _cuda_getCurrentRawStream as get_raw_stream
+aten = torch.ops.aten
+inductor_ops = torch.ops.inductor
 empty_strided_cuda = torch._C._dynamo.guards._empty_strided_cuda
+reinterpret_tensor = torch._C._dynamo.guards._reinterpret_tensor
+alloc_from_pool = torch.ops.inductor._alloc_from_pool
 async_compile = AsyncCompile()
+empty_strided_p2p = torch._C._distributed_c10d._SymmetricMemory.empty_strided_p2p
 
 
 @@KERNEL@@ = async_compile.triton('@@KERNEL@@', @@Q@@
@@ -217,8 +229,15 @@ class TestSeedAssembly(unittest.TestCase):
     def test_saved_values_are_not_forced_contiguous(self):
         # Saved transposed views carry the strides the generated code asserts.
         seed = generate_inductor_seed(self.op, "float32", capture_for(self.op))
-        body = seed[seed.index("def _build_backward_args") : seed.index("def _forward_with")]
+        body = seed[seed.index("def _build_backward_args") : seed.index("def layernorm_forward")]
         self.assertNotIn("saved[i].contiguous()", body)
+
+    def test_deployment_layer_follows_the_block(self):
+        seed = generate_inductor_seed(self.op, "float32", capture_for(self.op))
+        end = seed.index("# EVOLVE-BLOCK-END")
+        self.assertGreater(seed.index("ARTIFACT_CONTRACT = "), end)
+        self.assertGreater(seed.index("class LayernormFunction(torch.autograd.Function)"), end)
+        self.assertIn("'allowed_primitives': []", seed)
 
     def test_call_wrappers_take_named_parameters(self):
         seed = generate_inductor_seed(self.op, "float32", capture_for(self.op))
@@ -227,8 +246,10 @@ class TestSeedAssembly(unittest.TestCase):
         self.assertNotIn("def _fwd_call(args)", seed)
         self.assertNotIn("= args", seed)
         self.assertNotIn("args.clear()", seed)
-        # Call sites pass positionally rather than packing a list.
-        self.assertIn("_fwd_call(x.contiguous(), weight.contiguous()", seed)
+        # Call sites pass positionally rather than packing a list, and inputs
+        # keep their strides: the generated code asserts the captured ones.
+        self.assertIn("_fwd_call(x, weight, bias)", seed)
+        self.assertNotIn(".contiguous(), weight", seed)
         self.assertIn("*_build_backward_args(", seed)
 
     def test_gradient_selection_follows_the_declared_contract(self):
@@ -305,6 +326,171 @@ class TestTritonInlining(unittest.TestCase):
         ast.parse(seed)
 
 
+# A scoped case as Inductor emits it on CUDA: a cuBLAS extern call, the private
+# device guard, two outputs and two upstream gradients.
+GEMM_FWD_BODY = (
+    "        primals_1, primals_2, primals_3 = args\n"
+    "        args.clear()\n"
+    "        assert_size_stride(primals_1, (4, 4), (1, 4))\n"
+    "        with torch.cuda._DeviceGuard(0):\n"
+    "            torch.cuda.set_device(0)\n"
+    "            buf0 = empty_strided_cuda((4, 4), (4, 1), torch.float32)\n"
+    "            extern_kernels.mm(primals_1, reinterpret_tensor(primals_3, (4, 4), (1, 4), 0), out=buf0)\n"
+    "            buf1 = empty_strided_cuda((4, 4), (4, 1), torch.float32)\n"
+    "            triton_poi_fused_mul_0.run(buf0, buf1, 16)\n"
+    "        return (buf1, buf0, primals_1, primals_3, )"
+)
+GEMM_BWD_BODY = (
+    "        primals_1, primals_3, tangents_1, tangents_2 = args\n"
+    "        args.clear()\n"
+    "        with torch.cuda._DeviceGuard(0):\n"
+    "            torch.cuda.set_device(0)\n"
+    "            buf0 = empty_strided_cuda((4, 4), (4, 1), torch.float32)\n"
+    "            triton_poi_fused_mul_0.run(tangents_1, tangents_2, buf0, 16)\n"
+    "            buf1 = empty_strided_cuda((4, 4), (4, 1), torch.float32)\n"
+    "            extern_kernels.mm(buf0, primals_3, out=buf1)\n"
+    "        return (buf1, buf0, buf1, )"
+)
+
+
+class TestScopedCaseSeed(unittest.TestCase):
+    """A multi-output case with a library GEMM, granted vendor_gemm."""
+
+    def setUp(self):
+        self.op = get_task("fused_add_rms_norm")
+        self.captured = replace(
+            capture_for(self.op, triton=True),
+            forward_source=fake_module(_TRITON_TEMPLATE, "triton_poi_fused_mul_0", GEMM_FWD_BODY),
+            backward_source=fake_module(_TRITON_TEMPLATE, "triton_poi_fused_mul_0", GEMM_BWD_BODY),
+            backward_arg_spec=(("s", 0), ("s", 1), ("t", 0), ("t", 1)),
+            dynamic=False,
+        )
+        self.seed = generate_inductor_seed(
+            self.op, "float32", self.captured, allowed_primitives=("vendor_gemm",)
+        )
+
+    def test_forward_returns_every_output_and_backward_takes_one_gradient_each(self):
+        self.assertIn("    return _out[:2], tuple(_out[2:])", self.seed)
+        self.assertIn(
+            "def fused_add_rms_norm_backward_from_saved(output_grads, saved_tensors, eps=1e-6):",
+            self.seed,
+        )
+        self.assertIn("_build_backward_args(_BWD_ARG_SPEC, saved_tensors, output_grads)", self.seed)
+
+    def test_extern_gemm_runs_through_the_granted_primitive(self):
+        self.assertIn("buf0 = vendor_gemm(primals_1, reinterpret_tensor(primals_3", self.seed)
+        self.assertIn("buf1 = vendor_gemm(buf0, primals_3)", self.seed)
+        # The buffers planned for the out= argument are gone with it; the
+        # Triton kernels' output buffers stay.
+        self.assertEqual(self.seed.count("= empty_strided_cuda((4, 4), (4, 1), torch.float32)"), 2)
+        self.assertEqual(check_source(self.seed, allowed=("vendor_gemm",))["primitive_call_sites"],
+                         {"vendor_gemm": 2})
+        with self.assertRaises(PrimitiveViolation):
+            check_source(self.seed, allowed=())
+
+    def test_inductor_runtime_boilerplate_and_library_handles_are_gone(self):
+        for text in ("_DeviceGuard", "empty_strided_p2p", "_distributed_c10d", "extern_kernels",
+                     "aten = ", "inductor_ops", "alloc_from_pool"):
+            self.assertNotIn(text, self.seed)
+        self.assertIn("with torch.cuda.device(0):", self.seed)
+
+    def test_deployment_layer_records_the_grant_after_the_block(self):
+        end = self.seed.index("# EVOLVE-BLOCK-END")
+        self.assertGreater(self.seed.index("def vendor_gemm(a, b):"), end)
+        self.assertGreater(self.seed.index("ARTIFACT_CONTRACT = "), end)
+        self.assertIn("'allowed_primitives': ['vendor_gemm']", self.seed)
+        self.assertEqual(find_forwarding_aliases(self.seed), [])
+        self.assertTrue(evolvable_region_covers_pair(self.op, self.seed))
+
+    def test_a_library_call_without_its_grant_is_an_error(self):
+        with self.assertRaisesRegex(RuntimeError, "vendor_gemm grant"):
+            generate_inductor_seed(self.op, "float32", self.captured)
+
+
+class TestLaunchCodeLegalization(unittest.TestCase):
+    def test_reused_buffer_is_released_instead_of_written(self):
+        body = [
+            "        buf2 = reinterpret_tensor(buf0, (8, 4), (4, 1), 0); del buf0  # reuse",
+            "        # Topologically Sorted Source Nodes: [mm], Original ATen: [aten.mm]",
+            "        extern_kernels.mm(a, b, out=buf2)",
+        ]
+        self.assertEqual(
+            _legalize_launch_code(body, ("vendor_gemm",), "backward"),
+            [
+                "        del buf0",
+                "        # Topologically Sorted Source Nodes: [mm], Original ATen: [aten.mm]",
+                "        buf2 = vendor_gemm(a, b)",
+            ],
+        )
+
+    def test_gemm_into_a_live_buffer_is_refused(self):
+        body = ["        triton_poi_0.run(x, buf0, 4)", "        extern_kernels.mm(a, b, out=buf0)"]
+        with self.assertRaisesRegex(RuntimeError, "aliases a live buffer"):
+            _legalize_launch_code(body, ("vendor_gemm",), "forward")
+
+    def test_cudnn_attention_runs_through_vendor_sdpa_with_the_save_set_kept(self):
+        tag = "'torch.ops.aten._scaled_dot_product_cudnn_attention.default'"
+        forward = [
+            "        buf0 = torch.ops.aten._scaled_dot_product_cudnn_attention.default("
+            "q, k, v, None, True, 0.0, True, scale=0.125)",
+            "        buf1 = buf0[0]",
+            f"        assert_size_stride(buf1, (1, 2, 4, 8), (64, 8, 16, 1), {tag})",
+            "        buf2 = buf0[1]",
+            f"        assert_size_stride(buf2, (1, 2, 4, 1), (8, 4, 1, 1), {tag})",
+            f"        assert_alignment(buf2, 16, {tag})",
+            "        buf3 = buf0[6]",
+            f"        assert_size_stride(buf3, (), (), {tag})",
+            "        del buf0",
+        ]
+        # The output keeps its asserted layout. The logsumexp is the backend's
+        # (flash under deterministic algorithms lays it out differently from
+        # cuDNN), and the rng state means nothing without dropout.
+        self.assertEqual(
+            _legalize_launch_code(forward, ("vendor_sdpa",), "forward"),
+            [
+                "        buf0 = vendor_sdpa_forward(q, k, v, is_causal=True, scale=0.125)",
+                "        buf1 = buf0[0]",
+                f"        assert_size_stride(buf1, (1, 2, 4, 8), (64, 8, 16, 1), {tag})",
+                "        buf2 = buf0[1]",
+                "        buf3 = None  # backend rng/sequence state; unused without dropout",
+                "        del buf0",
+            ],
+        )
+        backward = [
+            "        assert_size_stride(getitem_1, (1, 2, 4, 1), (8, 4, 1, 1))",
+            "        assert_size_stride(getitem_6, (), ())",
+            "        assert_size_stride(dout, (1, 2, 4, 8), (64, 32, 8, 1))",
+            "        buf3 = torch.ops.aten._scaled_dot_product_cudnn_attention_backward.default("
+            "dout, q, k, v, out, getitem_1, getitem_6, getitem_7, None, None, None, 4, 4, 0.0, "
+            "True, scale=0.125)",
+        ]
+        self.assertEqual(
+            _legalize_launch_code(backward, ("vendor_sdpa",), "backward"),
+            [
+                "        assert_size_stride(dout, (1, 2, 4, 8), (64, 32, 8, 1))",
+                "        buf3 = vendor_sdpa_backward(dout, q, k, v, out, getitem_1, "
+                "is_causal=True, scale=0.125)",
+            ],
+        )
+
+    def test_attention_needs_its_grant_and_no_dropout(self):
+        call = ("        buf0 = torch.ops.aten._scaled_dot_product_flash_attention.default("
+                "q, k, v, 0.1, True, scale=0.125)")
+        with self.assertRaisesRegex(RuntimeError, "vendor_sdpa grant"):
+            _legalize_launch_code([call], ("vendor_gemm",), "forward")
+        with self.assertRaisesRegex(RuntimeError, "dropout"):
+            _legalize_launch_code([call], ("vendor_sdpa",), "forward")
+
+    def test_any_other_library_call_is_an_error(self):
+        for line in (
+            "        extern_kernels.bmm(a, b, out=buf0)",
+            "        buf0 = torch.ops.aten._scaled_dot_product_efficient_attention.default(q, k, v, None, True)",
+            "        buf0 = aten.mm.default(a, b)",
+        ):
+            with self.subTest(line=line), self.assertRaisesRegex(RuntimeError, "no granted primitive"):
+                _legalize_launch_code([line], ("vendor_gemm", "vendor_sdpa"), "forward")
+
+
 class TestSplitTopLevel(unittest.TestCase):
     def test_ignores_commas_inside_nesting_and_quotes(self):
         parts = _split_top_level("a={'x': 1, 'y': 2}, b=[3, 4], c='s, t', d=5")
@@ -342,6 +528,15 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
         for dtype, workload in selected.items():
             values = list(workload.dims.values())
             self.assertEqual(len(set(values)), len(values), f"{dtype}: {workload.dims}")
+
+    def test_static_capture_takes_the_declared_case_exactly(self):
+        # Equal dims are part of a static case (attention's QO = HQ * D).
+        case = Workload(dims=dict(M=128, K=128, N=256), dtype="float16")
+        op = replace(get_task("matmul"), correctness=(case,))
+        static = select_capture_workloads(op, ("float16",), dynamic=False)["float16"]
+        self.assertEqual(static, case)
+        dynamic = select_capture_workloads(op, ("float16",))["float16"]
+        self.assertEqual(dict(dynamic.dims), {"M": 128, "K": 129, "N": 256})
 
     def test_rejects_undeclared_dtype(self):
         with self.assertRaisesRegex(ValueError, "no declared workload"):

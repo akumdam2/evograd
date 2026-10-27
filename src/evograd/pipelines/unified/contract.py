@@ -54,9 +54,15 @@ def build_contract(source: str) -> dict:
 
     This manifest is held by the evaluator, outside the evolving candidate.
     AST hashes allow formatting changes without allowing provider/ABI changes.
+    A seed without preserved external regions (an A, B or D seed, whose library
+    calls, if any, run through granted primitives inside the block) has its
+    fixed code pinned alone.
     """
     fixed, editable = _parts(source)
-    regions = _literal(fixed, "UNIFIED_EXTERNAL_REGIONS")
+    declared = any(isinstance(node, ast.Assign) and any(
+        isinstance(t, ast.Name) and t.id == "UNIFIED_EXTERNAL_REGIONS" for t in node.targets)
+        for node in fixed)
+    regions = _literal(fixed, "UNIFIED_EXTERNAL_REGIONS") if declared else []
     wrappers = [region["wrapper"] for region in regions]
     if len(wrappers) != len(set(wrappers)):
         raise ValueError("external regions must have distinct wrapper names")

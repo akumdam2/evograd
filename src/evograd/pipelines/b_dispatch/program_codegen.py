@@ -76,6 +76,23 @@ def _extract_def_or_lambda(stmt: ast.stmt) -> ast.FunctionDef:
     raise ValueError(f"unsupported source shape for closure: {ast.dump(stmt)[:200]}")
 
 
+def _is_cpu_fallback(stmt: ast.stmt) -> bool:
+    """``if not HAS_TRITON or not a.is_cuda: return torch.mm(a, b)`` in a launcher.
+
+    The registry keeps these for CPU callers. B's seed runs on CUDA only and must
+    not carry them: a library contraction inside the evolve block breaks the
+    static rules. (The unified pipeline keeps them and rewrites them itself.)
+    """
+    return (
+        isinstance(stmt, ast.If)
+        and "is_cuda" in ast.unparse(stmt.test)
+        and len(stmt.body) == 1
+        and isinstance(stmt.body[0], ast.Return)
+        and stmt.body[0].value is not None
+        and ast.unparse(stmt.body[0].value).startswith("torch.")
+    )
+
+
 class _UnqualifyTransformer(ast.NodeTransformer):
     """Rewrite `elementwise.div_scalar(...)` to `div_scalar(...)`.
 
@@ -97,7 +114,8 @@ class _UnqualifyTransformer(ast.NodeTransformer):
 class _ProgramBuilder:
     """Resolves AtenIR nodes to direct calls, pulling in only what's referenced."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, strip_cpu_fallbacks: bool = False) -> None:
+        self.strip_cpu_fallbacks = strip_cpu_fallbacks
         self.submodules: dict[str, Any] = {
             name: importlib.import_module(f"evograd.atenir.primitive_triton.{name}")
             for name in _SUBMODULE_NAMES
@@ -298,6 +316,8 @@ class _ProgramBuilder:
         except SyntaxError:
             return
         if isinstance(fdef, ast.FunctionDef):
+            if self.strip_cpu_fallbacks:
+                fdef.body = [s for s in fdef.body if not _is_cpu_fallback(s)]
             self._collect_body_dependencies(fdef, real_fn)
             fdef = _UnqualifyTransformer(frozenset(self.submodules)).visit(fdef)
             ast.fix_missing_locations(fdef)
@@ -513,7 +533,7 @@ def generate_dispatch_program(graph: dict) -> str:
     if out_node.get("op") != "output":
         raise ValueError("graph's last node is not an output node; cannot generate program")
 
-    builder = _ProgramBuilder()
+    builder = _ProgramBuilder(strip_cpu_fallbacks=True)
     call_lines: list[str] = []
     line_by_name: dict[str, str] = {}
     layout_used: set[str] = set()
@@ -694,11 +714,11 @@ def generate_dispatch_program(graph: dict) -> str:
 dispatch-free Triton program for one AtenIR graph.
 
 Only the Triton kernels actually used by this graph are included below (pulled
-transitively from evograd/atenir/primitive_triton/), wrapped in an EVOLVE-BLOCK so
-OpenEvolve can rewrite/fuse them. There is no string-matching op dispatch table
-and no runtime registry: every call in `run_graph_program` below the block is a
-direct call to one of these kernels, with any baked scalar arguments inlined as
-literal defaults.
+transitively from evograd/atenir/primitive_triton/), wrapped in an EVOLVE-BLOCK
+together with the drivers that launch them, so OpenEvolve can rewrite/fuse both.
+There is no string-matching op dispatch table and no runtime registry: every call
+in `run_graph_program` is a direct call to one of these kernels, with any baked
+scalar arguments inlined as literal defaults.
 
 `run_graph_program` is the literal, unrolled call sequence for this graph — one
 statement per AtenIR call_function node, in topological order.
@@ -717,17 +737,20 @@ import triton.language.extra.cuda.libdevice as libdevice
         "# EVOLVE-BLOCK-START",
         "",
         kernel_library,
-        "# EVOLVE-BLOCK-END",
-        "",
         "",
         f"def run_graph_program({', '.join(placeholder_names)}):",
         *call_lines,
         *forward_lines,
+        "",
+        "",
+        "# EVOLVE-BLOCK-END",
     ]
     return "\n".join(lines) + "\n"
 
 
-def generate_autograd_pair_program(graph: dict, *, forward: str, op) -> str:
+def generate_autograd_pair_program(
+    graph: dict, *, forward: str, op, scalars: dict | None = None, allowed_primitives=()
+) -> str:
     """Build an autograd-pair seed around the dispatch-free backward program.
 
     The backward uses the generated `run_graph_program` call sequence. The
@@ -735,7 +758,10 @@ def generate_autograd_pair_program(graph: dict, *, forward: str, op) -> str:
     inputs and let OpenEvolve modify the EVOLVE-BLOCK later.
 
     ``op`` is the :class:`evograd.opdecl.activity.OpDecl` for the target
-    operator; the wrapper is rendered from its activity annotations.
+    operator; the wrapper is rendered from its activity annotations. The pair
+    joins the kernels and drivers inside the EVOLVE-BLOCK and closes it; the
+    deployment layer, recording ``allowed_primitives``, follows the block.
+    ``scalars`` are the values the graph was traced with.
     """
     from evograd.pipelines.b_dispatch.wrapper_codegen import render_autograd_pair_wrapper
 
@@ -745,9 +771,7 @@ def generate_autograd_pair_program(graph: dict, *, forward: str, op) -> str:
     # wrapper must agree with what is actually in the file.
     has_generated_forward = "def run_forward_program(" in source
     wrapper = render_autograd_pair_wrapper(
-        forward, op, has_generated_forward=has_generated_forward
+        forward, op, has_generated_forward=has_generated_forward,
+        scalars=scalars, allowed_primitives=allowed_primitives,
     )
-    marker = "# EVOLVE-BLOCK-END"
-    if marker not in source:
-        return source + wrapper
-    return source.replace(marker, wrapper.rstrip() + "\n" + marker, 1)
+    return source[: source.rindex("# EVOLVE-BLOCK-END")].rstrip() + "\n" + wrapper

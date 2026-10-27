@@ -28,6 +28,8 @@ Spec grammar for --example-args / --example-input:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import functools
 import importlib
 import json
 import re
@@ -470,9 +472,14 @@ def extract_named_op(op_name: str, parsed_args, device: str = "cpu") -> fx.Graph
 
 
 def extract_autograd(
-    fn_spec: str, parsed_inputs, device: str = "cpu", dynamic: bool = False
+    fn_spec: str, parsed_inputs, device: str = "cpu", dynamic: bool = False,
+    scalars: dict | None = None,
 ) -> fx.GraphModule:
     forward_fn = _import_callable(fn_spec)
+    if scalars:
+        # Non-tensor arguments (e.g. a declaration's eps), bound by keyword and
+        # traced as literals instead of the callable's own defaults.
+        forward_fn = functools.partial(forward_fn, **scalars)
     fwd_in = [_materialise(x, device) for x in parsed_inputs]
     if not all(isinstance(t, torch.Tensor) for t in fwd_in):
         raise ValueError("autograd mode: --example-input must be a flat list of tensors")
@@ -568,6 +575,19 @@ def main(argv=None) -> int:
             "generated programs are correct at any input shape"
         ),
     )
+    p.add_argument(
+        "--scalars",
+        default=None,
+        help="JSON object of non-tensor forward arguments, bound by keyword (--fn mode only)",
+    )
+    p.add_argument(
+        "--math-sdpa",
+        action="store_true",
+        help=(
+            "trace scaled_dot_product_attention through PyTorch's math backend, so it "
+            "decomposes into ATen primitives instead of a device-specific fused node"
+        ),
+    )
     args = p.parse_args(argv)
 
     if args.op:
@@ -581,7 +601,16 @@ def main(argv=None) -> int:
         if not args.example_input:
             p.error("--fn requires --example-input")
         parsed = _parse_spec(args.example_input)
-        gm = extract_autograd(args.fn, parsed, device=args.device, dynamic=args.dynamic)
+        sdpa = contextlib.nullcontext()
+        if args.math_sdpa:
+            from torch.nn.attention import SDPBackend, sdpa_kernel
+
+            sdpa = sdpa_kernel([SDPBackend.MATH])
+        with sdpa:
+            gm = extract_autograd(
+                args.fn, parsed, device=args.device, dynamic=args.dynamic,
+                scalars=json.loads(args.scalars) if args.scalars else None,
+            )
 
     graph = _serialise(gm)
     out_path = Path(args.out)

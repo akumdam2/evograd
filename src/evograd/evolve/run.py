@@ -25,6 +25,25 @@ _MAP_SHAPE_TEMPLATE = Path(__file__).with_name("config_map_shape_template.yaml")
 _EVALUATOR_ENTRY = Path(__file__).with_name("evaluator_entry.py")
 
 
+def _grant_paragraph(allowed) -> str:
+    """The system message's account of a run's trusted primitives; empty without a grant."""
+    if not allowed:
+        return ""
+    from evograd.pipelines.shared.primitives import GRANT_SCOPE, describe_grant, normalize
+
+    lines = [
+        "Library primitives this run grants:",
+        *(f"- {line}" for line in describe_grant(normalize(allowed),
+                                                 "Defined after the EVOLVE-BLOCK")),
+        f"- {GRANT_SCOPE}",
+        "- Their call sites inside the EVOLVE-BLOCK are part of the search: you may merge "
+        "calls (e.g. one GEMM over concatenated weights), change the transposes, layouts "
+        "and saved state around them, fuse neighbouring work into your own kernels, or "
+        "replace a call with Triton.",
+    ]
+    return "\n\n" + "\n".join(f"    {line}" for line in lines)
+
+
 def render_config(
     op: OpDecl,
     *,
@@ -37,6 +56,7 @@ def render_config(
     feature_bins: int = 10,
     num_islands: int = 2,
     archive_size: int = 20,
+    allowed_primitives: tuple[str, ...] = (),
 ) -> str:
     feature_dimensions = validate_feature_dimensions(tuple(feature_dimensions))
     if feature_bins < 1:
@@ -76,6 +96,7 @@ def render_config(
         "__ACTIVITY_CONTRACT__": ", ".join(
             f"{arg.name}: {type(arg).__name__}" for arg in op.args
         ),
+        "__TRUSTED_PRIMITIVES__": _grant_paragraph(allowed_primitives),
     }
     for key, value in replacements.items():
         text = text.replace(key, value)
@@ -138,6 +159,8 @@ def run_evolve(
     num_islands: int = 2,
     archive_size: int = 20,
     extra_env: dict[str, str] | None = None,
+    allowed_primitives: tuple[str, ...] = (),
+    pin_fixed_code: bool = False,
     ncu: bool = False,
     ncu_model: str | None = None,
     ncu_api_key: str | None = None,
@@ -174,6 +197,7 @@ def run_evolve(
                 secondary_model=secondary_model,
                 api_base=api_base,
                 feature_dimensions=feature_dimensions,
+                allowed_primitives=allowed_primitives,
                 feature_bins=feature_bins,
                 num_islands=num_islands,
                 archive_size=archive_size,
@@ -182,13 +206,21 @@ def run_evolve(
         )
 
     env = evograd_env()
-    from evograd.pipelines.unified.contract import CONTRACT_ENV, CONTRACT_FILE, seed_contract_path
+    from evograd.pipelines.unified.contract import (
+        CONTRACT_ENV,
+        CONTRACT_FILE,
+        build_contract,
+        seed_contract_path,
+    )
 
     unified_contract = seed_contract_path(seed_path)
-    if unified_contract is not None:
+    if unified_contract is not None or pin_fixed_code:
         # Keep the reference outside generated programs so candidates cannot
-        # redefine which library regions or deployment ABI are protected.
-        contract_text = unified_contract.read_text(encoding="utf-8")
+        # redefine which library regions or deployment ABI are protected. With
+        # ``pin_fixed_code`` any seed's code outside its block is held fixed.
+        contract_text = (unified_contract.read_text(encoding="utf-8") if unified_contract
+                         else json.dumps(build_contract(seed_path.read_text(encoding="utf-8")),
+                                         indent=2, sort_keys=True) + "\n")
         contract_target = output_dir / CONTRACT_FILE
         contract_target.write_text(contract_text, encoding="utf-8")
         env[CONTRACT_ENV] = str(contract_target.resolve())
@@ -227,6 +259,9 @@ def run_evolve(
         # only hands back the best one. Archiving there is the only place that
         # sees the whole population.
         env["EVOGRAD_PROGRAM_ARCHIVE_DIR"] = str(programs_dir)
+    if allowed_primitives:
+        # The run's ceiling: a candidate may not declare more than this.
+        env["EVOGRAD_ALLOWED_PRIMITIVES"] = ",".join(allowed_primitives)
     if extra_env:
         env.update(extra_env)
 

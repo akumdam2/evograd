@@ -60,7 +60,7 @@ prompt:
 
     Correctness is a hard requirement. Support the benchmark's CUDA dtypes,
     preserve output dtypes, and use fp32 accumulation for reductions. Do not
-    call PyTorch autograd in generated math.
+    call PyTorch autograd in generated math.__TRUSTED_PRIMITIVES__
 
 database:
   population_size: 30

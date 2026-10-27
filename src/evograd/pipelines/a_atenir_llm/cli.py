@@ -16,6 +16,7 @@ from evograd.pipelines.a_atenir_llm.synthesize import (
 )
 from evograd.pipelines.shared.cli_common import (
     add_exec_args,
+    add_grant_arg,
     add_llm_args,
     add_op_arg,
     resolve_op,
@@ -27,17 +28,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     add_op_arg(parser)
     add_llm_args(parser)
     add_exec_args(parser)
+    # Longer than C's defaults: one whole-module generation by a reasoning model
+    # can outlast 180 s, and the oracle compiles and checks real-size workloads.
+    parser.set_defaults(timeout=600, eval_timeout=300)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--lowering-context-file", default=None)
-    parser.add_argument(
-        "--allow-primitive",
-        action="append",
-        default=[],
-        metavar="NAME",
-        help="grant one trusted Level-1 primitive to the generated pair "
-             "(repeatable; currently: vendor_gemm). Nothing is relaxed for an "
-             "operator that does not ask",
-    )
+    add_grant_arg(parser)
     return parser.parse_args(argv)
 
 

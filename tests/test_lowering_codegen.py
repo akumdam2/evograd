@@ -114,6 +114,46 @@ class TestGeneratedForwardCone(unittest.TestCase):
         torch.testing.assert_close(namespace["run_graph_program"](x)[0], x[:, :5])
 
 
+class TestAutogradPairSeedLayout(unittest.TestCase):
+    """The seed B emits: everything evolvable in the block, the generated layer after it."""
+
+    def test_library_cpu_fallbacks_are_dropped_only_for_b(self):
+        from evograd.atenir.primitive_triton import gemm
+
+        for strip, present in ((False, True), (True, False)):
+            builder = _ProgramBuilder(strip_cpu_fallbacks=strip)
+            builder._collect_module_helper(gemm.mm)
+            source = builder.helper_sources[(gemm.__name__, "mm")]
+            self.assertEqual("torch.mm(a, b)" in source, present, source)
+
+    def test_seed_passes_the_static_rules_under_its_grant(self):
+        from evograd.atenir.extract import extract_autograd
+        from evograd.benchmark import get_task
+        from evograd.opdecl.verify_cli import load_candidate
+        from evograd.pipelines.b_dispatch.program_codegen import generate_autograd_pair_program
+        from evograd.pipelines.shared.artifact import validate_artifact
+
+        op = get_task("layernorm_linear")
+        inputs = [torch.randn(6, 8), torch.randn(8), torch.randn(8), torch.randn(8, 4)]
+        graph = _serialise(extract_autograd(op.forward, inputs, scalars={"eps": 1e-5}))
+        source = generate_autograd_pair_program(
+            graph, forward=op.forward, op=op, scalars={"eps": 1e-5},
+            allowed_primitives=("vendor_gemm",))
+        lines = source.splitlines()
+        start, end = (lines.index(f"# EVOLVE-BLOCK-{m}") for m in ("START", "END"))
+        at = {l[4:].split("(")[0]: i for i, l in enumerate(lines) if l.startswith("def ")}
+        for name in ("run_graph_program", "run_forward_program",
+                     op.forward_fn_name, op.backward_fn_name):
+            self.assertTrue(start < at[name] < end, name)
+        self.assertGreater(min(at["vendor_gemm"], at[f"{op.name}_deployment"]), end)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "seed.py"
+            path.write_text(source)
+            module = load_candidate(path)
+        validate_artifact(op, module, source=source, allowed_primitives=("vendor_gemm",))
+        self.assertEqual(module.ARTIFACT_CONTRACT["allowed_primitives"], ["vendor_gemm"])
+
+
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA required for emitted primitive kernels")
 class TestGeneratedPrimitiveCuda(unittest.TestCase):
     def test_symbolic_arange_generated_program_executes_with_new_size(self):

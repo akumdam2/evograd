@@ -234,6 +234,18 @@ def catalogue(allowed) -> list[dict[str, str]]:
     ]
 
 
+#: What a prompt says a grant reaches (TASK.md and the evolve system message).
+GRANT_SCOPE = ("It is the only way to reach a vendor contraction or fused attention: "
+               "every other contraction must be written in Triton (`tl.dot`).")
+
+
+def describe_grant(allowed, where: str) -> list[str]:
+    """One prompt line per granted primitive, in the order given: its symbols,
+    what it does, and ``where`` it is defined."""
+    return [f"`{'`, `'.join(REGISTRY[name].symbols)}`: {REGISTRY[name].summary}. "
+            f"{where}; call it by name, do not define or import it." for name in allowed]
+
+
 # ── source analysis ──────────────────────────────────────────────────────────
 
 

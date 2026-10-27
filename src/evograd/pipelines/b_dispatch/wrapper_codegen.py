@@ -49,8 +49,16 @@ def grad_indices(op: OpDecl) -> list[int]:
 
 
 def render_autograd_pair_wrapper(
-    forward: str, op: OpDecl, *, has_generated_forward: bool = False
+    forward: str, op: OpDecl, *, has_generated_forward: bool = False,
+    scalars: dict | None = None, allowed_primitives=(),
 ) -> str:
+    """The public pair, which closes the EVOLVE-BLOCK, then the deployment layer.
+
+    ``scalars`` are the values the graph was traced with: the pair then raises
+    on any other value, as the unified seed does, instead of silently computing
+    with the traced one. Without them the scalars are accepted and unused.
+    ``allowed_primitives`` is the run's grant, recorded by the layer.
+    """
     tensor_names = _tensor_args(op)
     scalar_inactive = _scalar_inactive(op)
     indices = grad_indices(op)
@@ -81,7 +89,12 @@ def render_autograd_pair_wrapper(
         [f"{name}.contiguous()" for name in upstream]
         + [f"{n}.contiguous()" for n in tensor_names]
     )
-    unused_scalars = "".join(f"    _ = {c.name}\n" for c in scalar_inactive)
+    unused_scalars = "".join(
+        f"    _ = {c.name}\n" if scalars is None else
+        f"    if {c.name} != {scalars[c.name]!r}:\n"
+        f"        raise ValueError({f'seed traced with {c.name}={scalars[c.name]!r}'!r})\n"
+        for c in scalar_inactive
+    )
 
     # Select grads by index and cast each to its source input's dtype — the
     # autograd contract. Dtype-generic graph programs bake extraction-time
@@ -122,7 +135,7 @@ def render_autograd_pair_wrapper(
         # Both halves now come from the same extracted graph. `run_forward_program`
         # takes the forward placeholders only; scalar inactive args were baked into
         # the trace as literals, exactly as they already are in the backward, so
-        # they are accepted and unused here for the same reason.
+        # they are handled here the same way.
         bind = (
             f"    {forward_capture} = _outs"
             if len(outs) > 1
@@ -172,5 +185,8 @@ def render_autograd_pair_wrapper(
         f"def {op.backward_fn_name}({backward_sig}):",
         backward_body,
         "",
+        "",
+        "# EVOLVE-BLOCK-END",
+        "",
     ])
-    return body + render_deployment_layer(op)
+    return body + render_deployment_layer(op, allowed_primitives=allowed_primitives)

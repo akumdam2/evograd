@@ -94,17 +94,14 @@ def render_statement(task: "AgentTask") -> str:
     )
     granted = spec["allowed_primitives"]
     if granted:
-        from evograd.pipelines.shared.primitives import REGISTRY
+        from evograd.pipelines.shared.primitives import GRANT_SCOPE, REGISTRY, describe_grant
 
         symbols = [symbol for name in granted for symbol in REGISTRY[name].symbols]
         library = "\n".join(
-            f"  - `{'`, `'.join(REGISTRY[name].symbols)}`: {REGISTRY[name].summary}. "
-            "The harness defines it outside your module; call it by name, do not define "
-            "or import it."
-            for name in granted
+            f"  - {line}"
+            for line in describe_grant(granted, "The harness defines it outside your module")
         ) + (
-            "\n  - It is the only way to reach a vendor contraction or fused attention: "
-            "every other contraction must be written in Triton (`tl.dot`)."
+            f"\n  - {GRANT_SCOPE}"
             "\n  - To run your module on its own, add `from adbench_primitives import "
             f"{', '.join(symbols)}` (the task pack ships that file); the harness removes "
             "that line and supplies its own definition."

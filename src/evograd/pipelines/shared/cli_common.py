@@ -12,6 +12,7 @@ from dataclasses import replace
 
 from evograd.opdecl.activity import OpDecl, example_input_spec
 from evograd.benchmark import TASKS, get_task, load_task
+from evograd.pipelines.shared.primitives import REGISTRY
 
 
 def add_op_arg(parser: argparse.ArgumentParser) -> None:
@@ -59,7 +60,19 @@ def add_exec_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--skip-verify",
         action="store_true",
-        help="accept the first attempt without oracle verification (no-CUDA machines)",
+        help="publish the first attempt unverified (no-CUDA machines); its report records "
+             "verification as skipped",
+    )
+
+
+def add_grant_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--allow-primitive",
+        action="append",
+        default=[],
+        choices=sorted(REGISTRY),
+        help="grant one trusted Level-1 primitive to the seed (repeatable); the "
+             "artifact declares the grant in its deployment layer",
     )
 
 

@@ -77,6 +77,22 @@ class TestPreservedRegions(unittest.TestCase):
             self.contract,
         )
 
+    def test_without_regions_only_the_fixed_code_is_pinned(self):
+        source = (_CONTRACT_SOURCE.split('# EVOLVE-BLOCK-START')[0].split('\n', 2)[2]
+                  .replace('_external_mm', 'vendor_gemm')
+                  + '# EVOLVE-BLOCK-START\ndef forward(a, b):\n    return vendor_gemm(a, b) * 2\n'
+                  + '# EVOLVE-BLOCK-END\n\nDEPLOYMENT_ENTRY = \'forward\'\n')
+        contract = build_contract(source)
+        self.assertEqual((contract['external_regions'], contract['external_call_sites']), ([], {}))
+        # The block may drop, repeat or restructure its library calls ...
+        validate_source(source.replace('return vendor_gemm(a, b) * 2',
+                                       'return vendor_gemm(a, b) + vendor_gemm(a, b)'), contract)
+        # ... but code outside it, e.g. a helper the block could call, stays the seed's.
+        with self.assertRaises(ValueError):
+            validate_source(source.replace('# EVOLVE-BLOCK-START',
+                                           'def helper(a, b):\n    return a.mm(b)\n\n# EVOLVE-BLOCK-START'),
+                            contract)
+
     def test_region_requires_a_fixed_provider_and_one_seed_call(self):
         with self.assertRaises(ValueError):
             build_contract(_CONTRACT_SOURCE.replace('def _external_mm(a, b):', 'def other(a, b):'))
@@ -214,6 +230,25 @@ class TestPreservedAttention(unittest.TestCase):
         forward.bind('q', 'k', 'v', None, True, 0.0, True, scale=0.1)
         backward = inspect.signature(namespace['_unified_sdpa_backward'])
         backward.bind(*range(15), scale=0.1)
+
+
+class TestGrantPrompt(unittest.TestCase):
+    """A granted run's evolve system message documents the grant."""
+
+    def test_the_evolve_prompt_documents_a_grant_and_is_unchanged_without_one(self):
+        import yaml
+
+        from evograd.benchmark import get_task
+        from evograd.evolve.run import render_config
+
+        op = get_task('rmsnorm')
+        plain = yaml.safe_load(render_config(op))['prompt']['system_message']
+        granted = yaml.safe_load(render_config(op, allowed_primitives=('vendor_gemm',)))
+        granted = granted['prompt']['system_message']
+        self.assertNotIn('vendor_gemm', plain)
+        self.assertTrue(granted.startswith(plain.rstrip('\n')))
+        self.assertIn('- `vendor_gemm`: 2-D row-major GEMM', granted)
+        self.assertIn('call sites inside the EVOLVE-BLOCK are part of the search', granted)
 
 
 class TestFixedConfiguration(unittest.TestCase):

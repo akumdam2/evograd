@@ -1,6 +1,6 @@
 """Pipeline A: AtenIR-grounded LLM autograd-pair synthesis.
 
-forward reference -> AtenIR backward graph summary -> LLM plan -> LLM codegen
+forward reference source + AtenIR graph summary -> LLM plan -> LLM codegen
 -> oracle verification (retry with repair prompts).
 
 Everything operator-specific comes from the :class:`OpDecl`: the forward
@@ -10,11 +10,14 @@ verification oracle.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl
+from evograd.opdecl.importing import reference_closure, resolve_callable
 from evograd.pipelines.shared.artifact import (
     ArtifactError,
     render_deployment_layer,
@@ -23,11 +26,13 @@ from evograd.pipelines.shared.artifact import (
 from evograd.pipelines.a_atenir_llm.prompts import (
     SYSTEM_MESSAGE,
     render_codegen_prompt,
+    render_context,
     render_plan_prompt,
     render_repair_prompt,
 )
-from evograd.pipelines.shared.graph_summary import summarize_backward_graph_file
+from evograd.pipelines.shared.graph_summary import load_graph, summarize_graph
 from evograd.pipelines.shared.llm_client import generate_with_openai_compatible_api
+from evograd.pipelines.shared.primitives import check_source, evolve_span
 from evograd.pipelines.shared.runner import (
     extract_graph,
     report_passed,
@@ -50,7 +55,7 @@ class AutogradPairConfig:
     temperature: float | None
     timeout: int
     python: str
-    eval_timeout: int = 120
+    eval_timeout: int = 300
     lowering_context: str | None = None
     #: Trusted Level-1 providers this run grants, by name. Empty means the
     #: default Triton-only search space.
@@ -61,7 +66,28 @@ class AutogradPairConfig:
     skip_verify: bool = False
 
 
-def _check_contract(config: AutogradPairConfig, program_path: Path) -> dict:
+#: Outside its EVOLVE-BLOCK the model's module may hold only `import torch` (exactly)
+#: and imports of these packages, in any form.
+_HEADER_PACKAGES = ("triton", "math", "typing")
+
+
+def _outside_block(body: str) -> list[int]:
+    """Lines of the model's module outside its EVOLVE-BLOCK that are not a
+    docstring or a header import. Only the block is evolved and held to the
+    static rules, so code there would stay fixed and unchecked in every
+    program evolved from this seed."""
+    start, end = evolve_span(body)
+    return [node.lineno for node in ast.parse(body).body
+            if not start <= node.lineno <= end
+            and not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))
+            and not (isinstance(node, ast.ImportFrom) and node.level == 0
+                     and node.module.split(".")[0] in ("__future__", *_HEADER_PACKAGES))
+            and not (isinstance(node, ast.Import) and all(
+                alias.name == "torch" and alias.asname is None
+                or alias.name.split(".")[0] in _HEADER_PACKAGES for alias in node.names))]
+
+
+def _check_contract(config: AutogradPairConfig, program_path: Path, body: str) -> dict:
     """Does the artifact export the interface tier 2 and tier 3 will look for?
 
     Run before the oracle: a program that computes the right numbers behind the
@@ -77,19 +103,22 @@ def _check_contract(config: AutogradPairConfig, program_path: Path) -> dict:
         validate_artifact(config.op, module,
                           source=program_path.read_text(encoding="utf-8"),
                           allowed_primitives=config.allowed_primitives)
+        stray = _outside_block(body)
+        if stray:
+            raise ArtifactError(
+                f"lines {stray} are outside the EVOLVE-BLOCK; only the torch/triton "
+                "imports may be, and `# EVOLVE-BLOCK-END` is the module's last line")
     except ArtifactError as exc:
         return {"ok": False, "error": f"artifact contract: {exc}"}
     except Exception as exc:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-    from evograd.pipelines.shared.primitives import check_source
-
     usage = check_source(program_path.read_text(encoding="utf-8"),
                          allowed=config.allowed_primitives)
     return {"ok": True, "contract": "satisfied", "primitives": usage}
 
 
-def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
-    contract = _check_contract(config, program_path)
+def _verify(config: AutogradPairConfig, program_path: Path, body: str) -> dict:
+    contract = _check_contract(config, program_path, body)
     if not contract["ok"]:
         return {"metrics": {"correct": 0.0}, "artifact_contract": contract}
     if config.skip_verify:
@@ -108,6 +137,20 @@ def _verify(config: AutogradPairConfig, program_path: Path) -> dict:
     return report
 
 
+def _ask(config: AutogradPairConfig, prompt: str) -> str:
+    """One model request, through the configured ``api_base`` only."""
+    return generate_with_openai_compatible_api(
+        prompt=prompt,
+        system_message=SYSTEM_MESSAGE,
+        model=config.model,
+        api_base=config.api_base,
+        api_key=config.api_key,
+        max_tokens=config.max_tokens,
+        temperature=config.temperature,
+        timeout=config.timeout,
+    )
+
+
 def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     print("Extract: AtenIR reference backward graph")
@@ -118,87 +161,62 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         out_path=config.output_dir / "atenir_graph.json",
         log_dir=config.output_dir,
     )
-    graph_summary = summarize_backward_graph_file(graph_path)
+    graph_summary = summarize_graph(load_graph(graph_path))
     (config.output_dir / "graph_summary.md").write_text(graph_summary, encoding="utf-8")
+    # The same standalone reference an ADBench task pack ships as reference.py;
+    # the entry alone when a global it reads cannot be written out.
+    try:
+        reference, _ = reference_closure(config.forward)
+    except ValueError:
+        reference = inspect.getsource(resolve_callable(config.forward))
+    (config.output_dir / "reference.py").write_text(reference, encoding="utf-8")
 
     lowering_context = config.lowering_context or ""
     if lowering_context:
         (config.output_dir / "lowering_context.md").write_text(lowering_context, encoding="utf-8")
 
-    plan_prompt = render_plan_prompt(
-        forward=config.forward,
+    context = render_context(
+        reference=reference,
         graph_summary=graph_summary,
-        lowering_context=lowering_context,
         op=config.op,
         allowed_primitives=config.allowed_primitives,
+        lowering_context=lowering_context,
     )
+    plan_prompt = render_plan_prompt(context)
     (config.output_dir / "autograd_pair_plan_prompt.md").write_text(plan_prompt, encoding="utf-8")
 
     if config.dry_run:
         dry_dir = config.output_dir / "attempt_001"
         dry_dir.mkdir(parents=True, exist_ok=True)
         (dry_dir / "codegen_prompt.md").write_text(
-            render_codegen_prompt(
-                graph_summary=graph_summary,
-                pair_plan="{AUTOGRAD_PAIR_PLAN_FROM_LLM}",
-                lowering_context=lowering_context,
-                op=config.op,
-                allowed_primitives=config.allowed_primitives,
-            ),
-            encoding="utf-8",
-        )
+            render_codegen_prompt(context, "{AUTOGRAD_PAIR_PLAN_FROM_LLM}"), encoding="utf-8")
         print(f"dry-run wrote {config.output_dir}")
         return 0
 
     print("Autograd-pair: plan synthesis")
-    pair_plan = generate_with_openai_compatible_api(
-        prompt=plan_prompt,
-        system_message=SYSTEM_MESSAGE,
-        model=config.model,
-        api_base=config.api_base,
-        api_key=config.api_key,
-        max_tokens=config.max_tokens,
-        temperature=config.temperature,
-        timeout=config.timeout,
-    )
+    pair_plan = _ask(config, plan_prompt)
     (config.output_dir / "autograd_pair_plan.md").write_text(pair_plan, encoding="utf-8")
 
-    prompt = render_codegen_prompt(
-        graph_summary=graph_summary,
-        pair_plan=pair_plan,
-        lowering_context=lowering_context,
-        op=config.op,
-        allowed_primitives=config.allowed_primitives,
-    )
-    previous_code = ""
+    prompt = render_codegen_prompt(context, pair_plan)
     for attempt in range(1, config.max_attempts + 1):
         attempt_dir = config.output_dir / f"attempt_{attempt:03d}"
         attempt_dir.mkdir(parents=True, exist_ok=True)
         (attempt_dir / "codegen_prompt.md").write_text(prompt, encoding="utf-8")
         print(f"Autograd-pair: codegen attempt {attempt}/{config.max_attempts}")
-        response = generate_with_openai_compatible_api(
-            prompt=prompt,
-            system_message=SYSTEM_MESSAGE,
-            model=config.model,
-            api_base=config.api_base,
-            api_key=config.api_key,
-            max_tokens=config.max_tokens,
-            temperature=config.temperature,
-            timeout=config.timeout,
-        )
-        code = strip_code_fence(response)
+        response = _ask(config, prompt)
+        body = strip_code_fence(response)
         program_path = attempt_dir / "program.py"
         # The model writes layers 1-2 (kernels and the public pair). Layers 3-4
         # -- the static autograd Function and the deployment entry -- are
         # generated from the declaration and appended here, never asked for:
         # the ABI is EvoGrad's, and a model that could restate it could also
         # get it subtly wrong.
-        code = code.rstrip() + "\n" + render_deployment_layer(
+        code = body.rstrip() + "\n" + render_deployment_layer(
             config.op, allowed_primitives=config.allowed_primitives)
         program_path.write_text(code, encoding="utf-8")
         (attempt_dir / "response.txt").write_text(response, encoding="utf-8")
 
-        report = _verify(config, program_path)
+        report = _verify(config, program_path, body)
         (attempt_dir / "verification_report.json").write_text(
             json.dumps(report, indent=2, sort_keys=True),
             encoding="utf-8",
@@ -218,18 +236,10 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
         if config.skip_verify:
             break
 
-        repair_prompt = render_repair_prompt(
-            graph_summary=graph_summary,
-            pair_plan=pair_plan,
-            previous_code=code or previous_code,
-            verifier_report=json.dumps(report, indent=2, sort_keys=True),
-            lowering_context=lowering_context,
-            op=config.op,
-            allowed_primitives=config.allowed_primitives,
-        )
-        (attempt_dir / "repair_prompt.md").write_text(repair_prompt, encoding="utf-8")
-        prompt = repair_prompt
-        previous_code = code
+        # The model sees its own module back, not the appended generated layer.
+        prompt = render_repair_prompt(
+            context, pair_plan, body, json.dumps(report, indent=2, sort_keys=True))
+        (attempt_dir / "repair_prompt.md").write_text(prompt, encoding="utf-8")
         print(f"attempt {attempt} failed; wrote repair prompt")
 
     print(f"Autograd-pair synthesis failed after {config.max_attempts} attempts")

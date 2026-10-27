@@ -251,6 +251,54 @@ def test_evolution_exhaustion_recovers_archive_or_frontend_seed(
     assert metered.instances[-1].closed
 
 
+def test_an_a_seed_spends_requests_that_evolution_then_does_not_get(
+        task, tmp_path, monkeypatch, metered):
+    from evograd.evolve import run as evolution
+
+    driver = load_driver("evograd")
+    skeleton = (task.root / "skeleton.py").read_text()
+
+    def seed(task_, ledger, args):
+        assert args.frontend == "a"
+        metered.instances[-1].calls_used = 3
+        program = ledger.root / "a_seed.py"
+        program.write_text(skeleton + "\n# a-seed\n")
+        return program
+
+    def evolve(op, **kwargs):
+        assert kwargs["iterations"] == 7 and kwargs["pin_fixed_code"]
+        assert kwargs["allowed_primitives"] == task.allowed_primitives
+        metered.instances[-1].exhaust()
+        raise RuntimeError("model request budget exhausted")
+
+    monkeypatch.setattr(driver, "pipeline_seed", seed)
+    monkeypatch.setattr(evolution, "run_evolve", evolve)
+    run_dir = tmp_path / "evograd-a"
+    assert driver.main(arguments(task, run_dir, "--frontend", "a")) == 0
+    record = assert_submission(task, run_dir, "evograd", "a-seed")
+    assert (record["config"]["frontend"], record["seed_requests"], record["iterations"]) == ("a", 3, 7)
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_a_pipeline_seed_counts_only_when_its_pipeline_exits_zero(
+        task, tmp_path, monkeypatch, returncode):
+    driver = load_driver("evograd")
+    events = []
+    ledger = SimpleNamespace(root=tmp_path, log_evaluation=events.append)
+    published = tmp_path / "seed" / "initial_program_autograd_pair.py"
+
+    def run(command, **kwargs):
+        assert command[3:5] == ["seed", "d"] and "--static-shapes" in command
+        published.parent.mkdir(parents=True)
+        published.write_text("# D publishes its seed before the static rules and the oracle\n")
+        return SimpleNamespace(returncode=returncode)
+
+    monkeypatch.setattr(driver.subprocess, "run", run)
+    seed = driver.pipeline_seed(task, ledger, SimpleNamespace(frontend="d"))
+    assert seed == (published if returncode == 0 else None)
+    assert len(events) == (1 if returncode == 0 else 0)
+
+
 @pytest.mark.parametrize("config", [{"budget": 10, "budget_unit": "legacy_native"},
                                       {"budget": 30, "budget_unit": "api_requests"}])
 def test_bench_refuses_to_reuse_finished_runs_with_an_incompatible_budget(

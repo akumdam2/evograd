@@ -81,8 +81,14 @@ def extract_graph(
     out_path: Path,
     dynamic_shapes: bool = True,
     log_dir: Path | None = None,
+    scalars: dict | None = None,
+    math_sdpa: bool = False,
 ) -> Path:
-    """Extract the AtenIR backward graph for a forward reference (GPU node)."""
+    """Extract the AtenIR backward graph for a forward reference (GPU node).
+
+    ``scalars`` and ``math_sdpa`` are passed to the extractor as ``--scalars`` /
+    ``--math-sdpa``; left at their defaults the command is unchanged.
+    """
     cmd = [
         python,
         "-m",
@@ -96,6 +102,10 @@ def extract_graph(
     ]
     if dynamic_shapes:
         cmd.append("--dynamic")
+    if scalars:
+        cmd.extend(["--scalars", json.dumps(scalars)])
+    if math_sdpa:
+        cmd.append("--math-sdpa")
     completed = _run(cmd, log_dir, "extract")
     if completed.returncode != 0:
         raise RuntimeError(f"AtenIR extraction failed:\n{completed.stderr}")

@@ -88,3 +88,46 @@ class TestJointForwardOutputs(unittest.TestCase):
         )
         graph = _serialise(gm)
         self.assertNotIn("num_forward_outputs", graph)
+
+
+def _scaled(x, weight, eps=1e-6):
+    return x * weight + eps
+
+
+def _causal_attention(q, k, v):
+    return torch.nn.functional.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+
+class TestExtractCliOptions(unittest.TestCase):
+    """``--scalars`` and ``--math-sdpa`` are opt-in; without them nothing changes."""
+
+    def _extract(self, fn, spec, *flags):
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from evograd.atenir.extract import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "graph.json"
+            main(["--fn", f"{__name__}:{fn}", "--example-input", spec, "--out", str(out), *flags])
+            return json.loads(out.read_text())
+
+    def test_scalars_replace_the_forward_default(self):
+        def literals(graph):
+            return [e["value"] for n in graph["nodes"] if n["op"] == "call_function"
+                    for e in n["args_ordered"] if e["kind"] == "scalar"]
+
+        spec = "[(4,8) f32, (8) f32]"
+        self.assertIn(1e-6, literals(self._extract("_scaled", spec)))
+        bound = literals(self._extract("_scaled", spec, "--scalars", '{"eps": 0.25}'))
+        self.assertIn(0.25, bound)
+        self.assertNotIn(1e-6, bound)
+
+    def test_math_sdpa_decomposes_attention_only_when_asked(self):
+        spec = "[(1,2,8,4) f32, (1,2,8,4) f32, (1,2,8,4) f32]"
+        fused = self._extract("_causal_attention", spec)["distinct_ops"]
+        self.assertTrue(any("scaled_dot_product" in t for t in fused), fused)
+        math = self._extract("_causal_attention", spec, "--math-sdpa")["distinct_ops"]
+        self.assertFalse(any("scaled_dot_product" in t for t in math), math)
+        self.assertIn("aten.bmm.default", math)

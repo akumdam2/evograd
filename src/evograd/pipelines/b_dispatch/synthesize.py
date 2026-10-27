@@ -1,11 +1,13 @@
 """Pipeline B: LLM-free hand-written dispatch autograd-pair seed.
 
-1. Extract the AtenIR backward graph (symbolic shapes by default).
+1. Extract the AtenIR backward graph (symbolic shapes by default), with the
+   declaration's scalars and SDPA through the math backend.
 2. Emit a dispatch-free Triton program (``dispatch_program.py``) from the
    hand-written primitive kernel registry — no LLM.
-3. Wrap it into an autograd-pair seed (``initial_program_autograd_pair.py``)
-   using the declaration-native wrapper codegen.
-4. Verify the graph execution against ``torch.autograd.grad`` per dtype.
+3. Wrap it into an autograd-pair artifact (``candidate.py``) using the
+   declaration-native wrapper codegen, and check the static rules.
+4. Verify the pair against the declaration's oracle per dtype; only a passing
+   candidate is published as ``initial_program_autograd_pair.py``.
 5. Write ``lowering_context.md`` (grounding context reusable by LLM pipelines).
 """
 
@@ -53,6 +55,26 @@ class HandwrittenDispatchConfig:
     # Extract the AtenIR graph with symbolic shapes so the generated program is
     # correct at any input shape (no traced dims baked into expand/view/scalars).
     dynamic_shapes: bool = True
+    # Trusted Level-1 primitives the run grants, recorded in ARTIFACT_CONTRACT.
+    allowed_primitives: tuple[str, ...] = ()
+    # Publish the statically checked pair without the oracle (no-CUDA machines).
+    skip_verify: bool = False
+
+
+def declared_scalars(op: OpDecl) -> dict[str, Any]:
+    """The scalar arguments (e.g. ``eps``) the declaration's case inputs carry.
+
+    The graph is traced with these, as the unified pipeline bakes them: the
+    effective value is what ``make_inputs`` supplies, which may differ from both
+    the declared default and the forward's own default.
+    """
+    scalars = op.scalar_inactive_args()
+    if not scalars:
+        return {}
+    from evograd.opdecl.inputs import make_case_inputs
+
+    values = make_case_inputs(op, op.correctness[0], device="cpu")
+    return {a.name: values.get(a.name, a.default) for a in scalars}
 
 
 # ── context generation ────────────────────────────────────────────────────────
@@ -310,8 +332,14 @@ def _run_dtype(
 def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
     pair_path = None
+    # Published only once accepted; stale results must not read as this run's.
+    published = config.output_dir / "initial_program_autograd_pair.py"
+    report_path = config.output_dir / "verification_report.json"
+    for stale in (published, report_path):
+        stale.unlink(missing_ok=True)
+    scalars = declared_scalars(config.op)
 
-    print(f"[B] Extract: {config.forward}")
+    print(f"[B] Extract: {config.forward} {scalars or ''}")
     graph_path = extract_graph(
         python=config.python,
         forward=config.forward,
@@ -319,6 +347,10 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
         out_path=config.output_dir / "atenir_graph.json",
         dynamic_shapes=config.dynamic_shapes,
         log_dir=config.output_dir,
+        scalars=scalars,
+        # Attention decomposes into bmm/softmax/mask, which B implements, rather
+        # than a device-specific fused node it could only call through torch.ops.
+        math_sdpa=True,
     )
     print(f"  → {graph_path}")
 
@@ -344,12 +376,20 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
         program_path.write_text(program, encoding="utf-8")
         print(f"  → {program_path} ({len(program)} chars)")
         if config.emit_autograd_pair_seed:
+            from evograd.opdecl.verify_cli import load_candidate
+            from evograd.pipelines.shared.artifact import validate_artifact
+
             pair_program = generate_autograd_pair_program(
-                graph, forward=config.forward, op=config.op
+                graph, forward=config.forward, op=config.op, scalars=scalars,
+                allowed_primitives=config.allowed_primitives,
             )
-            pair_path = config.output_dir / "initial_program_autograd_pair.py"
+            pair_path = config.output_dir / "candidate.py"
             pair_path.write_text(pair_program, encoding="utf-8")
             print(f"  → {pair_path} ({len(pair_program)} chars)")
+            # The artifact contract and static rules, under the run's grant.
+            validate_artifact(config.op, load_candidate(pair_path), source=pair_program,
+                              allowed_primitives=config.allowed_primitives)
+            print("  artifact contract and static rules: OK")
     except Exception as exc:
         print(f"  ERROR: dispatch program generation failed: {exc}")
         (config.output_dir / "generation_error.txt").write_text(
@@ -357,6 +397,11 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
         )
         return 1
 
+    if pair_path is not None and config.skip_verify:
+        report_path.write_text(json.dumps({"verification": "skipped"}), encoding="utf-8")
+        pair_path.replace(published)
+        print(f"[B] Verification skipped (--skip-verify); unverified seed: {published}")
+        return 0
     if pair_path is not None:
         normalized_dtypes = tuple(
             {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}.get(d, d)
@@ -412,8 +457,10 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
             "dtypes": list(config.dtypes),
             "reports": reports,
         }
-    report_path = config.output_dir / "verification_report.json"
     report_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(f"\n[B] {'PASS' if passed else 'FAIL'}  ({passed_cases}/{total_cases} cases)")
     print(f"    report: {report_path}")
+    if passed and pair_path is not None:
+        pair_path.replace(published)
+        print(f"    accepted seed: {published}")
     return 0 if passed else 1

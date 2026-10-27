@@ -14,7 +14,9 @@ near-duplicate copies of the same algorithm through the search. Shapes are a
 different matter: dynamic-shape capture makes a single kernel size-generic.
 
 Everything the search may change -- kernels, buffer allocation, launch order,
-and the saved-tensor contract -- lands inside the EVOLVE-BLOCK.
+and the saved-tensor contract -- lands inside the EVOLVE-BLOCK. Inductor's
+library calls (extern GEMM, fused attention) are routed through the granted
+trusted primitives, and the generated deployment layer follows the block.
 """
 
 from __future__ import annotations
@@ -25,12 +27,22 @@ from typing import Any
 
 from evograd.opdecl.activity import Inactive, OpDecl, format_default
 from evograd.pipelines.d_inductor.capture import CapturedPair
+from evograd.pipelines.shared.artifact import render_deployment_layer
 
 _HEADER_END = re.compile(r"^async_compile\s*=\s*AsyncCompile\(\)\s*$")
 _WAIT = re.compile(r"^async_compile\.wait\(globals\(\)\)\s*$")
 _CALL_DEF = re.compile(r"^\s+def call\(self, args\):\s*$")
 _RUNNER_INSTANCE = re.compile(r"^runner\s*=\s*Runner\(")
 _KERNEL_ASSIGN = re.compile(r"^(\w+)\s*=\s*async_compile\.", re.MULTILINE)
+#: Module-level handles Inductor binds for its runtime: ATen and extern-kernel
+#: namespaces and the symmetric-memory allocator. Kept, they would let evolved
+#: code reach library or private ATen entry points under names the static rules
+#: do not recognise; the seed reaches GEMM and attention only through the
+#: granted primitives instead.
+_LIBRARY_ALIAS = re.compile(
+    r"^(?:\w+ = torch\.(?:ops|_C\._distributed_c10d)\..*"
+    r"|from torch\._inductor\.select_algorithm import extern_kernels)$"
+)
 
 _DTYPE_TAGS = {
     "float32": "f32",
@@ -65,7 +77,7 @@ class _Split:
 
 
 def _split_module(source: str, side: str) -> _Split:
-    lines = source.splitlines()
+    lines = [ln for ln in source.splitlines() if not _LIBRARY_ALIAS.match(ln)]
 
     header_end = next((i for i, ln in enumerate(lines) if _HEADER_END.match(ln)), None)
     if header_end is None:
@@ -336,6 +348,103 @@ def _named_parameters(body: list[str], side: str) -> tuple[list[str], list[str]]
     return names, rest
 
 
+_EXTERN_MM = re.compile(r"^(\s*)extern_kernels\.mm\((.*), out=(\w+)\)$")
+#: Inductor's fused-attention externs: the granted primitive that runs the same
+#: kernel, how many leading tensors it takes, and where dropout_p, is_causal and
+#: attn_bias sit among the captured call's positional arguments.
+_ATTENTION = {
+    "_scaled_dot_product_cudnn_attention": ("vendor_sdpa_forward", 3, 5, 6, 3),
+    "_scaled_dot_product_flash_attention": ("vendor_sdpa_forward", 3, 3, 4, None),
+    "_scaled_dot_product_cudnn_attention_backward": ("vendor_sdpa_backward", 6, 13, 14, 8),
+    "_scaled_dot_product_flash_attention_backward": ("vendor_sdpa_backward", 6, 10, 11, None),
+}
+_ATTENTION_CALL = re.compile(
+    rf"^(\s*)(\w+) = torch\.ops\.aten\.({'|'.join(_ATTENTION)})\.default\((.*)\)$"
+)
+_ASSERT_ON = re.compile(r"^\s*assert_(?:size_stride|alignment)\((\w+),")
+#: A library entry point left in launch code once the granted calls are routed.
+_LIBRARY_CALL = re.compile(r"\b(?:extern_kernels|aten|inductor_ops|torch\.ops)\.")
+
+
+def _require(allowed: tuple[str, ...], primitive: str, side: str, line: str) -> None:
+    if primitive not in allowed:
+        raise RuntimeError(
+            f"{side}: {line.strip()!r} is a library call; routing it needs the "
+            f"{primitive} grant (--allow-primitive {primitive})"
+        )
+
+
+def _legalize_launch_code(body: list[str], allowed: tuple[str, ...], side: str) -> list[str]:
+    """Make a generated call body legal inside the evolve block.
+
+    The private ``torch.cuda._DeviceGuard`` becomes the public
+    ``torch.cuda.device``. Library calls run the same computation through the
+    granted trusted primitives: ``extern_kernels.mm(a, b, out=buf)`` becomes
+    ``buf = vendor_gemm(a, b)`` -- cuBLAS through ``torch.mm`` -- and the line
+    that planned ``buf`` (a fresh allocation, or a dead buffer reused) goes, as
+    nothing writes into it any more. Fused attention becomes
+    ``vendor_sdpa_forward``/``vendor_sdpa_backward`` with the save-set kept:
+    the primitive returns ``(out, logsumexp)`` and runs flash under
+    deterministic algorithms, whose logsumexp layout is not cuDNN's, so the
+    asserts on that backend state are dropped and the rng state (no dropout)
+    is ``None``. Any other library call is an error.
+    """
+    out: list[str] = []
+    state: set[str] = set()
+    result = None  # the forward attention call's result tuple
+    for line in body:
+        line = line.replace("torch.cuda._DeviceGuard(", "torch.cuda.device(")
+        if mm := _EXTERN_MM.match(line):
+            indent, args, buf = mm.groups()
+            _require(allowed, "vendor_gemm", side, line)
+            at = max((i for i, ln in enumerate(out)
+                      if re.search(rf"\b{buf}\b", ln) and not ln.lstrip().startswith("#")),
+                     default=None)
+            planned = at is not None and re.match(
+                rf"^(\s*){buf} = (?:empty_strided_\w+\(.*\)|.*; (del \w+)  # reuse)$", out[at]
+            )
+            if not planned:
+                raise RuntimeError(
+                    f"{side}: extern mm writes into {buf}, which aliases a live "
+                    "buffer; vendor_gemm returns a fresh tensor"
+                )
+            if planned.group(2):
+                out[at] = planned.group(1) + planned.group(2)
+            else:
+                del out[at]
+            a, b = (part.strip() for part in _split_top_level(args))
+            out.append(f"{indent}{buf} = vendor_gemm({a}, {b})")
+            continue
+        if call := _ATTENTION_CALL.match(line):
+            indent, name, kernel, text = call.groups()
+            primitive, tensors, dropout_at, causal_at, bias_at = _ATTENTION[kernel]
+            _require(allowed, "vendor_sdpa", side, line)
+            parts = [part.strip() for part in _split_top_level(text)]
+            args = [part for part in parts if not re.match(r"^\w+=", part)]
+            scale = next((p.split("=", 1)[1] for p in parts if p.startswith("scale=")), "None")
+            dropout = args[dropout_at] if len(args) > dropout_at else "0.0"
+            if float(dropout) != 0.0 or (bias_at is not None and args[bias_at] != "None"):
+                raise RuntimeError(f"{side}: aten.{kernel} with dropout or a bias has no granted primitive")
+            causal = args[causal_at] if len(args) > causal_at else "False"
+            out.append(f"{indent}{name} = {primitive}("
+                       f"{', '.join(args[:tensors])}, is_causal={causal}, scale={scale})")
+            if primitive == "vendor_sdpa_forward":
+                result = name
+            else:  # logsumexp and the rng state, handed back from the forward
+                state.update(args[5:])
+            continue
+        if result and (item := re.match(rf"^(\s*)(\w+) = {result}\[(\d+)\]$", line)):
+            indent, name, index = item.groups()
+            if index != "0":
+                state.add(name)
+            if int(index) > 1:
+                line = f"{indent}{name} = None  # backend rng/sequence state; unused without dropout"
+        if _LIBRARY_CALL.search(re.sub(r"'[^']*'|#.*", "", line)):
+            raise RuntimeError(f"{side}: no granted primitive runs {line.strip()!r}")
+        out.append(line)
+    return [ln for ln in out if not ((m := _ASSERT_ON.match(ln)) and m.group(1) in state)]
+
+
 def _dedent(lines: list[str], amount: int) -> list[str]:
     out = []
     for line in lines:
@@ -378,17 +487,16 @@ def _render_wrapper(op: OpDecl, dtype: str, captured: CapturedPair) -> str:
         for c in scalars
     )
     forward_sig = ", ".join(tensor_names) + scalar_sig
-    fwd_args = ", ".join(f"{n}.contiguous()" for n in tensor_names)
-    if op.is_multi_output:
-        raise NotImplementedError(
-            f"Pipeline D cannot yet generate a seed for a multi-output "
-            f"declaration ({op.name} returns {op.output_names}); its wrapper "
-            "assumes one upstream gradient tensor"
-        )
-    backward_sig = f"{op.upstream_grad_name}, saved_tensors{scalar_sig}"
-    backward_call = ", ".join(
-        [op.upstream_grad_name, "saved_tensors"] + [c.name for c in scalars]
-    )
+    # Inputs keep the strides they were captured with: the generated code
+    # asserts them, and a declared non-contiguous input (attention's q, k, v)
+    # is part of the case, not something to normalize away.
+    fwd_args = ", ".join(tensor_names)
+    # One upstream gradient per declared output; several arrive as one tuple.
+    upstream = op.upstream_grad_parameter
+    tangents = upstream if op.is_multi_output else f"({upstream},)"
+    n_out = len(op.outputs)
+    outputs = f"_out[:{n_out}]" if op.is_multi_output else "_out[0]"
+    backward_sig = f"{upstream}, saved_tensors{scalar_sig}"
     unused = "".join(f"    _ = {c.name}\n" for c in scalars)
     picked = ", ".join(f"_grads[{i}]" for i in captured.grad_indices)
 
@@ -430,25 +538,17 @@ def _build_backward_args(spec, saved, tangents):
     return [saved[i] if kind == "s" else tangents[i].contiguous() for kind, i in spec]
 
 
-def _forward_with_saved_impl({forward_sig}):
+def {op.forward_fn_name}({forward_sig}):
 {baked_note}{unused}    _check_dtype({guard_on})
     _out = _fwd_call({fwd_args})
-    return _out[0], tuple(_out[1:])
-
-
-def _backward_from_saved_impl({backward_sig}):
-{unused}    _grads = _bwd_call(
-        *_build_backward_args(_BWD_ARG_SPEC, saved_tensors, ({op.upstream_grad_name},))
-    )
-    return ({picked},)
-
-
-def {op.forward_fn_name}({forward_sig}):
-    return _forward_with_saved_impl({", ".join(tensor_names + [c.name for c in scalars])})
+    return {outputs}, tuple(_out[{n_out}:])
 
 
 def {op.backward_fn_name}({backward_sig}):
-    return _backward_from_saved_impl({backward_call})
+{unused}    _grads = _bwd_call(
+        *_build_backward_args(_BWD_ARG_SPEC, saved_tensors, {tangents})
+    )
+    return ({picked},)
 '''
 
 
@@ -456,18 +556,27 @@ def _render_banner(
     op: OpDecl, dtype: str, captured: CapturedPair, autotune: bool = True
 ) -> str:
     entries = "\n".join(f"    {s.describe()}" for s in captured.saved)
-    return f'''"""Pipeline D seed for `{op.name}` ({dtype}) -- Inductor kernels, unmodified.
+    shapes = (
+        "generic: captured with dynamic shapes, so sizes arrive as runtime arguments"
+        if captured.dynamic
+        else "static: captured at the case shape, which the generated code asserts"
+    )
+    return f'''"""Pipeline D seed for `{op.name}` ({dtype}) -- Inductor's kernels and launch code.
 
 Produced by AOTAutograd + min_cut_rematerialization_partition + Inductor. The
 save-set below is the partitioner's choice, not a policy of this pipeline;
 Pipeline B's inputs-only contract is the same decision at memory budget 0.
+Inductor's library calls (extern GEMM, fused attention) run through the granted
+trusted primitives defined after the evolve block.
 
 Partitioner save-set -- {len(captured.saved)} entries,
 {captured.saved_bytes_at_capture:,} bytes at the capture shape:
 {entries}
+(as captured; where a library call runs through a granted primitive the seed
+saves what that primitive returns, e.g. no rng state for vendor_sdpa)
 
 This is a {dtype} specialist, because Inductor specializes on dtype. Shapes are
-generic: captured with dynamic shapes, so sizes arrive as runtime arguments.
+{shapes}.
 
 Launch configs are {"autotuned at first call" if autotune else "pinned to the config autotuning chose at capture"}.
 
@@ -482,14 +591,21 @@ Captured on {captured.device}.
 
 
 def generate_inductor_seed(
-    op: OpDecl, dtype: str, captured: CapturedPair, autotune: bool = True
+    op: OpDecl,
+    dtype: str,
+    captured: CapturedPair,
+    autotune: bool = True,
+    allowed_primitives: tuple[str, ...] = (),
 ) -> str:
     """Merge one dtype's forward and backward captures into one evolvable seed.
 
     With ``autotune=False`` each kernel's config is pinned to the one the
     autotuner chose during capture, so the seed keeps that performance without
     sweeping at first call -- deterministic, and the block size becomes an
-    explicit constant the search can read and change."""
+    explicit constant the search can read and change.
+
+    ``allowed_primitives`` is the run's grant: Inductor's library calls are
+    routed through it, and the deployment layer records it."""
     fwd = _split_module(captured.forward_source, "forward")
     bwd = _split_module(captured.backward_source, "backward")
 
@@ -509,6 +625,8 @@ def generate_inductor_seed(
     bwd_kernels = _prefix_symbols("\n".join(bwd_lines), bwd.symbols, "bwd_")
     fwd_params, fwd_rest = _named_parameters(fwd.call_body, "forward")
     bwd_params, bwd_rest = _named_parameters(bwd.call_body, "backward")
+    fwd_rest = _legalize_launch_code(fwd_rest, allowed_primitives, "forward")
+    bwd_rest = _legalize_launch_code(bwd_rest, allowed_primitives, "backward")
     fwd_body = _prefix_symbols("\n".join(_dedent(fwd_rest, 4)), fwd.symbols, "fwd_")
     bwd_body = _prefix_symbols("\n".join(_dedent(bwd_rest, 4)), bwd.symbols, "bwd_")
 
@@ -546,6 +664,6 @@ def generate_inductor_seed(
         _render_wrapper(op, dtype, captured).rstrip(),
         "",
         "# EVOLVE-BLOCK-END",
-        "",
+        render_deployment_layer(op, allowed_primitives=allowed_primitives),
     ]
-    return "\n".join(parts) + "\n"
+    return "\n".join(parts)

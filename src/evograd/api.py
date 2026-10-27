@@ -154,7 +154,7 @@ def _seed(
                 max_attempts=max_attempts,
                 max_tokens=16000,
                 temperature=0.2,
-                timeout=240,
+                timeout=600,
                 python=os.sys.executable,
             )
         )

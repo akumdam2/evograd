@@ -14,7 +14,12 @@ from evograd.pipelines.b_dispatch.synthesize import (
     HandwrittenDispatchConfig,
     synthesize_handwritten_dispatch,
 )
-from evograd.pipelines.shared.cli_common import add_op_arg, resolve_op
+from evograd.pipelines.shared.cli_common import (
+    add_exec_args,
+    add_grant_arg,
+    add_op_arg,
+    resolve_op,
+)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -24,6 +29,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         epilog=__doc__,
     )
     add_op_arg(parser)
+    add_exec_args(parser)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument(
         "--dtype",
@@ -36,13 +42,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--rtol", type=float, default=2e-5)
     parser.add_argument("--fp16-atol", type=float, default=5e-2)
     parser.add_argument("--fp16-rtol", type=float, default=5e-2)
-    parser.add_argument("--python", default=sys.executable)
-    parser.add_argument(
-        "--eval-timeout",
-        type=int,
-        default=120,
-        help="kill a seed verification subprocess after this many seconds",
-    )
     parser.add_argument(
         "--no-autograd-pair-seed",
         action="store_true",
@@ -57,6 +56,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "correct at any input shape."
         ),
     )
+    # B records a grant in the deployment layer; its kernels stay handwritten.
+    add_grant_arg(parser)
     return parser.parse_args(argv)
 
 
@@ -81,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
             eval_timeout=args.eval_timeout,
             emit_autograd_pair_seed=not args.no_autograd_pair_seed,
             dynamic_shapes=not args.static_shapes,
+            allowed_primitives=tuple(args.allow_primitive),
+            skip_verify=args.skip_verify,
         )
     )
 

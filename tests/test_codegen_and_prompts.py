@@ -285,6 +285,164 @@ class TestPromptRendering(unittest.TestCase):
         rules = render_pair_rules(get_task("layernorm_linear"))
         self.assertIn("return dx, dlinear_weight, dweight, dbias", rules)
 
+    def test_pipeline_a_grant_text_follows_the_grant(self):
+        from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
+        from evograd.pipelines.shared.primitives import REGISTRY
+
+        op = get_task("rmsnorm")
+        none = render_pair_rules(op)
+        self.assertIn("None granted", none)
+        self.assertNotIn("vendor_", none)
+        gemm = render_pair_rules(op, ("vendor_gemm",))
+        self.assertIn(REGISTRY["vendor_gemm"].source.strip(), gemm)
+        self.assertNotIn("vendor_sdpa", gemm)
+        both = render_pair_rules(op, ("vendor_sdpa", "vendor_gemm"))
+        for spec in REGISTRY.values():
+            self.assertIn(spec.source.strip(), both)
+        for text in (none, gemm, both):  # nothing granted is called forbidden
+            self.assertNotIn("forbidden", text)
+
+    def test_pipeline_a_prompts_carry_the_reference_source_and_the_graph(self):
+        from evograd.opdecl.importing import reference_closure
+        from evograd.pipelines.a_atenir_llm.prompts import (
+            render_codegen_prompt,
+            render_context,
+            render_plan_prompt,
+            render_repair_prompt,
+        )
+
+        op = get_task("rmsnorm")
+        reference, _ = reference_closure(op.forward)
+        context = render_context(reference=reference, graph_summary="GRAPH-SUMMARY", op=op)
+        for prompt in (render_plan_prompt(context), render_codegen_prompt(context, "PLAN"),
+                       render_repair_prompt(context, "PLAN", "CODE", "{}")):
+            self.assertIn(reference.rstrip(), prompt)
+            self.assertIn("GRAPH-SUMMARY", prompt)
+            self.assertIn(f"def {op.forward_fn_name}(", prompt)
+
+    def test_the_graph_summary_shows_edges_and_scalars_of_a_real_extraction(self):
+        import torch
+
+        from evograd.atenir.extract import _serialise, extract_autograd
+        from evograd.pipelines.shared.graph_summary import summarize_graph
+
+        gm = extract_autograd(f"{__name__}:_rms", [torch.randn(4, 8), torch.randn(8)],
+                              dynamic=True)
+        summary = summarize_graph(_serialise(gm))
+        self.assertIn("inputs=['arg1_1']", summary)  # x, after the upstream gradient
+        self.assertNotIn("inputs=[]", summary)
+        self.assertIn("scalars=[1e-06]", summary)
+        cat = next(line for line in summary.splitlines() if "aten.cat" in line)
+        self.assertRegex(cat, r"inputs=\['\w+', '\w+'\] scalars=\[-1\]")
+
+    def test_pipeline_a_timeout_defaults_leave_c_alone(self):
+        from evograd.pipelines.a_atenir_llm.cli import parse_args as parse_a
+        from evograd.pipelines.c_forward_only.cli import parse_args as parse_c
+
+        argv = ["--op", "rmsnorm", "--output-dir", "out"]
+        a, c = parse_a(argv), parse_c(argv)
+        self.assertEqual((a.timeout, a.eval_timeout, a.max_attempts), (600, 300, 3))
+        self.assertEqual((c.timeout, c.eval_timeout), (180, 120))
+
+
+def _rms(x, weight):
+    import torch
+
+    half = x.shape[-1] // 2  # symbolic size arithmetic under dynamic tracing
+    h = torch.cat((-x[..., half:], x[..., :half]), dim=-1)  # a list operand
+    return h * (h.pow(2).mean(-1, keepdim=True) + 1e-6).rsqrt() * weight
+
+
+class TestPipelineASynthesis(unittest.TestCase):
+    """Plan -> codegen -> contract check with a stub LLM; no oracle (no CUDA)."""
+
+    MODULE = (
+        "import torch\n\n"
+        "# EVOLVE-BLOCK-START\n"
+        "def rmsnorm_forward_with_saved(x, weight, eps=1e-5):\n"
+        "    rrms = torch.rsqrt(x.float().pow(2).mean(-1, keepdim=True) + eps)\n"
+        "    return (x.float() * rrms * weight).to(x.dtype), (x, weight, rrms)\n\n"
+        "def rmsnorm_backward_from_saved(dy, saved_tensors, eps=1e-5):\n"
+        "    x, weight, rrms = saved_tensors\n"
+        "    return dy * weight * rrms, (dy * x * rrms).sum(0)\n"
+        "# EVOLVE-BLOCK-END\n"
+    )
+
+    def _synthesize(self, module, grant=()):
+        import json
+        import sys
+        import types
+
+        from evograd.pipelines.a_atenir_llm.synthesize import (
+            AutogradPairConfig,
+            synthesize_autograd_pair,
+        )
+
+        replies, clients = ["PLAN", f"```python\n{module}```"], []
+
+        def reply(**_):
+            message = types.SimpleNamespace(content=replies.pop(0))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+
+        def client(**kwargs):
+            clients.append(kwargs)
+            return types.SimpleNamespace(
+                chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=reply)))
+
+        def extract(*, out_path, **_):
+            nodes = [{"op": "placeholder", "name": "arg0_1", "shape": [8, 64]},
+                     {"op": "output", "args": [["arg0_1"]]}]
+            out_path.write_text(json.dumps({"nodes": nodes}), encoding="utf-8")
+            return out_path
+
+        op = get_task("rmsnorm")
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        config = AutogradPairConfig(
+            op=op, forward=op.forward, example_input="", output_dir=Path(tmp.name),
+            api_base="http://metering-proxy.invalid/v1", model="stub", api_key="k",
+            max_attempts=1, max_tokens=64, temperature=None, timeout=5,
+            python=sys.executable, allowed_primitives=grant, skip_verify=True)
+        with mock.patch("openai.OpenAI", client), mock.patch(
+                "evograd.pipelines.a_atenir_llm.synthesize.extract_graph", extract):
+            rc = synthesize_autograd_pair(config)
+        # Plan and codegen, each through the configured endpoint and key only.
+        self.assertEqual([(c["base_url"], c["api_key"]) for c in clients],
+                         [(config.api_base, "k")] * 2)
+        return rc, Path(tmp.name)
+
+    def test_the_seed_passes_the_protocol_rules_under_its_grant(self):
+        import importlib.util
+
+        from evograd.evaluation.protocol import check_rules
+
+        op = get_task("rmsnorm")
+        for grant in ((), ("vendor_gemm",)):
+            with self.subTest(grant=grant):
+                rc, out = self._synthesize(self.MODULE, grant)
+                self.assertEqual(rc, 0)
+                path = out / "best" / "initial_program_autograd_pair.py"
+                spec = importlib.util.spec_from_file_location("a_seed", path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                self.assertEqual(module.ARTIFACT_CONTRACT["allowed_primitives"], list(grant))
+                self.assertIsNone(check_rules(op, module, path))
+                self.assertIn("Autograd-pair rules", (out / "autograd_pair_plan_prompt.md").read_text())
+
+    def test_model_code_outside_the_block_is_rejected(self):
+        import json
+
+        for stray in ("\nif __name__ == '__main__':\n    print(1)\n",       # after the block
+                      "from torch import mm\n"):                            # aliasing import
+            with self.subTest(stray=stray):
+                module = (self.MODULE + stray if stray.startswith("\n")
+                          else stray + self.MODULE)
+                rc, out = self._synthesize(module)
+                self.assertEqual(rc, 1)
+                report = json.loads((out / "attempt_001" / "verification_report.json").read_text())
+                self.assertIn("outside the EVOLVE-BLOCK", report["artifact_contract"]["error"])
+                self.assertFalse((out / "best").exists())
+
 
 class TestEvolveConfigRendering(unittest.TestCase):
     def test_all_placeholders_replaced(self):
@@ -479,3 +637,36 @@ class TestGeneratedForwardWrapper(unittest.TestCase):
         y, saved = namespace[op.forward_fn_name](x, weight)
         self.assertTrue(torch.equal(y, x * 2.0))
         self.assertEqual(len(saved), 2)
+
+    def test_traced_scalars_are_enforced_rather_than_ignored(self):
+        import torch
+
+        op = get_task("rmsnorm")
+        wrapper = render_autograd_pair_wrapper(
+            "m:f", op, has_generated_forward=True, scalars={"eps": 1e-6})
+        self.assertNotIn("_ = eps", wrapper)
+        source = (
+            "def run_forward_program(*a):\n"
+            "    return (a[0] * 2.0,)\n"
+            "def run_graph_program(*a):\n"
+            "    return tuple(torch.zeros_like(t) for t in a[1:])\n"
+            + wrapper
+        )
+        namespace = {"torch": torch}
+        exec(compile(source, "<generated>", "exec"), namespace)
+        x, weight = torch.randn(4, 8), torch.randn(8)
+        namespace[op.forward_fn_name](x, weight, 1e-6)
+        for call in (lambda: namespace[op.forward_fn_name](x, weight, 1e-5),
+                     lambda: namespace[op.backward_fn_name](x, (x, weight), 1e-5)):
+            with self.assertRaisesRegex(ValueError, "eps=1e-06"):
+                call()
+
+    def test_the_pair_closes_the_block_and_the_granted_layer_follows(self):
+        op = get_task("rmsnorm")
+        wrapper = render_autograd_pair_wrapper(
+            "m:f", op, has_generated_forward=True, allowed_primitives=("vendor_gemm",))
+        end = wrapper.index("# EVOLVE-BLOCK-END")
+        self.assertLess(wrapper.index(f"def {op.backward_fn_name}("), end)
+        self.assertLess(end, wrapper.index("def vendor_gemm("))
+        self.assertLess(end, wrapper.index("ARTIFACT_CONTRACT = "))
+        self.assertIn("'allowed_primitives': ['vendor_gemm']", wrapper)

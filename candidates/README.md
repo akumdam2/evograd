@@ -9,7 +9,7 @@ Each agent is judged on the same terms:
 | Agent | What runs | Directory |
 |---|---|---|
 | **seed** (reference point) | evograd's frontend alone, no LLM | `seed/` |
-| **evograd** (ours) | unified frontend (PyTorch forward → Triton seed), then OpenEvolve | `evograd/` |
+| **evograd** (ours) | unified frontend (PyTorch forward → Triton seed), then OpenEvolve; `--frontend unified\|a\|b\|d` selects the seed frontend (default `unified`) | `evograd/` |
 | **OpenEvolve, raw** | the same OpenEvolve backend, without the frontend | `openevolve/` |
 | **GEPA** | `gepa.optimize_anything`, reflective Pareto search | `gepa/` |
 | **KernelAgent** (Meta) | `TritonKernelAgent` generation, then `OptimizationManager` | `kernelagent/` |
@@ -84,12 +84,13 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
    shape. By default the configuration is the operator's first timed case
    (`--case correctness` selects the frontend's own default instead).
 2. **Same instructions.** `TASK.md` begins with evograd's OpenEvolve system
-   message for that operator, verbatim; `task.json` records its SHA-256. The
-   rest of the statement replaces what evograd's seed carries (a program that
-   computes the operator): the reference source, the configuration, the
-   deliverable, and the static rules the evaluator enforces. Those rules are
-   read from the enforcement code itself. Each agent receives this text in its
-   own prompt slot:
+   message for that operator, verbatim (with the default frontend; with A, B or
+   D on a case that grants primitives, evograd's message adds a paragraph on the
+   grant); `task.json` records its SHA-256. The rest of the statement replaces
+   what evograd's seed carries (a program that computes the operator): the
+   reference source, the configuration, the deliverable, and the static rules
+   the evaluator enforces. Those rules are read from the enforcement code
+   itself. Each agent receives this text in its own prompt slot:
 
    | Agent | Where the statement goes |
    |---|---|
@@ -143,7 +144,7 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
 
 | Agent | Model-request cap | Additional native stopping control |
 |---|---|---|
-| evograd | N | OpenEvolve `iterations = N`; frontend seed uses no LLM |
+| evograd | N | OpenEvolve `iterations = N` minus the seed's requests; only `--frontend a` uses the LLM for its seed |
 | raw OpenEvolve | N | `iterations = N`; starts from the skeleton |
 | GEPA | N | `max_evals = N + 1`; initial generation also consumes the API cap |
 | KernelAgent | N across all workers and stages | generation: 4 workers × ⌈N/8⌉ rounds; optimization: max(1, ⌊N/8⌋) beam rounds |

@@ -2,6 +2,11 @@
 
     python -m evograd.pipelines.d_inductor.cli \\
         --op rmsnorm --output-dir /tmp/D_rmsnorm
+
+    # a scoped ADBench case: exact shape, pinned configs, the task's grant
+    evograd seed d --op qwen3_attention --declaration <pack>/declaration.py:op \\
+        --dtype bf16 --static-shapes --no-autotune \\
+        --allow-primitive vendor_gemm --allow-primitive vendor_sdpa --output-dir <dir>
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ from evograd.pipelines.d_inductor.synthesize import (
     InductorSeedConfig,
     synthesize_inductor_seed,
 )
-from evograd.pipelines.shared.cli_common import add_op_arg, resolve_op
+from evograd.pipelines.shared.cli_common import add_grant_arg, add_op_arg, resolve_op
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -56,6 +61,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "deterministic seed whose block sizes are explicit constants"
         ),
     )
+    # Inductor's extern GEMM and fused-attention calls run through the grant;
+    # without it such a call is an error.
+    add_grant_arg(parser)
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument(
         "--eval-timeout",
@@ -89,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
             autotune=args.autotune,
             eval_timeout=args.eval_timeout,
             skip_verify=args.skip_verify,
+            allowed_primitives=tuple(args.allow_primitive),
         )
     )
 

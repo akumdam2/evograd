@@ -12,7 +12,8 @@ Per dtype:
    context and as a reference point for the evolved result.
 
 Seeds are dtype specialists because Inductor specializes on dtype; shapes are
-generic. With one dtype the seed is written directly into ``--output-dir``, and
+generic under dynamic capture and the declared case under ``--static-shapes``.
+With one dtype the seed is written directly into ``--output-dir``, and
 with several into a subdirectory per dtype plus a ``seeds.json`` index.
 
 Unlike Pipeline B, the save-set is not a policy of this pipeline -- it is
@@ -28,6 +29,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl, Workload
+from evograd.pipelines.shared.primitives import PrimitiveViolation, check_source
 from evograd.pipelines.shared.runner import report_passed, verify_candidate
 
 _DTYPE_ALIASES = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
@@ -45,6 +47,8 @@ class InductorSeedConfig:
     autotune: bool = True
     eval_timeout: int = 120
     skip_verify: bool = False
+    #: Trusted primitives this run grants (see shared/primitives.py).
+    allowed_primitives: tuple[str, ...] = ()
 
 
 def _dims_are_distinct(workload: Workload) -> bool:
@@ -73,7 +77,7 @@ def _with_distinct_dims(workload: Workload) -> Workload:
 
 
 def select_capture_workloads(
-    op: OpDecl, dtypes: tuple[str, ...]
+    op: OpDecl, dtypes: tuple[str, ...], *, dynamic: bool = True
 ) -> dict[str, Workload]:
     """Pick one workload per dtype to trace on.
 
@@ -82,7 +86,9 @@ def select_capture_workloads(
     any reasonable case per dtype will do -- with one constraint: dimensions that
     are equal at trace time get unified into a single symbol, which bakes that
     equality into the kernel. Prefer a declared workload whose dims are pairwise
-    distinct; perturb one if none is.
+    distinct; perturb one if none is. A static capture specializes to the shape
+    it traces anyway, so it takes the declared case exactly: perturbing it would
+    break relations between dims (attention's QO = HQ * D).
     """
     cases = op.correctness or op.benchmark
     if not cases:
@@ -97,7 +103,9 @@ def select_capture_workloads(
                 f"available: {sorted({c.dtype for c in cases})}"
             )
         distinct = [c for c in matching if _dims_are_distinct(c)]
-        if distinct:
+        if not dynamic:
+            selected[dtype] = matching[len(matching) // 2]
+        elif distinct:
             selected[dtype] = distinct[len(distinct) // 2]
         else:
             selected[dtype] = _with_distinct_dims(matching[len(matching) // 2])
@@ -118,7 +126,8 @@ def _emit_one(
     print(f"[D] {dtype}: capture on {dict(workload.dims)} ({config.device})")
     try:
         captured = capture_inductor_pair(
-            op, workload, device=config.device, dynamic=config.dynamic_shapes
+            op, workload, device=config.device, dynamic=config.dynamic_shapes,
+            allow_multi_output=True,
         )
     except Exception as exc:
         print(f"  ERROR: Inductor capture failed: {exc}")
@@ -161,7 +170,10 @@ def _emit_one(
         print(f"    {entry.describe()}")
 
     try:
-        seed = generate_inductor_seed(op, dtype, captured, autotune=config.autotune)
+        seed = generate_inductor_seed(
+            op, dtype, captured, autotune=config.autotune,
+            allowed_primitives=config.allowed_primitives,
+        )
     except Exception as exc:
         print(f"  ERROR: seed assembly failed: {exc}")
         (seed_dir / "generation_error.txt").write_text(
@@ -177,6 +189,12 @@ def _emit_one(
         saved_bytes_at_capture=captured.saved_bytes_at_capture,
     )
     print(f"  → {pair_path} ({len(seed):,} chars)")
+
+    try:
+        check_source(seed, allowed=config.allowed_primitives)
+    except PrimitiveViolation as exc:
+        print(f"  FAIL: static rules: {exc}")
+        return 1, {**summary, "passed": False, "error": "static rules"}
 
     if config.skip_verify:
         print("  verification skipped (--skip-verify)")
@@ -222,7 +240,7 @@ def synthesize_inductor_seed(config: InductorSeedConfig) -> int:
     dtypes = tuple(dict.fromkeys(_DTYPE_ALIASES.get(d, d) for d in config.dtypes))
 
     try:
-        workloads = select_capture_workloads(op, dtypes)
+        workloads = select_capture_workloads(op, dtypes, dynamic=config.dynamic_shapes)
     except ValueError as exc:
         print(f"  ERROR: {exc}")
         return 1
