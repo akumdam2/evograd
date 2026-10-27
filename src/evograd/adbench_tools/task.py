@@ -186,9 +186,32 @@ def describe_abi(op, workload) -> dict[str, Any]:
     }
 
 
-def _tolerances(op, workload) -> dict[str, list[float]]:
-    names = [*op.output_names, *op.grad_names()]
-    return {name: list(op.tolerance_for(workload, name)) for name in names}
+def _gate1_tolerances(op, workload) -> dict[str, Any]:
+    """The tolerance Gate 1 accepts each output and gradient under, read from Gate 1.
+
+    Names and dtypes come from Gate 1's result contract (whose dtype the
+    reference result must have), the rule and per-result ``(atol, rtol)`` from
+    its tolerance policy. A model-reference task gets the fixed dtype defaults
+    and the compile envelope; the envelope's value needs a GPU calibration on
+    the model's payloads, so only its rule and ``gamma`` (the operator Gate 2
+    calibration's, which ``integrations.gates.judge_case`` uses) are recorded.
+    """
+    import torch
+
+    from evograd.opdecl.inputs import resolve_dtype
+    from evograd.verification.gate1.runner import declared_name, result_contract
+    from evograd.verification.gate1.tolerances import policy_identity, result_tolerances
+    from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
+
+    results = {}
+    for spec in result_contract(op, workload).specs:
+        name = declared_name(spec.name)
+        reference = torch.empty(0, dtype=resolve_dtype(spec.dtype), device="meta")
+        atol, rtol = result_tolerances(op, workload, name, reference)
+        results[name] = {"dtype": spec.dtype, "atol": atol, "rtol": rtol}
+    policy = policy_identity(op)
+    return {"policy": policy, "results": results,
+            **({"envelope_gamma": SAFETY_FACTOR_GAMMA} if "envelope" in policy else {})}
 
 
 def _evograd_revision() -> dict[str, Any]:
@@ -364,7 +387,7 @@ def build_task(
             "backward": scoped.backward_semantics,
             "extra_constraints": scoped.extra_constraints,
         },
-        "tolerances": _tolerances(scoped, workload),
+        "gate1_tolerances": _gate1_tolerances(scoped, workload),
         "allowed_primitives": list(allowed),
         "library_policy": {"requested": library, "decision": library_reason},
         "scoring": scoring,

@@ -82,16 +82,37 @@ def _argument_lines(abi: dict) -> list[str]:
     return lines
 
 
+def _tolerance_text(gate1: dict) -> str:
+    """Gate 1's acceptance rule, from ``task.json``'s ``gate1_tolerances``."""
+    results = "\n".join(
+        f"- `{name}` ({r['dtype']}): atol={r['atol']:.3g}, rtol={r['rtol']:.3g}"
+        for name, r in gate1["results"].items()
+    )
+    gamma = gate1.get("envelope_gamma")
+    if gamma is None:
+        return f"""Correctness tolerances at this configuration, per output and gradient
+(`|candidate - oracle| <= atol + rtol * |oracle|`, elementwise):
+
+{results}"""
+    return f"""Acceptance compares every output and gradient with the reference, element by
+element in float64, on real recorded training calls held out from you:
+`|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
+`atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
+dtype (below); `envelope` is {gamma:g}x the largest elementwise deviation of
+`torch.compile` from the reference on that result, measured on other recorded
+calls. So each element may be off by the dtype default or by up to {gamma:g}x
+torch.compile's own error, whichever is larger.
+
+{results}"""
+
+
 def render_statement(task: "AgentTask") -> str:
     spec = task.spec
     abi = spec["abi"]
     rules = static_rules()
     workload = spec["workload"]
     dims = ", ".join(f"{k}={v}" for k, v in workload["dims"].items())
-    tolerances = "\n".join(
-        f"- `{name}`: atol={atol:.3g}, rtol={rtol:.3g}"
-        for name, (atol, rtol) in spec["tolerances"].items()
-    )
+    tolerances = _tolerance_text(spec["gate1_tolerances"])
     granted = spec["allowed_primitives"]
     if granted:
         from evograd.pipelines.shared.primitives import GRANT_SCOPE, REGISTRY, describe_grant
@@ -113,8 +134,8 @@ def render_statement(task: "AgentTask") -> str:
     return f"""# Task {spec['task_id']}
 
 Write a training-ready forward/backward pair for `{spec['op']}` that is
-faster than PyTorch eager autograd at the configuration below, and exactly as
-correct as the declared tolerances allow.
+faster than PyTorch eager autograd at the configuration below, and correct
+within the tolerances in section 2.
 
 ## 1. Instructions (identical to the evograd agent's)
 
@@ -134,9 +155,6 @@ gradients you return are checked against `torch.autograd` applied to it.
 Fixed configuration: {dims}, dtype {workload['dtype']}, one CUDA device.
 
 {chr(10).join(_argument_lines(abi))}
-
-Correctness tolerances at this configuration, per output and gradient
-(`|candidate - oracle| <= atol + rtol * |oracle|`, elementwise):
 
 {tolerances}
 

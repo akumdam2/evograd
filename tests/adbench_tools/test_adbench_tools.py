@@ -107,6 +107,11 @@ def test_the_declaration_is_the_frontends_scoped_declaration(small_task, tmp_pat
     op = small_task.op()
     assert op.correctness == op.benchmark == op.coverage
     assert op.forward == base.forward
+    # Without a model reference, Gate 1 judges by the declaration's own tolerances.
+    workload = op.correctness[0]
+    assert {name: [r["atol"], r["rtol"]] for name, r in
+            small_task.spec["gate1_tolerances"]["results"].items()} == \
+        {name: list(op.tolerance_for(workload, name)) for name in [*op.output_names, *op.grad_names()]}
 
 
 def test_the_statement_carries_evograds_system_message_verbatim(small_task):
@@ -280,6 +285,17 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
                                                                  case.workload.dtype)
     assert task.spec["base_declaration"] == f"{task.root / 'declaration.py'}:op"
     assert f"Source: {reference.forward}" in task.reference_source
+    # The pack states the tolerance Gate 1 judges by, not the declaration's.
+    from evograd.verification.gate1.tolerances import model_policy_identity
+
+    gate1 = task.spec["gate1_tolerances"]
+    defaults = model_policy_identity()["defaults"]
+    assert "tolerances" not in task.spec
+    assert gate1["policy"] == model_policy_identity() and gate1["envelope_gamma"] == 2.0
+    assert list(gate1["results"]) == sorted([*op.output_names, *op.grad_names()])
+    assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
+               for r in gate1["results"].values())
+    assert "2x the largest elementwise deviation" in task.statement
     with pytest.raises(ValueError, match="no observed case"):
         build_task(None, tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
     with pytest.raises(ValueError, match="fixes the declaration"):

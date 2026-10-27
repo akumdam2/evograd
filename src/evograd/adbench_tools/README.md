@@ -279,7 +279,7 @@ neither. Anything specific to one agent lives in `candidates/<agent>/`.
 | `ledger.py` | **Run log** (§5.5): `run.json`, `evaluations.jsonl`, `llm.jsonl`, `api_calls.jsonl` |
 | `llm_budget.py` | Shared HTTP proxy that reserves and enforces model API requests independently of evaluator calls |
 | `score.py` | **Final measurement** and `compare` (§5.6) |
-| `_example_TASK.md` | A generated `TASK.md` for `llama3_swiglu_mlp`, bf16, B=2 T=2048 H=2048 I=8192, for reading |
+| `_example_TASK.md` | A generated `TASK.md` for Qwen3-0.6B's observed case `qwen3_swiglu_mlp/swiglu_mlp`, bf16, B=2 T=2048 H=1024 I=3072, for reading |
 
 `task --model M --case-id TASK/COMPONENT` builds the pack of one of a verified
 model's *observed cases* (§7) instead of an operator's declared configuration.
@@ -335,7 +335,7 @@ an existing pack, so all agents in a comparison see the same bytes.
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
 | `adbench_primitives.py` | A local `vendor_gemm` so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
-| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), tolerances, granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
+| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama3_swiglu_mlp.bf16.B2_H2048_I8192_T2048`.
 `compare` refuses to mix results from different task ids or statement hashes.
@@ -356,7 +356,12 @@ can't drift from what evograd uses or enforces.
    - the reference source in a ```` ```python ```` block;
    - the fixed configuration;
    - each argument and output with its shape, dtype and gradient role;
-   - the tolerances for each output and gradient.
+   - the tolerance Gate 1 accepts each output and gradient under: for a
+     model's observed case, the `torch.testing.assert_close` default for the
+     result's dtype or 2x `torch.compile`'s own largest elementwise deviation
+     on that result, whichever is larger, measured on held-out real recorded
+     calls (`gate1.tolerances`); for an operator pack without a model, the
+     declared tolerances, which Gate 1 uses there.
 3. **Deliverable and rules.**
    - The exact signatures to define.
    - The `saved_tensors` contract and the gradient order.
@@ -520,7 +525,8 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
    and its task pack carries the model's own reference computation
    (`Model.reference_op`) at that configuration: what the agent optimizes is
    what the gates judge. The agent still sees kernel-scope information only
-   (the forward's source, shapes, dtypes, tolerances); nothing about the model.
+   (the forward's source, shapes, dtypes, Gate 1's tolerance rule); nothing
+   about the model.
 2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
    Its best program is rebuilt from its evolve block into `submission.py`
    (`fixed_code_intact` is recorded).
