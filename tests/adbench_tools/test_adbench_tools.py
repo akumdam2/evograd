@@ -317,7 +317,8 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert list(gate1["results"]) == sorted([*op.output_names, *op.grad_names()])
     assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
                for r in gate1["results"].values())
-    assert "4x the largest elementwise deviation" in task.statement
+    assert "4x the larger of the largest elementwise" in task.statement
+    assert "4 ulps of the largest value" in task.statement
     # Search feedback is Gate 1 on payloads; no model case is judged by the declaration.
     assert task.spec["search_correctness"]["rule"] == "gate1_calibration_payloads"
     assert "the declaration's own tolerances" not in task.statement

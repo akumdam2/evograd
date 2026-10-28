@@ -292,7 +292,8 @@ def elementwise_error(candidate: torch.Tensor, reference: torch.Tensor, *,
 
     With ``abs_floor`` 0 this is ``torch.testing.assert_close``'s rule. The
     model policy passes gamma times the largest elementwise deviation the
-    trusted ``torch.compile`` control showed on this result: where the
+    trusted ``torch.compile`` control showed on this result (at least gamma
+    ulps of the reference's largest magnitude): where the
     reference element is the difference of two larger terms (a rotary
     embedding), one bf16 rounding of the operands moves it by more than
     ``rtol`` of itself, and the compiler's own implementation does the same.

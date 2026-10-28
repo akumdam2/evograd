@@ -98,10 +98,12 @@ def _tolerance_text(gate1: dict) -> str:
 element in float64, on real recorded training calls held out from you:
 `|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
 `atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
-dtype (below); `envelope` is {gamma:g}x the largest elementwise deviation of
-`torch.compile` from the reference on that result, measured on other recorded
-calls. So each element may be off by the dtype default or by up to {gamma:g}x
-torch.compile's own error, whichever is larger.
+dtype (below); `envelope` is {gamma:g}x the larger of the largest elementwise
+deviation of `torch.compile` from the reference on that result, measured on other
+recorded calls, and one unit in the last place of the reference's largest
+magnitude. So each element may be off by the dtype default or by up to {gamma:g}x
+torch.compile's own error or {gamma:g} ulps of the largest value, whichever is
+larger.
 
 {results}"""
 

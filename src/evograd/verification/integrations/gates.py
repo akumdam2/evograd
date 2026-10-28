@@ -193,7 +193,7 @@ def gate1_envelope(op, policy) -> dict[str, float]:
     deviation, so a stored calibration still binds.
     Gate 2 names a gradient by its argument (``grad:q_weight``, ``grad_in:x``);
     Gate 1 by the declared gradient name (``grad_in:dq_weight``, ``grad_in:dx``).
-    An uncalibrated case (no policy) keeps assert_close's rule alone.
+    An uncalibrated case (no policy) keeps assert_close's rule and Gate 1's rounding floor.
     """
     from evograd.verification.gate1.tolerances import ENVELOPE_GAMMA
 

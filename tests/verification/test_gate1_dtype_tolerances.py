@@ -11,7 +11,7 @@ from evograd.verification import gate1
 from evograd.verification.common import contracts as C
 from evograd.verification.gate1.runner import compare_results, PROTOCOL
 from evograd.verification.gate1.tolerances import (
-    MODEL_POLICY, model_policy_identity, result_tolerances,
+    ENVELOPE_GAMMA, MODEL_POLICY, model_policy_identity, result_tolerances, rounding_floor,
 )
 from tests.verification import _fixtures as F
 
@@ -41,7 +41,7 @@ class DtypeToleranceTests(unittest.TestCase):
                      tolerance_multipliers={"dw": (1000, 1000)},
                      tolerance_hook=mock.Mock(side_effect=AssertionError("legacy hook called")))
         ref = torch.tensor([1.0], dtype=torch.bfloat16)
-        bad = torch.tensor([1.03125], dtype=torch.bfloat16)
+        bad = torch.tensor([1.0625], dtype=torch.bfloat16)   # 8 ulps: beyond the rounding floor
         for name in ("out:hi", "out:lo", "grad_in:dw"):
             with self.subTest(name=name):
                 check = self.compare(ref, bad, name=name, op=op)
@@ -49,6 +49,7 @@ class DtypeToleranceTests(unittest.TestCase):
                 self.assertEqual(check.status, "failed")
 
     def test_bfloat16_boundary_matches_assert_close(self):
+        # The dtype defaults alone, without the rounding floor.
         ref = torch.tensor([1.0, 0.0], dtype=torch.bfloat16)
         for values in ([1.0078125, 0.0], [1.03125, 0.0], [1.0, 2e-5]):
             candidate = torch.tensor(values, dtype=torch.bfloat16)
@@ -57,23 +58,39 @@ class DtypeToleranceTests(unittest.TestCase):
                 expected = "passed"
             except AssertionError:
                 expected = "failed"
-            self.assertEqual(self.compare(ref, candidate).status, expected)
+            with mock.patch("evograd.verification.gate1.runner.rounding_floor", return_value=0.0):
+                self.assertEqual(self.compare(ref, candidate).status, expected)
 
     def test_the_compile_envelope_covers_a_cancelled_element_but_not_a_scale_fault(self):
-        # Two terms of size 0.5 cancel to 0.03 in the reference; one bf16 rounding of
-        # the operands moves the result by 0.004. The trusted compile moved it by up
-        # to 0.01 on the calibration payloads: envelope = 2 * 0.01.
+        # Two terms of size 0.5 cancel to 0.03 in the reference; rounding the operands
+        # moves the result by 0.02, past the rounding floor (4 ulps of 0.75 = 0.0156).
+        # The trusted compile moved it by up to 0.0075 on the calibration payloads:
+        # envelope = 4 * 0.0075.
         ref = torch.tensor([0.75, -0.5, 0.03125, 0.25], dtype=torch.bfloat16)
-        rounded = ref.clone(); rounded[2] = 0.03515625
+        rounded = ref.clone(); rounded[2] = 0.05078125
         contract = C.ResultContract((C.ResultSpec("out:y", C.OUTPUT),))
         judge = lambda cand, env: compare_results(self.op, self.workload, contract, {"out:y": cand},
                                                   {"out:y": ref}, envelope=env)[0]
-        self.assertEqual(judge(rounded, None).status, "failed")          # assert_close alone
-        check = judge(rounded, {"out:y": 0.02})
+        self.assertEqual(judge(rounded, None).status, "failed")          # no calibration
+        check = judge(rounded, {"out:y": 0.03})
         self.assertEqual(check.status, "passed")
-        self.assertEqual(check.limits["envelope"], 0.02)
-        self.assertEqual(judge((ref.float() * 1.05).to(ref.dtype), {"out:y": 0.02}).status, "failed")
-        self.assertEqual(judge(rounded, {"out:other": 0.02}).status, "failed")   # per result
+        self.assertEqual(check.limits["envelope"], 0.03)
+        self.assertEqual(judge((ref.float() * 1.05).to(ref.dtype), {"out:y": 0.03}).status, "failed")
+        self.assertEqual(judge(rounded, {"out:other": 0.03}).status, "failed")   # per result
+
+    def test_a_result_compile_reproduces_bit_for_bit_still_accepts_another_rounding(self):
+        # Envelope 0 (a vendor kernel under compile too): a cancelled element one rounding
+        # of a 0.5-sized operand away (0.0039) passes; a 5% scale fault does not.
+        ref = torch.tensor([0.75, -0.5, 0.03125, 0.25], dtype=torch.bfloat16)
+        rounded = ref.clone(); rounded[2] = 0.03515625
+        floor = ENVELOPE_GAMMA * 2.0 ** -7 * 2.0 ** -1      # ulp of 0.75 in bf16 is 2**-8
+        self.assertEqual(rounding_floor(self.op, ref), floor)
+        check = self.compare(ref, rounded)
+        self.assertEqual(check.status, "passed")
+        self.assertEqual((check.limits["envelope"], check.limits["rounding_floor"]), (floor, floor))
+        self.assertEqual(self.compare(ref, (ref.float() * 1.05).to(ref.dtype)).status, "failed")
+        self.assertEqual(rounding_floor(self.op, torch.zeros(3, dtype=torch.bfloat16)), 0.0)
+        self.assertEqual(rounding_floor(F.SPLIT, ref), 0.0)          # generic task: declared rule
 
     def test_unknown_model_result_dtype_is_not_assigned_a_guessed_tolerance(self):
         with self.assertRaisesRegex(ValueError, "unsupported result dtype"):
@@ -87,7 +104,7 @@ class DtypeToleranceTests(unittest.TestCase):
         self.assertEqual(report.subject["tolerance_policy"]["schema"], MODEL_POLICY)
         for result in report.cases[0].results:
             self.assertEqual((result.limits["atol"], result.limits["rtol"]), (1e-5, 1.3e-6))
-            self.assertEqual(result.limits["envelope"], 0.0)
+            self.assertEqual(result.limits["envelope"], result.limits["rounding_floor"])
 
     def test_generic_declaration_multipliers_and_hooks_are_preserved(self):
         workload = F.SPLIT.correctness[0]

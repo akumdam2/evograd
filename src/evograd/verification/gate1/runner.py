@@ -20,7 +20,9 @@ defaults from PyTorch 2.11 for each reference result and ``envelope_z``
 Gate 1's own factor (:data:`.tolerances.ENVELOPE_GAMMA`) times the largest
 elementwise deviation the trusted ``torch.compile`` control showed on that
 result over the calibration payloads (passed in by the caller from the
-operator Gate 2 policy; absent, 0). Declaration overrides,
+operator Gate 2 policy; absent, 0), but never less than that factor times one
+ulp of the reference result's largest magnitude
+(:func:`.tolerances.rounding_floor`). Declaration overrides,
 multipliers and shape hooks do not apply to model tasks. Generic tasks retain
 ``op.tolerance_for(workload, result)``. Computed in float64.
 
@@ -49,7 +51,7 @@ from evograd.opdecl.inputs import (
     upstream_grad_values,
 )
 from evograd.opdecl.oracle import oracle, reference_identity
-from evograd.verification.gate1.tolerances import policy_identity, result_tolerances
+from evograd.verification.gate1.tolerances import policy_identity, result_tolerances, rounding_floor
 from evograd.verification.common import contracts as C
 from evograd.verification.common.reports import (
     CaseReport,
@@ -358,7 +360,8 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
             continue
         try:
             atol, rtol = result_tolerances(op, workload, declared_name(pair.spec.name), pair.reference)
-            floor = float((envelope or {}).get(pair.spec.name, 0.0))
+            rounding = rounding_floor(op, pair.reference)
+            floor = max(float((envelope or {}).get(pair.spec.name, 0.0)), rounding)
             err = elementwise_error(pair.candidate, pair.reference, atol=atol, rtol=rtol,
                                     abs_floor=floor)
         except Exception as exc:  # no tolerance for this dtype, or an invalid one
@@ -366,7 +369,7 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
                                           subject=pair.spec.name))
             continue
         check.compared = True
-        check.limits = {"atol": atol, "rtol": rtol, "envelope": floor}
+        check.limits = {"atol": atol, "rtol": rtol, "envelope": floor, "rounding_floor": rounding}
         check.metrics = err.to_dict()
         unbounded = [k for k, v in check.metrics.items()
                      if isinstance(v, float) and not math.isfinite(v)]

@@ -13,14 +13,20 @@ calibration payloads (operator Gate 2's calibration, orders 101/202; Gate 1
 judges the acceptance payloads 303/404). ``assert_close``'s rule alone judges a near-zero
 element against nothing but ``atol``, and a result that is the difference of
 two larger terms (rotary embedding) then fails on one bf16 rounding of the
-operands -- as the compiler's own implementation does.
+operands -- as the compiler's own implementation does. Where the compile
+control reproduces the reference bit for bit (a vendor GEMM, SDPA or
+convolution) its deviation is 0, so the envelope never falls below
+:data:`ENVELOPE_GAMMA` units in the last place of the result's largest
+magnitude (:func:`rounding_floor`), about what compile is off by elsewhere.
 """
 
 from __future__ import annotations
 
+import math
+
 import torch
 
-MODEL_POLICY = "evograd-gate1-model-dtype-tolerances/4"
+MODEL_POLICY = "evograd-gate1-model-dtype-tolerances/5"
 #: Gate 1's own safety factor on the compile envelope, separate from operator Gate 2's
 #: (2): Gate 1 only has to accept every trusted implementation, rejecting small faults is
 #: Gate 2's job. The smallest integer at which every frontend seed passes on every
@@ -29,8 +35,8 @@ MODEL_POLICY = "evograd-gate1-model-dtype-tolerances/4"
 #: tensor-level error against a float64 reference is 1.8x native bf16's). Every other
 #: seed needs at most 0.17.
 ENVELOPE_GAMMA = 4.0
-ENVELOPE = ("ENVELOPE_GAMMA x max elementwise |compile - native| of the result on the operator "
-            "Gate 2 calibration payloads")
+ENVELOPE = ("ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator "
+            "Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)")
 DECLARED_POLICY = "evograd-gate1-declared-tolerances/1"
 SOURCE = "torch.testing.assert_close defaults, PyTorch 2.11"
 
@@ -73,3 +79,20 @@ def result_tolerances(op, workload, result_name: str, reference: torch.Tensor) -
         return _DEFAULTS[reference.dtype]
     except KeyError:
         raise ValueError(f"{MODEL_POLICY}: unsupported result dtype {reference.dtype}") from None
+
+
+def rounding_floor(op, reference: torch.Tensor) -> float:
+    """The least envelope of a model task's result: :data:`ENVELOPE_GAMMA` ulps of the
+    reference's largest magnitude; 0 for generic tasks.
+
+    Without it a result the compile control reproduces bit for bit has envelope 0,
+    and a correct implementation that only rounds differently fails on elements that
+    are the difference of larger terms (Qwen3.5-4B's causal_conv1d seed, 2026-10-28).
+    """
+    if not op.reference_contract or not reference.is_floating_point() or not reference.numel():
+        return 0.0
+    largest = float(reference.detach().abs().max())
+    if not math.isfinite(largest) or largest == 0.0:
+        return 0.0
+    # largest = m * 2**e with 0.5 <= m < 1, so its ulp is eps * 2**(e - 1)
+    return ENVELOPE_GAMMA * torch.finfo(reference.dtype).eps * 2.0 ** (math.frexp(largest)[1] - 1)
