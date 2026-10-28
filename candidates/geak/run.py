@@ -3,7 +3,7 @@
 
     bash candidates/geak/setup.sh                       # once: NVIDIA working copy
     python candidates/geak/run.py --task TASK --run-dir RUN --budget 30 \\
-        [--claude-model MODEL] [--gpu 0]
+        [--claude-model MODEL] [--effort LEVEL] [--gpu 0]
 
 GEAK as shipped is a Claude Code Workflow (``kernel_workflow.js``): a Director,
 a TechLead and specialist engineer agents, each writing code, running the
@@ -29,9 +29,13 @@ Differences that cannot be removed, and are recorded:
   agents use ``--model`` through an OpenAI-compatible API. For model parity run
   all agents on the same model, or report GEAK as a separate point.
 * GEAK's budget unit is an *optimization direction* (an engineer session that
-  may run the unittest many times). ``--geak-budget`` defaults to
-  ``max(2, budget // 5)``; the ledger counts the evaluator calls actually made,
-  which is the comparable number.
+  may run the unittest many times): run.json's ``budget`` is ``--geak-budget``,
+  default ``max(2, budget // 5)``, with ``budget_unit``
+  ``optimization_directions``. Its model requests go through the shared
+  request-budget proxy (a placeholder key and ``ANTHROPIC_BASE_URL`` for the
+  CLI; ``$ANTHROPIC_API_KEY`` stays in the proxy, which forwards to
+  ``--api-base``), which counts them in ``api_calls.jsonl`` without a cap.
+  Those counts and the evaluator calls in the ledger are the comparable numbers.
 """
 
 from __future__ import annotations
@@ -110,8 +114,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="GEAK optimization directions (default max(2, budget // 5))")
     p.add_argument("--claude-model", default=os.environ.get("ANTHROPIC_MODEL"),
                    help="model Claude Code runs GEAK with (default: Claude Code's)")
+    p.add_argument("--effort", default=None,
+                   help="Claude Code's reasoning effort (default: its own)")
     p.add_argument("--gpu", default=os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[0])
     p.add_argument("--time-limit", type=int, default=6 * 3600, help="seconds")
+    p.set_defaults(api_base=_common.DEFAULT_ANTHROPIC_API_BASE)
     args = p.parse_args(argv)
     geak_budget = args.geak_budget or max(2, args.budget // 5)
     workflow_dir = (args.geak_root / "kernel_workflow").resolve()
@@ -122,8 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     task, ledger = _common.start(args, AGENT, {
         "geak_commit": (args.geak_root / ".adbench_tools_geak_commit").read_text().strip()
         if (args.geak_root / ".adbench_tools_geak_commit").is_file() else None,
-        "mode": "author", "target_language": "triton", "geak_budget": geak_budget,
-        "claude_model": args.claude_model, "gpu": args.gpu,
+        "budget": geak_budget, "budget_unit": "optimization_directions",
+        "mode": "author", "target_language": "triton",
+        "claude_model": args.claude_model, "effort": args.effort, "gpu": args.gpu,
         "model_note": "GEAK runs on Claude Code's model, not --model",
     })
 
@@ -152,6 +160,8 @@ def main(argv: list[str] | None = None) -> int:
                "--output-format", "json"]
     if args.claude_model:
         command += ["--model", args.claude_model]
+    if args.effort:
+        command += ["--effort", args.effort]
     status = "completed"
     try:
         completed = subprocess.run(command, cwd=ledger.root, env=env, capture_output=True,

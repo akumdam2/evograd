@@ -344,8 +344,9 @@ def main(argv: list[str] | None = None) -> int:
     common(p)
     p.add_argument("--agent", required=True, help="a directory under candidates/")
     p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
-                   help="OpenAI-compatible model API requests per agent/case "
-                        "(default $ADBENCH_BUDGET or 10; Anthropic: legacy native budget)")
+                   help="model API requests per agent/case, Claude Code's included "
+                        "(default $ADBENCH_BUDGET or 10; GEAK: only counted, its "
+                        "optimization directions are max(2, N // 5))")
     p.add_argument("--case-id", nargs="*", default=None)
     p.add_argument("--time-limit", type=int, default=0, help="seconds per case, 0 = none")
     p.add_argument("--redo", action="store_true",

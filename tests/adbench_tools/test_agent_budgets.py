@@ -48,16 +48,19 @@ def metered(monkeypatch):
         "OPENAI_BASE_URL": UPSTREAM,
         "OPENAI_API_BASE": UPSTREAM,
         "ADBENCH_API_BASE": UPSTREAM,
+        "ANTHROPIC_API_KEY": "test-anthropic-key",
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
+    for name in ("ANTHROPIC_BASE_URL", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"):
+        monkeypatch.delenv(name, raising=False)
     instances = []
 
     class Proxy:
-        def __init__(self, upstream, limit, path, *, api_key):
-            self.upstream, self.limit, self.path = upstream, limit, path
-            self.api_key = api_key
-            self.base_url = "http://127.0.0.1:54321/v1"
+        def __init__(self, upstream, limit, path, *, api_key, api="openai"):
+            self.upstream, self.limit, self.budget, self.path = upstream, limit, limit, path
+            self.api_key, self.api = api_key, api
+            self.base_url = "http://127.0.0.1:54321" + ("/v1" if api == "openai" else "")
             self.calls_used = self.rejected_requests = 0
             self.started = self.closed = False
             instances.append(self)
@@ -75,9 +78,10 @@ def metered(monkeypatch):
     return SimpleNamespace(common=common, instances=instances, environment=environment)
 
 
-def arguments(task, run_dir, *extra):
+def arguments(task, run_dir, *extra, api_base=UPSTREAM):
     return ["--task", str(task.root), "--run-dir", str(run_dir), "--budget", "10",
-            "--model", "gpt-5.5", "--api-base", UPSTREAM, "--no-score", *extra]
+            "--model", "gpt-5.5", *(["--api-base", api_base] if api_base else []),
+            "--no-score", *extra]
 
 
 def assert_submission(task, run_dir, agent, marker):
@@ -100,7 +104,8 @@ def test_shared_budget_changes_only_the_runtime_endpoint_and_restores_environmen
     loaded, ledger = common.start(args, "gepa", {})
     proxy = metered.instances[-1]
     assert proxy.started and proxy.limit == 10 and proxy.upstream == UPSTREAM
-    assert proxy.api_key == "test-upstream-key"
+    assert proxy.api_key == "test-upstream-key" and proxy.api == "openai"
+    assert "ANTHROPIC_BASE_URL" not in os.environ and "ANTHROPIC_API_KEY" not in os.environ
     assert proxy.path == ledger.root / "api_calls.jsonl"
     assert args.api_base == proxy.base_url
     assert os.environ["OPENAI_API_KEY"] == os.environ["CODEX_API_KEY"] == "adbench-local"
@@ -166,6 +171,107 @@ def test_codex_separates_model_and_evaluator_budgets_and_keeps_its_submission(
     assert observed["evaluation_budget"] == record["config"]["evaluations"] == 3
     assert record["config"]["budget"] == 10
     assert metered.instances[-1].closed
+
+
+def test_claude_code_caps_anthropic_requests_with_the_key_kept_in_the_proxy(
+        task, tmp_path, monkeypatch, metered):
+    driver = load_driver("claude_code")
+    shared = driver._coding_agent
+    run_dir = tmp_path / "claude_code"
+    # Set by a launching Claude Code session; the CLI would then ignore the key.
+    monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "claude-vscode")
+
+    def launch(command, cwd, env, log, time_limit, input_text=None):
+        proxy = metered.instances[-1]
+        assert (proxy.api, proxy.limit, proxy.api_key) == ("anthropic", 10, "test-anthropic-key")
+        assert proxy.upstream == metered.common.DEFAULT_ANTHROPIC_API_BASE
+        # The real workspace environment: the proxy's endpoint, never its key.
+        assert env["ANTHROPIC_BASE_URL"] == proxy.base_url == "http://127.0.0.1:54321"
+        assert env["ANTHROPIC_API_KEY"] == "adbench-local"
+        assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
+        assert "CLAUDE_CODE_ENTRYPOINT" not in env
+        assert not any("test-anthropic-key" in value for value in env.values())
+        # Nor the other provider's real key.
+        assert "OPENAI_API_KEY" not in env and "CODEX_API_KEY" not in env
+        assert command[command.index("--effort") + 1] == "high"
+        prompt = command[command.index("-p") + 1]
+        assert "at most 10 model API requests" in prompt
+        assert "recorded separately from model API requests" in prompt
+        (cwd / "candidate.py").write_text((task.root / "skeleton.py").read_text()
+                                          + "\n# claude-deliverable\n")
+        log.write_text(json.dumps({"type": "result", "result": "done", "num_turns": 3}) + "\n")
+        proxy.exhaust()
+        return "exit_1"
+
+    monkeypatch.setattr(driver.shutil, "which", lambda _: "/test/claude")
+    monkeypatch.setattr(shared, "cli_version", lambda _: "test-version")
+    monkeypatch.setattr(shared, "launch", launch)
+    assert driver.main(arguments(task, run_dir, "--effort", "high", "--workspace",
+                                 str(tmp_path / "workspace"), api_base=None)) == 0
+    record = assert_submission(task, run_dir, "claude_code", "claude-deliverable")
+    config = record["config"]
+    assert (config["budget"], config["budget_unit"]) == (10, "api_requests")
+    assert config["evaluations"] is None
+    assert config["api_base"] == metered.common.DEFAULT_ANTHROPIC_API_BASE
+    assert metered.instances[-1].closed
+    assert os.environ["ANTHROPIC_API_KEY"] == "test-anthropic-key"
+    assert os.environ["CLAUDE_CODE_ENTRYPOINT"] == "claude-vscode"
+    assert "ANTHROPIC_BASE_URL" not in os.environ
+
+
+def test_geak_counts_anthropic_requests_without_a_cap_and_passes_effort(
+        task, tmp_path, monkeypatch, metered):
+    driver = load_driver("geak")
+    geak_root = tmp_path / "GEAK"
+    (geak_root / "kernel_workflow").mkdir(parents=True)
+    (geak_root / "kernel_workflow" / "kernel_workflow.js").write_text("// fake workflow\n")
+    prepare = ModuleType("prepare")
+    prepare.prepare = lambda task_, run_root, out: out
+    monkeypatch.setitem(sys.modules, "prepare", prepare)
+    skeleton = (task.root / "skeleton.py").read_text()
+
+    def run(command, **kwargs):
+        if command[0] == "nvidia-smi":
+            return SimpleNamespace(stdout="NVIDIA GH200\n")
+        proxy = metered.instances[-1]
+        assert (proxy.api, proxy.limit, proxy.api_key) == ("anthropic", None, "test-anthropic-key")
+        env = kwargs["env"]
+        assert env["ANTHROPIC_BASE_URL"] == proxy.base_url
+        assert env["ANTHROPIC_API_KEY"] == "adbench-local"
+        assert not any("test-anthropic-key" in value for value in env.values())
+        # Nor the other provider's real key.
+        assert "OPENAI_API_KEY" not in env and "CODEX_API_KEY" not in env
+        assert command[command.index("--effort") + 1] == "max"
+        candidate = kwargs["cwd"] / "exp" / "round1" / "workspace" / "kernel_src" / "candidate.py"
+        candidate.parent.mkdir(parents=True)
+        candidate.write_text(skeleton + "\n# geak-deliverable\n")
+        proxy.calls_used = 37  # counted, never refused
+        return SimpleNamespace(stdout=json.dumps({"result": "{}", "num_turns": 9}), stderr="")
+
+    monkeypatch.setattr(driver.shutil, "which", lambda _: "/test/claude")
+    monkeypatch.setattr(driver.subprocess, "run", run)
+    run_dir = tmp_path / "geak"
+    assert driver.main(arguments(task, run_dir, "--geak-root", str(geak_root),
+                                 "--effort", "max", api_base=None)) == 0
+    record = json.loads((run_dir / "run.json").read_text())
+    assert record["status"] == "completed"
+    config = record["config"]
+    assert (config["budget"], config["budget_unit"]) == (2, "optimization_directions")
+    assert config["effort"] == "max" and "geak_budget" not in config
+    assert record["llm_budget"] == {"limit": None, "used": 37, "rejected": 0,
+                                    "unit": "api_requests"}
+    assert "geak-deliverable" in Path(record["best_program"]).read_text()
+    assert metered.instances[-1].closed and "ANTHROPIC_BASE_URL" not in os.environ
+
+
+@pytest.mark.parametrize("agent", ["claude_code", "geak"])
+def test_anthropic_agents_need_the_upstream_key_before_a_run_starts(
+        task, tmp_path, monkeypatch, metered, agent):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    args = metered.common.parser("test").parse_args(arguments(task, tmp_path / "run"))
+    with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):
+        metered.common.start(args, agent, {})
+    assert not (tmp_path / "run").exists() and not metered.instances
 
 
 @pytest.mark.parametrize("has_correct, chosen", [(True, "best-correct"), (False, "last-attempt")])
@@ -299,20 +405,21 @@ def test_a_pipeline_seed_counts_only_when_its_pipeline_exits_zero(
     assert len(events) == (1 if returncode == 0 else 0)
 
 
+@pytest.mark.parametrize("agent", ["gepa", "claude_code"])
 @pytest.mark.parametrize("config", [{"budget": 10, "budget_unit": "legacy_native"},
                                       {"budget": 30, "budget_unit": "api_requests"}])
 def test_bench_refuses_to_reuse_finished_runs_with_an_incompatible_budget(
-        task, tmp_path, monkeypatch, metered, config):
+        task, tmp_path, monkeypatch, metered, config, agent):
     bench = load_driver("")
     root = tmp_path / "benchmark"
     cid = task.spec["case_id"]
     shutil.copytree(task.root, root / "tasks" / bench.case_dir(cid))
-    run_dir = root / "runs" / "gepa" / bench.case_dir(cid)
+    run_dir = root / "runs" / agent / bench.case_dir(cid)
     run_dir.mkdir(parents=True)
     (run_dir / "run.json").write_text(json.dumps({"status": "completed", "config": config}))
     before = (run_dir / "run.json").read_text()
     monkeypatch.setattr(bench.subprocess, "run", lambda *a, **k: pytest.fail("old run was relaunched"))
-    args = argparse.Namespace(root=root, case_id=[cid], model="qwen3_0_6b", agent="gepa",
+    args = argparse.Namespace(root=root, case_id=[cid], model="qwen3_0_6b", agent=agent,
                               budget=10, redo=False, agent_args=[], time_limit=None)
     with pytest.raises(SystemExit, match="requested 10-request budget"):
         bench.cmd_run(args)
@@ -380,7 +487,8 @@ def test_bench_preserves_an_interrupted_run_and_its_spent_api_budget(
 
 
 @pytest.mark.parametrize("agent, budget_unit, expected_calls", [
-    ("claude_code", "legacy_native", None),
+    ("claude_code", "legacy_native", None),  # a run from before Claude Code was metered
+    ("geak", "optimization_directions", 3),  # counted, not capped
     ("seed", "none", 0),
     ("gepa", "api_requests", 3),
 ])
@@ -393,7 +501,7 @@ def test_run_summary_distinguishes_api_requests_from_cli_usage_events(
     if agent != "seed":
         ledger.log_llm({"event": "turn.completed", "usage": {"input_tokens": 5}})
         ledger.log_llm({"event": "turn.completed", "usage": {"input_tokens": 7}})
-    if budget_unit == "api_requests":
+    if expected_calls:
         for index in range(1, 4):
             append_line(ledger.root / API_CALLS_FILE,
                         {"call": index, "method": "POST", "path": "/responses"})

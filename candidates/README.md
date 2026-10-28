@@ -132,10 +132,13 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
    repetitions, with a shared cached baseline.
 6. **Same model and model-request cap for the OpenAI agents.**
    - `--model` and `--api-base` are one OpenAI-compatible endpoint for every
-     agent except GEAK and Claude Code.
-   - `--budget N` caps admitted model API requests per agent and case. The
-     default is `ADBENCH_BUDGET`, or 10. Initial generation, reflection,
-     retries, failed upstream requests and context compaction all consume it.
+     agent except GEAK and Claude Code, which run on Anthropic's API
+     (`--api-base` defaults to `$ADBENCH_ANTHROPIC_API_BASE` or
+     `https://api.anthropic.com` for them).
+   - `--budget N` caps admitted model API requests per agent and case,
+     Claude Code's included. The default is `ADBENCH_BUDGET`, or 10. Initial
+     generation, reflection, retries, failed upstream requests and context
+     compaction all consume it.
    - The shared HTTP proxy records requests in `api_calls.jsonl` before
      forwarding them and refuses request N+1. Native loop limits below are
      additional stopping conditions, not alternative budget units.
@@ -149,12 +152,17 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
 | GEPA | N | `max_evals = N + 1`; initial generation also consumes the API cap |
 | KernelAgent | N across all workers and stages | generation: 4 workers × ⌈N/8⌉ rounds; optimization: max(1, ⌊N/8⌋) beam rounds |
 | Codex | N | session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
-| GEAK | Unmetered (`legacy_native`) | `budget = max(2, N // 5)` optimization directions |
-| Claude Code | Unmetered (`legacy_native`) | N evaluator calls by default; `--eval-budget` can override |
+| Claude Code | N | session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
+| GEAK | counted, not capped | `budget = max(2, N // 5)` optimization directions (`budget_unit: optimization_directions`) |
 
-Claude Code and GEAK are separate data points: neither has the same enforced
-API-request cap. Their `llm_calls_recorded` is `null` and tables show
-`unmetered`; token or session usage events do not establish a request count.
+Claude Code and GEAK are separate data points: both run on a Claude model,
+and GEAK's budget is in optimization directions. The proxy in front of
+Anthropic's API caps Claude Code's requests at N and only counts GEAK's, so
+both have a `llm_calls_recorded` count. Every request of the claude CLI counts
+(subagents and compaction too); `/v1/messages/count_tokens` is refused and
+Claude Code estimates tokens locally instead. Runs from before this have
+`llm_calls_recorded: null` (`unmetered`); token or session usage events do not
+establish a request count.
 
 ## What cannot be equalised (and is recorded instead)
 
@@ -206,11 +214,12 @@ export ADBENCH_API_BASE=https://api.openai.com/v1
 pip install -e references/gepa                   # 8f287de942f41a6d1e0e7e5b2d576247c4bedee9
 # KernelAgent
 pip install -e references/KernelAgent            # e0647170da36ef9b059ac0bd3d60103aa4ed378b
-# GEAK: Claude Code >= 2.1.177 on PATH, ANTHROPIC_API_KEY (or a gateway), ncu on PATH
+# GEAK: Claude Code >= 2.1.177 on PATH, ANTHROPIC_API_KEY (held by the request proxy;
+# ADBENCH_ANTHROPIC_API_BASE for a gateway), ncu on PATH
 bash candidates/geak/setup.sh                    # NVIDIA working copy -> candidates/geak/.work/GEAK
 # Coding agents: native CLIs on PATH (not pip packages; see pyproject.toml)
 curl -fsSL https://claude.ai/install.sh | bash -s 2.1.310  # Claude Code -> ~/.local/bin/claude;
-                                                 # ANTHROPIC_API_KEY or a `claude` login
+                                                 # ANTHROPIC_API_KEY (a `claude` login is not used)
 npm install -g @openai/codex@0.149.1             # Codex; uses OPENAI_API_KEY, --model, --api-base
 ```
 

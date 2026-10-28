@@ -36,13 +36,16 @@ against `torch.autograd` and faster than PyTorch eager.
 
 The current round runs only agents on OpenAI models: evograd, raw OpenEvolve,
 GEPA, KernelAgent and Codex. GEAK and Claude Code run on Claude Code's model,
-so they are separate data points and are left out of `run_openai.sh`. They also
-retain `legacy_native` budgets rather than the OpenAI agents' API-request cap.
+so they are separate data points and are left out of `run_openai.sh`. Claude
+Code has the same API-request cap as the OpenAI agents, at the same proxy in
+front of Anthropic's API; GEAK's requests go through it and are counted, while
+its budget stays in its own unit, optimization directions.
 
 Claude Code and Codex are the general-purpose coding agents: no kernel-specific
 loop, only a shell, a file editor and the evaluator. They show what an
-off-the-shelf agent does with the same task statement. Codex shares the metered
-OpenAI model budget; Claude Code's model and budget are reported separately.
+off-the-shelf agent does with the same task statement. Both have the same
+model-request cap; Codex shares the OpenAI model, Claude Code's model is
+reported separately.
 
 Raw OpenEvolve is the key ablation. It is evograd minus the frontend: same
 backend, same configuration, same evaluator, same budget. The gap between the
@@ -79,8 +82,10 @@ two is what the frontend contributes.
    formal T2 and model-scope T3. `score`/`compare` are separate diagnostics (§5.6).
 6. **Same model and API-request cap for the OpenAI agents.**
    - One `--model` / `--api-base` (an OpenAI-compatible endpoint) is used for
-     every metered model request; GEAK and Claude Code are separate points.
-   - `--budget N` caps model requests per agent/case at a shared HTTP proxy (§3).
+     every metered model request; GEAK and Claude Code (Anthropic's API) are
+     separate points.
+   - `--budget N` caps model requests per agent/case at a shared HTTP proxy (§3),
+     Claude Code's included; GEAK's are counted there without a cap.
    - API requests, evaluator calls and agent-reported usage events have separate
      ledgers; native iteration limits are additional stopping conditions.
 
@@ -173,7 +178,8 @@ already single operators.
 
 | | |
 |---|---|
-| Needs | A checkout at commit `02095f2c…`, prepared by `candidates/geak/setup.sh` into `candidates/geak/.work/GEAK`; the `claude` CLI ≥ 2.1.177; `ANTHROPIC_API_KEY`; `ncu` |
+| Needs | A checkout at commit `02095f2c…`, prepared by `candidates/geak/setup.sh` into `candidates/geak/.work/GEAK`; the `claude` CLI ≥ 2.1.177; `ANTHROPIC_API_KEY` (held by the request proxy, as for Claude Code); `ncu` |
+| Budget | `--geak-budget` optimization directions (default `max(2, N // 5)`; `run.json`: `budget`, `budget_unit: optimization_directions`). Its model requests are counted in `api_calls.jsonl` without a cap. `--claude-model` and `--effort` go to its `claude` command |
 | Input | An op task folder made by `prepare.py`: `TASK.md`, `meta.json`, the reference step as its baseline, and an `unittest.py` it may not edit. The only steering is one sentence: NVIDIA GPU, write Triton, deliverable path |
 | NVIDIA overlay | An NVIDIA GPU-identity probe replaces the `rocminfo` one. Nsight Compute is connected through GEAK's own generic `metrix` profiler hook. Nothing else in GEAK is changed |
 | Feedback | `unittest.py` runs our evaluator and prints PASS/FAIL, the latencies and `combined_score` |
@@ -187,12 +193,12 @@ and prompt for each, launches the CLI and picks the program to measure.
 
 | | |
 |---|---|
-| Needs | Claude Code: the `claude` CLI (`curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.310`) and `ANTHROPIC_API_KEY` or a `claude` login. Codex: the `codex` CLI (`npm install -g @openai/codex@0.149.1`) and `OPENAI_API_KEY`. Both are native CLIs, not pip packages (see `pyproject.toml`). `run.json` records the version each run used, and Claude Code's self-updater is off during a run |
+| Needs | Claude Code: the `claude` CLI (`curl -fsSL https://claude.ai/install.sh \| bash -s 2.1.310`) and `ANTHROPIC_API_KEY` (a `claude` login is not used: the proxy holds the key). Codex: the `codex` CLI (`npm install -g @openai/codex@0.149.1`) and `OPENAI_API_KEY`. Both are native CLIs, not pip packages (see `pyproject.toml`). `run.json` records the version each run used, and Claude Code's self-updater is off during a run |
 | Input | A workspace with `TASK.md`, `candidate.py` (the skeleton), `adbench_primitives.py` (if granted) and an `evaluate.py` it may not edit. The prompt (`prompt.md` in the run) describes the workspace, the applicable budget and the deliverable, followed by the same `TASK.md` verbatim |
 | Loop | The agent's own: `claude -p` (stream-JSON output) or `codex exec --json`, headless, permissions bypassed, until it stops or `--time-limit` (default 6 h) |
 | Isolation | The workspace is a new temporary directory, copied to `<run>/workspace` afterwards (`--workspace` overrides). Nothing the agent is given names the repository, the run or the task pack: `evaluate.py` holds only a socket address (Linux abstract namespace, this user only); the driver's evaluation server owns evaluator limits and records and replaces those paths in its feedback with `<evograd>`, `<run>` and `<task>`; and environment variables naming them are dropped (`PWD`, `SLURM_SUBMIT_DIR`) or pruned (`PYTHONPATH`). The agent runs as the same user, so a filesystem or process search could still find the repository; only a container would close that. User settings are not loaded: Claude Code gets `--setting-sources project,local --strict-mcp-config`, Codex gets `--ignore-user-config`. When the session ends, the CLI's whole process group is killed, so nothing it started competes with the final measurement |
-| Model | Claude Code: `--claude-model`. Codex: `--model` through a custom `adbench` HTTP Responses provider pointing to the shared budget proxy, with WebSockets disabled and `stream_max_retries=0`. Other request retries still consume budget. The CLI receives placeholder credentials (`adbench-local`); the proxy holds the upstream key and forwards to `--api-base`. `--effort` sets either agent's reasoning effort |
-| Feedback | `evaluate.py` sends `candidate.py` or a given path to the driver's evaluation server, which runs our evaluator (full, or `--correctness`), one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and any remaining evaluator budget. Codex has no evaluator-call cap unless `--eval-budget` is set |
+| Model | Claude Code: `--claude-model`, through `ANTHROPIC_BASE_URL` at the shared budget proxy, which forwards `/v1/messages` to `--api-base` (default `$ADBENCH_ANTHROPIC_API_BASE` or `https://api.anthropic.com`); `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` and `CLAUDE_CODE_DISABLE_TERMINAL_TITLE` turn off its traffic outside that path and its background title request. Codex: `--model` through a custom `adbench` HTTP Responses provider pointing to the shared budget proxy, with WebSockets disabled and `stream_max_retries=0`. Other request retries still consume budget (Claude Code retries server errors, not the proxy's 402). The CLI receives placeholder credentials (`adbench-local`); the proxy holds the upstream key and forwards to `--api-base`. `--effort` sets either agent's reasoning effort |
+| Feedback | `evaluate.py` sends `candidate.py` or a given path to the driver's evaluation server, which runs our evaluator (full, or `--correctness`), one call at a time. It prints the evaluator's feedback, `CORRECT`/`INCORRECT` and any remaining evaluator budget. Neither agent has an evaluator-call cap unless `--eval-budget` is set |
 | Code from reply | None to extract: the agent writes `candidate.py` with its file tools |
 | Output | `candidate.py` if `evaluate.py` passed exactly that module (the agent's choice). Otherwise, the best correct module it evaluated (full evaluations by `combined_score` first, then the latest). Otherwise, `candidate.py` as it is, unless it is still the skeleton. `run.json` records which rule applied (`deliverable`) |
 
@@ -211,8 +217,9 @@ and prompt for each, launches the CLI and picks the program to measure.
 
 ## 3. Budgets
 
-For evograd, raw OpenEvolve, GEPA, KernelAgent and Codex, `--budget N` is a hard
-cap on admitted **model API requests per agent and benchmark case**. The default
+For evograd, raw OpenEvolve, GEPA, KernelAgent, Codex and Claude Code,
+`--budget N` is a hard cap on admitted **model API requests per agent and
+benchmark case**. The default
 is `ADBENCH_BUDGET`, or **10**. `_common.start` routes those agents through
 `LLMBudgetProxy`, which reserves a request in `api_calls.jsonl` before forwarding
 it. Initial generation, reflection, retries, failed upstream calls and context
@@ -220,7 +227,14 @@ compaction all count. Parallel workers share one cap. Request N+1 is refused;
 the proxy does not retry upstream or follow redirects.
 
 The proxy meters `/chat/completions`, `/completions`, `/responses` and
-`/responses/compact`. Model metadata reads do not consume the cap. Agents and
+`/responses/compact` in front of an OpenAI-compatible API, and `/v1/messages`
+in front of Anthropic's (Claude Code and GEAK; the key goes upstream as
+`x-api-key`, `anthropic-version`/`anthropic-beta` pass through). Model metadata
+reads do not consume the cap. Anthropic's `/v1/messages/count_tokens` is
+refused (404) rather than forwarded: it generates nothing, and Claude Code then
+estimates context usage locally. Every request of the claude CLI counts,
+including subagents and compaction; its documented switches for nonessential
+traffic and the background title request are set. Agents and
 their subprocesses receive the metered endpoint and placeholder credentials;
 the upstream key remains in the proxy. This routing is not a filesystem or
 network sandbox for an agent running as the same user.
@@ -234,17 +248,18 @@ Native stopping limits remain in place:
 | GEPA | N | `max_evals = N + 1`; first candidate generation also consumes the API cap |
 | KernelAgent | N across generation and optimization | 4 generation workers × ⌈N/8⌉ rounds, stopping on first pass; max(1, ⌊N/8⌋) optimization rounds |
 | Codex | N | Session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
-| GEAK | Unmetered (`legacy_native`) | `max(2, N // 5)` optimization directions unless `--geak-budget` overrides |
-| Claude Code | Unmetered (`legacy_native`) | N calls of `evaluate.py` by default, or `--eval-budget` if set |
+| Claude Code | N | Session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
+| GEAK | Counted, not capped | `max(2, N // 5)` optimization directions unless `--geak-budget` overrides (its `budget_unit`) |
 
 These native limits can stop a run before N model requests. They do not grant
-extra requests. GEAK and Claude Code do not have an equal API-request budget
-and must be reported separately.
+extra requests. GEAK does not have an equal API-request budget, and Claude Code
+and GEAK run on a Claude model, so both must be reported separately.
 
 `evaluations.jsonl` counts evaluator calls independently; `llm.jsonl` stores
 token/session usage events. `llm_calls_recorded` comes from `api_calls.jsonl`
-for metered agents, is 0 for the frontend-only seed, and is `null`/`unmetered`
-when request count is unknown. Usage-event counts cannot replace API counts.
+for metered agents and GEAK, is 0 for the frontend-only seed, and is
+`null`/`unmetered` when request count is unknown (runs from before Claude Code
+and GEAK went through the proxy). Usage-event counts cannot replace API counts.
 
 Other limits:
 
@@ -277,7 +292,7 @@ neither. Anything specific to one agent lives in `candidates/<agent>/`.
 | `evaluate.py` | **The evaluator every agent goes through** (§5.4): full or correctness-only, in a child process that can be killed; Python API and command line |
 | `_check.py` | The correctness-only child: static rules, import, correctness and a run at the timed shape, no timing |
 | `ledger.py` | **Run log** (§5.5): `run.json`, `evaluations.jsonl`, `llm.jsonl`, `api_calls.jsonl` |
-| `llm_budget.py` | Shared HTTP proxy that reserves and enforces model API requests independently of evaluator calls |
+| `llm_budget.py` | Shared HTTP proxy (OpenAI-compatible or Anthropic API) that reserves, and optionally caps, model API requests independently of evaluator calls |
 | `score.py` | **Final measurement** and `compare` (§5.6) |
 | `_example_TASK.md` | A generated `TASK.md` for Qwen3-0.6B's observed case `qwen3_swiglu_mlp/swiglu_mlp`, bf16, B=2 T=2048 H=1024 I=3072, for reading |
 
@@ -442,7 +457,7 @@ Each run directory has:
 |---|---|
 | `run.json` | Agent, task id, statement hash, config (budget limit and unit, model, commits), status, wall time, best program, final request-budget usage |
 | `evaluations.jsonl` | One line per evaluation requested: kind, origin, correct, score, program path, seconds, failure type |
-| `api_calls.jsonl` | One line per admitted model API request for metered agents; request metadata only, no credentials or prompt/response content |
+| `api_calls.jsonl` | One line per admitted model API request for metered agents and GEAK; request metadata only, no credentials or prompt/response content |
 | `llm.jsonl` | LLM usage where the agent exposes it (GEPA metadata; Claude Code's session cost and usage for GEAK and Claude Code; Codex's per-turn tokens) |
 | `programs/` | Every packaged program evaluated through adbench-tools |
 

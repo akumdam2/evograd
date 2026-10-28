@@ -7,10 +7,12 @@ Each ``candidates/<agent>/run.py`` is::
     best = <run the agent; return the path of its best module or None>
     finish(args, task, ledger, best)         # final.json via evograd.adbench_tools.score
 
-For OpenAI-compatible agents, ``--budget`` caps actual model API requests,
-including initialization, reflection and retries, through a shared local proxy.
-Native iteration/evaluation limits remain stopping controls, not API counters.
-Anthropic drivers retain their separately labelled legacy budgets.
+For the OpenAI-compatible agents and Claude Code, ``--budget`` caps actual
+model API requests, including initialization, reflection and retries, through
+a shared local proxy (in front of OpenAI's or Anthropic's API). GEAK's requests
+go through the same proxy and are counted, not capped: its budget unit is its
+own optimization direction. Native iteration/evaluation limits remain stopping
+controls, not API counters.
 """
 
 from __future__ import annotations
@@ -28,8 +30,12 @@ if str(REPO / "src") not in sys.path:
 
 DEFAULT_MODEL = os.environ.get("ADBENCH_MODEL", "gpt-5.6-sol")
 DEFAULT_API_BASE = os.environ.get("ADBENCH_API_BASE", "https://api.openai.com/v1")
+DEFAULT_ANTHROPIC_API_BASE = os.environ.get("ADBENCH_ANTHROPIC_API_BASE",
+                                            "https://api.anthropic.com")
 DEFAULT_BUDGET = int(os.environ.get("ADBENCH_BUDGET", "10"))
-METERED_AGENTS = frozenset({"evograd", "openevolve", "gepa", "kernelagent", "codex"})
+METERED_AGENTS = frozenset({"evograd", "openevolve", "gepa", "kernelagent", "codex", "claude_code"})
+# The agents that run the claude CLI, on Anthropic's API; GEAK is counted, not capped.
+ANTHROPIC_AGENTS = frozenset({"claude_code", "geak"})
 
 
 def parser(description: str) -> argparse.ArgumentParser:
@@ -39,10 +45,12 @@ def parser(description: str) -> argparse.ArgumentParser:
     p.add_argument("--run-dir", type=Path, required=True, help="fresh directory for this run")
     p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
                    help="model API request cap per case (default $ADBENCH_BUDGET or 10; "
-                        "Anthropic drivers retain their legacy native budget)")
+                        "GEAK's requests are only counted, see its --geak-budget)")
     p.add_argument("--model", default=DEFAULT_MODEL, help="LLM for every agent call")
     p.add_argument("--api-base", default=DEFAULT_API_BASE,
-                   help="OpenAI-compatible endpoint (key from $OPENAI_API_KEY)")
+                   help="OpenAI-compatible endpoint (key from $OPENAI_API_KEY); for Claude Code "
+                        "and GEAK, Anthropic's (default $ADBENCH_ANTHROPIC_API_BASE or "
+                        "https://api.anthropic.com, key from $ANTHROPIC_API_KEY)")
     p.add_argument("--seed", type=int, default=0, help="the agent's own random seed")
     p.add_argument("--no-score", action="store_true",
                    help="skip the final measurement (run `python -m evograd.adbench_tools score` later)")
@@ -58,30 +66,52 @@ def start(args, agent: str, config: dict):
         raise SystemExit(f"{args.run_dir} already holds a run; use a fresh --run-dir")
     if args.budget < 1:
         raise SystemExit("--budget must be >= 1")
+    anthropic = agent in ANTHROPIC_AGENTS
+    if anthropic and not os.environ.get("ANTHROPIC_API_KEY"):
+        raise SystemExit("ANTHROPIC_API_KEY is not set; the request proxy forwards with it")
+    # A driver with its own budget unit (GEAK) overrides budget and budget_unit.
     config = {"budget": args.budget,
-              "budget_unit": "api_requests" if agent in METERED_AGENTS else
-                             "none" if agent == "seed" else "legacy_native",
+              "budget_unit": "api_requests" if agent in METERED_AGENTS else "none",
               "model": args.model, "api_base": args.api_base,
               "seed": args.seed, **config}
     ledger = RunLedger(args.run_dir, agent=agent, task=task, config=config)
-    if agent in METERED_AGENTS:
+    if agent in METERED_AGENTS or anthropic:
         from evograd.adbench_tools.llm_budget import LLMBudgetProxy
 
+        key = (os.environ["ANTHROPIC_API_KEY"] if anthropic else
+               os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY"))
         args._budget_proxy = LLMBudgetProxy(
-            args.api_base, args.budget, ledger.root / "api_calls.jsonl",
-            api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("CODEX_API_KEY"))
+            args.api_base, args.budget if agent in METERED_AGENTS else None,
+            ledger.root / "api_calls.jsonl", api_key=key,
+            api="anthropic" if anthropic else "openai")
         args._budget_proxy.start()
         args._upstream_api_base = args.api_base
         args.api_base = args._budget_proxy.base_url
         # Drivers and their subprocesses only receive the metered endpoint and
         # a placeholder credential. The upstream key stays in the proxy.
-        environment = {"OPENAI_API_KEY": "adbench-local", "CODEX_API_KEY": "adbench-local",
-                       "OPENAI_BASE_URL": args.api_base, "OPENAI_API_BASE": args.api_base,
-                       "ADBENCH_API_BASE": args.api_base}
+        if anthropic:
+            # The claude CLI appends /v1/messages. Its documented switches turn
+            # off traffic that bypasses the proxy (telemetry, update and
+            # availability checks) and the background session-title request.
+            # A launching Claude Code session's entrypoint (claude-vscode)
+            # would make the CLI ignore ANTHROPIC_API_KEY, so it is unset.
+            environment = {"ANTHROPIC_API_KEY": "adbench-local",
+                           "ANTHROPIC_BASE_URL": args.api_base,
+                           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+                           "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+                           "CLAUDE_CODE_ENTRYPOINT": None}
+        else:
+            environment = {"OPENAI_API_KEY": "adbench-local", "CODEX_API_KEY": "adbench-local",
+                           "OPENAI_BASE_URL": args.api_base, "OPENAI_API_BASE": args.api_base,
+                           "ADBENCH_API_BASE": args.api_base}
+        # Nor does the agent get the other provider's real key.
+        environment.update({name: None for name in
+                            (("OPENAI_API_KEY", "CODEX_API_KEY") if anthropic
+                             else ("ANTHROPIC_API_KEY",))})
         for name in ("NO_PROXY", "no_proxy"):
             environment[name] = ",".join(filter(None, (os.environ.get(name), "127.0.0.1", "localhost")))
         args._budget_environment = {name: os.environ.get(name) for name in environment}
-        os.environ.update(environment)
+        _set_environment(environment)
         atexit.register(close_budget, args)
     print(f"[{agent}] task {task.task_id} -> {ledger.root}", flush=True)
     return task, ledger
@@ -97,16 +127,21 @@ def close_budget(args) -> dict:
     if proxy is None:
         return {}
     proxy.close()
-    record = {"limit": args.budget, "used": proxy.calls_used,
+    record = {"limit": proxy.budget, "used": proxy.calls_used,
               "rejected": proxy.rejected_requests, "unit": "api_requests"}
-    for name, value in args._budget_environment.items():
+    _set_environment(args._budget_environment)
+    args.api_base = args._upstream_api_base
+    args._budget_proxy = None
+    return record
+
+
+def _set_environment(values: dict[str, str | None]) -> None:
+    """Set each variable, or unset it where the value is ``None``."""
+    for name, value in values.items():
         if value is None:
             os.environ.pop(name, None)
         else:
             os.environ[name] = value
-    args.api_base = args._upstream_api_base
-    args._budget_proxy = None
-    return record
 
 
 def finish(args, task, ledger, best: Path | None, *, status: str | None = None,

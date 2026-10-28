@@ -1,10 +1,11 @@
-"""A local OpenAI-compatible HTTP endpoint with a durable model-request cap.
+"""A local OpenAI- or Anthropic-compatible HTTP endpoint with a durable model-request cap.
 
 Point an agent's API base at :attr:`LLMBudgetProxy.base_url`. Every admitted
 generation request reserves one call before contacting the upstream, including
-requests that fail or are retried by the client. The proxy itself never retries
-or follows redirects. The JSONL ledger contains only request metadata, never
-credentials, prompts, responses, or query parameters.
+requests that fail or are retried by the client; the cap is optional, so a
+proxy without one only counts. The proxy itself never retries or follows
+redirects. The JSONL ledger contains only request metadata, never credentials,
+prompts, responses, or query parameters.
 
 This controls HTTP requests routed through the proxy; it is not a sandbox for
 an agent that can read credentials and contact a different endpoint itself.
@@ -23,7 +24,16 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-_GENERATIONS = {"/chat/completions", "/completions", "/responses", "/responses/compact"}
+# Per upstream API: the part of /v1/... that its base URLs include (OpenAI's end
+# in /v1; Anthropic's omit it, and clients append /v1/messages), the generation
+# routes under /v1, and the header that carries the upstream key.
+# Anthropic's /v1/messages/count_tokens is not forwarded: it generates nothing,
+# and Claude Code falls back to estimating tokens locally without it.
+_APIS = {
+    "openai": ("/v1", {"/chat/completions", "/completions", "/responses", "/responses/compact"},
+               "Authorization", "Bearer {}"),
+    "anthropic": ("", {"/messages"}, "x-api-key", "{}"),
+}
 _HOP_HEADERS = {
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
     "te", "trailer", "transfer-encoding", "upgrade",
@@ -36,7 +46,7 @@ class _ProxyClosed(Exception):
 
 
 class _Budget:
-    def __init__(self, path: Path, limit: int):
+    def __init__(self, path: Path, limit: int | None):
         self.path, self.limit = path, limit
         self.lock = threading.Lock()
         self.closed = True
@@ -74,7 +84,7 @@ class _Budget:
                 return True
             fcntl.flock(handle, fcntl.LOCK_EX)
             used = len(self._records(handle))
-            if used >= self.limit:
+            if self.limit is not None and used >= self.limit:
                 return False
             record = {"call": used + 1, "time": datetime.now(timezone.utc).isoformat(),
                       "method": "POST", "path": path}
@@ -163,7 +173,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._error(404, "unsupported_endpoint", "Unsupported API endpoint.")
             return
         route = parsed.path[3:]
-        generation = self.command == "POST" and route in _GENERATIONS
+        generation = self.command == "POST" and route in proxy._generations
         metadata = self.command == "GET" and (
             route == "/models" or route.startswith("/models/")
         )
@@ -205,12 +215,13 @@ class _Handler(BaseHTTPRequestHandler):
             headers = {key: value for key, value in self.headers.items()
                        if key.lower() not in excluded}
             if proxy._api_key is not None:
+                credentials = {"authorization", proxy._key_header.lower()}
                 headers = {key: value for key, value in headers.items()
-                           if key.lower() != "authorization"}
-                headers["Authorization"] = f"Bearer {proxy._api_key}"
+                           if key.lower() not in credentials}
+                headers[proxy._key_header] = proxy._key_format.format(proxy._api_key)
             headers["Content-Length"] = str(len(body))
             headers["Connection"] = "close"
-            target = proxy._upstream.path.rstrip("/") + route
+            target = proxy._upstream.path.rstrip("/") + parsed.path[len(proxy._prefix):]
             if parsed.query:
                 target += "?" + parsed.query
             connection.request(self.command, target, body=body, headers=headers)
@@ -251,17 +262,26 @@ class LLMBudgetProxy:
     even on an upstream error or client disconnect. Existing records are loaded
     on restart. Only supported generation routes and model metadata GETs are
     forwarded; metadata GETs do not consume the model-generation budget.
+    ``budget=None`` records every request and refuses none.
 
-    ``api_key`` optionally supplies the upstream Bearer credential; otherwise
-    the caller's Authorization header is preserved. HTTP streaming is supported,
-    WebSockets are explicitly rejected. ``start``/``close`` and ``with`` are both
-    supported; closing the proxy never initiates another upstream request.
+    ``api`` is the upstream's protocol: ``"openai"`` (``upstream_base_url`` and
+    :attr:`base_url` end in ``/v1``) or ``"anthropic"`` (both omit ``/v1``, as
+    ``ANTHROPIC_BASE_URL`` does; ``/v1/messages`` is metered). ``api_key``
+    optionally supplies the upstream credential (a Bearer token, or Anthropic's
+    ``x-api-key``) in place of the caller's; otherwise the caller's is preserved.
+    Other headers, such as ``anthropic-version`` and ``anthropic-beta``, pass
+    through. HTTP streaming is supported, WebSockets are explicitly rejected.
+    ``start``/``close`` and ``with`` are both supported; closing the proxy never
+    initiates another upstream request.
     """
 
-    def __init__(self, upstream_base_url: str, budget: int, ledger_path: str | Path,
-                 *, api_key: str | None = None, timeout: float = 600):
-        if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
-            raise ValueError("API call budget must be a positive integer")
+    def __init__(self, upstream_base_url: str, budget: int | None, ledger_path: str | Path,
+                 *, api_key: str | None = None, api: str = "openai", timeout: float = 600):
+        if budget is not None and (not isinstance(budget, int) or isinstance(budget, bool)
+                                   or budget < 1):
+            raise ValueError("API call budget must be a positive integer or None")
+        if api not in _APIS:
+            raise ValueError(f"unknown API {api!r}")
         upstream = urlsplit(upstream_base_url)
         if (upstream.scheme not in {"http", "https"} or not upstream.hostname
                 or upstream.username or upstream.password or upstream.query or upstream.fragment):
@@ -270,6 +290,7 @@ class LLMBudgetProxy:
             raise ValueError("API timeout must be positive")
         self.budget, self.timeout = budget, timeout
         self._upstream, self._api_key = upstream, api_key
+        self._prefix, self._generations, self._key_header, self._key_format = _APIS[api]
         self._budget = _Budget(Path(ledger_path), budget)
         self._budget.count()  # Fail closed before launching an agent on a corrupt ledger.
         self._server = None
@@ -281,7 +302,7 @@ class LLMBudgetProxy:
     def base_url(self) -> str:
         if self._server is None:
             raise RuntimeError("API budget proxy is not running")
-        return f"http://127.0.0.1:{self._server.server_port}/v1"
+        return f"http://127.0.0.1:{self._server.server_port}{self._prefix}"
 
     @property
     def calls_used(self) -> int:
@@ -289,7 +310,7 @@ class LLMBudgetProxy:
 
     @property
     def exhausted(self) -> bool:
-        return self.calls_used >= self.budget
+        return self.budget is not None and self.calls_used >= self.budget
 
     @property
     def rejected_requests(self) -> int:

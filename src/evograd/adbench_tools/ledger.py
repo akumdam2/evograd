@@ -5,7 +5,7 @@ A run directory holds:
     run.json            agent, model, budget, task, start/end, outcome
     evaluations.jsonl   one line per evaluation the agent requested
     llm.jsonl           agent usage events (which may span multiple requests)
-    api_calls.jsonl     one line per admitted model API request (metered agents)
+    api_calls.jsonl     one line per admitted model API request (metered agents and GEAK)
 
 Appends are single ``write`` calls of one line, so the agent's own worker
 processes (KernelAgent, GEAK's unittest) can append concurrently.
@@ -98,7 +98,10 @@ class RunLedger:
     def summary(self) -> dict[str, Any]:
         evaluations = read_lines(self.root / EVALUATIONS_FILE)
         llm = read_lines(self.root / LLM_FILE)
-        metered = self.record.get("config", {}).get("budget_unit") == "api_requests"
+        # GEAK's requests are counted in the same ledger, without a cap.
+        requests = self.root / API_CALLS_FILE
+        metered = (self.record.get("config", {}).get("budget_unit") == "api_requests"
+                   or requests.is_file())
         no_llm = self.record.get("agent") == "seed"
         tokens: dict[str, int] = {}
         for entry in llm:
@@ -110,7 +113,7 @@ class RunLedger:
             "correct_evaluations": sum(1 for e in evaluations if e.get("correct")),
             "evaluation_kinds": sorted({e.get("kind", "full") for e in evaluations}),
             # CLI usage events can represent whole turns/sessions, not requests.
-            "llm_calls_recorded": len(read_lines(self.root / API_CALLS_FILE)) if metered
+            "llm_calls_recorded": len(read_lines(requests)) if metered
                                   else 0 if no_llm else None,
             "llm_usage_events": len(llm),
             "llm_budget": self.record.get("llm_budget"),

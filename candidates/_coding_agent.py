@@ -30,9 +30,10 @@ scrubbed of variables that name them (:meth:`Workspace.environment`). The
 agent still runs as the same user, so a search of the filesystem or the
 process list can find the repository; only a container would close that.
 
-Codex's ``--budget N`` caps model requests in the shared HTTP proxy. Evaluations
-run one at a time; ``--eval-budget`` optionally caps them independently. Claude
-Code retains its legacy evaluation budget. The agent may also run GPU scripts.
+``--budget N`` caps either agent's model requests in the shared HTTP proxy
+(OpenAI's API for Codex, Anthropic's for Claude Code). Evaluations run one at a
+time; ``--eval-budget`` optionally caps them independently. The agent may also
+run GPU scripts.
 
 Deliverable: ``candidate.py`` when the server passed exactly that module (the
 agent's own choice); otherwise the best correct module it evaluated (a full
@@ -87,12 +88,10 @@ def cli_version(executable: str) -> str | None:
     return lines[-1] if lines else None
 
 
-def prompt(task, budget: int, *, evaluation_budget: int | None = None,
-           model_budget: bool = True) -> str:
+def prompt(task, budget: int, *, evaluation_budget: int | None = None) -> str:
     abi = task.spec["abi"]
     limits = (f"- You have at most {budget} model API requests, including this request, "
-              "reflection and retries. Keep candidate.py ready to submit before they run out.\n"
-              if model_budget else "")
+              "reflection and retries. Keep candidate.py ready to submit before they run out.\n")
     limits += (f"- `{ORACLE}` runs at most {evaluation_budget} evaluations in total "
                "(both kinds count) and prints how many remain after each. After that it refuses."
                if evaluation_budget is not None else
@@ -254,10 +253,7 @@ class Workspace:
         primitives = task.root / "adbench_primitives.py"
         if primitives.is_file():
             shutil.copy2(primitives, self.root / primitives.name)
-        model_budget = origin in _common.METERED_AGENTS
         eval_budget = getattr(args, "eval_budget", None)
-        if eval_budget is None and not model_budget:
-            eval_budget = args.budget
         if eval_budget is not None and eval_budget < 1:
             raise ValueError("--eval-budget must be >= 1")
         self.evaluator = Evaluator(task, ledger, origin, eval_budget, args.eval_timeout)
@@ -265,7 +261,7 @@ class Workspace:
                                         encoding="utf-8")
         self.oracle_sha256 = _sha256(self.root / ORACLE)
         (ledger.root / PROMPT).write_text(
-            prompt(task, args.budget, evaluation_budget=eval_budget, model_budget=model_budget),
+            prompt(task, args.budget, evaluation_budget=eval_budget),
             encoding="utf-8")
 
     def environment(self, gpu: str) -> dict[str, str]:

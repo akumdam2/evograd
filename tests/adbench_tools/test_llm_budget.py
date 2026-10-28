@@ -33,9 +33,13 @@ def upstream():
         def do_POST(self):
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             with self.server.lock:
+                headers = self.headers
                 self.server.received.append({"path": self.path, "body": body,
-                                             "authorization": self.headers.get("Authorization"),
-                                             "content_encoding": self.headers.get("Content-Encoding")})
+                                             "authorization": headers.get("Authorization"),
+                                             "x_api_key": headers.get("x-api-key"),
+                                             "anthropic_version": headers.get("anthropic-version"),
+                                             "anthropic_beta": headers.get("anthropic-beta"),
+                                             "content_encoding": headers.get("Content-Encoding")})
             if "stream" in self.path:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -262,3 +266,92 @@ def test_close_freezes_admission_for_an_already_accepted_slow_body(upstream, tmp
         assert proxy.calls_used == 0 and not upstream.received
     finally:
         proxy.close()
+
+
+ANTHROPIC_HEADERS = {"x-api-key": "adbench-local", "Authorization": "Bearer client-secret",
+                     "anthropic-version": "2023-06-01",
+                     "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14"}
+
+
+def anthropic_base(upstream):
+    """Anthropic base URLs are the bare host: clients append /v1/messages."""
+    return upstream.base_url.removesuffix("/v1")
+
+
+def test_anthropic_messages_are_metered_with_the_key_in_x_api_key(upstream, tmp_path):
+    path = tmp_path / "api_calls.jsonl"
+    with LLMBudgetProxy(anthropic_base(upstream), 1, path, api_key="test-upstream-secret",
+                        api="anthropic") as proxy:
+        assert not proxy.base_url.endswith("/v1")
+        assert request(proxy.base_url, "/v1/messages?beta=true", body=b"private prompt",
+                       headers=ANTHROPIC_HEADERS)[0] == 200
+        status, body, _ = request(proxy.base_url, "/v1/messages?beta=true",
+                                  headers=ANTHROPIC_HEADERS)
+        assert status == 402
+        assert json.loads(body)["error"]["code"] == "budget_exhausted"
+        assert proxy.calls_used == 1 and proxy.exhausted and proxy.rejected_requests == 1
+    assert len(upstream.received) == 1
+    received = upstream.received[0]
+    assert received["path"] == "/provider/v1/messages?beta=true"
+    assert received["body"] == b"private prompt"
+    assert received["x_api_key"] == "test-upstream-secret" and received["authorization"] is None
+    assert received["anthropic_version"] == ANTHROPIC_HEADERS["anthropic-version"]
+    assert received["anthropic_beta"] == ANTHROPIC_HEADERS["anthropic-beta"]
+    assert json.loads(path.read_text())["path"] == "/messages"
+    assert not any(word in path.read_text() for word in
+                   ("test-upstream-secret", "client-secret", "adbench-local", "private prompt"))
+
+
+def test_anthropic_proxy_forwards_only_messages_and_model_metadata(upstream, tmp_path):
+    with LLMBudgetProxy(anthropic_base(upstream), 1, tmp_path / "calls.jsonl",
+                        api_key="test-upstream-secret", api="anthropic") as proxy:
+        # Token counting generates nothing, and Claude Code estimates without it.
+        assert request(proxy.base_url, "/v1/messages/count_tokens")[0] == 404
+        assert request(proxy.base_url, "/v1/responses")[0] == 404
+        assert request(proxy.base_url, "/api/hello", method="HEAD", body=b"")[0] == 501
+        assert request(proxy.base_url, "/v1/models", method="GET", body=b"")[0] == 200
+        assert proxy.calls_used == 0
+    assert [(r["path"], r["x_api_key"]) for r in upstream.received] == [
+        ("/provider/v1/models", "test-upstream-secret")]
+    with LLMBudgetProxy(upstream.base_url, 1, tmp_path / "openai.jsonl") as proxy:
+        assert request(proxy.base_url, "/messages")[0] == 404
+        assert proxy.calls_used == 0
+    assert len(upstream.received) == 1
+
+
+def test_a_proxy_without_a_cap_counts_every_request_and_refuses_none(upstream, tmp_path):
+    ledger = tmp_path / "api_calls.jsonl"
+    with LLMBudgetProxy(anthropic_base(upstream), None, ledger, api="anthropic") as proxy:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+            results = list(pool.map(lambda _: request(proxy.base_url, "/v1/messages",
+                                                      headers=ANTHROPIC_HEADERS), range(12)))
+        assert request(proxy.base_url, "/v1/messages?fail=1")[0] == 500
+        assert [status for status, _, _ in results] == [200] * 12
+        assert proxy.calls_used == 13 and proxy.rejected_requests == 0
+        assert not proxy.exhausted
+    assert [json.loads(line)["call"] for line in ledger.read_text().splitlines()] == [
+        *range(1, 14)]
+    # Without an upstream key the caller's credential is forwarded unchanged.
+    assert {r["x_api_key"] for r in upstream.received} == {"adbench-local", None}
+
+
+@pytest.mark.parametrize("budget, api", [(0, "openai"), (True, "openai"), (1, "bedrock")])
+def test_invalid_budgets_and_apis_are_refused(tmp_path, budget, api):
+    with pytest.raises(ValueError):
+        LLMBudgetProxy("https://example.invalid", budget, tmp_path / "calls.jsonl", api=api)
+
+
+def test_anthropic_sdk_retries_use_the_cap_and_stop_on_402(upstream, tmp_path):
+    anthropic = pytest.importorskip("anthropic")
+    with LLMBudgetProxy(anthropic_base(upstream), 2, tmp_path / "calls.jsonl",
+                        api_key="test-upstream-secret", api="anthropic") as proxy:
+        with anthropic.Anthropic(api_key="adbench-local", base_url=proxy.base_url,
+                                 max_retries=5) as client:
+            with pytest.raises(anthropic.APIStatusError) as error:
+                client.messages.create(model="fake", max_tokens=1, extra_query={"fail": "1"},
+                                       messages=[{"role": "user", "content": "hi"}])
+        assert error.value.status_code == 402
+        assert proxy.calls_used == 2 and proxy.rejected_requests == 1
+    assert len(upstream.received) == 2
+    assert {r["x_api_key"] for r in upstream.received} == {"test-upstream-secret"}
+    assert all(r["anthropic_version"] for r in upstream.received)

@@ -13,8 +13,12 @@ and subagents are untouched. Settings and MCP servers of whoever launches it
 are not loaded (``--setting-sources project,local --strict-mcp-config``; the
 workspace has no project settings), so a run does not depend on the account.
 
-Budget mapping: ``--budget N`` evaluations through ``evaluate.py``, enforced
-exactly (see ``_coding_agent``).
+``--budget N`` caps model requests, as for Codex: the CLI gets a placeholder
+key and ``ANTHROPIC_BASE_URL`` at the shared request-budget proxy, which holds
+``$ANTHROPIC_API_KEY`` and forwards to ``--api-base`` (Anthropic's API).
+Retries, subagents and context compaction count; Claude Code does not retry
+the proxy's refusal. ``--eval-budget`` optionally limits evaluator calls
+independently.
 
 Differences that cannot be removed, and are recorded:
 
@@ -70,13 +74,14 @@ def main(argv: list[str] | None = None) -> int:
     _coding_agent.add_arguments(p)
     p.add_argument("--claude-model", default=os.environ.get("ANTHROPIC_MODEL"),
                    help="model Claude Code runs on (default: Claude Code's)")
+    p.set_defaults(api_base=_common.DEFAULT_ANTHROPIC_API_BASE)
     args = p.parse_args(argv)
     if shutil.which("claude") is None:
         raise SystemExit("the claude CLI is not on PATH")
     task, ledger = _common.start(args, AGENT, {
         "claude_code_version": _coding_agent.cli_version("claude"),
         "claude_model": args.claude_model, "effort": args.effort, "gpu": args.gpu,
-        "evaluations": args.budget, "time_limit": args.time_limit,
+        "evaluations": args.eval_budget, "time_limit": args.time_limit,
         "model_note": "Claude Code runs on --claude-model, not --model",
     })
 
