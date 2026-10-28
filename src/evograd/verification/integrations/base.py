@@ -35,6 +35,17 @@ LOSS_DEFINITION = ("the HF causal-LM loss: model(input_ids, labels=labels).loss,
                    "that scalar")
 
 
+#: Gate 3's protocol horizon (AdamW updates per run), 1000 until 2026-10-27. Over 1000
+#: updates every perturbation ends in the same chaotic spread: a 5% fault at one site
+#: moves the loss only 1.2-1.9x as far as compiling that site, and a correct candidate's
+#: single-step peak can reach 2.3x compile's (Qwen3-0.6B, Llama-3.2-1B, ConvNeXt V2,
+#: DLRM, DiT, Qwen2-VL). Over the first 100 updates of the same runs (a run's schedule
+#: depends only on the update index) every frontend seed needs at most 1.4 and the fault
+#: at least 5.3 on Qwen3-0.6B, Llama-3.2-1B, DLRM and DiT; ConvNeXt V2 and Qwen2-VL set
+#: their own horizons.
+GATE3_STEPS = 100
+
+
 @dataclass(frozen=True)
 class Model:
     """What one model contributes to the shared capture, replay and gates."""
@@ -60,7 +71,7 @@ class Model:
     #: Modules whose source is hashed into the corpus identity.
     modeling_modules: tuple[str, ...] = field(default_factory=tuple)
     #: Gate 3 horizon (AdamW updates per training run).
-    gate3_steps: int = 1000
+    gate3_steps: int = GATE3_STEPS
     #: Gate 3 optimizer settings beyond the protocol's constant-rate AdamW
     #: (``gate3.adamw`` keywords: ``lr``, ``warmup_steps``, ``clip_grad_norm``).
     #: Empty is the protocol default; whatever is set enters every run identity.
@@ -68,6 +79,12 @@ class Model:
     #: Training batches per Gate 3 update (gradient accumulation), for a model
     #: whose batch is too small to carry a stable update but must keep its shape.
     gate3_accumulation: int = 1
+    #: Gate 3 safety factor where this model needs its own; ``None`` is the
+    #: protocol's (``gates.GAMMA``).
+    gate3_gamma: float | None = None
+    #: Model-scope Gate 2 safety factor where this model needs its own; ``None`` is
+    #: the protocol's (``gates.GATE2_MODEL_GAMMA``).
+    gate2_model_gamma: float | None = None
     #: How a training step is run, recorded and judged
     #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
     objective: Any = None

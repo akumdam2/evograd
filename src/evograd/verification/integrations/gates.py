@@ -15,8 +15,9 @@ against the model reference (``Model.reference_op``):
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
   native repeats and compile at the same site, with :data:`GATE2_MODEL_GAMMA`
-  (a whole model judges a thousand propagated reductions per batch, the
-  operator scope a handful of results); coverage and input/parameter side
+  or the model's own ``Model.gate2_model_gamma`` (a whole model judges a
+  thousand propagated reductions per batch, the operator scope a handful of
+  results); coverage and input/parameter side
   effects checked, no per-call boundary replay (:data:`GATE2_MODEL_BOUNDARIES`).
 
 * Gate 3, single site (Level 2 only) -- continuous training with the candidate
@@ -69,6 +70,16 @@ GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
 #: Gate 3 runs save their state this often (and at the deadline).
 CHECKPOINT_EVERY = 100
+
+
+def model_gamma(model) -> float:
+    """Model-scope Gate 2's safety factor for ``model`` (its own, else the protocol's)."""
+    return GATE2_MODEL_GAMMA if model.gate2_model_gamma is None else float(model.gate2_model_gamma)
+
+
+def gate3_gamma(model) -> float:
+    """Gate 3's safety factor for ``model`` (its own, else the protocol's)."""
+    return GAMMA if model.gate3_gamma is None else float(model.gate3_gamma)
 
 
 def load_program(path: str | Path):
@@ -176,10 +187,16 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
 def gate1_envelope(op, policy) -> dict[str, float]:
     """Gate 1's elementwise envelope per result, from the operator Gate 2 policy.
 
+    The policy records its own factor times compile's largest elementwise
+    deviation (``envelope``, at ``policy.gamma``); Gate 1 applies its own,
+    :data:`~evograd.verification.gate1.tolerances.ENVELOPE_GAMMA`, to the same
+    deviation, so a stored calibration still binds.
     Gate 2 names a gradient by its argument (``grad:q_weight``, ``grad_in:x``);
     Gate 1 by the declared gradient name (``grad_in:dq_weight``, ``grad_in:dx``).
     An uncalibrated case (no policy) keeps assert_close's rule alone.
     """
+    from evograd.verification.gate1.tolerances import ENVELOPE_GAMMA
+
     if policy is None:
         return {}
     grads = {a.name: a.grad_name for a in op.active_args()}
@@ -190,7 +207,7 @@ def gate1_envelope(op, policy) -> dict[str, float]:
         prefix, _, rest = name.partition(":")
         if prefix in ("grad", "grad_in") and rest in grads:
             name = f"grad_in:{grads[rest]}"
-        envelope[name] = float(entry["envelope"])
+        envelope[name] = ENVELOPE_GAMMA * float(entry["envelope"]) / float(policy.gamma)
     return envelope
 
 
@@ -300,7 +317,7 @@ def judge_model(model, deployment, workload, *, compile_backend: str = "inductor
              else state / "gate2" / "model" / f"{'+'.join(deployment.patch_set)}.json")
     calibration = _calibrate(scope, deployment, samples, cache, samples=samples,
                              boundaries=GATE2_MODEL_BOUNDARIES,
-                             compile_backend=compile_backend, gamma=GATE2_MODEL_GAMMA)
+                             compile_backend=compile_backend, gamma=model_gamma(model))
     report = gate2.verify_integration(scope, deployment, policy=calibration.policy, samples=samples)
     return {"gate2_model_calibration": calibration, "gate2_model": report}
 
@@ -312,11 +329,11 @@ def _gate1_policy(op) -> dict[str, Any]:
     return policy_identity(op)
 
 
-def _gate2_model_rule() -> dict[str, Any]:
+def _gate2_model_rule(model) -> dict[str, Any]:
     """What a cached model-scope Gate 2 verdict was judged under."""
     from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS, MATCHED
 
-    return {"gamma": GATE2_MODEL_GAMMA, "formula": FORMULAS[MATCHED],
+    return {"gamma": model_gamma(model), "formula": FORMULAS[MATCHED],
             "calibration": CALIBRATION_PROCEDURE, "boundaries": GATE2_MODEL_BOUNDARIES}
 
 
@@ -402,7 +419,8 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
     compile_run = train(model, group / "compile.json", compiled, workload, patch_set, reuse=True,
                         log=log, deadline=deadline)
     calibration = gate3.calibrate_global_loss([gate3.TrainingControl(native_a, native_b, compile_run)],
-                                              floor_rms=FLOOR_RMS, floor_max=FLOOR_MAX, gamma=GAMMA)
+                                              floor_rms=FLOOR_RMS, floor_max=FLOOR_MAX,
+                                              gamma=gate3_gamma(model))
     candidate = train(model, out / "gate3_candidate.json", deployment, workload, patch_set,
                       reuse=False, log=log, deadline=deadline)
     verdict = gate3.verify_global_loss(candidate, native_a, policy=calibration.policy)
@@ -517,7 +535,7 @@ def verify_cases(run: Run) -> dict[str, Any]:
             key = {"programs": {case_id: run.programs[case_id]},
                    "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
                    "model": model.name, "workload": model.workload_config,
-                   "gate2_model": _gate2_model_rule()}
+                   "gate2_model": _gate2_model_rule(model)}
             entry.update(_judged_stage(
                 run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
                 lambda: judge_model(model, deployment, run.workload,
@@ -566,7 +584,7 @@ def verify_combination(run: Run, case_ids) -> dict[str, Any]:
     key = {"programs": {cid: run.programs[cid] for cid in case_ids},
            "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
            "model": model.name, "workload": model.workload_config,
-           "gate2_model": _gate2_model_rule()}
+           "gate2_model": _gate2_model_rule(model)}
     statuses = _judged_stage(run, out / "gate2_model.json", key,
                              lambda: judge_model(model, deployment, run.workload,
                                                  compile_backend=run.compile_backend,

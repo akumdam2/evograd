@@ -225,7 +225,8 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                                            "binding": max((native, "native_repeat"),
                                                           (compiled, "trusted_compile"),
                                                           (floor[metric], "floor"))[1]}
-        # Gate 1's envelope for this result: gamma x compile's largest elementwise deviation.
+        # gamma x compile's largest elementwise deviation; Gate 1 rescales it to its own
+        # factor (integrations.gates.gate1_envelope).
         entry["envelope"] = gamma * max(m.max_abs for m in groups[TRUSTED_COMPILE])
         entry["samples"] = {s: sorted({m.sample_id for m in groups[s]}) for s in CONTROL_SOURCES}
         out[name] = entry

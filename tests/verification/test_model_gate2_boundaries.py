@@ -10,7 +10,14 @@ from evograd.verification.integrations import gates
 class ModelGate2Boundaries(unittest.TestCase):
     def test_model_scope_gate2_runs_without_boundary_replay(self):
         self.assertFalse(gates.GATE2_MODEL_BOUNDARIES)
-        self.assertIs(gates._gate2_model_rule()["boundaries"], False)
+        model = mock.Mock(gate2_model_gamma=None)
+        self.assertIs(gates._gate2_model_rule(model)["boundaries"], False)
+
+    def test_a_model_may_set_its_own_model_scope_and_gate3_gammas(self):
+        self.assertEqual(gates.model_gamma(mock.Mock(gate2_model_gamma=None)), gates.GATE2_MODEL_GAMMA)
+        self.assertEqual(gates._gate2_model_rule(mock.Mock(gate2_model_gamma=3.0))["gamma"], 3.0)
+        self.assertEqual(gates.gate3_gamma(mock.Mock(gate3_gamma=None)), gates.GAMMA)
+        self.assertEqual(gates.gate3_gamma(mock.Mock(gate3_gamma=3.0)), 3.0)
 
     def _calibrate(self, cached_boundaries, requested):
         cached = mock.Mock()

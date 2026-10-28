@@ -25,7 +25,8 @@ MODEL = Model(
     contract=reference.CONTRACT,
     source_identity=reference.source_identity,
     modeling_modules=("transformers.models.qwen3_5.modeling_qwen3_5",),
-    # About 2.7 s per deterministic step: 1000 steps is ~45 min per run, four runs
-    # per verdict. 200 keeps one verdict within a 1 h allocation (user, 2026-10-21).
-    gate3_steps=200,
+    # Gate 3 at the protocol's 100 updates (2.7 s each), with Llama's warmup, clipping
+    # and 3e-5: at the protocol's constant 1e-4 its compile control drifted M 1.24 by
+    # update 100 (2026-10-20). Not yet measured with its seeds and faults.
+    gate3_optimizer={"warmup_steps": 100, "clip_grad_norm": 1.0, "lr": 3e-5},
 )

@@ -13,7 +13,7 @@ import dataclasses
 import hashlib
 from typing import Any
 
-from .base import Model
+from .base import GATE3_STEPS, Model
 from .generated import capture_for, invocations
 from .objectives import PrimaryOutput, batch_digest
 
@@ -56,7 +56,8 @@ def objective(name: str) -> PrimaryOutput:
                          GeneratedWorkload.objective_definition.fget(probe))
 
 
-def make_model(name: str, workload_config: dict[str, Any], *, gate3_steps: int = 1000) -> Model:
+def make_model(name: str, workload_config: dict[str, Any], *,
+               gate3_steps: int = GATE3_STEPS) -> Model:
     def load_workload():
         from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
 

@@ -292,11 +292,11 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     gate1 = task.spec["gate1_tolerances"]
     defaults = model_policy_identity()["defaults"]
     assert "tolerances" not in task.spec
-    assert gate1["policy"] == model_policy_identity() and gate1["envelope_gamma"] == 2.0
+    assert gate1["policy"] == model_policy_identity() and gate1["envelope_gamma"] == 4.0
     assert list(gate1["results"]) == sorted([*op.output_names, *op.grad_names()])
     assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
                for r in gate1["results"].values())
-    assert "2x the largest elementwise deviation" in task.statement
+    assert "4x the largest elementwise deviation" in task.statement
     # The rollback rule: search feedback on generated inputs, and the statement says so.
     assert task.spec["search_correctness"] == {"rule": "declared_tolerances"}
     assert "the declaration's own tolerances, not the acceptance rule" in task.statement
@@ -326,8 +326,9 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
                 for order in (101, 202, 303, 404) for call in "abcde"]
     manifest = _write_corpus(tmp_path / "corpus", payloads, case_id="rmsnorm/rmsnorm",
                              task="rmsnorm")
-    policy = SimpleNamespace(thresholds={"out:y": {"envelope": 0.5}, "grad:x": {"envelope": 0.25},
-                                         "grad:weight": {"rms": 1.0}})
+    policy = SimpleNamespace(gamma=2.0, thresholds={"out:y": {"envelope": 0.5},
+                                                    "grad:x": {"envelope": 0.25},
+                                                    "grad:weight": {"rms": 1.0}})
     calibrated = []
 
     def calibration(model, case, corpus, **options):
@@ -342,7 +343,7 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     assert search["rule"] == SEARCH_RULE and search["case_id"] == "rmsnorm/rmsnorm"
     assert search["payload_ids"] == [f"o{o}/rmsnorm/rmsnorm/{c}" for o in (101, 202) for c in "ace"]
     assert search["corpus"]["manifest"] == str(Path(manifest).resolve())
-    assert search["envelope"] == {"out:y": 0.5, "grad_in:dx": 0.25} and search["calibrated"]
+    assert search["envelope"] == {"out:y": 1.0, "grad_in:dx": 0.5} and search["calibrated"]
     assert calibrated == ["configured",
                           ("rmsnorm/rmsnorm", search["corpus"]["corpus_id"], tmp_path / "state")]
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement

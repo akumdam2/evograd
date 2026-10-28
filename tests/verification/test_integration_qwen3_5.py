@@ -88,10 +88,15 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(cases["qwen3_5_residual_rmsnorm/residual_rmsnorm"].frequency, 32)
 
     def test_gate3_horizon_is_per_model(self):
+        from evograd.verification.integrations.convnextv2_tiny import MODEL as CONVNEXT
+        from evograd.verification.integrations.qwen2_vl_2b import MODEL as QWEN2_VL
         from evograd.verification.integrations.qwen3_0_6b import MODEL as QWEN3
         from evograd.verification.integrations.qwen3_5_4b import MODEL
 
-        self.assertEqual((QWEN3.gate3_steps, MODEL.gate3_steps), (1000, 200))
+        self.assertEqual((QWEN3.gate3_steps, MODEL.gate3_steps), (100, 100))
+        self.assertEqual((CONVNEXT.gate3_steps, QWEN2_VL.gate3_steps), (50, 10))
+        self.assertEqual(MODEL.gate3_optimizer, {"warmup_steps": 100, "clip_grad_norm": 1.0,
+                                                 "lr": 3e-5})
 
     def test_every_case_task_is_redeclared_under_the_contract(self):
         from evograd.verification.integrations.base import observed_cases

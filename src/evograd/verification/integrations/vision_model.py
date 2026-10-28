@@ -13,7 +13,7 @@ import dataclasses
 import hashlib
 from typing import Any
 
-from .base import Model
+from .base import GATE3_STEPS, Model
 from .objectives import PrimaryOutput, batch_digest
 from .vision import capture_for, invocations
 
@@ -61,7 +61,8 @@ def reference_op_for(name: str):
     return reference_op
 
 
-def make_model(name: str, workload_config: dict[str, Any], *, gate3_steps: int = 1000) -> Model:
+def make_model(name: str, workload_config: dict[str, Any], *,
+               gate3_steps: int = GATE3_STEPS) -> Model:
     def load_workload():
         from evograd.benchmark.topdown.common.vision.spec import canonical
         from evograd.evaluation.tier3.workloads.common.vision.workload import VisionWorkload

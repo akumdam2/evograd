@@ -16,10 +16,11 @@ operands' real dtypes; ``reference_dtype`` is refused there. The report's
 **How.** Per element, per result:
 ``|candidate_i - reference_i| <= max(atol_z + rtol_z * |reference_i|, envelope_z)``,
 with model-reference tasks using fixed ``torch.testing.assert_close`` dtype
-defaults from PyTorch 2.11 for each reference result and ``envelope_z`` gamma
-times the largest elementwise deviation the trusted ``torch.compile`` control
-showed on that result over the calibration payloads (passed in by the caller
-from the operator Gate 2 policy; absent, 0). Declaration overrides,
+defaults from PyTorch 2.11 for each reference result and ``envelope_z``
+Gate 1's own factor (:data:`.tolerances.ENVELOPE_GAMMA`) times the largest
+elementwise deviation the trusted ``torch.compile`` control showed on that
+result over the calibration payloads (passed in by the caller from the
+operator Gate 2 policy; absent, 0). Declaration overrides,
 multipliers and shape hooks do not apply to model tasks. Generic tasks retain
 ``op.tolerance_for(workload, result)``. Computed in float64.
 

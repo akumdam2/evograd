@@ -193,15 +193,18 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
     reference result must have), the rule and per-result ``(atol, rtol)`` from
     its tolerance policy. A model-reference task gets the fixed dtype defaults
     and the compile envelope; the envelope's value needs a GPU calibration on
-    the model's payloads, so only its rule and ``gamma`` (the operator Gate 2
-    calibration's, which ``integrations.gates.judge_case`` uses) are recorded.
+    the model's payloads, so only its rule and Gate 1's factor
+    (``gate1.tolerances.ENVELOPE_GAMMA``) are recorded.
     """
     import torch
 
     from evograd.opdecl.inputs import resolve_dtype
     from evograd.verification.gate1.runner import declared_name, result_contract
-    from evograd.verification.gate1.tolerances import policy_identity, result_tolerances
-    from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
+    from evograd.verification.gate1.tolerances import (
+        ENVELOPE_GAMMA,
+        policy_identity,
+        result_tolerances,
+    )
 
     results = {}
     for spec in result_contract(op, workload).specs:
@@ -211,7 +214,7 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
         results[name] = {"dtype": spec.dtype, "atol": atol, "rtol": rtol}
     policy = policy_identity(op)
     return {"policy": policy, "results": results,
-            **({"envelope_gamma": SAFETY_FACTOR_GAMMA} if "envelope" in policy else {})}
+            **({"envelope_gamma": ENVELOPE_GAMMA} if "envelope" in policy else {})}
 
 
 #: The evaluator's correctness check before any payload rule: the declaration's
