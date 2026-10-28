@@ -37,9 +37,11 @@ def attention_forward_production(q, k, v, o_weight):
             sdpa_kwargs = {"enable_gqa": True}
         else:
             key, value = _repeat_kv(k, groups), _repeat_kv(v, groups)
+    # bool(): under symbolic shapes (torch.compile, make_fx) `tokens > 1` is a SymBool,
+    # which SDPA's is_causal refuses; Transformers' `... and ...` makes the same bool.
     attn = F.scaled_dot_product_attention(
         q, key, value, attn_mask=None, dropout_p=0.0, scale=head_dim ** -0.5,
-        is_causal=tokens > 1, **sdpa_kwargs,
+        is_causal=bool(tokens > 1), **sdpa_kwargs,
     )
     attn = attn.transpose(1, 2).contiguous()
     attn = attn.reshape(batch, tokens, -1).contiguous()

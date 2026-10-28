@@ -28,9 +28,11 @@ def forward_ref(q, k, v, gate, o_weight):
 
 def forward_production(q, k, v, gate, o_weight):
     batch, heads, tokens, head_dim = q.shape
+    # bool(): under symbolic shapes (torch.compile, make_fx) the comparisons are SymBools,
+    # which SDPA's bool arguments refuse; Transformers' `... and ...` makes the same bool.
     attn = F.scaled_dot_product_attention(
         q, k, v, attn_mask=None, dropout_p=0.0, scale=head_dim ** -0.5,
-        is_causal=tokens > 1, enable_gqa=heads != k.shape[1],
+        is_causal=bool(tokens > 1), enable_gqa=bool(heads != k.shape[1]),
     )
     attn = attn.transpose(1, 2).contiguous()
     attn = attn.reshape(batch, tokens, -1).contiguous()
