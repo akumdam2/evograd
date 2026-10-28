@@ -236,6 +236,7 @@ def _search_correctness(model_obj, observed, rule: str, corpus: str | Path | Non
         raise ValueError(f"search correctness must be {SEARCH_RULE!r} or {DECLARED_RULE!r}")
     if corpus is None:
         raise ValueError(f"{SEARCH_RULE!r} needs the model's payload corpus (its manifest.json)")
+    from evograd.verification.integrations.base import configure
     from evograd.verification.integrations.gates import gate1_envelope, operator_calibration
     from evograd.verification.payloads.corpus import Corpus
     from evograd.verification.payloads.gate1 import SEARCH_SELECTION, search_payload_ids
@@ -243,6 +244,9 @@ def _search_correctness(model_obj, observed, rule: str, corpus: str | Path | Non
     manifest = Path(corpus).resolve()
     opened = Corpus.open(manifest)
     payload_ids = search_payload_ids(opened, observed.case_id)
+    # Calibrated as `evograd evaluate` calibrates (deterministic algorithms, no
+    # TF32): the envelope is then Gate 1's own, and a stored calibration binds.
+    configure()
     scope, calibration = operator_calibration(model_obj, observed, opened, device=device,
                                               state=state)
     return {"rule": SEARCH_RULE, "case_id": observed.case_id, "selection": SEARCH_SELECTION,

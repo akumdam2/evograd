@@ -317,7 +317,7 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     from types import SimpleNamespace
 
     from evograd.adbench_tools.evaluate import evaluator_env
-    from evograd.verification.integrations import gates
+    from evograd.verification.integrations import base, gates
     from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
     from tests.verification.test_real_payloads import _write_corpus
 
@@ -335,6 +335,7 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
         return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=policy)
 
     monkeypatch.setattr(gates, "operator_calibration", calibration)
+    monkeypatch.setattr(base, "configure", lambda: calibrated.append("configured"))
     task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                       corpus=manifest, state=tmp_path / "state")
     search = task.spec["search_correctness"]
@@ -342,7 +343,8 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     assert search["payload_ids"] == [f"o{o}/rmsnorm/rmsnorm/{c}" for o in (101, 202) for c in "ace"]
     assert search["corpus"]["manifest"] == str(Path(manifest).resolve())
     assert search["envelope"] == {"out:y": 0.5, "grad_in:dx": 0.25} and search["calibrated"]
-    assert calibrated == [("rmsnorm/rmsnorm", search["corpus"]["corpus_id"], tmp_path / "state")]
+    assert calibrated == ["configured",
+                          ("rmsnorm/rmsnorm", search["corpus"]["corpus_id"], tmp_path / "state")]
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
     monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
     assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
