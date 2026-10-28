@@ -58,7 +58,7 @@ A local proxy counts model requests in `api_calls.jsonl`. Every admitted request
 
 ## Setup
 
-- Clone evograd and run the code at the commit in `/work/hdd/bcjw/wzhan/ADBench/REVISION`. The latest text of this plan is on `main`.
+- Clone evograd from GitHub and use the latest `main`.
 - Build the Python environment from [`requirements-adbench.txt`](requirements-adbench.txt).
 - Install KernelAgent, GEAK (`bash candidates/geak/setup.sh`), codex-cli and Claude Code at the versions that file lists.
 - Do not put the conda environment on `/work/hdd`: activating environments there has hung.
@@ -143,7 +143,6 @@ Codex, Claude Code and GEAK have a shell as their owner's Unix user, so they cou
    - The request proxy: an Anthropic endpoint. Claude Code's background requests are turned off.
    - GEAK: request counting and `--effort`.
    - The requirements file.
-2. **Pin the revision.** Write it to `ADBench/REVISION`.
-3. **Corpora.** Remove group write permission.
-4. **Weights.** Copy the Qwen3-0.6B weights into `/work/hdd/bcjw/wzhan/hf_cache`.
-5. **Task packs.** Build all 58 under `ADBench/tasks/`, link them into every agent root and smoke root, and write `cases.json`.
+2. **Corpora.** Remove group write permission.
+3. **Weights.** Copy the Qwen3-0.6B weights into `/work/hdd/bcjw/wzhan/hf_cache`.
+4. **Task packs.** Build all 58 under `ADBench/tasks/`, link them into every agent root and smoke root, and write `cases.json`.
