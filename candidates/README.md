@@ -13,7 +13,7 @@ Each agent is judged on the same terms:
 | **OpenEvolve, raw** | the same OpenEvolve backend, without the frontend | `openevolve/` |
 | **GEPA** | `gepa.optimize_anything`, reflective Pareto search | `gepa/` |
 | **KernelAgent** (Meta) | `TritonKernelAgent` generation, then `OptimizationManager` | `kernelagent/` |
-| **GEAK v4** (AMD) | Claude Code `kernel_workflow`, author mode, on NVIDIA | `geak/` |
+| **GEAK v4** (AMD) | `kernel_workflow` through Codex (default) or Claude, author mode, on NVIDIA | `geak/` |
 | **Claude Code** (Anthropic) | `claude -p`, headless, in a workspace with a metered `evaluate.py` | `claude_code/` |
 | **Codex** (OpenAI) | `codex exec`, headless, in the same workspace | `codex/` |
 
@@ -133,7 +133,7 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
    repetitions, with a shared cached baseline.
 6. **Same model and model-request cap for the OpenAI agents.**
    - `--model` and `--api-base` are one OpenAI-compatible endpoint for every
-     agent except GEAK and Claude Code, which run on Anthropic's API
+     agent except Claude Code and GEAK with `--backend claude`, which run on Anthropic's API
      (`--api-base` defaults to `$ADBENCH_ANTHROPIC_API_BASE` or
      `https://api.anthropic.com` for them).
    - `--budget N` caps admitted model API requests per agent and case,
@@ -156,10 +156,11 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
 | Claude Code | N | session time limit; optional independent `--eval-budget`; no evaluator-call cap by default |
 | GEAK | counted, not capped | `budget = max(2, N // 5)` optimization directions (`budget_unit: optimization_directions`) |
 
-Claude Code and GEAK are separate data points: both run on a Claude model,
-and GEAK's budget is in optimization directions. The proxy in front of
-Anthropic's API caps Claude Code's requests at N and only counts GEAK's, so
-both have a `llm_calls_recorded` count. Every request of the claude CLI counts
+GEAK defaults to the same OpenAI model through its Codex runtime, but its
+budget remains optimization directions: requests are counted, not capped.
+`--backend claude --claude-model MODEL` retains the Anthropic path.
+Claude Code uses a Claude model and its requests are capped at N.
+Both have a `llm_calls_recorded` count. Every request of the claude CLI counts
 (subagents and compaction too); `/v1/messages/count_tokens` is refused and
 Claude Code estimates tokens locally instead. Runs from before this have
 `llm_calls_recorded: null` (`unmetered`); token or session usage events do not
@@ -174,8 +175,8 @@ establish a request count.
   - its steer says the GPU is NVIDIA, because its knowledge base is
     AMD-specific.
 
-  GEAK also runs on Claude Code's model (`--claude-model`), not on `--model`.
-  Report it as a separate model and budget point.
+  GEAK defaults to Codex using `--model` and `--api-base` (Responses API).
+  Its direction budget differs from the other agents' API-request cap.
 - **Claude Code and Codex have a shell on the GPU node.** Their own
   sandboxes block the GPU, so they run with permissions bypassed. Nothing
   they are given names the repository, the run or the task pack: the
@@ -187,7 +188,7 @@ establish a request count.
   evograd's scoring source through the path `evaluate.py` then embedded).
   `run.json` records `oracle_intact` (whether `evaluate.py` was edited) and
   `deliverable` (which rule chose the measured program).
-  Claude Code runs on `--claude-model`, like GEAK. Codex uses an explicit
+  Claude Code runs on `--claude-model`, as does GEAK with `--backend claude`. Codex uses an explicit
   `adbench` HTTP Responses provider pointed at the shared budget proxy, with
   WebSockets and stream reconnection retries disabled, and a placeholder key
   (`adbench-local`). Other request retries still consume the budget. The proxy holds
@@ -215,8 +216,8 @@ export ADBENCH_API_BASE=https://api.openai.com/v1
 pip install -e references/gepa                   # 8f287de942f41a6d1e0e7e5b2d576247c4bedee9
 # KernelAgent
 pip install -e references/KernelAgent            # e0647170da36ef9b059ac0bd3d60103aa4ed378b
-# GEAK: Claude Code >= 2.1.177 on PATH, ANTHROPIC_API_KEY (held by the request proxy;
-# ADBENCH_ANTHROPIC_API_BASE for a gateway), ncu on PATH
+# GEAK: Node.js v20+, codex CLI, OPENAI_API_KEY, and ncu on PATH.
+# Custom --api-base endpoints must support the Responses API.
 bash candidates/geak/setup.sh                    # NVIDIA working copy -> candidates/geak/.work/GEAK
 # Coding agents: native CLIs on PATH (not pip packages; see pyproject.toml)
 curl -fsSL https://claude.ai/install.sh | bash -s 2.1.310  # Claude Code -> ~/.local/bin/claude;
@@ -244,8 +245,7 @@ python candidates/evograd/run.py     --task $TASK --run-dir $R/evograd     --bud
 python candidates/openevolve/run.py  --task $TASK --run-dir $R/openevolve  --budget 10
 python candidates/gepa/run.py        --task $TASK --run-dir $R/gepa        --budget 10
 python candidates/kernelagent/run.py --task $TASK --run-dir $R/kernelagent --budget 10
-python candidates/geak/run.py        --task $TASK --run-dir $R/geak        --budget 10 \
-    --claude-model claude-opus-5-5
+python candidates/geak/run.py        --task $TASK --run-dir $R/geak        --budget 10
 python candidates/codex/run.py       --task $TASK --run-dir $R/codex       --budget 10
 python candidates/claude_code/run.py --task $TASK --run-dir $R/claude_code --budget 10 \
     --claude-model claude-opus-5-5

@@ -254,7 +254,7 @@ def test_geak_counts_anthropic_requests_without_a_cap_and_passes_effort(
     monkeypatch.setattr(driver.subprocess, "run", run)
     run_dir = tmp_path / "geak"
     assert driver.main(arguments(task, run_dir, "--geak-root", str(geak_root),
-                                 "--effort", "max", api_base=None)) == 0
+                                 "--backend", "claude", "--effort", "max", api_base=None)) == 0
     record = json.loads((run_dir / "run.json").read_text())
     assert record["status"] == "completed"
     config = record["config"]
@@ -264,6 +264,64 @@ def test_geak_counts_anthropic_requests_without_a_cap_and_passes_effort(
                                     "unit": "api_requests"}
     assert "geak-deliverable" in Path(record["best_program"]).read_text()
     assert metered.instances[-1].closed and "ANTHROPIC_BASE_URL" not in os.environ
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure", "timeout"])
+def test_geak_codex_uses_openai_proxy_and_workflow_result(
+        task, tmp_path, monkeypatch, metered, outcome):
+    driver = load_driver("geak")
+    root = tmp_path / "GEAK"
+    for rel in ("kernel_workflow/kernel_workflow.js", "interface/runtime/engine/run_workflow.mjs"):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("// fake runtime")
+    prepare = ModuleType("prepare")
+    prepare.prepare = lambda task_, run_root, out: out
+    monkeypatch.setitem(sys.modules, "prepare", prepare)
+    monkeypatch.setattr(driver.shutil, "which", lambda name: f"/test/{name}")
+    monkeypatch.setenv("GEAK_MODEL", "wrong-model")
+    monkeypatch.setenv("GEAK_AGENT_PROFILE", "wrong-profile")
+    monkeypatch.setenv("GEAK_CODEX_EXTRA_ARGS", "-c model_provider=wrong")
+    # Codex must work without any Anthropic credential.
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+
+    def run(command, **kwargs):
+        if command[0] == "nvidia-smi":
+            return SimpleNamespace(stdout="NVIDIA GH200")
+        proxy = metered.instances[-1]
+        assert (proxy.api, proxy.limit, proxy.api_key) == ("openai", None, "test-upstream-key")
+        assert command[0] == "node" and command[command.index("--agent") + 1] == "codex"
+        env = kwargs["env"]
+        assert env["GEAK_CODEX_MODEL"] == "gpt-5.5"
+        assert env["GEAK_CODEX_EFFORT"] == "high"
+        assert env["OPENAI_BASE_URL"] == proxy.base_url
+        assert env["OPENAI_API_KEY"] == "adbench-local"
+        assert "GEAK_MODEL" not in env and "GEAK_AGENT_PROFILE" not in env
+        assert "model_provider=wrong" not in env["GEAK_CODEX_EXTRA_ARGS"]
+        assert "--skip-git-repo-check" in env["GEAK_CODEX_EXTRA_ARGS"]
+        assert not any("test-upstream-key" in value for value in env.values())
+        wf = json.loads(Path(command[command.index("--args-file") + 1]).read_text())
+        assert wf["mode"] == "author" and wf["budget"] == 2
+        candidate = kwargs["cwd"] / "exp" / "round1" / "workspace/kernel_src/candidate.py"
+        candidate.parent.mkdir(parents=True)
+        candidate.write_text("# codex-geak-deliverable")
+        proxy.calls_used = 12
+        if outcome == "timeout":
+            raise driver.subprocess.TimeoutExpired(command, 1)
+        Path(command[command.index("--result-file") + 1]).write_text(
+            json.dumps({"eval_dir": str(candidate.parents[2])}))
+        return SimpleNamespace(stdout="WORKFLOW_RESULT {}", stderr="", returncode=int(outcome == "failure"))
+
+    monkeypatch.setattr(driver.subprocess, "run", run)
+    run_dir = tmp_path / "run"
+    assert driver.main(arguments(task, run_dir, "--geak-root", str(root), "--effort", "high")) == 0
+    record = json.loads((run_dir / "run.json").read_text())
+    assert record["config"]["backend"] == "codex"
+    assert record["status"] == {"success": "completed", "failure": "workflow_failed",
+                                "timeout": "time_limit"}[outcome]
+    assert record["llm_budget"]["used"] == 12
+    assert "codex-geak-deliverable" in Path(record["best_program"]).read_text()
+    assert metered.instances[-1].closed
 
 
 @pytest.mark.parametrize("agent", ["claude_code", "geak"])

@@ -49,7 +49,7 @@ def parser(description: str) -> argparse.ArgumentParser:
     p.add_argument("--model", default=DEFAULT_MODEL, help="LLM for every agent call")
     p.add_argument("--api-base", default=DEFAULT_API_BASE,
                    help="OpenAI-compatible endpoint (key from $OPENAI_API_KEY); for Claude Code "
-                        "and GEAK, Anthropic's (default $ADBENCH_ANTHROPIC_API_BASE or "
+                        "and GEAK --backend claude, Anthropic's (default $ADBENCH_ANTHROPIC_API_BASE or "
                         "https://api.anthropic.com, key from $ANTHROPIC_API_KEY)")
     p.add_argument("--seed", type=int, default=0, help="the agent's own random seed")
     p.add_argument("--no-score", action="store_true",
@@ -67,7 +67,7 @@ def start(args, agent: str, config: dict):
         raise SystemExit(f"{args.run_dir} already holds a run; use a fresh --run-dir")
     if args.budget < 1:
         raise SystemExit("--budget must be >= 1")
-    anthropic = agent in ANTHROPIC_AGENTS
+    anthropic = config.get("api", "anthropic" if agent in ANTHROPIC_AGENTS else "openai") == "anthropic"
     if anthropic and not os.environ.get("ANTHROPIC_API_KEY"):
         raise SystemExit("ANTHROPIC_API_KEY is not set; the request proxy forwards with it")
     # A driver with its own budget unit (GEAK) overrides budget and budget_unit.
@@ -76,7 +76,7 @@ def start(args, agent: str, config: dict):
               "model": args.model, "api_base": args.api_base,
               "seed": args.seed, **config}
     ledger = RunLedger(args.run_dir, agent=agent, task=task, config=config)
-    if agent in METERED_AGENTS or anthropic:
+    if agent in METERED_AGENTS or anthropic or agent == "geak":
         from evograd.adbench_tools.llm_budget import LLMBudgetProxy
 
         key = (os.environ["ANTHROPIC_API_KEY"] if anthropic else

@@ -1,41 +1,15 @@
 #!/usr/bin/env python3
-"""GEAK v4 (AMD-AGI, ``kernel_workflow``) on an adbench-tools task, on NVIDIA.
+"""Run GEAK's author-mode kernel workflow on an ADBench task, on NVIDIA.
 
-    bash candidates/geak/setup.sh                       # once: NVIDIA working copy
-    python candidates/geak/run.py --task TASK --run-dir RUN --budget 30 \\
-        [--claude-model MODEL] [--effort LEVEL] [--gpu 0]
+    bash candidates/geak/setup.sh
+    python candidates/geak/run.py --task TASK --run-dir RUN --model MODEL
 
-GEAK as shipped is a Claude Code Workflow (``kernel_workflow.js``): a Director,
-a TechLead and specialist engineer agents, each writing code, running the
-task's immutable unittest, profiling, and having every claimed speedup
-re-verified. It is run here in its **author** mode -- "there is NO existing
-source to optimize ... write a fresh implementation in target_language" --
-which is the from-a-specification setting every other agent is in:
-
-* ``kernel_path`` is an op task dir built by ``prepare.py``: ``meta.json``
-  (the op spec), ``TASK.md`` (the shared statement), an immutable
-  ``unittest.py`` that runs the evograd evaluator on
-  ``kernel_src/candidate.py`` and logs every call to this run's ledger, and a
-  frozen eager-autograd ``baseline_src/``.
-* ``target_language`` is ``triton``; ``task`` (GEAK's natural-language steer)
-  says the device is NVIDIA, because GEAK's knowledge base is AMD-specific and
-  would otherwise steer toward MFMA/wave64/HIP. Nothing else is steered.
-* Claude Code is launched headless with one instruction: call the Workflow tool
-  with those args. GEAK's own prompts (``roles/*.md``) are untouched.
-
-Differences that cannot be removed, and are recorded:
-
-* GEAK's model is whatever Claude Code runs (``--claude-model``); the other
-  agents use ``--model`` through an OpenAI-compatible API. For model parity run
-  all agents on the same model, or report GEAK as a separate point.
-* GEAK's budget unit is an *optimization direction* (an engineer session that
-  may run the unittest many times): run.json's ``budget`` is ``--geak-budget``,
-  default ``max(2, budget // 5)``, with ``budget_unit``
-  ``optimization_directions``. Its model requests go through the shared
-  request-budget proxy (a placeholder key and ``ANTHROPIC_BASE_URL`` for the
-  CLI; ``$ANTHROPIC_API_KEY`` stays in the proxy, which forwards to
-  ``--api-base``), which counts them in ``api_calls.jsonl`` without a cap.
-  Those counts and the evaluator calls in the ledger are the comparable numbers.
+The default Codex backend runs GEAK's unmodified JS workflow through its Node
+runtime, using the shared --model and --api-base (Responses API). The optional
+--backend claude retains the native Claude Workflow path and --claude-model.
+Both paths use the same task preparation, evaluator and final measurement.
+GEAK's budget remains optimization directions, default max(2, budget // 5).
+API requests are counted through the shared proxy without a request cap.
 """
 
 from __future__ import annotations
@@ -97,7 +71,7 @@ def find_candidate(exp_root: Path, reply: str | None) -> Path | None:
     if reply:
         try:
             eval_dir = json.loads(reply[reply.find("{"): reply.rfind("}") + 1]).get("eval_dir")
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             eval_dir = None
     if eval_dir and (Path(eval_dir) / "workspace/kernel_src/candidate.py").is_file():
         return Path(eval_dir) / "workspace/kernel_src/candidate.py"
@@ -112,27 +86,40 @@ def main(argv: list[str] | None = None) -> int:
                    help="NVIDIA working copy from setup.sh")
     p.add_argument("--geak-budget", type=int, default=None,
                    help="GEAK optimization directions (default max(2, budget // 5))")
-    p.add_argument("--claude-model", default=os.environ.get("ANTHROPIC_MODEL"),
+    p.add_argument("--backend", choices=("codex", "claude"), default="codex")
+    p.add_argument("--claude-model", default=None,
                    help="model Claude Code runs GEAK with (default: Claude Code's)")
     p.add_argument("--effort", default=None,
-                   help="Claude Code's reasoning effort (default: its own)")
+                   help="backend reasoning effort (default: GEAK/backend default)")
     p.add_argument("--gpu", default=os.environ.get("CUDA_VISIBLE_DEVICES", "0").split(",")[0])
     p.add_argument("--time-limit", type=int, default=6 * 3600, help="seconds")
-    p.set_defaults(api_base=_common.DEFAULT_ANTHROPIC_API_BASE)
+    p.set_defaults(api_base=None)
     args = p.parse_args(argv)
+    args.api_base = args.api_base or (_common.DEFAULT_API_BASE if args.backend == "codex"
+                                     else _common.DEFAULT_ANTHROPIC_API_BASE)
+    if args.backend == "codex" and args.claude_model:
+        p.error("--claude-model requires --backend claude; use --model for Codex")
+    if args.backend == "claude" and args.claude_model is None:
+        args.claude_model = os.environ.get("ANTHROPIC_MODEL")
+    if args.geak_budget is not None and args.geak_budget < 1:
+        p.error("--geak-budget must be positive")
     geak_budget = args.geak_budget or max(2, args.budget // 5)
     workflow_dir = (args.geak_root / "kernel_workflow").resolve()
     if not (workflow_dir / "kernel_workflow.js").is_file():
         raise SystemExit(f"no GEAK working copy at {args.geak_root}; run candidates/geak/setup.sh")
-    if shutil.which("claude") is None:
-        raise SystemExit("the claude CLI is not on PATH")
+    runtime = args.geak_root.resolve() / "interface/runtime/engine/run_workflow.mjs"
+    if args.backend == "codex" and not runtime.is_file():
+        raise SystemExit("GEAK working copy lacks the Codex runtime; rerun candidates/geak/setup.sh")
+    for executable in (("node", "codex") if args.backend == "codex" else ("claude",)):
+        if shutil.which(executable) is None:
+            raise SystemExit(f"the {executable} CLI is not on PATH")
     task, ledger = _common.start(args, AGENT, {
         "geak_commit": (args.geak_root / ".adbench_tools_geak_commit").read_text().strip()
         if (args.geak_root / ".adbench_tools_geak_commit").is_file() else None,
         "budget": geak_budget, "budget_unit": "optimization_directions",
         "mode": "author", "target_language": "triton",
         "claude_model": args.claude_model, "effort": args.effort, "gpu": args.gpu,
-        "model_note": "GEAK runs on Claude Code's model, not --model",
+        "backend": args.backend, "api": "openai" if args.backend == "codex" else "anthropic",
     })
 
     from prepare import prepare  # candidates/geak/prepare.py
@@ -156,31 +143,59 @@ def main(argv: list[str] | None = None) -> int:
         "PYTHONPATH": os.pathsep.join([str(_common.REPO / "src"), str(task.root),
                                        env.get("PYTHONPATH", "")]).rstrip(os.pathsep),
     })
-    command = ["claude", "-p", prompt(wf_args, workflow_dir), "--dangerously-skip-permissions",
-               "--output-format", "json"]
-    if args.claude_model:
-        command += ["--model", args.claude_model]
-    if args.effort:
-        command += ["--effort", args.effort]
+    result_file = ledger.root / "workflow_result.json"
+    if args.backend == "codex":
+        # --model in GEAK's runtime names a registry entry, not an API model.
+        # Use its raw-model environment setting and clear inherited selection.
+        for name in ("GEAK_AGENT_PROFILE", "GEAK_MODEL", "GEAK_REGISTRY",
+                     "GEAK_CODEX_EXTRA_ARGS", "GEAK_CODEX_BIN", "OPENAI_CUSTOM_HEADERS",
+                     "GEAK_AMDKEY"):
+            env.pop(name, None)
+        env.update({"GEAK_AGENT_BACKEND": "codex", "GEAK_CODEX_MODEL": args.model,
+                    "GEAK_CODEX_AUTOCONFIG": "1", "OPENAI_BASE_URL": args.api_base,
+                    "GEAK_CODEX_EXTRA_ARGS": "--skip-git-repo-check "
+                    "-c model_providers.geak_auto.requires_openai_auth=false "
+                    "-c model_providers.geak_auto.supports_websockets=false"})
+        if args.effort:
+            env["GEAK_CODEX_EFFORT"] = args.effort
+        command = ["node", str(runtime), str(workflow_dir / "kernel_workflow.js"),
+                   "--agent", "codex", "--args-file", str(ledger.root / "workflow_args.json"),
+                   "--result-file", str(result_file),
+                   "--metrics-file", str(ledger.root / "workflow_metrics.json")]
+    else:
+        command = ["claude", "-p", prompt(wf_args, workflow_dir), "--dangerously-skip-permissions",
+                   "--output-format", "json"]
+        if args.claude_model:
+            command += ["--model", args.claude_model]
+        if args.effort:
+            command += ["--effort", args.effort]
     status = "completed"
     try:
         completed = subprocess.run(command, cwd=ledger.root, env=env, capture_output=True,
                                    text=True, timeout=args.time_limit)
         stdout, stderr = completed.stdout, completed.stderr
+        if getattr(completed, "returncode", 0) != 0:
+            status = "workflow_failed"
     except subprocess.TimeoutExpired as exc:
         status = "time_limit"
         stdout = exc.stdout if isinstance(exc.stdout, str) else ""
         stderr = exc.stderr if isinstance(exc.stderr, str) else ""
-    (ledger.root / "claude_stdout.json").write_text(stdout or "", encoding="utf-8")
-    (ledger.root / "claude_stderr.txt").write_text(stderr or "", encoding="utf-8")
+    prefix = "workflow" if args.backend == "codex" else "claude"
+    stdout_file = "workflow_stdout.txt" if args.backend == "codex" else "claude_stdout.json"
+    (ledger.root / stdout_file).write_text(stdout or "", encoding="utf-8")
+    (ledger.root / f"{prefix}_stderr.txt").write_text(stderr or "", encoding="utf-8")
     reply = None
-    try:
-        session = json.loads(stdout)
-        reply = session.get("result")
-        ledger.log_llm({"source": "claude-code", "total_cost_usd": session.get("total_cost_usd"),
-                        "num_turns": session.get("num_turns"), "usage": session.get("usage")})
-    except (ValueError, TypeError):
-        pass
+    if args.backend == "codex":
+        if result_file.is_file():
+            reply = result_file.read_text(encoding="utf-8")
+    else:
+        try:
+            session = json.loads(stdout)
+            reply = session.get("result")
+            ledger.log_llm({"source": "claude-code", "total_cost_usd": session.get("total_cost_usd"),
+                            "num_turns": session.get("num_turns"), "usage": session.get("usage")})
+        except (ValueError, TypeError):
+            pass
     candidate = find_candidate(exp_root, reply)
     best = None
     if candidate is not None:

@@ -18,17 +18,20 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 SRC="${1:-$REPO/references/GEAK}"
 DEST="${2:-$HERE/.work/GEAK}"
-PINNED=02095f2c8665a7d8741924546d27a30cc19794b3
+PINNED=0881e29473e5554f535ece584bfd15e2c09db906
 
-if [ -d "$SRC/.git" ]; then
+actual=unknown
+if [ -e "$SRC/.git" ]; then
     actual="$(git -C "$SRC" rev-parse HEAD)"
     [ "$actual" = "$PINNED" ] || echo "WARNING: GEAK at $actual, adbench-tools was written against $PINNED" >&2
 fi
+[ -f "$SRC/interface/runtime/engine/run_workflow.mjs" ] || { echo "GEAK source lacks the Codex runtime" >&2; exit 1; }
 mkdir -p "$DEST"
 rsync -a --delete --exclude .git --exclude 'kernel_workflow/exp/' "$SRC/" "$DEST/"
 cp "$DEST/scripts/gpu_identity.py" "$DEST/scripts/gpu_identity.amd.py"
 cp "$HERE/nvidia/gpu_identity.py" "$DEST/scripts/gpu_identity.py"
-echo "$PINNED" > "$DEST/.adbench_tools_geak_commit"
-command -v claude >/dev/null || echo "WARNING: the claude CLI is not on PATH (GEAK runs inside Claude Code >= 2.1.177)" >&2
+echo "$actual" > "$DEST/.adbench_tools_geak_commit"
+command -v node >/dev/null || echo "WARNING: Node.js v20+ is required" >&2
+command -v codex >/dev/null || echo "WARNING: the codex CLI is not on PATH" >&2
 command -v ncu >/dev/null || echo "WARNING: ncu is not on PATH; GEAK's profile step will fall back to benchmark-only" >&2
 echo "$DEST"
