@@ -131,8 +131,15 @@ def evaluator_env(task: AgentTask, *, cache_dir: str | Path | None = None,
 
 
 def search_rule(task: AgentTask) -> str:
-    """The pack's search-feedback correctness rule (packs older than the field: declared)."""
-    return (task.spec.get("search_correctness") or {}).get("rule", DECLARED_RULE)
+    """The pack's search-feedback correctness rule: Gate 1 on calibration payloads for a
+    model case, never the declaration's tolerances; those for an operator pack."""
+    from evograd.verification.payloads.gate1 import SEARCH_RULE
+
+    rule = (task.spec.get("search_correctness") or {}).get("rule", DECLARED_RULE)
+    if "model" in task.spec and rule != SEARCH_RULE:
+        raise ValueError(f"{task.root}: a model case is judged by {SEARCH_RULE!r}, not "
+                         f"{rule!r}; rebuild the pack")
+    return rule
 
 
 def _run_child(module: str, program: Path, env: dict[str, str], timeout: int,

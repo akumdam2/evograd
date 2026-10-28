@@ -14,8 +14,6 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
-from evograd.adbench_tools.task import build_task
-
 REPO = Path(__file__).resolve().parents[2]
 UPSTREAM = "https://example.invalid/v1"
 
@@ -30,9 +28,10 @@ def load_driver(agent):
 
 @pytest.fixture(scope="module")
 def task(tmp_path_factory):
-    return build_task(None, tmp_path_factory.mktemp("budget_task") / "task",
-                      model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
-                      search_correctness="declared_tolerances")
+    from tests.adbench_tools.test_adbench_tools import payload_rule_task
+
+    return payload_rule_task(tmp_path_factory.mktemp("budget_task") / "task",
+                             "qwen3_0_6b", "rmsnorm/rmsnorm")
 
 
 @pytest.fixture
@@ -76,7 +75,9 @@ def metered(monkeypatch):
             self.calls_used, self.rejected_requests = self.limit, 1
 
     monkeypatch.setattr(llm_budget, "LLMBudgetProxy", Proxy)
-    return SimpleNamespace(common=common, instances=instances, environment=environment)
+    yield SimpleNamespace(common=common, instances=instances, environment=environment)
+    # `start` points every evaluator at the pack's payload rule through the environment.
+    os.environ.pop("EVOGRAD_SEARCH_CORRECTNESS", None)
 
 
 def arguments(task, run_dir, *extra, api_base=UPSTREAM):

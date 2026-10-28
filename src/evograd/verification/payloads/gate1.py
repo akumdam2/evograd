@@ -14,6 +14,8 @@ device memory at once.
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Any, Mapping
 
 from evograd.opdecl.activity import OpDecl, Workload
@@ -105,6 +107,16 @@ SEARCH_SELECTION = "first, middle and last call of the case in each calibration 
 #: :data:`SEARCH_RULE`; the evolution evaluator's correctness check then calls
 #: :func:`search_correctness` instead of judging generated inputs.
 SEARCH_CORRECTNESS_ENV = "EVOGRAD_SEARCH_CORRECTNESS"
+
+
+def search_spec() -> dict[str, Any] | None:
+    """The ``search_correctness`` of the pack named by :data:`SEARCH_CORRECTNESS_ENV`, or
+    ``None`` outside such a pack. Under it no check judges by the declaration's tolerances."""
+    path = os.environ.get(SEARCH_CORRECTNESS_ENV)
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)["search_correctness"]
 
 
 def search_payload_ids(corpus: Corpus, case_id: str) -> list[str]:

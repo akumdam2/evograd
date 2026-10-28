@@ -217,26 +217,20 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
             **({"envelope_gamma": ENVELOPE_GAMMA} if "envelope" in policy else {})}
 
 
-#: The evaluator's correctness check before any payload rule: the declaration's
-#: tolerances on generated inputs. Operator packs always use it; a model case
-#: uses it only when built with it (the rollback of the payload rule).
+#: The evaluator's correctness check by the declaration's tolerances on generated
+#: inputs: an operator pack's, which has no payloads. A model case never uses it.
 DECLARED_RULE = "declared_tolerances"
 
 
-def _search_correctness(model_obj, observed, rule: str, corpus: str | Path | None, *,
+def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
                         device: str, state: Path | None) -> dict[str, Any]:
-    """What the evaluator judges a candidate's correctness by, frozen in the pack.
-
-    Under the payload rule: Gate 1 on the first, middle and last call of each
-    calibration order, with the compile envelope operator Gate 2's calibration
-    gives the case (a GPU run, as ``integrations.gates.judge_case`` makes it).
+    """What the evaluator judges a model case's candidates by, frozen in the pack:
+    Gate 1 on the first, middle and last call of each calibration order, with the
+    compile envelope operator Gate 2's calibration gives the case (a GPU run, as
+    ``integrations.gates.judge_case`` makes it).
     """
     from evograd.verification.payloads.gate1 import SEARCH_RULE
 
-    if rule == DECLARED_RULE:
-        return {"rule": DECLARED_RULE}
-    if rule != SEARCH_RULE:
-        raise ValueError(f"search correctness must be {SEARCH_RULE!r} or {DECLARED_RULE!r}")
     if corpus is None:
         raise ValueError(f"{SEARCH_RULE!r} needs the model's payload corpus (its manifest.json)")
     from evograd.verification.integrations.base import configure
@@ -330,7 +324,6 @@ def build_task(
     case: str = "benchmark",
     model: str | None = None,
     case_id: str | None = None,
-    search_correctness: str | None = None,
     corpus: str | Path | None = None,
     device: str = "cuda",
     state: str | Path | None = None,
@@ -345,10 +338,10 @@ def build_task(
     (``evograd evaluate``'s unit): the configuration the model trains at and
     the model's own reference computation, so what the agent optimizes is what
     the gates judge. ``op_name``, ``declaration``, ``dtype``, ``dims`` and
-    ``case`` are then taken from the case. Its ``search_correctness`` rule
-    (default :data:`~evograd.verification.payloads.gate1.SEARCH_RULE`, which
-    needs the model's ``corpus`` and a GPU; or :data:`DECLARED_RULE`) is what
-    the evaluator judges every agent's candidates by during search.
+    ``case`` are then taken from the case. The evaluator judges every agent's
+    candidates by :data:`~evograd.verification.payloads.gate1.SEARCH_RULE`
+    during search, which needs the model's ``corpus`` and a GPU; an operator
+    task has no payloads and keeps :data:`DECLARED_RULE`.
     """
     from dataclasses import replace
 
@@ -367,8 +360,6 @@ def build_task(
         select_workload,
     )
 
-    from evograd.verification.payloads.gate1 import SEARCH_RULE
-
     get_policy(scoring)
     observed = None
     if (model is None) != (case_id is None):
@@ -380,11 +371,9 @@ def build_task(
         base, workload = model_obj.reference_op(observed.task), observed.workload
         op_name = base.name
         selection = f"observed case {case_id} of {model}"
-        rule = search_correctness or SEARCH_RULE
     else:
-        if search_correctness not in (None, DECLARED_RULE) or corpus is not None:
+        if corpus is not None:
             raise ValueError("only a model's observed case has payloads to judge search feedback on")
-        rule = DECLARED_RULE
         if op_name is None:
             raise ValueError("op_name is required without a model")
         dims_given = dims is not None
@@ -413,9 +402,9 @@ def build_task(
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
     # Before the pack exists: a calibration that fails leaves no half-written pack.
-    search = (_search_correctness(model_obj, observed, rule, corpus, device=device,
+    search = (_search_correctness(model_obj, observed, corpus, device=device,
                                   state=Path(state) if state else None)
-              if observed is not None else {"rule": rule})
+              if observed is not None else {"rule": DECLARED_RULE})
     root.mkdir(parents=True, exist_ok=True)
 
     if observed is not None:

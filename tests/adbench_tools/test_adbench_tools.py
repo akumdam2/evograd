@@ -265,14 +265,35 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
+def payload_rule_task(output_dir: Path, model: str, case_id: str):
+    """A model case's pack without a GPU: a tiny real corpus holds its calibration calls;
+    only the operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
+    from types import SimpleNamespace
+    from unittest import mock
+
+    from evograd.verification.integrations import base, gates
+    from tests.verification.test_real_payloads import _write_corpus
+
+    payloads = [(call, order, {"x": torch.ones(1)}, {"dy": torch.ones(1)})
+                for order in (101, 202) for call in "abc"]
+    manifest = _write_corpus(output_dir.parent / f"{output_dir.name}_corpus", payloads,
+                             case_id=case_id, task=case_id.split("/")[0])
+
+    def calibration(model_obj, case, corpus, **_):
+        return SimpleNamespace(op=model_obj.reference_op(case.task)), SimpleNamespace(policy=None)
+
+    with mock.patch.object(gates, "operator_calibration", calibration), \
+            mock.patch.object(base, "configure", lambda: None):
+        return build_task(None, output_dir, model=model, case_id=case_id, corpus=manifest)
+
+
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     """The pack `evograd evaluate` judges: the case's configuration and the
     model's own reference computation, both read from the verification side."""
     from evograd.adbench_tools.task import observed_case
 
     model, case = observed_case("qwen3_0_6b", "rmsnorm/rmsnorm")
-    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
-                      search_correctness="declared_tolerances")
+    task = payload_rule_task(tmp_path / "task", "qwen3_0_6b", "rmsnorm/rmsnorm")
     reference = model.reference_op("rmsnorm")
     op = task.op()
     assert task.task_id == "qwen3_0_6b.rmsnorm.rmsnorm"
@@ -297,11 +318,14 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
                for r in gate1["results"].values())
     assert "4x the largest elementwise deviation" in task.statement
-    # The rollback rule: search feedback on generated inputs, and the statement says so.
-    assert task.spec["search_correctness"] == {"rule": "declared_tolerances"}
-    assert "the declaration's own tolerances, not the acceptance rule" in task.statement
+    # Search feedback is Gate 1 on payloads; no model case is judged by the declaration.
+    assert task.spec["search_correctness"]["rule"] == "gate1_calibration_payloads"
+    assert "the declaration's own tolerances" not in task.statement
     with pytest.raises(ValueError, match="needs the model's payload corpus"):
         build_task(None, tmp_path / "nocorpus", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
+    with pytest.raises(TypeError, match="search_correctness"):
+        build_task(None, tmp_path / "declared", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                   search_correctness="declared_tolerances")
     with pytest.raises(ValueError, match="no observed case"):
         build_task(None, tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
     with pytest.raises(ValueError, match="fixes the declaration"):
@@ -310,7 +334,8 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
 
 
 def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tmp_path,
-                                                                              monkeypatch):
+                                                                              monkeypatch,
+                                                                              small_task):
     """The default rule: Gate 1 on the first, middle and last calibration call
     of each order, with the envelope operator Gate 2's calibration gives the
     case; every evaluator the pack starts is pointed at it, and only by the pack."""
@@ -349,16 +374,24 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
     monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
     assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
-    declared = build_task(None, tmp_path / "declared", model="qwen3_0_6b",
-                          case_id="rmsnorm/rmsnorm", search_correctness="declared_tolerances")
-    assert SEARCH_CORRECTNESS_ENV not in evaluator_env(declared)
+    # An operator pack has no payloads and keeps the declaration's tolerances; a model
+    # pack that names them (built before that rule was removed) is refused, never judged.
+    assert small_task.spec["search_correctness"] == {"rule": "declared_tolerances"}
+    assert SEARCH_CORRECTNESS_ENV not in evaluator_env(small_task)
+    from evograd.adbench_tools.task import AgentTask
+
+    stale = AgentTask(task.root, {**task.spec,
+                                  "search_correctness": {"rule": "declared_tolerances"}})
+    with pytest.raises(ValueError, match="a model case is judged by"):
+        evaluator_env(stale)
     with pytest.raises(ValueError, match="only a model's observed case"):
         build_task("llama3_swiglu_mlp", tmp_path / "op", corpus=manifest)
 
 
 def test_the_evaluator_judges_correctness_by_the_packs_rule(tmp_path, monkeypatch):
     """With the pack's ``task.json`` in the environment, the evolution
-    evaluator's correctness check is Gate 1 on its payloads, not generated inputs."""
+    evaluator's correctness check is Gate 1 on its payloads, not generated inputs,
+    for every program, evograd's unified lineage included."""
     from evograd.evolve import evaluator
     from evograd.verification.payloads import gate1 as payload_gate1
 
@@ -369,9 +402,15 @@ def test_the_evaluator_judges_correctness_by_the_packs_rule(tmp_path, monkeypatc
                         lambda op, module, s, device: seen.append(s) or {"passed": 1, "total": 1})
     monkeypatch.setattr(evaluator, "make_case_inputs",
                         lambda *a, **k: pytest.fail("generated inputs used"))
+    unified = type("UnifiedLineage", (), {"UNIFIED_DEPLOYMENT_CONFIG": {}})
+    monkeypatch.delenv(payload_gate1.SEARCH_CORRECTNESS_ENV, raising=False)
+    assert evaluator._numerical_variants_apply(unified)
+    assert not evaluator._numerical_variants_apply(object())
     monkeypatch.setenv(payload_gate1.SEARCH_CORRECTNESS_ENV, str(tmp_path / "task.json"))
     assert evaluator._run_correctness(object(), object()) == {"passed": 1, "total": 1}
     assert seen == [spec]
+    # The unified lineage's stress variants judge by the declaration's tolerances.
+    assert not evaluator._numerical_variants_apply(unified)
 
 
 #: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
@@ -396,8 +435,7 @@ def test_a_model_task_states_and_generates_the_models_scalars(tmp_path, model, c
     from evograd.opdecl.activity import format_default
     from evograd.opdecl.inputs import make_case_inputs
 
-    task = build_task(None, tmp_path / "task", model=model, case_id=case_id,
-                      search_correctness="declared_tolerances")
+    task = payload_rule_task(tmp_path / "task", model, case_id)
     op = task.op()
     declared = {a.name: a.default for a in get_task(op.name).scalar_inactive_args()}
     assert declared != scalars  # the case this pins

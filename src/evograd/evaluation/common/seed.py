@@ -1,6 +1,7 @@
 """Untimed seed acceptance through deployment and required benchmark shapes.
 
-Small correctness cases use the existing numerical oracle and tolerances.
+Small correctness cases use the existing numerical oracle and tolerances; inside
+an ADBench model task pack, Gate 1 on its calibration payloads replaces them.
 Benchmark cases check execution, output/gradient contracts and finiteness, not
 a second numerical policy or performance score. Run in the pipeline's killable
 verification subprocess so a broken CUDA candidate cannot stop repair.
@@ -175,6 +176,7 @@ def main(argv=None):
     from evograd.evolve.evaluator import _capture_native_output, _native_output_tail
     from evograd.opdecl.verify import verify
     from evograd.opdecl.verify_cli import load_candidate
+    from evograd.verification.payloads.gate1 import search_correctness, search_spec
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--op", required=True)
@@ -200,15 +202,26 @@ def main(argv=None):
         with _capture_native_output() as captured:
             native_path = captured
             candidate = load_candidate(args.candidate)
-            report = verify(op, candidate, device=args.device)
-            payload["verify"] = report.to_dict()
-            if report.ok:
+            search = search_spec()
+            if search is None:
+                report = verify(op, candidate, device=args.device)
+                payload["verify"] = report.to_dict()
+                passed = report.ok
+            else:
+                # An ADBench model case: the pack's rule (Gate 1 on its calibration payloads)
+                # replaces every check by the declaration's tolerances on generated inputs.
+                summary = search_correctness(op, candidate, search, device=args.device)
+                payload["search_correctness"] = summary
+                passed = summary["passed"] == summary["total"]
+            if passed:
                 acceptance = check_seed_acceptance(
                     op, candidate, device=args.device, benchmark_suite=args.benchmark_suite,
+                    correctness=None if search is None else (),
                 )
                 payload["seed_acceptance"] = acceptance
                 payload["metrics"]["correct"] = float(acceptance["ok"])
-                if acceptance["ok"] and hasattr(candidate, "UNIFIED_DEPLOYMENT_CONFIG"):
+                if (acceptance["ok"] and search is None
+                        and hasattr(candidate, "UNIFIED_DEPLOYMENT_CONFIG")):
                     from evograd.pipelines.unified.validation import validate_numerical_variants
 
                     variants = validate_numerical_variants(op, candidate, device=args.device)

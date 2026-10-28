@@ -84,6 +84,7 @@ def selected_cases(args) -> list[str]:
 
 
 def cmd_tasks(args) -> int:
+    from evograd.adbench_tools.evaluate import search_rule
     from evograd.adbench_tools.task import build_task, load
 
     cases = model_cases(args.model)
@@ -95,12 +96,10 @@ def cmd_tasks(args) -> int:
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
                 raise SystemExit(f"{directory} holds {task.task_id}, not {args.model} {cid}")
-            print(f"kept {task.task_id}: {directory} (search correctness "
-                  f"{(task.spec.get('search_correctness') or {}).get('rule', 'declared_tolerances')})")
+            print(f"kept {task.task_id}: {directory} (search correctness {search_rule(task)})")
             continue
         task = build_task(None, directory, model=args.model, case_id=cid, library=args.library,
-                          search_correctness=args.search_correctness, corpus=args.corpus,
-                          state=args.state)
+                          corpus=args.corpus, state=args.state)
         print(f"built {task.task_id}: {directory} (L{task.spec['level']}, "
               f"primitives {list(task.allowed_primitives)}, "
               f"search correctness {task.spec['search_correctness']['rule']})")
@@ -345,12 +344,9 @@ def main(argv: list[str] | None = None) -> int:
     common(p)
     p.add_argument("--case-id", nargs="+", required=True, metavar="TASK/COMPONENT")
     p.add_argument("--library", default="auto")
-    p.add_argument("--search-correctness", default=None,
-                   choices=("gate1_calibration_payloads", "declared_tolerances"),
-                   help="how the evaluator judges correctness during search (default: Gate 1 "
-                        "on the first, middle and last call of each calibration order; needs "
-                        "--corpus and a GPU)")
-    p.add_argument("--corpus", type=Path, default=None, help="the model's payload corpus manifest")
+    p.add_argument("--corpus", type=Path, default=None,
+                   help="the model's payload corpus manifest (search feedback is Gate 1 on the "
+                        "first, middle and last call of each calibration order; needs a GPU)")
     p.add_argument("--state", type=Path, default=None,
                    help="reuse and keep operator Gate 2 calibrations here (as evaluate's state)")
     p.set_defaults(run=cmd_tasks)

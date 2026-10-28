@@ -41,7 +41,7 @@ A candidate is positive when it is accepted, its single-site T3 succeeds, and th
 
 All agents, evograd included, get their correctness feedback from one shared evaluator. It applies Gate 1's rule to real calibration payloads: the first, middle and last call of the case in orders 101 and 202. The compile envelope is precomputed and stored in the task pack. Acceptance payloads are never used as feedback. Timing feedback stays as it was: Tier 1 on generated inputs with the case's shapes.
 
-Which rule the evaluator applies is a field of the task pack. If the smoke runs show that the payload rule misjudges known candidates or is too slow, wzhan rebuilds every task pack with the earlier declared-tolerance rule before the searches start. The rule is never switched during the trial, and never for a single agent.
+The rule is stored in each task pack and is the same for every agent; evograd's seed acceptance uses it too. No check during search judges a model case by the declaration's tolerances, and there is no fallback rule.
 
 ## Agents and budget
 
@@ -90,12 +90,10 @@ python candidates/bench.py run --model $MODEL --agent $AGENT --case-id $CASE_ID 
   --budget 10 --time-limit 6000 -- <flags from the table above>
 ```
 
-- **Smoke first.** It checks the installation and the plumbing, and can run before the shared task packs exist, on throwaway packs of your own built with the earlier correctness rule:
+- **Smoke first.** It checks the installation and the plumbing on two of the shared task packs. Your smoke root's `tasks` links to them; runs and evaluations stay in the smoke root:
 
   ```bash
   SMOKE=/work/hdd/bcjw/wzhan/ADBench/smoke/$AGENT; CASES="rmsnorm/rmsnorm qwen3_swiglu_mlp/swiglu_mlp"
-  python candidates/bench.py tasks --root $SMOKE --model qwen3_0_6b --case-id $CASES \
-    --search-correctness declared_tolerances
   python candidates/bench.py run --root $SMOKE --model qwen3_0_6b --agent $AGENT --case-id $CASES \
     --budget 10 --time-limit 6000 -- <flags from the table above>
   python candidates/bench.py evaluate --root $SMOKE --model qwen3_0_6b --agent $AGENT --case-id $CASES \
@@ -106,7 +104,7 @@ python candidates/bench.py run --model $MODEL --agent $AGENT --case-id $CASE_ID 
 - **When to start a case.** Start a case only if the allocation has at least twice the agent's longest smoke case left, and at least 20 minutes.
 - **Interrupted searches.** If a search is cut off by the allocation or a node failure, move its run directory and `.log` to `$ADBENCH_ROOT/$MODEL/aborted/` and run the case once more. The rerun replaces the interrupted run whatever its result, and both runs' costs are reported. Never use `--redo`.
 - **Failures.** A search that ends without a submission keeps its failure record and is not rerun. Final verdicts are never fed back to an agent.
-- **Task packs.** In the trial roots do not run `bench.py tasks`: the trial packs are prebuilt, read-only, and shared by every agent. Start the trial only after wzhan says they are ready.
+- **Task packs.** Never run `bench.py tasks`, in the smoke root or the trial root: the packs are prebuilt, read-only, and shared by every agent. Start the smoke only after wzhan says they are ready.
 
 ## Outputs
 
@@ -139,7 +137,7 @@ Codex, Claude Code and GEAK have a shell as their owner's Unix user, so they cou
    - The qkv_norm_rope backward formula.
    - `parameter_args` for gelu and quick_gelu.
    - The unified frontend: accept convolutions with padding 0.
-   - Search feedback: Gate 1 on calibration payloads, with the compile envelope stored in the task pack.
+   - Search feedback: Gate 1 on calibration payloads, with the compile envelope stored in the task pack, for every agent and for evograd's seed acceptance. The declared-tolerance rule is removed for model cases.
    - The request proxy: an Anthropic endpoint. Claude Code's background requests are turned off.
    - GEAK: request counting and `--effort`.
    - The requirements file.

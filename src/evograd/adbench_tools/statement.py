@@ -116,9 +116,6 @@ def _search_text(spec: dict) -> str:
                 f"{len(search['payload_ids'])} recorded training calls (the first, middle and "
                 "last call of this operator in each of two training steps); the calls "
                 "acceptance judges are not among them.")
-    if "envelope_gamma" in spec["gate1_tolerances"]:
-        return (" Its correctness check runs generated inputs at this configuration against "
-                "the declaration's own tolerances, not the acceptance rule of section 2.")
     return ""
 
 

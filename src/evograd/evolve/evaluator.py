@@ -304,13 +304,19 @@ def _compare_tensor(candidate, reference, atol: float, rtol: float) -> tuple[boo
     return ok, max_abs, max_rel
 
 
+def _numerical_variants_apply(module) -> bool:
+    """Whether a unified-lineage program also faces the stress variants. They judge by the
+    declaration's tolerances on generated inputs, which a pack's payload rule replaces."""
+    from evograd.verification.payloads.gate1 import search_spec
+
+    return hasattr(module, "UNIFIED_DEPLOYMENT_CONFIG") and search_spec() is None
+
+
 def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]:
-    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, search_correctness
+    from evograd.verification.payloads.gate1 import search_correctness, search_spec
 
     # An ADBench task pack may judge search feedback by Gate 1 on recorded payloads.
-    if spec_path := os.environ.get(SEARCH_CORRECTNESS_ENV):
-        with open(spec_path, encoding="utf-8") as handle:
-            spec = json.load(handle)["search_correctness"]
+    if (spec := search_spec()) is not None:
         return search_correctness(op, module, spec, device=device)
     fwd, bwd = lookup_pair(op, module)
     grad_names = op.grad_names()
@@ -526,7 +532,7 @@ def build_evaluate(
                 native_output_path = captured_path
                 correctness = _run_correctness(op, module)
                 if correctness["passed"] == correctness["total"]:
-                    if hasattr(module, "UNIFIED_DEPLOYMENT_CONFIG"):
+                    if _numerical_variants_apply(module):
                         from evograd.pipelines.unified.validation import validate_numerical_variants
 
                         numerical_variants = validate_numerical_variants(op, module)

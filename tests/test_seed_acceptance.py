@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
+import os
 import subprocess
 import sys
 import types
@@ -290,6 +294,62 @@ class TestMultiOutputTasks(unittest.TestCase):
         failure = report["failure"]
         self.assertIn("total", failure["error_message"])
         self.assertFalse(failure["checks"]["total"]["ok"])
+
+
+class TestPayloadRule(unittest.TestCase):
+    """Inside an ADBench model task pack the pack's rule is seed acceptance's only
+    numerical check: never the declaration's tolerances on generated inputs."""
+
+    def run_seed(self, root: Path, summary: dict | None):
+        from evograd.evaluation.common import seed
+        from evograd.verification.payloads import gate1 as payload_gate1
+
+        op = fixture_op()
+        declaration = root / "declaration.py"
+        declaration.write_text("from tests.test_seed_acceptance import fixture_op\nop = fixture_op()\n")
+        # 1% off: far outside the declared float32 tolerance (1e-5).
+        source = fixture_candidate(op).fixture_source.replace(
+            "return x * weight + bias,", "return (x * weight + bias) * 1.01,")
+        candidate = root / "candidate.py"
+        candidate.write_text("UNIFIED_DEPLOYMENT_CONFIG = {}\n" + source)
+        spec = {"rule": payload_gate1.SEARCH_RULE, "case_id": "seed/affine"}
+        (root / "task.json").write_text(json.dumps({"search_correctness": spec}))
+        environment = {} if summary is None else {
+            payload_gate1.SEARCH_CORRECTNESS_ENV: str(root / "task.json")}
+        judged, out = [], io.StringIO()
+        with mock.patch.dict(os.environ, environment), \
+                mock.patch.object(payload_gate1, "search_correctness",
+                                  lambda op, module, s, device: judged.append(s) or summary), \
+                mock.patch("evograd.pipelines.unified.validation.validate_numerical_variants",
+                           side_effect=AssertionError("declared stress variants ran")), \
+                contextlib.redirect_stdout(out):
+            if summary is None:
+                os.environ.pop(payload_gate1.SEARCH_CORRECTNESS_ENV, None)
+            code = seed.main(["--op", op.name, "--declaration", f"{declaration}:op",
+                              "--device", "cpu", str(candidate)])
+        self.assertEqual(judged, [] if summary is None else [spec])
+        return code, json.loads(out.getvalue())
+
+    def test_a_seed_the_payloads_accept_is_accepted_without_declared_checks(self):
+        with TemporaryDirectory() as tmp:
+            code, report = self.run_seed(Path(tmp), {"passed": 6, "total": 6})
+        self.assertEqual((code, report["metrics"]["correct"]), (0, 1.0), report)
+        self.assertNotIn("verify", report)
+        self.assertNotIn("numerical_variants", report)
+        self.assertEqual({row["stage"] for row in report["seed_acceptance"]["cases"]},
+                         {"benchmark_pair", "benchmark_deployment"})
+
+    def test_a_seed_the_payloads_reject_is_rejected(self):
+        with TemporaryDirectory() as tmp:
+            code, report = self.run_seed(Path(tmp), {"passed": 5, "total": 6})
+        self.assertEqual((code, report["metrics"]["correct"]), (1, 0.0))
+        self.assertNotIn("seed_acceptance", report)
+
+    def test_outside_a_pack_the_declared_tolerances_still_judge(self):
+        with TemporaryDirectory() as tmp:
+            code, report = self.run_seed(Path(tmp), None)
+        self.assertEqual((code, report["metrics"]["correct"]), (1, 0.0))
+        self.assertFalse(report["verify"]["ok"])
 
 
 class TestVerifyCandidateArgumentValidation(unittest.TestCase):
