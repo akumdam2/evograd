@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The benchmark run of one agent on one model: tasks, runs, the protocol, the summary.
 
-    python candidates/bench.py tasks     --model M --case-id C [C ...]
+    python candidates/bench.py tasks     --model M --case-id C [C ...] --corpus MANIFEST
     python candidates/bench.py run       --model M --agent A [--budget N] [--case-id C ...] [-- agent flags]
     python candidates/bench.py evaluate  --model M --agent A --corpus MANIFEST [--deadline-min 50]
     python candidates/bench.py summarize --model M --agent A [A ...] [--out summary.md]
@@ -95,11 +95,18 @@ def cmd_tasks(args) -> int:
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
                 raise SystemExit(f"{directory} holds {task.task_id}, not {args.model} {cid}")
-            print(f"kept {task.task_id}: {directory}")
+            print(f"kept {task.task_id}: {directory} (search correctness "
+                  f"{(task.spec.get('search_correctness') or {}).get('rule', 'declared_tolerances')})")
             continue
-        task = build_task(None, directory, model=args.model, case_id=cid, library=args.library)
+        task = build_task(None, directory, model=args.model, case_id=cid, library=args.library,
+                          search_correctness=args.search_correctness, corpus=args.corpus,
+                          state=args.state)
         print(f"built {task.task_id}: {directory} (L{task.spec['level']}, "
-              f"primitives {list(task.allowed_primitives)})")
+              f"primitives {list(task.allowed_primitives)}, "
+              f"search correctness {task.spec['search_correctness']['rule']})")
+        if task.spec["search_correctness"].get("calibrated") is False:
+            print(f"  WARNING: no operator Gate 2 calibration for {cid}: search feedback has no "
+                  "compile envelope (assert_close's rule alone)", flush=True)
     return 0
 
 
@@ -338,6 +345,14 @@ def main(argv: list[str] | None = None) -> int:
     common(p)
     p.add_argument("--case-id", nargs="+", required=True, metavar="TASK/COMPONENT")
     p.add_argument("--library", default="auto")
+    p.add_argument("--search-correctness", default=None,
+                   choices=("gate1_calibration_payloads", "declared_tolerances"),
+                   help="how the evaluator judges correctness during search (default: Gate 1 "
+                        "on the first, middle and last call of each calibration order; needs "
+                        "--corpus and a GPU)")
+    p.add_argument("--corpus", type=Path, default=None, help="the model's payload corpus manifest")
+    p.add_argument("--state", type=Path, default=None,
+                   help="reuse and keep operator Gate 2 calibrations here (as evaluate's state)")
     p.set_defaults(run=cmd_tasks)
 
     p = sub.add_parser("run", help="one agent on every task pack (or --case-id), no scoring")

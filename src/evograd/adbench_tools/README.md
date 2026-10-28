@@ -350,7 +350,7 @@ an existing pack, so all agents in a comparison see the same bytes.
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
 | `adbench_primitives.py` | A local `vendor_gemm` so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
-| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
+| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama3_swiglu_mlp.bf16.B2_H2048_I8192_T2048`.
 `compare` refuses to mix results from different task ids or statement hashes.
@@ -437,6 +437,20 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
 | **full** | `evograd.evolve.evaluator_entry` in a child process, with the environment `run_evolve` sets: scoped declaration, forward override, scoring policy, performance baseline, baseline timing cache, granted primitives. It runs static rules → import → correctness of every output and gradient → a run at the timed shape → timing → `combined_score` | evograd, raw OpenEvolve, GEPA, GEAK, Claude Code, Codex, final score |
 | **correctness** | The same up to the timed-shape run, without timing (`_check.py`) | KernelAgent's test, GEAK's and the coding agents' `--correctness` mode |
 
+- **Correctness during search** follows the pack's `search_correctness`
+  (`task.json`). A model's observed case defaults to
+  `gate1_calibration_payloads`: Gate 1's rule (dtype defaults or the compile
+  envelope, whichever is larger) on the first, middle and last recorded call of
+  the case in each calibration order (101, 202), with the envelope operator
+  Gate 2's calibration gives the case; the acceptance calls (303, 404) stay
+  held out. `bench.py tasks` needs the model's `--corpus` and a GPU for it.
+  `declared_tolerances` (operator packs, and a model pack built with
+  `--search-correctness declared_tolerances`) keeps the declaration's
+  tolerances on generated inputs. The evaluator sets
+  `EVOGRAD_SEARCH_CORRECTNESS` from the pack alone, and a driver refuses to
+  start when the pack's corpus or payloads are missing; there is no fallback
+  between rules. To roll the rule back, rebuild every pack with the other one
+  before any search, never during a trial.
 - `EvalRecord.feedback()` renders the verdict in the format OpenEvolve shows
   its model. Every agent gets this text.
 - `agent_score()` is `combined_score` if correct, else 0, for optimizers that
@@ -529,7 +543,8 @@ run by `candidates/bench.py` on every agent in the same way:
 ```bash
 export ADBENCH_ROOT=...            # default results/adbench; results go to $ADBENCH_ROOT/<model>
 export ADBENCH_MODEL=gpt-5.5
-python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm ...
+python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm ... \
+                                     --corpus CORPUS/manifest.json       # GPU: Gate 1's envelope
 python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json --deadline-min 50
 python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd openevolve gepa kernelagent

@@ -271,7 +271,8 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     from evograd.adbench_tools.task import observed_case
 
     model, case = observed_case("qwen3_0_6b", "rmsnorm/rmsnorm")
-    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
+    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                      search_correctness="declared_tolerances")
     reference = model.reference_op("rmsnorm")
     op = task.op()
     assert task.task_id == "qwen3_0_6b.rmsnorm.rmsnorm"
@@ -296,11 +297,78 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
                for r in gate1["results"].values())
     assert "2x the largest elementwise deviation" in task.statement
+    # The rollback rule: search feedback on generated inputs, and the statement says so.
+    assert task.spec["search_correctness"] == {"rule": "declared_tolerances"}
+    assert "the declaration's own tolerances, not the acceptance rule" in task.statement
+    with pytest.raises(ValueError, match="needs the model's payload corpus"):
+        build_task(None, tmp_path / "nocorpus", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
     with pytest.raises(ValueError, match="no observed case"):
         build_task(None, tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
     with pytest.raises(ValueError, match="fixes the declaration"):
         build_task(None, tmp_path / "mixed", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                    dtype="float32")
+
+
+def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tmp_path,
+                                                                              monkeypatch):
+    """The default rule: Gate 1 on the first, middle and last calibration call
+    of each order, with the envelope operator Gate 2's calibration gives the
+    case; every evaluator the pack starts is pointed at it, and only by the pack."""
+    from types import SimpleNamespace
+
+    from evograd.adbench_tools.evaluate import evaluator_env
+    from evograd.verification.integrations import gates
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
+    from tests.verification.test_real_payloads import _write_corpus
+
+    payloads = [(call, order, {"x": torch.ones(2, 4), "weight": torch.ones(4)},
+                 {"dy": torch.ones(2, 4)})
+                for order in (101, 202, 303, 404) for call in "abcde"]
+    manifest = _write_corpus(tmp_path / "corpus", payloads, case_id="rmsnorm/rmsnorm",
+                             task="rmsnorm")
+    policy = SimpleNamespace(thresholds={"out:y": {"envelope": 0.5}, "grad:x": {"envelope": 0.25},
+                                         "grad:weight": {"rms": 1.0}})
+    calibrated = []
+
+    def calibration(model, case, corpus, **options):
+        calibrated.append((case.case_id, corpus.corpus_id, options["state"]))
+        return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=policy)
+
+    monkeypatch.setattr(gates, "operator_calibration", calibration)
+    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                      corpus=manifest, state=tmp_path / "state")
+    search = task.spec["search_correctness"]
+    assert search["rule"] == SEARCH_RULE and search["case_id"] == "rmsnorm/rmsnorm"
+    assert search["payload_ids"] == [f"o{o}/rmsnorm/rmsnorm/{c}" for o in (101, 202) for c in "ace"]
+    assert search["corpus"]["manifest"] == str(Path(manifest).resolve())
+    assert search["envelope"] == {"out:y": 0.5, "grad_in:dx": 0.25} and search["calibrated"]
+    assert calibrated == [("rmsnorm/rmsnorm", search["corpus"]["corpus_id"], tmp_path / "state")]
+    assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
+    monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
+    assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
+    declared = build_task(None, tmp_path / "declared", model="qwen3_0_6b",
+                          case_id="rmsnorm/rmsnorm", search_correctness="declared_tolerances")
+    assert SEARCH_CORRECTNESS_ENV not in evaluator_env(declared)
+    with pytest.raises(ValueError, match="only a model's observed case"):
+        build_task("llama3_swiglu_mlp", tmp_path / "op", corpus=manifest)
+
+
+def test_the_evaluator_judges_correctness_by_the_packs_rule(tmp_path, monkeypatch):
+    """With the pack's ``task.json`` in the environment, the evolution
+    evaluator's correctness check is Gate 1 on its payloads, not generated inputs."""
+    from evograd.evolve import evaluator
+    from evograd.verification.payloads import gate1 as payload_gate1
+
+    spec = {"rule": payload_gate1.SEARCH_RULE, "case_id": "c/x"}
+    (tmp_path / "task.json").write_text(json.dumps({"search_correctness": spec}))
+    seen = []
+    monkeypatch.setattr(payload_gate1, "search_correctness",
+                        lambda op, module, s, device: seen.append(s) or {"passed": 1, "total": 1})
+    monkeypatch.setattr(evaluator, "make_case_inputs",
+                        lambda *a, **k: pytest.fail("generated inputs used"))
+    monkeypatch.setenv(payload_gate1.SEARCH_CORRECTNESS_ENV, str(tmp_path / "task.json"))
+    assert evaluator._run_correctness(object(), object()) == {"passed": 1, "total": 1}
+    assert seen == [spec]
 
 
 #: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
@@ -325,7 +393,8 @@ def test_a_model_task_states_and_generates_the_models_scalars(tmp_path, model, c
     from evograd.opdecl.activity import format_default
     from evograd.opdecl.inputs import make_case_inputs
 
-    task = build_task(None, tmp_path / "task", model=model, case_id=case_id)
+    task = build_task(None, tmp_path / "task", model=model, case_id=case_id,
+                      search_correctness="declared_tolerances")
     op = task.op()
     declared = {a.name: a.default for a in get_task(op.name).scalar_inactive_args()}
     assert declared != scalars  # the case this pins

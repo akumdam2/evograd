@@ -40,7 +40,8 @@ single-configuration diagnostics. See
 ```bash
 export ADBENCH_ROOT=...     # results under $ADBENCH_ROOT/<model>
 export ADBENCH_MODEL=gpt-5.5
-python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm
+python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm \
+                                     --corpus CORPUS/manifest.json   # search feedback: Gate 1 on its payloads
 python candidates/bench.py run       --model qwen3_0_6b --agent seed            # frontend only, no LLM
 python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json

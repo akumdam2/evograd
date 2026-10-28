@@ -37,7 +37,7 @@ from typing import Any
 
 from evograd.adbench_tools.artifact import END, HEADER_MARK, PackagingError, package, unpackage
 from evograd.adbench_tools.ledger import RunLedger
-from evograd.adbench_tools.task import AgentTask, load
+from evograd.adbench_tools.task import DECLARED_RULE, TASK_FILE, AgentTask, load
 
 FAILED = -1e9
 DEFAULT_TIMEOUT = 900
@@ -120,7 +120,19 @@ def evaluator_env(task: AgentTask, *, cache_dir: str | Path | None = None,
         env.pop(CONTRACT_ENV, None)
     for name in ("EVOGRAD_PROGRAM_ARCHIVE_DIR", "EVOGRAD_EVAL_CHILD", "EVOGRAD_RESULT_JSON"):
         env.pop(name, None)
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
+
+    # The pack alone decides how correctness is judged, never the caller's environment.
+    if search_rule(task) == SEARCH_RULE:
+        env[SEARCH_CORRECTNESS_ENV] = str(task.root / TASK_FILE)
+    else:
+        env.pop(SEARCH_CORRECTNESS_ENV, None)
     return env
+
+
+def search_rule(task: AgentTask) -> str:
+    """The pack's search-feedback correctness rule (packs older than the field: declared)."""
+    return (task.spec.get("search_correctness") or {}).get("rule", DECLARED_RULE)
 
 
 def _run_child(module: str, program: Path, env: dict[str, str], timeout: int,
@@ -221,7 +233,9 @@ def evaluate_source(
                             {"failure": {"error_type": "PackagingError",
                                          "error_message": str(exc)}})
     else:
-        env = evaluator_env(task, warmup=warmup, reps=reps, contract=contract)
+        # The pack may be shared and read-only: a run keeps its own timing cache.
+        env = evaluator_env(task, cache_dir=Path(run_dir) / ".cache" if run_dir else None,
+                            warmup=warmup, reps=reps, contract=contract)
         if correctness_only:
             payload = _run_child("evograd.adbench_tools._check", program, env, timeout,
                                  ["--declaration", task.declaration, "--op", task.op_name])

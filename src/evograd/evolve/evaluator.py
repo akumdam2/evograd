@@ -305,6 +305,13 @@ def _compare_tensor(candidate, reference, atol: float, rtol: float) -> tuple[boo
 
 
 def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]:
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, search_correctness
+
+    # An ADBench task pack may judge search feedback by Gate 1 on recorded payloads.
+    if spec_path := os.environ.get(SEARCH_CORRECTNESS_ENV):
+        with open(spec_path, encoding="utf-8") as handle:
+            spec = json.load(handle)["search_correctness"]
+        return search_correctness(op, module, spec, device=device)
     fwd, bwd = lookup_pair(op, module)
     grad_names = op.grad_names()
     reports = []

@@ -194,6 +194,28 @@ def gate1_envelope(op, policy) -> dict[str, float]:
     return envelope
 
 
+def operator_calibration(model, case, corpus, *, device: str = "cuda",
+                         compile_backend: str = "inductor", state: Path | None = None):
+    """The case's operator scope on ``corpus`` and its Gate 2 calibration, saved
+    under ``state`` and reused.
+
+    The calibration binds the patch set (the scope's one site), never a
+    candidate, so the reference itself stands in for one: an ADBench task pack
+    takes Gate 1's envelope from here before any candidate exists.
+    """
+    from evograd.verification.common.execution import CANDIDATE, Deployment
+    from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
+
+    scope = PayloadOperatorScope(model.reference_op(case.task), case.workload, corpus,
+                                 case.case_id, device=device)
+    stand_in = Deployment("reference", CANDIDATE, {s: scope.native_site(s) for s in scope.sites()})
+    cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
+             / f"{case.case_id.replace('/', '__')}.json")
+    calibration = _calibrate(scope, stand_in, scope.samples("acceptance"), cache,
+                             samples=scope.samples("calibration"), compile_backend=compile_backend)
+    return scope, calibration
+
+
 def judge_case(model, case, module, corpus, *, device: str = "cuda",
                compile_backend: str = "inductor", state: Path | None = None) -> dict[str, Any]:
     """Gate 1 on the case's real payloads and operator Gate 2. With ``state``,
@@ -204,16 +226,12 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
     same shape add no coverage, and the fixed dtype tolerance judges them at a
     magnitude the model never trains at (user decision 2026-10-23)."""
     from evograd.verification import gate1, gate2
-    from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
     from evograd.verification.payloads import payload_cases
 
-    op = model.reference_op(case.task)
-    scope = PayloadOperatorScope(op, case.workload, corpus, case.case_id, device=device)
+    scope, calibration = operator_calibration(model, case, corpus, device=device,
+                                              compile_backend=compile_backend, state=state)
+    op = scope.op
     deployment = scope.candidate(module)
-    cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
-             / f"{case.case_id.replace('/', '__')}.json")
-    calibration = _calibrate(scope, deployment, scope.samples("acceptance"), cache,
-                             samples=scope.samples("calibration"), compile_backend=compile_backend)
     envelope = gate1_envelope(op, calibration.policy)
     payloads = gate1.verify_pair(op, module, device=device, envelope=envelope, cases=payload_cases(
         op, case.workload, corpus, case_id=case.case_id, split="acceptance", device=device))

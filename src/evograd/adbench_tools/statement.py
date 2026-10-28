@@ -106,6 +106,22 @@ torch.compile's own error, whichever is larger.
 {results}"""
 
 
+def _search_text(spec: dict) -> str:
+    """How the evaluator checks correctness during search (``search_correctness``)."""
+    from evograd.verification.payloads.gate1 import SEARCH_RULE
+
+    search = spec.get("search_correctness") or {}
+    if search.get("rule") == SEARCH_RULE:
+        return (f" Its correctness check applies the acceptance rule of section 2 to "
+                f"{len(search['payload_ids'])} recorded training calls (the first, middle and "
+                "last call of this operator in each of two training steps); the calls "
+                "acceptance judges are not among them.")
+    if "envelope_gamma" in spec["gate1_tolerances"]:
+        return (" Its correctness check runs generated inputs at this configuration against "
+                "the declaration's own tolerances, not the acceptance rule of section 2.")
+    return ""
+
+
 def render_statement(task: "AgentTask") -> str:
     spec = task.spec
     abi = spec["abi"]
@@ -194,7 +210,7 @@ module level:
 
 The same evaluator scores every agent. A candidate that fails the static
 rules, the import, any output or gradient check, or a run at the timed shape
-scores as incorrect. A correct candidate is timed at the configuration above
+scores as incorrect.{_search_text(spec)} A correct candidate is timed at the configuration above
 against the `{spec['performance_baseline']}` baseline: forward, backward from
 saved state, and the forward+backward step, with saved-tensor bytes reported
 relative to input bytes. `combined_score` is evograd's `{spec['scoring']}`

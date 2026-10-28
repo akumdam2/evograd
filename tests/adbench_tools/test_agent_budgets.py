@@ -31,7 +31,8 @@ def load_driver(agent):
 @pytest.fixture(scope="module")
 def task(tmp_path_factory):
     return build_task(None, tmp_path_factory.mktemp("budget_task") / "task",
-                      model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
+                      model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                      search_correctness="declared_tolerances")
 
 
 @pytest.fixture

@@ -62,6 +62,7 @@ def start(args, agent: str, config: dict):
     from evograd.adbench_tools.task import load
 
     task = load(args.task)
+    search_feedback(task)
     if (args.run_dir / "run.json").exists():
         raise SystemExit(f"{args.run_dir} already holds a run; use a fresh --run-dir")
     if args.budget < 1:
@@ -115,6 +116,33 @@ def start(args, agent: str, config: dict):
         atexit.register(close_budget, args)
     print(f"[{agent}] task {task.task_id} -> {ledger.root}", flush=True)
     return task, ledger
+
+
+def search_feedback(task) -> None:
+    """Point every evaluator this run starts at the pack's search-correctness rule.
+
+    Evaluators started through ``evograd.adbench_tools.evaluate`` read it from
+    the pack; OpenEvolve's (``run_evolve``) inherit this process's environment.
+    Under the payload rule the corpus and its named payloads must be there now:
+    a run never starts on a rule it cannot apply, and never falls back.
+    """
+    from evograd.adbench_tools.evaluate import search_rule
+    from evograd.verification.payloads.corpus import Corpus, CorpusError
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
+
+    if search_rule(task) != SEARCH_RULE:
+        os.environ.pop(SEARCH_CORRECTNESS_ENV, None)
+        return
+    spec = task.spec["search_correctness"]
+    try:
+        corpus = Corpus.open(spec["corpus"]["manifest"])
+        if corpus.corpus_id != spec["corpus"]["corpus_id"]:
+            raise CorpusError(f"it is {corpus.corpus_id}, not {spec['corpus']['corpus_id']}")
+        for payload_id in spec["payload_ids"]:
+            corpus.payload(payload_id)
+    except (CorpusError, OSError, ValueError) as exc:
+        raise SystemExit(f"{task.task_id}: search feedback needs {spec['corpus']['manifest']}: {exc}")
+    os.environ[SEARCH_CORRECTNESS_ENV] = str(task.root / "task.json")
 
 
 def budget_exhausted(args) -> bool:

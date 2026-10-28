@@ -231,6 +231,74 @@ class Gate1PayloadCaseTests(unittest.TestCase):
                           split="acceptance", device="cpu")
 
 
+class SearchFeedbackTests(unittest.TestCase):
+    """Search feedback: Gate 1 on a few calibration payloads, never the acceptance ones."""
+
+    def setUp(self):
+        from evograd.verification.payloads.gate1 import search_payload_ids
+
+        self.tmp = tempfile.TemporaryDirectory()
+        g = torch.Generator().manual_seed(0)
+        payloads = [(call, order, {"x": torch.randn(4, 8, generator=g),
+                                   "w": torch.randn(8, generator=g), "b": torch.randn(8, generator=g)},
+                     {"dy": torch.randn(4, 8, generator=g)})
+                    for order, calls in ((101, "abcde"), (202, "a"), (303, "abc"), (404, "ab"))
+                    for call in calls]
+        self.manifest = _write_corpus(Path(self.tmp.name), payloads)
+        self.corpus = Corpus.open(self.manifest)
+        self.op = replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),))
+        self.ids = search_payload_ids(self.corpus, "case/x")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def spec(self, ids=None, corpus_id=None):
+        from evograd.verification.payloads.gate1 import SEARCH_RULE
+
+        return {"rule": SEARCH_RULE, "case_id": "case/x", "envelope": {},
+                "corpus": {"manifest": str(self.manifest),
+                           "corpus_id": corpus_id or self.corpus.corpus_id},
+                "payload_ids": self.ids if ids is None else ids}
+
+    def judge(self, pair, spec=None):
+        from evograd.verification.payloads.gate1 import search_correctness
+
+        return search_correctness(self.op, pair, spec or self.spec(), device="cpu")
+
+    def test_first_middle_and_last_call_of_each_calibration_order(self):
+        from evograd.verification.payloads.gate1 import search_payload_ids
+
+        self.assertEqual(self.ids, ["o101/case/x/a", "o101/case/x/c", "o101/case/x/e",
+                                    "o202/case/x/a"])
+        with self.assertRaises(CorpusError):
+            search_payload_ids(self.corpus, "case/none")
+
+    def test_a_correct_pair_passes_and_a_wrong_one_fails_on_those_payloads(self):
+        with mock.patch("evograd.verification.gate1.runner.make_case_inputs",
+                        side_effect=AssertionError("generated inputs used")):
+            good = self.judge(F.scale_shift_pair())
+            bad = self.judge(F.scale_shift_pair(dw_scale=1.01))
+        self.assertEqual((good["status"], good["passed"], good["total"]), ("passed", 4, 4))
+        self.assertEqual([r["case_id"] for r in good["reports"]], self.ids)
+        self.assertEqual(bad["status"], "failed")
+        self.assertLess(bad["passed"], bad["total"])
+
+    def test_acceptance_payloads_and_another_corpus_are_refused(self):
+        with self.assertRaises(CorpusError):
+            self.judge(F.scale_shift_pair(), self.spec(ids=["o303/case/x/a"]))
+        with self.assertRaises(CorpusError):
+            self.judge(F.scale_shift_pair(), self.spec(corpus_id="another@0"))
+        with self.assertRaises(ValueError):
+            self.judge(F.scale_shift_pair(), {**self.spec(), "rule": "declared_tolerances"})
+
+    def test_an_incomplete_report_never_reads_as_correct(self):
+        # Duplicate case ids are a report-level finding: every case passes, the report does not.
+        summary = self.judge(F.scale_shift_pair(), self.spec(ids=[self.ids[0], self.ids[0]]))
+        self.assertEqual(summary["status"], "incomplete")
+        self.assertLess(summary["passed"], summary["total"])
+        self.assertIn("unique", summary["error_message"])
+
+
 class PayloadOperatorScopeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
