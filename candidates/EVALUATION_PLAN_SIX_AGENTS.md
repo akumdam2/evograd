@@ -4,7 +4,7 @@ Date: 2026-10-27. Protocol: `evograd-evaluation-v3`. For rules not repeated here
 
 ## Goal
 
-Six agents each search once on 58 cases from eight models, with a budget of 10 per case: OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them, then run the searches and a provisional evaluation. wzhan runs evograd and the frontend-only seed. Once the verification settings are final, wzhan evaluates every agent's submissions again in one unified evaluation, and only that evaluation is reported.
+Six agents each search once on 58 cases from eight models, with a budget of 10 per case: OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them and run the searches. wzhan runs evograd and the frontend-only seed. During search every agent gets Gate 1 as its correctness feedback; Gate 2, Gate 3 and the timings are run by wzhan on the submissions afterwards, once the verification settings are final, in one unified evaluation. Only that evaluation is reported.
 
 ## Cases
 
@@ -58,15 +58,15 @@ A local proxy counts model requests in `api_calls.jsonl`. Every admitted request
 
 ## Setup
 
-- Clone evograd at the commit in `/work/hdd/bcjw/wzhan/ADBench/REVISION`.
+- Clone evograd and run the code at the commit in `/work/hdd/bcjw/wzhan/ADBench/REVISION`. The latest text of this plan is on `main`.
 - Build the Python environment from [`requirements-adbench.txt`](requirements-adbench.txt).
 - Install KernelAgent, GEAK (`bash candidates/geak/setup.sh`), codex-cli and Claude Code at the versions that file lists.
 - Do not put the conda environment on `/work/hdd`: activating environments there has hung.
-- Use your own OpenAI and Anthropic API keys.
+- Use your own OpenAI and Anthropic API keys. Claude Code and GEAK need `ANTHROPIC_API_KEY` (a `claude` login is not enough): the request proxy forwards with it.
 
 ## Running
 
-Run on your own Slurm account, preferably with 2-hour `ghx4-interactive` allocations. Give each process its own GPU, run at most four searches per node, and give each process 8 CPUs and 32g of memory. Qwen3.5-4B evaluation needs 64g.
+Run on your own Slurm account, preferably with 2-hour `ghx4-interactive` allocations. Give each process its own GPU, run at most four searches per node, and give each process 8 CPUs and 32g of memory.
 
 ```bash
 export EVOGRAD=/path/to/your/evograd PATH=/path/to/your/env/bin:$PATH        # edit
@@ -88,23 +88,29 @@ cd "$EVOGRAD"
 # one search per case
 python candidates/bench.py run --model $MODEL --agent $AGENT --case-id $CASE_ID \
   --budget 10 --time-limit 6000 -- <flags from the table above>
-# after every case of the model is searched (exit 3: rerun unchanged in the next allocation)
-python candidates/bench.py evaluate --model $MODEL --agent $AGENT --case-id <every case of $MODEL> \
-  --corpus "$CORPUS" --deadline-min 100 --tier3-blocks 10
-python candidates/bench.py summarize --model $MODEL --agent $AGENT
 ```
 
-- **Smoke first.** Before the trial, run each agent on `rmsnorm/rmsnorm` and `qwen3_swiglu_mlp/swiglu_mlp` of `qwen3_0_6b`, with `ADBENCH_ROOT=/work/hdd/bcjw/wzhan/ADBench/smoke/$AGENT`. Check four things: the model actually used, the request count, that `submission.json` exists, and that `evaluate` reaches exit 0. Record each case's wall time. Smoke candidates never enter the trial.
+- **Smoke first.** It checks the installation and the plumbing, and can run before the shared task packs exist, on throwaway packs of your own built with the earlier correctness rule:
+
+  ```bash
+  SMOKE=/work/hdd/bcjw/wzhan/ADBench/smoke/$AGENT; CASES="rmsnorm/rmsnorm qwen3_swiglu_mlp/swiglu_mlp"
+  python candidates/bench.py tasks --root $SMOKE --model qwen3_0_6b --case-id $CASES \
+    --search-correctness declared_tolerances
+  python candidates/bench.py run --root $SMOKE --model qwen3_0_6b --agent $AGENT --case-id $CASES \
+    --budget 10 --time-limit 6000 -- <flags from the table above>
+  python candidates/bench.py evaluate --root $SMOKE --model qwen3_0_6b --agent $AGENT --case-id $CASES \
+    --corpus "$CORPUS" --deadline-min 100     # exit 3: rerun unchanged
+  ```
+
+  Check five things: the model actually used, the request count, that `submission.json` exists, that `evaluate` reaches exit 0, and each case's wall time. Smoke candidates never enter the trial; smoke costs are reported separately.
 - **When to start a case.** Start a case only if the allocation has at least twice the agent's longest smoke case left, and at least 20 minutes.
 - **Interrupted searches.** If a search is cut off by the allocation or a node failure, move its run directory and `.log` to `$ADBENCH_ROOT/$MODEL/aborted/` and run the case once more. The rerun replaces the interrupted run whatever its result, and both runs' costs are reported. Never use `--redo`.
 - **Failures.** A search that ends without a submission keeps its failure record and is not rerun. Final verdicts are never fed back to an agent.
-- **Task packs.** Do not run `bench.py tasks`. The packs are prebuilt, read-only, and shared by every agent.
+- **Task packs.** In the trial roots do not run `bench.py tasks`: the trial packs are prebuilt, read-only, and shared by every agent. Start the trial only after wzhan says they are ready.
 
 ## Outputs
 
-Everything goes under `/work/hdd/bcjw/wzhan/ADBench/<agent>/<model>/`:
-- **per case** (`runs/<agent>/<case>/`): `run.json`, `submission.py`, `submission.json`, `api_calls.jsonl`, `evaluations.jsonl`, `llm.jsonl` and the agent's logs;
-- **the provisional evaluation:** `evaluation/<agent>/` and `state/`.
+Everything goes under `/work/hdd/bcjw/wzhan/ADBench/<agent>/<model>/`, per case in `runs/<agent>/<case>/`: `run.json`, `submission.py`, `submission.json`, `api_calls.jsonl`, `evaluations.jsonl`, `llm.jsonl` and the agent's logs.
 
 Do not change anything there after a search finishes. Note reruns, and any change of limits or memory, in `/work/hdd/bcjw/wzhan/ADBench/<agent>/NOTES.md`.
 
@@ -126,7 +132,7 @@ The tables report, per model:
 
 Codex, Claude Code and GEAK have a shell as their owner's Unix user, so they could read the corpora or other agents' outputs; wzhan checks their transcripts for such access before the unified evaluation. Each agent searches each case once, so variance across searches is not measured.
 
-## Phase 0 (wzhan, before the smoke runs)
+## Phase 0 (wzhan, before the trial searches)
 
 1. **Fixes, with tests.** Each one is listed with what it fixes or adds:
    - Task-pack statements: give the model's real scalar values (eps and others).
