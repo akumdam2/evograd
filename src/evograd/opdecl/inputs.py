@@ -112,6 +112,22 @@ def make_case_inputs(op: OpDecl, workload: Workload, device: str = "cuda") -> di
     return apply_recorded_strides(op, workload, values)
 
 
+def case_scalars(op: OpDecl, workload: Workload) -> dict:
+    """The scalar arguments :func:`make_case_inputs` passes at ``workload``.
+
+    What a generated call at this configuration passes -- a model's eps read
+    off the workload's provenance, a convolution's stride read off its dims --
+    and therefore what a scoped declaration states as each scalar's default.
+    Generated on the meta device; an argument the generator leaves out keeps
+    its declared default.
+    """
+    scalars = op.scalar_inactive_args()
+    if not scalars:
+        return {}
+    values = make_case_inputs(op, workload, device="meta")
+    return {arg.name: values.get(arg.name, arg.default) for arg in scalars}
+
+
 def generated_inputs(op: OpDecl, workloads, device: str = "cuda") -> list:
     """``(workload, load)`` pairs whose ``load()`` generates that workload's
     inputs (:func:`make_case_inputs`), in the form the fair timer takes."""

@@ -271,6 +271,51 @@ class TestFixedConfiguration(unittest.TestCase):
             with self.subTest(dims=dims), self.assertRaises(ValueError):
                 select_workload(op, dtype='float32', dims=dims)
 
+    def test_a_declared_configuration_is_selected_even_with_a_zero_dim(self):
+        # Padding is a dim: every patchify stem (ConvNeXt V2's, DiT's) is P=0.
+        from evograd.pipelines.unified.synthesize import scoped_op, select_workload
+
+        op = get_task('spatial_conv2d')
+        declared = next(case for case in op.correctness if case.dims['P'] == 0)
+        self.assertEqual(select_workload(op, dtype='float32', dims=dict(declared.dims)), declared)
+        for suite in ('convnextv2_tiny_observed', 'dit_s_2_observed'):
+            stem = next(case for case in op.benchmark_suites[suite] if case.dims['P'] == 0)
+            scoped = scoped_op(op, stem)
+            with self.subTest(suite=suite):
+                self.assertEqual(select_workload(scoped, dtype=stem.dtype, dims=dict(stem.dims)),
+                                 stem)
+        # An undeclared configuration is still held to positive dims.
+        padded = next(case for case in op.correctness if case.dims['P'] > 0)
+        with self.assertRaises(ValueError):
+            select_workload(op, dtype='float32', dims={**padded.dims, 'B': 0})
+        undeclared = {**padded.dims, 'B': 3}
+        self.assertEqual(select_workload(op, dtype='float32', dims=undeclared),
+                         Workload(dims=undeclared, dtype='float32'))
+
+    def test_scoped_scalars_are_what_the_configuration_passes(self):
+        # A convolution's stride/padding/groups come from its dims, a model
+        # norm's eps from its provenance: the scoped signature states them.
+        from evograd.opdecl.inputs import case_scalars
+        from evograd.pipelines.unified.synthesize import scoped_op
+
+        conv = get_task('spatial_conv2d')
+        stem = next(case for case in conv.benchmark_suites['convnextv2_tiny_observed']
+                    if case.dims['S'] == 4)
+        scoped = scoped_op(conv, stem)
+        self.assertEqual({a.name: a.default for a in scoped.scalar_inactive_args()},
+                         {'stride': 4, 'padding': 0, 'groups': 1})
+        self.assertIn('stride=4, padding=0, groups=1', scoped.forward_parameters())
+        self.assertEqual(case_scalars(scoped, stem), case_scalars(conv, stem))
+        norm = get_task('layernorm')
+        observed = next(case for case in norm.benchmark_suites['qwen2_vl_2b_observed']
+                        if case.provenance.free.get('eps') == 1e-6)
+        self.assertEqual(next(a.default for a in norm.args if a.name == 'eps'), 1e-5)
+        self.assertEqual(next(a.default for a in scoped_op(norm, observed).args
+                              if a.name == 'eps'), 1e-6)
+        # Without a provenance the generator's generic value is the configuration's.
+        plain = Workload(dims=dict(observed.dims), dtype=observed.dtype)
+        self.assertEqual(case_scalars(norm, plain), {'eps': 1e-5})
+
     def test_verification_scope_keeps_oracle_and_tolerances_at_the_selected_configuration(self):
         from evograd.pipelines.unified.synthesize import scoped_op, select_workload
 
@@ -299,6 +344,27 @@ class TestFixedConfiguration(unittest.TestCase):
             self.assertEqual(loaded.tolerance_hook, op.tolerance_hook)
             self.assertEqual(loaded.forward, op.forward)
             self.assertEqual(loaded.declaration, f'{path}:op')
+
+    def test_generated_declaration_keeps_the_workloads_provenance(self):
+        # A recorded layout, a norm's eps and the model a generator reads its
+        # tables from live in the provenance; the scoped case keeps all three.
+        from evograd.benchmark import load_task
+        from evograd.opdecl.inputs import make_case_inputs
+        from evograd.pipelines.unified.synthesize import _write_declaration, scoped_op
+
+        op = get_task('rope')
+        observed = op.benchmark_suites['qwen3_0_6b_observed'][0]
+        self.assertEqual(observed.provenance.layout, 'head_major_view')
+        with tempfile.TemporaryDirectory(prefix='evograd-unified-declaration-') as directory:
+            path = Path(directory) / 'declaration.py'
+            _write_declaration(path, op, observed)
+            loaded = load_task(f'{path}:op')
+        self.assertEqual(loaded.correctness, (observed,))
+        expected = make_case_inputs(scoped_op(op, observed), observed, device='meta')
+        generated = make_case_inputs(loaded, loaded.correctness[0], device='meta')
+        self.assertEqual(generated['x'].stride(), expected['x'].stride())
+        self.assertNotEqual(generated['x'].stride(), torch.empty(generated['x'].shape,
+                                                                device='meta').stride())
 
     def test_evolution_entry_honors_the_scoped_declaration_for_a_registered_op(self):
         import evograd.evolve.evaluator as evaluator

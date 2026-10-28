@@ -253,17 +253,19 @@ def _write_model_declaration(path: Path, model_name: str, task: str, workload) -
 
     The base is ``Model.reference_op(task)``: the task re-declared with the
     model's own computation as forward, under its model-reference contract,
-    which is what every gate of ``evograd evaluate`` judges against.
+    which is what every gate of ``evograd evaluate`` judges against. The case's
+    workload is written whole, provenance included, so the inputs the pack
+    generates (and the scalar defaults ``scoped_op`` reads off them) are the
+    observed case's: its recorded strides, the model's eps.
     """
     source = f'''"""The observed configuration of {model_name}'s case {task}, under its model reference."""
 from pathlib import Path
-from evograd.opdecl.activity import Workload
+from evograd.opdecl.activity import Provenance, Workload
 from evograd.pipelines.unified.synthesize import scoped_op
 from evograd.verification.integrations import load
 
 _base = load({model_name!r}).reference_op({task!r})
-_case = Workload(dims={dict(workload.dims)!r}, dtype={workload.dtype!r},
-                 atol={workload.atol!r}, rtol={workload.rtol!r})
+_case = {workload!r}
 op = scoped_op(_base, _case, declaration=str(Path(__file__).resolve()) + ":op")
 '''
     path.write_text(source, encoding="utf-8")

@@ -38,17 +38,35 @@ def select_workload(op: OpDecl, *, dtype: str | None = None,
         if not matching:
             raise ValueError(f"no declared {dtype} workload; supply --dims explicitly")
         return matching[0]
-    if set(dims) != set(op.dims) or any(type(v) is not int or v <= 0 for v in dims.values()):
-        raise ValueError(f"--dims must bind every dimension {op.dims} to a positive integer")
-    return next((case for case in matching if case.dims == dims),
-                Workload(dims=dict(dims), dtype=dtype))
+    message = f"--dims must bind every dimension {op.dims} to a positive integer"
+    if set(dims) != set(op.dims) or any(type(v) is not int for v in dims.values()):
+        raise ValueError(message)
+    # A declared configuration is taken as declared: some dims are parameters,
+    # not sizes (a convolution's padding P is 0 at every patchify stem).
+    declared = next((case for case in matching if case.dims == dims), None)
+    if declared is not None:
+        return declared
+    if any(v <= 0 for v in dims.values()):
+        raise ValueError(message)
+    return Workload(dims=dict(dims), dtype=dtype)
 
 
 def scoped_op(op: OpDecl, workload: Workload, *, declaration: str | None = None) -> OpDecl:
-    """The same operator/oracle/tolerances, restricted to the captured c."""
+    """The same operator/oracle/tolerances, restricted to the captured c.
+
+    Each scalar argument's default becomes the value the input generator passes
+    at ``workload`` (``case_scalars``), so every signature and argument list
+    derived from the scoped declaration states the configuration's own eps or
+    stride rather than the operator's generic one.
+    """
+    from evograd.opdecl.inputs import case_scalars
+
+    scalars = case_scalars(op, workload)
+    args = tuple(replace(arg, default=scalars[arg.name]) if arg.name in scalars else arg
+                 for arg in op.args)
     # A user-selected deployment shape is not an official benchmark case and
     # must not invent model provenance to satisfy the benchmark taxonomy.
-    return replace(op, level=None, family=None,
+    return replace(op, level=None, family=None, args=args,
                    correctness=(workload,), coverage=(workload,), benchmark=(workload,),
                    benchmark_suites={}, regime_feature=None, regime_split=None, case_weight=None,
                    declaration=declaration if declaration is not None else op.declaration)
@@ -61,18 +79,20 @@ def _write_json(path: Path, value) -> None:
 def _write_declaration(path: Path, op: OpDecl, workload: Workload) -> None:
     # Reuse the trusted input factory, oracle and tolerances through the original
     # declaration. This file also lets the existing evolve/verify CLIs use c.
+    # The workload is written whole: its provenance (recorded strides, a norm's
+    # eps, the model a generator reads its tables from) decides the inputs the
+    # declaration generates, so dropping it would scope a different case.
     base = (f"load_task({op.declaration!r})" if op.declaration
             else f"get_task({op.name!r})")
     source = f'''"""The fixed deployment configuration of this unified-pipeline seed."""
 from dataclasses import replace
 from pathlib import Path
 from evograd.benchmark import get_task, load_task
-from evograd.opdecl.activity import Workload
+from evograd.opdecl.activity import Provenance, Workload
 from evograd.pipelines.unified.synthesize import scoped_op
 
 _base = {base}
-_case = Workload(dims={dict(workload.dims)!r}, dtype={workload.dtype!r},
-                 atol={workload.atol!r}, rtol={workload.rtol!r})
+_case = {workload!r}
 op = scoped_op(replace(_base, forward={op.forward!r}), _case,
                declaration=str(Path(__file__).resolve()) + ":op")
 '''

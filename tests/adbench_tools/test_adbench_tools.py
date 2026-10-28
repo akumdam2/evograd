@@ -281,8 +281,8 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert op.forward == reference.forward != get_task_forward("rmsnorm")
     assert op.reference_contract == reference.reference_contract
     assert op.correctness == op.benchmark == op.coverage
-    assert (op.correctness[0].dims, op.correctness[0].dtype) == (case.workload.dims,
-                                                                 case.workload.dtype)
+    # The observed case itself, provenance included (its layout, its eps).
+    assert op.correctness[0] == case.workload
     assert task.spec["base_declaration"] == f"{task.root / 'declaration.py'}:op"
     assert f"Source: {reference.forward}" in task.reference_source
     # The pack states the tolerance Gate 1 judges by, not the declaration's.
@@ -301,6 +301,46 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     with pytest.raises(ValueError, match="fixes the declaration"):
         build_task(None, tmp_path / "mixed", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                    dtype="float32")
+
+
+#: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
+#: the task's declared default is another model's or the generic grid's.
+MODEL_SCALARS = (
+    ("llama_3_2_1b", "llama3_residual_rmsnorm/residual_rmsnorm", {"eps": 1e-5}),
+    ("qwen3_0_6b", "rmsnorm/rmsnorm", {"eps": 1e-6}),
+    ("qwen2_vl_2b", "layernorm/model.visual.blocks.norm1", {"eps": 1e-6}),
+    ("qwen2_vl_2b", "rmsnorm/model.language_model.layers.input_layernorm", {"eps": 1e-6}),
+    ("convnextv2_tiny", "layernorm/convnextv2.embeddings.layernorm", {"eps": 1e-6}),
+    ("convnextv2_tiny", "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+     {"stride": 4, "padding": 0, "groups": 1}),
+    ("dit_s_2", "spatial_conv2d/patch", {"stride": 2, "padding": 0, "groups": 1}),
+)
+
+
+@pytest.mark.parametrize("model,case_id,scalars", MODEL_SCALARS)
+def test_a_model_task_states_and_generates_the_models_scalars(tmp_path, model, case_id, scalars):
+    """Signature defaults, argument list, skeleton and generated inputs all carry
+    the value the model's calls pass, not the declaration's default."""
+    from evograd.benchmark import get_task
+    from evograd.opdecl.activity import format_default
+    from evograd.opdecl.inputs import make_case_inputs
+
+    task = build_task(None, tmp_path / "task", model=model, case_id=case_id)
+    op = task.op()
+    declared = {a.name: a.default for a in get_task(op.name).scalar_inactive_args()}
+    assert declared != scalars  # the case this pins
+    assert {a.name: a.default for a in op.scalar_inactive_args()} == scalars
+    generated = make_case_inputs(op, op.correctness[0], device="meta")
+    assert {name: generated[name] for name in scalars} == scalars
+    abi = {e["name"]: e["default"] for e in task.spec["abi"]["arguments"] if e["kind"] == "scalar"}
+    assert abi == scalars
+    skeleton = (task.root / "skeleton.py").read_text()
+    for name, value in scalars.items():
+        assert f"- `{name}`: Python scalar, default {value!r} (inactive)" in task.statement
+        assert f"{name}={format_default(value)}" in task.spec["abi"]["forward_signature"]
+        assert f"{name}={format_default(value)}" in task.spec["abi"]["backward_signature"]
+    assert task.spec["abi"]["forward_signature"] in skeleton
+    assert task.spec["abi"]["forward_signature"] in task.statement
 
 
 def get_task_forward(name: str) -> str:
