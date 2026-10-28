@@ -63,6 +63,11 @@ A local proxy counts model requests in `api_calls.jsonl`. Every admitted request
 - Install KernelAgent, GEAK (`bash candidates/geak/setup.sh`), codex-cli and Claude Code at the versions that file lists.
 - Do not put the conda environment on `/work/hdd`: activating environments there has hung.
 - Use your own OpenAI and Anthropic API keys. Claude Code and GEAK need `ANTHROPIC_API_KEY` (a `claude` login is not enough): the request proxy forwards with it.
+- Check your access to the shared data once. The command should print only `ADBench writable`:
+
+  ```bash
+  find /work/hdd/bcjw/wzhan/{ADBench,ADBench_payload,hf_cache,evograd_verification/{hf_home,hf_cache,data}} /work/hdd/bcjw/kramesh/hub/models--meta-llama--Llama-3.2-1B ! -readable 2>&1 | head; test -w /work/hdd/bcjw/wzhan/ADBench && echo "ADBench writable"
+  ```
 
 ## Running
 
@@ -100,7 +105,7 @@ python candidates/bench.py run --model $MODEL --agent $AGENT --case-id $CASE_ID 
     --corpus "$CORPUS" --deadline-min 100     # exit 3: rerun unchanged
   ```
 
-  Check five things: the model actually used, the request count, that `submission.json` exists, that `evaluate` reaches exit 0, and each case's wall time. Smoke candidates never enter the trial; smoke costs are reported separately.
+  Check five things: the model actually used, the request count, that `submission.json` exists, that `evaluate` reaches exit 0, and each case's wall time. Start the trial searches only after all five pass. Smoke candidates never enter the trial; smoke costs are reported separately.
 - **When to start a case.** Start a case only if the allocation has at least twice the agent's longest smoke case left, and at least 20 minutes.
 - **Interrupted searches.** If a search is cut off by the allocation or a node failure, move its run directory and `.log` to `$ADBENCH_ROOT/$MODEL/aborted/` and run the case once more. The rerun replaces the interrupted run whatever its result, and both runs' costs are reported. Never use `--redo`.
 - **Failures.** A search that ends without a submission keeps its failure record and is not rerun. Final verdicts are never fed back to an agent.
