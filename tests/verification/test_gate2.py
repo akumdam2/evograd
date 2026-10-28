@@ -487,6 +487,25 @@ class TestControls(unittest.TestCase):
         self.assertIsNone(result.policy)
         self.assertEqual([f.code for f in result.findings], ["control_disqualified"])
 
+    def test_sites_compiled_in_one_process_keep_their_own_static_shapes(self):
+        # A Gate 3 compile control over several sites (or several calibrations in one process)
+        # must not turn one site's shapes dynamic because another site had other shapes: Qwen3.5's
+        # gated-attention reference then handed SDPA a SymBool and the control failed (2026-10-28).
+        from evograd.verification.gate2.calibration import _private_entry
+
+        symbolic = []
+
+        def recording(gm, example_inputs):
+            # a dynamic dimension enters the graph as an extra integer input
+            symbolic.append(any(not isinstance(t, torch.Tensor) for t in example_inputs))
+            return gm.forward
+
+        torch._dynamo.reset()
+        for n in (3, 5, 7):
+            torch.compile(_private_entry(torch.nn.functional.linear),
+                          backend=recording)(torch.randn(4, n), torch.randn(6, n))
+        self.assertEqual(symbolic, [False, False, False])
+
     def test_calibration_inputs_are_checked(self):
         scope = F.toy_module_scope()
         for kwargs in ({"patch_set": ()}, {"patch_set": ("nope",)}, {"samples": []},

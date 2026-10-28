@@ -57,6 +57,7 @@ Rules this module enforces:
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import time
@@ -487,12 +488,19 @@ def _private_entry(fn):
     new counting backend) would pile entries onto one code object until the
     recompile limit turns the next control into a hard failure. A private
     code object gives each control its own cache, freed with the control.
+    It also gets its own name: dynamo keeps automatic-dynamic shape state per
+    (file, line, name), so entries sharing a name would let one site's shapes
+    turn the next site's dynamic (a SymBool then reaches SDPA's bool arguments).
     """
     def site_entry(*args, **kwargs):
         return fn(*args, **kwargs)
 
-    return types.FunctionType(site_entry.__code__.replace(), site_entry.__globals__,
-                              "site_entry", None, site_entry.__closure__)
+    name = f"site_entry_{next(_ENTRY_IDS)}"
+    return types.FunctionType(site_entry.__code__.replace(co_name=name, co_qualname=name),
+                              site_entry.__globals__, name, None, site_entry.__closure__)
+
+
+_ENTRY_IDS = itertools.count()
 
 
 @dataclass
