@@ -8,7 +8,10 @@
      call the task pack made, so the seed's scoped declaration is the task's. Its
      library calls are fixed outside the evolve block by the unified contract.
    - ``a``, ``b``, ``d``: ``evograd seed a|b|d`` on the pack's declaration with the
-     task's grant. Only A calls a model.
+     task's grant. Only A calls a model. With ``--fallback-unified``, a case that
+     gets no accepted seed this way is seeded by ``unified`` in the same run, and
+     from then on runs as ``--frontend unified`` would; ``<run>/seed_a|b|d`` keeps
+     the failed frontend's output.
 2. ``evograd evolve`` -- ``evograd.evolve.run.run_evolve`` -- on that seed with the
    task's model/endpoint, every evaluated program archived, and the code outside
    the seed's evolve block held fixed (a unified seed's contract, which also pins
@@ -70,31 +73,43 @@ def pipeline_seed(task, ledger, args) -> Path | None:
 def main(argv: list[str] | None = None) -> int:
     p = _common.parser(__doc__)
     p.add_argument("--frontend", choices=FRONTENDS, default="unified")
+    p.add_argument("--fallback-unified", action="store_true",
+                   help="if --frontend a|b|d gives no accepted seed, seed with unified in the "
+                        "same run; the requests it spent stay counted")
     p.add_argument("--scoring", default=None, help="default: the task's scoring policy")
     p.add_argument("--eval-timeout", type=int, default=180,
                    help="unified seed acceptance timeout, as `evograd seed unified`")
     args = p.parse_args(argv)
     task, ledger = _common.start(args, AGENT, {
-        "frontend": args.frontend, "backend": "openevolve", "iterations": args.budget,
+        "frontend": args.frontend, "fallback_unified": args.fallback_unified,
+        "backend": "openevolve", "iterations": args.budget,
     })
 
     from evograd.evolve.run import run_evolve
     from evograd.pipelines.unified.contract import CONTRACT_FILE
 
     spec = task.spec
-    granted = task.allowed_primitives if args.frontend != "unified" else ()
-    if args.frontend == "unified":
-        seed = _common.unified_seed(task, ledger, eval_timeout=args.eval_timeout)
-        failure = ledger.root / "seed" / "failure.json"
-    else:
+    frontend, extra = args.frontend, {}
+    if frontend != "unified":
         seed = pipeline_seed(task, ledger, args)
         failure = ledger.root / "seed.log"
+        if seed is None and args.fallback_unified:
+            # unified_seed writes <run>/seed.
+            if (ledger.root / "seed").exists():
+                (ledger.root / "seed").rename(ledger.root / f"seed_{frontend}")
+            frontend, extra["seed_fallback_reason"] = "unified", str(failure)
+    if frontend == "unified":
+        seed = _common.unified_seed(task, ledger, eval_timeout=args.eval_timeout)
+        failure = ledger.root / "seed" / "failure.json"
+    extra["seed_frontend"] = frontend
     if seed is None:
-        return _common.finish(args, task, ledger, None, status="seed_failed", failure=str(failure))
+        return _common.finish(args, task, ledger, None, status="seed_failed", failure=str(failure),
+                              **extra)
 
+    granted = task.allowed_primitives if frontend != "unified" else ()
     seed_requests = args._budget_proxy.calls_used
     iterations = args.budget - seed_requests
-    extra = {"seed": str(seed), "seed_requests": seed_requests, "iterations": iterations}
+    extra.update({"seed": str(seed), "seed_requests": seed_requests, "iterations": iterations})
     if iterations < 1:
         return _common.finish(args, task, ledger, seed, **extra)
     evolve_dir = ledger.root / "evolve"
@@ -119,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         return _common.finish(args, task, ledger, _common.best_evaluated(ledger, seed),
                               contract=contract, **extra)
     if rc != 0 or not best.is_file():
-        return _common.finish(args, task, ledger, None, status="evolve_failed")
+        return _common.finish(args, task, ledger, None, status="evolve_failed", **extra)
     return _common.finish(args, task, ledger, best, contract=contract, **extra)
 
 

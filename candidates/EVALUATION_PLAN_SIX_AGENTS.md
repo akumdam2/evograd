@@ -56,6 +56,8 @@ The rule is stored in each task pack and is the same for every agent; evograd's 
 
 A local proxy counts model requests in `api_calls.jsonl`. Every admitted request counts, retries included, and request 11 is refused. Evaluator calls (`evaluations.jsonl`), tokens and wall time are recorded separately. GEAK's budget unit differs from the other agents', so it is reported in its own row.
 
+evograd uses gpt-5.5 with `--frontend a --fallback-unified`: frontend A's seed synthesis counts toward the 10 requests, and a case that gets no accepted A seed is seeded by the unified frontend in the same run.
+
 ## Setup
 
 - Clone evograd from GitHub and use the latest `main`.
