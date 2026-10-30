@@ -144,6 +144,22 @@ class ArtifactContract:
 # ── generation ───────────────────────────────────────────────────────────────
 
 
+# Emitted into a deployment layer whose declaration has scalars; see
+# `backward_scalars` in render_deployment_layer.
+_BACKWARD_SCALARS = '''
+
+def _backward_scalars(backward, **scalars):
+    """The declared scalars `backward` accepts: those it names, or all of them
+    when it takes **kwargs -- as Gate 1 passes them."""
+    import inspect
+
+    params = inspect.signature(backward).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return scalars
+    return {name: value for name, value in scalars.items() if name in params}
+'''
+
+
 def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
     """Layers 3 and 4, generated from the declaration.
 
@@ -166,8 +182,13 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
     scalar_store = "\n".join(
         f"        ctx.{name} = {name}" for name in scalars
     ) or "        pass"
-    scalar_load = ", ".join(f"ctx.{name}" for name in scalars)
-    backward_scalars = f", {scalar_load}" if scalars else ""
+    # The backward gets the declared scalars it names (or all, through **kwargs),
+    # by keyword: the rule Gate 1 calls a pair by (opdecl.bind.backward_inactive_kwargs).
+    # A backward from saved state may need none of them (eps is spent in the forward).
+    scalar_kwargs = ", ".join(f"{name}=ctx.{name}" for name in scalars)
+    backward_scalars = (f", **_backward_scalars({c.backward_fn}, {scalar_kwargs})"
+                        if scalars else "")
+    scalar_helper = _BACKWARD_SCALARS if scalars else ""
 
     # `backward_from_saved` takes one upstream gradient for a single-output
     # declaration and a tuple for a structured one; the declaration decides.
@@ -190,8 +211,14 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
     if len(c.gradient_return_order()) == 1:
         grad_terms += ","
     grad_unpack = ", ".join(g for g in c.grad_names)
+    grad_unwrap = ""
     if len(c.grad_names) == 1:
-        grad_unpack += ","
+        # A task statement asks a one-gradient backward to return the gradient
+        # itself (`return dx`); a 1-tuple, as evograd's own pairs return, is
+        # accepted too. `dx, = tensor` would unpack the tensor's first dimension.
+        (g,) = c.grad_names
+        grad_unwrap = (f"\n        if isinstance({g}, (tuple, list)):"
+                       f"\n            {g}, = {g}")
 
     flat_args, flat_outs, rank = batched_names(op)
     # Adapt only when the leading-dimension story is unambiguous: every declared
@@ -259,7 +286,7 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
 # ══════════════════════════════════════════════════════════════════════════════
 
 ARTIFACT_CONTRACT = {c.metadata()!r}
-
+{scalar_helper}
 
 class {c.function_cls}(torch.autograd.Function):
     """Static autograd wiring for `{op.name}`. No declaration is read at runtime."""
@@ -290,7 +317,7 @@ class {c.function_cls}(torch.autograd.Function):
         saved = tuple(saved)
         {grad_unpack} = {c.backward_fn}(
             {upstream_arg}, saved{backward_scalars}
-        )
+        ){grad_unwrap}
         # One value per forward argument, `None` for every inactive one.
         return {grad_terms}
 

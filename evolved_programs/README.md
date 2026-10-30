@@ -19,3 +19,5 @@ To evaluate one agent's programs for one model (on a tree with that site's patch
     python evolved_programs/eval_command.py AGENT MODEL --adbench /work/hdd/bcjw/wzhan/ADBench --out OUT_ROOT
 
 prints the formal `evograd.evaluation.protocol` command for them.
+
+`EVAL_PLAN_DELTAAI.md`: what DeltaAI runs for these agents (models IU cannot hold, MegaFold).
