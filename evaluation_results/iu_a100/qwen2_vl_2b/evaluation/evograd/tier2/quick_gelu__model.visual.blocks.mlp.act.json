@@ -1,0 +1,143 @@
+{
+ "stage_key": {
+  "case": "quick_gelu/model.visual.blocks.mlp.act",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.0.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.1.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.2.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.3.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.4.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.5.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.6.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.7.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.8.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.9.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.10.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.11.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.12.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.13.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.14.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.15.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.16.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.17.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.18.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.19.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.20.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.21.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.22.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.23.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.24.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.25.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.26.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.27.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.28.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.29.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.30.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.31.mlp.act"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "eda8bec6d56850bb55a08b5b1e61465d27ab79c75d971974729f8976096b9eae",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.0.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.1.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.2.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.3.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.4.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.5.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.6.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.7.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.8.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.9.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.10.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.11.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.12.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.13.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.14.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.15.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.16.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.17.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.18.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.19.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.20.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.21.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.22.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.23.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.24.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.25.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.26.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.27.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.28.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.29.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.30.mlp.act",
+    "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.31.mlp.act"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.5720203125484384,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.566715411733999,
+     "high": 0.5816454184379348
+    },
+    "candidate_ms": 3.8318080492317677,
+    "baseline_ms": 2.191872037947178,
+    "speedup_forward": 1.7318434926189565,
+    "speedup_backward": 0.8234134809556398
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 2.4653951900707636,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.438356761165759,
+     "high": 2.511757601386356
+    },
+    "candidate_ms": 3.543551981449127,
+    "baseline_ms": 8.736256010830402,
+    "speedup_forward": 3.1567797074366246,
+    "speedup_backward": 2.3509331096546524
+   }
+  }
+ }
+}

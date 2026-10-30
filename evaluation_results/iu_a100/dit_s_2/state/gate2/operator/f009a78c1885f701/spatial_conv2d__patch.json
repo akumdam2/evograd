@@ -1,0 +1,1218 @@
+{
+ "policy": {
+  "adapter": {
+   "case_id": "spatial_conv2d/patch",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "declaration": null,
+   "dims": {
+    "B": 256,
+    "C": 4,
+    "CG": 4,
+    "G": 1,
+    "K": 2,
+    "O": 384,
+    "OX": 16,
+    "OY": 16,
+    "P": 0,
+    "S": 2,
+    "X": 32,
+    "Y": 32
+   },
+   "dtype": "float32",
+   "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+   "inputs": "real_training_payload",
+   "op": "spatial_conv2d",
+   "parameter_args": [
+    "weight",
+    "bias"
+   ],
+   "reference": {
+    "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+    "kind": "model_reference",
+    "reference_contract": "evograd-model-reference/dit_s_2/1",
+    "reference_dtype": null,
+    "runtime_forward": null,
+    "source": null
+   },
+   "runtime_forward": null,
+   "scope": "operator"
+  },
+  "boundaries": false,
+  "calibration_executions": [
+   "bb9aa1c8c29045d4b8ed0bb6b69cce46",
+   "acd30743198643d08717acae9d704b55",
+   "1c4da39d67d64aa180fdb4b0d8a0e134",
+   "4a50cb762bf04976a180802802b813d9",
+   "e17989a8919a4e4e90a6222f800b942e",
+   "e15e61e7b80e4ee2a49099612f0c1c3a",
+   "2d5a7773e76b42de9749d0b4431c3a87",
+   "cc3e179523e1417c8086b9a0256e8ddf"
+  ],
+  "calibration_samples": [
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+     "call": "patch",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/spatial_conv2d/patch/patch",
+     "split": "calibration"
+    },
+    "input_digest": "507043852df6a43ccb93e8b1f17605f958dc4fa91f7ea833c90992ee3aba7b1d",
+    "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+    "seed": 101000064
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+     "call": "patch",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/spatial_conv2d/patch/patch",
+     "split": "calibration"
+    },
+    "input_digest": "075e5e2ab31c0b80c38b4cc79c46a2a5864b82fc4e0f117a666aad94ba021f0a",
+    "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+    "seed": 202000064
+   }
+  ],
+  "contract": {
+   "results": [
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "output",
+     "name": "out:out",
+     "presence": "required",
+     "shape": [
+      256,
+      384,
+      16,
+      16
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "input_grad",
+     "name": "grad_in:x",
+     "presence": "required",
+     "shape": [
+      256,
+      4,
+      32,
+      32
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:weight",
+     "presence": "required",
+     "shape": [
+      384,
+      4,
+      2,
+      2
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:bias",
+     "presence": "required",
+     "shape": [
+      384
+     ]
+    }
+   ]
+  },
+  "contract_digest": "7d8678a32437f5a50769f51791cecc815462915d10923567b7b8f461a9494ce4",
+  "controls": {
+   "compile": {
+    "identity": {
+     "backend": "inductor",
+     "compiles": "the native implementation of each replaced site",
+     "fullgraph": true,
+     "kind": "torch_compile",
+     "options": {},
+     "torch": "2.11.0+cu128"
+    },
+    "name": "torch_compile[inductor]",
+    "patch_set": [
+     "operator"
+    ],
+    "role": "control"
+   },
+   "compile_graphs": {
+    "operator": 1
+   },
+   "native_repeats": 2
+  },
+  "environment": {
+   "compute_capability": "8.0",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "cudnn_benchmark": false,
+   "cudnn_deterministic": true,
+   "deterministic_algorithms": true,
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "device_type": "cuda",
+   "float32_matmul_precision": "highest",
+   "machine": "x86_64",
+   "python": "3.12.13",
+   "sdpa_backends": {
+    "cudnn": true,
+    "flash": true,
+    "math": true,
+    "mem_efficient": true
+   },
+   "tf32_cudnn": true,
+   "tf32_matmul": false,
+   "torch": "2.11.0+cu128"
+  },
+  "epsilon": 1e-30,
+  "floors": {
+   "gradient": {
+    "E2": 0.0001,
+    "Emax": 0.01
+   },
+   "output": {
+    "E2": 1e-05,
+    "Emax": 0.001
+   }
+  },
+  "formula": "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), max_c E_m(compile_c, native_c), floor[z,m])",
+  "gamma": 2.0,
+  "numerics": {
+   "autocast": null,
+   "device_type": "cuda",
+   "dtype": "float32",
+   "grad_mode": "enabled",
+   "module_mode": "train"
+  },
+  "patch_set": [
+   "operator"
+  ],
+  "policy_hash": "7359731b1772244a2f6d4bdbfdecf484f72653d5fccd93bf95ed5ed178ab2ae1",
+  "reference": {
+   "deployment": {
+    "identity": {
+     "kind": "native_eager"
+    },
+    "name": "native",
+    "patch_set": [],
+    "role": "native"
+   },
+   "implementation": {
+    "adapter": {
+     "digest": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "fingerprint_version": 2,
+     "opaque": [
+      "evograd.verification.common.execution.Deployment.__init__:builtins.function",
+      "evograd.verification.common.execution.Invocation.__init__:builtins.function",
+      "evograd.verification.common.execution.Sample.__init__:builtins.function",
+      "evograd.verification.common.tensors:torch.strided:torch.layout"
+     ],
+     "qualname": "evograd.verification.gate2.adapters.payload.PayloadOperatorScope"
+    },
+    "inputs": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    },
+    "module": {
+     "digest": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.evaluation.tier2.runner.NativeModule"
+    },
+    "runtime_forward": {
+     "digest": "0f0f97b99f97317ee0477694bb44cb16df69033167907f4048a1a0363464fbad",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.ops.level1.spatial_conv2d.reference.forward"
+    },
+    "sampling": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    }
+   },
+   "kind": "native_eager"
+  },
+  "sample_identities": {
+   "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "7e37100073ff0a810357ebdddf9198c0d1f0b7c96ca7dbfea49586835a59a06b",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+     "inputs": "2d9c22354e1ae26bc35fe644418498f3cbde41410ef48da75d6289ef161433d4",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000064
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+     "call": "patch",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/spatial_conv2d/patch/patch",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "463108aebccd13653d161d5aa0bbe395ee19c593f1dbc5a641d555138672d25c",
+     "native_repeats": [
+      "c5af8821e719eaeb05a1a42eacfadfa3f81125c330a82814c1aa8c817d7818cb"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "storage_offset": 0,
+        "stride": [
+         98304,
+         1,
+         6144,
+         384
+        ],
+        "tensor": "36226042d3990c70acc5482b79dd0cb8e455ae5fd1584649e4839d7faaeec564"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           256,
+           4,
+           32,
+           32
+          ],
+          "storage_offset": 0,
+          "stride": [
+           4096,
+           1024,
+           32,
+           1
+          ],
+          "tensor": "d7ae068e6d948c0d4c45eca08ca7820714d89be171ad275d27cafcc1cb599afc"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "1c4da39d67d64aa180fdb4b0d8a0e134",
+     "compile_repeat": "4a50cb762bf04976a180802802b813d9",
+     "native": "bb9aa1c8c29045d4b8ed0bb6b69cce46",
+     "native_repeats": [
+      "acd30743198643d08717acae9d704b55"
+     ]
+    },
+    "fingerprint": "0bb96b439d000135c541491b99aaa9494a81381287be16af261729da3c9dd0d0",
+    "opaque": [],
+    "reference_results_digest": "c5af8821e719eaeb05a1a42eacfadfa3f81125c330a82814c1aa8c817d7818cb",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000064
+   },
+   "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "cdb415ae073cff59ffff0e2f430b8a503a1151ee4308b18119a67b814508e936",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+     "inputs": "abfd926d98b8163165b86334919a32450506d1a7205b1e4676d3ce5e1a881364",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000064
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+     "call": "patch",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/spatial_conv2d/patch/patch",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "3648e3ae8e634b83e9321444115bd59fb7dc374b781b7f31a4cdcee9cc0550a8",
+     "native_repeats": [
+      "7eb3d324c53c565191569e455e12fa55ae69e49c9940e3abf44f7dbfbf582f3c"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "storage_offset": 0,
+        "stride": [
+         98304,
+         1,
+         6144,
+         384
+        ],
+        "tensor": "dbde7c031db0595028b31a11c25aad57560629ec7da4319bdf2db2e3c554b025"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           256,
+           4,
+           32,
+           32
+          ],
+          "storage_offset": 0,
+          "stride": [
+           4096,
+           1024,
+           32,
+           1
+          ],
+          "tensor": "7cdc73533f9795181c79e928670c68a70465529568c262476d9e48994cbc7b73"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "2d5a7773e76b42de9749d0b4431c3a87",
+     "compile_repeat": "cc3e179523e1417c8086b9a0256e8ddf",
+     "native": "e17989a8919a4e4e90a6222f800b942e",
+     "native_repeats": [
+      "e15e61e7b80e4ee2a49099612f0c1c3a"
+     ]
+    },
+    "fingerprint": "acfa2bb431695d75896cb7bf4069ba653cb5c9ac0ae31b61db6187863d3f0512",
+    "opaque": [],
+    "reference_results_digest": "7eb3d324c53c565191569e455e12fa55ae69e49c9940e3abf44f7dbfbf582f3c",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000064
+   }
+  },
+  "sample_protocol": "disjoint_holdout",
+  "schema": "evograd-verification-gate2-policy/4",
+  "scope": "operator",
+  "thresholds": {
+   "grad:bias": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 1.2556844192485726e-07
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 8.35853857973023e-07
+     }
+    },
+    "envelope": 6.984919309616089e-10,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ],
+     "trusted_compile": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ]
+    }
+   },
+   "grad:weight": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     }
+    },
+    "envelope": 0.0,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ],
+     "trusted_compile": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ]
+    }
+   },
+   "grad_in:x": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     }
+    },
+    "envelope": 0.0,
+    "kind": "input_grad",
+    "samples": {
+     "native_repeat": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ],
+     "trusted_compile": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ]
+    }
+   },
+   "out:out": {
+    "E2": 0.000568412085721992,
+    "Emax": 0.006778642553579534,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 1e-05,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.000284206042860996
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.003389321276789767
+     }
+    },
+    "envelope": 0.0019176602363586426,
+    "kind": "output",
+    "samples": {
+     "native_repeat": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ],
+     "trusted_compile": [
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch"
+     ]
+    }
+   }
+  },
+  "weights": {
+   "fixed": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+   "initial_state_digests": [
+    "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990"
+   ]
+  }
+ },
+ "calibration": {
+  "status": "calibrated",
+  "policy_hash": "7359731b1772244a2f6d4bdbfdecf484f72653d5fccd93bf95ed5ed178ab2ae1",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "seed": 101000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/spatial_conv2d/patch/patch",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+       "call": "patch"
+      }
+     },
+     "native": {
+      "execution_id": "bb9aa1c8c29045d4b8ed0bb6b69cce46",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+       "seed": 101000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "507043852df6a43ccb93e8b1f17605f958dc4fa91f7ea833c90992ee3aba7b1d",
+      "sample_identity": {
+       "fingerprint": "0bb96b439d000135c541491b99aaa9494a81381287be16af261729da3c9dd0d0",
+       "components": {
+        "seed": 101000064,
+        "inputs": "2d9c22354e1ae26bc35fe644418498f3cbde41410ef48da75d6289ef161433d4",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7e37100073ff0a810357ebdddf9198c0d1f0b7c96ca7dbfea49586835a59a06b",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d7ae068e6d948c0d4c45eca08ca7820714d89be171ad275d27cafcc1cb599afc",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "36226042d3990c70acc5482b79dd0cb8e455ae5fd1584649e4839d7faaeec564",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "c5af8821e719eaeb05a1a42eacfadfa3f81125c330a82814c1aa8c817d7818cb",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.8823813600029098
+     },
+     "control": {
+      "execution_id": "1c4da39d67d64aa180fdb4b0d8a0e134",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+       "seed": 101000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "507043852df6a43ccb93e8b1f17605f958dc4fa91f7ea833c90992ee3aba7b1d",
+      "sample_identity": {
+       "fingerprint": "0bb96b439d000135c541491b99aaa9494a81381287be16af261729da3c9dd0d0",
+       "components": {
+        "seed": 101000064,
+        "inputs": "2d9c22354e1ae26bc35fe644418498f3cbde41410ef48da75d6289ef161433d4",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7e37100073ff0a810357ebdddf9198c0d1f0b7c96ca7dbfea49586835a59a06b",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d7ae068e6d948c0d4c45eca08ca7820714d89be171ad275d27cafcc1cb599afc",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "36226042d3990c70acc5482b79dd0cb8e455ae5fd1584649e4839d7faaeec564",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "463108aebccd13653d161d5aa0bbe395ee19c593f1dbc5a641d555138672d25c",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 1.6431411789963022
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+      "seed": 202000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/spatial_conv2d/patch/patch",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+       "call": "patch"
+      }
+     },
+     "native": {
+      "execution_id": "e17989a8919a4e4e90a6222f800b942e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+       "seed": 202000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "075e5e2ab31c0b80c38b4cc79c46a2a5864b82fc4e0f117a666aad94ba021f0a",
+      "sample_identity": {
+       "fingerprint": "acfa2bb431695d75896cb7bf4069ba653cb5c9ac0ae31b61db6187863d3f0512",
+       "components": {
+        "seed": 202000064,
+        "inputs": "abfd926d98b8163165b86334919a32450506d1a7205b1e4676d3ce5e1a881364",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cdb415ae073cff59ffff0e2f430b8a503a1151ee4308b18119a67b814508e936",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7cdc73533f9795181c79e928670c68a70465529568c262476d9e48994cbc7b73",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "dbde7c031db0595028b31a11c25aad57560629ec7da4319bdf2db2e3c554b025",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7eb3d324c53c565191569e455e12fa55ae69e49c9940e3abf44f7dbfbf582f3c",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.8155325090046972
+     },
+     "control": {
+      "execution_id": "2d5a7773e76b42de9749d0b4431c3a87",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+       "seed": 202000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "075e5e2ab31c0b80c38b4cc79c46a2a5864b82fc4e0f117a666aad94ba021f0a",
+      "sample_identity": {
+       "fingerprint": "acfa2bb431695d75896cb7bf4069ba653cb5c9ac0ae31b61db6187863d3f0512",
+       "components": {
+        "seed": 202000064,
+        "inputs": "abfd926d98b8163165b86334919a32450506d1a7205b1e4676d3ce5e1a881364",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cdb415ae073cff59ffff0e2f430b8a503a1151ee4308b18119a67b814508e936",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7cdc73533f9795181c79e928670c68a70465529568c262476d9e48994cbc7b73",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "dbde7c031db0595028b31a11c25aad57560629ec7da4319bdf2db2e3c554b025",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "3648e3ae8e634b83e9321444115bd59fb7dc374b781b7f31a4cdcee9cc0550a8",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.5349762389960233
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "disjoint_holdout",
+   "measurements": 16,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.00028404260791742,
+     "Emax": 0.003389321276789767
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 1.2556844192485726e-07,
+     "Emax": 8.35853857973023e-07
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.000284206042860996,
+     "Emax": 0.0029719911505413105
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 1.1101839044947044e-07,
+     "Emax": 5.460002213077044e-07
+    }
+   ],
+   "seconds": 5.9929464050073875
+  }
+ }
+}

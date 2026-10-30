@@ -1,0 +1,601 @@
+{
+ "stage_key": {
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "isolated": true,
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "llama3_attention/causal_gqa_attention": "9682ad191dd331bf20ff01a3cfefcebc23b8d4a8bede1e976d29721029f7c9ce",
+   "llama3_qkv_rope/qkv_norm_rope": "305d898abb734cd3329c27a25150fcc2bdb6a437e9f42f8169bc65a285ae3cd1"
+  }
+ },
+ "result": {
+  "report": {
+   "protocol": "evograd-tier3-model-v3",
+   "evaluation_tier": 3,
+   "execution_scope": "model",
+   "benchmark_level": 3,
+   "workload": "llama3_next_token",
+   "name": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696",
+   "workload_id": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696",
+   "workload_hash": "cdad36960f933dea",
+   "config_hash": "a698e8394966b427",
+   "model": "Llama-3.2-1B",
+   "layers": 16,
+   "batch": 2,
+   "tokens": 2048,
+   "units_per_step": 4096,
+   "unit_name": "tokens",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa",
+   "use_cache": false,
+   "gradient_checkpointing": false,
+   "training": true,
+   "seed": 0,
+   "data_seed": 0,
+   "canonical": false,
+   "config": {
+    "model": "llama_3_2_1b",
+    "batch_size": 2,
+    "seq_len": 2048,
+    "dtype": "bfloat16",
+    "device": "cuda",
+    "attn_implementation": "sdpa",
+    "seed": 0,
+    "data_seed": 0,
+    "arch_overrides": {},
+    "calibration_path": null,
+    "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+    "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+   },
+   "input_checksum": "0ba8f665e6f13551:(2, 2048)",
+   "expected_site_counts": {
+    "qkv_rope": 16,
+    "attention": 16,
+    "swiglu_mlp": 16,
+    "residual_rmsnorm": 32
+   },
+   "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+   "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+   "data_identity": {
+    "dataset": "Salesforce/wikitext",
+    "config": "wikitext-2-raw-v1",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "join": "documents joined with EOS; trailing partial block dropped",
+    "block_len": 2048,
+    "ignore_index": -100,
+    "tokenizer_sha256": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "train": {
+     "split": "train",
+     "blocks": 1200,
+     "block_len": 2048,
+     "tokens_total": 2458789,
+     "dropped_tail": 1189,
+     "documents": 23767,
+     "parquet_sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7"
+    },
+    "validation": {
+     "split": "validation",
+     "blocks": 124,
+     "block_len": 2048,
+     "tokens_total": 255186,
+     "dropped_tail": 1234,
+     "documents": 2461,
+     "parquet_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c"
+    },
+    "disjoint": "train and validation are separate parquet files of the published split"
+   },
+   "provider_order": [
+    "eager",
+    "llama3_qkv_rope/qkv_norm_rope",
+    "llama3_attention/causal_gqa_attention"
+   ],
+   "isolation": "one spawned process per provider",
+   "timing_protocol": {
+    "boundary": "loss.backward() + optimizer step",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "optimizer": "AdamW",
+    "optimizer_config": {
+     "learning_rate": 0.0001,
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "weight_decay": 0.01,
+     "amsgrad": false
+    },
+    "weights": "built by the workload from a fixed seed, identical across providers",
+    "batch_data": "seeded; every provider sees the same sequence",
+    "warmup_steps": 3,
+    "timed_steps_per_block": 10,
+    "blocks": 10,
+    "loss_trajectory_steps": 5,
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "peak_memory": "measured after the optimizer state exists",
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+   },
+   "verification_policy": {
+    "numerical_enforcement": {
+     "mode": "strict",
+     "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+     "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+    },
+    "preflight": "skipped by request (--no-verify): timings are ungated",
+    "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "loss_delta_threshold": null
+   },
+   "site_registry": {
+    "workload_family": "llama_3_2_1b",
+    "site_ops": {
+     "qkv_rope": "llama3_qkv_rope",
+     "attention": "llama3_attention",
+     "swiglu_mlp": "llama3_swiglu_mlp",
+     "residual_rmsnorm": "llama3_residual_rmsnorm"
+    },
+    "preflight_workloads": {
+     "qkv_rope": 1,
+     "attention": 1,
+     "swiglu_mlp": 1,
+     "residual_rmsnorm": 1
+    }
+   },
+   "environment": {
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "triton": "3.6.0"
+   },
+   "providers": {
+    "eager": {
+     "ok": true,
+     "provider": "eager",
+     "step_ms": 258.2945024994842,
+     "step_ms_min": 257.8524344993639,
+     "per_block_ms": [
+      257.8524344993639,
+      258.2122027000878,
+      258.12162309885025,
+      258.0249106991687,
+      258.3031818998279,
+      258.28582309914054,
+      258.35153489897493,
+      258.59106720017735,
+      258.36956200073473,
+      258.4854897009791
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 258.2945024994842,
+      "min_ms": 257.8524344993639,
+      "q20_ms": 258.10228061891394,
+      "q80_ms": 258.3927475407836
+     },
+     "cpu_bound_fraction": 0.9680423492068637,
+     "cpu_bound_fraction_per_block": [
+      0.9685829563122059,
+      0.9686343247300538,
+      0.9686940698636891,
+      0.9679847803150371,
+      0.9680211995853297,
+      0.9680240324450431,
+      0.9680605652211288,
+      0.9680436587028535,
+      0.9679828295707567,
+      0.9680410397108739
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 15857.86751310427,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 20979365888,
+     "losses": [
+      2.596156120300293,
+      2.715205430984497,
+      2.8173775672912598,
+      2.999742269515991,
+      2.9721505641937256
+     ],
+     "loss_trajectory_step_ms": [
+      647.3216940066777,
+      259.028305998072,
+      259.24040500831325,
+      259.61888700840063,
+      258.1058069918072
+     ],
+     "first_timed_batch_step_ms": 258.41044800472446,
+     "patched": [],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {},
+      "counts": {},
+      "modules_replaced": 0
+     },
+     "dynamo": null,
+     "kernel_sources": [],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "llama3_qkv_rope/qkv_norm_rope": {
+     "ok": true,
+     "provider": "llama3_qkv_rope/qkv_norm_rope",
+     "step_ms": 250.44784709971282,
+     "step_ms_min": 249.54053670080611,
+     "per_block_ms": [
+      249.54053670080611,
+      249.60505519993603,
+      249.97760120022576,
+      250.44360939937178,
+      250.40724349964876,
+      250.52391130011532,
+      250.45208480005388,
+      250.6386482011294,
+      250.65076960017907,
+      250.57709129905558
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 250.44784709971282,
+      "min_ms": 249.54053670080611,
+      "q20_ms": 249.90309200016782,
+      "q80_ms": 250.58940267947037
+     },
+     "cpu_bound_fraction": 0.9633949049774331,
+     "cpu_bound_fraction_per_block": [
+      0.9633531103939426,
+      0.9633954180406751,
+      0.9633364071172316,
+      0.9633622454133567,
+      0.963425391087048,
+      0.9634180064799123,
+      0.9633648084550952,
+      0.9634385727581504,
+      0.9634364928710918,
+      0.9633943919141911
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 16354.702375897154,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 20978317312,
+     "losses": [
+      2.595473289489746,
+      2.72184419631958,
+      2.8223962783813477,
+      3.0122082233428955,
+      2.9479031562805176
+     ],
+     "loss_trajectory_step_ms": [
+      1003.8666100008413,
+      251.500597994891,
+      250.25282701244578,
+      249.6322590013733,
+      250.68533000012394
+     ],
+     "first_timed_batch_step_ms": 249.31727300281636,
+     "patched": [
+      "qkv_rope"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "qkv_rope"
+      ],
+      "actual_sites": [
+       "qkv_rope"
+      ],
+      "paths": {
+       "qkv_rope": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn"
+       ]
+      },
+      "counts": {
+       "qkv_rope": 16
+      },
+      "modules_replaced": 16
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "qkv_rope",
+       "op": "llama3_qkv_rope",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "llama3_attention/causal_gqa_attention": {
+     "ok": true,
+     "provider": "llama3_attention/causal_gqa_attention",
+     "step_ms": 262.06921560078626,
+     "step_ms_min": 261.7273280004156,
+     "per_block_ms": [
+      261.7273280004156,
+      261.96618290123297,
+      261.927619499329,
+      262.41347910108743,
+      261.950011299632,
+      262.46781880035996,
+      262.4918704997981,
+      262.08219610125525,
+      262.7179586997954,
+      262.0562351003173
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 262.06921560078626,
+      "min_ms": 261.7273280004156,
+      "q20_ms": 261.9455329395714,
+      "q80_ms": 262.4726291402476
+     },
+     "cpu_bound_fraction": 0.9683822338398389,
+     "cpu_bound_fraction_per_block": [
+      0.9683572492677683,
+      0.9684278077094489,
+      0.9682736772258206,
+      0.9684299040984611,
+      0.9683306297291199,
+      0.9683775929640466,
+      0.9684121405996519,
+      0.9683868747156312,
+      0.9684682518803295,
+      0.9683537756823619
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 15629.458769546953,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 20979365888,
+     "losses": [
+      2.5961220264434814,
+      2.7198424339294434,
+      2.8244712352752686,
+      3.0208961963653564,
+      2.9547817707061768
+     ],
+     "loss_trajectory_step_ms": [
+      2059.561126996414,
+      262.37218199821655,
+      261.40236599894706,
+      261.67628000257537,
+      261.39056199463084
+     ],
+     "first_timed_batch_step_ms": 261.75593899097294,
+     "patched": [
+      "attention"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "attention"
+      ],
+      "actual_sites": [
+       "attention"
+      ],
+      "paths": {
+       "attention": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn"
+       ]
+      },
+      "counts": {
+       "attention": 16
+      },
+      "modules_replaced": 16
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "attention",
+       "op": "llama3_attention",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    }
+   },
+   "speedup_intervals": {
+    "reference": "eager",
+    "available": true,
+    "vs_reference": {
+     "llama3_attention/causal_gqa_attention": {
+      "step_ms_ratio": 0.9855965032266433,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9838171042517008,
+       "high": 0.986266800983326
+      }
+     },
+     "llama3_qkv_rope/qkv_norm_rope": {
+      "step_ms_ratio": 1.0313304965111054,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0303931056224118,
+       "high": 1.0335175318241931
+      }
+     }
+    }
+   }
+  },
+  "rows": {
+   "llama3_attention/causal_gqa_attention": {
+    "ok": true,
+    "step_ms": 262.06921560078626,
+    "peak_memory_bytes": 20979365888,
+    "cpu_bound_fraction": 0.9683822338398389,
+    "speedup": 0.9855965032266433,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9838171042517008,
+     "high": 0.986266800983326
+    },
+    "peak_memory_ratio": 1.0
+   },
+   "llama3_qkv_rope/qkv_norm_rope": {
+    "ok": true,
+    "step_ms": 250.44784709971282,
+    "peak_memory_bytes": 20978317312,
+    "cpu_bound_fraction": 0.9633949049774331,
+    "speedup": 1.0313304965111054,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0303931056224118,
+     "high": 1.0335175318241931
+    },
+    "peak_memory_ratio": 0.999950018699059
+   }
+  }
+ }
+}

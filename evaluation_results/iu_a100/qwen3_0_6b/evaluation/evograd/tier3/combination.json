@@ -1,0 +1,611 @@
+{
+ "stage_key": {
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "isolated": true,
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "fused_add_rms_norm/residual_rmsnorm": "30a56d562500bae32933dd87b94bd06b6535fa7c541cceed0265e9a59bec5092",
+   "qwen3_swiglu_mlp/swiglu_mlp": "883ec262f978c8f0139b6d88ce855dc4e1471aeb0ccd250fe76c653b6fe9a037"
+  }
+ },
+ "result": {
+  "report": {
+   "protocol": "evograd-tier3-model-v3",
+   "evaluation_tier": 3,
+   "execution_scope": "model",
+   "benchmark_level": 3,
+   "workload": "qwen3_next_token",
+   "name": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+   "workload_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+   "workload_hash": "09d9a051b745ed4a",
+   "config_hash": "6e254de2e1abf1a0",
+   "model": "Qwen3-0.6B",
+   "layers": 28,
+   "batch": 2,
+   "tokens": 2048,
+   "units_per_step": 4096,
+   "unit_name": "tokens",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa",
+   "use_cache": false,
+   "gradient_checkpointing": false,
+   "training": true,
+   "seed": 0,
+   "data_seed": 0,
+   "canonical": false,
+   "config": {
+    "model": "qwen3_0_6b",
+    "batch_size": 2,
+    "seq_len": 2048,
+    "dtype": "bfloat16",
+    "device": "cuda",
+    "attn_implementation": "sdpa",
+    "seed": 0,
+    "data_seed": 0,
+    "arch_overrides": {},
+    "calibration_path": null,
+    "simple_calibration_path": null,
+    "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+    "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+    "protocol4_calibration_path": null,
+    "protocol4_verdict_path": null,
+    "protocol4_diagnostic_timing": false
+   },
+   "input_checksum": "67180da8126a4063:(2, 2048)",
+   "expected_site_counts": {
+    "qkv_norm_rope": 28,
+    "attention": 28,
+    "swiglu_mlp": 28,
+    "residual_rmsnorm": 56
+   },
+   "provider_order": [
+    "eager",
+    "torch_compile",
+    "combination"
+   ],
+   "isolation": "one spawned process per provider",
+   "timing_protocol": {
+    "boundary": "loss.backward() + optimizer step",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "optimizer": "AdamW",
+    "optimizer_config": {
+     "learning_rate": 0.0001,
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "weight_decay": 0.01,
+     "amsgrad": false
+    },
+    "weights": "built by the workload from a fixed seed, identical across providers",
+    "batch_data": "seeded; every provider sees the same sequence",
+    "warmup_steps": 3,
+    "timed_steps_per_block": 10,
+    "blocks": 10,
+    "loss_trajectory_steps": 5,
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "peak_memory": "measured after the optimizer state exists",
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+   },
+   "verification_policy": {
+    "numerical_enforcement": {
+     "mode": "strict",
+     "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+     "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+    },
+    "preflight": "skipped by request (--no-verify): timings are ungated",
+    "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "loss_delta_threshold": null
+   },
+   "site_registry": {
+    "workload_family": "qwen3_0_6b",
+    "site_ops": {
+     "qkv_norm_rope": "qwen3_qkv_norm_rope",
+     "attention": "qwen3_attention",
+     "swiglu_mlp": "qwen3_swiglu_mlp",
+     "residual_rmsnorm": "fused_add_rms_norm"
+    },
+    "preflight_workloads": {
+     "qkv_norm_rope": 1,
+     "attention": 1,
+     "swiglu_mlp": 1,
+     "residual_rmsnorm": 1
+    }
+   },
+   "environment": {
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "triton": "3.6.0"
+   },
+   "providers": {
+    "eager": {
+     "ok": true,
+     "provider": "eager",
+     "step_ms": 243.8332174999232,
+     "step_ms_min": 243.76466109970352,
+     "per_block_ms": [
+      243.97133229940664,
+      243.8693775999127,
+      243.93914120009867,
+      243.88465059892042,
+      243.8478590993327,
+      243.81857590051368,
+      243.77103820006596,
+      243.76466109970352,
+      243.81080830062274,
+      243.81780410039937
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 243.8332174999232,
+      "min_ms": 243.76466109970352,
+      "q20_ms": 243.80285428051138,
+      "q80_ms": 243.89554871915607
+     },
+     "cpu_bound_fraction": 0.9807447309873392,
+     "cpu_bound_fraction_per_block": [
+      0.9816472740582087,
+      0.9817286690812148,
+      0.9816391437668351,
+      0.9811033335310115,
+      0.9807289929995343,
+      0.9807409325420782,
+      0.9806776000337559,
+      0.9807158433920323,
+      0.9807485294326,
+      0.9806991555964942
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 16798.367515292663,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 19386228736,
+     "losses": [
+      2.9603946208953857,
+      3.3391311168670654,
+      3.253258466720581,
+      3.3004512786865234,
+      3.2768514156341553
+     ],
+     "loss_trajectory_step_ms": [
+      712.6678839995293,
+      246.21106100676116,
+      245.43747899588197,
+      245.81363500328735,
+      245.6850540038431
+     ],
+     "first_timed_batch_step_ms": 247.99040099605918,
+     "patched": [],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {},
+      "counts": {},
+      "modules_replaced": 0
+     },
+     "dynamo": null,
+     "kernel_sources": [],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "torch_compile": {
+     "ok": true,
+     "provider": "torch_compile",
+     "step_ms": 222.86111494977376,
+     "step_ms_min": 222.6807484999881,
+     "per_block_ms": [
+      222.90436390030663,
+      222.70767769950908,
+      222.9949264001334,
+      222.6807484999881,
+      222.75679309968837,
+      222.92519269976765,
+      222.8178659992409,
+      222.92569620040013,
+      222.72550530033186,
+      223.0181842998718
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 222.86111494977376,
+      "min_ms": 222.6807484999881,
+      "q20_ms": 222.7219397801673,
+      "q80_ms": 222.93954224034678
+     },
+     "cpu_bound_fraction": 0.9426189300992194,
+     "cpu_bound_fraction_per_block": [
+      0.9426333205121815,
+      0.9425914196905062,
+      0.9426687440553834,
+      0.9425915729758012,
+      0.9423817010392723,
+      0.9426529498694659,
+      0.9423985242780268,
+      0.9426356197675495,
+      0.9426045396862571,
+      0.942693438473336
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 18379.159598672544,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 13072004096,
+     "losses": [
+      2.9578962326049805,
+      3.3404080867767334,
+      3.2581377029418945,
+      3.2968640327453613,
+      3.275836706161499
+     ],
+     "loss_trajectory_step_ms": [
+      25821.224501996767,
+      225.61600200424436,
+      224.1011899895966,
+      224.02428500936367,
+      224.03396299341694
+     ],
+     "first_timed_batch_step_ms": 224.2132700048387,
+     "patched": [],
+     "patch_provenance": {
+      "method": "whole_model_torch_compile",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {
+       "__whole_model__": [
+        "model"
+       ]
+      },
+      "counts": {
+       "__whole_model__": 1
+      },
+      "modules_replaced": 1
+     },
+     "dynamo": {
+      "graph_breaks": 0,
+      "graph_break_reasons": {},
+      "unique_graphs": 1,
+      "calls_captured": 2251
+     },
+     "kernel_sources": [
+      {
+       "site": "__whole_model__",
+       "op": null,
+       "origin": "whole_model_torch_compile"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "combination": {
+     "ok": true,
+     "provider": "combination",
+     "step_ms": 219.96975485017174,
+     "step_ms_min": 219.8619739006972,
+     "per_block_ms": [
+      219.95928060059668,
+      219.8767324007349,
+      219.94825540023157,
+      220.08557579974877,
+      219.9623264008551,
+      219.99008819984738,
+      219.99218389973976,
+      219.9776395005756,
+      219.9771832994884,
+      219.8619739006972
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 219.96975485017174,
+      "min_ms": 219.8619739006972,
+      "q20_ms": 219.93395080033224,
+      "q80_ms": 219.99050733982585
+     },
+     "cpu_bound_fraction": 0.9762626093049682,
+     "cpu_bound_fraction_per_block": [
+      0.9762588107861041,
+      0.9762539844784828,
+      0.9762125892285681,
+      0.9762664078238322,
+      0.9762417992881304,
+      0.9762915918508133,
+      0.9762698173755896,
+      0.9762958702850326,
+      0.9762682673654289,
+      0.9762257788017196
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 18620.74175965652,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 17037418496,
+     "losses": [
+      2.9607794284820557,
+      3.3510634899139404,
+      3.2620933055877686,
+      3.3100497722625732,
+      3.2797935009002686
+     ],
+     "loss_trajectory_step_ms": [
+      1057.7842769998824,
+      221.54966699599754,
+      220.7115640048869,
+      220.77533400442917,
+      220.657874000608
+     ],
+     "first_timed_batch_step_ms": 221.5429630014114,
+     "patched": [
+      "residual_rmsnorm",
+      "swiglu_mlp"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "residual_rmsnorm",
+       "swiglu_mlp"
+      ],
+      "actual_sites": [
+       "residual_rmsnorm",
+       "swiglu_mlp"
+      ],
+      "paths": {
+       "swiglu_mlp": [
+        "model.layers.0.mlp",
+        "model.layers.1.mlp",
+        "model.layers.2.mlp",
+        "model.layers.3.mlp",
+        "model.layers.4.mlp",
+        "model.layers.5.mlp",
+        "model.layers.6.mlp",
+        "model.layers.7.mlp",
+        "model.layers.8.mlp",
+        "model.layers.9.mlp",
+        "model.layers.10.mlp",
+        "model.layers.11.mlp",
+        "model.layers.12.mlp",
+        "model.layers.13.mlp",
+        "model.layers.14.mlp",
+        "model.layers.15.mlp",
+        "model.layers.16.mlp",
+        "model.layers.17.mlp",
+        "model.layers.18.mlp",
+        "model.layers.19.mlp",
+        "model.layers.20.mlp",
+        "model.layers.21.mlp",
+        "model.layers.22.mlp",
+        "model.layers.23.mlp",
+        "model.layers.24.mlp",
+        "model.layers.25.mlp",
+        "model.layers.26.mlp",
+        "model.layers.27.mlp"
+       ],
+       "residual_rmsnorm": [
+        "model.layers.0",
+        "model.layers.1",
+        "model.layers.2",
+        "model.layers.3",
+        "model.layers.4",
+        "model.layers.5",
+        "model.layers.6",
+        "model.layers.7",
+        "model.layers.8",
+        "model.layers.9",
+        "model.layers.10",
+        "model.layers.11",
+        "model.layers.12",
+        "model.layers.13",
+        "model.layers.14",
+        "model.layers.15",
+        "model.layers.16",
+        "model.layers.17",
+        "model.layers.18",
+        "model.layers.19",
+        "model.layers.20",
+        "model.layers.21",
+        "model.layers.22",
+        "model.layers.23",
+        "model.layers.24",
+        "model.layers.25",
+        "model.layers.26",
+        "model.layers.27",
+        "model.norm"
+       ]
+      },
+      "counts": {
+       "swiglu_mlp": 28,
+       "residual_rmsnorm": 29
+      },
+      "modules_replaced": 57
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "residual_rmsnorm",
+       "op": "fused_add_rms_norm",
+       "origin": "candidate:verified_deployment"
+      },
+      {
+       "site": "swiglu_mlp",
+       "op": "qwen3_swiglu_mlp",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    }
+   },
+   "speedup_intervals": {
+    "reference": "eager",
+    "available": true,
+    "vs_reference": {
+     "combination": {
+      "step_ms_ratio": 1.1084851990947828,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.1083055858208637,
+       "high": 1.1088428773566872
+      }
+     },
+     "torch_compile": {
+      "step_ms_ratio": 1.0941039111056943,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0936431442503989,
+       "high": 1.094918404249606
+      }
+     }
+    }
+   }
+  },
+  "rows": {
+   "combination": {
+    "ok": true,
+    "step_ms": 219.96975485017174,
+    "peak_memory_bytes": 17037418496,
+    "cpu_bound_fraction": 0.9762626093049682,
+    "speedup": 1.1084851990947828,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1083055858208637,
+     "high": 1.1088428773566872
+    },
+    "peak_memory_ratio": 0.8788413016277742
+   },
+   "torch_compile": {
+    "ok": true,
+    "step_ms": 222.86111494977376,
+    "peak_memory_bytes": 13072004096,
+    "cpu_bound_fraction": 0.9426189300992194,
+    "speedup": 1.0941039111056943,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0936431442503989,
+     "high": 1.094918404249606
+    },
+    "peak_memory_ratio": 0.6742932972685627
+   }
+  }
+ }
+}

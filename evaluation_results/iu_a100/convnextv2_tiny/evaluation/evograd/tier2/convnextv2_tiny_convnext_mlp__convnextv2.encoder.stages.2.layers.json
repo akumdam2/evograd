@@ -1,0 +1,97 @@
+{
+ "stage_key": {
+  "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.0#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.1#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.2#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.3#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.4#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.5#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.6#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.7#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.8#convnext_mlp"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "b993cc66d6246e547e53af4aa7e1e930616cf62e605d365986de428c7bb1aafd",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.0#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.1#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.2#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.3#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.4#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.5#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.6#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.7#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.8#convnext_mlp"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 1.029401267217405,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0278779079067841,
+     "high": 1.0310733237934229
+    },
+    "candidate_ms": 10.065407991409302,
+    "baseline_ms": 10.361343741416931,
+    "speedup_forward": 0.9723684024848314,
+    "speedup_backward": 1.3006910103544749
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.977282066728119,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9752641678146826,
+     "high": 0.9791806665323413
+    },
+    "candidate_ms": 9.961471915245056,
+    "baseline_ms": 9.735167860984802,
+    "speedup_forward": 1.226028480976428,
+    "speedup_backward": 0.8683431875918832
+   }
+  }
+ }
+}

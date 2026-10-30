@@ -21,3 +21,5 @@ To evaluate one agent's programs for one model (on a tree with that site's patch
 prints the formal `evograd.evaluation.protocol` command for them.
 
 `EVAL_PLAN_DELTAAI.md`: what DeltaAI runs for these agents (models IU cannot hold, MegaFold).
+
+`../evaluation_results/iu_a100/`: the formal evaluation of these programs on the IU A100 (six models).

@@ -1,0 +1,293 @@
+{
+ "gate3_calibration": {
+  "status": "calibrated",
+  "findings": [],
+  "policy": {
+   "binding": {
+    "adapter": {
+     "backward": "the workload loss as returned (weight 1)",
+     "config": {
+      "workload": {
+       "all_parameters_trainable": true,
+       "architecture": {
+        "architectures": [
+         "ConvNextV2ForImageClassification"
+        ],
+        "depths": [
+         3,
+         3,
+         9,
+         3
+        ],
+        "drop_path_rate": 0.0,
+        "hidden_act": "gelu",
+        "hidden_sizes": [
+         96,
+         192,
+         384,
+         768
+        ],
+        "image_size": 224,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+        "model_type": "convnextv2",
+        "num_channels": 3,
+        "num_labels": 1000,
+        "num_stages": 4,
+        "out_features": null,
+        "patch_size": 4,
+        "stage_names": [
+         "stem",
+         "stage1",
+         "stage2",
+         "stage3",
+         "stage4"
+        ],
+        "torch_dtype": "float32",
+        "transformers_version": "4.27.0.dev0"
+       },
+       "benchmark_level": 3,
+       "canonical": false,
+       "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+       "config": {
+        "arch_overrides": {},
+        "attn_implementation": "sdpa",
+        "batch_size": 32,
+        "calibration": null,
+        "data_path": null,
+        "data_seed": 0,
+        "device": "cuda",
+        "dtype": "bfloat16",
+        "image_size": 224,
+        "model": "convnextv2_tiny",
+        "seed": 0,
+        "seq_len": 0,
+        "stream": true,
+        "weights": "pretrained"
+       },
+       "data": "streamed_real_data",
+       "execution_scope": "model",
+       "gradient_checkpointing": false,
+       "input_checksum": "940a5bf83e358cc7d5ebf9381661ecb0a043e1f9d827044c44b74bd9a5d480c5",
+       "model": "facebook/convnextv2-tiny-1k-224",
+       "model_gate": {
+        "calibration": null,
+        "requires_real_data": true
+       },
+       "name": "convnextv2_tiny-023afe318b1f76e4",
+       "stream": {
+        "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+        "dataset": [
+         "ShaomuTan/imagenette",
+         "061f0ab5ca70523e13982a7ba463c076af657386",
+         "320px/train-00000-of-00001.parquet"
+        ],
+        "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+        "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+        "rows": 9469,
+        "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)",
+        "skipped": 0
+       },
+       "unit_name": "images",
+       "units_per_step": 32,
+       "use_cache": false,
+       "weights": "pretrained",
+       "workload_hash": "023afe318b1f76e447b38d6f84545abded6a9b8e0a6a04f453f5266ed0cff119"
+      }
+     },
+     "objective": "the HF image-classification loss: cross entropy over the 1000 ImageNet logits, mean over the batch"
+    },
+    "data": {
+     "train": {
+      "count": null,
+      "describe": {
+       "batch_size": 32,
+       "order": 707,
+       "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)",
+       "source": "convnextv2_tiny pool"
+      }
+     },
+     "validation": null
+    },
+    "environment": {
+     "compute_capability": "8.0",
+     "cuda": "12.8",
+     "cudnn": 91900,
+     "cudnn_benchmark": false,
+     "cudnn_deterministic": true,
+     "deterministic_algorithms": true,
+     "device_name": "NVIDIA A100-SXM4-40GB",
+     "device_type": "cuda",
+     "float32_matmul_precision": "highest",
+     "machine": "x86_64",
+     "python": "3.12.13",
+     "sdpa_backends": {
+      "cudnn": true,
+      "flash": true,
+      "math": true,
+      "mem_efficient": true
+     },
+     "tf32_cudnn": true,
+     "tf32_matmul": false,
+     "torch": "2.11.0+cu128"
+    },
+    "evaluator": null,
+    "initial_state": "ee1babc3a11960eafa4bf8176080e5946a0829138c9e1b7b0150ffd13c70d600",
+    "optimizer": {
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "foreach": false,
+     "lr": 0.0001,
+     "optimizer": "AdamW",
+     "schedule": "constant",
+     "weight_decay": 0.01
+    },
+    "plan": {
+     "checkpoints": [],
+     "steps": 50,
+     "validation_enabled": false,
+     "window": 1
+    },
+    "protocol_context": {
+     "data_recipe": {
+      "batch_size": 32,
+      "data": {
+       "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+       "dataset": [
+        "ShaomuTan/imagenette",
+        "061f0ab5ca70523e13982a7ba463c076af657386",
+        "320px/train-00000-of-00001.parquet"
+       ],
+       "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+       "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+       "rows": 9469,
+       "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)",
+       "skipped": 0
+      },
+      "dtype": "bfloat16",
+      "image_size": 224,
+      "train_order": 707
+     },
+     "numerics": {
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+      "cudnn_benchmark": false,
+      "cudnn_deterministic": true,
+      "deterministic_algorithms": true,
+      "float32_matmul_precision": "highest",
+      "matmul_allow_tf32": false,
+      "sdp_cudnn": true,
+      "sdp_flash": true,
+      "sdp_math": true,
+      "sdp_mem_efficient": true,
+      "torch_num_threads": 8
+     },
+     "patch_set": [
+      "convnext_mlp_stage2"
+     ],
+     "reference": {
+      "contract": "evograd-model-reference/convnextv2_tiny/1",
+      "model": "unpatched convnextv2_tiny at pretrained",
+      "modeling_sha256": "a8d9a5d91d2edc81c614088d83b779b04447e2713d13759c7cf9651238ac988b",
+      "transformers": "5.16.1"
+     }
+    },
+    "seed": 0
+   },
+   "calibration_runs": [
+    {
+     "compile": "c0cf9cb5706901498a73fc0eb36c2dc919cfae0583f278e001c1b307a80d2861",
+     "native_a": "6931687c65db4f94a8bc8f8290e8ebb48c719b65db8693d1005ec38db8f4b2c6",
+     "native_b": "715a0d4e74931bde05c9e41beda24fefe03e9cb55de614f0b442c29ba04318f5"
+    }
+   ],
+   "controls": [
+    {
+     "compile_identity": {
+      "backend": "inductor",
+      "compiles": "the native implementation of each replaced site",
+      "fullgraph": true,
+      "kind": "torch_compile",
+      "options": {},
+      "torch": "2.11.0+cu128"
+     },
+     "native_repeat": {
+      "max_abs": 0.0,
+      "max_abs_step": 1,
+      "rms": 0.0
+     },
+     "native_repeat_bitwise": true,
+     "trusted_compile": {
+      "max_abs": 0.0078125,
+      "max_abs_step": 28,
+      "rms": 0.0025203159500164674
+     }
+    }
+   ],
+   "floors": {
+    "max_abs": 0.0001,
+    "rms": 0.0001
+   },
+   "formula": "d[t] = objective_test[t] - objective_reference[t]; R = sqrt(sum_t d[t]^2 / N); M = max_t |d[t]|; T_m = gamma * max(max_c m(native_b, native_a), max_c m(compile, native_a), floor_m) for m in (R, M); pass iff R <= T_R and M <= T_M",
+   "gamma": 3.0,
+   "metrics": [
+    "rms",
+    "max_abs"
+   ],
+   "objective": "step record field 'objective' (scalar the backward differentiated)",
+   "policy_hash": "2270f0a94bb55af65ee3865b29000bc8627337b6a9ac2c707ae1c1459456a252",
+   "schema": "evograd-verification-gate3-global-loss-policy/1",
+   "steps": 50,
+   "thresholds": {
+    "max_abs": 0.0234375,
+    "rms": 0.0075609478500494025
+   }
+  }
+ },
+ "gate3": {
+  "gate": "gate3",
+  "protocol": "evograd-verification-gate3-global-loss/1",
+  "status": "passed",
+  "complete": true,
+  "metrics": [
+   "rms",
+   "max_abs"
+  ],
+  "policy": {
+   "policy_hash": "2270f0a94bb55af65ee3865b29000bc8627337b6a9ac2c707ae1c1459456a252",
+   "gamma": 3.0,
+   "floors": {
+    "max_abs": 0.0001,
+    "rms": 0.0001
+   },
+   "thresholds": {
+    "max_abs": 0.0234375,
+    "rms": 0.0075609478500494025
+   },
+   "steps": 50
+  },
+  "summary": {
+   "rms": 0.005023760665062155,
+   "max_abs": 0.01953125,
+   "max_abs_step": 28,
+   "steps": 50,
+   "overflow": false,
+   "judged": true,
+   "thresholds": {
+    "max_abs": 0.0234375,
+    "rms": 0.0075609478500494025
+   },
+   "ratios": {
+    "rms": 0.6644353015911001,
+    "max_abs": 0.8333333333333334
+   },
+   "passed": {
+    "rms": true,
+    "max_abs": true
+   }
+  },
+  "findings": []
+ }
+}

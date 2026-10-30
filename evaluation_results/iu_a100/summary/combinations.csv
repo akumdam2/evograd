@@ -1,0 +1,13 @@
+model,agent,cases,gate2_model,gate3,accepted,t3_speedup,t3_ci_low,t3_ci_high,t3_step_ms,t3_peak_memory_ratio,whole_model_compile_t3_speedup,speedup_vs_torch_compile
+qwen3_0_6b,evograd,fused_add_rms_norm/residual_rmsnorm;qwen3_swiglu_mlp/swiglu_mlp,passed,passed,True,1.1084851990947828,1.1083055858208637,1.1088428773566872,219.96975485017174,0.8788413016277742,1.0941039111056943,1.0131443529660313
+qwen3_0_6b,kernelagent,,,,False,,,,,,,
+llama_3_2_1b,evograd,llama3_qkv_rope/qkv_norm_rope,passed,passed,True,1.0328831125576883,1.0303349749911253,1.035088839065003,250.39051839994497,0.999950018699059,1.014549429717161,1.0180707635365172
+llama_3_2_1b,kernelagent,,,,False,,,,,,,
+qwen2_vl_2b,evograd,,,,False,,,,,,,
+qwen2_vl_2b,kernelagent,qwen2_vl_2b_text_mlp/model.language_model.layers.mlp,passed,passed,True,1.0702971532446268,1.0386272188569428,1.0714420790762502,268.51972985095927,1.000229837691426,,
+dit_s_2,evograd,dit_s_2_dit_modulation/blocks.modulation,passed,passed,True,1.0000688845011267,1.0000118930443191,1.0001183149672115,626.0268812002323,1.0,,
+dit_s_2,kernelagent,,,,False,,,,,,,
+convnextv2_tiny,evograd,convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers,passed,passed,True,1.1186970211999347,1.1174808905909042,1.1200749497140288,38.773652899544686,0.8281470305125392,,
+convnextv2_tiny,kernelagent,,,,False,,,,,,,
+torchrec_dlrm,evograd,torchrec_dlrm_dlrm_interaction/interaction,passed,passed,True,1.004753953256735,1.003626341550614,1.009479327022689,13.825230749353068,1.0,,
+torchrec_dlrm,kernelagent,torchrec_dlrm_dlrm_interaction/interaction,passed,passed,True,1.0070161600016787,1.0044820827852188,1.0084718227173022,13.834034449973842,1.0,,

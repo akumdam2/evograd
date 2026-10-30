@@ -1,0 +1,948 @@
+{
+ "stage_key": {
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "isolated": true,
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "fused_add_rms_norm/residual_rmsnorm": "30a56d562500bae32933dd87b94bd06b6535fa7c541cceed0265e9a59bec5092",
+   "qwen3_attention/causal_gqa_attention": "80174fb262d215b7674b216445ad1ece04e74bd38fd5f1a3447b386db0a7892b",
+   "qwen3_qkv_norm_rope/qkv_norm_rope": "7475539ad666ab4f43077a23707e56c4db206884c785db42fa2858d6241092ad",
+   "qwen3_swiglu_mlp/swiglu_mlp": "883ec262f978c8f0139b6d88ce855dc4e1471aeb0ccd250fe76c653b6fe9a037"
+  }
+ },
+ "result": {
+  "report": {
+   "protocol": "evograd-tier3-model-v3",
+   "evaluation_tier": 3,
+   "execution_scope": "model",
+   "benchmark_level": 3,
+   "workload": "qwen3_next_token",
+   "name": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+   "workload_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+   "workload_hash": "09d9a051b745ed4a",
+   "config_hash": "6e254de2e1abf1a0",
+   "model": "Qwen3-0.6B",
+   "layers": 28,
+   "batch": 2,
+   "tokens": 2048,
+   "units_per_step": 4096,
+   "unit_name": "tokens",
+   "dtype": "bfloat16",
+   "attn_implementation": "sdpa",
+   "use_cache": false,
+   "gradient_checkpointing": false,
+   "training": true,
+   "seed": 0,
+   "data_seed": 0,
+   "canonical": false,
+   "config": {
+    "model": "qwen3_0_6b",
+    "batch_size": 2,
+    "seq_len": 2048,
+    "dtype": "bfloat16",
+    "device": "cuda",
+    "attn_implementation": "sdpa",
+    "seed": 0,
+    "data_seed": 0,
+    "arch_overrides": {},
+    "calibration_path": null,
+    "simple_calibration_path": null,
+    "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+    "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+    "protocol4_calibration_path": null,
+    "protocol4_verdict_path": null,
+    "protocol4_diagnostic_timing": false
+   },
+   "input_checksum": "67180da8126a4063:(2, 2048)",
+   "expected_site_counts": {
+    "qkv_norm_rope": 28,
+    "attention": 28,
+    "swiglu_mlp": 28,
+    "residual_rmsnorm": 56
+   },
+   "provider_order": [
+    "qwen3_attention/causal_gqa_attention",
+    "fused_add_rms_norm/residual_rmsnorm",
+    "eager",
+    "qwen3_swiglu_mlp/swiglu_mlp",
+    "qwen3_qkv_norm_rope/qkv_norm_rope"
+   ],
+   "isolation": "one spawned process per provider",
+   "timing_protocol": {
+    "boundary": "loss.backward() + optimizer step",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "optimizer": "AdamW",
+    "optimizer_config": {
+     "learning_rate": 0.0001,
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "weight_decay": 0.01,
+     "amsgrad": false
+    },
+    "weights": "built by the workload from a fixed seed, identical across providers",
+    "batch_data": "seeded; every provider sees the same sequence",
+    "warmup_steps": 3,
+    "timed_steps_per_block": 10,
+    "blocks": 10,
+    "loss_trajectory_steps": 5,
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "peak_memory": "measured after the optimizer state exists",
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+   },
+   "verification_policy": {
+    "numerical_enforcement": {
+     "mode": "strict",
+     "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+     "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+    },
+    "preflight": "skipped by request (--no-verify): timings are ungated",
+    "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "loss_delta_threshold": null
+   },
+   "site_registry": {
+    "workload_family": "qwen3_0_6b",
+    "site_ops": {
+     "qkv_norm_rope": "qwen3_qkv_norm_rope",
+     "attention": "qwen3_attention",
+     "swiglu_mlp": "qwen3_swiglu_mlp",
+     "residual_rmsnorm": "fused_add_rms_norm"
+    },
+    "preflight_workloads": {
+     "qkv_norm_rope": 1,
+     "attention": 1,
+     "swiglu_mlp": 1,
+     "residual_rmsnorm": 1
+    }
+   },
+   "environment": {
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "triton": "3.6.0"
+   },
+   "providers": {
+    "qwen3_attention/causal_gqa_attention": {
+     "ok": true,
+     "provider": "qwen3_attention/causal_gqa_attention",
+     "step_ms": 247.50188649995835,
+     "step_ms_min": 247.47949699958554,
+     "per_block_ms": [
+      247.5152088998584,
+      247.4955427009263,
+      247.50189949991181,
+      247.51340279908618,
+      247.50943000108236,
+      247.52125309896655,
+      247.50187350000488,
+      247.4934234007378,
+      247.47949699958554,
+      247.49398800049676
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 247.50188649995835,
+      "min_ms": 247.47949699958554,
+      "q20_ms": 247.49387508054497,
+      "q80_ms": 247.51376401924063
+     },
+     "cpu_bound_fraction": 0.9800817063178502,
+     "cpu_bound_fraction_per_block": [
+      0.9805206963950128,
+      0.9805303176465656,
+      0.9805628655424545,
+      0.9805427001357583,
+      0.9800793545519998,
+      0.9800840580837005,
+      0.9800740991179817,
+      0.9800787421607516,
+      0.9800718687398677,
+      0.980076245727866
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 16549.368806531053,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 19386228736,
+     "losses": [
+      2.959291696548462,
+      3.3420827388763428,
+      3.257014274597168,
+      3.2999954223632812,
+      3.2795233726501465
+     ],
+     "loss_trajectory_step_ms": [
+      1761.4463030040497,
+      260.51946899679024,
+      248.5166440019384,
+      248.76194300304633,
+      248.7412049958948
+     ],
+     "first_timed_batch_step_ms": 248.513025988359,
+     "patched": [
+      "attention"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "attention"
+      ],
+      "actual_sites": [
+       "attention"
+      ],
+      "paths": {
+       "attention": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn",
+        "model.layers.16.self_attn",
+        "model.layers.17.self_attn",
+        "model.layers.18.self_attn",
+        "model.layers.19.self_attn",
+        "model.layers.20.self_attn",
+        "model.layers.21.self_attn",
+        "model.layers.22.self_attn",
+        "model.layers.23.self_attn",
+        "model.layers.24.self_attn",
+        "model.layers.25.self_attn",
+        "model.layers.26.self_attn",
+        "model.layers.27.self_attn"
+       ]
+      },
+      "counts": {
+       "attention": 28
+      },
+      "modules_replaced": 28
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "attention",
+       "op": "qwen3_attention",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "fused_add_rms_norm/residual_rmsnorm": {
+     "ok": true,
+     "provider": "fused_add_rms_norm/residual_rmsnorm",
+     "step_ms": 222.40388250065735,
+     "step_ms_min": 222.26252569962526,
+     "per_block_ms": [
+      222.45351409947034,
+      222.43112919968553,
+      222.63304219959537,
+      222.45017610111972,
+      222.26252569962526,
+      222.38134799990803,
+      222.3007777996827,
+      222.38310750108212,
+      222.42465750023257,
+      222.30013890075497
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 222.40388250065735,
+      "min_ms": 222.26252569962526,
+      "q20_ms": 222.30065001989715,
+      "q80_ms": 222.45084370078985
+     },
+     "cpu_bound_fraction": 0.9766433744871578,
+     "cpu_bound_fraction_per_block": [
+      0.9765922169341634,
+      0.9766502898314992,
+      0.9766895621206748,
+      0.9766348326073516,
+      0.9766364591428164,
+      0.9765770971902366,
+      0.9766594937232186,
+      0.9766570025987064,
+      0.9766310535956231,
+      0.9767335161105828
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 18416.944677159103,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 18446704640,
+     "losses": [
+      2.9585187435150146,
+      3.3524038791656494,
+      3.255805015563965,
+      3.3097739219665527,
+      3.2805278301239014
+     ],
+     "loss_trajectory_step_ms": [
+      1047.0542189868866,
+      224.00240199931432,
+      223.10697899956722,
+      223.69236900703982,
+      223.69497299951036
+     ],
+     "first_timed_batch_step_ms": 223.78764799213968,
+     "patched": [
+      "residual_rmsnorm"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "residual_rmsnorm"
+      ],
+      "actual_sites": [
+       "residual_rmsnorm"
+      ],
+      "paths": {
+       "residual_rmsnorm": [
+        "model.layers.0",
+        "model.layers.1",
+        "model.layers.2",
+        "model.layers.3",
+        "model.layers.4",
+        "model.layers.5",
+        "model.layers.6",
+        "model.layers.7",
+        "model.layers.8",
+        "model.layers.9",
+        "model.layers.10",
+        "model.layers.11",
+        "model.layers.12",
+        "model.layers.13",
+        "model.layers.14",
+        "model.layers.15",
+        "model.layers.16",
+        "model.layers.17",
+        "model.layers.18",
+        "model.layers.19",
+        "model.layers.20",
+        "model.layers.21",
+        "model.layers.22",
+        "model.layers.23",
+        "model.layers.24",
+        "model.layers.25",
+        "model.layers.26",
+        "model.layers.27",
+        "model.norm"
+       ]
+      },
+      "counts": {
+       "residual_rmsnorm": 29
+      },
+      "modules_replaced": 29
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "residual_rmsnorm",
+       "op": "fused_add_rms_norm",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "eager": {
+     "ok": true,
+     "provider": "eager",
+     "step_ms": 244.39675940011512,
+     "step_ms_min": 243.55482490063878,
+     "per_block_ms": [
+      243.5776127007557,
+      243.59027159953257,
+      245.18782249942888,
+      243.60569630080136,
+      245.5797871996765,
+      245.47680800023954,
+      243.6028438998619,
+      243.55482490063878,
+      245.56388820055872,
+      249.35023809957784
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 244.39675940011512,
+      "min_ms": 243.55482490063878,
+      "q20_ms": 243.5877398197772,
+      "q80_ms": 245.56706800038228
+     },
+     "cpu_bound_fraction": 0.9807597905776217,
+     "cpu_bound_fraction_per_block": [
+      0.9807505133618638,
+      0.9807690677933798,
+      0.9803607636391656,
+      0.9807111041663641,
+      0.9808425324673221,
+      0.9807972934908422,
+      0.9807912747419889,
+      0.9807379804446394,
+      0.9808814588587813,
+      0.9731306284251688
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 16759.633024815266,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 19386228736,
+     "losses": [
+      2.9603946208953857,
+      3.3408002853393555,
+      3.2523036003112793,
+      3.298515558242798,
+      3.2768678665161133
+     ],
+     "loss_trajectory_step_ms": [
+      733.3316990116145,
+      245.76186499325559,
+      245.12707199028227,
+      244.79150200204458,
+      244.72809299186338
+     ],
+     "first_timed_batch_step_ms": 245.592145001865,
+     "patched": [],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {},
+      "counts": {},
+      "modules_replaced": 0
+     },
+     "dynamo": null,
+     "kernel_sources": [],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "qwen3_swiglu_mlp/swiglu_mlp": {
+     "ok": true,
+     "provider": "qwen3_swiglu_mlp/swiglu_mlp",
+     "step_ms": 241.03167405046406,
+     "step_ms_min": 240.999831299996,
+     "per_block_ms": [
+      241.2433946999954,
+      241.05274390021805,
+      241.03417010046542,
+      241.02317250071792,
+      241.03881900082342,
+      241.02841450076085,
+      241.0291780004627,
+      241.0444549008389,
+      241.02689489955083,
+      240.999831299996
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 241.03167405046406,
+      "min_ms": 240.999831299996,
+      "q20_ms": 241.02615041978424,
+      "q80_ms": 241.04611270071473
+     },
+     "cpu_bound_fraction": 0.9803587597179118,
+     "cpu_bound_fraction_per_block": [
+      0.9803714294173156,
+      0.9803617738464073,
+      0.980399465361034,
+      0.9803122432101151,
+      0.9803395572571966,
+      0.9803538225534232,
+      0.9803186069000144,
+      0.980395954341305,
+      0.9803986040593632,
+      0.9803557455894161
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 16993.617192163852,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 17976942592,
+     "losses": [
+      2.9596173763275146,
+      3.340501070022583,
+      3.2600347995758057,
+      3.294137954711914,
+      3.275592088699341
+     ],
+     "loss_trajectory_step_ms": [
+      1083.1223370041698,
+      243.0324230081169,
+      242.30745999375358,
+      242.10013200354297,
+      242.04502899374347
+     ],
+     "first_timed_batch_step_ms": 242.75782699987758,
+     "patched": [
+      "swiglu_mlp"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "swiglu_mlp"
+      ],
+      "actual_sites": [
+       "swiglu_mlp"
+      ],
+      "paths": {
+       "swiglu_mlp": [
+        "model.layers.0.mlp",
+        "model.layers.1.mlp",
+        "model.layers.2.mlp",
+        "model.layers.3.mlp",
+        "model.layers.4.mlp",
+        "model.layers.5.mlp",
+        "model.layers.6.mlp",
+        "model.layers.7.mlp",
+        "model.layers.8.mlp",
+        "model.layers.9.mlp",
+        "model.layers.10.mlp",
+        "model.layers.11.mlp",
+        "model.layers.12.mlp",
+        "model.layers.13.mlp",
+        "model.layers.14.mlp",
+        "model.layers.15.mlp",
+        "model.layers.16.mlp",
+        "model.layers.17.mlp",
+        "model.layers.18.mlp",
+        "model.layers.19.mlp",
+        "model.layers.20.mlp",
+        "model.layers.21.mlp",
+        "model.layers.22.mlp",
+        "model.layers.23.mlp",
+        "model.layers.24.mlp",
+        "model.layers.25.mlp",
+        "model.layers.26.mlp",
+        "model.layers.27.mlp"
+       ]
+      },
+      "counts": {
+       "swiglu_mlp": 28
+      },
+      "modules_replaced": 28
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "swiglu_mlp",
+       "op": "qwen3_swiglu_mlp",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "qwen3_qkv_norm_rope/qkv_norm_rope": {
+     "ok": true,
+     "provider": "qwen3_qkv_norm_rope/qkv_norm_rope",
+     "step_ms": 206.64090159989428,
+     "step_ms_min": 206.53662390104728,
+     "per_block_ms": [
+      206.53662390104728,
+      206.63409609987866,
+      206.6477070999099,
+      206.62382070004242,
+      206.6107053993619,
+      206.6508881005575,
+      206.6186641997774,
+      206.65757350070635,
+      206.7507437997847,
+      206.71201149962144
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 206.64090159989428,
+      "min_ms": 206.53662390104728,
+      "q20_ms": 206.6170724396943,
+      "q80_ms": 206.66846110048937
+     },
+     "cpu_bound_fraction": 0.9712820072474622,
+     "cpu_bound_fraction_per_block": [
+      0.9712746742512678,
+      0.971272922949138,
+      0.9712889376632079,
+      0.9712889594191075,
+      0.9712769152561022,
+      0.9713130683560935,
+      0.9712928934892086,
+      0.9712870992388221,
+      0.97124402557874,
+      0.9711974744172768
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 19821.826019375516,
+     "unit_name": "tokens",
+     "peak_memory_bytes": 18446704640,
+     "losses": [
+      2.9581351280212402,
+      3.3419628143310547,
+      3.2500667572021484,
+      3.3011670112609863,
+      3.2738358974456787
+     ],
+     "loss_trajectory_step_ms": [
+      1073.760412997217,
+      208.0426449974766,
+      207.32684200629592,
+      207.25621900055557,
+      207.28491300542373
+     ],
+     "first_timed_batch_step_ms": 206.97771599225234,
+     "patched": [
+      "qkv_norm_rope"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "qkv_norm_rope"
+      ],
+      "actual_sites": [
+       "qkv_norm_rope"
+      ],
+      "paths": {
+       "qkv_norm_rope": [
+        "model.layers.0.self_attn",
+        "model.layers.1.self_attn",
+        "model.layers.2.self_attn",
+        "model.layers.3.self_attn",
+        "model.layers.4.self_attn",
+        "model.layers.5.self_attn",
+        "model.layers.6.self_attn",
+        "model.layers.7.self_attn",
+        "model.layers.8.self_attn",
+        "model.layers.9.self_attn",
+        "model.layers.10.self_attn",
+        "model.layers.11.self_attn",
+        "model.layers.12.self_attn",
+        "model.layers.13.self_attn",
+        "model.layers.14.self_attn",
+        "model.layers.15.self_attn",
+        "model.layers.16.self_attn",
+        "model.layers.17.self_attn",
+        "model.layers.18.self_attn",
+        "model.layers.19.self_attn",
+        "model.layers.20.self_attn",
+        "model.layers.21.self_attn",
+        "model.layers.22.self_attn",
+        "model.layers.23.self_attn",
+        "model.layers.24.self_attn",
+        "model.layers.25.self_attn",
+        "model.layers.26.self_attn",
+        "model.layers.27.self_attn"
+       ]
+      },
+      "counts": {
+       "qkv_norm_rope": 28
+      },
+      "modules_replaced": 28
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "qkv_norm_rope",
+       "op": "qwen3_qkv_norm_rope",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    }
+   },
+   "speedup_intervals": {
+    "reference": "eager",
+    "available": true,
+    "vs_reference": {
+     "fused_add_rms_norm/residual_rmsnorm": {
+      "step_ms_ratio": 1.0988871086789267,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0950958743660235,
+       "high": 1.1042510317181051
+      }
+     },
+     "qwen3_attention/causal_gqa_attention": {
+      "step_ms_ratio": 0.987454127547251,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9841727169328023,
+       "high": 0.9921789161017511
+      }
+     },
+     "qwen3_qkv_norm_rope/qkv_norm_rope": {
+      "step_ms_ratio": 1.1827124132149072,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.1787401155744561,
+       "high": 1.1883996534718209
+      }
+     },
+     "qwen3_swiglu_mlp/swiglu_mlp": {
+      "step_ms_ratio": 1.0139611748659494,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0105918467064634,
+       "high": 1.0188153355392613
+      }
+     }
+    }
+   }
+  },
+  "rows": {
+   "fused_add_rms_norm/residual_rmsnorm": {
+    "ok": true,
+    "step_ms": 222.40388250065735,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9766433744871578,
+    "speedup": 1.0988871086789267,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0950958743660235,
+     "high": 1.1042510317181051
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   },
+   "qwen3_attention/causal_gqa_attention": {
+    "ok": true,
+    "step_ms": 247.50188649995835,
+    "peak_memory_bytes": 19386228736,
+    "cpu_bound_fraction": 0.9800817063178502,
+    "speedup": 0.987454127547251,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9841727169328023,
+     "high": 0.9921789161017511
+    },
+    "peak_memory_ratio": 1.0
+   },
+   "qwen3_qkv_norm_rope/qkv_norm_rope": {
+    "ok": true,
+    "step_ms": 206.64090159989428,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9712820072474622,
+    "speedup": 1.1827124132149072,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1787401155744561,
+     "high": 1.1883996534718209
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   },
+   "qwen3_swiglu_mlp/swiglu_mlp": {
+    "ok": true,
+    "step_ms": 241.03167405046406,
+    "peak_memory_bytes": 17976942592,
+    "cpu_bound_fraction": 0.9803587597179118,
+    "speedup": 1.0139611748659494,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0105918467064634,
+     "high": 1.0188153355392613
+    },
+    "peak_memory_ratio": 0.9273047809766646
+   }
+  }
+ }
+}

@@ -1,0 +1,8148 @@
+{
+ "stage_key": {
+  "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+  "program_sha256": "a0c06a6aa54eaead0b507b5c557d782e212f3b954d201bdc5f48ed4433ecdf1e",
+  "corpus": {
+   "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+   "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor"
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "failed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "convnextv2_tiny_convnext_mlp",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_1530085562833214731",
+    "source_hash": "216e9672b9f2fca7e9387a269a4e8d4d8d5f36221ba17c6332410cd0aa8cc406"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:ddown_bias": 0.0,
+    "grad_in:ddown_weight": 0.001953125,
+    "grad_in:dgrn_bias": 1.4901161193847656e-08,
+    "grad_in:dgrn_weight": 0.001953125,
+    "grad_in:dup_bias": 0.0009765625,
+    "grad_in:dup_weight": 0.0009765625,
+    "grad_in:dx": 3.0517578125e-05,
+    "out:out": 1.0
+   },
+   "cases": [
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+    "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+   ]
+  },
+  "case_counts": {
+   "passed": 6,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.0625,
+       "max_rel_err": 20481.0,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        21,
+        12,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 2.384185791015625e-06,
+       "max_rel_err": 45.631895773112774,
+       "headroom": 0.078125,
+       "worst_index": [
+        26,
+        18,
+        15,
+        145
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 7.62939453125e-06
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.0001220703125,
+       "max_rel_err": 1323.2231140136719,
+       "headroom": 0.125,
+       "worst_index": [
+        228,
+        57
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 9.1552734375e-05,
+       "max_rel_err": 2.823293172690763,
+       "headroom": 0.09375,
+       "worst_index": [
+        398
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 42.07462686567164,
+       "headroom": 0.25,
+       "worst_index": [
+        0,
+        0,
+        0,
+        713
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.0001220703125,
+       "max_rel_err": 4.903381642512077,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        0,
+        0,
+        58
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.0003509521484375,
+       "max_rel_err": 622.868537902832,
+       "headroom": 0.1796875,
+       "worst_index": [
+        39,
+        171
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 121,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4813256,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.125,
+       "max_rel_err": 16090.42857142857,
+       "headroom": 0.125,
+       "worst_index": [
+        4,
+        23,
+        26,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 0.5
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 36.74067556858063,
+       "headroom": 0.0625,
+       "worst_index": [
+        26,
+        16,
+        10,
+        150
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 7.62939453125e-06
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.0001220703125,
+       "max_rel_err": 679.4929504394531,
+       "headroom": 0.125,
+       "worst_index": [
+        255,
+        152
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 6.103515625e-05,
+       "max_rel_err": 2.208955223880597,
+       "headroom": 0.0625,
+       "worst_index": [
+        23
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.0006103515625,
+       "max_rel_err": 0.2961165048543689,
+       "headroom": 0.3125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        708
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.044444444444444446,
+       "headroom": 0.125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        206
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 551.3429641723633,
+       "headroom": 0.125,
+       "worst_index": [
+        92,
+        239
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 122,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4813068,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.25,
+       "max_rel_err": 105983.0,
+       "headroom": 0.25,
+       "worst_index": [
+        4,
+        20,
+        24,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 1.0
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 25.60700522735715,
+       "headroom": 0.0625,
+       "worst_index": [
+        26,
+        18,
+        15,
+        20
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.0001220703125,
+       "max_rel_err": 900.0301361083984,
+       "headroom": 0.125,
+       "worst_index": [
+        105,
+        62
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 6.103515625e-05,
+       "max_rel_err": 7.25,
+       "headroom": 0.0625,
+       "worst_index": [
+        329
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 3.134831460674157,
+       "headroom": 0.125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        575
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.31868131868131866,
+       "headroom": 0.125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        99
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.00146484375,
+       "max_rel_err": 432.13367462158203,
+       "headroom": 0.75,
+       "worst_index": [
+        70,
+        504
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 123,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4816896,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.0625,
+       "max_rel_err": 20219.55319148936,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        2,
+        22,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 34.64515430096071,
+       "headroom": 0.25,
+       "worst_index": [
+        15,
+        23,
+        20,
+        149
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 3.0517578125e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 393.3906555175781,
+       "headroom": 0.25,
+       "worst_index": [
+        55,
+        152
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.0001220703125,
+       "max_rel_err": 1.881720430107527,
+       "headroom": 0.125,
+       "worst_index": [
+        398
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 5.821917808219178,
+       "headroom": 0.125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        171
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00390625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00390625,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.7925311203319502,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        0,
+        0,
+        228
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00390625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00390625,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 911.9510650634766,
+       "headroom": 0.25,
+       "worst_index": [
+        152,
+        55
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 121,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4813227,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.125,
+       "max_rel_err": 4747.659340659341,
+       "headroom": 0.125,
+       "worst_index": [
+        7,
+        8,
+        13,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 0.5
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 5.7220458984375e-06,
+       "max_rel_err": 28.80697138607502,
+       "headroom": 0.1875,
+       "worst_index": [
+        15,
+        23,
+        20,
+        1
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 3.0517578125e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 852.3464202880859,
+       "headroom": 0.25,
+       "worst_index": [
+        23,
+        152
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 1.4188311688311688,
+       "headroom": 0.25,
+       "worst_index": [
+        23
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 2.8636363636363638,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        0,
+        0,
+        40
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00390625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00390625,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.16161616161616163,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        0,
+        0,
+        68
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00390625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00390625,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.0003204345703125,
+       "max_rel_err": 402.3313522338867,
+       "headroom": 0.1640625,
+       "worst_index": [
+        152,
+        197
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 122,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4812895,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 0.25,
+       "max_rel_err": 7761.8421052631575,
+       "headroom": 0.25,
+       "worst_index": [
+        6,
+        2,
+        7,
+        6
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.0
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.0,
+       "rounding_floor": 1.0
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 4.172325134277344e-06,
+       "max_rel_err": 28.78034682080925,
+       "headroom": 0.13671875,
+       "worst_index": [
+        15,
+        23,
+        20,
+        95
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 3.0517578125e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 1043.081283569336,
+       "headroom": 0.25,
+       "worst_index": [
+        400,
+        70
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dup_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.7514792899408284,
+       "headroom": 0.25,
+       "worst_index": [
+        400
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 5.316831683168317,
+       "headroom": 0.0625,
+       "worst_index": [
+        0,
+        0,
+        0,
+        400
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00390625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00390625,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dgrn_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 768,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.20625,
+       "headroom": 0.03125,
+       "worst_index": [
+        0,
+        0,
+        0,
+        227
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_weight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 147456,
+       "max_abs_err": 0.00146484375,
+       "max_rel_err": 923.8719940185547,
+       "headroom": 0.75,
+       "worst_index": [
+        152,
+        504
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddown_bias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 192,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.001953125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.001953125,
+       "rounding_floor": 0.001953125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "Y": 28,
+      "X": 28,
+      "H": 192,
+      "I": 768
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "case": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.1.layers",
+       "index_in_step": 123,
+       "kind": "boundary:convnext_mlp",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "role": "convnextv2.encoder.stages.1.layers"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 4816896,
+        "numel": 4816896,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dup_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dgrn_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_weight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:ddown_bias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "c7fa6e7d4324774244cd602fa18c92004af74080c9548a5efd5db28bd4de2ed0",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/work/hdd/bcjw/wzhan/ADBench_eval/convnextv2_tiny/state/gate2/operator/7096a8fa75b2f9a2/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.1.layers.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "failed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "convnextv2_tiny_convnext_mlp",
+    "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+     "source": null
+    },
+    "parameter_args": [
+     "up_weight",
+     "up_bias",
+     "grn_weight",
+     "grn_bias",
+     "down_weight",
+     "down_bias"
+    ],
+    "dims": {
+     "B": 32,
+     "Y": 28,
+     "X": 28,
+     "H": 192,
+     "I": 768
+    },
+    "dtype": "bfloat16",
+    "inputs": "real_training_payload",
+    "case_id": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_1530085562833214731"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+     "seed": 303000121,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+     "seed": 303000122,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+     "seed": 303000123,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+     "seed": 404000121,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+     "seed": 404000122,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+     "seed": 404000123,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "c7fa6e7d4324774244cd602fa18c92004af74080c9548a5efd5db28bd4de2ed0",
+    "schema": "evograd-verification-gate2-policy/4",
+    "boundaries": false,
+    "sample_protocol": "disjoint_holdout",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "fad319b45310e663ff8166746b6986826e5a49f89159e52bd6c7ab2f3a5a09e6",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 0,
+   "failed": 6,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [
+   "threshold_exceeded"
+  ],
+  "cases": [
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0024044036875108207,
+       "Emax": 0.09805168971269855,
+       "diff_l2": 3.3636899322203426,
+       "diff_max": 0.0625,
+       "ref_l2": 1398.9705429634535,
+       "ref_rms": 0.6374188979622011,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004625009308315447,
+       "Emax": 0.25191332562453855,
+       "diff_l2": 9.60694269406871e-05,
+       "diff_max": 2.384185791015625e-06,
+       "ref_l2": 0.02077172618181782,
+       "ref_rms": 9.464309937176997e-06,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003987155003603657,
+       "Emax": 0.07429422789307255,
+       "diff_l2": 0.0025156448366744307,
+       "diff_max": 0.0001220703125,
+       "ref_l2": 0.6309373060241573,
+       "ref_rms": 0.0016430659011045763,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003018076126845102,
+       "Emax": 0.026234193127540818,
+       "diff_l2": 0.000291886768517047,
+       "diff_max": 9.1552734375e-05,
+       "ref_l2": 0.09671285820817456,
+       "ref_rms": 0.003489824670036731,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004397057823995078,
+       "Emax": 0.059632252359300336,
+       "diff_l2": 0.0009977727097202939,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.22691825981349903,
+       "ref_rms": 0.008188207399210319,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0007466591515268644,
+       "Emax": 0.005895848524956795,
+       "diff_l2": 0.00042841704530875924,
+       "diff_max": 0.0001220703125,
+       "ref_l2": 0.5737786035739026,
+       "ref_rms": 0.020704451951790017,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.000747 > 0.0002 (3.73x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0007466591515268644,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.006381737611036299,
+       "Emax": 0.25207189712524164,
+       "diff_l2": 0.0034118791802880133,
+       "diff_max": 0.0003509521484375,
+       "ref_l2": 0.5346316925327137,
+       "ref_rms": 0.001392270032637275,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.4155236159565349,
+       "ref_rms": 0.02998783394089401,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "seed": 303000121,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "820f9591568f41c98e8c1b5a26e19215",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "seed": 303000121,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "ab93492c0a260aa82fd68b8cf8b07a2b0eecb05b658a513c05c8b840267dd4ff",
+      "sample_identity": {
+       "fingerprint": "640898664dd248893480f60225649b12c16bfab58849b355c6d412421d80bae2",
+       "components": {
+        "seed": 303000121,
+        "inputs": "cb592d6c8047b5bd623c09405c17c650309268b52c293309270ebb3a5f3a8436",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8ffdc136a2638ac036a308ea9893079ddef334b3e6fd787d40c35a437aba4c73",
+        "initial_state": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "98dc2e35ae68e5f3e805b20340bb6c2ed350b70fa9e39489bfaa8fb04f153c76",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "9c0f608f33a62c9f5715ffeff776293b620370600ff4ff15f54ef4f5ab5e6d85",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "a86a2a6bd89430cf6aff15bcaf052eb5c3fb0e5a3222f20cf28e9d29eaca8a2f",
+      "initial_state_digest": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+      "error_stage": null,
+      "seconds": 0.15491440199548379
+     },
+     "candidate": {
+      "execution_id": "c79042cee46443c98238db4cf9d1736b",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "seed": 303000121,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "ab93492c0a260aa82fd68b8cf8b07a2b0eecb05b658a513c05c8b840267dd4ff",
+      "sample_identity": {
+       "fingerprint": "640898664dd248893480f60225649b12c16bfab58849b355c6d412421d80bae2",
+       "components": {
+        "seed": 303000121,
+        "inputs": "cb592d6c8047b5bd623c09405c17c650309268b52c293309270ebb3a5f3a8436",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8ffdc136a2638ac036a308ea9893079ddef334b3e6fd787d40c35a437aba4c73",
+        "initial_state": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "98dc2e35ae68e5f3e805b20340bb6c2ed350b70fa9e39489bfaa8fb04f153c76",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "9c0f608f33a62c9f5715ffeff776293b620370600ff4ff15f54ef4f5ab5e6d85",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "d855129d68992a7022364f6dd099a4197c52f55ab9a82f077de40c3b3b3b3934",
+      "initial_state_digest": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+      "error_stage": null,
+      "seconds": 0.10139620100380853
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002486090175534747,
+       "Emax": 0.14353888009449914,
+       "diff_l2": 4.751612013601422,
+       "diff_max": 0.125,
+       "ref_l2": 1911.2790277526321,
+       "ref_rms": 0.8708441916065248,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004596960883055566,
+       "Emax": 0.24816215606883915,
+       "diff_l2": 7.754413784758139e-05,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 0.01686856595482674,
+       "ref_rms": 7.685896443788994e-06,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0038712878304168127,
+       "Emax": 0.07665002636815936,
+       "diff_l2": 0.0023674697276577826,
+       "diff_max": 0.0001220703125,
+       "ref_l2": 0.6115457778821066,
+       "ref_rms": 0.0015925671299013193,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002340336440852458,
+       "Emax": 0.016626638020500236,
+       "diff_l2": 0.000238086364676157,
+       "diff_max": 6.103515625e-05,
+       "ref_l2": 0.101731682898308,
+       "ref_rms": 0.0036709259066532367,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.006211038684783119,
+       "Emax": 0.11874301936790574,
+       "diff_l2": 0.0008847423518463683,
+       "diff_max": 0.0006103515625,
+       "ref_l2": 0.14244676240931547,
+       "ref_rms": 0.00514010478888806,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.00621 > 0.0058 (1.07x)",
+        "subject": "grad:grn_weight",
+        "details": {
+         "metric": "E2",
+         "value": 0.006211038684783119,
+         "threshold": 0.0057961742819409995
+        }
+       },
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.119 > 0.104 (1.14x)",
+        "subject": "grad:grn_weight",
+        "details": {
+         "metric": "Emax",
+         "value": 0.11874301936790574,
+         "threshold": 0.10436093463538804
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0008362022532766386,
+       "Emax": 0.01205042102658802,
+       "diff_l2": 0.00046949370614931873,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.5614595085215555,
+       "ref_rms": 0.020259924898999686,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.000836 > 0.0002 (4.18x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0008362022532766386,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004883228776688732,
+       "Emax": 0.1731485843243457,
+       "diff_l2": 0.002643987530137715,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.5414424863236852,
+       "ref_rms": 0.0014100064748012635,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.39142800382600484,
+       "ref_rms": 0.02824888292216272,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "seed": 303000122,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "5fc1153eafd8465097dcffb547b8c955",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "seed": 303000122,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "20f8904803ac83cfb1a43d30d99966228630f67e9967cdf8ef6cbf7171393b0b",
+      "sample_identity": {
+       "fingerprint": "e23fb0df8f16701b9e604a431a35b077dc42cf52d0c6ee16d37c6b758db4ab1c",
+       "components": {
+        "seed": 303000122,
+        "inputs": "d9a8f3f1b350360a7149538d8724c2b0236269336280c09930e8a9593edc95c3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "21c15499bba81fa0e90441c835245c0909e2b6403da6115e8c886865f9cc3cb9",
+        "initial_state": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "67e86d46fd54de524207c352043e28dd34c4869a654df585161e889f7be93511",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "8b5ffef129d36da2cce10365f2cab182c1b9d3bfe5864e8798f2daf70936f7ee",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4f08cf4bc018abd6222704c306ea3ee18521c21506f8a049bf75bc85ad39dbe6",
+      "initial_state_digest": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+      "error_stage": null,
+      "seconds": 0.14857378700980917
+     },
+     "candidate": {
+      "execution_id": "a6d12f5b90924abaa478af56118ca502",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "seed": 303000122,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "20f8904803ac83cfb1a43d30d99966228630f67e9967cdf8ef6cbf7171393b0b",
+      "sample_identity": {
+       "fingerprint": "e23fb0df8f16701b9e604a431a35b077dc42cf52d0c6ee16d37c6b758db4ab1c",
+       "components": {
+        "seed": 303000122,
+        "inputs": "d9a8f3f1b350360a7149538d8724c2b0236269336280c09930e8a9593edc95c3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "21c15499bba81fa0e90441c835245c0909e2b6403da6115e8c886865f9cc3cb9",
+        "initial_state": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "67e86d46fd54de524207c352043e28dd34c4869a654df585161e889f7be93511",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "8b5ffef129d36da2cce10365f2cab182c1b9d3bfe5864e8798f2daf70936f7ee",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "73a22d45a4ffae3fac950729d03fb30a304a1b2d15472e115598711bb11b06ae",
+      "initial_state_digest": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+      "error_stage": null,
+      "seconds": 0.10249274999659974
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0032068574385210814,
+       "Emax": 0.26708359629302786,
+       "diff_l2": 6.588037792362186,
+       "diff_max": 0.25,
+       "ref_l2": 2054.3594215402404,
+       "ref_rms": 0.9360365199130957,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004432688567716509,
+       "Emax": 0.2639561903161789,
+       "diff_l2": 7.029898998067147e-05,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 0.015859221532652328,
+       "ref_rms": 7.226004552224329e-06,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0037701900159258896,
+       "Emax": 0.07670543787632707,
+       "diff_l2": 0.0023039782040155457,
+       "diff_max": 0.0001220703125,
+       "ref_l2": 0.6111040011997196,
+       "ref_rms": 0.0015914166697909367,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002399012642481238,
+       "Emax": 0.019785982670930975,
+       "diff_l2": 0.00020508579614463604,
+       "diff_max": 6.103515625e-05,
+       "ref_l2": 0.08548758456417344,
+       "ref_rms": 0.0030847674975310263,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003122990407388456,
+       "Emax": 0.06175550401120182,
+       "diff_l2": 0.0003421492889426972,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.10955822603016363,
+       "ref_rms": 0.003953341955653303,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0007708534328638596,
+       "Emax": 0.012580556841133515,
+       "diff_l2": 0.0004145649760657744,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.5377999998334193,
+       "ref_rms": 0.019406185917125333,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.000771 > 0.0002 (3.85x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0007708534328638596,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.00814317459445147,
+       "Emax": 0.864657013449553,
+       "diff_l2": 0.0052975175568227735,
+       "diff_max": 0.00146484375,
+       "ref_l2": 0.6505469697815828,
+       "ref_rms": 0.0016941327338062051,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.865 > 0.759 (1.14x)",
+        "subject": "grad:down_weight",
+        "details": {
+         "metric": "Emax",
+         "value": 0.864657013449553,
+         "threshold": 0.7591428874139646
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.36846538225177605,
+       "ref_rms": 0.026591698453765158,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "seed": 303000123,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "7ca2e7e51a58432d8884700f817a06b0",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "seed": 303000123,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9e46794007c42c96797ffe933b02e41d35928c45881790f8a6d4afc014840800",
+      "sample_identity": {
+       "fingerprint": "99f5765130930281cebb38cd25fef76d146a851924ad18aec22d14f1197d4da2",
+       "components": {
+        "seed": 303000123,
+        "inputs": "d67463d323eadc273a5b19c9a7f9e484d0ffbf6eff8977f065d843970b0d19a5",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b3c87c6443e926111ba5d4e7eafac539b98b76edcb44e0ca90c946ee02256bd1",
+        "initial_state": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1609ba5508d2240fc12718579bec7fb99e1b3fa891953a043f55af0a0c7914c6",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0e9863a47ab913934cbd98f0a5177272022aac6ec5403afc39d2af63d78c8056",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "3fc4d19cf9221ecc31c68a3a7dc70d6db600709d35188ba76ab2afe48827fa87",
+      "initial_state_digest": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+      "error_stage": null,
+      "seconds": 0.1476155669952277
+     },
+     "candidate": {
+      "execution_id": "c368d7c9d4984b668ddacec6ee2d10d7",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "seed": 303000123,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9e46794007c42c96797ffe933b02e41d35928c45881790f8a6d4afc014840800",
+      "sample_identity": {
+       "fingerprint": "99f5765130930281cebb38cd25fef76d146a851924ad18aec22d14f1197d4da2",
+       "components": {
+        "seed": 303000123,
+        "inputs": "d67463d323eadc273a5b19c9a7f9e484d0ffbf6eff8977f065d843970b0d19a5",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b3c87c6443e926111ba5d4e7eafac539b98b76edcb44e0ca90c946ee02256bd1",
+        "initial_state": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1609ba5508d2240fc12718579bec7fb99e1b3fa891953a043f55af0a0c7914c6",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0e9863a47ab913934cbd98f0a5177272022aac6ec5403afc39d2af63d78c8056",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "f8e1e90e311bf9ed11f5750439d8d1dda97c931fe4c1db739e2b3a822806b82e",
+      "initial_state_digest": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+      "error_stage": null,
+      "seconds": 0.10071987099945545
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002377384759516011,
+       "Emax": 0.09783722329533069,
+       "diff_l2": 3.333181847038793,
+       "diff_max": 0.0625,
+       "ref_l2": 1402.037189687951,
+       "ref_rms": 0.6388161672509652,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.00441225990679573,
+       "Emax": 0.5281451710566049,
+       "diff_l2": 0.00013988832890761248,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 0.031704462534529645,
+       "ref_rms": 1.444563909575594e-05,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0041847904541105485,
+       "Emax": 0.10727745617003098,
+       "diff_l2": 0.003657097391003046,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.8739021537890455,
+       "ref_rms": 0.002275786858825639,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0031388402452029746,
+       "Emax": 0.026442648076259734,
+       "diff_l2": 0.00040156414987483306,
+       "diff_max": 0.0001220703125,
+       "ref_l2": 0.12793392415830507,
+       "ref_rms": 0.004616417846955162,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0026981659536400087,
+       "Emax": 0.03825873654827034,
+       "diff_l2": 0.0009543082795817628,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.3536877627168693,
+       "ref_rms": 0.01276260781335381,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0011246720224915678,
+       "Emax": 0.01072149107423748,
+       "diff_l2": 0.0007097270622003597,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.6310524739719672,
+       "ref_rms": 0.02277114473253091,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.00112 > 0.0002 (5.62x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0011246720224915678,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.006105265871190305,
+       "Emax": 0.24720004185939734,
+       "diff_l2": 0.004630813741930056,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.7584950171919729,
+       "ref_rms": 0.001975247440604096,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.4661310152224842,
+       "ref_rms": 0.03364010838954185,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+      "seed": 404000121,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "5e5ead7084e948c4959e5dd40abad2f4",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "seed": 404000121,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "7633f98e3e6d992871f0c398a69bff6cbb16e3b94f3afed89e563225efa8eaba",
+      "sample_identity": {
+       "fingerprint": "00eb330762af8d4638b24a780b6c5e36b707954ce5fe58ad9cd7f2e0e9be7920",
+       "components": {
+        "seed": 404000121,
+        "inputs": "176a63122564af3cf048f01e4434d9e161697040394df6c088e5075ae0f2280a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "f6af490e48e68c6efc3f7d28e257da259d7fd23b37cb1f87cf752371b8592ded",
+        "initial_state": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7d76a48f4b3d76333d20bff140edb05e05ce3ddbeb06a2ce9a2ab63e2803bacb",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "7a3933d61a07507093f251ef528b750a9b9e3661a10135de5a1641fbc9f2af28",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "51f5a1c6bc541bb31d1c472f6026d03473e332e3bf0469fadd8413325b9613ea",
+      "initial_state_digest": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+      "error_stage": null,
+      "seconds": 0.15088497700344305
+     },
+     "candidate": {
+      "execution_id": "7774794a202741bc85029233db0ff717",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+       "seed": 404000121,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "7633f98e3e6d992871f0c398a69bff6cbb16e3b94f3afed89e563225efa8eaba",
+      "sample_identity": {
+       "fingerprint": "00eb330762af8d4638b24a780b6c5e36b707954ce5fe58ad9cd7f2e0e9be7920",
+       "components": {
+        "seed": 404000121,
+        "inputs": "176a63122564af3cf048f01e4434d9e161697040394df6c088e5075ae0f2280a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "f6af490e48e68c6efc3f7d28e257da259d7fd23b37cb1f87cf752371b8592ded",
+        "initial_state": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7d76a48f4b3d76333d20bff140edb05e05ce3ddbeb06a2ce9a2ab63e2803bacb",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "7a3933d61a07507093f251ef528b750a9b9e3661a10135de5a1641fbc9f2af28",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "25bd08afc6ae7246f91dc8157fe4b5e5a440c30d8af486c54b19e5abe484c779",
+      "initial_state_digest": "06029966c2fc42d10e8706558a1a84369090d09c49d3701c15dce38d2ca1f5d4",
+      "error_stage": null,
+      "seconds": 0.1036832259997027
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002391444261859997,
+       "Emax": 0.14239202677734616,
+       "diff_l2": 4.607530717226355,
+       "diff_max": 0.125,
+       "ref_l2": 1926.6728439837227,
+       "ref_rms": 0.8778581415619463,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.00464726115859484,
+       "Emax": 0.479731261413097,
+       "diff_l2": 0.00012165613949149212,
+       "diff_max": 5.7220458984375e-06,
+       "ref_l2": 0.026178029454293983,
+       "ref_rms": 1.1927606888870727e-05,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004133850656946904,
+       "Emax": 0.21330318320207386,
+       "diff_l2": 0.0036337807366111936,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.8790304822707259,
+       "ref_rms": 0.002289141880913349,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.213 > 0.2 (1.07x)",
+        "subject": "grad:up_weight",
+        "details": {
+         "metric": "Emax",
+         "value": 0.21330318320207386,
+         "threshold": 0.2000111450262728
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.00327116526065357,
+       "Emax": 0.04716713573037294,
+       "diff_l2": 0.00046922770150168195,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.1434435939833659,
+       "ref_rms": 0.00517607484998898,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002218601789728019,
+       "Emax": 0.024636534351482643,
+       "diff_l2": 0.0006092848871867784,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.27462561781376343,
+       "ref_rms": 0.009909698398196476,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0008535146374041063,
+       "Emax": 0.010041336170834492,
+       "diff_l2": 0.0005750957108682335,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.6737971273900343,
+       "ref_rms": 0.024313559554864552,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.000854 > 0.0002 (4.27x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0008535146374041063,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.005494622830182593,
+       "Emax": 0.1685963836366362,
+       "diff_l2": 0.004010146326832049,
+       "diff_max": 0.0003204345703125,
+       "ref_l2": 0.7298310458734047,
+       "ref_rms": 0.0019006016819619917,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.44874125513153507,
+       "ref_rms": 0.03238511055583529,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+      "seed": 404000122,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "22cbe5cb6d37427d90037d68f7119978",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "seed": 404000122,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e3e9fa9f78717323e0271b7a8c44c663aa0581d8dd75c10de460acd8078f346b",
+      "sample_identity": {
+       "fingerprint": "3b68f55082efce40cb10b65ab68d53417dbd6d21c919b111826d080fbd0cd4ef",
+       "components": {
+        "seed": 404000122,
+        "inputs": "843fb3ce0ca81e3d49b36627cacdb4681024ebf9477e5dbe663fdd3ab971175a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "c03ca42de7bbdc25c331e7a142fad2aa1e69863ac0bba0cb2601788f9b2e8867",
+        "initial_state": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "85ca8b43aa28973e4fc6444c96487ea4a01d4b6313df7ee6886e7d17580a0691",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "74e8cb18b653dae751da9e189c8f20343c252f1de6d82f2a44a65813e048510e",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "e0db09c1b4540f5963c2b1ca400b8f29ff274cb24c64a23da04e265faa06ed57",
+      "initial_state_digest": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+      "error_stage": null,
+      "seconds": 0.14722880999033805
+     },
+     "candidate": {
+      "execution_id": "a52b2b3a70ef41a1b47fb544315ee0c9",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+       "seed": 404000122,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e3e9fa9f78717323e0271b7a8c44c663aa0581d8dd75c10de460acd8078f346b",
+      "sample_identity": {
+       "fingerprint": "3b68f55082efce40cb10b65ab68d53417dbd6d21c919b111826d080fbd0cd4ef",
+       "components": {
+        "seed": 404000122,
+        "inputs": "843fb3ce0ca81e3d49b36627cacdb4681024ebf9477e5dbe663fdd3ab971175a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "c03ca42de7bbdc25c331e7a142fad2aa1e69863ac0bba0cb2601788f9b2e8867",
+        "initial_state": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "85ca8b43aa28973e4fc6444c96487ea4a01d4b6313df7ee6886e7d17580a0691",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "74e8cb18b653dae751da9e189c8f20343c252f1de6d82f2a44a65813e048510e",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "1376203218f3942b86092e82ed37c4e4c347ebaa4eada9d1c5f9683ad025ea26",
+      "initial_state_digest": "7a5901747ba18cb07f0d180c6da1c94329a83d3b2a76e6a576f0c9b11e61f220",
+      "error_stage": null,
+      "seconds": 0.10368160200596321
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003256064481633459,
+       "Emax": 0.2663974455433572,
+       "diff_l2": 6.70635569897021,
+       "diff_max": 0.25,
+       "ref_l2": 2059.650764534569,
+       "ref_rms": 0.9384474370243597,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005494300381256183,
+       "Emax": 0.47900289802899354
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.004465264264728938,
+       "Emax": 0.38350170359215063,
+       "diff_l2": 0.00010662072908672908,
+       "diff_max": 4.172325134277344e-06,
+       "ref_l2": 0.023877809411847084,
+       "ref_rms": 1.0879547848670213e-05,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.008419195293037297,
+       "Emax": 1.1434906394258657
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         28,
+         28,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         5376,
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:up_weight",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003756509075798681,
+       "Emax": 0.21303637056013508,
+       "diff_l2": 0.003306221608358807,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.8801314043560144,
+       "ref_rms": 0.0022920088655104544,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.007811677349117009,
+       "Emax": 0.2000111450262728
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768,
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         192,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.213 > 0.2 (1.07x)",
+        "subject": "grad:up_weight",
+        "details": {
+         "metric": "Emax",
+         "value": 0.21303637056013508,
+         "threshold": 0.2000111450262728
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:up_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.003277233836594184,
+       "Emax": 0.054206144569050346,
+       "diff_l2": 0.00040905299159297676,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.12481654101865337,
+       "ref_rms": 0.004503928972277343,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.006373365446958229,
+       "Emax": 0.09018171380853769
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0024889980787280424,
+       "Emax": 0.04224752360326762,
+       "diff_l2": 0.00039860612348974943,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.1601472202394989,
+       "ref_rms": 0.0057788150447028105,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0057961742819409995,
+       "Emax": 0.10436093463538804
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:grn_bias",
+      "kind": "param_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0006097341558444037,
+       "Emax": 0.008478495388132019,
+       "diff_l2": 0.00048656671631363565,
+       "diff_max": 0.000244140625,
+       "ref_l2": 0.7979981302503926,
+       "ref_rms": 0.028795277207055138,
+       "elements": 768,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         1,
+         1,
+         1,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         768,
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "E2 0.00061 > 0.0002 (3.05x)",
+        "subject": "grad:grn_bias",
+        "details": {
+         "metric": "E2",
+         "value": 0.0006097341558444037,
+         "threshold": 0.0002
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:down_weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.007808808801122449,
+       "Emax": 0.647418030254302,
+       "diff_l2": 0.0067845730970854294,
+       "diff_max": 0.00146484375,
+       "ref_l2": 0.8688358583078901,
+       "ref_rms": 0.0022625933810101304,
+       "elements": 147456,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.012011290368905247,
+       "Emax": 0.7591428874139646
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192,
+         768
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         768,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:down_bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.4365177892570093,
+       "ref_rms": 0.03150295789169933,
+       "elements": 192,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         192
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+      "seed": 404000123,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+      }
+     },
+     "reference": {
+      "execution_id": "589107d2910749a3b8b535e13cf83aef",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "seed": 404000123,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2c39d3bb7304a9ea23245b208b8cbc35796927f3ea5a2a73cca74408f9da239d",
+      "sample_identity": {
+       "fingerprint": "cfd82b8b0868b189756ededa2b7b1f3bf02bbc612d5cf859fefde26491164744",
+       "components": {
+        "seed": 404000123,
+        "inputs": "6042d8132e2f5e4aea5793ee2196ca90f68ce4e208faa50bbab00b7bd74c8fec",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "0c83595cedfb5635c3732bb326d07723e7076ea2483ba600aaa0062d014e0f26",
+        "initial_state": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e3e48727a29ee2c44f6d4d2181516eadf066572c22f2cabd6e412136b1e1f881",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "2afcd3b32f9315012064af56ad3319e547ea39046e17599482eb824f4b762682",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "fb27b5697613b82a64420ca1e13978b1748995f5ff06f525927ddf539efcacb1",
+      "initial_state_digest": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+      "error_stage": null,
+      "seconds": 0.15190827701007947
+     },
+     "candidate": {
+      "execution_id": "1d300f0df899465c9ce7986041b248ab",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1530085562833214731"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+       "seed": 404000123,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2c39d3bb7304a9ea23245b208b8cbc35796927f3ea5a2a73cca74408f9da239d",
+      "sample_identity": {
+       "fingerprint": "cfd82b8b0868b189756ededa2b7b1f3bf02bbc612d5cf859fefde26491164744",
+       "components": {
+        "seed": 404000123,
+        "inputs": "6042d8132e2f5e4aea5793ee2196ca90f68ce4e208faa50bbab00b7bd74c8fec",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "0c83595cedfb5635c3732bb326d07723e7076ea2483ba600aaa0062d014e0f26",
+        "initial_state": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e3e48727a29ee2c44f6d4d2181516eadf066572c22f2cabd6e412136b1e1f881",
+             "shape": [
+              32,
+              28,
+              28,
+              192
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              5376,
+              192,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "2afcd3b32f9315012064af56ad3319e547ea39046e17599482eb824f4b762682",
+           "shape": [
+            32,
+            28,
+            28,
+            192
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            150528,
+            5376,
+            192,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "58f13f7fc6f65b92bb2b0f3a07b21c9b3c6ae55a2f4794c1f7b629841c2c4935",
+      "initial_state_digest": "257998e1ceb4f0a0f3c8cd36d376f175ba0664839a75f1ae6845455c44ea1674",
+      "error_stage": null,
+      "seconds": 0.10363520499959122
+     },
+     "contract_digest": "8ac897100db85432bdc0ac8baf93beb9d3706c6bd9fb7d203d6740510ac306f7"
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "disjoint_holdout"
+  }
+ }
+}

@@ -1,0 +1,2521 @@
+{
+ "stage_key": {
+  "case": "spatial_conv2d/patch",
+  "program_sha256": "8816472028c5054764a004032e9d10f283e8f84523d231768ed9ab126b1dc101",
+  "corpus": {
+   "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+   "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/dit_s_2/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor"
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "passed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "spatial_conv2d",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_3651145315213078322",
+    "source_hash": "3d61652cd97a52972fe86d688a654ff1bedf27fb512ee0332f3c93c030ed70c0"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/dit_s_2/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:dbias": 1.3969838619232178e-09,
+    "grad_in:dweight": 0.0,
+    "grad_in:dx": 0.0,
+    "out:out": 0.003835320472717285
+   },
+   "cases": [
+    "o303/spatial_conv2d/patch/patch",
+    "o404/spatial_conv2d/patch/patch"
+   ]
+  },
+  "case_counts": {
+   "passed": 2,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o303/spatial_conv2d/patch/patch",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 25165824,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 0.003835320472717285
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 0.003835320472717285,
+       "rounding_floor": 9.5367431640625e-07
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 1048576,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 3.637978807091713e-12
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 3.637978807091713e-12,
+       "rounding_floor": 3.637978807091713e-12
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 6144,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.1641532182693481e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.1641532182693481e-10,
+       "rounding_floor": 1.1641532182693481e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 384,
+       "max_abs_err": 2.3283064365386963e-10,
+       "max_rel_err": 4.17299571016041e-05,
+       "headroom": 2.3279941244205873e-05,
+       "worst_index": [
+        348
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.3969838619232178e-09
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.3969838619232178e-09,
+       "rounding_floor": 4.656612873077393e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 256,
+      "C": 4,
+      "Y": 32,
+      "X": 32,
+      "O": 384,
+      "CG": 4,
+      "K": 2,
+      "OY": 16,
+      "OX": 16,
+      "S": 2,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+       "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 178,
+        "sha256": "d5e618bc7b97d8672347c920bd451759b7bf095b4a9118cae3f740500b5bbcb9"
+       }
+      },
+      "payload_id": "o303/spatial_conv2d/patch/patch",
+      "case": "spatial_conv2d/patch",
+      "batch": {
+       "order": 303,
+       "sha256": "6cb287886087500ea6c0e320ae13c774facb3f31f6ce7fff843e933a05e66308"
+      },
+      "call": {
+       "index_in_step": 64,
+       "kind": "module:nn.Conv2d",
+       "layer": null,
+       "path": "patch",
+       "role": "patch"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 25165824,
+        "numel": 25165824,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         384
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/spatial_conv2d/patch/patch",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 25165824,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 0.003835320472717285
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 0.003835320472717285,
+       "rounding_floor": 9.5367431640625e-07
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 1048576,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 3.637978807091713e-12
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 3.637978807091713e-12,
+       "rounding_floor": 3.637978807091713e-12
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 6144,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.1641532182693481e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.1641532182693481e-10,
+       "rounding_floor": 1.1641532182693481e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 384,
+       "max_abs_err": 2.3283064365386963e-10,
+       "max_rel_err": 9.524898083590506e-05,
+       "headroom": 2.3280084240411427e-05,
+       "worst_index": [
+        345
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.3969838619232178e-09
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.3969838619232178e-09,
+       "rounding_floor": 4.656612873077393e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 256,
+      "C": 4,
+      "Y": 32,
+      "X": 32,
+      "O": 384,
+      "CG": 4,
+      "K": 2,
+      "OY": 16,
+      "OX": 16,
+      "S": 2,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+       "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 178,
+        "sha256": "d5e618bc7b97d8672347c920bd451759b7bf095b4a9118cae3f740500b5bbcb9"
+       }
+      },
+      "payload_id": "o404/spatial_conv2d/patch/patch",
+      "case": "spatial_conv2d/patch",
+      "batch": {
+       "order": 404,
+       "sha256": "3d3186883e460cf083af2d833477cad1e94b98b20a3381b0557f5adc8a57be57"
+      },
+      "call": {
+       "index_in_step": 64,
+       "kind": "module:nn.Conv2d",
+       "layer": null,
+       "path": "patch",
+       "role": "patch"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 25165824,
+        "numel": 25165824,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         384
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "7359731b1772244a2f6d4bdbfdecf484f72653d5fccd93bf95ed5ed178ab2ae1",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+      "seed": 101000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/spatial_conv2d/patch/patch",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+       "call": "patch"
+      }
+     },
+     "native": {
+      "execution_id": "bb9aa1c8c29045d4b8ed0bb6b69cce46",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+       "seed": 101000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "507043852df6a43ccb93e8b1f17605f958dc4fa91f7ea833c90992ee3aba7b1d",
+      "sample_identity": {
+       "fingerprint": "0bb96b439d000135c541491b99aaa9494a81381287be16af261729da3c9dd0d0",
+       "components": {
+        "seed": 101000064,
+        "inputs": "2d9c22354e1ae26bc35fe644418498f3cbde41410ef48da75d6289ef161433d4",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7e37100073ff0a810357ebdddf9198c0d1f0b7c96ca7dbfea49586835a59a06b",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d7ae068e6d948c0d4c45eca08ca7820714d89be171ad275d27cafcc1cb599afc",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "36226042d3990c70acc5482b79dd0cb8e455ae5fd1584649e4839d7faaeec564",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "c5af8821e719eaeb05a1a42eacfadfa3f81125c330a82814c1aa8c817d7818cb",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.8823813600029098
+     },
+     "control": {
+      "execution_id": "1c4da39d67d64aa180fdb4b0d8a0e134",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+       "seed": 101000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "14cfec4f407e907ed5739382aaa8df7ec61a2991537f83beb557f24a29a8adbf",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "507043852df6a43ccb93e8b1f17605f958dc4fa91f7ea833c90992ee3aba7b1d",
+      "sample_identity": {
+       "fingerprint": "0bb96b439d000135c541491b99aaa9494a81381287be16af261729da3c9dd0d0",
+       "components": {
+        "seed": 101000064,
+        "inputs": "2d9c22354e1ae26bc35fe644418498f3cbde41410ef48da75d6289ef161433d4",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7e37100073ff0a810357ebdddf9198c0d1f0b7c96ca7dbfea49586835a59a06b",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d7ae068e6d948c0d4c45eca08ca7820714d89be171ad275d27cafcc1cb599afc",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "36226042d3990c70acc5482b79dd0cb8e455ae5fd1584649e4839d7faaeec564",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "463108aebccd13653d161d5aa0bbe395ee19c593f1dbc5a641d555138672d25c",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 1.6431411789963022
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+      "seed": 202000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/spatial_conv2d/patch/patch",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+       "call": "patch"
+      }
+     },
+     "native": {
+      "execution_id": "e17989a8919a4e4e90a6222f800b942e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+       "seed": 202000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "075e5e2ab31c0b80c38b4cc79c46a2a5864b82fc4e0f117a666aad94ba021f0a",
+      "sample_identity": {
+       "fingerprint": "acfa2bb431695d75896cb7bf4069ba653cb5c9ac0ae31b61db6187863d3f0512",
+       "components": {
+        "seed": 202000064,
+        "inputs": "abfd926d98b8163165b86334919a32450506d1a7205b1e4676d3ce5e1a881364",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cdb415ae073cff59ffff0e2f430b8a503a1151ee4308b18119a67b814508e936",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7cdc73533f9795181c79e928670c68a70465529568c262476d9e48994cbc7b73",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "dbde7c031db0595028b31a11c25aad57560629ec7da4319bdf2db2e3c554b025",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7eb3d324c53c565191569e455e12fa55ae69e49c9940e3abf44f7dbfbf582f3c",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.8155325090046972
+     },
+     "control": {
+      "execution_id": "2d5a7773e76b42de9749d0b4431c3a87",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+       "seed": 202000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/patch/patch",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "26b98ebbb4e8c1d307a86ae9fcdb387628ed625143ea1be7a95612b54531a796",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "075e5e2ab31c0b80c38b4cc79c46a2a5864b82fc4e0f117a666aad94ba021f0a",
+      "sample_identity": {
+       "fingerprint": "acfa2bb431695d75896cb7bf4069ba653cb5c9ac0ae31b61db6187863d3f0512",
+       "components": {
+        "seed": 202000064,
+        "inputs": "abfd926d98b8163165b86334919a32450506d1a7205b1e4676d3ce5e1a881364",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cdb415ae073cff59ffff0e2f430b8a503a1151ee4308b18119a67b814508e936",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "7cdc73533f9795181c79e928670c68a70465529568c262476d9e48994cbc7b73",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "dbde7c031db0595028b31a11c25aad57560629ec7da4319bdf2db2e3c554b025",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "3648e3ae8e634b83e9321444115bd59fb7dc374b781b7f31a4cdcee9cc0550a8",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.5349762389960233
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "disjoint_holdout",
+   "measurements": 16,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.00028404260791742,
+     "Emax": 0.003389321276789767
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o101/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 1.2556844192485726e-07,
+     "Emax": 8.35853857973023e-07
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.000284206042860996,
+     "Emax": 0.0029719911505413105
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o202/spatial_conv2d/patch/patch",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 1.1101839044947044e-07,
+     "Emax": 5.460002213077044e-07
+    }
+   ],
+   "seconds": 5.9929464050073875
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "spatial_conv2d",
+    "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/dit_s_2/1",
+     "source": null
+    },
+    "parameter_args": [
+     "weight",
+     "bias"
+    ],
+    "dims": {
+     "B": 256,
+     "C": 4,
+     "Y": 32,
+     "X": 32,
+     "O": 384,
+     "CG": 4,
+     "K": 2,
+     "OY": 16,
+     "OX": 16,
+     "S": 2,
+     "P": 0,
+     "G": 1
+    },
+    "dtype": "float32",
+    "inputs": "real_training_payload",
+    "case_id": "spatial_conv2d/patch",
+    "corpus": {
+     "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+     "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "float32"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_3651145315213078322"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o303/spatial_conv2d/patch/patch",
+     "seed": 303000064,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/spatial_conv2d/patch/patch",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6cb287886087500ea6c0e320ae13c774facb3f31f6ce7fff843e933a05e66308",
+      "call": "patch"
+     }
+    },
+    {
+     "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o404/spatial_conv2d/patch/patch",
+     "seed": 404000064,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/spatial_conv2d/patch/patch",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "3d3186883e460cf083af2d833477cad1e94b98b20a3381b0557f5adc8a57be57",
+      "call": "patch"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "7359731b1772244a2f6d4bdbfdecf484f72653d5fccd93bf95ed5ed178ab2ae1",
+    "schema": "evograd-verification-gate2-policy/4",
+    "boundaries": false,
+    "sample_protocol": "disjoint_holdout",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "0f0f97b99f97317ee0477694bb44cb16df69033167907f4048a1a0363464fbad",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 2,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o303/spatial_conv2d/patch/patch",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 1408.5308918944222,
+       "ref_rms": 0.2807765276764835,
+       "elements": 25165824,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.000568412085721992,
+       "Emax": 0.006778642553579534
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.0007656492311181859,
+       "ref_rms": 7.477043272638534e-07,
+       "elements": 1048576,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.006225950604780335,
+       "ref_rms": 7.94291778410633e-05,
+       "elements": 6144,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.1272199242861473e-07,
+       "Emax": 5.452068858519357e-07,
+       "diff_l2": 9.43307039208601e-10,
+       "diff_max": 2.3283064365386963e-10,
+       "ref_l2": 0.00836843830458359,
+       "ref_rms": 0.00042705007896231986,
+       "elements": 384,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o303/spatial_conv2d/patch/patch",
+      "seed": 303000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/spatial_conv2d/patch/patch",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6cb287886087500ea6c0e320ae13c774facb3f31f6ce7fff843e933a05e66308",
+       "call": "patch"
+      }
+     },
+     "reference": {
+      "execution_id": "dcc831ac36394c408573236ab2e80975",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o303/spatial_conv2d/patch/patch",
+       "seed": 303000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/spatial_conv2d/patch/patch",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6cb287886087500ea6c0e320ae13c774facb3f31f6ce7fff843e933a05e66308",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "fcb15329450221b9d7edeee6a7b38d467c8ba911f9149e20e58d1ec21f39c878",
+      "sample_identity": {
+       "fingerprint": "9d5bfd6294fba9f1faf73178beff651073c83b652be0f2d61b0becb74730abe4",
+       "components": {
+        "seed": 303000064,
+        "inputs": "d95b4a47c34b367740e45751528b5b6f79340d1e0affaa97c1aa1ecd61606a19",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8323efebac950fdeea759a0237e06708597ee82dc652b0a9325dd0126ab158d6",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "bfb11e697630919606fd77bac97aa95279e774687d3fc5ecce56e1b81ed0b582",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "d13c9fac6397f3510fbd0eefcb4ef42f953529e5e9eb7919f28a5f71d067c5ff",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7fffdc162761ddc99f0ccca114b324e4db7e9ac3ad9fd372e1a2c9bb809f5aef",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.8043444729992189
+     },
+     "candidate": {
+      "execution_id": "056c2c8be3db4f1091ebe90e20363e82",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_3651145315213078322"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o303/spatial_conv2d/patch/patch",
+       "seed": 303000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/spatial_conv2d/patch/patch",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6cb287886087500ea6c0e320ae13c774facb3f31f6ce7fff843e933a05e66308",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "fcb15329450221b9d7edeee6a7b38d467c8ba911f9149e20e58d1ec21f39c878",
+      "sample_identity": {
+       "fingerprint": "9d5bfd6294fba9f1faf73178beff651073c83b652be0f2d61b0becb74730abe4",
+       "components": {
+        "seed": 303000064,
+        "inputs": "d95b4a47c34b367740e45751528b5b6f79340d1e0affaa97c1aa1ecd61606a19",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8323efebac950fdeea759a0237e06708597ee82dc652b0a9325dd0126ab158d6",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "bfb11e697630919606fd77bac97aa95279e774687d3fc5ecce56e1b81ed0b582",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "d13c9fac6397f3510fbd0eefcb4ef42f953529e5e9eb7919f28a5f71d067c5ff",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "75aee3578d8bb61ea826df4a5657272d93bf482bd427a8483fdbc9c45c237136",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.5297989069949836
+     },
+     "contract_digest": "7d8678a32437f5a50769f51791cecc815462915d10923567b7b8f461a9494ce4"
+    }
+   },
+   {
+    "case_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o404/spatial_conv2d/patch/patch",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 1408.2939902557696,
+       "ref_rms": 0.280729303707251,
+       "elements": 25165824,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.000568412085721992,
+       "Emax": 0.006778642553579534
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         384,
+         16,
+         16
+        ],
+        "dtype": "float32",
+        "stride": [
+         98304,
+         256,
+         16,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.000778270035462001,
+       "ref_rms": 7.600293315058604e-07,
+       "elements": 1048576,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         256,
+         4,
+         32,
+         32
+        ],
+        "dtype": "float32",
+        "stride": [
+         4096,
+         1024,
+         32,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.0066818608326354246,
+       "ref_rms": 8.524557068877677e-05,
+       "elements": 6144,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384,
+         4,
+         2,
+         2
+        ],
+        "dtype": "float32",
+        "stride": [
+         16,
+         4,
+         2,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.14586030187862e-07,
+       "Emax": 5.504496452938724e-07,
+       "diff_l2": 9.49773019686839e-10,
+       "diff_max": 2.3283064365386963e-10,
+       "ref_l2": 0.008288733086657257,
+       "ref_rms": 0.00042298263909238543,
+       "elements": 384,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         384
+        ],
+        "dtype": "float32",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o404/spatial_conv2d/patch/patch",
+      "seed": 404000064,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/spatial_conv2d/patch/patch",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "3d3186883e460cf083af2d833477cad1e94b98b20a3381b0557f5adc8a57be57",
+       "call": "patch"
+      }
+     },
+     "reference": {
+      "execution_id": "a0368fa94e4f412db8ded5d701769820",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o404/spatial_conv2d/patch/patch",
+       "seed": 404000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/spatial_conv2d/patch/patch",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "3d3186883e460cf083af2d833477cad1e94b98b20a3381b0557f5adc8a57be57",
+        "call": "patch"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "16ec3899a37150f6e905d18eaa2318da3c9cc06cf437b33ceff6f36823afad3a",
+      "sample_identity": {
+       "fingerprint": "ae45780677e83ce09b6210fd4595d3aa58e898cbaae0326cedd58f254199d9e3",
+       "components": {
+        "seed": 404000064,
+        "inputs": "4d21c47eadaf5ea3a6c39b91bddf539ebd69e00e36948adeee3b08cc1aae17b3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7f966dcafdc57409d206352dcdb743505184b42c9892d1129685dd2c7faa742a",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "93a6fc0205ce3c0e4347c5d88f7c0e1a81a8ff5cfb098d9571e8d3fb81375e7a",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "ef1144ae61c9e2e7fe6c1d75979720c6166b3a4612bc173b9467748bff68be8a",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "91726eb2c7cd443b4d6bcdf15fc543ea1de5fc08c1b38bcadc7aed674aebada1",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.7567840330011677
+     },
+     "candidate": {
+      "execution_id": "1b4582370cc14290b34678e0d6ee275b",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_3651145315213078322"
+       }
+      },
+      "sample": {
+       "sample_id": "dit_s_2-real-training-payloads@f009a78c1885f701/o404/spatial_conv2d/patch/patch",
+       "seed": 404000064,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/spatial_conv2d/patch/patch",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "3d3186883e460cf083af2d833477cad1e94b98b20a3381b0557f5adc8a57be57",
+        "call": "patch"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "16ec3899a37150f6e905d18eaa2318da3c9cc06cf437b33ceff6f36823afad3a",
+      "sample_identity": {
+       "fingerprint": "ae45780677e83ce09b6210fd4595d3aa58e898cbaae0326cedd58f254199d9e3",
+       "components": {
+        "seed": 404000064,
+        "inputs": "4d21c47eadaf5ea3a6c39b91bddf539ebd69e00e36948adeee3b08cc1aae17b3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "7f966dcafdc57409d206352dcdb743505184b42c9892d1129685dd2c7faa742a",
+        "initial_state": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "93a6fc0205ce3c0e4347c5d88f7c0e1a81a8ff5cfb098d9571e8d3fb81375e7a",
+             "shape": [
+              256,
+              4,
+              32,
+              32
+             ],
+             "dtype": "float32",
+             "stride": [
+              4096,
+              1024,
+              32,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "ef1144ae61c9e2e7fe6c1d75979720c6166b3a4612bc173b9467748bff68be8a",
+           "shape": [
+            256,
+            384,
+            16,
+            16
+           ],
+           "dtype": "float32",
+           "stride": [
+            98304,
+            1,
+            6144,
+            384
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "30472ae667a980fe2e67412c115fab6ac7ade8601840e32166a6f80b6da1ab1f",
+      "initial_state_digest": "2ad0950ff2f773a3a856a3dd6c73cc194658abbfe1b567bfde12f3eba2af8990",
+      "error_stage": null,
+      "seconds": 0.4930907810048666
+     },
+     "contract_digest": "7d8678a32437f5a50769f51791cecc815462915d10923567b7b8f461a9494ce4"
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "disjoint_holdout"
+  }
+ }
+}

@@ -1,0 +1,135 @@
+{
+ "stage_key": {
+  "case": "qwen3_attention/causal_gqa_attention",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.0.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.1.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.2.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.3.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.4.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.5.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.6.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.7.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.8.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.9.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.10.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.11.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.12.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.13.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.14.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.15.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.16.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.17.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.18.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.19.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.20.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.21.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.22.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.23.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.24.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.25.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.26.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.27.self_attn#attention"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "80174fb262d215b7674b216445ad1ece04e74bd38fd5f1a3447b386db0a7892b",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.0.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.1.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.2.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.3.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.4.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.5.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.6.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.7.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.8.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.9.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.10.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.11.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.12.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.13.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.14.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.15.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.16.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.17.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.18.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.19.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.20.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.21.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.22.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.23.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.24.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.25.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.26.self_attn#attention",
+    "o303/qwen3_attention/causal_gqa_attention/model.layers.27.self_attn#attention"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.9028407972311809,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9025210463357325,
+     "high": 0.903112005736245
+    },
+    "candidate_ms": 43.23788678646088,
+    "baseline_ms": 39.03692817687988,
+    "speedup_forward": 0.9723674302728591,
+    "speedup_backward": 0.879913653549746
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.885430530014893,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.8851071460857053,
+     "high": 0.885638217405374
+    },
+    "candidate_ms": 43.245566844940186,
+    "baseline_ms": 38.290945172309875,
+    "speedup_forward": 0.972561003709685,
+    "speedup_backward": 0.8581704826439222
+   }
+  }
+ }
+}

@@ -1,0 +1,1153 @@
+{
+ "policy": {
+  "adapter": {
+   "case_id": "layernorm/convnextv2.embeddings.layernorm",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "declaration": null,
+   "dims": {
+    "hidden": 96,
+    "rows": 100352
+   },
+   "dtype": "bfloat16",
+   "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+   "inputs": "real_training_payload",
+   "op": "layernorm",
+   "parameter_args": [
+    "weight",
+    "bias"
+   ],
+   "reference": {
+    "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+    "kind": "model_reference",
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "reference_dtype": null,
+    "runtime_forward": null,
+    "source": null
+   },
+   "runtime_forward": null,
+   "scope": "operator"
+  },
+  "boundaries": false,
+  "calibration_executions": [
+   "b3ebe19ae98f4d6b95d0d941fb65c14b",
+   "d69d239d04d04765b5970972c97d900c",
+   "6d42cd09129e4612b7fd5daa67dd6bdb",
+   "4edcbe5369634bb6a1d65ab4a6e0469b",
+   "b6f8f728e8544642ac650f1f5663abe9",
+   "d7edfea2d11f437480263dd0135900fd",
+   "7bc0bab56cd8483098bc5ae2a3f8d8ea",
+   "cc2f33c464e045da9e3324d4efb6ce4b"
+  ],
+  "calibration_samples": [
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.embeddings.layernorm",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "split": "calibration"
+    },
+    "input_digest": "13cff2d4ffd5cd9d2e476db280e50a13b235ab09bea0579fccde466a962ad303",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "seed": 101000001
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.embeddings.layernorm",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "split": "calibration"
+    },
+    "input_digest": "a062b1dd72c939581e684fba86a0554a64d5d17c08eb8521811ee907125cc96f",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "seed": 202000001
+   }
+  ],
+  "contract": {
+   "results": [
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "output",
+     "name": "out:y",
+     "presence": "required",
+     "shape": [
+      100352,
+      96
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "input_grad",
+     "name": "grad_in:x",
+     "presence": "required",
+     "shape": [
+      100352,
+      96
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:weight",
+     "presence": "required",
+     "shape": [
+      96
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:bias",
+     "presence": "required",
+     "shape": [
+      96
+     ]
+    }
+   ]
+  },
+  "contract_digest": "781dc310b61e109a8880c08f385942142134f3457b63813749c4aad7f867bad8",
+  "controls": {
+   "compile": {
+    "identity": {
+     "backend": "inductor",
+     "compiles": "the native implementation of each replaced site",
+     "fullgraph": true,
+     "kind": "torch_compile",
+     "options": {},
+     "torch": "2.11.0+cu128"
+    },
+    "name": "torch_compile[inductor]",
+    "patch_set": [
+     "operator"
+    ],
+    "role": "control"
+   },
+   "compile_graphs": {
+    "operator": 1
+   },
+   "native_repeats": 2
+  },
+  "environment": {
+   "compute_capability": "8.0",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "cudnn_benchmark": false,
+   "cudnn_deterministic": true,
+   "deterministic_algorithms": true,
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "device_type": "cuda",
+   "float32_matmul_precision": "highest",
+   "machine": "x86_64",
+   "python": "3.12.13",
+   "sdpa_backends": {
+    "cudnn": true,
+    "flash": true,
+    "math": true,
+    "mem_efficient": true
+   },
+   "tf32_cudnn": true,
+   "tf32_matmul": false,
+   "torch": "2.11.0+cu128"
+  },
+  "epsilon": 1e-30,
+  "floors": {
+   "gradient": {
+    "E2": 0.0001,
+    "Emax": 0.01
+   },
+   "output": {
+    "E2": 1e-05,
+    "Emax": 0.001
+   }
+  },
+  "formula": "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), max_c E_m(compile_c, native_c), floor[z,m])",
+  "gamma": 2.0,
+  "numerics": {
+   "autocast": null,
+   "device_type": "cuda",
+   "dtype": "bfloat16",
+   "grad_mode": "enabled",
+   "module_mode": "train"
+  },
+  "patch_set": [
+   "operator"
+  ],
+  "policy_hash": "919a4f5126ec108a1c9cc9cb63d53d30fb52af62f1d5db9370bd10f2a44e4a8b",
+  "reference": {
+   "deployment": {
+    "identity": {
+     "kind": "native_eager"
+    },
+    "name": "native",
+    "patch_set": [],
+    "role": "native"
+   },
+   "implementation": {
+    "adapter": {
+     "digest": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "fingerprint_version": 2,
+     "opaque": [
+      "evograd.verification.common.execution.Deployment.__init__:builtins.function",
+      "evograd.verification.common.execution.Invocation.__init__:builtins.function",
+      "evograd.verification.common.execution.Sample.__init__:builtins.function",
+      "evograd.verification.common.tensors:torch.strided:torch.layout"
+     ],
+     "qualname": "evograd.verification.gate2.adapters.payload.PayloadOperatorScope"
+    },
+    "inputs": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    },
+    "module": {
+     "digest": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.evaluation.tier2.runner.NativeModule"
+    },
+    "runtime_forward": {
+     "digest": "740e478b84c1f2657e638f7d0762cff491c9c3999c4e6ebe575b96b26d761f8b",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.ops.level1.layernorm.forward_ref.layernorm_runtime_ref"
+    },
+    "sampling": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    }
+   },
+   "kind": "native_eager"
+  },
+  "sample_identities": {
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "5ca6f13c46d5c081d0cf21f87d389d3d2a42d6c6286b27a3379b575bcc4866d8",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+     "inputs": "77077400599f186a7f1b85ac84711fa4da0a95c7a84ab998d69c263a0debed54",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000001
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.embeddings.layernorm",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "d85d5c80f8d37c956e93db235fca2091ee304564743b2456fd262a94cd800c0f",
+     "native_repeats": [
+      "6aa40f9fde06d3436cef84ac0a0886a31045c313de3da81c35b524339ca4d463"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "y": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         100352,
+         96
+        ],
+        "storage_offset": 0,
+        "stride": [
+         96,
+         1
+        ],
+        "tensor": "d61eab2a8f882cc053272f5c74fe0522438b9b63865c9423c5761aafa77cd2de"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           100352,
+           96
+          ],
+          "storage_offset": 0,
+          "stride": [
+           96,
+           1
+          ],
+          "tensor": "ed564cfcc8c29f467a92c4c9c0f49260296bcb03602a5d3a6acc2884318ed55a"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "6d42cd09129e4612b7fd5daa67dd6bdb",
+     "compile_repeat": "4edcbe5369634bb6a1d65ab4a6e0469b",
+     "native": "b3ebe19ae98f4d6b95d0d941fb65c14b",
+     "native_repeats": [
+      "d69d239d04d04765b5970972c97d900c"
+     ]
+    },
+    "fingerprint": "d8af3261c9360d39d9bcdbdace946411fa35c5b83e7cdd6c72f17326a8a8092a",
+    "opaque": [],
+    "reference_results_digest": "6aa40f9fde06d3436cef84ac0a0886a31045c313de3da81c35b524339ca4d463",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000001
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "95e2859c45fe39d001c3643aa268e8f737bc56dc1a73b67c2ab4466ee520bc1b",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+     "inputs": "047485660b85f01b3ad85621c69505f1be0cf38a6d9282ba2688039472e1c1c2",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000001
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.embeddings.layernorm",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "107fdead4179f07102749edb0c91a25505fad14479452b89a35a400e47e9d640",
+     "native_repeats": [
+      "6b723c91d9b0cb9a85785bc0c3d2f7765771c2b2bfbc2da8dc052fa8eef479f8"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "y": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         100352,
+         96
+        ],
+        "storage_offset": 0,
+        "stride": [
+         96,
+         1
+        ],
+        "tensor": "7335ecd29de7b167dda8325baf21987f6c9ea7958b8d488ae84ef317edb48836"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           100352,
+           96
+          ],
+          "storage_offset": 0,
+          "stride": [
+           96,
+           1
+          ],
+          "tensor": "a086ed2c818e146a3f7d18e18bff14175e610a9f4ea25f0e3b2bda78935240fa"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "7bc0bab56cd8483098bc5ae2a3f8d8ea",
+     "compile_repeat": "cc2f33c464e045da9e3324d4efb6ce4b",
+     "native": "b6f8f728e8544642ac650f1f5663abe9",
+     "native_repeats": [
+      "d7edfea2d11f437480263dd0135900fd"
+     ]
+    },
+    "fingerprint": "8826c88fe50530fb3c538e95fc66a0f0585e95cb50d1fde0c40ce92a9aeff05e",
+    "opaque": [],
+    "reference_results_digest": "6b723c91d9b0cb9a85785bc0c3d2f7765771c2b2bfbc2da8dc052fa8eef479f8",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000001
+   }
+  },
+  "sample_protocol": "disjoint_holdout",
+  "schema": "evograd-verification-gate2-policy/4",
+  "scope": "operator",
+  "thresholds": {
+   "grad:bias": {
+    "E2": 0.005277575872820066,
+    "Emax": 0.03378155319912778,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.002638787936410033
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.01689077659956389
+     }
+    },
+    "envelope": 0.00244140625,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ]
+    }
+   },
+   "grad:weight": {
+    "E2": 0.009516951709963379,
+    "Emax": 0.07631674936438493,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0047584758549816895
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.038158374682192464
+     }
+    },
+    "envelope": 0.00390625,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ]
+    }
+   },
+   "grad_in:x": {
+    "E2": 0.0002,
+    "Emax": 0.02253550628701365,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 7.226286604195904e-06
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.011267753143506825
+     }
+    },
+    "envelope": 1.52587890625e-05,
+    "kind": "input_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ]
+    }
+   },
+   "out:y": {
+    "E2": 2.5030723280450017e-05,
+    "Emax": 0.048955737385720406,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 1e-05,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 1.2515361640225009e-05
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.024477868692860203
+     }
+    },
+    "envelope": 0.015625,
+    "kind": "output",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+     ]
+    }
+   }
+  },
+  "weights": {
+   "fixed": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+   "initial_state_digests": [
+    "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb"
+   ]
+  }
+ },
+ "calibration": {
+  "status": "calibrated",
+  "policy_hash": "919a4f5126ec108a1c9cc9cb63d53d30fb52af62f1d5db9370bd10f2a44e4a8b",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "seed": 101000001,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.embeddings.layernorm"
+      }
+     },
+     "native": {
+      "execution_id": "b3ebe19ae98f4d6b95d0d941fb65c14b",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 101000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "13cff2d4ffd5cd9d2e476db280e50a13b235ab09bea0579fccde466a962ad303",
+      "sample_identity": {
+       "fingerprint": "d8af3261c9360d39d9bcdbdace946411fa35c5b83e7cdd6c72f17326a8a8092a",
+       "components": {
+        "seed": 101000001,
+        "inputs": "77077400599f186a7f1b85ac84711fa4da0a95c7a84ab998d69c263a0debed54",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "5ca6f13c46d5c081d0cf21f87d389d3d2a42d6c6286b27a3379b575bcc4866d8",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "ed564cfcc8c29f467a92c4c9c0f49260296bcb03602a5d3a6acc2884318ed55a",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "d61eab2a8f882cc053272f5c74fe0522438b9b63865c9423c5761aafa77cd2de",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6aa40f9fde06d3436cef84ac0a0886a31045c313de3da81c35b524339ca4d463",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.3201224079966778
+     },
+     "control": {
+      "execution_id": "6d42cd09129e4612b7fd5daa67dd6bdb",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 101000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "13cff2d4ffd5cd9d2e476db280e50a13b235ab09bea0579fccde466a962ad303",
+      "sample_identity": {
+       "fingerprint": "d8af3261c9360d39d9bcdbdace946411fa35c5b83e7cdd6c72f17326a8a8092a",
+       "components": {
+        "seed": 101000001,
+        "inputs": "77077400599f186a7f1b85ac84711fa4da0a95c7a84ab998d69c263a0debed54",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "5ca6f13c46d5c081d0cf21f87d389d3d2a42d6c6286b27a3379b575bcc4866d8",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "ed564cfcc8c29f467a92c4c9c0f49260296bcb03602a5d3a6acc2884318ed55a",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "d61eab2a8f882cc053272f5c74fe0522438b9b63865c9423c5761aafa77cd2de",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "d85d5c80f8d37c956e93db235fca2091ee304564743b2456fd262a94cd800c0f",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.5660837489995174
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "seed": 202000001,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.embeddings.layernorm"
+      }
+     },
+     "native": {
+      "execution_id": "b6f8f728e8544642ac650f1f5663abe9",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 202000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "a062b1dd72c939581e684fba86a0554a64d5d17c08eb8521811ee907125cc96f",
+      "sample_identity": {
+       "fingerprint": "8826c88fe50530fb3c538e95fc66a0f0585e95cb50d1fde0c40ce92a9aeff05e",
+       "components": {
+        "seed": 202000001,
+        "inputs": "047485660b85f01b3ad85621c69505f1be0cf38a6d9282ba2688039472e1c1c2",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "95e2859c45fe39d001c3643aa268e8f737bc56dc1a73b67c2ab4466ee520bc1b",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a086ed2c818e146a3f7d18e18bff14175e610a9f4ea25f0e3b2bda78935240fa",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "7335ecd29de7b167dda8325baf21987f6c9ea7958b8d488ae84ef317edb48836",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6b723c91d9b0cb9a85785bc0c3d2f7765771c2b2bfbc2da8dc052fa8eef479f8",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.2903149729972938
+     },
+     "control": {
+      "execution_id": "7bc0bab56cd8483098bc5ae2a3f8d8ea",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 202000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "a062b1dd72c939581e684fba86a0554a64d5d17c08eb8521811ee907125cc96f",
+      "sample_identity": {
+       "fingerprint": "8826c88fe50530fb3c538e95fc66a0f0585e95cb50d1fde0c40ce92a9aeff05e",
+       "components": {
+        "seed": 202000001,
+        "inputs": "047485660b85f01b3ad85621c69505f1be0cf38a6d9282ba2688039472e1c1c2",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "95e2859c45fe39d001c3643aa268e8f737bc56dc1a73b67c2ab4466ee520bc1b",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a086ed2c818e146a3f7d18e18bff14175e610a9f4ea25f0e3b2bda78935240fa",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "7335ecd29de7b167dda8325baf21987f6c9ea7958b8d488ae84ef317edb48836",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "107fdead4179f07102749edb0c91a25505fad14479452b89a35a400e47e9d640",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.1978325880045304
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "disjoint_holdout",
+   "measurements": 16,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "out:y",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "out:y",
+     "kind": "output",
+     "E2": 1.2515361640225009e-05,
+     "Emax": 0.024263720251588735
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 5.987676377084703e-06,
+     "Emax": 0.01109595215726343
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.004390032243778026,
+     "Emax": 0.037425597832365085
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.002638787936410033,
+     "Emax": 0.01689077659956389
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "out:y",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "out:y",
+     "kind": "output",
+     "E2": 1.1382739386797169e-05,
+     "Emax": 0.024477868692860203
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 7.226286604195904e-06,
+     "Emax": 0.011267753143506825
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0047584758549816895,
+     "Emax": 0.038158374682192464
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.002249121301849852,
+     "Emax": 0.012952968917739612
+    }
+   ],
+   "seconds": 2.220650098999613
+  }
+ }
+}

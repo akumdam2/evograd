@@ -1,0 +1,443 @@
+{
+ "gate": "gate3",
+ "protocol": "evograd-verification-gate3-measurement/1",
+ "objective": "evograd-gate3-step-objective/1: float(loss_sum / weight), the scalar tensor backward() differentiates, read before the optimizer update",
+ "run_id": "37e6268e905f4247be4f111a5aa1fdff",
+ "status": "incomplete",
+ "complete": false,
+ "completed": true,
+ "acceptance": {
+  "configured": false,
+  "reason": "This is a training measurement, not an acceptance verdict. Use gate3.verify_training with a native reference and a frozen window-loss policy."
+ },
+ "deployment": {
+  "name": "native",
+  "role": "native",
+  "patch_set": [],
+  "identity": {
+   "kind": "native_eager"
+  }
+ },
+ "identity": {
+  "plan": {
+   "steps": 10,
+   "window": 1,
+   "checkpoints": [],
+   "validation_enabled": false,
+   "accumulation": 8
+  },
+  "seed": 0,
+  "adapter": {
+   "objective": "the HF causal-LM loss of Qwen2-VL: next-token cross entropy over the labelled answer tokens, mean over valid tokens",
+   "backward": "the workload loss as returned (weight 1)",
+   "config": {
+    "workload": {
+     "name": "qwen2_vl_2b-3a15546eddc6dd18",
+     "model": "Qwen/Qwen2-VL-2B-Instruct",
+     "workload_hash": "3a15546eddc6dd180d01c21f5796f2f5343baf68a03473fcc1e86eaab7b49a7f",
+     "config": {
+      "model": "qwen2_vl_2b",
+      "batch_size": 1,
+      "seq_len": 512,
+      "image_size": 224,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "seed": 0,
+      "data_seed": 0,
+      "attn_implementation": "sdpa",
+      "arch_overrides": {},
+      "weights": "pretrained",
+      "calibration": null,
+      "data_path": null,
+      "stream": true
+     },
+     "canonical": false,
+     "execution_scope": "model",
+     "benchmark_level": 3,
+     "unit_name": "tokens",
+     "units_per_step": 512,
+     "weights": "pretrained",
+     "checkpoint_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+     "data": "streamed_real_data",
+     "stream": {
+      "dataset": [
+       "lmms-lab-encoder/textvqa",
+       "9c0699cd19768ac5ab97568f6b3cbac4c0062884",
+       "data/train-00000-of-00020.parquet"
+      ],
+      "checkpoint_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+      "pool_sha256": "ef0384d81f72f4b99fd53fd8f0be7cb31ee49a0f8c25e3c4f5a9112ec5991a99",
+      "rows": 1731,
+      "skipped": 0,
+      "pool_rule": "every TextVQA shard-0 row: image RGB resized to 224x224 (bicubic), Qwen2VLImageProcessorPil (224*224 pixels); chat template with one image and the question, <|image_pad|> expanded to grid.prod() // merge**2; target = prompt + most common answer + <|im_end|>; labels on the answer and <|im_end|> only; right padded to seq_len; mm_token_type_ids = 1 at image tokens; longer rows skipped",
+      "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+     },
+     "all_parameters_trainable": true,
+     "gradient_checkpointing": false,
+     "use_cache": false,
+     "input_checksum": "d9f0c2442983881646d129f9b541f353833689cc8bab84101cb712563cdb5e11",
+     "architecture": {
+      "architectures": [
+       "Qwen2VLForConditionalGeneration"
+      ],
+      "attention_dropout": 0.0,
+      "bos_token_id": 151643,
+      "eos_token_id": 151645,
+      "vision_start_token_id": 151652,
+      "vision_end_token_id": 151653,
+      "vision_token_id": 151654,
+      "image_token_id": 151655,
+      "video_token_id": 151656,
+      "hidden_act": "silu",
+      "hidden_size": 1536,
+      "initializer_range": 0.02,
+      "intermediate_size": 8960,
+      "max_position_embeddings": 32768,
+      "max_window_layers": 28,
+      "model_type": "qwen2_vl",
+      "num_attention_heads": 12,
+      "num_hidden_layers": 28,
+      "num_key_value_heads": 2,
+      "rms_norm_eps": 1e-06,
+      "rope_theta": 1000000.0,
+      "sliding_window": 32768,
+      "tie_word_embeddings": true,
+      "torch_dtype": "bfloat16",
+      "transformers_version": "4.41.2",
+      "use_cache": true,
+      "use_sliding_window": false,
+      "vision_config": {
+       "depth": 32,
+       "embed_dim": 1280,
+       "mlp_ratio": 4,
+       "num_heads": 16,
+       "in_chans": 3,
+       "hidden_size": 1536,
+       "patch_size": 14,
+       "spatial_merge_size": 2,
+       "spatial_patch_size": 14,
+       "temporal_patch_size": 2
+      },
+      "rope_scaling": {
+       "type": "mrope",
+       "mrope_section": [
+        16,
+        24,
+        24
+       ]
+      },
+      "vocab_size": 151936
+     },
+     "model_gate": {
+      "calibration": null,
+      "requires_real_data": true
+     }
+    }
+   }
+  },
+  "data": {
+   "train": {
+    "describe": {
+     "source": "qwen2_vl_2b pool",
+     "order": 707,
+     "batch_size": 1,
+     "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+    },
+    "count": null
+   },
+   "validation": null
+  },
+  "optimizer": {
+   "optimizer": "AdamW",
+   "lr": 3e-05,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "schedule": "linear_warmup",
+   "foreach": false,
+   "warmup_steps": 100,
+   "clip_grad_norm": 1.0
+  },
+  "environment": {
+   "python": "3.12.13",
+   "machine": "x86_64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "compute_capability": "8.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  },
+  "protocol_context": {
+   "reference": {
+    "contract": "evograd-model-reference/qwen2_vl_2b/1",
+    "transformers": "5.16.1",
+    "modeling_sha256": "fcccdb0359f583fc4ba3c7509ac6d4c97e1f0b0f3a4e8b1400e0cd29665daaf4",
+    "model": "unpatched qwen2_vl_2b at pretrained"
+   },
+   "data_recipe": {
+    "train_order": 707,
+    "batch_size": 1,
+    "image_size": 224,
+    "dtype": "bfloat16",
+    "seq_len": 512,
+    "data": {
+     "dataset": [
+      "lmms-lab-encoder/textvqa",
+      "9c0699cd19768ac5ab97568f6b3cbac4c0062884",
+      "data/train-00000-of-00020.parquet"
+     ],
+     "checkpoint_revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+     "pool_sha256": "ef0384d81f72f4b99fd53fd8f0be7cb31ee49a0f8c25e3c4f5a9112ec5991a99",
+     "rows": 1731,
+     "skipped": 0,
+     "pool_rule": "every TextVQA shard-0 row: image RGB resized to 224x224 (bicubic), Qwen2VLImageProcessorPil (224*224 pixels); chat template with one image and the question, <|image_pad|> expanded to grid.prod() // merge**2; target = prompt + most common answer + <|im_end|>; labels on the answer and <|im_end|> only; right padded to seq_len; mm_token_type_ids = 1 at image tokens; longer rows skipped",
+     "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+    }
+   },
+   "patch_set": [
+    "text_mlp"
+   ],
+   "numerics": {
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "deterministic_algorithms": true,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "matmul_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "sdp_flash": true,
+    "sdp_mem_efficient": true,
+    "sdp_cudnn": true,
+    "sdp_math": true,
+    "torch_num_threads": 8
+   }
+  },
+  "initial_state": "13393078c6899be99d840f28557f8ac53ea2e7a0c31aa86ea6421e80cb36e19b",
+  "evaluator": null
+ },
+ "seed": 0,
+ "train_steps": [
+  {
+   "step": 1,
+   "loss_sum": 44.72790884971619,
+   "weight": 8.0,
+   "mean_loss": 5.590988606214523,
+   "objective": 5.590988606214523,
+   "grad_norm": 298.0,
+   "lr": 3.0000000000000004e-07
+  },
+  {
+   "step": 2,
+   "loss_sum": 33.497655630111694,
+   "weight": 8.0,
+   "mean_loss": 4.187206953763962,
+   "objective": 4.187206953763962,
+   "grad_norm": 1088.0,
+   "lr": 6.000000000000001e-07
+  },
+  {
+   "step": 3,
+   "loss_sum": 34.17169523239136,
+   "weight": 8.0,
+   "mean_loss": 4.27146190404892,
+   "objective": 4.27146190404892,
+   "grad_norm": 174.0,
+   "lr": 9e-07
+  },
+  {
+   "step": 4,
+   "loss_sum": 32.693886399269104,
+   "weight": 8.0,
+   "mean_loss": 4.086735799908638,
+   "objective": 4.086735799908638,
+   "grad_norm": 159.0,
+   "lr": 1.2000000000000002e-06
+  },
+  {
+   "step": 5,
+   "loss_sum": 34.65257120132446,
+   "weight": 8.0,
+   "mean_loss": 4.331571400165558,
+   "objective": 4.331571400165558,
+   "grad_norm": 174.0,
+   "lr": 1.5e-06
+  },
+  {
+   "step": 6,
+   "loss_sum": 31.210407733917236,
+   "weight": 8.0,
+   "mean_loss": 3.9013009667396545,
+   "objective": 3.9013009667396545,
+   "grad_norm": 432.0,
+   "lr": 1.8e-06
+  },
+  {
+   "step": 7,
+   "loss_sum": 34.43987703323364,
+   "weight": 8.0,
+   "mean_loss": 4.304984629154205,
+   "objective": 4.304984629154205,
+   "grad_norm": 284.0,
+   "lr": 2.1000000000000002e-06
+  },
+  {
+   "step": 8,
+   "loss_sum": 33.878737449645996,
+   "weight": 8.0,
+   "mean_loss": 4.2348421812057495,
+   "objective": 4.2348421812057495,
+   "grad_norm": 207.0,
+   "lr": 2.4000000000000003e-06
+  },
+  {
+   "step": 9,
+   "loss_sum": 21.48546004295349,
+   "weight": 8.0,
+   "mean_loss": 2.6856825053691864,
+   "objective": 2.6856825053691864,
+   "grad_norm": 268.0,
+   "lr": 2.7e-06
+  },
+  {
+   "step": 10,
+   "loss_sum": 39.478575468063354,
+   "weight": 8.0,
+   "mean_loss": 4.934821933507919,
+   "objective": 4.934821933507919,
+   "grad_norm": 241.0,
+   "lr": 3e-06
+  }
+ ],
+ "train_windows": [
+  {
+   "window": 1,
+   "steps": [
+    1,
+    1
+   ],
+   "loss_sum": 44.72790884971619,
+   "weight": 8.0,
+   "mean_loss": 5.590988606214523
+  },
+  {
+   "window": 2,
+   "steps": [
+    2,
+    2
+   ],
+   "loss_sum": 33.497655630111694,
+   "weight": 8.0,
+   "mean_loss": 4.187206953763962
+  },
+  {
+   "window": 3,
+   "steps": [
+    3,
+    3
+   ],
+   "loss_sum": 34.17169523239136,
+   "weight": 8.0,
+   "mean_loss": 4.27146190404892
+  },
+  {
+   "window": 4,
+   "steps": [
+    4,
+    4
+   ],
+   "loss_sum": 32.693886399269104,
+   "weight": 8.0,
+   "mean_loss": 4.086735799908638
+  },
+  {
+   "window": 5,
+   "steps": [
+    5,
+    5
+   ],
+   "loss_sum": 34.65257120132446,
+   "weight": 8.0,
+   "mean_loss": 4.331571400165558
+  },
+  {
+   "window": 6,
+   "steps": [
+    6,
+    6
+   ],
+   "loss_sum": 31.210407733917236,
+   "weight": 8.0,
+   "mean_loss": 3.9013009667396545
+  },
+  {
+   "window": 7,
+   "steps": [
+    7,
+    7
+   ],
+   "loss_sum": 34.43987703323364,
+   "weight": 8.0,
+   "mean_loss": 4.304984629154205
+  },
+  {
+   "window": 8,
+   "steps": [
+    8,
+    8
+   ],
+   "loss_sum": 33.878737449645996,
+   "weight": 8.0,
+   "mean_loss": 4.2348421812057495
+  },
+  {
+   "window": 9,
+   "steps": [
+    9,
+    9
+   ],
+   "loss_sum": 21.48546004295349,
+   "weight": 8.0,
+   "mean_loss": 2.6856825053691864
+  },
+  {
+   "window": 10,
+   "steps": [
+    10,
+    10
+   ],
+   "loss_sum": 39.478575468063354,
+   "weight": 8.0,
+   "mean_loss": 4.934821933507919
+  }
+ ],
+ "validation": {},
+ "state": {},
+ "site_calls": {
+  "total": {}
+ },
+ "findings": [],
+ "seconds": 28.33648178000294,
+ "suspended": false,
+ "segments": [
+  {
+   "started_at_step": 1,
+   "time": "2026-10-30T07:46:04+0000",
+   "completed_at_step": 10
+  }
+ ]
+}

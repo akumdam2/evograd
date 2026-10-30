@@ -1,0 +1,85 @@
+{
+ "stage_key": {
+  "case": "grn/convnextv2.encoder.stages.0.layers.grn",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "4c20a206b1b289fd9bd170e96c74145c2532ab3147e7f646808d421c30146ef5",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+    "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 3.4943549944345085,
+    "ci95": {
+     "iterations": 2000,
+     "low": 3.3392782081118204,
+     "high": 3.496957669548464
+    },
+    "candidate_ms": 2.358272075653076,
+    "baseline_ms": 8.240639805793762,
+    "speedup_forward": 2.77173908458754,
+    "speedup_backward": 3.847536693982285
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.7977430586038716,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.7689755343136089,
+     "high": 0.7980894542302651
+    },
+    "candidate_ms": 2.3592960238456726,
+    "baseline_ms": 1.8821120262145996,
+    "speedup_forward": 0.6642157091779716,
+    "speedup_backward": 0.8750830861215836
+   }
+  }
+ }
+}

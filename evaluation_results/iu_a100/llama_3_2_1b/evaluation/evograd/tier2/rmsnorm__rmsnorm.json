@@ -1,0 +1,145 @@
+{
+ "stage_key": {
+  "case": "rmsnorm/rmsnorm",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/rmsnorm/rmsnorm/model.layers.0.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.0.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.1.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.1.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.2.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.2.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.3.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.3.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.4.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.4.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.5.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.5.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.6.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.6.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.7.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.7.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.8.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.8.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.9.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.9.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.10.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.10.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.11.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.11.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.12.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.12.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.13.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.13.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.14.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.14.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.15.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.15.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.norm"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "b2dbe2293c5d716847dddee95c52556a3b8d905bc2a4290dfda2ff6fc4a0e50b",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/rmsnorm/rmsnorm/model.layers.0.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.0.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.1.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.1.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.2.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.2.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.3.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.3.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.4.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.4.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.5.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.5.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.6.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.6.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.7.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.7.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.8.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.8.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.9.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.9.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.10.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.10.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.11.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.11.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.12.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.12.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.13.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.13.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.14.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.14.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.15.input_layernorm",
+    "o303/rmsnorm/rmsnorm/model.layers.15.post_attention_layernorm",
+    "o303/rmsnorm/rmsnorm/model.norm"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 2.3448208989909722,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.3370805879150343,
+     "high": 2.3506007270278926
+    },
+    "candidate_ms": 13.207551926374435,
+    "baseline_ms": 30.969343781471252,
+    "speedup_forward": 8.661691728739365,
+    "speedup_backward": 2.614959998414791
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.4956691788846743,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.4878832051900899,
+     "high": 1.499673574565657
+    },
+    "candidate_ms": 13.35910388827324,
+    "baseline_ms": 19.980799943208694,
+    "speedup_forward": 1.9810945567868612,
+    "speedup_backward": 1.303280617260931
+   }
+  }
+ }
+}

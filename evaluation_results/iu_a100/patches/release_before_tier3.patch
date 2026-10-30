@@ -1,0 +1,19 @@
+--- a/src/evograd/evaluation/protocol.py
++++ b/src/evograd/evaluation/protocol.py
+@@ -591,6 +591,8 @@
+
+             def single_site():
+                 providers = {REFERENCE: REFERENCE, **{cid: (cid,) for cid in level2}}
++                # Tier 3 children need the GPU this process's verification left cached (IU A100 40GB OOM).
++                _release_device_memory()
+                 report = run_tier3(run, providers, options=tier3_options, isolate=isolate_tier3)
+                 return {"report": report, "rows": {cid: _tier3_row(report, cid) for cid in level2}}
+
+@@ -615,6 +617,7 @@
+                 providers = {REFERENCE: REFERENCE, "combination": tuple(chosen)}
+                 if whole_model_compile(run.workload) is not None:
+                     providers["torch_compile"] = "torch_compile"
++                _release_device_memory()
+                 report = run_tier3(run, providers, options=tier3_options, isolate=isolate_tier3)
+                 rows = {name: _tier3_row(report, name) for name in providers if name != REFERENCE}
+                 return {"report": report, "rows": rows}

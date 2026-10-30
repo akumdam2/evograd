@@ -1,0 +1,885 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "qwen2_vl_2b",
+ "workload": {
+  "model": "qwen2_vl_2b",
+  "device": "cuda",
+  "weights": "pretrained",
+  "stream": true
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA A100-SXM4-40GB"
+ },
+ "reference": "eager",
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "layernorm/model.visual.blocks.norm1": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 65,
+   "recorded": 65,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/layernorm__model.visual.blocks.norm1.py",
+   "program_sha256": "5153822ef5f5f5659db0a9ff0fe634e60a090d607f156e6ce3d2bca11b9ab209",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.0.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.0.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.1.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.1.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.2.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.2.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.3.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.3.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.4.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.4.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.5.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.5.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.6.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.6.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.7.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.7.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.8.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.8.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.9.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.9.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.10.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.10.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.11.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.11.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.12.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.12.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.13.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.13.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.14.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.14.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.15.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.15.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.16.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.16.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.17.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.17.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.18.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.18.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.19.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.19.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.20.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.20.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.21.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.21.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.22.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.22.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.23.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.23.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.24.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.24.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.25.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.25.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.26.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.26.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.27.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.27.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.28.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.28.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.29.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.29.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.30.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.30.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.31.norm1",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.blocks.31.norm2",
+     "o303/layernorm/model.visual.blocks.norm1/model.visual.merger.ln_q"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.08123412423237622,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.08064849501698568,
+      "high": 0.08414801899753101
+     },
+     "candidate_ms": 19.34950403124094,
+     "baseline_ms": 1.571840014308691,
+     "speedup_forward": 1.2769230576837658,
+     "speedup_backward": 0.07722556950194796
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.2671243493629976,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.2578893206435,
+      "high": 1.2675137943242476
+     },
+     "candidate_ms": 19.688448041677475,
+     "baseline_ms": 24.947711914777756,
+     "speedup_forward": 5.304222631860266,
+     "speedup_backward": 0.8821605265733901
+    }
+   }
+  },
+  "linear/model.visual.blocks.attn.qkv": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": false
+  },
+  "linear/model.visual.blocks.attn.proj": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": false
+  },
+  "linear/model.visual.blocks.mlp.fc1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": false
+  },
+  "linear/model.visual.blocks.mlp.fc2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": false
+  },
+  "linear/model.visual.merger.mlp": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/model.visual.merger.mlp_2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/model.language_model.layers.self_attn.q_proj": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear/model.language_model.layers.self_attn.k_proj": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 56,
+   "recorded": 56,
+   "submitted": false
+  },
+  "quick_gelu/model.visual.blocks.mlp.act": {
+   "task": "quick_gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/quick_gelu__model.visual.blocks.mlp.act.py",
+   "program_sha256": "69593de90f1691e47288ce05fd63ff7d009faaaed1eae653fa09c21cd38f914c",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.0.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.1.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.2.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.3.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.4.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.5.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.6.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.7.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.8.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.9.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.10.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.11.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.12.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.13.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.14.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.15.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.16.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.17.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.18.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.19.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.20.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.21.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.22.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.23.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.24.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.25.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.26.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.27.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.28.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.29.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.30.mlp.act",
+     "o303/quick_gelu/model.visual.blocks.mlp.act/model.visual.blocks.31.mlp.act"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.6260245908080886,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.6172506207940417,
+      "high": 0.6363640310006365
+     },
+     "candidate_ms": 2.9982720389962196,
+     "baseline_ms": 1.8769920263439417,
+     "speedup_forward": 1.9359374766941977,
+     "speedup_backward": 1.211730200234022
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 2.733867089661599,
+     "ci95": {
+      "iterations": 2000,
+      "low": 2.71459867638101,
+      "high": 2.7755240298680515
+     },
+     "candidate_ms": 3.1974399983882904,
+     "baseline_ms": 8.741375982761383,
+     "speedup_forward": 1.9312500204636314,
+     "speedup_backward": 2.577123843120589
+    }
+   }
+  },
+  "gelu/model.visual.merger.mlp": {
+   "task": "gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/gelu__model.visual.merger.mlp.py",
+   "program_sha256": "e2ef667ac6aea07580707a1b47fcfe442b833658694a8955674729a22032b999",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.1138211349050032,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.10937500177635684,
+      "high": 0.11570248350086376
+     },
+     "candidate_ms": 0.12595200538635254,
+     "baseline_ms": 0.014336000196635723,
+     "speedup_forward": 0.8888888552039012,
+     "speedup_backward": 0.25641025880209
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 2.0730770356605337,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.9887640682141474,
+      "high": 2.1807228619934955
+     },
+     "candidate_ms": 0.13311999291181564,
+     "baseline_ms": 0.275968000292778,
+     "speedup_forward": 2.6428570918140735,
+     "speedup_backward": 1.7604165940334118
+    }
+   }
+  },
+  "rmsnorm/model.language_model.layers.input_layernorm": {
+   "task": "rmsnorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 57,
+   "recorded": 57,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/rmsnorm__model.language_model.layers.input_layernorm.py",
+   "program_sha256": "150dd748bfaa64e2d995bedcd96570342a604c042897d038a8ad6fc630dd9ebb",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.0.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.0.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.1.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.1.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.2.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.2.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.3.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.3.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.4.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.4.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.5.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.5.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.6.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.6.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.7.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.7.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.8.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.8.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.9.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.9.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.10.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.10.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.11.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.11.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.12.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.12.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.13.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.13.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.14.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.14.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.15.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.15.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.16.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.16.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.17.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.17.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.18.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.18.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.19.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.19.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.20.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.20.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.21.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.21.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.22.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.22.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.23.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.23.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.24.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.24.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.25.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.25.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.26.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.26.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.27.input_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.layers.27.post_attention_layernorm",
+     "o303/rmsnorm/model.language_model.layers.input_layernorm/model.language_model.norm"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.608307343168077,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.6042447283247219,
+      "high": 1.613928046741651
+     },
+     "candidate_ms": 13.47276807576418,
+     "baseline_ms": 21.66835182905197,
+     "speedup_forward": 5.246169533082691,
+     "speedup_backward": 1.678834891772261
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.4337498251010738,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.4082725665586577,
+      "high": 1.4526424722024174
+     },
+     "candidate_ms": 14.505983971059322,
+     "baseline_ms": 20.797951981425285,
+     "speedup_forward": 5.34414224009855,
+     "speedup_backward": 1.0122208879157917
+    }
+   }
+  },
+  "linear_no_bias/model.language_model.layers.self_attn.o_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear_no_bias/model.language_model.layers.mlp.gate_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 56,
+   "recorded": 56,
+   "submitted": false
+  },
+  "linear_no_bias/model.language_model.layers.mlp.down_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear_no_bias/lm_head": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+   "task": "qwen2_vl_2b_vision_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 32,
+   "recorded": 32,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/qwen2_vl_2b_vision_mlp__model.visual.blocks.mlp.py",
+   "program_sha256": "89c36121a3f2462231f8b86772c67ecb681373bc847d6555084e0d3638680694",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.0.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.1.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.2.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.3.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.4.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.5.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.6.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.7.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.8.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.9.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.10.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.11.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.12.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.13.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.14.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.15.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.16.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.17.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.18.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.19.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.20.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.21.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.22.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.23.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.24.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.25.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.26.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.27.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.28.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.29.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.30.mlp#vision_mlp",
+     "o303/qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp/model.visual.blocks.31.mlp#vision_mlp"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  },
+  "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+   "task": "qwen2_vl_2b_text_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/qwen2_vl_2b/qwen2_vl_2b_text_mlp__model.language_model.layers.mlp.py",
+   "program_sha256": "18a704c866991d291fc7602eb5c13a9756962c83c2ff1f0c1fa5b9ec67a9a067",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.0.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.1.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.2.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.3.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.4.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.5.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.6.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.7.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.8.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.9.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.10.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.11.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.12.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.13.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.14.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.15.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.16.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.17.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.18.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.19.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.20.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.21.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.22.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.23.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.24.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.25.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.26.mlp#text_mlp",
+     "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.27.mlp#text_mlp"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.4901301250381415,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.48941377566963384,
+      "high": 0.49229221983921934
+     },
+     "candidate_ms": 47.491583704948425,
+     "baseline_ms": 23.277055859565735,
+     "speedup_forward": 0.4155862312529349,
+     "speedup_backward": 0.47414121443032553
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.578725488568757,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.5775676003361686,
+      "high": 0.5808279803992237
+     },
+     "candidate_ms": 47.242239236831665,
+     "baseline_ms": 27.34028798341751,
+     "speedup_forward": 0.44341432208716797,
+     "speedup_backward": 0.517454403682173
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 274.6481587499147,
+    "peak_memory_bytes": 22210408448,
+    "cpu_bound_fraction": 0.9775624330056258,
+    "speedup": 1.045731426737153,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0416388736298081,
+     "high": 1.049621262118661
+    },
+    "peak_memory_ratio": 1.000229837691426
+   }
+  }
+ },
+ "corpus": {
+  "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+  "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "tier3": {
+  "single_site": {
+   "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+    "ok": true,
+    "step_ms": 274.6481587499147,
+    "peak_memory_bytes": 22210408448,
+    "cpu_bound_fraction": 0.9775624330056258,
+    "speedup": 1.045731426737153,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0416388736298081,
+     "high": 1.049621262118661
+    },
+    "peak_memory_ratio": 1.000229837691426
+   }
+  },
+  "combination": {
+   "cases": [
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp"
+   ],
+   "patch_set": [
+    "text_mlp"
+   ],
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "tier3": {
+    "ok": true,
+    "step_ms": 268.51972985095927,
+    "peak_memory_bytes": 22210408448,
+    "cpu_bound_fraction": 0.9758813999038842,
+    "speedup": 1.0702971532446268,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0386272188569428,
+     "high": 1.0714420790762502
+    },
+    "peak_memory_ratio": 1.000229837691426
+   }
+  }
+ },
+ "summary": {
+  "models": [
+   "qwen2_vl_2b"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 16,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 4,
+    "accepted": 4
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 0.31062074934985306,
+     "configurations_covered": 4
+    },
+    "torch_compile": {
+     "geomean": 1.791312527145909,
+     "configurations_covered": 4
+    }
+   },
+   "coverage": 0.25
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 2,
+    "submitted": 2,
+    "violation": 0,
+    "executable": 2,
+    "gate1": 2,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 0.4901301250381415,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 0.578725488568757,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 0.5,
+   "tier3_single_site": {
+    "qwen2_vl_2b": {
+     "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+      "task": "qwen2_vl_2b_text_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 274.6481587499147,
+       "peak_memory_bytes": 22210408448,
+       "cpu_bound_fraction": 0.9775624330056258,
+       "speedup": 1.045731426737153,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0416388736298081,
+        "high": 1.049621262118661
+       },
+       "peak_memory_ratio": 1.000229837691426
+      }
+     },
+     "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+      "task": "qwen2_vl_2b_vision_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "passed",
+      "gate2_operator": "failed",
+      "gate2_model": "passed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {}
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "qwen2_vl_2b": {
+     "cases": [
+      "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp"
+     ],
+     "accepted": true,
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "speedup": 1.0702971532446268,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0386272188569428,
+      "high": 1.0714420790762502
+     },
+     "speedup_vs_torch_compile": null,
+     "peak_memory_ratio": 1.000229837691426,
+     "cpu_bound_fraction": 0.9758813999038842
+    }
+   },
+   "speedup": {
+    "geomean": 1.0702971532446268,
+    "models_covered": 1
+   },
+   "coverage": 1.0,
+   "peak_memory_ratio_geomean": 1.000229837691426
+  }
+ }
+}

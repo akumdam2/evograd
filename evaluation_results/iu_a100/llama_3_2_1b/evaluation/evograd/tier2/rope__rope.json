@@ -1,0 +1,111 @@
+{
+ "stage_key": {
+  "case": "rope/rope",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "39b4a4c45846703a59da756e2a8bc43014a013e85cd7602c28d364fea6fdbec1",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 1.2993842420857111,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.2952491320822,
+     "high": 1.3174763705298402
+    },
+    "candidate_ms": 6.153215974569321,
+    "baseline_ms": 7.995391875505447,
+    "speedup_forward": 0.7374410628024513,
+    "speedup_backward": 3.865941854765984
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.9185478514430675,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9151768274115227,
+     "high": 0.9213407440956726
+    },
+    "candidate_ms": 6.078464031219482,
+    "baseline_ms": 5.583360075950623,
+    "speedup_forward": 0.14831507211776085,
+    "speedup_backward": 1.993206463570441
+   }
+  }
+ }
+}

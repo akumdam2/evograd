@@ -1,0 +1,103 @@
+{
+ "stage_key": {
+  "case": "dit_s_2_dit_modulation/blocks.modulation",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.0.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.1.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.2.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.3.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.4.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.5.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.6.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.7.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.8.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.9.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.10.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.11.mod_fn"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "a889169cfb84d60f70ef62cc5cf3646277ead7edb6b1a31e041da48e543bda09",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.0.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.1.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.2.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.3.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.4.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.5.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.6.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.7.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.8.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.9.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.10.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.11.mod_fn"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 1.1864976935989677,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1699052785112476,
+     "high": 1.2248622753298628
+    },
+    "candidate_ms": 4.565504029393196,
+    "baseline_ms": 5.416960000991821,
+    "speedup_forward": 0.3432165500195601,
+    "speedup_backward": 1.600964083480355
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 2.807026759964172,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.801553585185871,
+     "high": 2.833686320291632
+    },
+    "candidate_ms": 2.8999680876731873,
+    "baseline_ms": 8.140288025140762,
+    "speedup_forward": 1.4635782031891722,
+    "speedup_backward": 2.9715563181050966
+   }
+  }
+ }
+}

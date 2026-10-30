@@ -1,0 +1,111 @@
+{
+ "stage_key": {
+  "case": "llama3_qkv_rope/qkv_norm_rope",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.0.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.1.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.2.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.3.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.4.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.5.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.6.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.7.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.8.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.9.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.10.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.11.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.12.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.13.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.14.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.15.self_attn#qkv_rope"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "305d898abb734cd3329c27a25150fcc2bdb6a437e9f42f8169bc65a285ae3cd1",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.0.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.1.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.2.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.3.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.4.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.5.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.6.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.7.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.8.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.9.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.10.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.11.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.12.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.13.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.14.self_attn#qkv_rope",
+    "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.15.self_attn#qkv_rope"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 1.2798385676604236,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.2669592568868053,
+     "high": 1.2886041356681486
+    },
+    "candidate_ms": 20.04172796010971,
+    "baseline_ms": 25.650176405906677,
+    "speedup_forward": 1.7962103938583023,
+    "speedup_backward": 1.1003460099657802
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.9481659359927884,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.947114430669811,
+     "high": 0.9512612494091979
+    },
+    "candidate_ms": 22.402559876441956,
+    "baseline_ms": 21.241344153881073,
+    "speedup_forward": 1.0570564395557103,
+    "speedup_backward": 0.9159217958864939
+   }
+  }
+ }
+}

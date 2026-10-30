@@ -1,0 +1,1093 @@
+{
+ "gate": "gate3",
+ "protocol": "evograd-verification-gate3-measurement/1",
+ "objective": "evograd-gate3-step-objective/1: float(loss_sum / weight), the scalar tensor backward() differentiates, read before the optimizer update",
+ "run_id": "82cf7df5334f43138600ee8aa089ecaf",
+ "status": "incomplete",
+ "complete": false,
+ "completed": true,
+ "acceptance": {
+  "configured": false,
+  "reason": "This is a training measurement, not an acceptance verdict. Use gate3.verify_training with a native reference and a frozen window-loss policy."
+ },
+ "deployment": {
+  "name": "candidate",
+  "role": "candidate",
+  "patch_set": [
+   "convnext_mlp_stage2"
+  ],
+  "identity": {
+   "programs": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_2961853248964933007"
+    }
+   }
+  }
+ },
+ "identity": {
+  "plan": {
+   "steps": 50,
+   "window": 1,
+   "checkpoints": [],
+   "validation_enabled": false
+  },
+  "seed": 0,
+  "adapter": {
+   "objective": "the HF image-classification loss: cross entropy over the 1000 ImageNet logits, mean over the batch",
+   "backward": "the workload loss as returned (weight 1)",
+   "config": {
+    "workload": {
+     "name": "convnextv2_tiny-023afe318b1f76e4",
+     "model": "facebook/convnextv2-tiny-1k-224",
+     "workload_hash": "023afe318b1f76e447b38d6f84545abded6a9b8e0a6a04f453f5266ed0cff119",
+     "config": {
+      "model": "convnextv2_tiny",
+      "batch_size": 32,
+      "seq_len": 0,
+      "image_size": 224,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "seed": 0,
+      "data_seed": 0,
+      "attn_implementation": "sdpa",
+      "arch_overrides": {},
+      "weights": "pretrained",
+      "calibration": null,
+      "data_path": null,
+      "stream": true
+     },
+     "canonical": false,
+     "execution_scope": "model",
+     "benchmark_level": 3,
+     "unit_name": "images",
+     "units_per_step": 32,
+     "weights": "pretrained",
+     "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+     "data": "streamed_real_data",
+     "stream": {
+      "dataset": [
+       "ShaomuTan/imagenette",
+       "061f0ab5ca70523e13982a7ba463c076af657386",
+       "320px/train-00000-of-00001.parquet"
+      ],
+      "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+      "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+      "rows": 9469,
+      "skipped": 0,
+      "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+      "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+     },
+     "all_parameters_trainable": true,
+     "gradient_checkpointing": false,
+     "use_cache": false,
+     "input_checksum": "940a5bf83e358cc7d5ebf9381661ecb0a043e1f9d827044c44b74bd9a5d480c5",
+     "architecture": {
+      "architectures": [
+       "ConvNextV2ForImageClassification"
+      ],
+      "depths": [
+       3,
+       3,
+       9,
+       3
+      ],
+      "drop_path_rate": 0.0,
+      "hidden_act": "gelu",
+      "hidden_sizes": [
+       96,
+       192,
+       384,
+       768
+      ],
+      "image_size": 224,
+      "initializer_range": 0.02,
+      "layer_norm_eps": 1e-12,
+      "model_type": "convnextv2",
+      "num_channels": 3,
+      "num_stages": 4,
+      "out_features": null,
+      "patch_size": 4,
+      "stage_names": [
+       "stem",
+       "stage1",
+       "stage2",
+       "stage3",
+       "stage4"
+      ],
+      "torch_dtype": "float32",
+      "transformers_version": "4.27.0.dev0",
+      "num_labels": 1000
+     },
+     "model_gate": {
+      "calibration": null,
+      "requires_real_data": true
+     }
+    }
+   }
+  },
+  "data": {
+   "train": {
+    "describe": {
+     "source": "convnextv2_tiny pool",
+     "order": 707,
+     "batch_size": 32,
+     "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+    },
+    "count": null
+   },
+   "validation": null
+  },
+  "optimizer": {
+   "optimizer": "AdamW",
+   "lr": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "schedule": "constant",
+   "foreach": false
+  },
+  "environment": {
+   "python": "3.12.13",
+   "machine": "x86_64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "compute_capability": "8.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  },
+  "protocol_context": {
+   "reference": {
+    "contract": "evograd-model-reference/convnextv2_tiny/1",
+    "transformers": "5.16.1",
+    "modeling_sha256": "a8d9a5d91d2edc81c614088d83b779b04447e2713d13759c7cf9651238ac988b",
+    "model": "unpatched convnextv2_tiny at pretrained"
+   },
+   "data_recipe": {
+    "train_order": 707,
+    "batch_size": 32,
+    "image_size": 224,
+    "dtype": "bfloat16",
+    "data": {
+     "dataset": [
+      "ShaomuTan/imagenette",
+      "061f0ab5ca70523e13982a7ba463c076af657386",
+      "320px/train-00000-of-00001.parquet"
+     ],
+     "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+     "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+     "rows": 9469,
+     "skipped": 0,
+     "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+     "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+    }
+   },
+   "patch_set": [
+    "convnext_mlp_stage2"
+   ],
+   "numerics": {
+    "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+    "deterministic_algorithms": true,
+    "cudnn_deterministic": true,
+    "cudnn_benchmark": false,
+    "matmul_allow_tf32": false,
+    "float32_matmul_precision": "highest",
+    "sdp_flash": true,
+    "sdp_mem_efficient": true,
+    "sdp_cudnn": true,
+    "sdp_math": true,
+    "torch_num_threads": 8
+   }
+  },
+  "initial_state": "ee1babc3a11960eafa4bf8176080e5946a0829138c9e1b7b0150ffd13c70d600",
+  "evaluator": null
+ },
+ "seed": 0,
+ "train_steps": [
+  {
+   "step": 1,
+   "loss_sum": 0.373046875,
+   "weight": 1.0,
+   "mean_loss": 0.373046875,
+   "objective": 0.373046875
+  },
+  {
+   "step": 2,
+   "loss_sum": 0.11962890625,
+   "weight": 1.0,
+   "mean_loss": 0.11962890625,
+   "objective": 0.11962890625
+  },
+  {
+   "step": 3,
+   "loss_sum": 0.4765625,
+   "weight": 1.0,
+   "mean_loss": 0.4765625,
+   "objective": 0.4765625
+  },
+  {
+   "step": 4,
+   "loss_sum": 0.203125,
+   "weight": 1.0,
+   "mean_loss": 0.203125,
+   "objective": 0.203125
+  },
+  {
+   "step": 5,
+   "loss_sum": 0.1435546875,
+   "weight": 1.0,
+   "mean_loss": 0.1435546875,
+   "objective": 0.1435546875
+  },
+  {
+   "step": 6,
+   "loss_sum": 0.23828125,
+   "weight": 1.0,
+   "mean_loss": 0.23828125,
+   "objective": 0.23828125
+  },
+  {
+   "step": 7,
+   "loss_sum": 0.150390625,
+   "weight": 1.0,
+   "mean_loss": 0.150390625,
+   "objective": 0.150390625
+  },
+  {
+   "step": 8,
+   "loss_sum": 0.16796875,
+   "weight": 1.0,
+   "mean_loss": 0.16796875,
+   "objective": 0.16796875
+  },
+  {
+   "step": 9,
+   "loss_sum": 0.1259765625,
+   "weight": 1.0,
+   "mean_loss": 0.1259765625,
+   "objective": 0.1259765625
+  },
+  {
+   "step": 10,
+   "loss_sum": 0.078125,
+   "weight": 1.0,
+   "mean_loss": 0.078125,
+   "objective": 0.078125
+  },
+  {
+   "step": 11,
+   "loss_sum": 0.11669921875,
+   "weight": 1.0,
+   "mean_loss": 0.11669921875,
+   "objective": 0.11669921875
+  },
+  {
+   "step": 12,
+   "loss_sum": 0.053955078125,
+   "weight": 1.0,
+   "mean_loss": 0.053955078125,
+   "objective": 0.053955078125
+  },
+  {
+   "step": 13,
+   "loss_sum": 0.059326171875,
+   "weight": 1.0,
+   "mean_loss": 0.059326171875,
+   "objective": 0.059326171875
+  },
+  {
+   "step": 14,
+   "loss_sum": 0.07373046875,
+   "weight": 1.0,
+   "mean_loss": 0.07373046875,
+   "objective": 0.07373046875
+  },
+  {
+   "step": 15,
+   "loss_sum": 0.052978515625,
+   "weight": 1.0,
+   "mean_loss": 0.052978515625,
+   "objective": 0.052978515625
+  },
+  {
+   "step": 16,
+   "loss_sum": 0.0283203125,
+   "weight": 1.0,
+   "mean_loss": 0.0283203125,
+   "objective": 0.0283203125
+  },
+  {
+   "step": 17,
+   "loss_sum": 0.03857421875,
+   "weight": 1.0,
+   "mean_loss": 0.03857421875,
+   "objective": 0.03857421875
+  },
+  {
+   "step": 18,
+   "loss_sum": 0.0244140625,
+   "weight": 1.0,
+   "mean_loss": 0.0244140625,
+   "objective": 0.0244140625
+  },
+  {
+   "step": 19,
+   "loss_sum": 0.0306396484375,
+   "weight": 1.0,
+   "mean_loss": 0.0306396484375,
+   "objective": 0.0306396484375
+  },
+  {
+   "step": 20,
+   "loss_sum": 0.023681640625,
+   "weight": 1.0,
+   "mean_loss": 0.023681640625,
+   "objective": 0.023681640625
+  },
+  {
+   "step": 21,
+   "loss_sum": 0.02392578125,
+   "weight": 1.0,
+   "mean_loss": 0.02392578125,
+   "objective": 0.02392578125
+  },
+  {
+   "step": 22,
+   "loss_sum": 0.033203125,
+   "weight": 1.0,
+   "mean_loss": 0.033203125,
+   "objective": 0.033203125
+  },
+  {
+   "step": 23,
+   "loss_sum": 0.1943359375,
+   "weight": 1.0,
+   "mean_loss": 0.1943359375,
+   "objective": 0.1943359375
+  },
+  {
+   "step": 24,
+   "loss_sum": 0.16796875,
+   "weight": 1.0,
+   "mean_loss": 0.16796875,
+   "objective": 0.16796875
+  },
+  {
+   "step": 25,
+   "loss_sum": 0.036865234375,
+   "weight": 1.0,
+   "mean_loss": 0.036865234375,
+   "objective": 0.036865234375
+  },
+  {
+   "step": 26,
+   "loss_sum": 0.08935546875,
+   "weight": 1.0,
+   "mean_loss": 0.08935546875,
+   "objective": 0.08935546875
+  },
+  {
+   "step": 27,
+   "loss_sum": 0.080078125,
+   "weight": 1.0,
+   "mean_loss": 0.080078125,
+   "objective": 0.080078125
+  },
+  {
+   "step": 28,
+   "loss_sum": 0.1904296875,
+   "weight": 1.0,
+   "mean_loss": 0.1904296875,
+   "objective": 0.1904296875
+  },
+  {
+   "step": 29,
+   "loss_sum": 0.032958984375,
+   "weight": 1.0,
+   "mean_loss": 0.032958984375,
+   "objective": 0.032958984375
+  },
+  {
+   "step": 30,
+   "loss_sum": 0.0167236328125,
+   "weight": 1.0,
+   "mean_loss": 0.0167236328125,
+   "objective": 0.0167236328125
+  },
+  {
+   "step": 31,
+   "loss_sum": 0.016845703125,
+   "weight": 1.0,
+   "mean_loss": 0.016845703125,
+   "objective": 0.016845703125
+  },
+  {
+   "step": 32,
+   "loss_sum": 0.01611328125,
+   "weight": 1.0,
+   "mean_loss": 0.01611328125,
+   "objective": 0.01611328125
+  },
+  {
+   "step": 33,
+   "loss_sum": 0.0634765625,
+   "weight": 1.0,
+   "mean_loss": 0.0634765625,
+   "objective": 0.0634765625
+  },
+  {
+   "step": 34,
+   "loss_sum": 0.138671875,
+   "weight": 1.0,
+   "mean_loss": 0.138671875,
+   "objective": 0.138671875
+  },
+  {
+   "step": 35,
+   "loss_sum": 0.12451171875,
+   "weight": 1.0,
+   "mean_loss": 0.12451171875,
+   "objective": 0.12451171875
+  },
+  {
+   "step": 36,
+   "loss_sum": 0.064453125,
+   "weight": 1.0,
+   "mean_loss": 0.064453125,
+   "objective": 0.064453125
+  },
+  {
+   "step": 37,
+   "loss_sum": 0.04736328125,
+   "weight": 1.0,
+   "mean_loss": 0.04736328125,
+   "objective": 0.04736328125
+  },
+  {
+   "step": 38,
+   "loss_sum": 0.036376953125,
+   "weight": 1.0,
+   "mean_loss": 0.036376953125,
+   "objective": 0.036376953125
+  },
+  {
+   "step": 39,
+   "loss_sum": 0.05859375,
+   "weight": 1.0,
+   "mean_loss": 0.05859375,
+   "objective": 0.05859375
+  },
+  {
+   "step": 40,
+   "loss_sum": 0.09326171875,
+   "weight": 1.0,
+   "mean_loss": 0.09326171875,
+   "objective": 0.09326171875
+  },
+  {
+   "step": 41,
+   "loss_sum": 0.00738525390625,
+   "weight": 1.0,
+   "mean_loss": 0.00738525390625,
+   "objective": 0.00738525390625
+  },
+  {
+   "step": 42,
+   "loss_sum": 0.0257568359375,
+   "weight": 1.0,
+   "mean_loss": 0.0257568359375,
+   "objective": 0.0257568359375
+  },
+  {
+   "step": 43,
+   "loss_sum": 0.06201171875,
+   "weight": 1.0,
+   "mean_loss": 0.06201171875,
+   "objective": 0.06201171875
+  },
+  {
+   "step": 44,
+   "loss_sum": 0.01019287109375,
+   "weight": 1.0,
+   "mean_loss": 0.01019287109375,
+   "objective": 0.01019287109375
+  },
+  {
+   "step": 45,
+   "loss_sum": 0.01470947265625,
+   "weight": 1.0,
+   "mean_loss": 0.01470947265625,
+   "objective": 0.01470947265625
+  },
+  {
+   "step": 46,
+   "loss_sum": 0.01385498046875,
+   "weight": 1.0,
+   "mean_loss": 0.01385498046875,
+   "objective": 0.01385498046875
+  },
+  {
+   "step": 47,
+   "loss_sum": 0.00958251953125,
+   "weight": 1.0,
+   "mean_loss": 0.00958251953125,
+   "objective": 0.00958251953125
+  },
+  {
+   "step": 48,
+   "loss_sum": 0.061767578125,
+   "weight": 1.0,
+   "mean_loss": 0.061767578125,
+   "objective": 0.061767578125
+  },
+  {
+   "step": 49,
+   "loss_sum": 0.01177978515625,
+   "weight": 1.0,
+   "mean_loss": 0.01177978515625,
+   "objective": 0.01177978515625
+  },
+  {
+   "step": 50,
+   "loss_sum": 0.09765625,
+   "weight": 1.0,
+   "mean_loss": 0.09765625,
+   "objective": 0.09765625
+  }
+ ],
+ "train_windows": [
+  {
+   "window": 1,
+   "steps": [
+    1,
+    1
+   ],
+   "loss_sum": 0.373046875,
+   "weight": 1.0,
+   "mean_loss": 0.373046875
+  },
+  {
+   "window": 2,
+   "steps": [
+    2,
+    2
+   ],
+   "loss_sum": 0.11962890625,
+   "weight": 1.0,
+   "mean_loss": 0.11962890625
+  },
+  {
+   "window": 3,
+   "steps": [
+    3,
+    3
+   ],
+   "loss_sum": 0.4765625,
+   "weight": 1.0,
+   "mean_loss": 0.4765625
+  },
+  {
+   "window": 4,
+   "steps": [
+    4,
+    4
+   ],
+   "loss_sum": 0.203125,
+   "weight": 1.0,
+   "mean_loss": 0.203125
+  },
+  {
+   "window": 5,
+   "steps": [
+    5,
+    5
+   ],
+   "loss_sum": 0.1435546875,
+   "weight": 1.0,
+   "mean_loss": 0.1435546875
+  },
+  {
+   "window": 6,
+   "steps": [
+    6,
+    6
+   ],
+   "loss_sum": 0.23828125,
+   "weight": 1.0,
+   "mean_loss": 0.23828125
+  },
+  {
+   "window": 7,
+   "steps": [
+    7,
+    7
+   ],
+   "loss_sum": 0.150390625,
+   "weight": 1.0,
+   "mean_loss": 0.150390625
+  },
+  {
+   "window": 8,
+   "steps": [
+    8,
+    8
+   ],
+   "loss_sum": 0.16796875,
+   "weight": 1.0,
+   "mean_loss": 0.16796875
+  },
+  {
+   "window": 9,
+   "steps": [
+    9,
+    9
+   ],
+   "loss_sum": 0.1259765625,
+   "weight": 1.0,
+   "mean_loss": 0.1259765625
+  },
+  {
+   "window": 10,
+   "steps": [
+    10,
+    10
+   ],
+   "loss_sum": 0.078125,
+   "weight": 1.0,
+   "mean_loss": 0.078125
+  },
+  {
+   "window": 11,
+   "steps": [
+    11,
+    11
+   ],
+   "loss_sum": 0.11669921875,
+   "weight": 1.0,
+   "mean_loss": 0.11669921875
+  },
+  {
+   "window": 12,
+   "steps": [
+    12,
+    12
+   ],
+   "loss_sum": 0.053955078125,
+   "weight": 1.0,
+   "mean_loss": 0.053955078125
+  },
+  {
+   "window": 13,
+   "steps": [
+    13,
+    13
+   ],
+   "loss_sum": 0.059326171875,
+   "weight": 1.0,
+   "mean_loss": 0.059326171875
+  },
+  {
+   "window": 14,
+   "steps": [
+    14,
+    14
+   ],
+   "loss_sum": 0.07373046875,
+   "weight": 1.0,
+   "mean_loss": 0.07373046875
+  },
+  {
+   "window": 15,
+   "steps": [
+    15,
+    15
+   ],
+   "loss_sum": 0.052978515625,
+   "weight": 1.0,
+   "mean_loss": 0.052978515625
+  },
+  {
+   "window": 16,
+   "steps": [
+    16,
+    16
+   ],
+   "loss_sum": 0.0283203125,
+   "weight": 1.0,
+   "mean_loss": 0.0283203125
+  },
+  {
+   "window": 17,
+   "steps": [
+    17,
+    17
+   ],
+   "loss_sum": 0.03857421875,
+   "weight": 1.0,
+   "mean_loss": 0.03857421875
+  },
+  {
+   "window": 18,
+   "steps": [
+    18,
+    18
+   ],
+   "loss_sum": 0.0244140625,
+   "weight": 1.0,
+   "mean_loss": 0.0244140625
+  },
+  {
+   "window": 19,
+   "steps": [
+    19,
+    19
+   ],
+   "loss_sum": 0.0306396484375,
+   "weight": 1.0,
+   "mean_loss": 0.0306396484375
+  },
+  {
+   "window": 20,
+   "steps": [
+    20,
+    20
+   ],
+   "loss_sum": 0.023681640625,
+   "weight": 1.0,
+   "mean_loss": 0.023681640625
+  },
+  {
+   "window": 21,
+   "steps": [
+    21,
+    21
+   ],
+   "loss_sum": 0.02392578125,
+   "weight": 1.0,
+   "mean_loss": 0.02392578125
+  },
+  {
+   "window": 22,
+   "steps": [
+    22,
+    22
+   ],
+   "loss_sum": 0.033203125,
+   "weight": 1.0,
+   "mean_loss": 0.033203125
+  },
+  {
+   "window": 23,
+   "steps": [
+    23,
+    23
+   ],
+   "loss_sum": 0.1943359375,
+   "weight": 1.0,
+   "mean_loss": 0.1943359375
+  },
+  {
+   "window": 24,
+   "steps": [
+    24,
+    24
+   ],
+   "loss_sum": 0.16796875,
+   "weight": 1.0,
+   "mean_loss": 0.16796875
+  },
+  {
+   "window": 25,
+   "steps": [
+    25,
+    25
+   ],
+   "loss_sum": 0.036865234375,
+   "weight": 1.0,
+   "mean_loss": 0.036865234375
+  },
+  {
+   "window": 26,
+   "steps": [
+    26,
+    26
+   ],
+   "loss_sum": 0.08935546875,
+   "weight": 1.0,
+   "mean_loss": 0.08935546875
+  },
+  {
+   "window": 27,
+   "steps": [
+    27,
+    27
+   ],
+   "loss_sum": 0.080078125,
+   "weight": 1.0,
+   "mean_loss": 0.080078125
+  },
+  {
+   "window": 28,
+   "steps": [
+    28,
+    28
+   ],
+   "loss_sum": 0.1904296875,
+   "weight": 1.0,
+   "mean_loss": 0.1904296875
+  },
+  {
+   "window": 29,
+   "steps": [
+    29,
+    29
+   ],
+   "loss_sum": 0.032958984375,
+   "weight": 1.0,
+   "mean_loss": 0.032958984375
+  },
+  {
+   "window": 30,
+   "steps": [
+    30,
+    30
+   ],
+   "loss_sum": 0.0167236328125,
+   "weight": 1.0,
+   "mean_loss": 0.0167236328125
+  },
+  {
+   "window": 31,
+   "steps": [
+    31,
+    31
+   ],
+   "loss_sum": 0.016845703125,
+   "weight": 1.0,
+   "mean_loss": 0.016845703125
+  },
+  {
+   "window": 32,
+   "steps": [
+    32,
+    32
+   ],
+   "loss_sum": 0.01611328125,
+   "weight": 1.0,
+   "mean_loss": 0.01611328125
+  },
+  {
+   "window": 33,
+   "steps": [
+    33,
+    33
+   ],
+   "loss_sum": 0.0634765625,
+   "weight": 1.0,
+   "mean_loss": 0.0634765625
+  },
+  {
+   "window": 34,
+   "steps": [
+    34,
+    34
+   ],
+   "loss_sum": 0.138671875,
+   "weight": 1.0,
+   "mean_loss": 0.138671875
+  },
+  {
+   "window": 35,
+   "steps": [
+    35,
+    35
+   ],
+   "loss_sum": 0.12451171875,
+   "weight": 1.0,
+   "mean_loss": 0.12451171875
+  },
+  {
+   "window": 36,
+   "steps": [
+    36,
+    36
+   ],
+   "loss_sum": 0.064453125,
+   "weight": 1.0,
+   "mean_loss": 0.064453125
+  },
+  {
+   "window": 37,
+   "steps": [
+    37,
+    37
+   ],
+   "loss_sum": 0.04736328125,
+   "weight": 1.0,
+   "mean_loss": 0.04736328125
+  },
+  {
+   "window": 38,
+   "steps": [
+    38,
+    38
+   ],
+   "loss_sum": 0.036376953125,
+   "weight": 1.0,
+   "mean_loss": 0.036376953125
+  },
+  {
+   "window": 39,
+   "steps": [
+    39,
+    39
+   ],
+   "loss_sum": 0.05859375,
+   "weight": 1.0,
+   "mean_loss": 0.05859375
+  },
+  {
+   "window": 40,
+   "steps": [
+    40,
+    40
+   ],
+   "loss_sum": 0.09326171875,
+   "weight": 1.0,
+   "mean_loss": 0.09326171875
+  },
+  {
+   "window": 41,
+   "steps": [
+    41,
+    41
+   ],
+   "loss_sum": 0.00738525390625,
+   "weight": 1.0,
+   "mean_loss": 0.00738525390625
+  },
+  {
+   "window": 42,
+   "steps": [
+    42,
+    42
+   ],
+   "loss_sum": 0.0257568359375,
+   "weight": 1.0,
+   "mean_loss": 0.0257568359375
+  },
+  {
+   "window": 43,
+   "steps": [
+    43,
+    43
+   ],
+   "loss_sum": 0.06201171875,
+   "weight": 1.0,
+   "mean_loss": 0.06201171875
+  },
+  {
+   "window": 44,
+   "steps": [
+    44,
+    44
+   ],
+   "loss_sum": 0.01019287109375,
+   "weight": 1.0,
+   "mean_loss": 0.01019287109375
+  },
+  {
+   "window": 45,
+   "steps": [
+    45,
+    45
+   ],
+   "loss_sum": 0.01470947265625,
+   "weight": 1.0,
+   "mean_loss": 0.01470947265625
+  },
+  {
+   "window": 46,
+   "steps": [
+    46,
+    46
+   ],
+   "loss_sum": 0.01385498046875,
+   "weight": 1.0,
+   "mean_loss": 0.01385498046875
+  },
+  {
+   "window": 47,
+   "steps": [
+    47,
+    47
+   ],
+   "loss_sum": 0.00958251953125,
+   "weight": 1.0,
+   "mean_loss": 0.00958251953125
+  },
+  {
+   "window": 48,
+   "steps": [
+    48,
+    48
+   ],
+   "loss_sum": 0.061767578125,
+   "weight": 1.0,
+   "mean_loss": 0.061767578125
+  },
+  {
+   "window": 49,
+   "steps": [
+    49,
+    49
+   ],
+   "loss_sum": 0.01177978515625,
+   "weight": 1.0,
+   "mean_loss": 0.01177978515625
+  },
+  {
+   "window": 50,
+   "steps": [
+    50,
+    50
+   ],
+   "loss_sum": 0.09765625,
+   "weight": 1.0,
+   "mean_loss": 0.09765625
+  }
+ ],
+ "validation": {},
+ "state": {},
+ "site_calls": {
+  "total": {
+   "convnext_mlp_stage2": 450
+  }
+ },
+ "findings": [],
+ "seconds": 2.768730586001766,
+ "suspended": false,
+ "segments": [
+  {
+   "started_at_step": 1,
+   "time": "2026-10-30T07:09:46+0000",
+   "completed_at_step": 50
+  }
+ ]
+}

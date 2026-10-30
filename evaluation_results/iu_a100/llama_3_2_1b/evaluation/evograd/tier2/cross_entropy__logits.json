@@ -1,0 +1,81 @@
+{
+ "stage_key": {
+  "case": "cross_entropy/logits",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/cross_entropy/logits/loss_function#fixed_cross_entropy"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "a60db6d84c5a5cf276bed8e83ea11572b34e287edfed2a869024fb8e72b61e2a",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/cross_entropy/logits/loss_function#fixed_cross_entropy"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 2.2947837227893175,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.293628251347836,
+     "high": 2.2954195513194855
+    },
+    "candidate_ms": 5.967872142791748,
+    "baseline_ms": 13.694975852966309,
+    "speedup_forward": 1.9782190737964251,
+    "speedup_backward": 2.5410970846420153
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.8135899173310204,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.8132783818616149,
+     "high": 0.814417031992799
+    },
+    "candidate_ms": 5.960191965103149,
+    "baseline_ms": 4.849152088165283,
+    "speedup_forward": 0.5324507420734211,
+    "speedup_backward": 1.0736984566035708
+   }
+  }
+ }
+}
