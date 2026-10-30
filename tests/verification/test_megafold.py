@@ -273,6 +273,18 @@ class TheRecordedSubset(unittest.TestCase):
         self.assertFalse(model.gate3_applies)
         self.assertEqual(model.objective.primary, "distogram_logits")
 
+    def test_gate1_names_each_reference_without_a_megafold_checkout(self):
+        """Search runs Gate 1 on a task pack where MegaFold is not installed."""
+        from evograd.opdecl.oracle import reference_identity
+        from evograd.verification.integrations import load
+
+        model = load("megafold")
+        with mock.patch.dict("sys.modules", {"megafold": None}):
+            for task in ("swiglu", "layernorm", "megafold_layernorm_linear", "megafold_evoattention"):
+                with self.subTest(task=task):
+                    identity = reference_identity(model.reference_op(task))
+                    self.assertEqual(identity["reference_contract"], model.contract)
+
 
 class EachCaseHasItsSite(unittest.TestCase):
     """The registry's sites carry the configurations the harvest observed there."""

@@ -16,18 +16,13 @@ import dataclasses
 import hashlib
 from pathlib import Path
 
-import torch.nn.functional as F
-
 CONTRACT = "evograd-model-reference/megafold/1"
 
-
-def swiglu(a, b):
-    """``FusedTransition``'s activation as MegaFold's eager spelling: ``silu(gates) * x``."""
-    return F.silu(a) * b
-
-
-#: Tasks whose declared forward is not MegaFold's computation.
-_FORWARDS = {"swiglu": f"{__name__}:swiglu"}
+#: Tasks whose declared forward is not MegaFold's computation. The forward lives
+#: outside this module: a reference's identity calls its module's
+#: ``source_identity``, which imports MegaFold, and Gate 1 in search runs
+#: without a MegaFold checkout.
+_FORWARDS = {"swiglu": "evograd.benchmark.topdown.megafold.contracts:megafold_swiglu_forward"}
 
 #: MegaFold modules whose source is the reference (hashed into every identity).
 MODELING_MODULES = ("megafold.model.megafold", "megafold.model.attention",

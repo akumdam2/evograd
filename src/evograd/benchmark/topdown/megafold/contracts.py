@@ -70,6 +70,11 @@ def megafold_evoattention_forward(q, k, v, key_mask, pair_bias):
     return out.permute(0, 2, 1, 3).reshape(b, s, n, h, d)
 
 
+def megafold_swiglu_forward(a, b):
+    """``FusedTransition``'s activation as MegaFold's eager spelling: ``silu(gates) * x``."""
+    return F.silu(a) * b
+
+
 def _observed(name: str, args: tuple[str, ...]) -> tuple[Workload, ...]:
     """One case per observed configuration of ``name``, with its recorded layout."""
     if not has_snapshot(WORKLOAD):

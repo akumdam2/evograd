@@ -654,7 +654,12 @@ class TestTheProvidersAgree(unittest.TestCase):
             "                                      provider='compile_clean')\n"
             "print(provenance.method)\n"
         )
-        child = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        # The tests before this one gave this process a process group and its
+        # MASTER_PORT; the tier-3 CLI's parent builds no model, so each child
+        # picks its own port, and this child must too.
+        env = {key: value for key, value in os.environ.items() if key != "MASTER_PORT"}
+        child = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                               env=env)
         self.assertEqual(child.returncode, 0, child.stderr[-3000:])
         self.assertEqual(child.stdout.split()[-1], "module_surgery:compile_clean")
 
