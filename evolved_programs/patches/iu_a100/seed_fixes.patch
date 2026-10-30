@@ -1,0 +1,58 @@
+diff --git a/src/evograd/pipelines/a_atenir_llm/synthesize.py b/src/evograd/pipelines/a_atenir_llm/synthesize.py
+index f951038..a9a18c2 100644
+--- a/src/evograd/pipelines/a_atenir_llm/synthesize.py
++++ b/src/evograd/pipelines/a_atenir_llm/synthesize.py
+@@ -23,6 +23,7 @@ from evograd.pipelines.shared.artifact import (
+     render_deployment_layer,
+     validate_artifact,
+ )
++from evograd.pipelines.b_dispatch.synthesize import declared_scalars
+ from evograd.pipelines.a_atenir_llm.prompts import (
+     SYSTEM_MESSAGE,
+     render_codegen_prompt,
+@@ -136,6 +137,19 @@ def _verify(config: AutogradPairConfig, program_path: Path, body: str) -> dict:
+         # calibration payloads rather than the declaration's tolerances.
+         seed_acceptance=True,
+     )
++    if not report_passed(report) and report.get("returncode") and not report.get("stderr", "").strip():
++        # Gate 1 crashed without a word (e.g. SIGSEGV): the declaration's check
++        # often fails cleanly on the same program, so its report goes to the
++        # repair prompt. Diagnostic only -- acceptance stays Gate 1's.
++        report["diagnostic_declaration_check"] = verify_candidate(
++            python=config.python,
++            op_name=config.op.name,
++            program_path=program_path,
++            log_dir=program_path.parent / "diagnostic",
++            forward=config.forward,
++            declaration=config.op.declaration,
++            timeout=config.eval_timeout,
++        )
+     report["artifact_contract"] = contract
+     return report
+ 
+@@ -163,6 +177,9 @@ def synthesize_autograd_pair(config: AutogradPairConfig) -> int:
+         example_input=config.example_input,
+         out_path=config.output_dir / "atenir_graph.json",
+         log_dir=config.output_dir,
++        # As B does: a forward whose scalars (stride, eps, ...) have no default
++        # cannot be traced without them, and a default may not be the case's.
++        scalars=declared_scalars(config.op),
+     )
+     graph_summary = summarize_graph(load_graph(graph_path))
+     (config.output_dir / "graph_summary.md").write_text(graph_summary, encoding="utf-8")
+diff --git a/src/evograd/pipelines/d_inductor/capture.py b/src/evograd/pipelines/d_inductor/capture.py
+index 0e62ae0..96c43d6 100644
+--- a/src/evograd/pipelines/d_inductor/capture.py
++++ b/src/evograd/pipelines/d_inductor/capture.py
+@@ -316,7 +316,10 @@ def capture_inductor_pair(
+ 
+     # A warm FX-graph cache skips codegen entirely, so there would be no module
+     # to record. Force a real compile for the duration of the capture.
+-    with inductor_config.patch(force_disable_caches=True):
++    # Layout optimization turns a convolution's input channels-last in the
++    # forward, but compile_fx_inner compiles the backward for the traced
++    # (contiguous) strides of what it saves, so its stride assert fails.
++    with inductor_config.patch(force_disable_caches=True, layout_optimization=False):
+         with _record_generated_modules(sources, modules, slot, lowering_observer):
+             compiled = aot_function(
+                 traced,

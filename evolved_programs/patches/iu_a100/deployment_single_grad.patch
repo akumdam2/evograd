@@ -1,0 +1,29 @@
+diff --git a/src/evograd/pipelines/shared/artifact.py b/src/evograd/pipelines/shared/artifact.py
+index ad8d0a6..62b7cc2 100644
+--- a/src/evograd/pipelines/shared/artifact.py
++++ b/src/evograd/pipelines/shared/artifact.py
+@@ -190,8 +190,14 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
+     if len(c.gradient_return_order()) == 1:
+         grad_terms += ","
+     grad_unpack = ", ".join(g for g in c.grad_names)
++    grad_unwrap = ""
+     if len(c.grad_names) == 1:
+-        grad_unpack += ","
++        # A task statement asks a one-gradient backward to return the gradient
++        # itself (`return dx`); a 1-tuple, as evograd's own pairs return, is
++        # accepted too. `dx, = tensor` would unpack the tensor's first dimension.
++        (g,) = c.grad_names
++        grad_unwrap = (f"\n        if isinstance({g}, (tuple, list)):"
++                       f"\n            {g}, = {g}")
+ 
+     flat_args, flat_outs, rank = batched_names(op)
+     # Adapt only when the leading-dimension story is unambiguous: every declared
+@@ -290,7 +296,7 @@ class {c.function_cls}(torch.autograd.Function):
+         saved = tuple(saved)
+         {grad_unpack} = {c.backward_fn}(
+             {upstream_arg}, saved{backward_scalars}
+-        )
++        ){grad_unwrap}
+         # One value per forward argument, `None` for every inactive one.
+         return {grad_terms}
+ 

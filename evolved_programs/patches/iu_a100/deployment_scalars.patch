@@ -1,0 +1,52 @@
+diff --git a/src/evograd/pipelines/shared/artifact.py b/src/evograd/pipelines/shared/artifact.py
+index 62b7cc2..54a452e 100644
+--- a/src/evograd/pipelines/shared/artifact.py
++++ b/src/evograd/pipelines/shared/artifact.py
+@@ -144,6 +144,22 @@ class ArtifactContract:
+ # ── generation ───────────────────────────────────────────────────────────────
+ 
+ 
++# Emitted into a deployment layer whose declaration has scalars; see
++# `backward_scalars` in render_deployment_layer.
++_BACKWARD_SCALARS = '''
++
++def _backward_scalars(backward, **scalars):
++    """The declared scalars `backward` accepts: those it names, or all of them
++    when it takes **kwargs -- as Gate 1 passes them."""
++    import inspect
++
++    params = inspect.signature(backward).parameters
++    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
++        return scalars
++    return {name: value for name, value in scalars.items() if name in params}
++'''
++
++
+ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
+     """Layers 3 and 4, generated from the declaration.
+ 
+@@ -166,8 +182,13 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
+     scalar_store = "\n".join(
+         f"        ctx.{name} = {name}" for name in scalars
+     ) or "        pass"
+-    scalar_load = ", ".join(f"ctx.{name}" for name in scalars)
+-    backward_scalars = f", {scalar_load}" if scalars else ""
++    # The backward gets the declared scalars it names (or all, through **kwargs),
++    # by keyword: the rule Gate 1 calls a pair by (opdecl.bind.backward_inactive_kwargs).
++    # A backward from saved state may need none of them (eps is spent in the forward).
++    scalar_kwargs = ", ".join(f"{name}=ctx.{name}" for name in scalars)
++    backward_scalars = (f", **_backward_scalars({c.backward_fn}, {scalar_kwargs})"
++                        if scalars else "")
++    scalar_helper = _BACKWARD_SCALARS if scalars else ""
+ 
+     # `backward_from_saved` takes one upstream gradient for a single-output
+     # declaration and a tuple for a structured one; the declaration decides.
+@@ -265,7 +286,7 @@ def render_deployment_layer(op: OpDecl, *, allowed_primitives=()) -> str:
+ # ══════════════════════════════════════════════════════════════════════════════
+ 
+ ARTIFACT_CONTRACT = {c.metadata()!r}
+-
++{scalar_helper}
+ 
+ class {c.function_cls}(torch.autograd.Function):
+     """Static autograd wiring for `{op.name}`. No declaration is read at runtime."""
