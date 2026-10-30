@@ -29,18 +29,21 @@ side on identical weights and batches:
 first and the candidate patches go on top, so the only difference between them
 is the kernels.
 
-Four determinism decisions worth knowing before touching this file:
+Five determinism decisions worth knowing before touching this file:
 
-* **Batches are seeded synthetic features.** The tier-3 protocol compares
-  providers on identical data; an MSA/template pipeline would inject variance
-  that is not the kernels'.
-* **The forward is stochastic.** The diffusion module samples noise, the pair
-  stack samples structured dropout, and MegaFold draws its recycling count from
-  ``randint(1, num_recycling_steps)`` whenever the module is training, so
+* **The data is one frozen real structure.** A real PDB entry featurized once by
+  MegaFold's own training featurization and frozen
+  (:mod:`evograd.benchmark.topdown.megafold.data`), loaded only after its hash
+  is checked. One structure, because every site's shapes follow its token,
+  atom and MSA counts; batches differ by their seed alone.
+* **The forward is stochastic.** The diffusion module samples noise and
+  augmentations and the pair stack samples structured dropout, so
   :meth:`MegaFoldWorkload.loss` reseeds both ``torch`` and ``random`` from the
-  batch's seed before every call. Without that, two providers would train on
-  different noise for a different number of recycling passes and the
-  loss-agreement metric would compare nothing.
+  seed the batch carries before every call. Without that, two providers would
+  train on different noise and the loss-agreement metric would compare nothing.
+* **One recycling pass.** MegaFold draws its recycling count from
+  ``randint(1, num_recycling_steps)`` when training; passing 1 makes that draw
+  1, so every step makes the same site calls.
 * **The autocast context is MegaFold's own.** Its trainer opens none; it passes
   ``dtype=self.dtype`` into the forward and the model opens
   ``torch.autocast(device_type="cuda", dtype=dtype, cache_enabled=False)``
@@ -64,6 +67,7 @@ import dataclasses
 import os
 import random
 import socket
+from pathlib import Path
 from typing import Any, Callable
 
 import torch
@@ -73,6 +77,7 @@ from torch import nn
 
 from evograd.evaluation.tier3.patch import (
     KernelSet,
+    KernelSource,
     ModulePatch,
     PatchProvenance,
     Site,
@@ -99,10 +104,15 @@ DIFFUSION_CHUNK_SIZE = 4
 #: passes it through to the model constructor.
 DIFFUSION_NUM_AUGMENTATIONS = 47
 
-#: The forward's own default. The yaml sets no recycling count and the trainer
-#: does not pass one at a training step, so 4 is what MegaFold trains with.
-#: MegaFold reads it as the upper end of a draw, not as a fixed count.
-NUM_RECYCLING_STEPS = 4
+#: MegaFold trains with the forward's default of 4, read as the upper end of a
+#: ``randint(1, 4)`` draw. 1 makes the draw 1: every step the same site calls.
+NUM_RECYCLING_STEPS = 1
+
+#: Batch tensors MegaFold's forward writes into: ``MegaFoldLoss.calculate_confidence_labels``
+#: masks ``resolved_labels`` in place (``masked_fill_``) whenever the confidence
+#: head is called. :meth:`MegaFoldWorkload.loss` hands the model its own copies,
+#: so a batch is the same input at every use.
+WRITTEN_INPUTS = ("resolved_labels",)
 
 #: LayerNorm epsilon. MegaFold's fused kernel hardcodes it and its own torch
 #: fallback takes ``F.layer_norm``'s default, so both spellings agree on 1e-5.
@@ -130,6 +140,17 @@ BUILD_COMPILE_CLEAN = "compile_clean"
 #: Every provider this workload builds a distinct tree for.
 BUILD_MODES = (BUILD_EAGER, BUILD_MEGAFOLD, BUILD_COMPILE, BUILD_COMPILE_CLEAN)
 
+#: How a kernel set asks for the ``compile`` tree whatever its provider is
+#: named: the evaluation's whole-model ``torch.compile`` comparison
+#: (``evaluation.protocol.whole_model_compile``), as Qwen3's workload marks it.
+WHOLE_MODEL_COMPILE_ORIGIN = "whole_model_torch_compile"
+
+
+def whole_model_compile_kernels(registry):
+    """A kernel set that patches nothing and asks for the whole model compiled."""
+    return KernelSet(registry=registry, sources=(KernelSource(
+        site="__whole_model__", op_name=None, module=None, origin=WHOLE_MODEL_COMPILE_ORIGIN),))
+
 
 def _surgery_only(site: str):
     """The 'default' of a surgery-route site, which is not a callable path.
@@ -148,11 +169,29 @@ def _surgery_only(site: str):
     return refuse
 
 
+def _observed(site: str) -> tuple[Workload, ...]:
+    """The configurations the harvest observed at ``site``: its task's observed
+    suite, those of the snapshot's configurations its recorder filed under the
+    site (``provenance.note``). Two sites share the attention task, and a site
+    holds many configurations, so this is what places a case at its site."""
+    from evograd.benchmark import get_task
+    from evograd.benchmark.topdown import has_snapshot, load_snapshot
+
+    if not has_snapshot("megafold"):
+        return ()
+    task = MEGAFOLD_SITE_OPS[site]
+    snapshot = load_snapshot("megafold")
+    entry = snapshot["level1"].get(task) or snapshot["tasks"].get(task) or {}
+    workloads = get_task(task).benchmark_suites.get("megafold_observed", ())
+    return tuple(w for w, c in zip(workloads, entry.get("configurations", ()))
+                 if c["provenance"]["note"] == site)
+
+
 #: The MegaFold patchable surface, owned by this workload as every registry is.
 MEGAFOLD_SITES = SiteRegistry(
     name="megafold",
     sites=tuple(
-        Site(site, op_name, _surgery_only(site))
+        Site(site, op_name, _surgery_only(site), preflight=_observed(site))
         for site, op_name in MEGAFOLD_SITE_OPS.items()
     ),
 )
@@ -305,6 +344,17 @@ def _trainer_autocast_dtype() -> torch.dtype:
 # -- replacement modules: the evolved sites ----------------------------------
 
 
+def _autocast_dtype(t) -> torch.dtype | None:
+    """The dtype an enclosing autocast runs reduced-precision ops in, or None."""
+    kind = t.device.type
+    return torch.get_autocast_dtype(kind) if torch.is_autocast_enabled(kind) else None
+
+
+def _no_autocast(t):
+    """A kernel sees exactly the dtypes its contract declares, never autocast's rewrites."""
+    return torch.autocast(device_type=t.device.type, enabled=False)
+
+
 def _like(tensor, activation):
     """A parameter in the activation's dtype, which autocast will not do here.
 
@@ -330,9 +380,10 @@ def _like(tensor, activation):
 class _PatchedSwiGLUTransition(nn.Module):
     """MegaFold's transition, with its gated activation evolved.
 
-    The module is ``in_proj -> SwiGLU -> out_proj``, and only the middle is a
-    site: the two projections are the original module objects, so their
-    parameters are carried across rather than reinitialized. ``in_proj`` is a
+    The module is ``ff = [in_proj, SwiGLU, out_proj]``, and only the middle is
+    a site: the two projections are the original module objects, so their
+    parameters are carried across rather than reinitialized, under the names
+    the original gives them (``ff.0``, ``ff.2``). ``in_proj`` is a
     ``LayernormLinear`` when the transition includes its normalization (the
     default, and what the pairformer and pairwise blocks build) and a bare
     ``LinearNoBias`` when it does not (``include_ln=False``, which the
@@ -342,8 +393,9 @@ class _PatchedSwiGLUTransition(nn.Module):
     MegaFold's spelling chunks one tensor into ``a`` then ``b`` and computes
     ``silu(b) * a``, while the declaration is ``swiglu(a, b) = silu(a) * b``,
     so the declaration's ``a`` is MegaFold's second half and its ``b`` is the
-    first. The halves are made contiguous because chunking leaves strided
-    views and the pair was declared, verified and evolved on contiguous rows.
+    first. The halves reach the kernel as MegaFold holds them: ``[rows, cols]``
+    views of the projection's output, a row stride of ``2 * cols``, in its
+    dtype (SwiGLU is elementwise, so autocast leaves it alone).
     """
 
     def __init__(self, original: nn.Module, kernel: Callable):
@@ -353,98 +405,98 @@ class _PatchedSwiGLUTransition(nn.Module):
         # by position rather than by type keeps this working whether the first
         # entry is fused, eager, or already patched by the layernorm_linear
         # site (the patches are independent and either order is legal).
-        self.in_proj = sequence[0]
-        self.out_proj = sequence[2]
+        self.ff = nn.Sequential(sequence[0], _KernelSwiGLU(kernel), sequence[2])
+
+    def forward(self, x):
+        return self.ff(x)
+
+
+class _KernelSwiGLU(nn.Module):
+    """The transition's activation through a ``swiglu`` kernel, on ``[rows, cols]`` half views."""
+
+    def __init__(self, kernel: Callable):
+        super().__init__()
         self.kernel = kernel
 
     def forward(self, x):
-        first, gates = self.in_proj(x).chunk(2, dim=-1)
-        return self.out_proj(self.kernel(gates.contiguous(), first.contiguous()))
+        first, gates = x.chunk(2, dim=-1)
+        cols = gates.shape[-1]
+        with _no_autocast(gates):
+            out = self.kernel(gates.reshape(-1, cols), first.reshape(-1, cols))
+        return out.reshape(gates.shape)
 
 
 class _MegaFoldPatchedLayerNorm(_PatchedLayerNorm):
-    """AlphaFold3's patched LayerNorm, with the parameters cast to match.
+    """AlphaFold3's patched LayerNorm, in MegaFold's precision.
 
     Subclassed rather than copied: the constructor that carries the original's
-    weight and bias across is the same one, and only the dtype alignment is new.
-    AlphaFold3 trains in float32 with no autocast, so it never needed this; see
-    :func:`_like` for why MegaFold does.
+    weight and bias across is the same one. What is new is the precision:
+    autocast runs ``layer_norm`` in float32 (a bfloat16 input is cast up first)
+    and returns float32, so the kernel receives exactly that -- float32 rows,
+    ``[rows, hidden]`` -- and the caller gets float32 back, as from the module
+    it replaced.
     """
 
     def forward(self, x):
-        return self.kernel(x, _like(self.weight, x), _like(self.bias, x), self.eps)
+        rows = x.reshape(-1, x.shape[-1])
+        if _autocast_dtype(x) is not None:
+            rows = rows.float()
+        with _no_autocast(x):
+            out = self.kernel(rows, _like(self.weight, rows), _like(self.bias, rows), self.eps)
+        return out.reshape(x.shape)
 
 
 class _PatchedLayernormLinear(nn.Module):
-    """MegaFold's ``LayernormLinear``, rerouted through the evolved pair.
+    """MegaFold's ``LayernormLinear``, rerouted through ``megafold_layernorm_linear``.
 
-    The declaration is ``out = layer_norm(x, gamma, beta, eps) @ linear_weight``
-    with ``linear_weight`` stored ``[K, N]``, which is MegaFold's own layout:
-    its torch fallback is ``F.linear(F.layer_norm(...), linear_weight.T)``, the
-    same product. So the parameters go through unchanged, as the original
-    objects rather than copies.
+    The contract is MegaFold's torch path, ``F.linear(F.layer_norm(x, ...),
+    linear_weight.T)``, in MegaFold's precision: under autocast the LayerNorm
+    runs in float32 (a bfloat16 ``x`` cast up first) and the GEMM in bfloat16
+    (the weight cast down), outside it everything is float32. The site makes
+    exactly those casts, flattens the leading axes to ``[M, K]`` (a view) and
+    hands the kernel float32 rows and the weight in the GEMM's dtype, so the
+    output dtype is the original module's. ``linear_weight`` stays ``[K, N]``,
+    MegaFold's layout; the cast is autograd's, so its gradient reaches the
+    float32 parameter as autocast's would. The parameters keep MegaFold's
+    attribute names, so the patched tree's parameters are named as the
+    original's.
 
-    Two things the declaration does not carry. A *linear* bias is added
-    afterwards, which is exactly where MegaFold's fused kernel adds it and
-    changes no gradient; most instances have none, but the triangle
-    multiplication's does. A missing *LayerNorm* bias has no such rewrite --
-    the declaration's ``beta`` is a required tensor and synthesizing zeros
-    would quietly train a parameter that does not exist -- so those instances
-    are left unmatched and run stock.
+    Instances with a linear bias (the triangle multiplication's ``combined``)
+    or without a LayerNorm bias are a different contract and are left
+    unmatched: they run MegaFold's own code.
     """
 
     def __init__(self, original: nn.Module, kernel: Callable):
         super().__init__()
-        self.weight = original.WEIGHT
-        self.bias = original.BIAS
+        self.WEIGHT = original.WEIGHT
+        self.BIAS = original.BIAS
         self.linear_weight = original.linear_weight
-        self.linear_bias = original.linear_bias
         self.kernel = kernel
 
     def forward(self, x):
-        # The declaration is two-dimensional, ``[M, K] -> [M, N]``, and covers
-        # float32 and float16; the site is reached with leading batch/residue
-        # axes and, under MegaFold's autocast, in bfloat16 as well. MegaFold's
-        # own kernel flattens the leading axes (``a.view(-1, K)``) and casts
-        # its inputs (to bfloat16, via ``custom_fwd``). The site does the
-        # same in the declaration's terms: flatten to ``[M, K]``, run the
-        # kernel in the nearest declared dtype -- float32 for bfloat16, which
-        # loses nothing -- and hand back the caller's shape and dtype. Both
-        # conversions sit inside the patched boundary and so inside every
-        # patched provider's timed step, identity control included.
         lead, k = x.shape[:-1], x.shape[-1]
-        model_dtype = x.dtype
-        kernel_dtype = model_dtype if model_dtype in (torch.float32, torch.float16) else torch.float32
-        # ``reshape`` of a view whose leading axes flatten without a copy
-        # stays a view, and ``.to`` of the same dtype returns the tensor
-        # unchanged, so the float32 majority of calls would reach the kernel
-        # non-contiguous. The pair was declared, verified and evolved on
-        # contiguous rows, like the swiglu and attention sites' inputs.
-        x2 = x.reshape(-1, k).to(kernel_dtype).contiguous()
-        out = self.kernel(
-            x2,
-            _like(self.weight, x2),
-            _like(self.bias, x2),
-            _like(self.linear_weight, x2),
-            LAYER_NORM_EPS,
-        )
-        out = out.reshape(*lead, out.shape[-1]).to(model_dtype)
-        if self.linear_bias is not None:
-            out = out + _like(self.linear_bias, out)
-        return out
+        rows = x.reshape(-1, k)
+        gemm_dtype = _autocast_dtype(x)
+        weight = self.linear_weight
+        if gemm_dtype is not None:
+            rows, weight = rows.float(), weight.to(gemm_dtype)
+        with _no_autocast(x):
+            out = self.kernel(rows, self.WEIGHT, self.BIAS, weight, LAYER_NORM_EPS)
+        return out.reshape(*lead, out.shape[-1])
 
 
 class _PatchedAttend(nn.Module):
-    """MegaFold's ``Attend`` core, rerouted through ``evoattention``.
+    """MegaFold's ``Attend`` core, rerouted through ``megafold_evoattention``.
 
     ``Attend`` is the pure attention mathematics after projection, which is
-    exactly the boundary the ``evoattention`` declaration draws, and it is also
-    where MegaFold puts its own Triton EvoAttention. Shapes differ by
-    convention: ``Attend`` runs ``[b, h, n, d]`` with an additive
-    ``[b, h, n, n]`` bias and a boolean key mask, the declaration runs
-    ``[B, S, N, H, D]`` with a float32 additive ``res_mask`` and ``pair_bias``;
-    the MSA axis ``S`` is 1 here, as it is for pair-bias attention over the
-    single representation.
+    exactly the boundary the declaration draws, and it is also where MegaFold
+    puts its own Triton EvoAttention. ``Attend`` runs ``[b, h, n, d]`` views of
+    a ``[b, n, h, d]`` projection; the declaration takes the same memory viewed
+    as ``[B, S, N, H, D]`` (no copy), MegaFold's boolean key mask as
+    ``[B, S, N]``, and the bias as one ``[B, 1, H, N, N]`` tensor shared across
+    ``S`` -- all in the dtype MegaFold computes in there (bfloat16 under
+    autocast, float32 where it is off). The MSA axis ``S`` is 1 for pair-bias
+    attention over the single representation.
 
     Configurations the declaration does not model are refused rather than
     silently computed differently: a custom scale, softclamp, attention
@@ -494,53 +546,32 @@ class _PatchedAttend(nn.Module):
         # copies of the bias.
         B = batch_size if batch_size and batch % batch_size == 0 else batch
         S = batch // B
-        # The declaration takes float16 or bfloat16 only, and the site is also
-        # reached in float32 (the diffusion module's attention, the trunk under
-        # the eager tree). MegaFold's own Triton path casts q, k, v to bfloat16
-        # before its kernel and the output back to the caller's dtype; the site
-        # does the same, so the kernel meets its declared contract and the
-        # model sees the dtype it asked for. The casts are inside the patched
-        # boundary and so inside every patched provider's timed step,
-        # identity control included.
-        model_dtype = q.dtype
-        kernel_dtype = model_dtype if model_dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
+        dtype = q.dtype
+        if attn_bias is not None and attn_bias.dtype != dtype:
+            raise ValueError(f"attention bias in {attn_bias.dtype} with q in {dtype}: "
+                             "MegaFold adds them in one dtype")
 
-        def to_declared(t):  # [(B S), h, n, d] -> [B, S, N, H, D]
-            return t.view(B, S, heads, n, d).permute(0, 1, 3, 2, 4).to(kernel_dtype).contiguous()
+        def declared(t):  # [(B S), h, n, d] view -> [B, S, N, H, D] view of the same memory
+            return t.permute(0, 2, 1, 3).unflatten(0, (B, S))
 
         if attn_bias is None:
-            pair_bias = q.new_zeros((B, 1, heads, n, n), dtype=torch.float32)
+            pair_bias = q.new_zeros((B, 1, heads, n, n))
         else:
             # The bias is one ``[b, h, n, n]`` tensor per batch element; the
-            # declaration broadcasts it over ``S`` (``[B, 1, H, N, N]``) and the
-            # kernel reduces ``d_pair_bias`` over ``S`` itself. Triangle
-            # attention arrives with that one bias ``repeat``-ed over its rows,
-            # so the site takes the first row's copy rather than materialising
-            # all ``S`` of them (906 MB per call at 384 residues) and leaving
-            # autograd an ``S``-way reduction. ``contiguous`` because
-            # ``expand``/slicing leave views and ``.float()`` on float32 is a
-            # no-op; the pair was declared, verified and evolved on contiguous
-            # inputs.
-            pair_bias = (
-                attn_bias.expand(batch, heads, n, n)
-                .reshape(B, S, heads, n, n)[:, :1]
-                .float()
-                .contiguous()
-            )
-        if mask is None:
-            res_mask = q.new_zeros((B, S, 1, 1, n), dtype=torch.float32)
-        else:
-            res_mask = torch.where(
-                mask.view(B, S, 1, 1, n),
-                q.new_zeros((), dtype=torch.float32),
-                q.new_full((), -1e9, dtype=torch.float32),
-            ).contiguous()
-
-        out = self.kernel(
-            to_declared(q), to_declared(k), to_declared(v), res_mask, pair_bias
-        )
+            # declaration broadcasts it over ``S`` and the kernel reduces
+            # ``d_pair_bias`` over ``S`` itself. Triangle attention arrives with
+            # that one bias ``repeat``-ed over its rows, so the site passes the
+            # first row (a view): autograd's gradient into that row is the
+            # kernel's S-sum, which is what the repeat's backward would form.
+            pair_bias = attn_bias.expand(batch, heads, n, n).reshape(B, S, heads, n, n)[:, :1]
+        # MegaFold broadcasts one key mask over the rows (stride 0); the kernel
+        # gets it materialized, a few hundred KB, so no argument overlaps itself.
+        key_mask = (q.new_ones((B, S, n), dtype=torch.bool) if mask is None
+                    else mask.view(B, S, n).contiguous())
+        with _no_autocast(q):
+            out = self.kernel(declared(q), declared(k), declared(v), key_mask, pair_bias)
         # [B, S, N, H, D] -> [(B S), h, n, d], the layout the caller folded.
-        return out.permute(0, 1, 3, 2, 4).reshape(batch, heads, n, d).to(model_dtype)
+        return out.flatten(0, 1).permute(0, 2, 1, 3)
 
 
 # -- replacement modules: the eager reference --------------------------------
@@ -549,14 +580,17 @@ class _PatchedAttend(nn.Module):
 class _EagerLayernormLinear(nn.Module):
     """``LayernormLinear`` as the LayerNorm and Linear it fuses.
 
-    This is MegaFold's own fallback, which it takes whenever its autotuner has
-    no configuration for a shape: ``F.linear(F.layer_norm(X, (K,), WEIGHT,
-    BIAS), linear_weight.T, linear_bias)``. Written functionally rather than as
-    ``nn.LayerNorm`` followed by ``nn.Linear`` for one reason: ``nn.Linear``
-    wants its weight as ``[N, K]`` and MegaFold stores ``[K, N]``, so building
-    one would mean wrapping a transposed *view* in a new ``nn.Parameter`` and
-    the gradients would accumulate on that new leaf instead of the model's.
-    Holding the original parameter objects is the whole point of surgery.
+    This is MegaFold's own fallback, spelled exactly as MegaFold spells it and
+    taken whenever its autotuner has no configuration for a shape:
+    ``F.linear(F.layer_norm(X, (K,), WEIGHT, BIAS), linear_weight.T,
+    linear_bias)``. The spelling matters under autocast, where ``F.linear``
+    casts its input, weight and bias to bfloat16 and adds the bias inside the
+    GEMM. Written functionally rather than as ``nn.LayerNorm`` followed by
+    ``nn.Linear`` for one reason: ``nn.Linear`` wants its weight as ``[N, K]``
+    and MegaFold stores ``[K, N]``, so building one would mean wrapping a
+    transposed *view* in a new ``nn.Parameter`` and the gradients would
+    accumulate on that new leaf instead of the model's. Holding the original
+    parameter objects is the whole point of surgery.
 
     The upper-case attribute names are MegaFold's, deliberately. This class has
     to be a *drop-in* for the module it replaces, because the candidate patches
@@ -577,13 +611,8 @@ class _EagerLayernormLinear(nn.Module):
         self.has_linear_bias = original.has_linear_bias
 
     def forward(self, x):
-        normalized = F.layer_norm(
-            x, (self.K,), self.WEIGHT, self.BIAS, LAYER_NORM_EPS
-        )
-        out = normalized @ self.linear_weight
-        if self.linear_bias is not None:
-            out = out + self.linear_bias
-        return out
+        normalized = F.layer_norm(x, (self.K,), self.WEIGHT, self.BIAS, LAYER_NORM_EPS)
+        return F.linear(normalized, self.linear_weight.T, self.linear_bias)
 
 
 class _EagerSwiGLU(nn.Module):
@@ -650,8 +679,18 @@ def _eager_surgery(model_module) -> tuple[ModulePatch, ...]:
     )
 
 
-def _module_patches() -> tuple[ModulePatch, ...]:
-    """The MegaFold site table, bound to the real module classes.
+#: Top-level modules of ``model`` that hold no site although their modules match
+#: one: no gradient reaches them in this workload's step, so a call there could
+#: not show a backward fault. The template embedder's output is multiplied by
+#: ``has_templates``, False for every structure MegaFold's training featurizes
+#: (no kalign); with one recycling pass the recycling projections are applied to
+#: zeros and multiplied by 0.0. They run their eager spelling in every provider.
+NOT_SITES = ("template_embedder", "recycle_single", "recycle_pairwise")
+
+
+def _module_patches(model: nn.Module) -> tuple[ModulePatch, ...]:
+    """The MegaFold site table, bound to the real module classes and to ``model``'s
+    tree (whose :data:`NOT_SITES` modules no matcher takes).
 
     Every matcher accepts both spellings of a fused module: MegaFold's own and
     the eager replacement this workload installs. That is what lets the
@@ -660,6 +699,7 @@ def _module_patches() -> tuple[ModulePatch, ...]:
     matcher that recognized only ``FusedTransition`` would find nothing in an
     eager tree and ``patch_modules`` would refuse the provider outright.
     """
+    outside = {id(m) for path, m in model.named_modules() if path.split(".", 1)[0] in NOT_SITES}
     model_module = _require_model_module()
     AttentionPairBias = model_module.AttentionPairBias
     LayernormLinear = model_module.LayernormLinear
@@ -693,34 +733,62 @@ def _module_patches() -> tuple[ModulePatch, ...]:
 
     def fusable_layernorm_linear(module: nn.Module) -> bool:
         # Both spellings answer to the same attribute names, so one predicate
-        # covers MegaFold's tree and the eager one alike.
+        # covers MegaFold's tree and the eager one alike. The contract has a
+        # LayerNorm bias and no linear bias.
         return (
             type(module) in (LayernormLinear, _EagerLayernormLinear)
             and module.has_layernorm_bias
+            and module.linear_bias is None
         )
 
     def transition(module: nn.Module) -> bool:
         return type(module) in (FusedTransition, _EagerTransition)
 
+    def inside(match: Callable[[nn.Module], bool]) -> Callable[[nn.Module], bool]:
+        return lambda m: id(m) not in outside and match(m)
+
     return (
-        ModulePatch("layer_norm", pre_layer_norm, swap_inner_norm),
+        ModulePatch("layer_norm", inside(pre_layer_norm), swap_inner_norm),
         ModulePatch(
             "layernorm_linear",
-            fusable_layernorm_linear,
+            inside(fusable_layernorm_linear),
             _PatchedLayernormLinear,
         ),
-        ModulePatch("transition", transition, _PatchedSwiGLUTransition),
+        ModulePatch("transition", inside(transition), _PatchedSwiGLUTransition),
         ModulePatch(
             "pair_bias_attention",
-            lambda m: type(m) is AttentionPairBias and m.window_size is None,
+            inside(lambda m: type(m) is AttentionPairBias and m.window_size is None),
             swap_inner_attend,
         ),
         ModulePatch(
             "triangle_attention",
-            lambda m: type(m) is TriangleAttention,
+            inside(lambda m: type(m) is TriangleAttention),
             swap_inner_attend,
         ),
     )
+
+
+def _deterministic_distogram_loss(loss_module: nn.Module) -> None:
+    """``MegaFoldLoss.calculate_distogram_loss``, its mean taken as one sum over the count.
+
+    MegaFold's ``F.cross_entropy(logits, labels, ignore_index=...)`` reduces through
+    ``nll_loss2d``'s atomic adds, the one op in the training step PyTorch's
+    deterministic mode refuses -- and the verification settings run in that mode.
+    The per-pixel losses are the same call with ``reduction="none"``; their sum
+    over the number of counted pixels is the mean ``reduction="mean"`` takes, as
+    one deterministic reduction, and every per-pixel gradient is the same.
+    """
+    from megafold.utils.model_utils import to_pairwise_mask
+
+    ignore = loss_module.ignore_index
+
+    def calculate_distogram_loss(distogram_logits, distogram_labels, atom_mask, pairwise_mask):
+        mask = to_pairwise_mask(atom_mask) if loss_module.distogram_atom_resolution else pairwise_mask
+        labels = torch.where(mask, distogram_labels, ignore)
+        losses = F.cross_entropy(distogram_logits, labels, ignore_index=ignore, reduction="none")
+        return losses.sum() / (labels != ignore).sum()
+
+    loss_module.calculate_distogram_loss = calculate_distogram_loss
 
 
 def _apply_surgery(model: nn.Module, patches: tuple[ModulePatch, ...]) -> int:
@@ -754,9 +822,9 @@ class MegaFoldWorkload:
     swapped rather than what it meant to.
 
     Everything this workload pins that MegaFold would otherwise vary -- the
-    recycling count, whether the confidence head is called, the attention
-    implementation, the checkpointing flags -- is a constructor argument and
-    appears in :meth:`describe`. Nothing is changed silently.
+    structure, the recycling count, whether the confidence head is called, the
+    attention implementation, the checkpointing flags -- is a constructor
+    argument and appears in :meth:`describe`. Nothing is changed silently.
     """
 
     unit_name = "residues"
@@ -776,6 +844,9 @@ class MegaFoldWorkload:
         num_recycling_steps: int = NUM_RECYCLING_STEPS,
         diffusion_num_augmentations: int = DIFFUSION_NUM_AUGMENTATIONS,
         include_confidence_head: bool = False,
+        sample: str | None = None,
+        pool: str | None = None,
+        init_checkpoint: str | None = None,
     ):
         if use_optimized_evo not in (None, "triton", "deepspeed"):
             raise ValueError(
@@ -794,8 +865,20 @@ class MegaFoldWorkload:
         self.diffusion_num_augmentations = diffusion_num_augmentations
         self.diffusion_chunk_size = DIFFUSION_CHUNK_SIZE
         self.include_confidence_head = include_confidence_head
-        self.name = f"{config.name}[batch={batch},residues={residues}]"
-        self._loss_seed = seed
+        #: A frozen state loaded over the initialization (the verification's warm
+        #: start: at the initialization MegaFold's zero-initialized output layers
+        #: keep every gradient from the MSA module, the diffusion module and the
+        #: input embedder). Its SHA-256 and recipe are part of ``describe()``.
+        self.init_checkpoint = init_checkpoint
+        if batch != 1:
+            raise ValueError("MegaFold trains at batch 1, which is all the frozen pool serves")
+        from evograd.benchmark.topdown.megafold import data
+
+        self.sample = sample or data.SAMPLE
+        self.pool = pool or str(data.pool_dir())
+        self.name = f"{config.name}[{self.sample},residues={residues}]"
+        self._features = None
+        self._site_calls = None
 
     @property
     def checkpoint_flags(self) -> dict[str, bool]:
@@ -846,7 +929,10 @@ class MegaFoldWorkload:
         model_module = _require_model_module()
         _prepare_single_process_run()
 
-        mode = provider if provider in BUILD_MODES else BUILD_EAGER
+        if any(source.origin == WHOLE_MODEL_COMPILE_ORIGIN for source in kernels.sources):
+            mode = BUILD_COMPILE
+        else:
+            mode = provider if provider in BUILD_MODES else BUILD_EAGER
         megafold_mode = mode == BUILD_MEGAFOLD
 
         # compile_clean rebinds MegaFold module globals and flips dynamo config
@@ -876,7 +962,6 @@ class MegaFoldWorkload:
             # configuration, because those are what the declared benchmark dims
             # are derived from; a case could otherwise claim an architecture
             # the model does not have.
-            dim_atom_inputs=config.dim_atom_inputs,
             dim_atompair_inputs=config.dim_atompair_inputs,
             dim_template_feats=config.dim_template_feats,
             atoms_per_window=config.atoms_per_window,
@@ -907,7 +992,10 @@ class MegaFoldWorkload:
             diffusion_num_augmentations=self.diffusion_num_augmentations,
             diffusion_chunk_size=self.diffusion_chunk_size,
             **self.checkpoint_flags,
-        ).to(device=self.device, dtype=self.dtype)
+        )
+        if self.init_checkpoint:
+            model.load_state_dict(self.initial_state()[0], strict=True)
+        model = model.to(device=self.device, dtype=self.dtype)
 
         # Attention-weight dropout off, for EVERY provider. MegaFold applies
         # its attention dropout post-aggregation precisely so a fused kernel
@@ -924,11 +1012,12 @@ class MegaFoldWorkload:
 
         if not megafold_mode:
             _apply_surgery(model, _eager_surgery(model_module))
+            _deterministic_distogram_loss(model.loss)
 
         # patch_modules touches only patched sites, records what it replaced,
         # and raises on a requested site that matches nothing -- the case where
         # MegaFold's class names have moved out from under the matchers.
-        provenance = patch_modules(model, _module_patches(), kernels)
+        provenance = patch_modules(model, _module_patches(model), kernels)
 
         if mode == BUILD_COMPILE_CLEAN:
             scaffolding.install()
@@ -967,49 +1056,151 @@ class MegaFoldWorkload:
         )
         return model, provenance
 
-    def batch_for(self, *, seed: int) -> Any:
-        _require_model_package()
-        batch = _synthetic_batch(
-            self.config, batch=self.batch, residues=self.residues, seed=seed
-        )
-        self._loss_seed = seed
-        moved = {
-            key: value.to(self.device) if torch.is_tensor(value) else value
-            for key, value in batch.dict().items()
-        }
-        return moved
+    def initial_state(self):
+        """``(state_dict, identity)`` of ``init_checkpoint``, read once."""
+        if getattr(self, "_initial", None) is None:
+            from evograd.evaluation.tier3.workloads.common import init_state
 
-    def loss(self, model: nn.Module, batch: Any) -> torch.Tensor:
+            self._initial = init_state.load(self.init_checkpoint, "megafold")
+        return self._initial
+
+    def expected_site_calls(self) -> dict[str, int]:
+        """Each site kernel's calls in one forward and backward of the pinned step:
+        the training calls, their activation-checkpoint recomputes and the
+        confidence head's no-grad mini-rollout. The step's control flow is pinned
+        (one structure, one recycling pass, a fixed rollout), so the calls are
+        counted once, on the eager tree with every site patched by a counting
+        kernel, and kept; the caller's random state is left as it was."""
+        if self._site_calls is None:
+            from evograd.benchmark import get_task
+            from evograd.opdecl.oracle import resolve_runtime_forward
+
+            registry = self.site_registry
+            counts = dict.fromkeys(registry.names, 0)
+
+            def counting(site):
+                forward = resolve_runtime_forward(get_task(registry.require(site).op))
+
+                def kernel(*args, **kwargs):
+                    counts[site] += 1
+                    return forward(*args, **kwargs)
+
+                return kernel
+
+            kernels = KernelSet(registry=registry, patched=tuple(registry.names),
+                                overrides={site: counting(site) for site in registry.names})
+            state = random.getstate()
+            with torch.random.fork_rng():
+                try:
+                    model = self.build(kernels).train()
+                    self.loss(model, self.batch_for(seed=0)).backward()
+                finally:
+                    random.setstate(state)
+            del model
+            torch.cuda.empty_cache()
+            self._site_calls = counts
+        return dict(self._site_calls)
+
+    def _sample(self):
+        """The pinned structure, loaded once (hash checked) and checked against the case."""
+        if self._features is None:
+            _require_model_package()
+            from evograd.benchmark.topdown.megafold import data
+            from megafold.inputs import collate_inputs_to_batched_atom_input
+
+            atom_input, entry = data.load_sample(self.sample, self.pool)
+            if entry["tokens"] != self.residues:
+                raise ValueError(f"{self.sample} has {entry['tokens']} tokens; the case asks for "
+                                 f"{self.residues} residues")
+            batch = collate_inputs_to_batched_atom_input(
+                [atom_input], atoms_per_window=self.config.atoms_per_window)
+            self._features = (batch, entry, data.pool_manifest(self.pool))
+        return self._features
+
+    def batch_for(self, *, seed: int) -> Any:
+        """The structure on the device, carrying the seed its step's randomness is drawn from.
+
+        The seed is a (host) tensor of the batch: batches of one structure differ
+        by it alone, and a batch's content -- what Gate 2 identifies a sample by --
+        must tell them apart.
+        """
+        batch, _entry, _manifest = self._sample()
+        return {"seed": torch.tensor(seed, dtype=torch.int64), **batch.to(self.device).dict()}
+
+    def loss(self, model: nn.Module, batch: Any, *,
+             call_confidence_head: bool | None = None) -> torch.Tensor:
         """One forward to MegaFold's own combined loss.
 
-        The reseed is what makes every provider train on the same randomness:
-        the diffusion module samples noise, the pair stack samples structured
-        dropout, and the recycling count is drawn with ``random.randint`` in
-        training mode. It is identical work for every provider and inside the
-        timed region for all of them alike.
+        The reseed from the batch's seed is what makes every provider train on
+        the same randomness: the diffusion module samples noise and
+        augmentations and the pair stack samples structured dropout. It is
+        identical work for every provider and inside the timed region for all
+        of them alike. The seed is the batch's, not the workload's, so a batch
+        means the same step wherever and whenever it is used.
 
         ``num_recycling_steps`` is passed rather than left to the forward's
-        default so the pin is visible here and in ``describe``. MegaFold reads
-        it as the upper end of that draw, so what actually runs is
-        ``randint(1, num_recycling_steps)`` under the reseeded stream: pinned
-        across providers, not fixed to the number itself.
+        default so the pin is visible here and in ``describe``: MegaFold draws
+        ``randint(1, num_recycling_steps)`` in training mode, which is 1.
 
         ``call_confidence_head`` is the trainer's own switch, which it drives
         from ``steps % confidence_head_interval == 0`` (every tenth step in the
-        yaml). Pinning it means every timed step here is the same kind of step.
+        yaml). Pinning it (``include_confidence_head``) means every step here is
+        the same kind of step; the argument overrides the pin for one call, as
+        a training loop that follows the trainer's schedule does. The head's
+        forward runs either way; called, it also gets its loss (a diffusion
+        mini-rollout under ``no_grad`` makes its labels), and without that no
+        gradient reaches it.
 
         ``dtype`` is how MegaFold's trainer requests mixed precision: the model
         opens its own autocast around the whole forward using the dtype it is
         handed.
         """
-        torch.manual_seed(self._loss_seed)
-        random.seed(self._loss_seed)
+        seed = int(batch["seed"])
+        torch.manual_seed(seed)
+        random.seed(seed)
+        inputs = {key: value.clone() if key in WRITTEN_INPUTS and torch.is_tensor(value) else value
+                  for key, value in batch.items() if key != "seed"}
         return model(
-            **batch,
+            **inputs,
             num_recycling_steps=self.num_recycling_steps,
-            call_confidence_head=self.include_confidence_head,
+            call_confidence_head=(self.include_confidence_head if call_confidence_head is None
+                                  else call_confidence_head),
             dtype=_trainer_autocast_dtype(),
         )
+
+    #: What :meth:`primary_output` returns beside the loss.
+    primary_output_name = "distogram_logits"
+    objective_definition = ("MegaFold's own combined training loss (4 x diffusion + 0.03 x distogram "
+                            "+ 1e-4 x confidence, megafold_1x1 weights) of one forward at batch 1, one "
+                            "recycling pass, confidence head called or not as the workload pins it; "
+                            "backward of that scalar. Primary output: the distogram head's logits.")
+
+    def primary_output(self, model: nn.Module, batch: Any) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(loss, distogram logits)``: the head's output, read by a hook on it."""
+        seen = []
+        head = getattr(model, "_orig_mod", model).distogram_head
+        handle = head.register_forward_hook(lambda _m, _a, out: seen.append(out))
+        try:
+            loss = self.loss(model, batch)
+        finally:
+            handle.remove()
+        if len(seen) != 1:
+            raise RuntimeError(f"the distogram head ran {len(seen)} times in one step")
+        return loss, seen[0]
+
+    def data_identity(self) -> dict[str, Any]:
+        from evograd.benchmark.topdown.megafold import data
+
+        _batch, entry, manifest = self._sample()
+        return {"pool": self.pool, "pool_manifest_sha256": data.sha_file(Path(self.pool) / data.POOL_MANIFEST),
+                "sample": self.sample, "sample_sha256": entry["sha256"],
+                "megafold_commit": manifest["megafold_commit"], "rule": manifest["rule"]}
+
+    def data_recipe(self) -> dict[str, Any]:
+        _batch, entry, manifest = self._sample()
+        return {"sample": self.sample, "tokens": entry["tokens"], "atoms": entry["atoms"],
+                "msa_rows": entry["msa_rows"], "crop": manifest["crop"], "seed": manifest["seed"],
+                "batch": 1, "steps_differ_by": "seed (dropout, diffusion noise, augmentations)"}
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -1027,11 +1218,11 @@ class MegaFoldWorkload:
             "diffusion_num_augmentations": self.diffusion_num_augmentations,
             "diffusion_chunk_size": self.diffusion_chunk_size,
             "include_confidence_head": self.include_confidence_head,
-            # The one place the registered configuration and the yaml disagree.
-            # 77 is what this repository's AlphaFold3 configuration declares and
-            # what every benchmark dim derives from; the yaml says 3. Reported
-            # so a run cannot be read as MegaFold's own.
-            "dim_atom_inputs": self.config.dim_atom_inputs,
+            "weights": "warm_start" if self.init_checkpoint else "random",
+            **({"init_checkpoint": self.initial_state()[1]} if self.init_checkpoint else {}),
+            "sample": self.sample,
+            "pool": self.pool,
+            "dim_atom_inputs": YAML_MODEL_KWARGS["dim_atom_inputs"],
             **self.checkpoint_flags,
         }
 
@@ -1044,9 +1235,11 @@ YAML_PAIRFORMER_DROPOUT_ROW_PROB = 0.25
 #: Read from the file, not remembered. What is deliberately *not* here: the
 #: widths and depths the registered AlphaFold3 configuration owns, the
 #: ``checkpoint_*`` flags and ``use_optimized_evo`` (constructor arguments, so
-#: a run can vary them and say that it did), and the yaml's own
-#: ``dim_atom_inputs: 3``, which the configuration puts at 77.
+#: a run can vary them and say that it did). ``dim_atom_inputs`` is the yaml's
+#: 3, the width MegaFold's featurizer emits (formal charge, implicit and
+#: explicit valence), not the registered configuration's 77.
 YAML_MODEL_KWARGS = {
+    "dim_atom_inputs": 3,
     "dim_template_model": 64,
     "num_atom_embeds": 47,
     "num_atompair_embeds": 11,
@@ -1078,202 +1271,6 @@ YAML_MODEL_KWARGS = {
 }
 
 
-#: MSA depth and template count in a synthetic example. MegaFold's own mock
-#: uses these; they are not model dimensions, just how much of each the example
-#: carries.
-MOCK_MSA_DEPTH = 7
-MOCK_TEMPLATE_COUNT = 2
-
-
-def _synthetic_batch(config: AlphaFoldConfig, *, batch: int, residues: int, seed: int):
-    """Seeded synthetic training inputs at a fixed crop length.
-
-    The tier-3 protocol compares providers on identical data, so every example
-    is generated under a caller-supplied seed and the crop is exactly
-    ``residues`` rather than sampled.
-    """
-    from megafold.inputs import collate_inputs_to_batched_atom_input
-
-    examples = []
-    for index in range(batch):
-        random.seed(seed + 7919 * index)
-        torch.manual_seed(seed + 7919 * index)
-        examples.append(_mock_example(config, residues=residues))
-    return collate_inputs_to_batched_atom_input(
-        examples, atoms_per_window=config.atoms_per_window
-    )
-
-
-def _mock_example(config: AlphaFoldConfig, *, residues: int):
-    """One synthetic training example, ported from MegaFold's own mock.
-
-    This is ``megafold.mocks.MockAtomDataset.__getitem__``, feature for feature
-    and in its order, with three changes. It is a port rather than a call for a
-    blunt reason: **the upstream mock does not run.**
-    ``megafold/mocks.py:82`` reads::
-
-        unique_asym_id = list(dict.fromkeys(asym_id.unique))
-
-    ``asym_id.unique`` is the bound method, never called, and
-    ``dict.fromkeys`` raises ``TypeError: 'method' object is not iterable`` on
-    every single item. Fixed here by calling it. There is a second one behind
-    it: the mock then passes ``distance_labels=`` to ``AtomInput``, which has
-    no such field, so even with the first fixed it raises again. The distogram
-    labels are derived from ``atom_pos`` inside the model and no such input
-    exists, so that argument is simply dropped here. Both are worth sending
-    upstream, at which point this port can go back to being a call.
-
-    The other two changes are the benchmark's:
-
-    * the crop is exactly ``residues`` rather than ``randrange(1, max_seq_len)``,
-      because a benchmark case declares its shape;
-    * every token is a protein residue rather than a random draw over all five
-      molecule types, because a random mixture is incoherent and MegaFold
-      rejects it outright (see the comment at ``is_molecule_types``);
-    * ``atom_ids``, ``atompair_ids`` and ``token_constraints`` are supplied,
-      which the mock leaves unset and which MegaFold's own training config makes
-      mandatory -- it sets ``num_atom_embeds``, ``num_atompair_embeds`` and
-      three ``constraints``, and the trunk asserts on each. Supplying them is
-      what keeps that config faithful; dropping the three settings would have
-      been the larger deviation. The identifiers are drawn uniformly over their
-      embedding tables. The constraint channel is filled with
-      ``CONSTRAINTS_MASK_VALUE``, which is not a shortcut: it is what MegaFold
-      writes for an example carrying no constraints, its own config applies real
-      ones to a tenth of examples, so the masked path is the common one and the
-      learnable mask embeddings still take part in the step.
-
-    Widths come from the registered configuration wherever it has them, so the
-    example cannot describe a model the constructor did not build.
-    """
-    from megafold.inputs import (
-        ADDITIONAL_MOLECULE_FEATS,
-        CONSTRAINT_DIMS,
-        CONSTRAINTS_MASK_VALUE,
-        DEFAULT_NUM_MOLECULE_MODS,
-        IS_MOLECULE_TYPES,
-        IS_PROTEIN_INDEX,
-        NUM_MSA_ONE_HOT,
-        AtomInput,
-    )
-    from megafold.utils.model_utils import exclusive_cumsum
-
-    seq_len = residues
-    atom_seq_len = config.atoms_per_window * seq_len
-
-    atom_inputs = torch.randn(atom_seq_len, config.dim_atom_inputs)
-    atompair_inputs = torch.randn(
-        atom_seq_len, atom_seq_len, config.dim_atompair_inputs
-    )
-
-    molecule_atom_lens = torch.randint(1, config.atoms_per_window, (seq_len,))
-    atom_offsets = exclusive_cumsum(molecule_atom_lens)
-
-    additional_molecule_feats = torch.randint(0, 2, (seq_len, ADDITIONAL_MOLECULE_FEATS))
-    additional_token_feats = torch.randn(seq_len, 33)
-
-    # Every token is a protein residue, where the mock draws all five molecule
-    # types at random. A random mixture is not merely unrealistic, it is
-    # incoherent, and MegaFold rejects it: random ligand tokens produce many
-    # distinct ligand residues while `num_ligands` defaults to one per example,
-    # so the confidence head's affinity pooling does an `index_add_` of index k
-    # into a destination of size 1 and the whole step dies on a device-side
-    # assert. A protein crop is also what this benchmark measures -- MegaFold's
-    # residue sweep is protein crop lengths -- so the ligand affinity head and
-    # the nucleotide loss weighting do not fire, and the declaration says so.
-    is_molecule_types = torch.zeros(seq_len, IS_MOLECULE_TYPES, dtype=torch.bool)
-    is_molecule_types[:, IS_PROTEIN_INDEX] = True
-
-    # the molecule-atom length mappings must match the atom sequence length
-    if molecule_atom_lens.sum() < atom_seq_len:
-        molecule_atom_lens[-1] = atom_seq_len - molecule_atom_lens[:-1].sum()
-
-    asym_id = additional_molecule_feats[:, 2]
-
-    is_molecule_mod = torch.rand((seq_len, DEFAULT_NUM_MOLECULE_MODS)) < 0.05
-
-    molecule_ids = torch.randint(0, 32, (seq_len,))
-    token_bonds = torch.randint(0, 2, (seq_len, seq_len)).bool()
-
-    templates = torch.randn(
-        MOCK_TEMPLATE_COUNT, seq_len, seq_len, config.dim_template_feats
-    )
-    template_mask = torch.ones((MOCK_TEMPLATE_COUNT,)).bool()
-
-    msa = torch.randn(MOCK_MSA_DEPTH, seq_len, NUM_MSA_ONE_HOT)
-    # Upstream leaves the MSA mask off half the time on a coin flip. Pinned on
-    # here: a benchmark case that silently measured a different masking path
-    # depending on its seed would not be one shape.
-    msa_mask = torch.ones((MOCK_MSA_DEPTH,)).bool()
-    additional_msa_feats = torch.randn(MOCK_MSA_DEPTH, seq_len, 2)
-
-    # required for training, omitted on inference
-    atom_pos = torch.randn(atom_seq_len, 3)
-    molecule_atom_indices = molecule_atom_lens - 1
-    distogram_atom_indices = molecule_atom_lens - 1
-
-    molecule_atom_indices += atom_offsets
-    distogram_atom_indices += atom_offsets
-
-    # Upstream also draws `distance_labels` here and passes it to AtomInput,
-    # which has no such field. The distogram labels come from `atom_pos`
-    # inside the model, so nothing is lost by not drawing them.
-    resolved_labels = torch.randint(0, 2, (atom_seq_len,))
-
-    majority_asym_id = asym_id.mode().values.item()
-    chains = torch.tensor([majority_asym_id, -1]).long()
-
-    # the three features the mock omits and MegaFold's config requires
-    atom_ids = torch.randint(0, YAML_MODEL_KWARGS["num_atom_embeds"], (atom_seq_len,))
-    atompair_ids = torch.randint(
-        0, YAML_MODEL_KWARGS["num_atompair_embeds"], (atom_seq_len, atom_seq_len)
-    )
-    constraint_width = sum(
-        CONSTRAINT_DIMS[name] for name in YAML_MODEL_KWARGS["constraints"]
-    )
-    token_constraints = torch.full(
-        (seq_len, seq_len, constraint_width), float(CONSTRAINTS_MASK_VALUE)
-    )
-
-    features = {
-        "atom_inputs": atom_inputs,
-        "atompair_inputs": atompair_inputs,
-        "molecule_ids": molecule_ids,
-        "token_bonds": token_bonds,
-        "molecule_atom_lens": molecule_atom_lens,
-        "additional_molecule_feats": additional_molecule_feats,
-        "additional_msa_feats": additional_msa_feats,
-        "additional_token_feats": additional_token_feats,
-        "is_molecule_types": is_molecule_types,
-        "is_molecule_mod": is_molecule_mod,
-        "templates": templates,
-        "template_mask": template_mask,
-        "msa": msa,
-        "msa_mask": msa_mask,
-        "atom_pos": atom_pos,
-        "molecule_atom_indices": molecule_atom_indices,
-        "distogram_atom_indices": distogram_atom_indices,
-        "resolved_labels": resolved_labels,
-        "chains": chains,
-        "atom_ids": atom_ids,
-        "atompair_ids": atompair_ids,
-        "token_constraints": token_constraints,
-    }
-    # Checked rather than trusted. This is a port of an unmaintained upstream
-    # function -- one that does not run, and whose own call to this constructor
-    # passes a field that was deleted -- so the thing most likely to break it
-    # next is AtomInput being renamed underneath it. A drift check here names
-    # the field; without it the failure is a TypeError an hour into a job.
-    known = {field.name for field in dataclasses.fields(AtomInput)}
-    unknown = sorted(set(features) - known)
-    if unknown:
-        raise TypeError(
-            f"the megafold synthetic example has drifted from AtomInput: "
-            f"{unknown} are no longer fields of it. Reconcile "
-            f"_mock_example against megafold/inputs.py:AtomInput."
-        )
-    return AtomInput(**features)
-
-
 def make_workload(
     case: Workload,
     *,
@@ -1292,7 +1289,7 @@ def make_workload(
 
     ``settings`` are :class:`MegaFoldWorkload`'s own knobs
     (``use_optimized_evo``, ``checkpointing``, ``num_recycling_steps``,
-    ``diffusion_num_augmentations``, ``include_confidence_head``), forwarded
+    ``diffusion_num_augmentations``, ``include_confidence_head``, ``init_checkpoint``), forwarded
     unchanged so the adapter can turn command-line flags into them without this
     function growing a branch per flag. An unknown one is a ``TypeError`` here,
     naming itself, rather than a stray keyword MegaFold's constructor swallows

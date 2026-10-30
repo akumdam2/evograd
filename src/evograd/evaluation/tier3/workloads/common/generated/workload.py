@@ -169,18 +169,9 @@ class GeneratedWorkload:
     def initial_state(self):
         """``(state_dict, identity)`` of ``init_checkpoint``, read once."""
         if getattr(self, "_initial", None) is None:
-            from pathlib import Path
+            from evograd.evaluation.tier3.workloads.common import init_state
 
-            path = Path(self.init_checkpoint)
-            data = torch.load(path, map_location="cpu", weights_only=True)
-            if data.get("schema") != "evograd-generated-init-state/1" or data.get("model") != self.spec.model:
-                raise ValueError(f"{path} is not an initial state of {self.spec.model}")
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                for block in iter(lambda: stream.read(1 << 20), b""):
-                    digest.update(block)
-            identity = {"sha256": digest.hexdigest(), "recipe": data.get("recipe")}
-            self._initial = (data["state_dict"], identity)
+            self._initial = init_state.load(self.init_checkpoint, self.spec.model)
         return self._initial
 
     def batch_for(self, *, seed):

@@ -32,10 +32,10 @@ from typing import Any
 
 from evograd.evaluation.tier3.workloads import Tier3Adapter
 
-#: The crop the benchmark measures when none is given. AlphaFold3's cost is
-#: quadratic in residues, so this is the smallest crop that still exercises the
-#: pair stack rather than a number chosen for speed.
-DEFAULT_RESIDUES = 128
+#: The crop the benchmark measures when none is given: the frozen structure's
+#: token count, MegaFold's own crop size. Another value needs a structure of
+#: that size in the pool.
+DEFAULT_RESIDUES = 384
 
 #: MegaFold holds its weights in float32 and gets mixed precision from autocast
 #: rather than from the parameter dtype, and the declared operator tolerances

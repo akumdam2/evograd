@@ -106,7 +106,8 @@ def _observed_bindings() -> tuple:
     from evograd.benchmark.topdown.qwen2_vl_2b.levels.level1.manifest import OBSERVED_BINDINGS as QWEN2_VL
     from evograd.benchmark.topdown.dit_s_2.levels.level1.manifest import OBSERVED_BINDINGS as DIT
     from evograd.benchmark.topdown.torchrec_dlrm.levels.level1.manifest import OBSERVED_BINDINGS as DLRM
-    return QWEN3_0_6B + LLAMA_3_2_1B + QWEN3_5_4B + OLMOE_1B_7B + CONVNEXT + QWEN2_VL + DIT + DLRM
+    from evograd.benchmark.topdown.megafold.levels.level1.manifest import OBSERVED_BINDINGS as MEGAFOLD
+    return QWEN3_0_6B + LLAMA_3_2_1B + QWEN3_5_4B + OLMOE_1B_7B + CONVNEXT + QWEN2_VL + DIT + DLRM + MEGAFOLD
 
 
 def _discover() -> dict[str, OpDecl]:
@@ -156,6 +157,7 @@ def _model_task_packages() -> tuple[str, ...]:
         "evograd.benchmark.topdown.llama3_2_1b.levels.level2",
         "evograd.benchmark.topdown.qwen3_5_4b.levels.level2",
         "evograd.benchmark.topdown.olmoe_1b_7b.levels.level2",
+        "evograd.benchmark.topdown.megafold.levels.level2",
     )
 
 

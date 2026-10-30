@@ -168,8 +168,23 @@ class Selection(unittest.TestCase):
         op = swiglu()
         with self.assertRaisesRegex(CorpusError, "records 0 calls"):
             tier2_payloads(self.no_303, op, case(3))
-        with self.assertRaisesRegex(CorpusError, "records 3 calls .* makes 4 per step"):
+        with self.assertRaisesRegex(CorpusError, "records 3 calls .* records 4 per step"):
             tier2_payloads(self.corpus, op, case(4))
+
+    def test_a_declared_subset_is_timed_as_recorded(self):
+        """A model that records a declared subset of a case's calls (MegaFold keeps
+        three of 48) is timed on exactly that subset, in call order; the step's
+        full count is not what the corpus is held to."""
+        from dataclasses import replace
+
+        from evograd.evaluation.protocol import tier2_payloads
+        from evograd.verification.payloads import CorpusError
+
+        subset = replace(case(48), recorded=3)
+        records = tier2_payloads(self.corpus, swiglu(), subset)
+        self.assertEqual([r["call"]["index_in_step"] for r in records], [1, 2, 10])
+        with self.assertRaisesRegex(CorpusError, "records 3 calls .* records 48 per step"):
+            tier2_payloads(self.corpus, swiglu(), case(48))
 
     def test_a_call_that_does_not_match_the_declaration_is_an_error(self):
         from dataclasses import replace

@@ -153,6 +153,10 @@ class TestDerivedNaming(unittest.TestCase):
                     "llama3_qkv_rope",
                     "llama3_residual_rmsnorm",
                     "llama3_swiglu_mlp",
+                    # MegaFold's mixed-precision LayerNorm+Linear and
+                    # attention: what its autocast trunk computes there.
+                    "megafold_evoattention",
+                    "megafold_layernorm_linear",
                     # OLMoE-1B-7B's four sites: the attention prefix with
                     # full-width q/k norms, the attention core, the routed
                     # experts (the router stays native) and the residual fusion.

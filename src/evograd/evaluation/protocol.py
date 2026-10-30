@@ -14,7 +14,8 @@ Every submission follows the same steps, whoever generated it:
    neither verified nor timed.
 1. **Verification** (:func:`evograd.verification.integrations.gates.verify_cases`): Gate 1 on the
    model's real training payloads and operator Gate 2 for every candidate, and
-   the single-site model Gate 2 and Gate 3 for every Level-2 candidate. A candidate
+   the single-site model Gate 2 and Gate 3 for every Level-2 candidate (Gate 3
+   where it applies to the model, ``Model.gate3_applies``). A candidate
    passing every gate that applies is *accepted*.
 2. **Tier 2** for every *executable* candidate, accepted or not: the
    deployed forward and autograd backward on every recorded call of the case
@@ -29,8 +30,8 @@ Every submission follows the same steps, whoever generated it:
    candidate alone at its model site, against eager.
 4. **Combination**: the accepted Level-2 candidates whose single-site speedup
    has a 95% interval above one (:data:`COMBINATION_RULE`), judged together by
-   model Gate 2 and Gate 3, then timed at Tier 3 against eager and the
-   whole-model ``torch.compile``.
+   model Gate 2 and Gate 3 (where it applies), then timed at Tier 3 against
+   eager and the whole-model ``torch.compile``.
 5. **Summary** (:func:`summarize`): per level, the speedup over the accepted
    configurations, coverage and the verification funnel; peak memory at
    Level 3.
@@ -71,7 +72,8 @@ TIER2_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
 #: and seed ``seed + k`` for its block order.
 TIER2_INPUTS = {"source": "real_training_payload", "split": "acceptance",
                 "order": ACCEPTANCE_ORDERS[0],
-                "calls": "every call of the case in that order's training step, in call order",
+                "calls": ("every call of the case the corpus records in that order's training step, "
+                           "in call order: all of them, or the subset the model declares"),
                 "speedup": "sum of the baseline's per-call medians over the candidate's"}
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0}
@@ -179,10 +181,10 @@ def tier2_payloads(corpus, op, case) -> list[dict[str, Any]]:
     records = sorted((r for r in corpus.payloads(case_id=case.case_id, split=TIER2_INPUTS["split"])
                       if (r.get("batch") or {}).get("order") == order),
                      key=lambda r: r["call"]["index_in_step"])
-    if not records or len(records) != case.frequency:
+    if not records or len(records) != case.calls_recorded:
         raise CorpusError(f"corpus {corpus.corpus_id} records {len(records)} calls of "
-                          f"{case.case_id!r} in the step of order {order}; the model makes "
-                          f"{case.frequency} per step and Tier 2 times recorded calls only")
+                          f"{case.case_id!r} in the step of order {order}; the model records "
+                          f"{case.calls_recorded} per step and Tier 2 times recorded calls only")
     problems = [p for r in records for p in check_payload_interface(op, r)]
     if problems:
         raise CorpusError("; ".join(problems[:5]))
@@ -339,11 +341,15 @@ def deployment_kernels(run: Run, case_ids: Sequence[str]):
     registry = run.workload.site_registry
     level2 = [(run.cases[cid], run.modules[cid]) for cid in case_ids]
     deployment = deployment_for(run.model, level2, run.workload)
-    modules = {site_for_case(registry, case): module for case, module in level2}
+    modules: dict[str, list] = {}
+    for case, module in level2:
+        modules.setdefault(site_for_case(registry, case), []).append(module)
     kernels = KernelSet(registry=registry)
     for site, call in deployment.sites.items():
+        # Several candidates at one site (one per configuration) are no one module.
+        module = modules[site][0] if len(modules[site]) == 1 else None
         kernels = patch(kernels, site, call, source=KernelSource(
-            site=site, op_name=registry.require(site).op, module=modules[site],
+            site=site, op_name=registry.require(site).op, module=module,
             origin="candidate:verified_deployment"))
     return kernels
 
@@ -510,7 +516,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                      "tier2_inputs": dict(TIER2_INPUTS),
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
-                              "frequency": c.frequency, "submitted": c.case_id in candidates}
+                              "frequency": c.frequency, "recorded": c.calls_recorded,
+                              "submitted": c.case_id in candidates}
                   for c in observed_cases(model)},
     }
     for case_id, failure in unloadable.items():

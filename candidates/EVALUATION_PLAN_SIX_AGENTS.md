@@ -4,7 +4,7 @@ Date: 2026-10-27. Protocol: `evograd-evaluation-v3`. For rules not repeated here
 
 ## Goal
 
-Six agents each search once on 58 cases from eight models, with a budget of 10 per case: OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them and run the searches. wzhan runs evograd and the frontend-only seed. During search every agent gets Gate 1 as its correctness feedback; Gate 2, Gate 3 and the timings are run by wzhan on the submissions afterwards, once the verification settings are final, in one unified evaluation. Only that evaluation is reported.
+Six agents each search once on 62 cases from nine models (the 58 below, then four MegaFold cases), with a budget of 10 per case: OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them and run the searches. wzhan runs evograd and the frontend-only seed. During search every agent gets Gate 1 as its correctness feedback; Gate 2, Gate 3 and the timings are run by wzhan on the submissions afterwards, once the verification settings are final, in one unified evaluation. Only that evaluation is reported.
 
 ## Cases
 
@@ -12,7 +12,9 @@ The 58 cases are:
 - every L2 case (28);
 - per model, one L1 case per L1 task, using the task's first configuration in the model's snapshot (30).
 
-Tasks whose operator is itself a granted vendor primitive are left out: `linear`, `linear_no_bias` and `causal_gqa_attention/causal_gqa_sdpa`. The case list is `/work/hdd/bcjw/wzhan/ADBench/cases.json`. MegaFold is not in this round.
+Tasks whose operator is itself a granted vendor primitive are left out: `linear`, `linear_no_bias` and `causal_gqa_attention/causal_gqa_sdpa`. The case list is `/work/hdd/bcjw/wzhan/ADBench/cases.json`.
+
+MegaFold joins afterwards with four cases: per task, the configuration the model calls most per training step, for L1 and L2 alike, because its layers run at many shapes (23 LayerNorm+Linear and 5 attention configurations). Its model-scope evaluation needs about 58 GB of GPU memory and runs on a GH200.
 
 | Model (`--model`) | L1 | L2 | Corpus under `/work/hdd/bcjw/wzhan/ADBench_payload/` | Gate 3 settings (provisional) |
 | --- | --- | --- | --- | --- |
@@ -24,6 +26,7 @@ Tasks whose operator is itself a granted vendor primitive are left out: `linear`
 | `dit_s_2` | 1 | 2 | `dit_s_2/dit_s_2_20261021` | 1000 updates, lr 1e-4 |
 | `torchrec_dlrm` | 1 | 1 | `torchrec_dlrm/torchrec_dlrm_20261021` | 1000 updates, lr 1e-4 |
 | `olmoe_1b_7b` | 4 | 4 | `olmoe_1b_7b/olmoe_1b_7b_20261021` | none (no model-scope gates) |
+| `megafold` | 2 | 2 | `megafold/megafold_20261027_ws200` | none (not applicable) |
 
 The corpora are read-only; never copy or write them. Orders 101 and 202 are the calibration split and orders 303 and 404 the acceptance split; Tier 2 times order 303. The corpus index is `/work/hdd/bcjw/wzhan/ADBench_payload/README.md`.
 
@@ -32,7 +35,7 @@ The corpora are read-only; never copy or write them. Orders 101 and 202 are the 
 | Level | Accepted when | Timing |
 | --- | --- | --- |
 | L1 | static rules, Gate 1, operator-scope Gate 2 | T2 |
-| L2 | the L1 gates plus single-site model-scope Gate 2 and Gate 3 (OLMoE: Gate 1 and operator-scope Gate 2 only) | T2, single-site T3 |
+| L2 | the L1 gates plus single-site model-scope Gate 2 and Gate 3 (OLMoE: Gate 1 and operator-scope Gate 2 only; MegaFold: no Gate 3) | T2, single-site T3 |
 | L3 | the positive L2 candidates of one agent on one model, deployed together: model-scope Gate 2 and Gate 3 | T3 against eager and whole-model `torch.compile` |
 
 A candidate is positive when it is accepted, its single-site T3 succeeds, and the lower 95% bound of that speedup over eager is above 1. An executable candidate that is not accepted is still timed, but only as a diagnostic. The safety margins, the floors and the Gate 3 settings are provisional until the unified evaluation.

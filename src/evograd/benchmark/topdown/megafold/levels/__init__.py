@@ -1,0 +1,1 @@
+"""MegaFold benchmark levels."""

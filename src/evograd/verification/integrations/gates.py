@@ -24,7 +24,9 @@ against the model reference (``Model.reference_op``):
   alone at its model site, after all of its preceding gates pass.
 
 A Level-1 candidate is accepted when Gate 1 and operator Gate 2 pass; a
-Level-2 candidate also needs its single-site model Gate 2 and Gate 3.
+Level-2 candidate also needs its single-site model Gate 2 and Gate 3. A model
+whose Gate 3 does not apply (``Model.gate3_applies``, MegaFold) accepts its
+Level-2 candidates and their combination on model Gate 2.
 
 The **combination** -- the Level-2 candidates deployed together -- is then
 judged once more:
@@ -66,6 +68,8 @@ GATE2_MODEL_GAMMA = 4.0
 #: per-call budgets, and failed rounding-level candidates on single bf16 ULP flips.
 GATE2_MODEL_BOUNDARIES = False
 TRAIN_ORDER, TRAIN_SEED = 707, 0
+#: Gate 3's status for a model it does not apply to (``Model.gate3_applies``).
+NOT_APPLICABLE = "not_applicable"
 GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
 #: Gate 3 runs save their state this often (and at the deadline).
@@ -261,16 +265,33 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
 # ── Level-2 candidates in the model: Gate 2 model scope and Gate 3 ───────────
 
 
-def model_scope(model, workload):
-    """The whole model, every site's native being its model reference."""
+def model_scope(model, workload, deployment=None):
+    """The whole model, every site's native being its model reference. A
+    deployment whose candidates take only some of a site's configurations
+    (:func:`by_configuration`) is recorded in the scope, whose controls then
+    replace exactly those calls."""
     from evograd.opdecl.oracle import resolve_runtime_forward
 
-    from .base import objective_of
+    from .base import objective_of, observed_cases
 
     registry = workload.site_registry
-    return objective_of(model).model_scope(workload, {
-        site: resolve_runtime_forward(model.reference_op(registry.require(site).op))
-        for site in registry.names})
+    natives = {site: resolve_runtime_forward(model.reference_op(registry.require(site).op))
+               for site in registry.names}
+    replaced = dict((deployment.identity if deployment is not None else {}).get("configurations") or {})
+    if not replaced:
+        return objective_of(model).model_scope(workload, natives)
+    cases = {c.case_id: c for c in observed_cases(model)}
+    return objective_of(model).model_scope(workload, natives, replaced={
+        site: tuple(cases[cid].workload for cid in ids) for site, ids in replaced.items()})
+
+
+def _patch_name(deployment) -> str:
+    """A deployment's patch set as a file name, with the configurations it replaces."""
+    from evograd.verification.common.contracts import stable_hash
+
+    name = "+".join(deployment.patch_set)
+    configurations = deployment.identity.get("configurations")
+    return f"{name}@{stable_hash(configurations)[:12]}" if configurations else name
 
 
 def site_for_case(registry, case) -> str:
@@ -292,29 +313,66 @@ def site_for_case(registry, case) -> str:
     return sites[0]
 
 
+def by_configuration(model, registry, site, calls):
+    """The callable a site holds for its Level-2 candidates ``calls`` (``[(case, call)]``).
+
+    A site observed at one configuration (``Site.preflight``) holds its one
+    candidate as it is. A site observed at several -- MegaFold's LayerNorm+Linear
+    at 23 -- sends each call by its configuration to the candidate for it, and
+    every other call to the site's model reference: a candidate replaces its own
+    case's calls and nothing else.
+    """
+    configurations = registry.require(site).preflight or ()
+    if len(configurations) <= 1:
+        if len(calls) > 1:
+            raise ValueError(f"two candidates for model site {site}")
+        return calls[0][1]
+    from evograd.benchmark import get_task
+    from evograd.opdecl.oracle import resolve_runtime_forward
+    from evograd.verification.common import dispatch
+
+    op = get_task(registry.require(site).op)
+    observed = {dispatch.configuration(op, w) for w in configurations}
+    if len(observed) != len(configurations):
+        raise ValueError(f"{site}: two observed configurations no call tells apart")
+    routes = {}
+    for case, call in calls:
+        key = dispatch.configuration(op, case.workload)
+        if key not in observed:
+            raise ValueError(f"{case.case_id}: not a configuration observed at {site}")
+        if key in routes:
+            raise ValueError(f"two candidates for {case.case_id}'s configuration at {site}")
+        routes[key] = call
+    return dispatch.by_configuration(op, routes, resolve_runtime_forward(model.reference_op(op.name)))
+
+
 def deployment_for(model, level2, workload):
-    """Level-2 candidates at their model sites, each through its artifact's own entry."""
+    """Level-2 candidates at their model sites, each through its artifact's own entry
+    (several at one site each take their own configuration's calls: :func:`by_configuration`)."""
     from evograd.verification.common.execution import candidate
     from evograd.verification.gate2.adapters.operator import SITE, OperatorScope
 
-    registry, sites, programs = workload.site_registry, {}, {}
+    registry, routes, programs = workload.site_registry, {}, {}
     for case, module in level2:
-        site = site_for_case(registry, case)
-        if site in sites:
-            raise ValueError(f"two candidates for model site {site}")
         single = OperatorScope(model.reference_op(case.task), case.workload).candidate(module)
-        sites[site], programs[case.case_id] = single.sites[SITE], dict(single.identity)
-    return candidate("candidate", sites, programs=programs)
+        routes.setdefault(site_for_case(registry, case), []).append((case, single.sites[SITE]))
+        programs[case.case_id] = dict(single.identity)
+    sites = {site: by_configuration(model, registry, site, calls) for site, calls in routes.items()}
+    # Which configurations the candidates take, at a site that has several.
+    configurations = {site: sorted(case.case_id for case, _ in calls) for site, calls in routes.items()
+                      if len(registry.require(site).preflight or ()) > 1}
+    return candidate("candidate", sites, programs=programs,
+                     **({"configurations": configurations} if configurations else {}))
 
 
 def judge_model(model, deployment, workload, *, compile_backend: str = "inductor",
                 state: Path | None = None) -> dict[str, Any]:
     from evograd.verification import gate2
 
-    scope = model_scope(model, workload)
+    scope = model_scope(model, workload, deployment)
     samples = scope.samples(MODEL_ORDERS)
     cache = (None if state is None
-             else state / "gate2" / "model" / f"{'+'.join(deployment.patch_set)}.json")
+             else state / "gate2" / "model" / f"{_patch_name(deployment)}.json")
     calibration = _calibrate(scope, deployment, samples, cache, samples=samples,
                              boundaries=GATE2_MODEL_BOUNDARIES,
                              compile_backend=compile_backend, gamma=model_gamma(model))
@@ -404,7 +462,7 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
     from evograd.verification.gate2.calibration import compile_control
 
     patch_set = deployment.patch_set
-    group = controls / "gate3" / "+".join(patch_set)
+    group = controls / "gate3" / _patch_name(deployment)
     settings = {**dict(model.gate3_optimizer),
                 **({"accumulation": model.gate3_accumulation} if model.gate3_accumulation != 1 else {})}
     if settings:
@@ -414,7 +472,7 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
                      reuse=True, log=log, deadline=deadline)
     native_b = train(model, group / "native_b.json", Deployment.native(), workload, patch_set,
                      reuse=True, log=log, deadline=deadline)
-    compiled, _graphs = compile_control(model_scope(model, workload), patch_set,
+    compiled, _graphs = compile_control(model_scope(model, workload, deployment), patch_set,
                                         backend=compile_backend)
     compile_run = train(model, group / "compile.json", compiled, workload, patch_set, reuse=True,
                         log=log, deadline=deadline)
@@ -540,8 +598,10 @@ def verify_cases(run: Run) -> dict[str, Any]:
                 run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
                 lambda: judge_model(model, deployment, run.workload,
                                     compile_backend=run.compile_backend, state=run.state)))
-            if all(entry.get(gate) == "passed"
-                   for gate in ("gate1_payloads", "gate2_operator", "gate2_model")):
+            if not model.gate3_applies:
+                entry["gate3"] = NOT_APPLICABLE
+            elif all(entry.get(gate) == "passed"
+                     for gate in ("gate1_payloads", "gate2_operator", "gate2_model")):
                 out = run.out / "gate3_single_site" / case_id.replace("/", "__")
                 _check_deadline(run.deadline, f"{case_id} single-site Gate 3")
                 training = judge_training(model, deployment, run.workload, out, run.state,
@@ -561,15 +621,19 @@ def verify_cases(run: Run) -> dict[str, Any]:
 
 def accepted(model, entry: Mapping[str, Any]) -> bool:
     """Gate 1 on real payloads and operator Gate 2; for Level 2 also the
-    single-site model Gate 2 and Gate 3, where the model has model-scope gates."""
+    single-site model Gate 2 and Gate 3, where the model has model-scope gates
+    (Gate 3 where it applies to the model, ``Model.gate3_applies``)."""
     gates = [entry.get("gate1_payloads"), entry.get("gate2_operator")]
     if entry.get("level") == 2 and model.model_gates:
-        gates.extend((entry.get("gate2_model"), entry.get("gate3")))
+        gates.append(entry.get("gate2_model"))
+        if model.gate3_applies:
+            gates.append(entry.get("gate3"))
     return all(g == "passed" for g in gates)
 
 
 def verify_combination(run: Run, case_ids) -> dict[str, Any]:
-    """Model Gate 2 and Gate 3 of the given accepted Level-2 candidates deployed together."""
+    """Model Gate 2 and Gate 3 (where it applies) of the given accepted Level-2
+    candidates deployed together."""
     model = run.model
     case_ids = sorted(case_ids)
     if not model.model_gates:
@@ -589,13 +653,17 @@ def verify_combination(run: Run, case_ids) -> dict[str, Any]:
                              lambda: judge_model(model, deployment, run.workload,
                                                  compile_backend=run.compile_backend,
                                                  state=run.state))
-    training = judge_training(model, deployment, run.workload, out, run.state,
-                              compile_backend=run.compile_backend, log=run.log,
-                              deadline=run.deadline)
-    _write(out / "gate3.json", {name: r.to_dict() for name, r in training.items()})
-    statuses.update({name: _status(r) for name, r in training.items()})
+    if model.gate3_applies:
+        training = judge_training(model, deployment, run.workload, out, run.state,
+                                  compile_backend=run.compile_backend, log=run.log,
+                                  deadline=run.deadline)
+        _write(out / "gate3.json", {name: r.to_dict() for name, r in training.items()})
+        statuses.update({name: _status(r) for name, r in training.items()})
+    else:
+        statuses["gate3"] = NOT_APPLICABLE
     result = {"cases": case_ids, "patch_set": list(deployment.patch_set), **statuses,
-              "accepted": statuses.get("gate2_model") == "passed" and statuses.get("gate3") == "passed"}
+              "accepted": statuses.get("gate2_model") == "passed"
+                          and statuses.get("gate3") == ("passed" if model.gate3_applies else NOT_APPLICABLE)}
     run.log("combination", result)
     return result
 

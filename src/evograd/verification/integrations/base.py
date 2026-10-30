@@ -15,6 +15,7 @@ snapshot. Nothing here edits a task or a snapshot.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -92,6 +93,14 @@ class Model:
     #: model without a well-posed whole-model comparison yet (OLMoE: routed
     #: experts) is verified by Gate 1 and operator Gate 2 only.
     model_gates: bool = True
+    #: Whether Gate 3 belongs to the model gates. MegaFold: no (its continued
+    #: training is ~2.3 h per 1000 updates; user decision 2026-10-27), so its
+    #: Level-2 candidates and their combination are accepted on model Gate 2.
+    gate3_applies: bool = True
+    #: ``case -> calls per step the corpus records`` for a model whose capture
+    #: records a declared subset of each case's calls (MegaFold: a full step is
+    #: 275 GiB of payloads); ``None`` records every call.
+    recorded_calls: Callable[["Case"], int] | None = None
 
 
 def objective_of(model: Model):
@@ -154,6 +163,13 @@ class Case:
     #: The module paths the harvest observed this configuration at (when it
     #: records them): what tells apart configurations with identical task inputs.
     paths: tuple[str, ...] = ()
+    #: Calls per step the corpus records, when the model records a subset.
+    recorded: int | None = None
+
+    @property
+    def calls_recorded(self) -> int:
+        """Calls per step the corpus holds: every one, or the model's declared subset."""
+        return self.frequency if self.recorded is None else self.recorded
 
 
 def observed_cases(model: Model) -> tuple[Case, ...]:
@@ -197,6 +213,8 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
     if len(ids) != len(set(ids)):
         raise ValueError(f"{model.name}: case ids repeat {sorted({i for i in ids if ids.count(i) > 1})}; "
                          "each configuration's provenance component must name its role")
+    if model.recorded_calls is not None:
+        cases = [dataclasses.replace(c, recorded=model.recorded_calls(c)) for c in cases]
     return tuple(cases)
 
 
@@ -378,11 +396,17 @@ def record_step(writer, invocations: Iterable[dict[str, Any]], batch: dict[str, 
             "batch": dict(batch), "call": {**inv["call"], "index_in_step": count},
             "args": args, "cotangents": cots, "cotangent_stats": stats,
             "aliases": [sorted(names) for names in storages.values() if len(names) > 1],
-            "live_outputs": {name: {"digest": tensor_digest(v), "shape": list(v.shape),
-                                    "stride": list(v.stride()), "dtype": str(v.dtype)}
+            # A recorder may hand the summary over instead of the output (MegaFold's
+            # outputs are a third of a step's recorded bytes).
+            "live_outputs": {name: (dict(v) if isinstance(v, Mapping) else
+                                    {"digest": tensor_digest(v), "shape": list(v.shape),
+                                     "stride": list(v.stride()), "dtype": str(v.dtype)})
                              for name, v in inv["live_outputs"].items()},
             "notes": inv["notes"]})
         count += 1
+    # The writer holds every storage of the step until its next ``new_step``; once
+    # the step is written they can go, rather than outlive the next step's capture.
+    writer.new_step()
     return count
 
 
@@ -409,8 +433,8 @@ def splits(payloads: list[dict[str, Any]]) -> dict[str, list[str]]:
 
 
 def coverage(cases: Sequence[Case], payloads: list[dict[str, Any]]) -> dict[str, Any]:
-    """Every case received exactly its calls per step, in every recorded order."""
-    expected = {c.case_id: c.frequency for c in cases}
+    """Every case received exactly the calls per step it records, in every recorded order."""
+    expected = {c.case_id: c.calls_recorded for c in cases}
     seen: dict[str, dict[str, int]] = {}
     for p in payloads:
         per_case = seen.setdefault(p["case_id"], {})
@@ -440,7 +464,8 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
     return {"name": f"{model.name}-real-training-payloads", "suite": model.suite,
             "snapshot_hash": load_snapshot(model.name).get("snapshot_hash"),
             "cases": {c.case_id: {"task": c.task, "level": c.level, "dims": dict(c.workload.dims),
-                                  "dtype": c.workload.dtype, "frequency": c.frequency} for c in cases},
+                                  "dtype": c.workload.dtype, "frequency": c.frequency,
+                                  "recorded": c.calls_recorded} for c in cases},
             "references": {t: reference_identity(model.reference_op(t))
                            for t in sorted({c.task for c in cases})},
             "modeling_sha256": {name: sha_file(importlib.import_module(name).__file__)

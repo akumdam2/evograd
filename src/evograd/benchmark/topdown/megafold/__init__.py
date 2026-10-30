@@ -24,30 +24,29 @@ searches, and measurement is the tier-3 protocol
 (``evaluation/tier3/runner.py``): identical weights and batches per provider,
 step latency, peak memory, loss agreement, ``cpu_bound_fraction``.
 
-Batches are fully synthetic (seeded random features and labels at a fixed crop
-length). That is a requirement, not a shortcut: the protocol compares providers
-on identical data, and an MSA/template pipeline would inject variance that is
-not the kernels'.
+The data is one real PDB structure (7a4d, 384 tokens after MegaFold's crop),
+featurized once by MegaFold's own training featurization and frozen
+(:mod:`.data`). One structure, because every site's shapes follow its token,
+atom and MSA counts: steps differ by their seed alone (dropout, diffusion noise,
+augmentations).
 """
 
 from evograd.opdecl import declare_workload
-from evograd.opdecl.models import AF3_RESIDUE_SWEEP, ALPHAFOLD3
+from evograd.opdecl.models import ALPHAFOLD3
 from evograd.ops._common import model_workloads
 
-#: Patch sites, and the declared operator each one accepts. Both attention
-#: flavours funnel to ``evoattention``: pair-bias and triangle attention share
-#: one softmax-attention core in this implementation, at different head widths.
-#:
-#: ``layernorm_linear`` is a site here and was not one under
-#: alphafold3-pytorch, which had no fused module boundary to swap. MegaFold
-#: builds ``LayernormLinear`` directly into the tree in more than a dozen
-#: places, so the boundary the declaration describes is a real module.
+#: Patch sites, and the task each one accepts. Both attention flavours funnel to
+#: ``megafold_evoattention``: pair-bias and triangle attention share ``Attend``,
+#: at different head widths. The LayerNorm and the SwiGLU are the generic
+#: tasks, because MegaFold computes exactly those there in either precision
+#: region; the LayerNorm+Linear and the attention are MegaFold's own
+#: mixed-precision contracts (:mod:`.contracts`).
 MEGAFOLD_SITE_OPS = {
     "layer_norm": "layernorm",
-    "layernorm_linear": "layernorm_linear",
+    "layernorm_linear": "megafold_layernorm_linear",
     "transition": "swiglu",
-    "pair_bias_attention": "evoattention",
-    "triangle_attention": "evoattention",
+    "pair_bias_attention": "megafold_evoattention",
+    "triangle_attention": "megafold_evoattention",
 }
 
 workload = declare_workload(
@@ -59,11 +58,11 @@ workload = declare_workload(
     benchmark=model_workloads(
         ALPHAFOLD3,
         "train_step",
-        tuple({"batch": 1, "residues": residues} for residues in AF3_RESIDUE_SWEEP),
+        ({"batch": 1, "residues": 384},),
         ("float32",),
         note=(
-            "MegaFold trains at batch 1 with activation checkpointing; the "
-            "residue sweep is its reported crop lengths"
+            "MegaFold trains at batch 1 with activation checkpointing; 384 "
+            "residues is its crop and the frozen structure's token count"
         ),
     ),
     exclusions=(
@@ -72,41 +71,47 @@ workload = declare_workload(
         "softmax-attention flavours. Everything else inside the timed step "
         "runs stock and dilutes the measured speedup accordingly, and that "
         "dilution is the level-3 result rather than a flaw: triangle "
-        "multiplication, outer product mean, MSA pair-weighted averaging, the "
-        "diffusion module internals and the confidence head internals are all "
-        "unpatched. Attention-weight dropout is disabled for every provider "
+        "multiplication (its combined projection carries a linear bias, which "
+        "the LayerNorm+Linear contract does not), outer product mean, MSA "
+        "pair-weighted averaging, the diffusion module internals and the "
+        "confidence head internals are all unpatched. Attention-weight dropout is disabled for every provider "
         "alike, because no fused-attention contract models it (MegaFold's own "
         "EvoAttention and DS4Sci included) and a dropout firing in one "
         "provider but not another would also desynchronize their RNG streams. "
-        "The MSA and template data pipeline is replaced by seeded synthetic "
-        "features at a fixed crop, so nothing here measures data loading and "
-        "no result speaks to prediction quality. The pocket, contact and "
-        "docking constraint channels are present but uniformly masked, which "
-        "is what MegaFold writes for an example carrying no constraints and "
-        "what nine in ten of its own training examples get. Every token in a "
-        "synthetic example is a protein residue, so the ligand binding "
-        "affinity head and the nucleotide loss weighting never fire; a random "
-        "mixture of molecule types is not a harder case but an incoherent one, "
-        "which MegaFold's own affinity pooling rejects. EMA, gradient clipping, "
+        "The data is one real structure featurized once and frozen, so nothing "
+        "here measures data loading and no result speaks to prediction "
+        "quality. Its templates are masked (MegaFold's training never passes a "
+        "kalign binary) and it drew no constraints, as nine in ten of "
+        "MegaFold's training examples do not. EMA, gradient clipping, "
         "DeepSpeed and sequence parallelism are excluded: the harness trains "
         "one model in one process with AdamW, in the single-rank process "
         "group MegaFold's own one-GPU config runs inside, and sequence "
         "parallelism is pinned to a group size of one, which makes MegaFold's "
         "collectives no-ops rather than removing them from the code path. The recycling "
-        "count and whether the confidence head is called are pinned rather "
-        "than sampled, where MegaFold draws the first from "
-        "randint(1, num_recycling_steps) each step and calls the second every "
-        "tenth step. Weights are randomly initialized. Step times are "
+        "count (one pass) and whether the confidence head is called are "
+        "pinned rather than sampled, where MegaFold draws the first from "
+        "randint(1, 4) each step and calls the second every tenth step: "
+        "verification and the ADBench evaluation call it on every step, so "
+        "that its sites get a gradient (the tier-3 CLI leaves it off unless "
+        "--confidence-head). The template embedder (its output is masked "
+        "without templates) and the recycling projections (multiplied by zero "
+        "in the one pass) get no gradient and hold no sites. "
+        "Weights are randomly initialized, except where verification and the "
+        "ADBench evaluation load their warm start: 200 updates of MegaFold's "
+        "own trainer recipe on the structure. Outside MegaFold's own tree the "
+        "distogram loss's mean is taken as a sum over the counted pixels, the "
+        "same mean without nll_loss2d's atomic reduction, which deterministic "
+        "mode refuses. Step times are "
         "single-GPU compute per step and are not comparable to the MegaFold "
         "paper's reported throughput, which is a multi-GPU end-to-end number "
         "over the real data pipeline."
     ),
     requires="megafold",
     notes=(
-        "The shapes here are declared from MegaFold's configuration, not "
-        "harvested from a run: every benchmark case re-derives from the "
-        "registered AlphaFold3 configuration, and the workload re-derives them "
-        "a second time at build. Weights are randomly initialized from a fixed "
+        "The Level-1/2 cases are harvested from one real training step on the "
+        "frozen structure (harvest/snapshot.json); the Level-3 case's dims "
+        "re-derive from the registered AlphaFold3 configuration, and the "
+        "workload re-derives them a second time at build. Weights are randomly initialized from a fixed "
         "seed; the task measures training-step speed and memory, not "
         "prediction quality, and identical weights across providers is what "
         "makes the comparison attributable."

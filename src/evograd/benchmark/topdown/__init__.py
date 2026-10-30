@@ -47,6 +47,8 @@ TOPDOWN_WORKLOADS: dict[str, str] = {
     "qwen3_5_4b": "qwen3_5_4b",
     # Routed-MoE Level 3 at B2 x T2048 (grouped-GEMM experts); L2 invocations from layer 8.
     "olmoe_1b_7b": "olmoe_1b_7b",
+    # Whole-model training step on one frozen real structure (7a4d, 384 tokens).
+    "megafold": "megafold",
 }
 
 
