@@ -11,7 +11,9 @@ the final gates (`bench.py evaluate`: Gate 2, Gate 3, speedups) are reported sep
 | [kernelagent](kernelagent/) | 58 | 50 | iu_a100 | NVIDIA A100-SXM4-40GB (Indiana University Jetstream2) |
 
 Each agent folder has a README (code, model, command) and a `manifest.csv` (one row per case).
-`patches/<site>/` holds the local patches that site's runs used. Programs searched on different GPUs
+`patches/<site>/` holds the local patches that site's runs used; `search_reports/<site>/` holds the
+searches' own reports and run logs (fallbacks and failures with their causes, harness fixes, cost
+and time). Programs searched on different GPUs
 were tuned against different timing; compare them only after evaluating them on the same GPU.
 
 To evaluate one agent's programs for one model (on a tree with that site's patches):
