@@ -1,0 +1,111 @@
+{
+ "stage_key": {
+  "case": "rope/rope",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "96899195ff06c89d8c1bbea8c04b10f66720a2f95ee3c3a8ae7ec5fbe5dc40dc",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+    "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 2.347549876534967,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.3413787569676843,
+     "high": 2.3590211095846185
+    },
+    "candidate_ms": 3.3853440284729004,
+    "baseline_ms": 7.947263956069946,
+    "speedup_forward": 6.0933783760797064,
+    "speedup_backward": 2.602891522011723
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.6393038851181274,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.6245954918142225,
+     "high": 1.6497197935299552
+    },
+    "candidate_ms": 3.1185920238494873,
+    "baseline_ms": 5.1123200207948685,
+    "speedup_forward": 1.0726351135437717,
+    "speedup_backward": 1.2849516332710442
+   }
+  }
+ }
+}

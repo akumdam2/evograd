@@ -90,10 +90,10 @@ class NextTokenLM:
     def data_recipe(self, workload) -> dict[str, Any]:
         return {"batch_size": workload.batch_size, "seq_len": workload.seq_len}
 
-    def model_scope(self, workload, native_sites: Mapping[str, Callable]):
+    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None):
         from evograd.verification.gate2.adapters.model import WorkloadModelScope
 
-        return WorkloadModelScope(workload, native_sites=native_sites)
+        return WorkloadModelScope(workload, native_sites=native_sites, replaced=replaced)
 
     def training(self, workload, *, train_data, optimizer):
         from evograd.verification import gate3
@@ -134,10 +134,10 @@ class PrimaryOutput:
     def data_recipe(self, workload) -> dict[str, Any]:
         return dict(workload.data_recipe())
 
-    def model_scope(self, workload, native_sites: Mapping[str, Callable]):
+    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None):
         from evograd.verification.gate2.adapters.model import ObjectiveModelScope
 
-        return ObjectiveModelScope(workload, native_sites=native_sites)
+        return ObjectiveModelScope(workload, native_sites=native_sites, replaced=replaced)
 
     def training(self, workload, *, train_data, optimizer):
         from evograd.verification import gate3

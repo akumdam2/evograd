@@ -1,0 +1,103 @@
+{
+ "stage_key": {
+  "case": "dit_s_2_dit_mlp/blocks.mlp",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.0.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.1.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.2.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.3.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.4.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.5.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.6.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.7.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.8.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.9.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.10.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.11.mlp_fn"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "21355dae2216ec4d8800301c4c2453fa468d7f261c02656770185e1c6b1d4f16",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.0.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.1.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.2.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.3.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.4.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.5.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.6.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.7.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.8.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.9.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.10.mlp_fn",
+    "o303/dit_s_2_dit_mlp/blocks.mlp/blocks.11.mlp_fn"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.9755031299935915,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9753125558260103,
+     "high": 0.975699882248953
+    },
+    "candidate_ms": 326.09177589416504,
+    "baseline_ms": 318.10354804992676,
+    "speedup_forward": 0.9986515449460515,
+    "speedup_backward": 0.9642815393783958
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.9716230299473717,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.971552557930055,
+     "high": 0.9717940630473579
+    },
+    "candidate_ms": 326.3221740722656,
+    "baseline_ms": 317.0621395111084,
+    "speedup_forward": 0.9988247107173464,
+    "speedup_backward": 0.9584833782309843
+   }
+  }
+ }
+}

@@ -1,0 +1,856 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "convnextv2_tiny",
+ "workload": {
+  "model": "convnextv2_tiny",
+  "device": "cuda",
+  "weights": "pretrained",
+  "stream": true
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA A100-SXM4-40GB"
+ },
+ "reference": "eager",
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "spatial_conv2d/convnextv2.embeddings.patch_embeddings": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/spatial_conv2d__convnextv2.embeddings.patch_embeddings.py",
+   "program_sha256": "c527aae677f59310867531f1646dd4662b5f9194bfc63cfee832b9d4a394704c",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.0739827260334085,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0739827260334085,
+      "high": 1.075215781036992
+     },
+     "candidate_ms": 0.8304640054702759,
+     "baseline_ms": 0.8919039964675903,
+     "speedup_forward": 1.0,
+     "speedup_backward": 1.0904977264332933
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.2044334738775921,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.2035670054643604,
+      "high": 1.2059186065990406
+     },
+     "candidate_ms": 0.8314880132675171,
+     "baseline_ms": 1.001471996307373,
+     "speedup_forward": 1.2715232222064925,
+     "speedup_backward": 1.195783135434589
+    }
+   }
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.0.layers.dwconv": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.1.downsampling_layer": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.1.layers.dwconv": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.2.downsampling_layer": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.2.layers.dwconv": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.3.downsampling_layer": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "spatial_conv2d/convnextv2.encoder.stages.3.layers.dwconv": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "layernorm/convnextv2.embeddings.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/layernorm__convnextv2.embeddings.layernorm.py",
+   "program_sha256": "3bf82811f47e51355f34df778df061d5ee7d0491e5269ce94769bd14e6a02a10",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  },
+  "layernorm/convnextv2.encoder.stages.0.layers.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 4,
+   "recorded": 4,
+   "submitted": false
+  },
+  "layernorm/convnextv2.encoder.stages.1.layers.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 4,
+   "recorded": 4,
+   "submitted": false
+  },
+  "layernorm/convnextv2.encoder.stages.2.layers.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 10,
+   "recorded": 10,
+   "submitted": false
+  },
+  "layernorm/convnextv2.encoder.stages.3.layers.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "layernorm/convnextv2.layernorm": {
+   "task": "layernorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.0.layers.pwconv1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.0.layers.pwconv2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.1.layers.pwconv1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.1.layers.pwconv2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.2.layers.pwconv1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.2.layers.pwconv2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.3.layers.pwconv1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/convnextv2.encoder.stages.3.layers.pwconv2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "linear/classifier": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "gelu/convnextv2.encoder.stages.0.layers.act": {
+   "task": "gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/gelu__convnextv2.encoder.stages.0.layers.act.py",
+   "program_sha256": "ffc8cb3b0ef114dc733e3d2ddc94b7277e68cd82d7182e687fab8ed5a8bd824c",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+     "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+     "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.0103807022865339,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0092272909213635,
+      "high": 1.0115473985964223
+     },
+     "candidate_ms": 0.8878079652786255,
+     "baseline_ms": 0.8970240354537964,
+     "speedup_forward": 1.0170939602215323,
+     "speedup_backward": 1.0114285757050527
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.3000577626240808,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.1943483715885912,
+      "high": 1.390751438688122
+     },
+     "candidate_ms": 0.8872959762811661,
+     "baseline_ms": 1.1535360217094421,
+     "speedup_forward": 1.0,
+     "speedup_backward": 1.1333333832256158
+    }
+   }
+  },
+  "gelu/convnextv2.encoder.stages.1.layers.act": {
+   "task": "gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "gelu/convnextv2.encoder.stages.2.layers.act": {
+   "task": "gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": false
+  },
+  "gelu/convnextv2.encoder.stages.3.layers.act": {
+   "task": "gelu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "grn/convnextv2.encoder.stages.0.layers.grn": {
+   "task": "grn",
+   "level": 1,
+   "family": "normalization",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/grn__convnextv2.encoder.stages.0.layers.grn.py",
+   "program_sha256": "8ee2b75b5530e782388632abc290a725a90cac9a1201b5a6757323aaab8b29f1",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "o303/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  },
+  "grn/convnextv2.encoder.stages.1.layers.grn": {
+   "task": "grn",
+   "level": 1,
+   "family": "normalization",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "grn/convnextv2.encoder.stages.2.layers.grn": {
+   "task": "grn",
+   "level": 1,
+   "family": "normalization",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": false
+  },
+  "grn/convnextv2.encoder.stages.3.layers.grn": {
+   "task": "grn",
+   "level": 1,
+   "family": "normalization",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": false
+  },
+  "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+   "task": "convnextv2_tiny_convnext_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.0.layers.py",
+   "program_sha256": "6da33f3ca8ecec7d8811b9fc35dabd766bcc398396638399500a084e09edf5e8",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "failed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers/convnextv2.encoder.stages.0.layers.0#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers/convnextv2.encoder.stages.0.layers.1#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers/convnextv2.encoder.stages.0.layers.2#convnext_mlp"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  },
+  "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+   "task": "convnextv2_tiny_convnext_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.1.layers.py",
+   "program_sha256": "3d7816a145e27efd94bc66a819f741b63e16f12823e14010ed9406f6a67c4dd6",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.0#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.1#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers/convnextv2.encoder.stages.1.layers.2#convnext_mlp"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  },
+  "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+   "task": "convnextv2_tiny_convnext_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 9,
+   "recorded": 9,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.2.layers.py",
+   "program_sha256": "b993cc66d6246e547e53af4aa7e1e930616cf62e605d365986de428c7bb1aafd",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.0#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.1#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.2#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.3#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.4#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.5#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.6#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.7#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers/convnextv2.encoder.stages.2.layers.8#convnext_mlp"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.029401267217405,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0278779079067841,
+      "high": 1.0310733237934229
+     },
+     "candidate_ms": 10.065407991409302,
+     "baseline_ms": 10.361343741416931,
+     "speedup_forward": 0.9723684024848314,
+     "speedup_backward": 1.3006910103544749
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.977282066728119,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.9752641678146826,
+      "high": 0.9791806665323413
+     },
+     "candidate_ms": 9.961471915245056,
+     "baseline_ms": 9.735167860984802,
+     "speedup_forward": 1.226028480976428,
+     "speedup_backward": 0.8683431875918832
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 38.87425334978616,
+    "peak_memory_bytes": 2513478656,
+    "cpu_bound_fraction": 0.8865078694307963,
+    "speedup": 1.1142347329457047,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1130555793885886,
+     "high": 1.116079827556143
+    },
+    "peak_memory_ratio": 0.8285853749762436
+   }
+  },
+  "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+   "task": "convnextv2_tiny_convnext_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 3,
+   "recorded": 3,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.3.layers.py",
+   "program_sha256": "dfaab7cfac38d321adab7c4c30c4838b04339b9574ff89a71cbf190bafc739cf",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "failed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "o303/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+    ]
+   },
+   "tier2_skipped": "rejected by verification"
+  }
+ },
+ "corpus": {
+  "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+  "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "tier3": {
+  "single_site": {
+   "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+    "ok": true,
+    "step_ms": 38.87425334978616,
+    "peak_memory_bytes": 2513478656,
+    "cpu_bound_fraction": 0.8865078694307963,
+    "speedup": 1.1142347329457047,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1130555793885886,
+     "high": 1.116079827556143
+    },
+    "peak_memory_ratio": 0.8285853749762436
+   }
+  },
+  "combination": {
+   "cases": [
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers"
+   ],
+   "patch_set": [
+    "convnext_mlp_stage2"
+   ],
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "tier3": {
+    "ok": true,
+    "step_ms": 38.773652899544686,
+    "peak_memory_bytes": 2513478656,
+    "cpu_bound_fraction": 0.8844616022826304,
+    "speedup": 1.1186970211999347,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1174808905909042,
+     "high": 1.1200749497140288
+    },
+    "peak_memory_ratio": 0.8281470305125392
+   }
+  }
+ },
+ "summary": {
+  "models": [
+   "convnextv2_tiny"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 31,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 4,
+    "accepted": 2
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 1.0416964149757075,
+     "configurations_covered": 2
+    },
+    "torch_compile": {
+     "geomean": 1.25133252466275,
+     "configurations_covered": 2
+    }
+   },
+   "coverage": 0.06451612903225806
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 4,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 4,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 1.029401267217405,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 0.977282066728119,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 0.25,
+   "tier3_single_site": {
+    "convnextv2_tiny": {
+     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+      "task": "convnextv2_tiny_convnext_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "failed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {}
+     },
+     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+      "task": "convnextv2_tiny_convnext_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "passed",
+      "gate2_operator": "failed",
+      "gate2_model": "passed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {}
+     },
+     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+      "task": "convnextv2_tiny_convnext_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 38.87425334978616,
+       "peak_memory_bytes": 2513478656,
+       "cpu_bound_fraction": 0.8865078694307963,
+       "speedup": 1.1142347329457047,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.1130555793885886,
+        "high": 1.116079827556143
+       },
+       "peak_memory_ratio": 0.8285853749762436
+      }
+     },
+     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+      "task": "convnextv2_tiny_convnext_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "failed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {}
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "convnextv2_tiny": {
+     "cases": [
+      "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers"
+     ],
+     "accepted": true,
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "speedup": 1.1186970211999347,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.1174808905909042,
+      "high": 1.1200749497140288
+     },
+     "speedup_vs_torch_compile": null,
+     "peak_memory_ratio": 0.8281470305125392,
+     "cpu_bound_fraction": 0.8844616022826304
+    }
+   },
+   "speedup": {
+    "geomean": 1.1186970211999347,
+    "models_covered": 1
+   },
+   "coverage": 1.0,
+   "peak_memory_ratio_geomean": 0.8281470305125392
+  }
+ }
+}

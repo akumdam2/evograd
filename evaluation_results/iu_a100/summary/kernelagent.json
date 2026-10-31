@@ -1,0 +1,411 @@
+{
+ "models": [
+  "convnextv2_tiny",
+  "dit_s_2",
+  "llama_3_2_1b",
+  "qwen2_vl_2b",
+  "qwen3_0_6b",
+  "torchrec_dlrm"
+ ],
+ "level1": {
+  "funnel": {
+   "configurations": 89,
+   "submitted": 18,
+   "violation": 0,
+   "executable": 18,
+   "gate1": 18,
+   "accepted": 14
+  },
+  "speedup": {
+   "eager": {
+    "geomean": 0.8424806204645524,
+    "configurations_covered": 14
+   },
+   "torch_compile": {
+    "geomean": 1.0165219594138621,
+    "configurations_covered": 14
+   }
+  },
+  "coverage": 0.15730337078651685
+ },
+ "level2": {
+  "funnel": {
+   "configurations": 17,
+   "submitted": 14,
+   "violation": 2,
+   "executable": 12,
+   "gate1": 11,
+   "accepted": 3
+  },
+  "speedup": {
+   "eager": {
+    "geomean": 1.1586150595213742,
+    "configurations_covered": 3
+   },
+   "torch_compile": {
+    "geomean": 1.7336867066936463,
+    "configurations_covered": 3
+   }
+  },
+  "coverage": 0.17647058823529413,
+  "tier3_single_site": {
+   "qwen3_0_6b": {
+    "fused_add_rms_norm/residual_rmsnorm": {
+     "task": "fused_add_rms_norm",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "qwen3_attention/causal_gqa_attention": {
+     "task": "qwen3_attention",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "failed",
+     "gate2_operator": "failed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "qwen3_qkv_norm_rope/qkv_norm_rope": {
+     "task": "qwen3_qkv_norm_rope",
+     "submitted": false,
+     "executable": false,
+     "accepted": false,
+     "gate1_payloads": null,
+     "gate2_operator": null,
+     "gate2_model": null,
+     "gate3": null,
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "qwen3_swiglu_mlp/swiglu_mlp": {
+     "task": "qwen3_swiglu_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "passed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "dit_s_2": {
+    "dit_s_2_dit_mlp/blocks.mlp": {
+     "task": "dit_s_2_dit_mlp",
+     "submitted": true,
+     "executable": false,
+     "accepted": false,
+     "gate1_payloads": null,
+     "gate2_operator": null,
+     "gate2_model": null,
+     "gate3": null,
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "dit_s_2_dit_modulation/blocks.modulation": {
+     "task": "dit_s_2_dit_modulation",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 627.350515100261,
+      "peak_memory_bytes": 25337815552,
+      "cpu_bound_fraction": 0.9150539846135799,
+      "speedup": 0.9979304197272358,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9978465645931206,
+       "high": 0.9979991466002056
+      },
+      "peak_memory_ratio": 0.9998138074127398
+     }
+    }
+   },
+   "llama_3_2_1b": {
+    "llama3_attention/causal_gqa_attention": {
+     "task": "llama3_attention",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "llama3_qkv_rope/qkv_norm_rope": {
+     "task": "llama3_qkv_rope",
+     "submitted": false,
+     "executable": false,
+     "accepted": false,
+     "gate1_payloads": null,
+     "gate2_operator": null,
+     "gate2_model": null,
+     "gate3": null,
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "llama3_residual_rmsnorm/residual_rmsnorm": {
+     "task": "llama3_residual_rmsnorm",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "incomplete",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "llama3_swiglu_mlp/swiglu_mlp": {
+     "task": "llama3_swiglu_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "incomplete",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "convnextv2_tiny": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": false,
+     "accepted": false,
+     "gate1_payloads": null,
+     "gate2_operator": null,
+     "gate2_model": null,
+     "gate3": null,
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": false,
+     "executable": false,
+     "accepted": false,
+     "gate1_payloads": null,
+     "gate2_operator": null,
+     "gate2_model": null,
+     "gate3": null,
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "qwen2_vl_2b": {
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+     "task": "qwen2_vl_2b_text_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 274.6481587499147,
+      "peak_memory_bytes": 22210408448,
+      "cpu_bound_fraction": 0.9775624330056258,
+      "speedup": 1.045731426737153,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0416388736298081,
+       "high": 1.049621262118661
+      },
+      "peak_memory_ratio": 1.000229837691426
+     }
+    },
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+     "task": "qwen2_vl_2b_vision_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "passed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "torchrec_dlrm": {
+    "torchrec_dlrm_dlrm_interaction/interaction": {
+     "task": "torchrec_dlrm_dlrm_interaction",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 13.824170849693473,
+      "peak_memory_bytes": 3411414528,
+      "cpu_bound_fraction": 0.8105581446828987,
+      "speedup": 1.0038644126493264,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0028220528090377,
+       "high": 1.0055378877519772
+      },
+      "peak_memory_ratio": 1.0
+     }
+    }
+   }
+  }
+ },
+ "level3": {
+  "models": {
+   "qwen3_0_6b": {
+    "cases": [],
+    "accepted": false,
+    "gate2_model": null,
+    "gate3": null,
+    "speedup": null,
+    "ci95": null,
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": null,
+    "cpu_bound_fraction": null
+   },
+   "dit_s_2": {
+    "cases": [],
+    "accepted": false,
+    "gate2_model": null,
+    "gate3": null,
+    "speedup": null,
+    "ci95": null,
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": null,
+    "cpu_bound_fraction": null
+   },
+   "llama_3_2_1b": {
+    "cases": [],
+    "accepted": false,
+    "gate2_model": null,
+    "gate3": null,
+    "speedup": null,
+    "ci95": null,
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": null,
+    "cpu_bound_fraction": null
+   },
+   "convnextv2_tiny": {
+    "cases": [],
+    "accepted": false,
+    "gate2_model": null,
+    "gate3": null,
+    "speedup": null,
+    "ci95": null,
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": null,
+    "cpu_bound_fraction": null
+   },
+   "qwen2_vl_2b": {
+    "cases": [
+     "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.0702971532446268,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0386272188569428,
+     "high": 1.0714420790762502
+    },
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": 1.000229837691426,
+    "cpu_bound_fraction": 0.9758813999038842
+   },
+   "torchrec_dlrm": {
+    "cases": [
+     "torchrec_dlrm_dlrm_interaction/interaction"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.0070161600016787,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0044820827852188,
+     "high": 1.0084718227173022
+    },
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": 1.0,
+    "cpu_bound_fraction": 0.8106003500671723
+   }
+  },
+  "speedup": {
+   "geomean": 1.0381746140804697,
+   "models_covered": 2
+  },
+  "coverage": 0.3333333333333333,
+  "peak_memory_ratio_geomean": 1.0001149122433013
+ }
+}

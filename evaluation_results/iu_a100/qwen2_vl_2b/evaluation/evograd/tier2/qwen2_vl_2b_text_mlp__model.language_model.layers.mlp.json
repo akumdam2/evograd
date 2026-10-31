@@ -1,0 +1,135 @@
+{
+ "stage_key": {
+  "case": "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.0.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.1.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.2.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.3.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.4.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.5.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.6.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.7.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.8.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.9.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.10.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.11.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.12.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.13.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.14.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.15.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.16.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.17.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.18.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.19.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.20.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.21.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.22.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.23.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.24.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.25.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.26.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.27.mlp#text_mlp"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "3c3b04c0826a995d8af2a79c16b014e35fe9379dedfe88086a6e355dbc30f92c",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.0.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.1.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.2.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.3.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.4.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.5.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.6.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.7.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.8.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.9.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.10.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.11.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.12.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.13.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.14.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.15.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.16.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.17.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.18.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.19.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.20.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.21.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.22.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.23.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.24.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.25.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.26.mlp#text_mlp",
+    "o303/qwen2_vl_2b_text_mlp/model.language_model.layers.mlp/model.language_model.layers.27.mlp#text_mlp"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.8598664376536692,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.8569062343686675,
+     "high": 0.8628059628318087
+    },
+    "candidate_ms": 28.063744366168976,
+    "baseline_ms": 24.131071895360947,
+    "speedup_forward": 1.0417316962061394,
+    "speedup_backward": 0.8329829211270592
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 0.9999274673851148,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9988935453442312,
+     "high": 1.0013615629209123
+    },
+    "candidate_ms": 28.23167997598648,
+    "baseline_ms": 28.229632258415222,
+    "speedup_forward": 1.1377746324922542,
+    "speedup_backward": 0.8848696305742553
+   }
+  }
+ }
+}

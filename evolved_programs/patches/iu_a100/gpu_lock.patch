@@ -1,0 +1,154 @@
+diff --git a/src/evograd/adbench_tools/evaluate.py b/src/evograd/adbench_tools/evaluate.py
+index abdd39a..bdbdbeb 100644
+--- a/src/evograd/adbench_tools/evaluate.py
++++ b/src/evograd/adbench_tools/evaluate.py
+@@ -36,6 +36,7 @@ from pathlib import Path
+ from typing import Any
+ 
+ from evograd.adbench_tools.artifact import END, HEADER_MARK, PackagingError, package, unpackage
++from evograd.adbench_tools.gpu_lock import gpu_lock
+ from evograd.adbench_tools.ledger import RunLedger
+ from evograd.adbench_tools.task import DECLARED_RULE, TASK_FILE, AgentTask, load
+ 
+@@ -244,8 +245,10 @@ def evaluate_source(
+         env = evaluator_env(task, cache_dir=Path(run_dir) / ".cache" if run_dir else None,
+                             warmup=warmup, reps=reps, contract=contract)
+         if correctness_only:
+-            payload = _run_child("evograd.adbench_tools._check", program, env, timeout,
+-                                 ["--declaration", task.declaration, "--op", task.op_name])
++            # The full path's child takes the GPU lock itself, in evaluate_isolated.
++            with gpu_lock(f"check {program.name}"):
++                payload = _run_child("evograd.adbench_tools._check", program, env, timeout,
++                                     ["--declaration", task.declaration, "--op", task.op_name])
+         else:
+             payload = _run_child("evograd.evolve.evaluator_entry", program, env, timeout)
+         record = EvalRecord(kind, payload["metrics"], payload["artifacts"], str(program))
+diff --git a/src/evograd/adbench_tools/gpu_lock.py b/src/evograd/adbench_tools/gpu_lock.py
+new file mode 100644
+index 0000000..16252b7
+--- /dev/null
++++ b/src/evograd/adbench_tools/gpu_lock.py
+@@ -0,0 +1,55 @@
++"""An optional cross-process lock around GPU evaluation (Gate 1 and T1 timing).
++
++Several ``bench.py run`` processes can search at once while only one of them
++evaluates on the GPU at any time. ``ADBENCH_GPU_LOCK`` names the lock file;
++when it is unset, :func:`gpu_lock` does nothing and the code behaves as before.
++
++Each acquire and release is written as one line to stderr and appended to
++``<lock>.log`` (stderr of an evaluation child is often captured), so waiting
++and holding times can be counted and overlaps ruled out afterwards.
++"""
++
++from __future__ import annotations
++
++import contextlib
++import fcntl
++import os
++import sys
++import time
++
++LOCK_ENV = "ADBENCH_GPU_LOCK"
++
++
++def _log(path: str, line: str) -> None:
++    line = f"[gpu_lock] {line}\n"
++    sys.stderr.write(line)
++    sys.stderr.flush()
++    fd = os.open(path + ".log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
++    try:
++        os.write(fd, line.encode())
++    finally:
++        os.close(fd)
++
++
++@contextlib.contextmanager
++def gpu_lock(label: str):
++    """Hold ``$ADBENCH_GPU_LOCK`` exclusively for the body; a no-op when it is unset.
++
++    Never nest it: a child process that takes the lock while its parent holds it waits forever.
++    """
++    path = os.environ.get(LOCK_ENV)
++    if not path:
++        yield
++        return
++    with open(path, "a") as handle:
++        asked = time.time()
++        fcntl.flock(handle, fcntl.LOCK_EX)
++        held = time.time()
++        _log(path, f"acquire t={held:.3f} pid={os.getpid()} waited={held - asked:.3f} {label}")
++        try:
++            yield
++        finally:
++            released = time.time()
++            _log(path, f"release t={released:.3f} pid={os.getpid()} "
++                       f"held={released - held:.3f} {label}")
++            fcntl.flock(handle, fcntl.LOCK_UN)
+diff --git a/src/evograd/evolve/evaluator.py b/src/evograd/evolve/evaluator.py
+index c7915c3..78a0d92 100644
+--- a/src/evograd/evolve/evaluator.py
++++ b/src/evograd/evolve/evaluator.py
+@@ -28,6 +28,7 @@ from typing import Any
+ 
+ import torch
+ 
++from evograd.adbench_tools.gpu_lock import gpu_lock
+ from evograd.opdecl.activity import OpDecl
+ from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
+ from evograd.opdecl.inputs import (
+@@ -723,13 +724,14 @@ def evaluate_isolated(
+     }
+     try:
+         try:
+-            process = subprocess.run(
+-                [sys.executable, evaluator_file, program_path],
+-                capture_output=True,
+-                text=True,
+-                timeout=timeout,
+-                env=env,
+-            )
++            with gpu_lock(f"evaluate_isolated {os.path.basename(program_path)}"):
++                process = subprocess.run(
++                    [sys.executable, evaluator_file, program_path],
++                    capture_output=True,
++                    text=True,
++                    timeout=timeout,
++                    env=env,
++                )
+         except subprocess.TimeoutExpired as exc:
+             stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+             return _result(
+diff --git a/src/evograd/pipelines/shared/runner.py b/src/evograd/pipelines/shared/runner.py
+index 9aa9b94..f695501 100644
+--- a/src/evograd/pipelines/shared/runner.py
++++ b/src/evograd/pipelines/shared/runner.py
+@@ -21,6 +21,7 @@ import sys
+ from pathlib import Path
+ 
+ import evograd
++from evograd.adbench_tools.gpu_lock import gpu_lock
+ 
+ 
+ def evograd_env() -> dict[str, str]:
+@@ -150,13 +151,14 @@ def verify_candidate(
+     if benchmark_suite is not None:
+         cmd.extend(["--benchmark-suite", benchmark_suite])
+     cmd.append(str(program_path))
+-    completed = _run(
+-        cmd,
+-        log_dir,
+-        "verify",
+-        {"EVOGRAD_DECLARATION": declaration} if declaration else None,
+-        timeout,
+-    )
++    with gpu_lock(f"verify_candidate {op_name} {program_path.name}"):
++        completed = _run(
++            cmd,
++            log_dir,
++            "verify",
++            {"EVOGRAD_DECLARATION": declaration} if declaration else None,
++            timeout,
++        )
+     try:
+         report = json.loads(completed.stdout)
+     except json.JSONDecodeError:

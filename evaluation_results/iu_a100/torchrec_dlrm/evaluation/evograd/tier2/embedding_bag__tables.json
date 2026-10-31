@@ -1,0 +1,131 @@
+{
+ "stage_key": {
+  "case": "embedding_bag/tables",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+    "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/embedding_bag/tables/tables.0",
+    "o303/embedding_bag/tables/tables.1",
+    "o303/embedding_bag/tables/tables.2",
+    "o303/embedding_bag/tables/tables.3",
+    "o303/embedding_bag/tables/tables.4",
+    "o303/embedding_bag/tables/tables.5",
+    "o303/embedding_bag/tables/tables.6",
+    "o303/embedding_bag/tables/tables.7",
+    "o303/embedding_bag/tables/tables.8",
+    "o303/embedding_bag/tables/tables.9",
+    "o303/embedding_bag/tables/tables.10",
+    "o303/embedding_bag/tables/tables.11",
+    "o303/embedding_bag/tables/tables.12",
+    "o303/embedding_bag/tables/tables.13",
+    "o303/embedding_bag/tables/tables.14",
+    "o303/embedding_bag/tables/tables.15",
+    "o303/embedding_bag/tables/tables.16",
+    "o303/embedding_bag/tables/tables.17",
+    "o303/embedding_bag/tables/tables.18",
+    "o303/embedding_bag/tables/tables.19",
+    "o303/embedding_bag/tables/tables.20",
+    "o303/embedding_bag/tables/tables.21",
+    "o303/embedding_bag/tables/tables.22",
+    "o303/embedding_bag/tables/tables.23",
+    "o303/embedding_bag/tables/tables.24",
+    "o303/embedding_bag/tables/tables.25"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "9f3e2d0192360b70de9331c710ff9665a022966713158cf32a64a70543c67f46",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+    "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/embedding_bag/tables/tables.0",
+    "o303/embedding_bag/tables/tables.1",
+    "o303/embedding_bag/tables/tables.2",
+    "o303/embedding_bag/tables/tables.3",
+    "o303/embedding_bag/tables/tables.4",
+    "o303/embedding_bag/tables/tables.5",
+    "o303/embedding_bag/tables/tables.6",
+    "o303/embedding_bag/tables/tables.7",
+    "o303/embedding_bag/tables/tables.8",
+    "o303/embedding_bag/tables/tables.9",
+    "o303/embedding_bag/tables/tables.10",
+    "o303/embedding_bag/tables/tables.11",
+    "o303/embedding_bag/tables/tables.12",
+    "o303/embedding_bag/tables/tables.13",
+    "o303/embedding_bag/tables/tables.14",
+    "o303/embedding_bag/tables/tables.15",
+    "o303/embedding_bag/tables/tables.16",
+    "o303/embedding_bag/tables/tables.17",
+    "o303/embedding_bag/tables/tables.18",
+    "o303/embedding_bag/tables/tables.19",
+    "o303/embedding_bag/tables/tables.20",
+    "o303/embedding_bag/tables/tables.21",
+    "o303/embedding_bag/tables/tables.22",
+    "o303/embedding_bag/tables/tables.23",
+    "o303/embedding_bag/tables/tables.24",
+    "o303/embedding_bag/tables/tables.25"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.5661801683479263,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.5586787662394828,
+     "high": 0.5762515422246495
+    },
+    "candidate_ms": 7.121407978236675,
+    "baseline_ms": 4.031999967992306,
+    "speedup_forward": 1.209150305253757,
+    "speedup_backward": 0.7212506042409078
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 2.3778901868838656,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.2955861909252957,
+     "high": 2.438137329430063
+    },
+    "candidate_ms": 5.668863981962204,
+    "baseline_ms": 13.47993603348732,
+    "speedup_forward": 9.669871484905128,
+    "speedup_backward": 2.4211669827358175
+   }
+  }
+ }
+}

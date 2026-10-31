@@ -1,0 +1,294 @@
+{
+ "gate3_calibration": {
+  "status": "calibrated",
+  "findings": [],
+  "policy": {
+   "binding": {
+    "adapter": {
+     "backward": "mean over the batch's valid tokens",
+     "config": {
+      "workload": {
+       "attn_implementation": "sdpa",
+       "batch": 2,
+       "canonical": false,
+       "config": {
+        "arch_overrides": {},
+        "attn_implementation": "sdpa",
+        "batch_size": 2,
+        "calibration_path": null,
+        "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+        "data_seed": 0,
+        "device": "cuda",
+        "dtype": "bfloat16",
+        "model": "llama_3_2_1b",
+        "seed": 0,
+        "seq_len": 2048,
+        "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08"
+       },
+       "config_hash": "a698e8394966b427",
+       "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+       "data_identity": {
+        "block_len": 2048,
+        "config": "wikitext-2-raw-v1",
+        "dataset": "Salesforce/wikitext",
+        "disjoint": "train and validation are separate parquet files of the published split",
+        "ignore_index": -100,
+        "join": "documents joined with EOS; trailing partial block dropped",
+        "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+        "tokenizer_sha256": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+        "train": {
+         "block_len": 2048,
+         "blocks": 1200,
+         "documents": 23767,
+         "dropped_tail": 1189,
+         "parquet_sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7",
+         "split": "train",
+         "tokens_total": 2458789
+        },
+        "validation": {
+         "block_len": 2048,
+         "blocks": 124,
+         "documents": 2461,
+         "dropped_tail": 1234,
+         "parquet_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c",
+         "split": "validation",
+         "tokens_total": 255186
+        }
+       },
+       "data_seed": 0,
+       "dtype": "bfloat16",
+       "expected_site_counts": {
+        "attention": 16,
+        "qkv_rope": 16,
+        "residual_rmsnorm": 32,
+        "swiglu_mlp": 16
+       },
+       "gradient_checkpointing": false,
+       "input_checksum": "0ba8f665e6f13551:(2, 2048)",
+       "layers": 16,
+       "model": "Llama-3.2-1B",
+       "name": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696",
+       "seed": 0,
+       "tokens": 2048,
+       "training": true,
+       "unit_name": "tokens",
+       "units_per_step": 4096,
+       "use_cache": false,
+       "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+       "workload": "llama3_next_token",
+       "workload_hash": "cdad36960f933dea",
+       "workload_id": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696"
+      }
+     },
+     "objective": "token-weighted next-token NLL (float32, shifted, ignore_index=-100)"
+    },
+    "data": {
+     "train": {
+      "count": null,
+      "describe": {
+       "batch_size": 2,
+       "batches_per_epoch": 600,
+       "order_sha256": "74875bbbba7856df",
+       "seed": 707
+      }
+     },
+     "validation": null
+    },
+    "environment": {
+     "compute_capability": "8.0",
+     "cuda": "12.8",
+     "cudnn": 91900,
+     "cudnn_benchmark": false,
+     "cudnn_deterministic": true,
+     "deterministic_algorithms": true,
+     "device_name": "NVIDIA A100-SXM4-40GB",
+     "device_type": "cuda",
+     "float32_matmul_precision": "highest",
+     "machine": "x86_64",
+     "python": "3.12.13",
+     "sdpa_backends": {
+      "cudnn": true,
+      "flash": true,
+      "math": true,
+      "mem_efficient": true
+     },
+     "tf32_cudnn": true,
+     "tf32_matmul": false,
+     "torch": "2.11.0+cu128"
+    },
+    "evaluator": null,
+    "initial_state": "b81e21bc612ba8559e829206dedaba74194786a5b259581f09298e46830ac9a7",
+    "optimizer": {
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "clip_grad_norm": 1.0,
+     "eps": 1e-08,
+     "foreach": false,
+     "lr": 3e-05,
+     "optimizer": "AdamW",
+     "schedule": "linear_warmup",
+     "warmup_steps": 100,
+     "weight_decay": 0.01
+    },
+    "plan": {
+     "checkpoints": [],
+     "steps": 100,
+     "validation_enabled": false,
+     "window": 1
+    },
+    "protocol_context": {
+     "data_recipe": {
+      "batch_size": 2,
+      "data": {
+       "block_len": 2048,
+       "config": "wikitext-2-raw-v1",
+       "dataset": "Salesforce/wikitext",
+       "disjoint": "train and validation are separate parquet files of the published split",
+       "ignore_index": -100,
+       "join": "documents joined with EOS; trailing partial block dropped",
+       "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+       "tokenizer_sha256": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+       "train": {
+        "block_len": 2048,
+        "blocks": 1200,
+        "documents": 23767,
+        "dropped_tail": 1189,
+        "parquet_sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7",
+        "split": "train",
+        "tokens_total": 2458789
+       },
+       "validation": {
+        "block_len": 2048,
+        "blocks": 124,
+        "documents": 2461,
+        "dropped_tail": 1234,
+        "parquet_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c",
+        "split": "validation",
+        "tokens_total": 255186
+       }
+      },
+      "seq_len": 2048,
+      "train_order": 707
+     },
+     "numerics": {
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+      "cudnn_benchmark": false,
+      "cudnn_deterministic": true,
+      "deterministic_algorithms": true,
+      "float32_matmul_precision": "highest",
+      "matmul_allow_tf32": false,
+      "sdp_cudnn": true,
+      "sdp_flash": true,
+      "sdp_math": true,
+      "sdp_mem_efficient": true,
+      "torch_num_threads": 8
+     },
+     "patch_set": [
+      "qkv_rope"
+     ],
+     "reference": {
+      "contract": "evograd-model-reference/llama_3_2_1b/1",
+      "model": "unpatched llama_3_2_1b at pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+      "modeling_llama_sha256": "13e65b752a9c9d8a5c22b83df73009a8940c0eefdc58c101df3eb910e3efc2f9",
+      "transformers": "5.16.1"
+     }
+    },
+    "seed": 0
+   },
+   "calibration_runs": [
+    {
+     "compile": "b11d292326bd57b2f2f9568bb49a9ab6db129adc0c7be3e2d6037aaaaa5fd9b2",
+     "native_a": "2f4a1bab258c1ca4ef4d833b527ef1cd24d0ad3e58ae525f71151bf0eb066f1a",
+     "native_b": "7f6be8dbbb485f7d385cca850955efdec1166ca6b078b2c86c76d31acebcb1d8"
+    }
+   ],
+   "controls": [
+    {
+     "compile_identity": {
+      "backend": "inductor",
+      "compiles": "the native implementation of each replaced site",
+      "fullgraph": true,
+      "kind": "torch_compile",
+      "options": {},
+      "torch": "2.11.0+cu128"
+     },
+     "native_repeat": {
+      "max_abs": 0.0,
+      "max_abs_step": 1,
+      "rms": 0.0
+     },
+     "native_repeat_bitwise": true,
+     "trusted_compile": {
+      "max_abs": 0.0020856857299804688,
+      "max_abs_step": 65,
+      "rms": 0.0007060101678040174
+     }
+    }
+   ],
+   "floors": {
+    "max_abs": 0.0001,
+    "rms": 0.0001
+   },
+   "formula": "d[t] = objective_test[t] - objective_reference[t]; R = sqrt(sum_t d[t]^2 / N); M = max_t |d[t]|; T_m = gamma * max(max_c m(native_b, native_a), max_c m(compile, native_a), floor_m) for m in (R, M); pass iff R <= T_R and M <= T_M",
+   "gamma": 2.0,
+   "metrics": [
+    "rms",
+    "max_abs"
+   ],
+   "objective": "step record field 'objective' (scalar the backward differentiated)",
+   "policy_hash": "6dc732f31e2802463e2cc8f2bf4ec489d983b87dd2d0093596701f99e39fa9ed",
+   "schema": "evograd-verification-gate3-global-loss-policy/1",
+   "steps": 100,
+   "thresholds": {
+    "max_abs": 0.0041713714599609375,
+    "rms": 0.0014120203356080348
+   }
+  }
+ },
+ "gate3": {
+  "gate": "gate3",
+  "protocol": "evograd-verification-gate3-global-loss/1",
+  "status": "passed",
+  "complete": true,
+  "metrics": [
+   "rms",
+   "max_abs"
+  ],
+  "policy": {
+   "policy_hash": "6dc732f31e2802463e2cc8f2bf4ec489d983b87dd2d0093596701f99e39fa9ed",
+   "gamma": 2.0,
+   "floors": {
+    "max_abs": 0.0001,
+    "rms": 0.0001
+   },
+   "thresholds": {
+    "max_abs": 0.0041713714599609375,
+    "rms": 0.0014120203356080348
+   },
+   "steps": 100
+  },
+  "summary": {
+   "rms": 0.0007060101678040174,
+   "max_abs": 0.0020856857299804688,
+   "max_abs_step": 65,
+   "steps": 100,
+   "overflow": false,
+   "judged": true,
+   "thresholds": {
+    "max_abs": 0.0041713714599609375,
+    "rms": 0.0014120203356080348
+   },
+   "ratios": {
+    "rms": 0.5,
+    "max_abs": 0.5
+   },
+   "passed": {
+    "rms": true,
+    "max_abs": true
+   }
+  },
+  "findings": []
+ }
+}

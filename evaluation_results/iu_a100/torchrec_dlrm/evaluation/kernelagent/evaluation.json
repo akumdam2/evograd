@@ -1,0 +1,428 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "torchrec_dlrm",
+ "workload": {
+  "model": "torchrec_dlrm",
+  "device": "cuda",
+  "input_mode": "real",
+  "stream": true
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA A100-SXM4-40GB"
+ },
+ "reference": "eager",
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "linear/dense_layers": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/dense_layers_2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 2,
+   "recorded": 2,
+   "submitted": false
+  },
+  "linear/dense_layers_3": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/over_layers": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/over_layers_2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "linear/over_layers_3": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "embedding_bag/tables": {
+   "task": "embedding_bag",
+   "level": 1,
+   "family": "embedding",
+   "frequency": 26,
+   "recorded": 26,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/torchrec_dlrm/embedding_bag__tables.py",
+   "program_sha256": "9bac4e6cf6c5764de9767bf2734ee9ba112bd38bb7d5ce93a26914343b60e3f5",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+     "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/embedding_bag/tables/tables.0",
+     "o303/embedding_bag/tables/tables.1",
+     "o303/embedding_bag/tables/tables.2",
+     "o303/embedding_bag/tables/tables.3",
+     "o303/embedding_bag/tables/tables.4",
+     "o303/embedding_bag/tables/tables.5",
+     "o303/embedding_bag/tables/tables.6",
+     "o303/embedding_bag/tables/tables.7",
+     "o303/embedding_bag/tables/tables.8",
+     "o303/embedding_bag/tables/tables.9",
+     "o303/embedding_bag/tables/tables.10",
+     "o303/embedding_bag/tables/tables.11",
+     "o303/embedding_bag/tables/tables.12",
+     "o303/embedding_bag/tables/tables.13",
+     "o303/embedding_bag/tables/tables.14",
+     "o303/embedding_bag/tables/tables.15",
+     "o303/embedding_bag/tables/tables.16",
+     "o303/embedding_bag/tables/tables.17",
+     "o303/embedding_bag/tables/tables.18",
+     "o303/embedding_bag/tables/tables.19",
+     "o303/embedding_bag/tables/tables.20",
+     "o303/embedding_bag/tables/tables.21",
+     "o303/embedding_bag/tables/tables.22",
+     "o303/embedding_bag/tables/tables.23",
+     "o303/embedding_bag/tables/tables.24",
+     "o303/embedding_bag/tables/tables.25"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.44371078906761274,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.4421075092448042,
+      "high": 0.44598764670225893
+     },
+     "candidate_ms": 4.652543939650059,
+     "baseline_ms": 2.0643839426338673,
+     "speedup_forward": 1.275541755320751,
+     "speedup_backward": 0.8836992532321981
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 2.253516441157295,
+     "ci95": {
+      "iterations": 2000,
+      "low": 2.242026293304563,
+      "high": 2.280890240141201
+     },
+     "candidate_ms": 4.622847981750965,
+     "baseline_ms": 10.417663931846619,
+     "speedup_forward": 6.949685281809884,
+     "speedup_backward": 2.3304367673198603
+    }
+   }
+  },
+  "torchrec_dlrm_dlrm_interaction/interaction": {
+   "task": "torchrec_dlrm_dlrm_interaction",
+   "level": 2,
+   "family": "interaction",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/kernelagent/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+   "program_sha256": "46d25ebf9c1dc1914170202239806f2583751136935f8b519b4e2bfd0b3a1dce",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+     "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 2.6744791248235957,
+     "ci95": {
+      "iterations": 2000,
+      "low": 2.6426736380192697,
+      "high": 2.683246098029625
+     },
+     "candidate_ms": 0.19660800695419312,
+     "baseline_ms": 0.5258240103721619,
+     "speedup_forward": 5.571428302292388,
+     "speedup_backward": 3.3434343226480134
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 3.2076922468440627,
+     "ci95": {
+      "iterations": 2000,
+      "low": 3.135678253793589,
+      "high": 3.2441558184341246
+     },
+     "candidate_ms": 0.19968000054359436,
+     "baseline_ms": 0.6405119895935059,
+     "speedup_forward": 23.571428951931452,
+     "speedup_backward": 2.9660194407939073
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 13.824170849693473,
+    "peak_memory_bytes": 3411414528,
+    "cpu_bound_fraction": 0.8105581446828987,
+    "speedup": 1.0038644126493264,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0028220528090377,
+     "high": 1.0055378877519772
+    },
+    "peak_memory_ratio": 1.0
+   }
+  }
+ },
+ "corpus": {
+  "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+  "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "tier3": {
+  "single_site": {
+   "torchrec_dlrm_dlrm_interaction/interaction": {
+    "ok": true,
+    "step_ms": 13.824170849693473,
+    "peak_memory_bytes": 3411414528,
+    "cpu_bound_fraction": 0.8105581446828987,
+    "speedup": 1.0038644126493264,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0028220528090377,
+     "high": 1.0055378877519772
+    },
+    "peak_memory_ratio": 1.0
+   }
+  },
+  "combination": {
+   "cases": [
+    "torchrec_dlrm_dlrm_interaction/interaction"
+   ],
+   "patch_set": [
+    "dlrm_interaction"
+   ],
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "tier3": {
+    "ok": true,
+    "step_ms": 13.834034449973842,
+    "peak_memory_bytes": 3411414528,
+    "cpu_bound_fraction": 0.8106003500671723,
+    "speedup": 1.0070161600016787,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0044820827852188,
+     "high": 1.0084718227173022
+    },
+    "peak_memory_ratio": 1.0
+   }
+  }
+ },
+ "summary": {
+  "models": [
+   "torchrec_dlrm"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 7,
+    "submitted": 1,
+    "violation": 0,
+    "executable": 1,
+    "gate1": 1,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 0.44371078906761274,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 2.253516441157295,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 0.14285714285714285
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 1,
+    "submitted": 1,
+    "violation": 0,
+    "executable": 1,
+    "gate1": 1,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 2.6744791248235957,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 3.2076922468440627,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 1.0,
+   "tier3_single_site": {
+    "torchrec_dlrm": {
+     "torchrec_dlrm_dlrm_interaction/interaction": {
+      "task": "torchrec_dlrm_dlrm_interaction",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 13.824170849693473,
+       "peak_memory_bytes": 3411414528,
+       "cpu_bound_fraction": 0.8105581446828987,
+       "speedup": 1.0038644126493264,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0028220528090377,
+        "high": 1.0055378877519772
+       },
+       "peak_memory_ratio": 1.0
+      }
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "torchrec_dlrm": {
+     "cases": [
+      "torchrec_dlrm_dlrm_interaction/interaction"
+     ],
+     "accepted": true,
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "speedup": 1.0070161600016787,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0044820827852188,
+      "high": 1.0084718227173022
+     },
+     "speedup_vs_torch_compile": null,
+     "peak_memory_ratio": 1.0,
+     "cpu_bound_fraction": 0.8106003500671723
+    }
+   },
+   "speedup": {
+    "geomean": 1.0070161600016787,
+    "models_covered": 1
+   },
+   "coverage": 1.0,
+   "peak_memory_ratio_geomean": 1.0
+  }
+ }
+}

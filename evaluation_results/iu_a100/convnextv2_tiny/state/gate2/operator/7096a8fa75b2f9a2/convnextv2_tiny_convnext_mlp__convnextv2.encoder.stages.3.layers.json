@@ -1,0 +1,3514 @@
+{
+ "policy": {
+  "adapter": {
+   "case_id": "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "declaration": null,
+   "dims": {
+    "B": 32,
+    "H": 768,
+    "I": 3072,
+    "X": 7,
+    "Y": 7
+   },
+   "dtype": "bfloat16",
+   "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+   "inputs": "real_training_payload",
+   "op": "convnextv2_tiny_convnext_mlp",
+   "parameter_args": [
+    "up_weight",
+    "up_bias",
+    "grn_weight",
+    "grn_bias",
+    "down_weight",
+    "down_bias"
+   ],
+   "reference": {
+    "forward": "evograd.benchmark.topdown.common.vision.operators:convnext_mlp",
+    "kind": "model_reference",
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "reference_dtype": null,
+    "runtime_forward": null,
+    "source": null
+   },
+   "runtime_forward": null,
+   "scope": "operator"
+  },
+  "boundaries": false,
+  "calibration_executions": [
+   "ddfc6adb2b34487cad30da23fb32f31a",
+   "2712775887564714b33299264dd24492",
+   "daea02f8e6464382a6361c3580a8e720",
+   "82cb075f321c4db9b9c6444d7decf617",
+   "b1bbd6bcaddb44579a810034dd794c85",
+   "513ab1cc3fa1417784dc5e6e8fa24412",
+   "e1ed8d8003314f4aa8b8bd1427a6c9e2",
+   "fca76cb337e14e1c804e6c8a46684e2f",
+   "070396fed2cb4c238385c893a0e5ea41",
+   "d030492b025445a285b53020775a501f",
+   "f773e32e43ca4552a3aca65284078bbd",
+   "d1879b1a071c4174ba6574df639e3658",
+   "e9a9aa0b846d43858deaf86a7fd8e014",
+   "8d0a9a33d3b84e5e8d1df580f3b83758",
+   "2e48d5d2824b4d0083bb248697cb4507",
+   "ec57ef0c716f4e91b32c783c4ba56e94",
+   "6c2fbda532ff4614bf470c65f9b8903d",
+   "541f6051bc814d64a0fb71247ea02b2e",
+   "90251805723243398c14087e028931db",
+   "2a15c20c2ca3439c901911093a8b2097",
+   "721aa01993fe472383c0b6f7614cece1",
+   "75afc0bc05b44e0c94351aaf39c40d43",
+   "fa0dcff0f2464b0bbce6decce2edcbeb",
+   "60e4242910a64e498dc9b72c2d5478bc"
+  ],
+  "calibration_samples": [
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "525495268c200989c84e72fe8d87ac9865b58abbac34d3cb15b09f7273e7e37b",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+    "seed": 101000133
+   },
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "c6ba96bde887ff6e476f5fafdf0fb374391e9d4cd35075b5fc61ca96fb0ef658",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+    "seed": 101000134
+   },
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "bf9bbfa9a2a56d62f6faf6b58cf599ca0799c5d818447da35ee2756f1ba44735",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+    "seed": 101000135
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "af36079da68a7c5d7120613941064c8071458057b2e3c68d6add50bbe946311f",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+    "seed": 202000133
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "e09f6e9161186fb15e3aaeb196aa4fb753e36b1f3ccf3b340059c09c73b9b30f",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+    "seed": 202000134
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "split": "calibration"
+    },
+    "input_digest": "4442139da602363c7c6b065e0f4da5d76e569d4231d24b826d0ccc9ca71dac4d",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+    "seed": 202000135
+   }
+  ],
+  "contract": {
+   "results": [
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "output",
+     "name": "out:out",
+     "presence": "required",
+     "shape": [
+      32,
+      7,
+      7,
+      768
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "input_grad",
+     "name": "grad_in:x",
+     "presence": "required",
+     "shape": [
+      32,
+      7,
+      7,
+      768
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:up_weight",
+     "presence": "required",
+     "shape": [
+      3072,
+      768
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:up_bias",
+     "presence": "required",
+     "shape": [
+      3072
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:grn_weight",
+     "presence": "required",
+     "shape": [
+      1,
+      1,
+      1,
+      3072
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:grn_bias",
+     "presence": "required",
+     "shape": [
+      1,
+      1,
+      1,
+      3072
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:down_weight",
+     "presence": "required",
+     "shape": [
+      768,
+      3072
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:down_bias",
+     "presence": "required",
+     "shape": [
+      768
+     ]
+    }
+   ]
+  },
+  "contract_digest": "3174b0e9fc33ecfc6ec4ea923fa5c42389ad9a74a8cc7c910bca5cdd5c9cc503",
+  "controls": {
+   "compile": {
+    "identity": {
+     "backend": "inductor",
+     "compiles": "the native implementation of each replaced site",
+     "fullgraph": true,
+     "kind": "torch_compile",
+     "options": {},
+     "torch": "2.11.0+cu128"
+    },
+    "name": "torch_compile[inductor]",
+    "patch_set": [
+     "operator"
+    ],
+    "role": "control"
+   },
+   "compile_graphs": {
+    "operator": 1
+   },
+   "native_repeats": 2
+  },
+  "environment": {
+   "compute_capability": "8.0",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "cudnn_benchmark": false,
+   "cudnn_deterministic": true,
+   "deterministic_algorithms": true,
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "device_type": "cuda",
+   "float32_matmul_precision": "highest",
+   "machine": "x86_64",
+   "python": "3.12.13",
+   "sdpa_backends": {
+    "cudnn": true,
+    "flash": true,
+    "math": true,
+    "mem_efficient": true
+   },
+   "tf32_cudnn": true,
+   "tf32_matmul": false,
+   "torch": "2.11.0+cu128"
+  },
+  "epsilon": 1e-30,
+  "floors": {
+   "gradient": {
+    "E2": 0.0001,
+    "Emax": 0.01
+   },
+   "output": {
+    "E2": 1e-05,
+    "Emax": 0.001
+   }
+  },
+  "formula": "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), max_c E_m(compile_c, native_c), floor[z,m])",
+  "gamma": 2.0,
+  "numerics": {
+   "autocast": null,
+   "device_type": "cuda",
+   "dtype": "bfloat16",
+   "grad_mode": "enabled",
+   "module_mode": "train"
+  },
+  "patch_set": [
+   "operator"
+  ],
+  "policy_hash": "f5b9c4bfe27d60a8cc8c0749588e406511f4d3a2db7fba1c40ba613e91f9b685",
+  "reference": {
+   "deployment": {
+    "identity": {
+     "kind": "native_eager"
+    },
+    "name": "native",
+    "patch_set": [],
+    "role": "native"
+   },
+   "implementation": {
+    "adapter": {
+     "digest": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "fingerprint_version": 2,
+     "opaque": [
+      "evograd.verification.common.execution.Deployment.__init__:builtins.function",
+      "evograd.verification.common.execution.Invocation.__init__:builtins.function",
+      "evograd.verification.common.execution.Sample.__init__:builtins.function",
+      "evograd.verification.common.tensors:torch.strided:torch.layout"
+     ],
+     "qualname": "evograd.verification.gate2.adapters.payload.PayloadOperatorScope"
+    },
+    "inputs": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    },
+    "module": {
+     "digest": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.evaluation.tier2.runner.NativeModule"
+    },
+    "runtime_forward": {
+     "digest": "fad319b45310e663ff8166746b6986826e5a49f89159e52bd6c7ab2f3a5a09e6",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.benchmark.topdown.common.vision.operators.convnext_mlp"
+    },
+    "sampling": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    }
+   },
+   "kind": "native_eager"
+  },
+  "sample_identities": {
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "b183bf94e013db7d170eb45969e2c1c27563fe54f7610c284ef53219ad4a99a0",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+     "inputs": "610b2db6344b88a9a99b460cbe0049214b9260a844b4f18dd24de6477bab13c3",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000133
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "7a9140a31ec704d624d1fc9006f99bcc3c2dd9754ab238bd7faff195c0178421",
+     "native_repeats": [
+      "966104aaa759271b80ecc170e5cc80e3f379ec068bc625422de64b92c9f9026e"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "efd80bc61ed829e8c28d63f565df9d07f479ce79f9deb6b24fca3390a7d6aed2"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "73e964c3b1ba8967d79287910189b5de52104c81bd250afbb456ec827c22e4be"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "daea02f8e6464382a6361c3580a8e720",
+     "compile_repeat": "82cb075f321c4db9b9c6444d7decf617",
+     "native": "ddfc6adb2b34487cad30da23fb32f31a",
+     "native_repeats": [
+      "2712775887564714b33299264dd24492"
+     ]
+    },
+    "fingerprint": "8a2de595425b2268710455510ba4587429b4b8b87c2bc946791cdc395835eb68",
+    "opaque": [],
+    "reference_results_digest": "966104aaa759271b80ecc170e5cc80e3f379ec068bc625422de64b92c9f9026e",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000133
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "3ae42789bc748e22728095c7c6f2a8d3e79cb7b73556e5e5f13c1e3e419cc7a8",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+     "inputs": "0a7b29590a4ce25b74893924e309b6e8b8818595ff57994fbc741bca6c684b43",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000134
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "5b92fcf76768287ae30330305678a02e4eaf8152b4a3787cde79493c27585794",
+     "native_repeats": [
+      "d7eba91715edc2bd6bed971ea57f99ca44bc42d7fcb2a988e9201eed3546c650"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "c0064a145ee6803d08be495909d2c6d9cd3dc87dbabdfc351aeaf8755f96ddf7"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "e425f486343296a5604e294abb9ad679c8d143ee9026f305ad88642f6a2ff3ed"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "e1ed8d8003314f4aa8b8bd1427a6c9e2",
+     "compile_repeat": "fca76cb337e14e1c804e6c8a46684e2f",
+     "native": "b1bbd6bcaddb44579a810034dd794c85",
+     "native_repeats": [
+      "513ab1cc3fa1417784dc5e6e8fa24412"
+     ]
+    },
+    "fingerprint": "dbf68c75786d7e0d13da85d848d21eaff301981f4154afe1d300809a2d622cf6",
+    "opaque": [],
+    "reference_results_digest": "d7eba91715edc2bd6bed971ea57f99ca44bc42d7fcb2a988e9201eed3546c650",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000134
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "8b860be2c47d4834629dbcdcd9b2c47c6042f9c1e3c9d2989dfffb2206a47de9",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+     "inputs": "8ea6412b3ce1b4980617c5bd6ecfdaef2ba8214696deda27c9baa169e7102e23",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000135
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "992736cc95e8760a8655f4f4c5594822e6d79b9de9fa568c1d6021aac4c3e09c",
+     "native_repeats": [
+      "390585c60649a5cac6f9cd648062994aa3795ba5ecb44168b4e91c8ce37b58c2"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "0769ef5048c46590e4392b93aac91796d065309484291aa6d678c5370bb60588"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "1484b7537c6618819c3b4966b4368a9064d5317866b6b0e8ee95f52becd48a09"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "f773e32e43ca4552a3aca65284078bbd",
+     "compile_repeat": "d1879b1a071c4174ba6574df639e3658",
+     "native": "070396fed2cb4c238385c893a0e5ea41",
+     "native_repeats": [
+      "d030492b025445a285b53020775a501f"
+     ]
+    },
+    "fingerprint": "ef300c993713454ad12f3f6b7c16a92b694f8d957dec43298dc643acecb3fa86",
+    "opaque": [],
+    "reference_results_digest": "390585c60649a5cac6f9cd648062994aa3795ba5ecb44168b4e91c8ce37b58c2",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000135
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "10795e0016ee5f45ef4c9c2890366ee609df79f5a29b7914d801627371d50ffd",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+     "inputs": "e746a7627eb5e2ddcf44416e2f4114c61ada647ed0d47ce077c2588066baa343",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000133
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "b7d0df886c55a774f85216afc54967d7bb1d4592848f96e71fad6bbf084bd8db",
+     "native_repeats": [
+      "4fd6431f6d94b5b52d3c04c74e057a4e2a27376fa07fc232f9e9a84c5763149d"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "971cbc7e2f843ae9d3385ccc3144542667a9ecefcf3b304649f210a73b5e8ef2"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "a1c6bcfd75eca5c848d0bfcd7f6db99be57d7304e565374fdbf0d324255ac076"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "2e48d5d2824b4d0083bb248697cb4507",
+     "compile_repeat": "ec57ef0c716f4e91b32c783c4ba56e94",
+     "native": "e9a9aa0b846d43858deaf86a7fd8e014",
+     "native_repeats": [
+      "8d0a9a33d3b84e5e8d1df580f3b83758"
+     ]
+    },
+    "fingerprint": "2db17a93720c769ad7275ba464f869e6c0f74a0fdcbf4473c120587eff342811",
+    "opaque": [],
+    "reference_results_digest": "4fd6431f6d94b5b52d3c04c74e057a4e2a27376fa07fc232f9e9a84c5763149d",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000133
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "d239e3481e9c212113e980eb4d92664e7bb2b18b90bb3ce06670f320e6761b1c",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+     "inputs": "53375f69fc097d4ff78f7e149e1dd6d314fde16d52bcf632e3fa123ce0bca9c8",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000134
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "311471fdc4508d4b41c6f23eea1a21bde528331ca8e4e1056042ea4ccb763ed5",
+     "native_repeats": [
+      "8763afe724e564476fbe853c1a13c188c5d9ee46854bc7b8919038f3b82911da"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "b0b9a14c09dae50bf44dd78f9718ac355c5e2809414e20642af62456559ebafd"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "48b4e354eb38cb42a19293c50180bc21239487377fdf6d709a908b1343e2a6d6"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "90251805723243398c14087e028931db",
+     "compile_repeat": "2a15c20c2ca3439c901911093a8b2097",
+     "native": "6c2fbda532ff4614bf470c65f9b8903d",
+     "native_repeats": [
+      "541f6051bc814d64a0fb71247ea02b2e"
+     ]
+    },
+    "fingerprint": "a1b2301848ac519c2c06c2275effeebb036bcb0f21c0f198eff09e21a0055646",
+    "opaque": [],
+    "reference_results_digest": "8763afe724e564476fbe853c1a13c188c5d9ee46854bc7b8919038f3b82911da",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000134
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "299789fca473c3591357f1275b8e5fa15a6d296282067d9f942adb4d65832220",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+     "inputs": "d9091bde4c61a503874cde09b666e2cf0a3be67155f30fbba817ac362c45e75c",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000135
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "71df21416ec0234ff9a26d07d8dc6908b6f4f826199b8a4d387e0839f440574f",
+     "native_repeats": [
+      "91ac1fdd5b6f63c776c723c413c82877bd2cf18acff0618e1b5b7c7078a79aba"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         7,
+         7,
+         768
+        ],
+        "storage_offset": 0,
+        "stride": [
+         37632,
+         7,
+         1,
+         49
+        ],
+        "tensor": "04da903e3ae56aeae8db03af351e05ffd4174792450da5116b097251bb785b71"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           7,
+           7,
+           768
+          ],
+          "storage_offset": 0,
+          "stride": [
+           37632,
+           5376,
+           768,
+           1
+          ],
+          "tensor": "5f9ce99c51beda288a36c143725ecee20823fd2443241b1375289eeb5f2588cd"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "fa0dcff0f2464b0bbce6decce2edcbeb",
+     "compile_repeat": "60e4242910a64e498dc9b72c2d5478bc",
+     "native": "721aa01993fe472383c0b6f7614cece1",
+     "native_repeats": [
+      "75afc0bc05b44e0c94351aaf39c40d43"
+     ]
+    },
+    "fingerprint": "a16162c88eea807ab26c3a50c5972fe29aa9ead5fa3d266f1b82bd66ed4d53d8",
+    "opaque": [],
+    "reference_results_digest": "91ac1fdd5b6f63c776c723c413c82877bd2cf18acff0618e1b5b7c7078a79aba",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000135
+   }
+  },
+  "sample_protocol": "disjoint_holdout",
+  "schema": "evograd-verification-gate2-policy/4",
+  "scope": "operator",
+  "thresholds": {
+   "grad:down_bias": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     }
+    },
+    "envelope": 0.0,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad:down_weight": {
+    "E2": 0.019645165422322176,
+    "Emax": 1.5784105329093585,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.009822582711161088
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.7892052664546793
+     }
+    },
+    "envelope": 0.00030517578125,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad:grn_bias": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     }
+    },
+    "envelope": 0.0,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad:grn_weight": {
+    "E2": 0.0062491967576443035,
+    "Emax": 0.21219198701212613,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0031245983788221517
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.10609599350606307
+     }
+    },
+    "envelope": 0.0078125,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad:up_bias": {
+    "E2": 0.007369790042981911,
+    "Emax": 0.1973916379440577,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0036848950214909554
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.09869581897202885
+     }
+    },
+    "envelope": 0.00048828125,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad:up_weight": {
+    "E2": 0.0074165875012435645,
+    "Emax": 1.820454962388041,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0037082937506217823
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.9102274811940205
+     }
+    },
+    "envelope": 0.0009765625,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "grad_in:x": {
+    "E2": 0.010635288880902238,
+    "Emax": 0.3660300721715983,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.005317644440451119
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.18301503608579914
+     }
+    },
+    "envelope": 1.71661376953125e-05,
+    "kind": "input_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   },
+   "out:out": {
+    "E2": 0.011301022183712732,
+    "Emax": 0.6005202765996692,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 1e-05,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.005650511091856366
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.3002601382998346
+     }
+    },
+    "envelope": 0.5625,
+    "kind": "output",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+     ]
+    }
+   }
+  },
+  "weights": {
+   "fixed": null,
+   "initial_state_digests": [
+    "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+    "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+    "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327"
+   ]
+  }
+ },
+ "calibration": {
+  "status": "calibrated",
+  "policy_hash": "f5b9c4bfe27d60a8cc8c0749588e406511f4d3a2db7fba1c40ba613e91f9b685",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "seed": 101000133,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "ddfc6adb2b34487cad30da23fb32f31a",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "seed": 101000133,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "525495268c200989c84e72fe8d87ac9865b58abbac34d3cb15b09f7273e7e37b",
+      "sample_identity": {
+       "fingerprint": "8a2de595425b2268710455510ba4587429b4b8b87c2bc946791cdc395835eb68",
+       "components": {
+        "seed": 101000133,
+        "inputs": "610b2db6344b88a9a99b460cbe0049214b9260a844b4f18dd24de6477bab13c3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b183bf94e013db7d170eb45969e2c1c27563fe54f7610c284ef53219ad4a99a0",
+        "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "73e964c3b1ba8967d79287910189b5de52104c81bd250afbb456ec827c22e4be",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "efd80bc61ed829e8c28d63f565df9d07f479ce79f9deb6b24fca3390a7d6aed2",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "966104aaa759271b80ecc170e5cc80e3f379ec068bc625422de64b92c9f9026e",
+      "initial_state_digest": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+      "error_stage": null,
+      "seconds": 0.08052662400586996
+     },
+     "control": {
+      "execution_id": "daea02f8e6464382a6361c3580a8e720",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "seed": 101000133,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "525495268c200989c84e72fe8d87ac9865b58abbac34d3cb15b09f7273e7e37b",
+      "sample_identity": {
+       "fingerprint": "8a2de595425b2268710455510ba4587429b4b8b87c2bc946791cdc395835eb68",
+       "components": {
+        "seed": 101000133,
+        "inputs": "610b2db6344b88a9a99b460cbe0049214b9260a844b4f18dd24de6477bab13c3",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b183bf94e013db7d170eb45969e2c1c27563fe54f7610c284ef53219ad4a99a0",
+        "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "73e964c3b1ba8967d79287910189b5de52104c81bd250afbb456ec827c22e4be",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "efd80bc61ed829e8c28d63f565df9d07f479ce79f9deb6b24fca3390a7d6aed2",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7a9140a31ec704d624d1fc9006f99bcc3c2dd9754ab238bd7faff195c0178421",
+      "initial_state_digest": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+      "error_stage": null,
+      "seconds": 3.318200188994524
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "seed": 101000134,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "b1bbd6bcaddb44579a810034dd794c85",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "seed": 101000134,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "c6ba96bde887ff6e476f5fafdf0fb374391e9d4cd35075b5fc61ca96fb0ef658",
+      "sample_identity": {
+       "fingerprint": "dbf68c75786d7e0d13da85d848d21eaff301981f4154afe1d300809a2d622cf6",
+       "components": {
+        "seed": 101000134,
+        "inputs": "0a7b29590a4ce25b74893924e309b6e8b8818595ff57994fbc741bca6c684b43",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "3ae42789bc748e22728095c7c6f2a8d3e79cb7b73556e5e5f13c1e3e419cc7a8",
+        "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e425f486343296a5604e294abb9ad679c8d143ee9026f305ad88642f6a2ff3ed",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c0064a145ee6803d08be495909d2c6d9cd3dc87dbabdfc351aeaf8755f96ddf7",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "d7eba91715edc2bd6bed971ea57f99ca44bc42d7fcb2a988e9201eed3546c650",
+      "initial_state_digest": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+      "error_stage": null,
+      "seconds": 0.07213878800394014
+     },
+     "control": {
+      "execution_id": "e1ed8d8003314f4aa8b8bd1427a6c9e2",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "seed": 101000134,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "c6ba96bde887ff6e476f5fafdf0fb374391e9d4cd35075b5fc61ca96fb0ef658",
+      "sample_identity": {
+       "fingerprint": "dbf68c75786d7e0d13da85d848d21eaff301981f4154afe1d300809a2d622cf6",
+       "components": {
+        "seed": 101000134,
+        "inputs": "0a7b29590a4ce25b74893924e309b6e8b8818595ff57994fbc741bca6c684b43",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "3ae42789bc748e22728095c7c6f2a8d3e79cb7b73556e5e5f13c1e3e419cc7a8",
+        "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e425f486343296a5604e294abb9ad679c8d143ee9026f305ad88642f6a2ff3ed",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c0064a145ee6803d08be495909d2c6d9cd3dc87dbabdfc351aeaf8755f96ddf7",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "5b92fcf76768287ae30330305678a02e4eaf8152b4a3787cde79493c27585794",
+      "initial_state_digest": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+      "error_stage": null,
+      "seconds": 0.040779592003673315
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "seed": 101000135,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "070396fed2cb4c238385c893a0e5ea41",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "seed": 101000135,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "bf9bbfa9a2a56d62f6faf6b58cf599ca0799c5d818447da35ee2756f1ba44735",
+      "sample_identity": {
+       "fingerprint": "ef300c993713454ad12f3f6b7c16a92b694f8d957dec43298dc643acecb3fa86",
+       "components": {
+        "seed": 101000135,
+        "inputs": "8ea6412b3ce1b4980617c5bd6ecfdaef2ba8214696deda27c9baa169e7102e23",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8b860be2c47d4834629dbcdcd9b2c47c6042f9c1e3c9d2989dfffb2206a47de9",
+        "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1484b7537c6618819c3b4966b4368a9064d5317866b6b0e8ee95f52becd48a09",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0769ef5048c46590e4392b93aac91796d065309484291aa6d678c5370bb60588",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "390585c60649a5cac6f9cd648062994aa3795ba5ecb44168b4e91c8ce37b58c2",
+      "initial_state_digest": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+      "error_stage": null,
+      "seconds": 0.06707215099595487
+     },
+     "control": {
+      "execution_id": "f773e32e43ca4552a3aca65284078bbd",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "seed": 101000135,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "bf9bbfa9a2a56d62f6faf6b58cf599ca0799c5d818447da35ee2756f1ba44735",
+      "sample_identity": {
+       "fingerprint": "ef300c993713454ad12f3f6b7c16a92b694f8d957dec43298dc643acecb3fa86",
+       "components": {
+        "seed": 101000135,
+        "inputs": "8ea6412b3ce1b4980617c5bd6ecfdaef2ba8214696deda27c9baa169e7102e23",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "8b860be2c47d4834629dbcdcd9b2c47c6042f9c1e3c9d2989dfffb2206a47de9",
+        "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1484b7537c6618819c3b4966b4368a9064d5317866b6b0e8ee95f52becd48a09",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0769ef5048c46590e4392b93aac91796d065309484291aa6d678c5370bb60588",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "992736cc95e8760a8655f4f4c5594822e6d79b9de9fa568c1d6021aac4c3e09c",
+      "initial_state_digest": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+      "error_stage": null,
+      "seconds": 0.04045852800481953
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+      "seed": 202000133,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "e9a9aa0b846d43858deaf86a7fd8e014",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "seed": 202000133,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "af36079da68a7c5d7120613941064c8071458057b2e3c68d6add50bbe946311f",
+      "sample_identity": {
+       "fingerprint": "2db17a93720c769ad7275ba464f869e6c0f74a0fdcbf4473c120587eff342811",
+       "components": {
+        "seed": 202000133,
+        "inputs": "e746a7627eb5e2ddcf44416e2f4114c61ada647ed0d47ce077c2588066baa343",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "10795e0016ee5f45ef4c9c2890366ee609df79f5a29b7914d801627371d50ffd",
+        "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a1c6bcfd75eca5c848d0bfcd7f6db99be57d7304e565374fdbf0d324255ac076",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "971cbc7e2f843ae9d3385ccc3144542667a9ecefcf3b304649f210a73b5e8ef2",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4fd6431f6d94b5b52d3c04c74e057a4e2a27376fa07fc232f9e9a84c5763149d",
+      "initial_state_digest": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+      "error_stage": null,
+      "seconds": 0.0679588450002484
+     },
+     "control": {
+      "execution_id": "2e48d5d2824b4d0083bb248697cb4507",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+       "seed": 202000133,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.0#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "af36079da68a7c5d7120613941064c8071458057b2e3c68d6add50bbe946311f",
+      "sample_identity": {
+       "fingerprint": "2db17a93720c769ad7275ba464f869e6c0f74a0fdcbf4473c120587eff342811",
+       "components": {
+        "seed": 202000133,
+        "inputs": "e746a7627eb5e2ddcf44416e2f4114c61ada647ed0d47ce077c2588066baa343",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "10795e0016ee5f45ef4c9c2890366ee609df79f5a29b7914d801627371d50ffd",
+        "initial_state": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a1c6bcfd75eca5c848d0bfcd7f6db99be57d7304e565374fdbf0d324255ac076",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "971cbc7e2f843ae9d3385ccc3144542667a9ecefcf3b304649f210a73b5e8ef2",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "b7d0df886c55a774f85216afc54967d7bb1d4592848f96e71fad6bbf084bd8db",
+      "initial_state_digest": "eeebf5da145a6054b6dd5d71c741ff9025c6a63fe288eb4e2d371ffaca0a0327",
+      "error_stage": null,
+      "seconds": 0.04746939799224492
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+      "seed": 202000134,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "6c2fbda532ff4614bf470c65f9b8903d",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "seed": 202000134,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e09f6e9161186fb15e3aaeb196aa4fb753e36b1f3ccf3b340059c09c73b9b30f",
+      "sample_identity": {
+       "fingerprint": "a1b2301848ac519c2c06c2275effeebb036bcb0f21c0f198eff09e21a0055646",
+       "components": {
+        "seed": 202000134,
+        "inputs": "53375f69fc097d4ff78f7e149e1dd6d314fde16d52bcf632e3fa123ce0bca9c8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "d239e3481e9c212113e980eb4d92664e7bb2b18b90bb3ce06670f320e6761b1c",
+        "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "48b4e354eb38cb42a19293c50180bc21239487377fdf6d709a908b1343e2a6d6",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "b0b9a14c09dae50bf44dd78f9718ac355c5e2809414e20642af62456559ebafd",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "8763afe724e564476fbe853c1a13c188c5d9ee46854bc7b8919038f3b82911da",
+      "initial_state_digest": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+      "error_stage": null,
+      "seconds": 0.06763916599447839
+     },
+     "control": {
+      "execution_id": "90251805723243398c14087e028931db",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+       "seed": 202000134,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.1#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e09f6e9161186fb15e3aaeb196aa4fb753e36b1f3ccf3b340059c09c73b9b30f",
+      "sample_identity": {
+       "fingerprint": "a1b2301848ac519c2c06c2275effeebb036bcb0f21c0f198eff09e21a0055646",
+       "components": {
+        "seed": 202000134,
+        "inputs": "53375f69fc097d4ff78f7e149e1dd6d314fde16d52bcf632e3fa123ce0bca9c8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "d239e3481e9c212113e980eb4d92664e7bb2b18b90bb3ce06670f320e6761b1c",
+        "initial_state": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "48b4e354eb38cb42a19293c50180bc21239487377fdf6d709a908b1343e2a6d6",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "b0b9a14c09dae50bf44dd78f9718ac355c5e2809414e20642af62456559ebafd",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "311471fdc4508d4b41c6f23eea1a21bde528331ca8e4e1056042ea4ccb763ed5",
+      "initial_state_digest": "2266a474e512b90389c236e924ea96364494c9c29a492817d38f65734ed6cce8",
+      "error_stage": null,
+      "seconds": 0.04137242599972524
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+      "seed": 202000135,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+      }
+     },
+     "native": {
+      "execution_id": "721aa01993fe472383c0b6f7614cece1",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "seed": 202000135,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "4442139da602363c7c6b065e0f4da5d76e569d4231d24b826d0ccc9ca71dac4d",
+      "sample_identity": {
+       "fingerprint": "a16162c88eea807ab26c3a50c5972fe29aa9ead5fa3d266f1b82bd66ed4d53d8",
+       "components": {
+        "seed": 202000135,
+        "inputs": "d9091bde4c61a503874cde09b666e2cf0a3be67155f30fbba817ac362c45e75c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "299789fca473c3591357f1275b8e5fa15a6d296282067d9f942adb4d65832220",
+        "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "5f9ce99c51beda288a36c143725ecee20823fd2443241b1375289eeb5f2588cd",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "04da903e3ae56aeae8db03af351e05ffd4174792450da5116b097251bb785b71",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "91ac1fdd5b6f63c776c723c413c82877bd2cf18acff0618e1b5b7c7078a79aba",
+      "initial_state_digest": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+      "error_stage": null,
+      "seconds": 0.06985669099958614
+     },
+     "control": {
+      "execution_id": "fa0dcff0f2464b0bbce6decce2edcbeb",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+       "seed": 202000135,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.3.layers.2#convnext_mlp"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "4442139da602363c7c6b065e0f4da5d76e569d4231d24b826d0ccc9ca71dac4d",
+      "sample_identity": {
+       "fingerprint": "a16162c88eea807ab26c3a50c5972fe29aa9ead5fa3d266f1b82bd66ed4d53d8",
+       "components": {
+        "seed": 202000135,
+        "inputs": "d9091bde4c61a503874cde09b666e2cf0a3be67155f30fbba817ac362c45e75c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "299789fca473c3591357f1275b8e5fa15a6d296282067d9f942adb4d65832220",
+        "initial_state": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "5f9ce99c51beda288a36c143725ecee20823fd2443241b1375289eeb5f2588cd",
+             "shape": [
+              32,
+              7,
+              7,
+              768
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              37632,
+              5376,
+              768,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "04da903e3ae56aeae8db03af351e05ffd4174792450da5116b097251bb785b71",
+           "shape": [
+            32,
+            7,
+            7,
+            768
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            37632,
+            7,
+            1,
+            49
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "71df21416ec0234ff9a26d07d8dc6908b6f4f826199b8a4d387e0839f440574f",
+      "initial_state_digest": "241757e23811a96ef5bc61e582fb0a674bb3d31f3b5b4443b9a4185185d975e8",
+      "error_stage": null,
+      "seconds": 0.04446218999510165
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "disjoint_holdout",
+   "measurements": 96,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.004832125994382523,
+     "Emax": 0.24299818303886989
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.004697658354604715,
+     "Emax": 0.12508491404125271
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.003069752911420802,
+     "Emax": 0.9102274811940205
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.00129577744559342,
+     "Emax": 0.0283834184853079
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.001909911693931186,
+     "Emax": 0.07736611233196895
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0036491892227908307,
+     "Emax": 0.41883421644806906
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.005650511091856366,
+     "Emax": 0.3002601382998346
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0045761709474273875,
+     "Emax": 0.13573990206258976
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0027610204959949455,
+     "Emax": 0.4539041695666409
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0024666715728137827,
+     "Emax": 0.09869581897202885
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0031245983788221517,
+     "Emax": 0.10609599350606307
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0036293220012891788,
+     "Emax": 0.4348028891216057
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.004865032680164435,
+     "Emax": 0.13177256623884392
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.005195030478193962,
+     "Emax": 0.06470078000276927
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0037082937506217823,
+     "Emax": 0.38672997639401197
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.003279219535562056,
+     "Emax": 0.08915825329238772
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0024375744820636265,
+     "Emax": 0.10237067939664421
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.009822582711161088,
+     "Emax": 0.7892052664546793
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0050774087796090295,
+     "Emax": 0.2339426941384224
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.004939108645102676,
+     "Emax": 0.14834561345985017
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0032332404105958707,
+     "Emax": 0.6719738524426547
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0017911800768832295,
+     "Emax": 0.038878117825984645
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.001468184775252361,
+     "Emax": 0.040625149847855264
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.004010343328358542,
+     "Emax": 0.24914282651037703
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.0#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.005341075208913751,
+     "Emax": 0.2915476180710572
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.004620931778675381,
+     "Emax": 0.18301503608579914
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0025688532729255986,
+     "Emax": 0.3621634316905772
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.001862668079980229,
+     "Emax": 0.0874412913737043
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.002953159368553671,
+     "Emax": 0.08846273061727435
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0034281788684073873,
+     "Emax": 0.3088778274990593
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.1#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.004965017914380571,
+     "Emax": 0.13086980704913587
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.005317644440451119,
+     "Emax": 0.1148118341128558
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_weight",
+     "kind": "param_grad",
+     "E2": 0.0036904748430859565,
+     "Emax": 0.5563831324494113
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:up_bias",
+     "kind": "param_grad",
+     "E2": 0.0036848950214909554,
+     "Emax": 0.06654607222733645
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_weight",
+     "kind": "param_grad",
+     "E2": 0.0009517264922403728,
+     "Emax": 0.020760877239125
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:grn_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_weight",
+     "kind": "param_grad",
+     "E2": 0.006123687618640667,
+     "Emax": 0.35251065412022775
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers/convnextv2.encoder.stages.3.layers.2#convnext_mlp",
+     "result": "grad:down_bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    }
+   ],
+   "seconds": 4.57249200399383
+  }
+ }
+}

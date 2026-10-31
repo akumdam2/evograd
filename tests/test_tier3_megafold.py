@@ -85,7 +85,7 @@ needs_checkout = unittest.skipIf(
 )
 
 
-def _tiny_case(residues: int = 16) -> Workload:
+def _tiny_case(residues: int = 384) -> Workload:
     return Workload(
         dims=ALPHAFOLD3_2L.train_step_dims(batch=1, residues=residues),
         dtype="float32",
@@ -143,7 +143,7 @@ class TestModulesImportWithoutMegaFold(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.megafold.workload import make_workload
 
         with self.assertRaises(ImportError) as caught:
-            make_workload(_tiny_case(), device="cpu", seed=0)
+            make_workload(_tiny_case(), device="cuda", seed=0)
         message = str(caught.exception)
         self.assertIn("PYTHONPATH", message)
         self.assertIn("MegaFold", message)
@@ -164,7 +164,7 @@ class TestModulesImportWithoutMegaFold(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.megafold.workload import make_workload
 
         with self.assertRaises(ImportError) as caught:
-            make_workload(_tiny_case(), device="cpu", seed=0)
+            make_workload(_tiny_case(), device="cuda", seed=0)
         message = str(caught.exception)
         self.assertIn("GPU", message)
         self.assertNotIn("clone", message)
@@ -186,10 +186,10 @@ class TestTheDeclaration(unittest.TestCase):
             get_workload("megafold").sites,
             {
                 "layer_norm": "layernorm",
-                "layernorm_linear": "layernorm_linear",
+                "layernorm_linear": "megafold_layernorm_linear",
                 "transition": "swiglu",
-                "pair_bias_attention": "evoattention",
-                "triangle_attention": "evoattention",
+                "pair_bias_attention": "megafold_evoattention",
+                "triangle_attention": "megafold_evoattention",
             },
         )
 
@@ -210,10 +210,10 @@ class TestTheDeclaration(unittest.TestCase):
     def test_it_requires_megafold_by_name(self):
         self.assertEqual(get_workload("megafold").requires, "megafold")
 
-    def test_the_notes_say_the_shapes_are_declared_not_harvested(self):
+    def test_the_notes_say_where_the_shapes_come_from(self):
         notes = get_workload("megafold").notes
-        self.assertIn("declared from MegaFold's configuration", notes)
-        self.assertIn("not harvested", notes)
+        self.assertIn("harvested from one real training step", notes)
+        self.assertIn("re-derive from the registered AlphaFold3 configuration", notes)
 
 
 class TestTheExclusionsStateEveryRestriction(unittest.TestCase):
@@ -244,11 +244,10 @@ class TestTheExclusionsStateEveryRestriction(unittest.TestCase):
     def test_attention_dropout_is_declared_off_for_every_provider(self):
         self._assert_states("Attention-weight dropout is disabled for every provider")
 
-    def test_the_data_pipeline_is_declared_synthetic(self):
+    def test_the_data_is_declared_one_frozen_real_structure(self):
         self._assert_states(
-            "MSA and template data pipeline is replaced by seeded synthetic "
-            "features at a fixed crop",
-            "constraint channels are present but uniformly masked",
+            "one real structure featurized once and frozen",
+            "templates are masked",
         )
 
     def test_the_excluded_training_machinery_is_named(self):
@@ -258,13 +257,18 @@ class TestTheExclusionsStateEveryRestriction(unittest.TestCase):
 
     def test_the_pinned_stochastic_choices_are_named(self):
         self._assert_states(
-            "recycling count and whether the confidence head is called are "
-            "pinned rather than sampled"
+            "count (one pass) and whether the confidence head is called are "
+            "pinned rather than sampled",
+            "call it on every step",
         )
+
+    def test_the_sites_no_gradient_reaches_are_named(self):
+        self._assert_states("The template embedder", "the recycling projections")
 
     def test_random_weights_and_incomparable_timings_are_declared(self):
         self._assert_states(
             "Weights are randomly initialized",
+            "load their warm start",
             "not comparable to the MegaFold",
         )
 
@@ -485,7 +489,7 @@ class TestTheModelBuilds(unittest.TestCase):
         )
 
         self.sites = MEGAFOLD_SITES
-        self.workload = make_workload(_tiny_case(), device="cpu", seed=0)
+        self.workload = make_workload(_tiny_case(), device="cuda", seed=0)
 
     def test_build_returns_a_module(self):
         from torch import nn
@@ -515,8 +519,8 @@ class TestTheModelBuilds(unittest.TestCase):
     def test_batches_are_identical_for_identical_seeds(self):
         from evograd.evaluation.tier3.workloads.megafold.workload import make_workload
 
-        first = make_workload(_tiny_case(), device="cpu", seed=0).batch_for(seed=5)
-        second = make_workload(_tiny_case(), device="cpu", seed=0).batch_for(seed=5)
+        first = make_workload(_tiny_case(), device="cuda", seed=0).batch_for(seed=5)
+        second = make_workload(_tiny_case(), device="cuda", seed=0).batch_for(seed=5)
         for key, value in first.items():
             with self.subTest(feature=key):
                 if torch.is_tensor(value):
@@ -524,9 +528,13 @@ class TestTheModelBuilds(unittest.TestCase):
 
     def test_the_crop_length_is_exactly_as_declared(self):
         batch = self.workload.batch_for(seed=1)
-        self.assertEqual(
-            batch["atom_inputs"].shape[1], 16 * ALPHAFOLD3_2L.atoms_per_window
-        )
+        self.assertEqual(batch["molecule_ids"].shape[1], 384)
+        self.assertEqual(batch["atom_inputs"].shape[-1], 3)
+
+    def test_the_seed_travels_with_the_batch_as_content(self):
+        batch = self.workload.batch_for(seed=7)
+        self.assertTrue(torch.is_tensor(batch["seed"]))
+        self.assertEqual(int(batch["seed"]), 7)
 
 
 @needs_megafold
@@ -545,9 +553,9 @@ class TestEverySiteMatchesSomething(unittest.TestCase):
             make_workload,
         )
 
-        workload = make_workload(_tiny_case(), device="cpu", seed=0)
+        workload = make_workload(_tiny_case(), device="cuda", seed=0)
         model = workload.build(KernelSet(registry=MEGAFOLD_SITES))
-        for spec in _module_patches():
+        for spec in _module_patches(model):
             with self.subTest(site=spec.site):
                 matched = [
                     path
@@ -555,6 +563,26 @@ class TestEverySiteMatchesSomething(unittest.TestCase):
                     if path and spec.match(module)
                 ]
                 self.assertTrue(matched, f"{spec.site} matched nothing")
+
+    def test_no_site_lies_where_no_gradient_reaches(self):
+        from evograd.evaluation.tier3.workloads.megafold.workload import (
+            MEGAFOLD_SITES,
+            NOT_SITES,
+            _module_patches,
+            make_workload,
+        )
+
+        workload = make_workload(_tiny_case(), device="cuda", seed=0)
+        model = workload.build(KernelSet(registry=MEGAFOLD_SITES))
+        tops = {path.split(".", 1)[0] for path, _ in model.named_modules() if path}
+        self.assertLessEqual(set(NOT_SITES), tops)
+        taken = [
+            path
+            for spec in _module_patches(model)
+            for path, module in model.named_modules()
+            if path and spec.match(module)
+        ]
+        self.assertFalse([p for p in taken if p.split(".", 1)[0] in NOT_SITES])
 
 
 @needs_megafold
@@ -573,7 +601,11 @@ class TestTheProvidersAgree(unittest.TestCase):
         import argparse
 
         args = argparse.Namespace()
-        return providers(args, MEGAFOLD_SITES)
+        # compile_clean rebinds MegaFold's module globals for the life of the
+        # process, after which no other provider may be built in it; it is
+        # built in a child of its own below.
+        return {name: kernels for name, kernels in providers(args, MEGAFOLD_SITES).items()
+                if name != "compile_clean"}
 
     def _loss_per_provider(self) -> dict[str, float]:
         from evograd.evaluation.tier3.model import build_with_provenance
@@ -581,7 +613,7 @@ class TestTheProvidersAgree(unittest.TestCase):
 
         losses = {}
         for name, kernels in self._providers().items():
-            workload = make_workload(_tiny_case(), device="cpu", seed=0)
+            workload = make_workload(_tiny_case(), device="cuda", seed=0)
             model, _ = build_with_provenance(workload, kernels, provider=name)
             losses[name] = float(
                 workload.loss(model, workload.batch_for(seed=1)).detach()
@@ -596,7 +628,7 @@ class TestTheProvidersAgree(unittest.TestCase):
 
         for name, kernels in self._providers().items():
             with self.subTest(provider=name):
-                workload = make_workload(_tiny_case(), device="cpu", seed=0)
+                workload = make_workload(_tiny_case(), device="cuda", seed=0)
                 model, provenance = build_with_provenance(
                     workload, kernels, provider=name
                 )
@@ -604,6 +636,32 @@ class TestTheProvidersAgree(unittest.TestCase):
                 # The provider that built the tree is recorded, because three
                 # providers request the same sites and still differ.
                 self.assertEqual(provenance.method, f"module_surgery:{name}")
+
+    def test_compile_clean_builds_in_its_own_process(self):
+        """As the tier-3 CLI builds every provider: one process each."""
+        import subprocess
+        import sys
+
+        code = (
+            "from evograd.evaluation.tier3.model import build_with_provenance\n"
+            "from evograd.evaluation.tier3.patch import KernelSet\n"
+            "from evograd.evaluation.tier3.workloads.megafold.workload import MEGAFOLD_SITES, make_workload\n"
+            "from evograd.opdecl.activity import Workload\n"
+            "from evograd.opdecl.models import ALPHAFOLD3_2L\n"
+            "case = Workload(dims=ALPHAFOLD3_2L.train_step_dims(batch=1, residues=384), dtype='float32')\n"
+            "workload = make_workload(case, device='cuda', seed=0)\n"
+            "_, provenance = build_with_provenance(workload, KernelSet(registry=MEGAFOLD_SITES),\n"
+            "                                      provider='compile_clean')\n"
+            "print(provenance.method)\n"
+        )
+        # The tests before this one gave this process a process group and its
+        # MASTER_PORT; the tier-3 CLI's parent builds no model, so each child
+        # picks its own port, and this child must too.
+        env = {key: value for key, value in os.environ.items() if key != "MASTER_PORT"}
+        child = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                               env=env)
+        self.assertEqual(child.returncode, 0, child.stderr[-3000:])
+        self.assertEqual(child.stdout.split()[-1], "module_surgery:compile_clean")
 
     def test_an_unrecognized_provider_gets_the_eager_tree(self):
         """``candidate`` and the identity control are eager plus their kernels.
@@ -617,7 +675,7 @@ class TestTheProvidersAgree(unittest.TestCase):
             make_workload,
         )
 
-        workload = make_workload(_tiny_case(), device="cpu", seed=0)
+        workload = make_workload(_tiny_case(), device="cuda", seed=0)
         _model, provenance = build_with_provenance(
             workload, KernelSet(registry=MEGAFOLD_SITES), provider="candidate"
         )
@@ -648,7 +706,7 @@ class TestTheProvidersAgree(unittest.TestCase):
             make_workload,
         )
 
-        workload = make_workload(_tiny_case(), device="cpu", seed=0)
+        workload = make_workload(_tiny_case(), device="cuda", seed=0)
         model, provenance = build_with_provenance(
             workload, KernelSet(registry=MEGAFOLD_SITES), provider="compile"
         )
@@ -674,11 +732,11 @@ class TestIdentityControl(unittest.TestCase):
             make_workload,
         )
 
-        workload = make_workload(_tiny_case(), device="cpu", seed=0)
+        workload = make_workload(_tiny_case(), device="cuda", seed=0)
         model = workload.build(KernelSet(registry=MEGAFOLD_SITES))
         loss_eager = workload.loss(model, workload.batch_for(seed=1))
 
-        patched = make_workload(_tiny_case(), device="cpu", seed=0)
+        patched = make_workload(_tiny_case(), device="cuda", seed=0)
         control = identity_control_kernels(TASKS, registry=MEGAFOLD_SITES)
         patched_model, provenance = patched.build_patched(control)
         self.assertEqual(set(provenance.actual_sites), set(MEGAFOLD_SITES.names))

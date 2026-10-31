@@ -1,0 +1,501 @@
+{
+ "stage_key": {
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "isolated": true,
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "torchrec_dlrm_dlrm_interaction/interaction": "6f8e3a0502f74dc819776140dd3cd11d2b0b1ac930db9d064548aeff3efad73b"
+  }
+ },
+ "result": {
+  "report": {
+   "protocol": "evograd-tier3-model-v3",
+   "evaluation_tier": 3,
+   "execution_scope": "model",
+   "benchmark_level": 3,
+   "name": "torchrec_dlrm-1394f3cc47559de8",
+   "model": "TorchRec DLRM example",
+   "workload_hash": "1394f3cc47559de80502495a9a0d21cddfa3334127401bc1285a61a130a2a758",
+   "config": {
+    "model": "torchrec_dlrm",
+    "batch_size": 32,
+    "dtype": "float32",
+    "device": "cuda",
+    "seed": 0,
+    "data_seed": 0,
+    "input_mode": "real",
+    "arch_overrides": {},
+    "calibration": null,
+    "data_path": null,
+    "stream": true
+   },
+   "canonical": false,
+   "unit_name": "examples",
+   "units_per_step": 32,
+   "weights": "random",
+   "data": "streamed_real_data",
+   "stream": {
+    "dataset": [
+     "criteo_kaggle",
+     "torchrec_preprocessed_numpy",
+     "train_first_half"
+    ],
+    "mapping": "per_feature_modulo_table_size",
+    "table_sizes": [
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000
+    ],
+    "train_rows": 22920309,
+    "rule": "batch i of data order o: random.Random(f'criteo-train-first-half/order{o}/batch{i}').sample(range(train_rows), batch_size) rows of the labeled first half; sparse ids per_feature_modulo_table_size",
+    "files": {
+     "train_dense.npy": {
+      "bytes": 2383712212
+     },
+     "train_sparse.npy": {
+      "bytes": 9534848464
+     },
+     "train_labels.npy": {
+      "bytes": 183362596
+     }
+    },
+    "files_sha256": null
+   },
+   "all_parameters_trainable": true,
+   "input_checksum": "40dbdf4a351536d3bb776014c9d40a7cc9fcb65740fb70f8b4b89dbeda992153",
+   "architecture": {
+    "num_dense_features": 13,
+    "num_sparse_features": 26,
+    "embedding_dim": 64,
+    "num_embeddings_per_feature": [
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000,
+     100000
+    ],
+    "dense_arch_layer_sizes": [
+     512,
+     256,
+     64
+    ],
+    "over_arch_layer_sizes": [
+     512,
+     512,
+     256,
+     1
+    ],
+    "multi_hot_sizes": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ]
+   },
+   "model_gate": {
+    "calibration": null,
+    "requires_real_data": true
+   },
+   "execution_note": "single-device architecture and AdamW; TorchRec distributed sharding and fused sparse optimizer are outside this workload",
+   "seed": 0,
+   "provider_order": [
+    "eager",
+    "combination"
+   ],
+   "isolation": "one spawned process per provider",
+   "timing_protocol": {
+    "boundary": "loss.backward() + optimizer step",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "optimizer": "AdamW",
+    "optimizer_config": {
+     "learning_rate": 0.0001,
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "weight_decay": 0.01,
+     "amsgrad": false
+    },
+    "weights": "built by the workload from a fixed seed, identical across providers",
+    "batch_data": "seeded; every provider sees the same sequence",
+    "warmup_steps": 3,
+    "timed_steps_per_block": 10,
+    "blocks": 10,
+    "loss_trajectory_steps": 5,
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "peak_memory": "measured after the optimizer state exists",
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+   },
+   "verification_policy": {
+    "numerical_enforcement": {
+     "mode": "strict",
+     "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+     "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+    },
+    "preflight": "skipped by request (--no-verify): timings are ungated",
+    "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "loss_delta_threshold": null
+   },
+   "site_registry": {
+    "workload_family": "torchrec_dlrm",
+    "site_ops": {
+     "embedding_bag": "embedding_bag",
+     "dlrm_interaction": "torchrec_dlrm_dlrm_interaction"
+    },
+    "preflight_workloads": {
+     "embedding_bag": 1,
+     "dlrm_interaction": 1
+    }
+   },
+   "environment": {
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "triton": "3.6.0"
+   },
+   "providers": {
+    "eager": {
+     "ok": true,
+     "provider": "eager",
+     "step_ms": 13.890955250099069,
+     "step_ms_min": 13.878139200096484,
+     "per_block_ms": [
+      14.369617898773868,
+      13.878139200096484,
+      13.889348199882079,
+      14.016660199558828,
+      13.884698499168735,
+      13.878395699430257,
+      13.890631700633094,
+      13.891278799565043,
+      13.899005299026612,
+      13.897192900185473
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 13.890955250099069,
+      "min_ms": 13.878139200096484,
+      "q20_ms": 13.88343793922104,
+      "q80_ms": 13.922536279133055
+     },
+     "cpu_bound_fraction": 0.8126004370335611,
+     "cpu_bound_fraction_per_block": [
+      0.8190733729150761,
+      0.812201797235169,
+      0.8131013735383825,
+      0.8141444350098792,
+      0.8127419331300598,
+      0.8122051239327607,
+      0.812543075298278,
+      0.8126268907943599,
+      0.8125739832727623,
+      0.812504624608708
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 2303.6572664627784,
+     "unit_name": "examples",
+     "peak_memory_bytes": 3411414528,
+     "losses": [
+      0.9237588047981262,
+      0.7928167581558228,
+      0.6638531684875488,
+      0.6425787806510925,
+      0.5786564350128174
+     ],
+     "loss_trajectory_step_ms": [
+      395.1470739993965,
+      19.45903801242821,
+      18.816402996890247,
+      19.208597994293086,
+      18.838724005036056
+     ],
+     "first_timed_batch_step_ms": 18.55067400902044,
+     "patched": [],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {},
+      "counts": {},
+      "modules_replaced": 0
+     },
+     "dynamo": null,
+     "kernel_sources": [],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "combination": {
+     "ok": true,
+     "provider": "combination",
+     "step_ms": 13.825230749353068,
+     "step_ms_min": 13.792245899094269,
+     "per_block_ms": [
+      13.855398500163574,
+      13.817545400524978,
+      13.831133898929693,
+      13.828045999980532,
+      13.83980210084701,
+      13.792245899094269,
+      13.814079899748322,
+      13.844243499625009,
+      13.822415498725604,
+      13.821585901314393
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 13.825230749353068,
+      "min_ms": 13.792245899094269,
+      "q20_ms": 13.816852300369646,
+      "q80_ms": 13.84069038060261
+     },
+     "cpu_bound_fraction": 0.811008142186064,
+     "cpu_bound_fraction_per_block": [
+      0.8110911425681435,
+      0.8111249050504079,
+      0.8112094194168378,
+      0.8108926742370115,
+      0.8110415105168766,
+      0.8102693122245945,
+      0.8107529694418375,
+      0.8110919892747658,
+      0.8105894227125167,
+      0.8109747738552515
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 2314.6087454270805,
+     "unit_name": "examples",
+     "peak_memory_bytes": 3411414528,
+     "losses": [
+      0.9237588047981262,
+      0.7928167581558228,
+      0.6638531684875488,
+      0.6425787806510925,
+      0.5786563754081726
+     ],
+     "loss_trajectory_step_ms": [
+      674.488972988911,
+      20.17035298922565,
+      19.145571000990458,
+      18.782277998980135,
+      19.091228998149745
+     ],
+     "first_timed_batch_step_ms": 18.63826799672097,
+     "patched": [
+      "dlrm_interaction"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "dlrm_interaction"
+      ],
+      "actual_sites": [
+       "dlrm_interaction"
+      ],
+      "paths": {
+       "dlrm_interaction": [
+        "interaction"
+       ]
+      },
+      "counts": {
+       "dlrm_interaction": 1
+      },
+      "modules_replaced": 1
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "dlrm_interaction",
+       "op": "torchrec_dlrm_dlrm_interaction",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    }
+   },
+   "speedup_intervals": {
+    "reference": "eager",
+    "available": true,
+    "vs_reference": {
+     "combination": {
+      "step_ms_ratio": 1.004753953256735,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.003626341550614,
+       "high": 1.009479327022689
+      }
+     }
+    }
+   }
+  },
+  "rows": {
+   "combination": {
+    "ok": true,
+    "step_ms": 13.825230749353068,
+    "peak_memory_bytes": 3411414528,
+    "cpu_bound_fraction": 0.811008142186064,
+    "speedup": 1.004753953256735,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.003626341550614,
+     "high": 1.009479327022689
+    },
+    "peak_memory_ratio": 1.0
+   }
+  }
+ }
+}

@@ -1,0 +1,81 @@
+{
+ "stage_key": {
+  "case": "gelu/model.visual.merger.mlp",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "e2ef667ac6aea07580707a1b47fcfe442b833658694a8955674729a22032b999",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+    "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.1138211349050032,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.10937500177635684,
+     "high": 0.11570248350086376
+    },
+    "candidate_ms": 0.12595200538635254,
+    "baseline_ms": 0.014336000196635723,
+    "speedup_forward": 0.8888888552039012,
+    "speedup_backward": 0.25641025880209
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 2.0730770356605337,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.9887640682141474,
+     "high": 2.1807228619934955
+    },
+    "candidate_ms": 0.13311999291181564,
+    "baseline_ms": 0.275968000292778,
+    "speedup_forward": 2.6428570918140735,
+    "speedup_backward": 1.7604165940334118
+   }
+  }
+ }
+}

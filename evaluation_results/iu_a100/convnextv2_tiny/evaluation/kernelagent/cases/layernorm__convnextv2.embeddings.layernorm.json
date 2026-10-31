@@ -1,0 +1,1724 @@
+{
+ "stage_key": {
+  "case": "layernorm/convnextv2.embeddings.layernorm",
+  "program_sha256": "56af57f2c7560c1d715b8ee972ecc1044a120965702649918075d068bb79a751",
+  "corpus": {
+   "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+   "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor"
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "failed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "layernorm",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_1836761348260827722",
+    "source_hash": "13bb2efa2556c090f5ec5551269860bc7b920b67cc7a1dae3f3e6b4f62618e86"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:dbias": 0.0048828125,
+    "grad_in:dweight": 0.0078125,
+    "grad_in:dx": 3.0517578125e-05,
+    "out:y": 0.03125
+   },
+   "cases": [
+    "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm"
+   ]
+  },
+  "case_counts": {
+   "passed": 2,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:y",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.00390625,
+       "max_rel_err": 15.273690223693848,
+       "headroom": 0.0625,
+       "worst_index": [
+        14009,
+        75
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0625,
+       "rounding_floor": 0.0625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 0.0078125,
+       "headroom": 0.0078125,
+       "worst_index": [
+        57651,
+        36
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0009765625,
+       "max_rel_err": 0.16666666666666666,
+       "headroom": 0.125,
+       "worst_index": [
+        44
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.00048828125,
+       "max_rel_err": 0.24850299401197604,
+       "headroom": 0.0625,
+       "worst_index": [
+        69
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 96
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "case": "layernorm/convnextv2.embeddings.layernorm",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.layernorm",
+       "index_in_step": 1,
+       "kind": "module:ConvNextV2LayerNorm",
+       "layer": null,
+       "path": "convnextv2.embeddings.layernorm",
+       "role": "convnextv2.embeddings.layernorm"
+      },
+      "cotangent_stats": {
+       "dy": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9629876,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:y",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:y",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.00390625,
+       "max_rel_err": 1.2564102564102564,
+       "headroom": 0.0625,
+       "worst_index": [
+        270,
+        52
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0625,
+       "rounding_floor": 0.0625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 0.0078125,
+       "headroom": 0.0009765625,
+       "worst_index": [
+        48874,
+        65
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0009765625,
+       "max_rel_err": 0.3644067796610169,
+       "headroom": 0.125,
+       "worst_index": [
+        47
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0009765625,
+       "max_rel_err": 0.08502024291497975,
+       "headroom": 0.2,
+       "worst_index": [
+        3
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0048828125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0048828125,
+       "rounding_floor": 0.00390625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 96
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "case": "layernorm/convnextv2.embeddings.layernorm",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.layernorm",
+       "index_in_step": 1,
+       "kind": "module:ConvNextV2LayerNorm",
+       "layer": null,
+       "path": "convnextv2.embeddings.layernorm",
+       "role": "convnextv2.embeddings.layernorm"
+      },
+      "cotangent_stats": {
+       "dy": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9629977,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:y",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "919a4f5126ec108a1c9cc9cb63d53d30fb52af62f1d5db9370bd10f2a44e4a8b",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/work/hdd/bcjw/wzhan/ADBench_eval/convnextv2_tiny/state/gate2/operator/7096a8fa75b2f9a2/layernorm__convnextv2.embeddings.layernorm.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "failed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "layernorm",
+    "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.ops.level1.layernorm.forward_ref:layernorm_runtime_ref",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+     "source": null
+    },
+    "parameter_args": [
+     "weight",
+     "bias"
+    ],
+    "dims": {
+     "rows": 100352,
+     "hidden": 96
+    },
+    "dtype": "bfloat16",
+    "inputs": "real_training_payload",
+    "case_id": "layernorm/convnextv2.embeddings.layernorm",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_1836761348260827722"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "seed": 303000001,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.embeddings.layernorm"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+     "seed": 404000001,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.embeddings.layernorm"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "919a4f5126ec108a1c9cc9cb63d53d30fb52af62f1d5db9370bd10f2a44e4a8b",
+    "schema": "evograd-verification-gate2-policy/4",
+    "boundaries": false,
+    "sample_protocol": "disjoint_holdout",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "740e478b84c1f2657e638f7d0762cff491c9c3999c4e6ebe575b96b26d761f8b",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 1,
+   "failed": 1,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [
+   "threshold_exceeded"
+  ],
+  "cases": [
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:y",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.1865284415890515e-05,
+       "Emax": 0.011769609464852785,
+       "diff_l2": 0.012222914329625335,
+       "diff_max": 0.00390625,
+       "ref_l2": 1030.140863143227,
+       "ref_rms": 0.33189291553514255,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2.5030723280450017e-05,
+       "Emax": 0.048955737385720406
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.020547229687608e-05,
+       "Emax": 0.02678962005495033,
+       "diff_l2": 9.021011994934094e-06,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 0.8839387078337813,
+       "ref_rms": 0.0002847892025195109,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02253550628701365
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0268 > 0.0225 (1.19x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.02678962005495033,
+         "threshold": 0.02253550628701365
+        }
+       }
+      ]
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0038466673658231797,
+       "Emax": 0.023046830106711498,
+       "diff_l2": 0.0015970153577071343,
+       "diff_max": 0.0009765625,
+       "ref_l2": 0.41516856172599576,
+       "ref_rms": 0.04237296389474464,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.009516951709963379,
+       "Emax": 0.07631674936438493
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0015763435819738305,
+       "Emax": 0.008093060072548433,
+       "diff_l2": 0.0009318452226867906,
+       "diff_max": 0.00048828125,
+       "ref_l2": 0.5911434749015653,
+       "ref_rms": 0.06033332826185789,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005277575872820066,
+       "Emax": 0.03378155319912778
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "seed": 303000001,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.embeddings.layernorm"
+      }
+     },
+     "reference": {
+      "execution_id": "8d95462301304e8792ecafe712200265",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 303000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2023cdc0978665fc2d1faaf47fc433ee1fac5159ec693859b3d4faebee3c92a6",
+      "sample_identity": {
+       "fingerprint": "1c9d2afb08bf4d42499be9e224c1c40781f9db6f089c7441055c5c7a3b80a969",
+       "components": {
+        "seed": 303000001,
+        "inputs": "7b311b43091451adf276a550aa9d0e115b69691f2b16f156286e5c3bd7650637",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "6d80b88893ba8a07c2056056ccf6836964524c9242bc226bc5e944511cac9970",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "b769f5c3252df327564045202984b1433539cfc04fa183aa908d04d5d0aeeb9c",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "6a5786a4155d4f5a1c8fc59284fcbf6f2437eb39e68097c3b664adf387a2b867",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "ac38ac24f644734ae5743c80c2f6af5c48377c9c07ada062e0ec9ae48c0000d8",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.2944339839887107
+     },
+     "candidate": {
+      "execution_id": "f7bb3745661e4207b462383a451a274f",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1836761348260827722"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 303000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2023cdc0978665fc2d1faaf47fc433ee1fac5159ec693859b3d4faebee3c92a6",
+      "sample_identity": {
+       "fingerprint": "1c9d2afb08bf4d42499be9e224c1c40781f9db6f089c7441055c5c7a3b80a969",
+       "components": {
+        "seed": 303000001,
+        "inputs": "7b311b43091451adf276a550aa9d0e115b69691f2b16f156286e5c3bd7650637",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "6d80b88893ba8a07c2056056ccf6836964524c9242bc226bc5e944511cac9970",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "b769f5c3252df327564045202984b1433539cfc04fa183aa908d04d5d0aeeb9c",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "6a5786a4155d4f5a1c8fc59284fcbf6f2437eb39e68097c3b664adf387a2b867",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "27cbe89759ad0cbbd6d41461938bbe52f3faa2b11b38b03f461ef2cafc68708a",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.20225610298803076
+     },
+     "contract_digest": "781dc310b61e109a8880c08f385942142134f3457b63813749c4aad7f867bad8"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:y",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.69609874203242e-06,
+       "Emax": 0.012077112623013595,
+       "diff_l2": 0.008730115983264106,
+       "diff_max": 0.00390625,
+       "ref_l2": 1003.9117818507815,
+       "ref_rms": 0.32344237583380886,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2.5030723280450017e-05,
+       "Emax": 0.048955737385720406
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 7.103657818444035e-06,
+       "Emax": 0.01707401659786079,
+       "diff_l2": 9.852241312462969e-06,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 1.3869250975015257,
+       "ref_rms": 0.0004468423986542153,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02253550628701365
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         96,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0018946305502599613,
+       "Emax": 0.016421220818760487,
+       "diff_l2": 0.0011039636014387197,
+       "diff_max": 0.0009765625,
+       "ref_l2": 0.5826801437817233,
+       "ref_rms": 0.05946954314653161,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.009516951709963379,
+       "Emax": 0.07631674936438493
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.002975107829240117,
+       "Emax": 0.016211418323352395,
+       "diff_l2": 0.0017559710765183772,
+       "diff_max": 0.0009765625,
+       "ref_l2": 0.5902209860295639,
+       "ref_rms": 0.06023917713561625,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.005277575872820066,
+       "Emax": 0.03378155319912778
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+      "seed": 404000001,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.embeddings.layernorm"
+      }
+     },
+     "reference": {
+      "execution_id": "97a131344c8c4709a7dc1ed782e9a8bf",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 404000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e86bd50ddd4375849db91d59c026715141d8ea138297e9a0c2a824905233610e",
+      "sample_identity": {
+       "fingerprint": "b034f221dbaf2eba6dd7e3eff3e00900e766eecc54b189f856a77eb2f5999b7f",
+       "components": {
+        "seed": 404000001,
+        "inputs": "14d2639d5f00ee477ce5d29260a7d7af3ff90c4d39a9279bd796c6a6f137bc1a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "919a33f993938899c076404b52007675d2e248f5fef33780ee4391efa4b59d33",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f1c19442c86e9aed5d3dc9590199de504436404394d3af02887f1eb5eb9ec60a",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "50535995d821f56e76adda60fd2cad3c5170019f89a9d8ee327187364eda1235",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "fbfeeaeaefd8c543f58658dfa39c47112c701f23150be1ccee8d2031978966c9",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.2961441770021338
+     },
+     "candidate": {
+      "execution_id": "d12ce4a8a0854f68937983f5d762324f",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1836761348260827722"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+       "seed": 404000001,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/layernorm/convnextv2.embeddings.layernorm/convnextv2.embeddings.layernorm",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.embeddings.layernorm"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e86bd50ddd4375849db91d59c026715141d8ea138297e9a0c2a824905233610e",
+      "sample_identity": {
+       "fingerprint": "b034f221dbaf2eba6dd7e3eff3e00900e766eecc54b189f856a77eb2f5999b7f",
+       "components": {
+        "seed": 404000001,
+        "inputs": "14d2639d5f00ee477ce5d29260a7d7af3ff90c4d39a9279bd796c6a6f137bc1a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "919a33f993938899c076404b52007675d2e248f5fef33780ee4391efa4b59d33",
+        "initial_state": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f1c19442c86e9aed5d3dc9590199de504436404394d3af02887f1eb5eb9ec60a",
+             "shape": [
+              100352,
+              96
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              96,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "y": {
+           "tensor": "50535995d821f56e76adda60fd2cad3c5170019f89a9d8ee327187364eda1235",
+           "shape": [
+            100352,
+            96
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            96,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "06ec5df81c6ca06f2c8c3a6b46cea62fdfc4a851faabddd05ea6e06a4a46ebff",
+      "initial_state_digest": "df6da45f9cd04ba50dfbbcdf63fb549e36db2294f197e1297153daf6d766d5bb",
+      "error_stage": null,
+      "seconds": 0.20810401400376577
+     },
+     "contract_digest": "781dc310b61e109a8880c08f385942142134f3457b63813749c4aad7f867bad8"
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "disjoint_holdout"
+  }
+ }
+}

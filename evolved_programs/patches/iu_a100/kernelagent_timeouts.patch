@@ -1,0 +1,53 @@
+diff --git a/candidates/kernelagent/run.py b/candidates/kernelagent/run.py
+index 2aef0a7..a28dafa 100755
+--- a/candidates/kernelagent/run.py
++++ b/candidates/kernelagent/run.py
+@@ -214,6 +214,32 @@ def register_model(model: str, api_base: str) -> None:
+                                    description="registered by adbench-tools")
+ 
+ 
++def _optimization_timeouts(seconds: int) -> None:
++    """Give optimization the test timeout generation gets (``--test-timeout``).
++
++    KernelAgent's optimization workers build their VerificationWorker and
++    KernelProfiler without a timeout, so its defaults apply: 30 s per test and
++    300 s per ncu run, sized for its own quick test. This test runs the
++    evaluator's Gate 1 on recorded payloads, and both wait for the shared GPU
++    lock. The workers are forked from this process and inherit the defaults.
++    """
++    import functools
++
++    from triton_kernel_agent import worker
++    from triton_kernel_agent.opt_worker_component.profiling import kernel_profiler
++
++    for cls, name in ((worker.VerificationWorker, "test_timeout_s"),
++                      (kernel_profiler.KernelProfiler, "ncu_timeout_seconds")):
++        init = cls.__init__
++
++        @functools.wraps(init)
++        def patched(self, *a, _init=init, _name=name, **k):
++            k.setdefault(_name, seconds)
++            _init(self, *a, **k)
++
++        cls.__init__ = patched
++
++
+ def main(argv: list[str] | None = None) -> int:
+     p = _common.parser(__doc__)
+     p.add_argument("--kernelagent-root", type=Path, default=DEFAULT_ROOT)
+@@ -230,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
+         "kernelagent_commit": KERNELAGENT_COMMIT, "gen_workers": args.gen_workers,
+         "gen_rounds": gen_rounds, "opt_strategy": args.opt_strategy, "opt_rounds": opt_rounds,
+         "gpu_name": args.gpu_name, "skip_optimization": args.skip_optimization,
++        "test_timeout": args.test_timeout,
+     })
+ 
+     root = args.kernelagent_root.resolve()
+@@ -273,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
+     if not args.skip_optimization:
+         from triton_kernel_agent.opt_manager import OptimizationManager
+ 
++        _optimization_timeouts(args.test_timeout)
+         config = root / "examples" / "configs" / f"{args.opt_strategy}.yaml"
+         manager = OptimizationManager(
+             config=str(config), max_rounds=opt_rounds, log_dir=ledger.root / "optimization",

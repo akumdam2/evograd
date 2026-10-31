@@ -1,0 +1,526 @@
+{
+ "models": [
+  "convnextv2_tiny",
+  "dit_s_2",
+  "llama_3_2_1b",
+  "qwen2_vl_2b",
+  "qwen3_0_6b",
+  "torchrec_dlrm"
+ ],
+ "level1": {
+  "funnel": {
+   "configurations": 89,
+   "submitted": 18,
+   "violation": 0,
+   "executable": 18,
+   "gate1": 18,
+   "accepted": 13
+  },
+  "speedup": {
+   "eager": {
+    "geomean": 1.3235582370219134,
+    "configurations_covered": 13
+   },
+   "torch_compile": {
+    "geomean": 1.406326090866755,
+    "configurations_covered": 13
+   }
+  },
+  "coverage": 0.14606741573033707
+ },
+ "level2": {
+  "funnel": {
+   "configurations": 17,
+   "submitted": 17,
+   "violation": 0,
+   "executable": 17,
+   "gate1": 17,
+   "accepted": 10
+  },
+  "speedup": {
+   "eager": {
+    "geomean": 1.1818156585789341,
+    "configurations_covered": 10
+   },
+   "torch_compile": {
+    "geomean": 1.2801301644527794,
+    "configurations_covered": 10
+   }
+  },
+  "coverage": 0.5882352941176471,
+  "tier3_single_site": {
+   "qwen3_0_6b": {
+    "fused_add_rms_norm/residual_rmsnorm": {
+     "task": "fused_add_rms_norm",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 222.40388250065735,
+      "peak_memory_bytes": 18446704640,
+      "cpu_bound_fraction": 0.9766433744871578,
+      "speedup": 1.0988871086789267,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0950958743660235,
+       "high": 1.1042510317181051
+      },
+      "peak_memory_ratio": 0.9515365206511097
+     }
+    },
+    "qwen3_attention/causal_gqa_attention": {
+     "task": "qwen3_attention",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 247.50188649995835,
+      "peak_memory_bytes": 19386228736,
+      "cpu_bound_fraction": 0.9800817063178502,
+      "speedup": 0.987454127547251,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9841727169328023,
+       "high": 0.9921789161017511
+      },
+      "peak_memory_ratio": 1.0
+     }
+    },
+    "qwen3_qkv_norm_rope/qkv_norm_rope": {
+     "task": "qwen3_qkv_norm_rope",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "passed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 206.64090159989428,
+      "peak_memory_bytes": 18446704640,
+      "cpu_bound_fraction": 0.9712820072474622,
+      "speedup": 1.1827124132149072,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.1787401155744561,
+       "high": 1.1883996534718209
+      },
+      "peak_memory_ratio": 0.9515365206511097
+     }
+    },
+    "qwen3_swiglu_mlp/swiglu_mlp": {
+     "task": "qwen3_swiglu_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 241.03167405046406,
+      "peak_memory_bytes": 17976942592,
+      "cpu_bound_fraction": 0.9803587597179118,
+      "speedup": 1.0139611748659494,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0105918467064634,
+       "high": 1.0188153355392613
+      },
+      "peak_memory_ratio": 0.9273047809766646
+     }
+    }
+   },
+   "dit_s_2": {
+    "dit_s_2_dit_mlp/blocks.mlp": {
+     "task": "dit_s_2_dit_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 633.9026491994446,
+      "peak_memory_bytes": 21316008448,
+      "cpu_bound_fraction": 0.918982619439356,
+      "speedup": 0.9875810059962445,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9874856652873905,
+       "high": 0.9876586012662759
+      },
+      "peak_memory_ratio": 0.841115901309605
+     }
+    },
+    "dit_s_2_dit_modulation/blocks.modulation": {
+     "task": "dit_s_2_dit_modulation",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 625.9135486994637,
+      "peak_memory_bytes": 25342534144,
+      "cpu_bound_fraction": 0.9203195200049876,
+      "speedup": 1.0001863952311796,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0000980667824089,
+       "high": 1.000259767257982
+      },
+      "peak_memory_ratio": 1.0
+     }
+    }
+   },
+   "llama_3_2_1b": {
+    "llama3_attention/causal_gqa_attention": {
+     "task": "llama3_attention",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 262.06921560078626,
+      "peak_memory_bytes": 20979365888,
+      "cpu_bound_fraction": 0.9683822338398389,
+      "speedup": 0.9855965032266433,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9838171042517008,
+       "high": 0.986266800983326
+      },
+      "peak_memory_ratio": 1.0
+     }
+    },
+    "llama3_qkv_rope/qkv_norm_rope": {
+     "task": "llama3_qkv_rope",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 250.44784709971282,
+      "peak_memory_bytes": 20978317312,
+      "cpu_bound_fraction": 0.9633949049774331,
+      "speedup": 1.0313304965111054,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0303931056224118,
+       "high": 1.0335175318241931
+      },
+      "peak_memory_ratio": 0.999950018699059
+     }
+    },
+    "llama3_residual_rmsnorm/residual_rmsnorm": {
+     "task": "llama3_residual_rmsnorm",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "incomplete",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "llama3_swiglu_mlp/swiglu_mlp": {
+     "task": "llama3_swiglu_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "incomplete",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "convnextv2_tiny": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "passed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 38.87425334978616,
+      "peak_memory_bytes": 2513478656,
+      "cpu_bound_fraction": 0.8865078694307963,
+      "speedup": 1.1142347329457047,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.1130555793885886,
+       "high": 1.116079827556143
+      },
+      "peak_memory_ratio": 0.8285853749762436
+     }
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+     "task": "convnextv2_tiny_convnext_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "failed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "qwen2_vl_2b": {
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+     "task": "qwen2_vl_2b_text_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {
+      "ok": true,
+      "step_ms": 296.6982409496268,
+      "peak_memory_bytes": 22210285568,
+      "cpu_bound_fraction": 0.9792662451776564,
+      "speedup": 0.9707657805051391,
+      "ci95": {
+       "iterations": 2000,
+       "low": 0.9332572776843847,
+       "high": 0.9986939370453836
+      },
+      "peak_memory_ratio": 1.000224303878631
+     }
+    },
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+     "task": "qwen2_vl_2b_vision_mlp",
+     "submitted": true,
+     "executable": true,
+     "accepted": false,
+     "gate1_payloads": "passed",
+     "gate2_operator": "failed",
+     "gate2_model": "passed",
+     "gate3": "skipped",
+     "positive": false,
+     "selected_for_combination": false,
+     "tier3": {}
+    }
+   },
+   "torchrec_dlrm": {
+    "torchrec_dlrm_dlrm_interaction/interaction": {
+     "task": "torchrec_dlrm_dlrm_interaction",
+     "submitted": true,
+     "executable": true,
+     "accepted": true,
+     "gate1_payloads": "passed",
+     "gate2_operator": "passed",
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "positive": true,
+     "selected_for_combination": true,
+     "tier3": {
+      "ok": true,
+      "step_ms": 13.729040299949702,
+      "peak_memory_bytes": 3411414528,
+      "cpu_bound_fraction": 0.808921577597302,
+      "speedup": 1.0123218809904102,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.0113849314754022,
+       "high": 1.01420276853629
+      },
+      "peak_memory_ratio": 1.0
+     }
+    }
+   }
+  }
+ },
+ "level3": {
+  "models": {
+   "qwen3_0_6b": {
+    "cases": [
+     "fused_add_rms_norm/residual_rmsnorm",
+     "qwen3_swiglu_mlp/swiglu_mlp"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.1084851990947828,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1083055858208637,
+     "high": 1.1088428773566872
+    },
+    "speedup_vs_torch_compile": 1.0131443529660313,
+    "peak_memory_ratio": 0.8788413016277742,
+    "cpu_bound_fraction": 0.9762626093049682
+   },
+   "dit_s_2": {
+    "cases": [
+     "dit_s_2_dit_modulation/blocks.modulation"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.0000688845011267,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0000118930443191,
+     "high": 1.0001183149672115
+    },
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": 1.0,
+    "cpu_bound_fraction": 0.9203520991272582
+   },
+   "llama_3_2_1b": {
+    "cases": [
+     "llama3_qkv_rope/qkv_norm_rope"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.0328831125576883,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0303349749911253,
+     "high": 1.035088839065003
+    },
+    "speedup_vs_torch_compile": 1.0180707635365172,
+    "peak_memory_ratio": 0.999950018699059,
+    "cpu_bound_fraction": 0.9632502515857939
+   },
+   "convnextv2_tiny": {
+    "cases": [
+     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.1186970211999347,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1174808905909042,
+     "high": 1.1200749497140288
+    },
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": 0.8281470305125392,
+    "cpu_bound_fraction": 0.8844616022826304
+   },
+   "qwen2_vl_2b": {
+    "cases": [],
+    "accepted": false,
+    "gate2_model": null,
+    "gate3": null,
+    "speedup": null,
+    "ci95": null,
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": null,
+    "cpu_bound_fraction": null
+   },
+   "torchrec_dlrm": {
+    "cases": [
+     "torchrec_dlrm_dlrm_interaction/interaction"
+    ],
+    "accepted": true,
+    "gate2_model": "passed",
+    "gate3": "passed",
+    "speedup": 1.004753953256735,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.003626341550614,
+     "high": 1.009479327022689
+    },
+    "speedup_vs_torch_compile": null,
+    "peak_memory_ratio": 1.0,
+    "cpu_bound_fraction": 0.811008142186064
+   }
+  },
+  "speedup": {
+   "geomean": 1.0517599739763857,
+   "models_covered": 5
+  },
+  "coverage": 0.8333333333333334,
+  "peak_memory_ratio_geomean": 0.9384242892153932
+ }
+}

@@ -445,6 +445,50 @@ def test_an_a_seed_spends_requests_that_evolution_then_does_not_get(
     assert (record["config"]["frontend"], record["seed_requests"], record["iterations"]) == ("a", 3, 7)
 
 
+@pytest.mark.parametrize("fallback", [True, False])
+def test_a_without_an_accepted_seed_falls_back_to_unified_only_when_asked(
+        task, tmp_path, monkeypatch, metered, fallback):
+    from evograd.evolve import run as evolution
+
+    driver = load_driver("evograd")
+    skeleton = (task.root / "skeleton.py").read_text()
+    unified_calls = []
+
+    def a_seed(task_, ledger, args):
+        metered.instances[-1].calls_used = 3
+        (ledger.root / "seed").mkdir()
+        (ledger.root / "seed" / "rejected.py").write_text("# a-seed\n")
+        return None
+
+    def unified_seed(task_, ledger, **kwargs):
+        unified_calls.append(kwargs)
+        program = ledger.root / "seed" / "initial_program_autograd_pair.py"
+        program.parent.mkdir()  # A's output was moved out of the way
+        program.write_text(skeleton + "\n# unified-seed\n")
+        return program
+
+    def evolve(op, **kwargs):
+        assert kwargs["iterations"] == 7 and kwargs["allowed_primitives"] == ()
+        metered.instances[-1].exhaust()
+        raise RuntimeError("model request budget exhausted")
+
+    monkeypatch.setattr(driver, "pipeline_seed", a_seed)
+    monkeypatch.setattr(metered.common, "unified_seed", unified_seed)
+    monkeypatch.setattr(evolution, "run_evolve", evolve)
+    run_dir = tmp_path / "evograd-a"
+    flags = ["--frontend", "a", *(["--fallback-unified"] if fallback else [])]
+    assert driver.main(arguments(task, run_dir, *flags)) == (0 if fallback else 1)
+    if not fallback:
+        record = json.loads((run_dir / "run.json").read_text())
+        assert (record["status"], record["seed_frontend"], unified_calls) == ("seed_failed", "a", [])
+        return
+    record = assert_submission(task, run_dir, "evograd", "unified-seed")
+    assert (record["config"]["frontend"], record["seed_frontend"], record["seed_requests"],
+            record["iterations"]) == ("a", "unified", 3, 7)
+    assert record["seed_fallback_reason"] == str(run_dir / "seed.log")
+    assert (run_dir / "seed_a" / "rejected.py").is_file()
+
+
 @pytest.mark.parametrize("returncode", [0, 1])
 def test_a_pipeline_seed_counts_only_when_its_pipeline_exits_zero(
         task, tmp_path, monkeypatch, returncode):

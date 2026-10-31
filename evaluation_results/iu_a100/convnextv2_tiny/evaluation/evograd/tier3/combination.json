@@ -1,0 +1,446 @@
+{
+ "stage_key": {
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "isolated": true,
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": "b993cc66d6246e547e53af4aa7e1e930616cf62e605d365986de428c7bb1aafd"
+  }
+ },
+ "result": {
+  "report": {
+   "protocol": "evograd-tier3-model-v3",
+   "evaluation_tier": 3,
+   "execution_scope": "model",
+   "benchmark_level": 3,
+   "name": "convnextv2_tiny-023afe318b1f76e4",
+   "model": "facebook/convnextv2-tiny-1k-224",
+   "workload_hash": "023afe318b1f76e447b38d6f84545abded6a9b8e0a6a04f453f5266ed0cff119",
+   "config": {
+    "model": "convnextv2_tiny",
+    "batch_size": 32,
+    "seq_len": 0,
+    "image_size": 224,
+    "dtype": "bfloat16",
+    "device": "cuda",
+    "seed": 0,
+    "data_seed": 0,
+    "attn_implementation": "sdpa",
+    "arch_overrides": {},
+    "weights": "pretrained",
+    "calibration": null,
+    "data_path": null,
+    "stream": true
+   },
+   "canonical": false,
+   "unit_name": "images",
+   "units_per_step": 32,
+   "weights": "pretrained",
+   "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+   "data": "streamed_real_data",
+   "stream": {
+    "dataset": [
+     "ShaomuTan/imagenette",
+     "061f0ab5ca70523e13982a7ba463c076af657386",
+     "320px/train-00000-of-00001.parquet"
+    ],
+    "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+    "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+    "rows": 9469,
+    "skipped": 0,
+    "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+    "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+   },
+   "all_parameters_trainable": true,
+   "gradient_checkpointing": false,
+   "use_cache": false,
+   "input_checksum": "940a5bf83e358cc7d5ebf9381661ecb0a043e1f9d827044c44b74bd9a5d480c5",
+   "architecture": {
+    "architectures": [
+     "ConvNextV2ForImageClassification"
+    ],
+    "depths": [
+     3,
+     3,
+     9,
+     3
+    ],
+    "drop_path_rate": 0.0,
+    "hidden_act": "gelu",
+    "hidden_sizes": [
+     96,
+     192,
+     384,
+     768
+    ],
+    "image_size": 224,
+    "initializer_range": 0.02,
+    "layer_norm_eps": 1e-12,
+    "model_type": "convnextv2",
+    "num_channels": 3,
+    "num_stages": 4,
+    "out_features": null,
+    "patch_size": 4,
+    "stage_names": [
+     "stem",
+     "stage1",
+     "stage2",
+     "stage3",
+     "stage4"
+    ],
+    "torch_dtype": "float32",
+    "transformers_version": "4.27.0.dev0",
+    "num_labels": 1000
+   },
+   "model_gate": {
+    "calibration": null,
+    "requires_real_data": true
+   },
+   "seed": 0,
+   "provider_order": [
+    "eager",
+    "combination"
+   ],
+   "isolation": "one spawned process per provider",
+   "timing_protocol": {
+    "boundary": "loss.backward() + optimizer step",
+    "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+    "optimizer": "AdamW",
+    "optimizer_config": {
+     "learning_rate": 0.0001,
+     "betas": [
+      0.9,
+      0.999
+     ],
+     "eps": 1e-08,
+     "weight_decay": 0.01,
+     "amsgrad": false
+    },
+    "weights": "pinned pretrained checkpoint, identical across providers",
+    "batch_data": "seeded; every provider sees the same sequence",
+    "warmup_steps": 3,
+    "timed_steps_per_block": 10,
+    "blocks": 10,
+    "loss_trajectory_steps": 5,
+    "provider_order": "seeded random, recorded; identical settings for every provider",
+    "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+    "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+    "peak_memory": "measured after the optimizer state exists",
+    "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+   },
+   "verification_policy": {
+    "numerical_enforcement": {
+     "mode": "strict",
+     "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+     "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+    },
+    "preflight": "skipped by request (--no-verify): timings are ungated",
+    "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+    "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+    "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+    "loss_delta_threshold": null
+   },
+   "site_registry": {
+    "workload_family": "convnextv2_tiny",
+    "site_ops": {
+     "convnext_mlp_stage0": "convnextv2_tiny_convnext_mlp",
+     "convnext_mlp_stage1": "convnextv2_tiny_convnext_mlp",
+     "convnext_mlp_stage2": "convnextv2_tiny_convnext_mlp",
+     "convnext_mlp_stage3": "convnextv2_tiny_convnext_mlp"
+    },
+    "preflight_workloads": {
+     "convnext_mlp_stage0": 1,
+     "convnext_mlp_stage1": 1,
+     "convnext_mlp_stage2": 1,
+     "convnext_mlp_stage3": 1
+    }
+   },
+   "environment": {
+    "gpu_name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.11.0+cu128",
+    "cuda": "12.8",
+    "triton": "3.6.0"
+   },
+   "providers": {
+    "eager": {
+     "ok": true,
+     "provider": "eager",
+     "step_ms": 43.375969999760855,
+     "step_ms_min": 43.26697359938407,
+     "per_block_ms": [
+      43.26697359938407,
+      43.33037059986964,
+      43.336343800183386,
+      43.372101899876725,
+      43.389604799449444,
+      43.420847300149035,
+      43.45395440032007,
+      43.428435499663465,
+      43.379838099644985,
+      43.34919159882702
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 43.375969999760855,
+      "min_ms": 43.26697359938407,
+      "q20_ms": 43.335149160120636,
+      "q80_ms": 43.42236494005192
+     },
+     "cpu_bound_fraction": 0.9270150068227472,
+     "cpu_bound_fraction_per_block": [
+      0.923471402698135,
+      0.9231537913609922,
+      0.9279522261052515,
+      0.9261766098560883,
+      0.9266359139843133,
+      0.9272140942199147,
+      0.9268159194255797,
+      0.9286231299073623,
+      0.9280475138602252,
+      0.928676852202569
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 737.7356633217983,
+     "unit_name": "images",
+     "peak_memory_bytes": 3035063296,
+     "losses": [
+      0.291015625,
+      0.275390625,
+      0.11328125,
+      0.2578125,
+      0.1650390625
+     ],
+     "loss_trajectory_step_ms": [
+      10313.040797002031,
+      52.33140999916941,
+      51.51881500205491,
+      51.71164599596523,
+      51.63396100397222
+     ],
+     "first_timed_batch_step_ms": 48.270966013660654,
+     "patched": [],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [],
+      "actual_sites": [],
+      "paths": {},
+      "counts": {},
+      "modules_replaced": 0
+     },
+     "dynamo": null,
+     "kernel_sources": [],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    },
+    "combination": {
+     "ok": true,
+     "provider": "combination",
+     "step_ms": 38.773652899544686,
+     "step_ms_min": 38.736718001018744,
+     "per_block_ms": [
+      38.74775990116177,
+      38.81741360091837,
+      38.795106699399184,
+      38.78071469953284,
+      38.766591099556535,
+      38.736718001018744,
+      38.788417099567596,
+      38.74605740129482,
+      38.75638580066152,
+      38.78385830030311
+     ],
+     "latency": {
+      "count": 10,
+      "median_ms": 38.773652899544686,
+      "min_ms": 38.736718001018744,
+      "q20_ms": 38.74741940118838,
+      "q80_ms": 38.789755019533914
+     },
+     "cpu_bound_fraction": 0.8844616022826304,
+     "cpu_bound_fraction_per_block": [
+      0.883932283778747,
+      0.8841600693261105,
+      0.8851451283943951,
+      0.8850253370831853,
+      0.884530223752065,
+      0.8843996876435348,
+      0.8853871018237989,
+      0.8839416110480172,
+      0.884466652206241,
+      0.8844565523590197
+     ],
+     "steps": 10,
+     "blocks": 10,
+     "units_per_second": 825.3026889910537,
+     "unit_name": "images",
+     "peak_memory_bytes": 2513478656,
+     "losses": [
+      0.291015625,
+      0.27734375,
+      0.11376953125,
+      0.259765625,
+      0.1650390625
+     ],
+     "loss_trajectory_step_ms": [
+      10418.62628000672,
+      46.756689000176266,
+      48.02744500921108,
+      46.72101201140322,
+      46.524453995516524
+     ],
+     "first_timed_batch_step_ms": 42.75702800077852,
+     "patched": [
+      "convnext_mlp_stage2"
+     ],
+     "patch_provenance": {
+      "method": "module_surgery",
+      "requested_sites": [
+       "convnext_mlp_stage2"
+      ],
+      "actual_sites": [
+       "convnext_mlp_stage2"
+      ],
+      "paths": {
+       "convnext_mlp_stage2": [
+        "convnextv2.encoder.stages.2.layers.0",
+        "convnextv2.encoder.stages.2.layers.1",
+        "convnextv2.encoder.stages.2.layers.2",
+        "convnextv2.encoder.stages.2.layers.3",
+        "convnextv2.encoder.stages.2.layers.4",
+        "convnextv2.encoder.stages.2.layers.5",
+        "convnextv2.encoder.stages.2.layers.6",
+        "convnextv2.encoder.stages.2.layers.7",
+        "convnextv2.encoder.stages.2.layers.8"
+       ]
+      },
+      "counts": {
+       "convnext_mlp_stage2": 9
+      },
+      "modules_replaced": 9
+     },
+     "dynamo": null,
+     "kernel_sources": [
+      {
+       "site": "convnext_mlp_stage2",
+       "op": "convnextv2_tiny_convnext_mlp",
+       "origin": "candidate:verified_deployment"
+      }
+     ],
+     "verification": {
+      "gate": "skipped",
+      "checked": [],
+      "unverifiable": []
+     },
+     "model_correctness": {
+      "gate": "not_applicable",
+      "ok": true,
+      "skipped": true,
+      "execution_ok": true,
+      "numerical_ok": null,
+      "numerical_status": "unavailable",
+      "numerical_unavailable_at": [
+       "model_gate"
+      ],
+      "evaluation_complete": false,
+      "evaluation_incomplete_because": [
+       "the tier-1 and whole-model gates were skipped (--no-verify)"
+      ],
+      "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+      "findings": []
+     },
+     "evaluation_complete": false,
+     "evaluation_incomplete_because": [
+      "the tier-1 and whole-model gates were skipped (--no-verify)"
+     ],
+     "optimizer": {
+      "name": "AdamW",
+      "learning_rate": 0.0001,
+      "betas": [
+       0.9,
+       0.999
+      ],
+      "eps": 1e-08,
+      "weight_decay": 0.01,
+      "amsgrad": false
+     }
+    }
+   },
+   "speedup_intervals": {
+    "reference": "eager",
+    "available": true,
+    "vs_reference": {
+     "combination": {
+      "step_ms_ratio": 1.1186970211999347,
+      "ci95": {
+       "iterations": 2000,
+       "low": 1.1174808905909042,
+       "high": 1.1200749497140288
+      }
+     }
+    }
+   }
+  },
+  "rows": {
+   "combination": {
+    "ok": true,
+    "step_ms": 38.773652899544686,
+    "peak_memory_bytes": 2513478656,
+    "cpu_bound_fraction": 0.8844616022826304,
+    "speedup": 1.1186970211999347,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1174808905909042,
+     "high": 1.1200749497140288
+    },
+    "peak_memory_ratio": 0.8281470305125392
+   }
+  }
+ }
+}

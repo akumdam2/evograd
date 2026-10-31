@@ -1,0 +1,99 @@
+diff --git a/candidates/_common.py b/candidates/_common.py
+index 55f8af1..528b4ac 100644
+--- a/candidates/_common.py
++++ b/candidates/_common.py
+@@ -70,11 +70,18 @@ def start(args, agent: str, config: dict):
+     anthropic = config.get("api", "anthropic" if agent in ANTHROPIC_AGENTS else "openai") == "anthropic"
+     if anthropic and not os.environ.get("ANTHROPIC_API_KEY"):
+         raise SystemExit("ANTHROPIC_API_KEY is not set; the request proxy forwards with it")
++    # Set by the trial's scripts for an agent whose own request settings differ
++    # from the trial's: a floor under each request's output cap (its caps leave a
++    # reasoning model no room to answer), and the API's default reasoning effort.
++    min_output = int(os.environ.get("ADBENCH_MIN_OUTPUT_TOKENS") or 0) or None
++    default_reasoning = os.environ.get("ADBENCH_DEFAULT_REASONING") == "1"
++    overrides = {**({"min_output_tokens": min_output} if min_output else {}),
++                 **({"default_reasoning": True} if default_reasoning else {})}
+     # A driver with its own budget unit (GEAK) overrides budget and budget_unit.
+     config = {"budget": args.budget,
+               "budget_unit": "api_requests" if agent in METERED_AGENTS else "none",
+               "model": args.model, "api_base": args.api_base,
+-              "seed": args.seed, **config}
++              "seed": args.seed, **overrides, **config}
+     ledger = RunLedger(args.run_dir, agent=agent, task=task, config=config)
+     if agent in METERED_AGENTS or anthropic or agent == "geak":
+         from evograd.adbench_tools.llm_budget import LLMBudgetProxy
+@@ -84,7 +91,8 @@ def start(args, agent: str, config: dict):
+         args._budget_proxy = LLMBudgetProxy(
+             args.api_base, args.budget if agent in METERED_AGENTS else None,
+             ledger.root / "api_calls.jsonl", api_key=key,
+-            api="anthropic" if anthropic else "openai")
++            api="anthropic" if anthropic else "openai",
++            **overrides)
+         args._budget_proxy.start()
+         args._upstream_api_base = args.api_base
+         args.api_base = args._budget_proxy.base_url
+diff --git a/src/evograd/adbench_tools/llm_budget.py b/src/evograd/adbench_tools/llm_budget.py
+index 81fb9da..2f6f13d 100644
+--- a/src/evograd/adbench_tools/llm_budget.py
++++ b/src/evograd/adbench_tools/llm_budget.py
+@@ -188,6 +188,8 @@ class _Handler(BaseHTTPRequestHandler):
+         except (ValueError, OSError):
+             self._error(400, "invalid_request", "Invalid API request body.")
+             return
++        if generation and (proxy.min_output_tokens or proxy.default_reasoning):
++            body = _rewrite_request(body, proxy.min_output_tokens, proxy.default_reasoning)
+         try:
+             admitted = proxy._budget.reserve(route if generation else None, self.server.generation)
+         except _ProxyClosed:
+@@ -254,6 +256,33 @@ class _Handler(BaseHTTPRequestHandler):
+             self.close_connection = True
+ 
+ 
++def _rewrite_request(body: bytes, min_output_tokens: int | None, default_reasoning: bool) -> bytes:
++    """``body`` brought to the trial's common request settings.
++
++    ``min_output_tokens``: an output cap (``max_completion_tokens``/``max_tokens``)
++    below it is raised to it. A reasoning model spends the cap on reasoning first,
++    so a cap an agent sized for visible output can end a request with nothing in it.
++    ``default_reasoning``: an agent's own ``reasoning_effort`` is dropped, so the
++    model runs at the API's default effort, as evograd's requests (which name none) do.
++    """
++    try:
++        request = json.loads(body)
++    except ValueError:
++        return body
++    if not isinstance(request, dict):
++        return body
++    changed = False
++    if min_output_tokens:
++        for key in ("max_completion_tokens", "max_tokens"):
++            value = request.get(key)
++            if isinstance(value, int) and not isinstance(value, bool) and value < min_output_tokens:
++                request[key], changed = min_output_tokens, True
++    if default_reasoning and "reasoning_effort" in request:
++        del request["reasoning_effort"]
++        changed = True
++    return json.dumps(request).encode() if changed else body
++
++
+ class LLMBudgetProxy:
+     """Meter model requests from one agent/case without changing its LLM loop.
+ 
+@@ -276,7 +305,8 @@ class LLMBudgetProxy:
+     """
+ 
+     def __init__(self, upstream_base_url: str, budget: int | None, ledger_path: str | Path,
+-                 *, api_key: str | None = None, api: str = "openai", timeout: float = 600):
++                 *, api_key: str | None = None, api: str = "openai", timeout: float = 600,
++                 min_output_tokens: int | None = None, default_reasoning: bool = False):
+         if budget is not None and (not isinstance(budget, int) or isinstance(budget, bool)
+                                    or budget < 1):
+             raise ValueError("API call budget must be a positive integer or None")
+@@ -289,6 +319,7 @@ class LLMBudgetProxy:
+         if timeout <= 0:
+             raise ValueError("API timeout must be positive")
+         self.budget, self.timeout = budget, timeout
++        self.min_output_tokens, self.default_reasoning = min_output_tokens, default_reasoning
+         self._upstream, self._api_key = upstream, api_key
+         self._prefix, self._generations, self._key_header, self._key_format = _APIS[api]
+         self._budget = _Budget(Path(ledger_path), budget)

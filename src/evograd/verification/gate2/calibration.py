@@ -458,9 +458,10 @@ def compile_control(adapter: ScopeAdapter, patch_set: Sequence[str], *, backend:
     """The native implementation of every replaced site under ``torch.compile``.
 
     Installed at exactly the candidate's replacement sites and run through the
-    same autograd path. The returned counter records how many graphs the
-    backend compiled per site; a site with zero did not run compiled code and
-    the control does not qualify.
+    same autograd path; where the adapter's deployment takes only some of a
+    site's configurations (``control_site``), at exactly those calls. The
+    returned counter records how many graphs the backend compiled per site; a
+    site with zero did not run compiled code and the control does not qualify.
     """
     from torch._dynamo import lookup_backend
 
@@ -472,8 +473,10 @@ def compile_control(adapter: ScopeAdapter, patch_set: Sequence[str], *, backend:
             graphs[_site] += 1
             return real(gm, example_inputs)
 
-        sites[site] = torch.compile(_private_entry(adapter.native_site(site)), backend=counting,
-                                    fullgraph=fullgraph, **dict(options or {}))
+        compiled = torch.compile(_private_entry(adapter.native_site(site)), backend=counting,
+                                 fullgraph=fullgraph, **dict(options or {}))
+        install = getattr(adapter, "control_site", None)
+        sites[site] = install(site, compiled) if install is not None else compiled
     identity = {"kind": "torch_compile", "backend": backend, "fullgraph": fullgraph,
                 "options": dict(options or {}), "torch": torch.__version__,
                 "compiles": "the native implementation of each replaced site"}

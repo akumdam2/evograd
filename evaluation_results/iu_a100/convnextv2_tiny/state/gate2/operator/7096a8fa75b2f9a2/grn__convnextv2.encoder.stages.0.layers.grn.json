@@ -1,0 +1,2919 @@
+{
+ "policy": {
+  "adapter": {
+   "case_id": "grn/convnextv2.encoder.stages.0.layers.grn",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "declaration": null,
+   "dims": {
+    "B": 32,
+    "H": 384,
+    "X": 56,
+    "Y": 56
+   },
+   "dtype": "bfloat16",
+   "forward": "evograd.ops.level1.grn.reference:forward",
+   "inputs": "real_training_payload",
+   "op": "grn",
+   "parameter_args": [
+    "weight",
+    "bias"
+   ],
+   "reference": {
+    "forward": "evograd.ops.level1.grn.reference:forward",
+    "kind": "model_reference",
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "reference_dtype": null,
+    "runtime_forward": null,
+    "source": null
+   },
+   "runtime_forward": null,
+   "scope": "operator"
+  },
+  "boundaries": false,
+  "calibration_executions": [
+   "ed2940d4294a49558b81d0f33f6c5c54",
+   "05318a25d56441d6b8c7a95db6f9bdbb",
+   "8089e2cc7dea4abe895c297738c8e7b2",
+   "f0362aa365e143469f759491b93ea32f",
+   "31089bde39e94f5ba419cebe18f8e4c5",
+   "da19c11ea578456286643b6b5173cf32",
+   "dca0ede29a32470bbf233c9a6ae76e01",
+   "2e901eba05ff4d0c8df986525d754b11",
+   "6400477c24b64285a7c72acc3e7afa60",
+   "3b4a7309dba74eee9029204c7da0d672",
+   "8530347241854812ac283131881e0000",
+   "87f8eb76862643e7aa3cdfa9c1680345",
+   "c2946a5a58f44a6189031c96dfbc6a35",
+   "938057e3edcf448ba4efca09f3a10df4",
+   "4818e46f94654927960c5090c031d75f",
+   "efe02298c6aa4e27959acf9506307527",
+   "83e3c1128a484a748ab48114cbd30623",
+   "4831b8f697454d198864b831c47bddc8",
+   "4c358356bc304612855ddb3bf528f64c",
+   "a54660e4a39442c09d34fe941887bf4e",
+   "792dfa0a827d4d008a19312763456ab0",
+   "a4df34eb0be847a3ab302575f6e91b3d",
+   "9703edc635674da59d01f3e7ad18434f",
+   "6e342a742ddc47c7a967cc47563b9d78"
+  ],
+  "calibration_samples": [
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.0.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "split": "calibration"
+    },
+    "input_digest": "2c959bc7ab2607c6329ee69631072d22c4b25da66f46cd6185d5d8564b2d0a9d",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+    "seed": 101000006
+   },
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.1.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "split": "calibration"
+    },
+    "input_digest": "0e42840134a709b826b136489c003906f179218b991decca00d76d6a4be73513",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+    "seed": 101000012
+   },
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.2.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "split": "calibration"
+    },
+    "input_digest": "8d58134672af49124b03992bf376b20edb179ceabf439267fc2e785a6157bbb7",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+    "seed": 101000018
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.0.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "split": "calibration"
+    },
+    "input_digest": "ea6d7bd2c1fde7160409ea252528490481bd842691253d239df254f8c108a174",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+    "seed": 202000006
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.1.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "split": "calibration"
+    },
+    "input_digest": "da334b30e233ac76398fae3724146fc77a445aaf9e4fccd92b6ed8c17166c7c8",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+    "seed": 202000012
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.2.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "split": "calibration"
+    },
+    "input_digest": "6750c0078eb4d915bdf58d2b4e3cfa2ee00e4397753161ab0746b9ff11391fac",
+    "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+    "seed": 202000018
+   }
+  ],
+  "contract": {
+   "results": [
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "output",
+     "name": "out:out",
+     "presence": "required",
+     "shape": [
+      32,
+      56,
+      56,
+      384
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "input_grad",
+     "name": "grad_in:x",
+     "presence": "required",
+     "shape": [
+      32,
+      56,
+      56,
+      384
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:weight",
+     "presence": "required",
+     "shape": [
+      1,
+      1,
+      1,
+      384
+     ]
+    },
+    {
+     "aliases": [],
+     "dtype": "bfloat16",
+     "exact": false,
+     "kind": "param_grad",
+     "name": "grad:bias",
+     "presence": "required",
+     "shape": [
+      1,
+      1,
+      1,
+      384
+     ]
+    }
+   ]
+  },
+  "contract_digest": "81d2db31c4d61496ceb8c5a90ff4afe7553aa5372f701832bc607aa64529bbe5",
+  "controls": {
+   "compile": {
+    "identity": {
+     "backend": "inductor",
+     "compiles": "the native implementation of each replaced site",
+     "fullgraph": true,
+     "kind": "torch_compile",
+     "options": {},
+     "torch": "2.11.0+cu128"
+    },
+    "name": "torch_compile[inductor]",
+    "patch_set": [
+     "operator"
+    ],
+    "role": "control"
+   },
+   "compile_graphs": {
+    "operator": 1
+   },
+   "native_repeats": 2
+  },
+  "environment": {
+   "compute_capability": "8.0",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "cudnn_benchmark": false,
+   "cudnn_deterministic": true,
+   "deterministic_algorithms": true,
+   "device_name": "NVIDIA A100-SXM4-40GB",
+   "device_type": "cuda",
+   "float32_matmul_precision": "highest",
+   "machine": "x86_64",
+   "python": "3.12.13",
+   "sdpa_backends": {
+    "cudnn": true,
+    "flash": true,
+    "math": true,
+    "mem_efficient": true
+   },
+   "tf32_cudnn": true,
+   "tf32_matmul": false,
+   "torch": "2.11.0+cu128"
+  },
+  "epsilon": 1e-30,
+  "floors": {
+   "gradient": {
+    "E2": 0.0001,
+    "Emax": 0.01
+   },
+   "output": {
+    "E2": 1e-05,
+    "Emax": 0.001
+   }
+  },
+  "formula": "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), max_c E_m(compile_c, native_c), floor[z,m])",
+  "gamma": 2.0,
+  "numerics": {
+   "autocast": null,
+   "device_type": "cuda",
+   "dtype": "bfloat16",
+   "grad_mode": "enabled",
+   "module_mode": "train"
+  },
+  "patch_set": [
+   "operator"
+  ],
+  "policy_hash": "4f5572943741d41e62eed734986a5529b7d80293a4f9d6cff7d7f2540d4b53fd",
+  "reference": {
+   "deployment": {
+    "identity": {
+     "kind": "native_eager"
+    },
+    "name": "native",
+    "patch_set": [],
+    "role": "native"
+   },
+   "implementation": {
+    "adapter": {
+     "digest": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "fingerprint_version": 2,
+     "opaque": [
+      "evograd.verification.common.execution.Deployment.__init__:builtins.function",
+      "evograd.verification.common.execution.Invocation.__init__:builtins.function",
+      "evograd.verification.common.execution.Sample.__init__:builtins.function",
+      "evograd.verification.common.tensors:torch.strided:torch.layout"
+     ],
+     "qualname": "evograd.verification.gate2.adapters.payload.PayloadOperatorScope"
+    },
+    "inputs": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    },
+    "module": {
+     "digest": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.evaluation.tier2.runner.NativeModule"
+    },
+    "runtime_forward": {
+     "digest": "ff822532a5056eabe60133e962cacf44c598acfdaf1d32e2416488760c4f82c3",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.ops.level1.grn.reference.forward"
+    },
+    "sampling": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    }
+   },
+   "kind": "native_eager"
+  },
+  "sample_identities": {
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "13e7c62931e2440022ee09202b02f6120886f27aa7d3c4958eb7a154633d741e",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+     "inputs": "ae66cc8b3203587b673c67c556d836972d1cd68c8d499833da959c9d64c42304",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000006
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.0.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "4c98c15a22133ef9921da8a5d319984a77a0a3275d8306c2836a7aecbb53bdc0",
+     "native_repeats": [
+      "7431364a0efa553f881600b723175662969a076dbf68085a067cd2aa15e07816"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "ad38f43d5556e16c53b41120deed113af868f3b32b88a023021c8f9b7c618726"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "e9e4ff91dbcb2d35768d2dc84ad92a98ff11136f68184f6265de6a9514f46530"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "8089e2cc7dea4abe895c297738c8e7b2",
+     "compile_repeat": "f0362aa365e143469f759491b93ea32f",
+     "native": "ed2940d4294a49558b81d0f33f6c5c54",
+     "native_repeats": [
+      "05318a25d56441d6b8c7a95db6f9bdbb"
+     ]
+    },
+    "fingerprint": "07282f1fe573e4660a4f805bce9b247d8908081bea00a10e3c5104770fb6ba58",
+    "opaque": [],
+    "reference_results_digest": "7431364a0efa553f881600b723175662969a076dbf68085a067cd2aa15e07816",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000006
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "947cc912ba8b5fe688f4f2dd0471b0b39b426507e738dbf50eb3d5ee997e70f8",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+     "inputs": "8b01828c172777a7d7aaef6b2703dbca535db031d5a23bcaf724bdcb658873a5",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000012
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.1.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "0c6e423527346b7e6ae10b7141f96fa09773287a793e151862b4104af04f14ad",
+     "native_repeats": [
+      "b084f3dea62145227b41a14738e6e8591052be5c30fadfe908a67276221da3ad"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "1dafbd39209aa5065f634c2eb72f168240a145fbf1ef1500e6a247ab6b884df6"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "6725ef25f48ea4353b33dee5eef45dd40be5b70822de86f61865d4de5a979513"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "dca0ede29a32470bbf233c9a6ae76e01",
+     "compile_repeat": "2e901eba05ff4d0c8df986525d754b11",
+     "native": "31089bde39e94f5ba419cebe18f8e4c5",
+     "native_repeats": [
+      "da19c11ea578456286643b6b5173cf32"
+     ]
+    },
+    "fingerprint": "f86cf810fd23334f58df6ced07d93c5ffb76bb556835752a517cfdd3a3c0deb4",
+    "opaque": [],
+    "reference_results_digest": "b084f3dea62145227b41a14738e6e8591052be5c30fadfe908a67276221da3ad",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000012
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "d26ea2d236a7f69c4d3f235f57b2eb74c0a3f33e99aa8400fdbac29ae48001cb",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+     "inputs": "e71ad491e77afb9302b9c12bbd15ea650cffcfc0a2132fe13297c5bf9f2a43d9",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000018
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+     "call": "convnextv2.encoder.stages.0.layers.2.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "9fc01cadd266a0d411e1c8d66caa8addd549238ba4f67a5a99846b14e6fa5a0a",
+     "native_repeats": [
+      "3db24390b6709b6515f0b7302050f8c171217feedc22a55f9093097edf8874f6"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "c18949a930f2bbffed32f5673e95573ebf073b306707d80da094057752f33734"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "f76766c2e06d883db83a6cc28b58c5a38109a92a8a9d8bb82ab817719ce35559"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "8530347241854812ac283131881e0000",
+     "compile_repeat": "87f8eb76862643e7aa3cdfa9c1680345",
+     "native": "6400477c24b64285a7c72acc3e7afa60",
+     "native_repeats": [
+      "3b4a7309dba74eee9029204c7da0d672"
+     ]
+    },
+    "fingerprint": "84581e5fc6c00fda6adef7806da7c8bf89181851d1dc7d794a17e4ec52729b01",
+    "opaque": [],
+    "reference_results_digest": "3db24390b6709b6515f0b7302050f8c171217feedc22a55f9093097edf8874f6",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000018
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "43ad0ed36eb0cfcdf733e5e8c51b8518fc32f3e5e69cad8b42037cb74581a449",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+     "inputs": "1ecd8eb2cf7442dc976797cf33ad35f0f30421a2e200bedf62cd5af1961e2631",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000006
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.0.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "4ae10befe311324af14086ac68e815290babb832923d4449b6225ffa1bcb8972",
+     "native_repeats": [
+      "e87cc56e84a1ef340df201b9df443c1da4d9a2879fd5866b822930f60f0269a2"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "b1410221d53d05a2d815b877f3d2b92bd071d0b96187c65eba7e1001bbb0564e"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "938c1250d283683368f01191473a840d9502fbd4bc0df65792559abc08ddc494"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "4818e46f94654927960c5090c031d75f",
+     "compile_repeat": "efe02298c6aa4e27959acf9506307527",
+     "native": "c2946a5a58f44a6189031c96dfbc6a35",
+     "native_repeats": [
+      "938057e3edcf448ba4efca09f3a10df4"
+     ]
+    },
+    "fingerprint": "a82e1752a304f5aa98c81efdc907861a6239752ff4b2b68a2602f8c04ff420f6",
+    "opaque": [],
+    "reference_results_digest": "e87cc56e84a1ef340df201b9df443c1da4d9a2879fd5866b822930f60f0269a2",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000006
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "43875032a2646430e18c731f711c9531d4db3e950de9d27f3f678d80afb76efc",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+     "inputs": "801d88e7c4afae669c8019bb884d7424e57fb6bfa6e3354cb4c2c76a91305d2c",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000012
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.1.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "a97ceca561a1e01bc63303c7c71f8dccc508f989647ddc5416c6c888971fbe5b",
+     "native_repeats": [
+      "c6eb91fa673e04c34dfb60d16bd3eaefba4dcbbf4476fb0987293231eed61441"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "2d2bf70bdf45a9a07a862952f003c3cf4202b8af98d89dda1723b1d78c2f15f9"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "e8526a6424d873294788cf54a0d941c1c8744ee2920e713b792e99567e1278ee"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "4c358356bc304612855ddb3bf528f64c",
+     "compile_repeat": "a54660e4a39442c09d34fe941887bf4e",
+     "native": "83e3c1128a484a748ab48114cbd30623",
+     "native_repeats": [
+      "4831b8f697454d198864b831c47bddc8"
+     ]
+    },
+    "fingerprint": "c0153a8475be062f76ce82ee7096253d113735db25dfa03aa51a4a92b8c80b18",
+    "opaque": [],
+    "reference_results_digest": "c6eb91fa673e04c34dfb60d16bd3eaefba4dcbbf4476fb0987293231eed61441",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000012
+   },
+   "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "562014859932690b8cbb7e8e10472b3ee7ee2c800755c0b2c210f430af860cf6",
+     "differentiable_inputs": {
+      "x": "args[0]"
+     },
+     "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+     "inputs": "6f51fea2496d04c256e3648326b7c3b8dae6547849e559e5964ed69d142d51e1",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000018
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+     "call": "convnextv2.encoder.stages.0.layers.2.grn",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "d3d909dc19a336ee9fb49e501ddfee7e51832aca34c02c39c2d34ef9fa507133",
+     "native_repeats": [
+      "ce15d3ab959040ab86c4144994da7b5bffa87fa420580f1e3cc349324467f88a"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "out": {
+        "dtype": "bfloat16",
+        "layout": "strided",
+        "shape": [
+         32,
+         56,
+         56,
+         384
+        ],
+        "storage_offset": 0,
+        "stride": [
+         1204224,
+         21504,
+         384,
+         1
+        ],
+        "tensor": "4a5cf7e97580ce51bfc39ac45c976e6ffdd0b379fa866b7025b4e65d41f14c9d"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "bfloat16",
+          "layout": "strided",
+          "shape": [
+           32,
+           56,
+           56,
+           384
+          ],
+          "storage_offset": 0,
+          "stride": [
+           1204224,
+           21504,
+           384,
+           1
+          ],
+          "tensor": "6a02fe4a9c4b493b9290be0718f2ff56a897c552fb6c01eb7588d072a3296b0b"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "9703edc635674da59d01f3e7ad18434f",
+     "compile_repeat": "6e342a742ddc47c7a967cc47563b9d78",
+     "native": "792dfa0a827d4d008a19312763456ab0",
+     "native_repeats": [
+      "a4df34eb0be847a3ab302575f6e91b3d"
+     ]
+    },
+    "fingerprint": "322148c37671f859c03a49ae95928384951709a95dba712eb59f3edaf59ecc7c",
+    "opaque": [],
+    "reference_results_digest": "ce15d3ab959040ab86c4144994da7b5bffa87fa420580f1e3cc349324467f88a",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000018
+   }
+  },
+  "sample_protocol": "disjoint_holdout",
+  "schema": "evograd-verification-gate2-policy/4",
+  "scope": "operator",
+  "thresholds": {
+   "grad:bias": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0
+     }
+    },
+    "envelope": 0.0,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ]
+    }
+   },
+   "grad:weight": {
+    "E2": 0.009041877022962493,
+    "Emax": 0.10927422971153684,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.004520938511481247
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.05463711485576842
+     }
+    },
+    "envelope": 0.00390625,
+    "kind": "param_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ]
+    }
+   },
+   "grad_in:x": {
+    "E2": 0.006118180925244238,
+    "Emax": 2.75816961604509,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.003059090462622119
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 1.379084808022545
+     }
+    },
+    "envelope": 6.103515625e-05,
+    "kind": "input_grad",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ]
+    }
+   },
+   "out:out": {
+    "E2": 0.007557288383963777,
+    "Emax": 0.7055788494286557,
+    "components": {
+     "E2": {
+      "binding": "trusted_compile",
+      "floor": 1e-05,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.0037786441919818886
+     },
+     "Emax": {
+      "binding": "trusted_compile",
+      "floor": 0.001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "trusted_compile": 0.35278942471432784
+     }
+    },
+    "envelope": 0.1875,
+    "kind": "output",
+    "samples": {
+     "native_repeat": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ],
+     "trusted_compile": [
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn"
+     ]
+    }
+   }
+  },
+  "weights": {
+   "fixed": null,
+   "initial_state_digests": [
+    "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+    "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+    "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909"
+   ]
+  }
+ },
+ "calibration": {
+  "status": "calibrated",
+  "policy_hash": "4f5572943741d41e62eed734986a5529b7d80293a4f9d6cff7d7f2540d4b53fd",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "seed": 101000006,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.0.layers.0.grn"
+      }
+     },
+     "native": {
+      "execution_id": "ed2940d4294a49558b81d0f33f6c5c54",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "seed": 101000006,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.0.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2c959bc7ab2607c6329ee69631072d22c4b25da66f46cd6185d5d8564b2d0a9d",
+      "sample_identity": {
+       "fingerprint": "07282f1fe573e4660a4f805bce9b247d8908081bea00a10e3c5104770fb6ba58",
+       "components": {
+        "seed": 101000006,
+        "inputs": "ae66cc8b3203587b673c67c556d836972d1cd68c8d499833da959c9d64c42304",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "13e7c62931e2440022ee09202b02f6120886f27aa7d3c4958eb7a154633d741e",
+        "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e9e4ff91dbcb2d35768d2dc84ad92a98ff11136f68184f6265de6a9514f46530",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "ad38f43d5556e16c53b41120deed113af868f3b32b88a023021c8f9b7c618726",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7431364a0efa553f881600b723175662969a076dbf68085a067cd2aa15e07816",
+      "initial_state_digest": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+      "error_stage": null,
+      "seconds": 1.209053088008659
+     },
+     "control": {
+      "execution_id": "8089e2cc7dea4abe895c297738c8e7b2",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "seed": 101000006,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.0.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2c959bc7ab2607c6329ee69631072d22c4b25da66f46cd6185d5d8564b2d0a9d",
+      "sample_identity": {
+       "fingerprint": "07282f1fe573e4660a4f805bce9b247d8908081bea00a10e3c5104770fb6ba58",
+       "components": {
+        "seed": 101000006,
+        "inputs": "ae66cc8b3203587b673c67c556d836972d1cd68c8d499833da959c9d64c42304",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "13e7c62931e2440022ee09202b02f6120886f27aa7d3c4958eb7a154633d741e",
+        "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e9e4ff91dbcb2d35768d2dc84ad92a98ff11136f68184f6265de6a9514f46530",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "ad38f43d5556e16c53b41120deed113af868f3b32b88a023021c8f9b7c618726",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4c98c15a22133ef9921da8a5d319984a77a0a3275d8306c2836a7aecbb53bdc0",
+      "initial_state_digest": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+      "error_stage": null,
+      "seconds": 1.6112663179956144
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "seed": 101000012,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.0.layers.1.grn"
+      }
+     },
+     "native": {
+      "execution_id": "31089bde39e94f5ba419cebe18f8e4c5",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "seed": 101000012,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.1.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "0e42840134a709b826b136489c003906f179218b991decca00d76d6a4be73513",
+      "sample_identity": {
+       "fingerprint": "f86cf810fd23334f58df6ced07d93c5ffb76bb556835752a517cfdd3a3c0deb4",
+       "components": {
+        "seed": 101000012,
+        "inputs": "8b01828c172777a7d7aaef6b2703dbca535db031d5a23bcaf724bdcb658873a5",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "947cc912ba8b5fe688f4f2dd0471b0b39b426507e738dbf50eb3d5ee997e70f8",
+        "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6725ef25f48ea4353b33dee5eef45dd40be5b70822de86f61865d4de5a979513",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "1dafbd39209aa5065f634c2eb72f168240a145fbf1ef1500e6a247ab6b884df6",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "b084f3dea62145227b41a14738e6e8591052be5c30fadfe908a67276221da3ad",
+      "initial_state_digest": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+      "error_stage": null,
+      "seconds": 1.2050370979995932
+     },
+     "control": {
+      "execution_id": "dca0ede29a32470bbf233c9a6ae76e01",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "seed": 101000012,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.1.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "0e42840134a709b826b136489c003906f179218b991decca00d76d6a4be73513",
+      "sample_identity": {
+       "fingerprint": "f86cf810fd23334f58df6ced07d93c5ffb76bb556835752a517cfdd3a3c0deb4",
+       "components": {
+        "seed": 101000012,
+        "inputs": "8b01828c172777a7d7aaef6b2703dbca535db031d5a23bcaf724bdcb658873a5",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "947cc912ba8b5fe688f4f2dd0471b0b39b426507e738dbf50eb3d5ee997e70f8",
+        "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6725ef25f48ea4353b33dee5eef45dd40be5b70822de86f61865d4de5a979513",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "1dafbd39209aa5065f634c2eb72f168240a145fbf1ef1500e6a247ab6b884df6",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "0c6e423527346b7e6ae10b7141f96fa09773287a793e151862b4104af04f14ad",
+      "initial_state_digest": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+      "error_stage": null,
+      "seconds": 0.8483242969959974
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "seed": 101000018,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.encoder.stages.0.layers.2.grn"
+      }
+     },
+     "native": {
+      "execution_id": "6400477c24b64285a7c72acc3e7afa60",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "seed": 101000018,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.2.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "8d58134672af49124b03992bf376b20edb179ceabf439267fc2e785a6157bbb7",
+      "sample_identity": {
+       "fingerprint": "84581e5fc6c00fda6adef7806da7c8bf89181851d1dc7d794a17e4ec52729b01",
+       "components": {
+        "seed": 101000018,
+        "inputs": "e71ad491e77afb9302b9c12bbd15ea650cffcfc0a2132fe13297c5bf9f2a43d9",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "d26ea2d236a7f69c4d3f235f57b2eb74c0a3f33e99aa8400fdbac29ae48001cb",
+        "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f76766c2e06d883db83a6cc28b58c5a38109a92a8a9d8bb82ab817719ce35559",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c18949a930f2bbffed32f5673e95573ebf073b306707d80da094057752f33734",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "3db24390b6709b6515f0b7302050f8c171217feedc22a55f9093097edf8874f6",
+      "initial_state_digest": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+      "error_stage": null,
+      "seconds": 1.1594285300088814
+     },
+     "control": {
+      "execution_id": "8530347241854812ac283131881e0000",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "seed": 101000018,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.encoder.stages.0.layers.2.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "8d58134672af49124b03992bf376b20edb179ceabf439267fc2e785a6157bbb7",
+      "sample_identity": {
+       "fingerprint": "84581e5fc6c00fda6adef7806da7c8bf89181851d1dc7d794a17e4ec52729b01",
+       "components": {
+        "seed": 101000018,
+        "inputs": "e71ad491e77afb9302b9c12bbd15ea650cffcfc0a2132fe13297c5bf9f2a43d9",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "d26ea2d236a7f69c4d3f235f57b2eb74c0a3f33e99aa8400fdbac29ae48001cb",
+        "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f76766c2e06d883db83a6cc28b58c5a38109a92a8a9d8bb82ab817719ce35559",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c18949a930f2bbffed32f5673e95573ebf073b306707d80da094057752f33734",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "9fc01cadd266a0d411e1c8d66caa8addd549238ba4f67a5a99846b14e6fa5a0a",
+      "initial_state_digest": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+      "error_stage": null,
+      "seconds": 0.7705495590053033
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+      "seed": 202000006,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.0.layers.0.grn"
+      }
+     },
+     "native": {
+      "execution_id": "c2946a5a58f44a6189031c96dfbc6a35",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "seed": 202000006,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.0.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "ea6d7bd2c1fde7160409ea252528490481bd842691253d239df254f8c108a174",
+      "sample_identity": {
+       "fingerprint": "a82e1752a304f5aa98c81efdc907861a6239752ff4b2b68a2602f8c04ff420f6",
+       "components": {
+        "seed": 202000006,
+        "inputs": "1ecd8eb2cf7442dc976797cf33ad35f0f30421a2e200bedf62cd5af1961e2631",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "43ad0ed36eb0cfcdf733e5e8c51b8518fc32f3e5e69cad8b42037cb74581a449",
+        "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "938c1250d283683368f01191473a840d9502fbd4bc0df65792559abc08ddc494",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "b1410221d53d05a2d815b877f3d2b92bd071d0b96187c65eba7e1001bbb0564e",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "e87cc56e84a1ef340df201b9df443c1da4d9a2879fd5866b822930f60f0269a2",
+      "initial_state_digest": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+      "error_stage": null,
+      "seconds": 1.1730866300058551
+     },
+     "control": {
+      "execution_id": "4818e46f94654927960c5090c031d75f",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+       "seed": 202000006,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.0.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "ea6d7bd2c1fde7160409ea252528490481bd842691253d239df254f8c108a174",
+      "sample_identity": {
+       "fingerprint": "a82e1752a304f5aa98c81efdc907861a6239752ff4b2b68a2602f8c04ff420f6",
+       "components": {
+        "seed": 202000006,
+        "inputs": "1ecd8eb2cf7442dc976797cf33ad35f0f30421a2e200bedf62cd5af1961e2631",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "43ad0ed36eb0cfcdf733e5e8c51b8518fc32f3e5e69cad8b42037cb74581a449",
+        "initial_state": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "938c1250d283683368f01191473a840d9502fbd4bc0df65792559abc08ddc494",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "b1410221d53d05a2d815b877f3d2b92bd071d0b96187c65eba7e1001bbb0564e",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4ae10befe311324af14086ac68e815290babb832923d4449b6225ffa1bcb8972",
+      "initial_state_digest": "2425d583d13809b9c0f4b7ad690dae58ee5082e8bd39d39a6932a70f2ad25a7e",
+      "error_stage": null,
+      "seconds": 0.7994524270034162
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+      "seed": 202000012,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.0.layers.1.grn"
+      }
+     },
+     "native": {
+      "execution_id": "83e3c1128a484a748ab48114cbd30623",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "seed": 202000012,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.1.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "da334b30e233ac76398fae3724146fc77a445aaf9e4fccd92b6ed8c17166c7c8",
+      "sample_identity": {
+       "fingerprint": "c0153a8475be062f76ce82ee7096253d113735db25dfa03aa51a4a92b8c80b18",
+       "components": {
+        "seed": 202000012,
+        "inputs": "801d88e7c4afae669c8019bb884d7424e57fb6bfa6e3354cb4c2c76a91305d2c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "43875032a2646430e18c731f711c9531d4db3e950de9d27f3f678d80afb76efc",
+        "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e8526a6424d873294788cf54a0d941c1c8744ee2920e713b792e99567e1278ee",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "2d2bf70bdf45a9a07a862952f003c3cf4202b8af98d89dda1723b1d78c2f15f9",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "c6eb91fa673e04c34dfb60d16bd3eaefba4dcbbf4476fb0987293231eed61441",
+      "initial_state_digest": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+      "error_stage": null,
+      "seconds": 1.2122976550017484
+     },
+     "control": {
+      "execution_id": "4c358356bc304612855ddb3bf528f64c",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+       "seed": 202000012,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.1.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "da334b30e233ac76398fae3724146fc77a445aaf9e4fccd92b6ed8c17166c7c8",
+      "sample_identity": {
+       "fingerprint": "c0153a8475be062f76ce82ee7096253d113735db25dfa03aa51a4a92b8c80b18",
+       "components": {
+        "seed": 202000012,
+        "inputs": "801d88e7c4afae669c8019bb884d7424e57fb6bfa6e3354cb4c2c76a91305d2c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "43875032a2646430e18c731f711c9531d4db3e950de9d27f3f678d80afb76efc",
+        "initial_state": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "e8526a6424d873294788cf54a0d941c1c8744ee2920e713b792e99567e1278ee",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "2d2bf70bdf45a9a07a862952f003c3cf4202b8af98d89dda1723b1d78c2f15f9",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "a97ceca561a1e01bc63303c7c71f8dccc508f989647ddc5416c6c888971fbe5b",
+      "initial_state_digest": "532652efd90dc8dcd31f8f7b0adbc47d869ce340ea5636f13a5df14387afb909",
+      "error_stage": null,
+      "seconds": 0.7801646919979248
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+      "seed": 202000018,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.encoder.stages.0.layers.2.grn"
+      }
+     },
+     "native": {
+      "execution_id": "792dfa0a827d4d008a19312763456ab0",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "seed": 202000018,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.2.grn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "6750c0078eb4d915bdf58d2b4e3cfa2ee00e4397753161ab0746b9ff11391fac",
+      "sample_identity": {
+       "fingerprint": "322148c37671f859c03a49ae95928384951709a95dba712eb59f3edaf59ecc7c",
+       "components": {
+        "seed": 202000018,
+        "inputs": "6f51fea2496d04c256e3648326b7c3b8dae6547849e559e5964ed69d142d51e1",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "562014859932690b8cbb7e8e10472b3ee7ee2c800755c0b2c210f430af860cf6",
+        "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6a02fe4a9c4b493b9290be0718f2ff56a897c552fb6c01eb7588d072a3296b0b",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4a5cf7e97580ce51bfc39ac45c976e6ffdd0b379fa866b7025b4e65d41f14c9d",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "ce15d3ab959040ab86c4144994da7b5bffa87fa420580f1e3cc349324467f88a",
+      "initial_state_digest": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+      "error_stage": null,
+      "seconds": 1.2102432510000654
+     },
+     "control": {
+      "execution_id": "9703edc635674da59d01f3e7ad18434f",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+       "seed": 202000018,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.encoder.stages.0.layers.2.grn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "6750c0078eb4d915bdf58d2b4e3cfa2ee00e4397753161ab0746b9ff11391fac",
+      "sample_identity": {
+       "fingerprint": "322148c37671f859c03a49ae95928384951709a95dba712eb59f3edaf59ecc7c",
+       "components": {
+        "seed": 202000018,
+        "inputs": "6f51fea2496d04c256e3648326b7c3b8dae6547849e559e5964ed69d142d51e1",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "562014859932690b8cbb7e8e10472b3ee7ee2c800755c0b2c210f430af860cf6",
+        "initial_state": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6a02fe4a9c4b493b9290be0718f2ff56a897c552fb6c01eb7588d072a3296b0b",
+             "shape": [
+              32,
+              56,
+              56,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              1204224,
+              21504,
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4a5cf7e97580ce51bfc39ac45c976e6ffdd0b379fa866b7025b4e65d41f14c9d",
+           "shape": [
+            32,
+            56,
+            56,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            1204224,
+            21504,
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "d3d909dc19a336ee9fb49e501ddfee7e51832aca34c02c39c2d34ef9fa507133",
+      "initial_state_digest": "33d33b3a7dbe9e5507cc71018c656b9c45ec37699d2017356ac261a42cce79b6",
+      "error_stage": null,
+      "seconds": 0.805868580006063
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "disjoint_holdout",
+   "measurements": 48,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.003562765900583207,
+     "Emax": 0.14138903319185533
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.002066288405512848,
+     "Emax": 0.6110426147776159
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.004520938511481247,
+     "Emax": 0.04682548940601619
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0037786441919818886,
+     "Emax": 0.23924284614115995
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.003059090462622119,
+     "Emax": 0.8408575689633203
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.001711629405702271,
+     "Emax": 0.019312201886011876
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0036130290572044615,
+     "Emax": 0.23385816946141058
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0030185417122490002,
+     "Emax": 0.5060690873240392
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0020715074765073624,
+     "Emax": 0.031067848438996855
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0034580833142227375,
+     "Emax": 0.13975257902828808
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.002136036937103689,
+     "Emax": 1.379084808022545
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.003302617126803978,
+     "Emax": 0.05463711485576842
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.0.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0037686938590347943,
+     "Emax": 0.18125820531111217
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0029036645120886885,
+     "Emax": 0.8125823249601734
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.001819410915811432,
+     "Emax": 0.013714473268359246
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.1.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "out:out",
+     "kind": "output",
+     "E2": 0.0035749004111826988,
+     "Emax": 0.35278942471432784
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad_in:x",
+     "kind": "input_grad",
+     "E2": 0.002910602783309689,
+     "Emax": 0.451033713646425
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:weight",
+     "kind": "param_grad",
+     "E2": 0.0017407566885424763,
+     "Emax": 0.022654862380334588
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/grn/convnextv2.encoder.stages.0.layers.grn/convnextv2.encoder.stages.0.layers.2.grn",
+     "result": "grad:bias",
+     "kind": "param_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    }
+   ],
+   "seconds": 22.89011777700216
+  }
+ }
+}

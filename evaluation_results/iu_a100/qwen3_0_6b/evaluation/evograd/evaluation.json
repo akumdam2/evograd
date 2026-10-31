@@ -1,0 +1,1225 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "qwen3_0_6b",
+ "workload": {
+  "model": "qwen3_0_6b",
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "batch_size": 2,
+  "seq_len": 2048,
+  "seed": 0,
+  "data_seed": 0,
+  "attn_implementation": "sdpa",
+  "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+  "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA A100-SXM4-40GB"
+ },
+ "reference": "eager",
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "linear_no_bias/mlp_up": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 56,
+   "recorded": 56,
+   "submitted": false
+  },
+  "linear_no_bias/attn_kv_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 56,
+   "recorded": 56,
+   "submitted": false
+  },
+  "linear_no_bias/mlp_down": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear_no_bias/attn_qkv": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear_no_bias/attn_out_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "linear_no_bias/lm_head": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": false
+  },
+  "rmsnorm/rmsnorm": {
+   "task": "rmsnorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 57,
+   "recorded": 57,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/rmsnorm__rmsnorm.py",
+   "program_sha256": "37f32b192cd6be67a11206d2345f57cc387d2a0ad8037fca04f4c081299db056",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/rmsnorm/rmsnorm/model.layers.0.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.0.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.1.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.1.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.2.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.2.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.3.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.3.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.4.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.4.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.5.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.5.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.6.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.6.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.7.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.7.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.8.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.8.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.9.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.9.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.10.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.10.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.11.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.11.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.12.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.12.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.13.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.13.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.14.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.14.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.15.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.15.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.16.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.16.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.17.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.17.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.18.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.18.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.19.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.19.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.20.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.20.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.21.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.21.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.22.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.22.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.23.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.23.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.24.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.24.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.25.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.25.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.26.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.26.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.27.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.27.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.norm"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.8383579168540494,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.8341485928671755,
+      "high": 1.842354007052428
+     },
+     "candidate_ms": 13.145087957382202,
+     "baseline_ms": 24.165376514196396,
+     "speedup_forward": 5.947368783842778,
+     "speedup_backward": 2.440446342324685
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.5816520958353377,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.577745854827345,
+      "high": 1.584764231777249
+     },
+     "candidate_ms": 13.171199977397919,
+     "baseline_ms": 20.83225604891777,
+     "speedup_forward": 2.591874500071819,
+     "speedup_backward": 1.2450034432027772
+    }
+   }
+  },
+  "rmsnorm/k_head_norm": {
+   "task": "rmsnorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "rmsnorm/q_head_norm": {
+   "task": "rmsnorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "rope/rope": {
+   "task": "rope",
+   "level": 1,
+   "family": "positional",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/rope__rope.py",
+   "program_sha256": "b2b2fcef816e0172f14f6275a97694518b621d75ab661a5043f2292014dcc726",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/rope/rope/model.layers.0.self_attn#rope_q",
+     "o303/rope/rope/model.layers.1.self_attn#rope_q",
+     "o303/rope/rope/model.layers.2.self_attn#rope_q",
+     "o303/rope/rope/model.layers.3.self_attn#rope_q",
+     "o303/rope/rope/model.layers.4.self_attn#rope_q",
+     "o303/rope/rope/model.layers.5.self_attn#rope_q",
+     "o303/rope/rope/model.layers.6.self_attn#rope_q",
+     "o303/rope/rope/model.layers.7.self_attn#rope_q",
+     "o303/rope/rope/model.layers.8.self_attn#rope_q",
+     "o303/rope/rope/model.layers.9.self_attn#rope_q",
+     "o303/rope/rope/model.layers.10.self_attn#rope_q",
+     "o303/rope/rope/model.layers.11.self_attn#rope_q",
+     "o303/rope/rope/model.layers.12.self_attn#rope_q",
+     "o303/rope/rope/model.layers.13.self_attn#rope_q",
+     "o303/rope/rope/model.layers.14.self_attn#rope_q",
+     "o303/rope/rope/model.layers.15.self_attn#rope_q",
+     "o303/rope/rope/model.layers.16.self_attn#rope_q",
+     "o303/rope/rope/model.layers.17.self_attn#rope_q",
+     "o303/rope/rope/model.layers.18.self_attn#rope_q",
+     "o303/rope/rope/model.layers.19.self_attn#rope_q",
+     "o303/rope/rope/model.layers.20.self_attn#rope_q",
+     "o303/rope/rope/model.layers.21.self_attn#rope_q",
+     "o303/rope/rope/model.layers.22.self_attn#rope_q",
+     "o303/rope/rope/model.layers.23.self_attn#rope_q",
+     "o303/rope/rope/model.layers.24.self_attn#rope_q",
+     "o303/rope/rope/model.layers.25.self_attn#rope_q",
+     "o303/rope/rope/model.layers.26.self_attn#rope_q",
+     "o303/rope/rope/model.layers.27.self_attn#rope_q"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.1655554450046242,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.163827760528378,
+      "high": 1.1678159704201738
+     },
+     "candidate_ms": 11.82617598772049,
+     "baseline_ms": 13.784063816070557,
+     "speedup_forward": 0.685818064139583,
+     "speedup_backward": 3.8656795758736253
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.8418756031552258,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.8396696487247104,
+      "high": 0.844580759343109
+     },
+     "candidate_ms": 11.967487901449203,
+     "baseline_ms": 10.075136095285416,
+     "speedup_forward": 0.16110775137080177,
+     "speedup_backward": 2.1436567147391816
+    }
+   }
+  },
+  "rope/rope_kv": {
+   "task": "rope",
+   "level": 1,
+   "family": "positional",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "swiglu/mlp_activation": {
+   "task": "swiglu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/swiglu__mlp_activation.py",
+   "program_sha256": "85807bdd79e919e685bfeef6348fb8ace8efd13457c368af6c170ed03b5918ce",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/swiglu/mlp_activation/model.layers.0.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.1.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.2.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.3.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.4.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.5.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.6.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.7.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.8.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.9.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.10.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.11.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.12.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.13.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.14.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.15.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.16.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.17.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.18.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.19.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.20.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.21.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.22.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.23.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.24.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.25.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.26.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.27.mlp#act_mul"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 4.018223399955758,
+     "ci95": {
+      "iterations": 2000,
+      "low": 4.012396365038474,
+      "high": 4.022001991934178
+     },
+     "candidate_ms": 4.4953599870204926,
+     "baseline_ms": 18.063360691070557,
+     "speedup_forward": 4.20954245578934,
+     "speedup_backward": 3.744898087217501
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.9587093641091806,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.9488919726096163,
+      "high": 1.966441162097895
+     },
+     "candidate_ms": 4.538368001580238,
+     "baseline_ms": 8.889343902468681,
+     "speedup_forward": 1.0304129568012266,
+     "speedup_backward": 1.1567055975311975
+    },
+    "megafold": {
+     "error": "ModuleNotFoundError: No module named 'megafold'"
+    }
+   }
+  },
+  "causal_gqa_attention/causal_gqa_sdpa": {
+   "task": "causal_gqa_attention",
+   "level": 1,
+   "family": "attention",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": false
+  },
+  "cross_entropy/logits": {
+   "task": "cross_entropy",
+   "level": 1,
+   "family": "loss",
+   "frequency": 1,
+   "recorded": 1,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/cross_entropy__logits.py",
+   "program_sha256": "f10c7f9540863cce99e771698aa49a51f9a4e687eeb5af5adb7cdf2a90c46ff8",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/cross_entropy/logits/loss_function#fixed_cross_entropy"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 2.9051202917061696,
+     "ci95": {
+      "iterations": 2000,
+      "low": 2.9044037544773973,
+      "high": 2.9061297230353564
+     },
+     "candidate_ms": 5.579775810241699,
+     "baseline_ms": 16.209919929504395,
+     "speedup_forward": 3.815803303794951,
+     "speedup_backward": 2.3550122381570326
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.001466555659159,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0007332778295797,
+      "high": 1.0020172963327443
+     },
+     "candidate_ms": 5.5859198570251465,
+     "baseline_ms": 5.594111919403076,
+     "speedup_forward": 0.984309625787455,
+     "speedup_backward": 1.027131795937737
+    }
+   }
+  },
+  "qwen3_swiglu_mlp/swiglu_mlp": {
+   "task": "qwen3_swiglu_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/qwen3_swiglu_mlp__swiglu_mlp.py",
+   "program_sha256": "883ec262f978c8f0139b6d88ce855dc4e1471aeb0ccd250fe76c653b6fe9a037",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.0.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.1.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.2.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.3.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.4.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.5.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.6.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.7.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.8.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.9.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.10.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.11.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.12.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.13.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.14.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.15.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.16.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.17.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.18.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.19.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.20.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.21.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.22.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.23.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.24.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.25.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.26.mlp#swiglu_mlp",
+     "o303/qwen3_swiglu_mlp/swiglu_mlp/model.layers.27.mlp#swiglu_mlp"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.0822116823614116,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0819993113602155,
+      "high": 1.082268764095547
+     },
+     "candidate_ms": 37.354496717453,
+     "baseline_ms": 40.42547273635864,
+     "speedup_forward": 1.088188903188762,
+     "speedup_backward": 1.078607962719404
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.9885422971618939,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.9884742435951831,
+      "high": 0.9885964939713906
+     },
+     "candidate_ms": 37.35756874084473,
+     "baseline_ms": 36.92953681945801,
+     "speedup_forward": 1.0044247479910953,
+     "speedup_backward": 0.9800703923756015
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 241.03167405046406,
+    "peak_memory_bytes": 17976942592,
+    "cpu_bound_fraction": 0.9803587597179118,
+    "speedup": 1.0139611748659494,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0105918467064634,
+     "high": 1.0188153355392613
+    },
+    "peak_memory_ratio": 0.9273047809766646
+   }
+  },
+  "fused_add_rms_norm/residual_rmsnorm": {
+   "task": "fused_add_rms_norm",
+   "level": 2,
+   "family": "norm",
+   "frequency": 56,
+   "recorded": 56,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/fused_add_rms_norm__residual_rmsnorm.py",
+   "program_sha256": "30a56d562500bae32933dd87b94bd06b6535fa7c541cceed0265e9a59bec5092",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.0#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.0#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.1#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.1#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.2#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.2#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.3#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.3#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.4#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.4#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.5#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.5#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.6#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.6#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.7#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.7#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.8#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.8#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.9#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.9#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.10#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.10#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.11#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.11#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.12#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.12#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.13#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.13#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.14#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.14#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.15#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.15#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.16#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.16#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.17#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.17#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.18#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.18#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.19#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.19#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.20#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.20#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.21#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.21#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.22#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.22#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.23#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.23#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.24#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.24#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.25#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.25#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.26#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.26#residual_mlp_to_next",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.27#residual_post_attention",
+     "o303/fused_add_rms_norm/residual_rmsnorm/model.layers.27#residual_mlp_to_final"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.732909826378499,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.7269161277434257,
+      "high": 1.7396664577880427
+     },
+     "candidate_ms": 14.829568013548851,
+     "baseline_ms": 25.698304131627083,
+     "speedup_forward": 4.196084190953365,
+     "speedup_backward": 2.1575855758199816
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 1.617646036439451,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.6122540605492874,
+      "high": 1.6266817390449413
+     },
+     "candidate_ms": 14.54233592748642,
+     "baseline_ms": 23.524352073669434,
+     "speedup_forward": 2.0985119406003276,
+     "speedup_backward": 1.2810334204261173
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 222.40388250065735,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9766433744871578,
+    "speedup": 1.0988871086789267,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0950958743660235,
+     "high": 1.1042510317181051
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   }
+  },
+  "qwen3_qkv_norm_rope/qkv_norm_rope": {
+   "task": "qwen3_qkv_norm_rope",
+   "level": 2,
+   "family": "attention",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/qwen3_qkv_norm_rope__qkv_norm_rope.py",
+   "program_sha256": "7475539ad666ab4f43077a23707e56c4db206884c785db42fa2858d6241092ad",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.0.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.1.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.2.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.3.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.4.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.5.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.6.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.7.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.8.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.9.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.10.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.11.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.12.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.13.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.14.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.15.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.16.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.17.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.18.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.19.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.20.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.21.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.22.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.23.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.24.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.25.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.26.self_attn#qkv_norm_rope",
+     "o303/qwen3_qkv_norm_rope/qkv_norm_rope/model.layers.27.self_attn#qkv_norm_rope"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 1.8402402362934827,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.836384123004873,
+      "high": 1.8410649277735245
+     },
+     "candidate_ms": 44.93465608358383,
+     "baseline_ms": 82.69056212902069,
+     "speedup_forward": 2.6015546739707154,
+     "speedup_backward": 1.5549058343046258
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.8260662549863876,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.8248056042093577,
+      "high": 0.8272547483902417
+     },
+     "candidate_ms": 45.16147208213806,
+     "baseline_ms": 37.30636811256409,
+     "speedup_forward": 0.9816154283481622,
+     "speedup_backward": 0.6387958027753562
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 206.64090159989428,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9712820072474622,
+    "speedup": 1.1827124132149072,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1787401155744561,
+     "high": 1.1883996534718209
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   }
+  },
+  "qwen3_attention/causal_gqa_attention": {
+   "task": "qwen3_attention",
+   "level": 2,
+   "family": "attention",
+   "frequency": 28,
+   "recorded": 28,
+   "submitted": true,
+   "program": "/media/volume/wzhan-eval-data/wzhan/evograd-eval/evolved_programs/evograd/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py",
+   "program_sha256": "80174fb262d215b7674b216445ad1ece04e74bd38fd5f1a3447b386db0a7892b",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+     "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.0.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.1.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.2.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.3.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.4.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.5.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.6.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.7.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.8.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.9.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.10.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.11.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.12.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.13.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.14.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.15.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.16.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.17.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.18.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.19.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.20.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.21.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.22.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.23.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.24.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.25.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.26.self_attn#attention",
+     "o303/qwen3_attention/causal_gqa_attention/model.layers.27.self_attn#attention"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "speedup": 0.9028407972311809,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.9025210463357325,
+      "high": 0.903112005736245
+     },
+     "candidate_ms": 43.23788678646088,
+     "baseline_ms": 39.03692817687988,
+     "speedup_forward": 0.9723674302728591,
+     "speedup_backward": 0.879913653549746
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "speedup": 0.885430530014893,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.8851071460857053,
+      "high": 0.885638217405374
+     },
+     "candidate_ms": 43.245566844940186,
+     "baseline_ms": 38.290945172309875,
+     "speedup_forward": 0.972561003709685,
+     "speedup_backward": 0.8581704826439222
+    }
+   },
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 247.50188649995835,
+    "peak_memory_bytes": 19386228736,
+    "cpu_bound_fraction": 0.9800817063178502,
+    "speedup": 0.987454127547251,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9841727169328023,
+     "high": 0.9921789161017511
+    },
+    "peak_memory_ratio": 1.0
+   }
+  }
+ },
+ "corpus": {
+  "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+  "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "tier3": {
+  "single_site": {
+   "fused_add_rms_norm/residual_rmsnorm": {
+    "ok": true,
+    "step_ms": 222.40388250065735,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9766433744871578,
+    "speedup": 1.0988871086789267,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0950958743660235,
+     "high": 1.1042510317181051
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   },
+   "qwen3_attention/causal_gqa_attention": {
+    "ok": true,
+    "step_ms": 247.50188649995835,
+    "peak_memory_bytes": 19386228736,
+    "cpu_bound_fraction": 0.9800817063178502,
+    "speedup": 0.987454127547251,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9841727169328023,
+     "high": 0.9921789161017511
+    },
+    "peak_memory_ratio": 1.0
+   },
+   "qwen3_qkv_norm_rope/qkv_norm_rope": {
+    "ok": true,
+    "step_ms": 206.64090159989428,
+    "peak_memory_bytes": 18446704640,
+    "cpu_bound_fraction": 0.9712820072474622,
+    "speedup": 1.1827124132149072,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1787401155744561,
+     "high": 1.1883996534718209
+    },
+    "peak_memory_ratio": 0.9515365206511097
+   },
+   "qwen3_swiglu_mlp/swiglu_mlp": {
+    "ok": true,
+    "step_ms": 241.03167405046406,
+    "peak_memory_bytes": 17976942592,
+    "cpu_bound_fraction": 0.9803587597179118,
+    "speedup": 1.0139611748659494,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0105918467064634,
+     "high": 1.0188153355392613
+    },
+    "peak_memory_ratio": 0.9273047809766646
+   }
+  },
+  "combination": {
+   "cases": [
+    "fused_add_rms_norm/residual_rmsnorm",
+    "qwen3_swiglu_mlp/swiglu_mlp"
+   ],
+   "patch_set": [
+    "residual_rmsnorm",
+    "swiglu_mlp"
+   ],
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "tier3": {
+    "ok": true,
+    "step_ms": 219.96975485017174,
+    "peak_memory_bytes": 17037418496,
+    "cpu_bound_fraction": 0.9762626093049682,
+    "speedup": 1.1084851990947828,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1083055858208637,
+     "high": 1.1088428773566872
+    },
+    "peak_memory_ratio": 0.8788413016277742
+   },
+   "torch_compile_tier3": {
+    "ok": true,
+    "step_ms": 222.86111494977376,
+    "peak_memory_bytes": 13072004096,
+    "cpu_bound_fraction": 0.9426189300992194,
+    "speedup": 1.0941039111056943,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0936431442503989,
+     "high": 1.094918404249606
+    },
+    "peak_memory_ratio": 0.6742932972685627
+   },
+   "speedup_vs_torch_compile": 1.0131443529660313
+  }
+ },
+ "summary": {
+  "models": [
+   "qwen3_0_6b"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 14,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 4,
+    "accepted": 4
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 2.236352716742259,
+     "configurations_covered": 4
+    },
+    "torch_compile": {
+     "geomean": 1.2712803489413924,
+     "configurations_covered": 4
+    }
+   },
+   "coverage": 0.2857142857142857
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 4,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 4,
+    "accepted": 3
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 1.1918816108718915,
+     "configurations_covered": 3
+    },
+    "torch_compile": {
+     "geomean": 1.1229086198205418,
+     "configurations_covered": 3
+    }
+   },
+   "coverage": 0.75,
+   "tier3_single_site": {
+    "qwen3_0_6b": {
+     "fused_add_rms_norm/residual_rmsnorm": {
+      "task": "fused_add_rms_norm",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 222.40388250065735,
+       "peak_memory_bytes": 18446704640,
+       "cpu_bound_fraction": 0.9766433744871578,
+       "speedup": 1.0988871086789267,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0950958743660235,
+        "high": 1.1042510317181051
+       },
+       "peak_memory_ratio": 0.9515365206511097
+      }
+     },
+     "qwen3_attention/causal_gqa_attention": {
+      "task": "qwen3_attention",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {
+       "ok": true,
+       "step_ms": 247.50188649995835,
+       "peak_memory_bytes": 19386228736,
+       "cpu_bound_fraction": 0.9800817063178502,
+       "speedup": 0.987454127547251,
+       "ci95": {
+        "iterations": 2000,
+        "low": 0.9841727169328023,
+        "high": 0.9921789161017511
+       },
+       "peak_memory_ratio": 1.0
+      }
+     },
+     "qwen3_qkv_norm_rope/qkv_norm_rope": {
+      "task": "qwen3_qkv_norm_rope",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "passed",
+      "gate2_operator": "failed",
+      "gate2_model": "passed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {
+       "ok": true,
+       "step_ms": 206.64090159989428,
+       "peak_memory_bytes": 18446704640,
+       "cpu_bound_fraction": 0.9712820072474622,
+       "speedup": 1.1827124132149072,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.1787401155744561,
+        "high": 1.1883996534718209
+       },
+       "peak_memory_ratio": 0.9515365206511097
+      }
+     },
+     "qwen3_swiglu_mlp/swiglu_mlp": {
+      "task": "qwen3_swiglu_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 241.03167405046406,
+       "peak_memory_bytes": 17976942592,
+       "cpu_bound_fraction": 0.9803587597179118,
+       "speedup": 1.0139611748659494,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0105918467064634,
+        "high": 1.0188153355392613
+       },
+       "peak_memory_ratio": 0.9273047809766646
+      }
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "qwen3_0_6b": {
+     "cases": [
+      "fused_add_rms_norm/residual_rmsnorm",
+      "qwen3_swiglu_mlp/swiglu_mlp"
+     ],
+     "accepted": true,
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "speedup": 1.1084851990947828,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.1083055858208637,
+      "high": 1.1088428773566872
+     },
+     "speedup_vs_torch_compile": 1.0131443529660313,
+     "peak_memory_ratio": 0.8788413016277742,
+     "cpu_bound_fraction": 0.9762626093049682
+    }
+   },
+   "speedup": {
+    "geomean": 1.1084851990947828,
+    "models_covered": 1
+   },
+   "coverage": 1.0,
+   "peak_memory_ratio_geomean": 0.8788413016277742
+  }
+ }
+}

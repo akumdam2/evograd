@@ -76,11 +76,27 @@ Level-1/2 operator grids came from this model's configuration, and this task
 runs that configuration, so `evoattention`'s benchmark grid and the attention
 the model executes are the same widths by construction.
 
-**The shapes are declared, not harvested.** Every benchmark case re-derives
-from the registered AlphaFold3 configuration, and the workload re-derives them
-a second time at build and refuses a case that does not match. Nothing here
-comes from a captured run, and the provenance says so rather than implying a
-harvest.
+**Real data, harvested cases.** The step runs on one real PDB structure
+(7a4d, 384 tokens after MegaFold's crop, a 12,097-row MSA), featurized once by
+MegaFold's own training featurization and frozen
+(`benchmark/topdown/megafold/data.py`); one structure, because every site's
+shapes follow its token, atom and MSA counts, so steps differ by their seed
+alone. The Level-1/2 cases are harvested from one such step
+(`benchmark/topdown/megafold/harvest/`). The Level-3 case re-derives from the
+registered AlphaFold3 configuration, and the workload refuses a case that does
+not match.
+
+**Two of the five sites are MegaFold's own contracts.** MegaFold trains with
+float32 parameters under a bfloat16 autocast over the trunk; the diffusion
+module, heads and loss run with autocast off. The LayerNorm and the SwiGLU
+compute the same thing in either region and keep the generic `layernorm` and
+`swiglu` contracts. The LayerNorm+Linear (LayerNorm in float32, GEMM in
+bfloat16 under autocast) and the attention (score plus bias rounded to the
+case dtype, `masked_fill` of dropped keys, float32 softmax) are declared as
+`megafold_layernorm_linear` and `megafold_evoattention`, exactly as MegaFold's
+PyTorch code computes them. Each site adapter makes autocast's casts itself,
+runs its kernel with autocast off and returns the dtype the replaced module
+returns.
 
 **Three providers, one architecture.** MegaFold builds its own fused Triton
 kernels directly into the module tree rather than behind a flag, so the choice
@@ -131,17 +147,32 @@ be discovered:
   fused-attention contract models it, MegaFold's own EvoAttention included, and
   a dropout firing in one provider but not another would desynchronize their
   RNG streams.
-- The MSA and template data pipeline is replaced by seeded synthetic features
-  at a fixed crop. Nothing here measures data loading, and no result speaks to
-  prediction quality.
+- The data is one real structure featurized once and frozen. Nothing here
+  measures data loading, and no result speaks to prediction quality. Its
+  templates are masked (MegaFold's training never passes a kalign binary) and
+  it drew no constraints.
 - EMA, gradient clipping, DeepSpeed and sequence parallelism are excluded. The
   harness trains one model in one process with AdamW. Sequence parallelism is
   pinned to a group size of one, which makes MegaFold's collectives no-ops
   rather than removing them from the code path.
-- The recycling count and whether the confidence head is called are pinned
-  rather than sampled. MegaFold draws the first from
-  `randint(1, num_recycling_steps)` every step and calls the second every tenth.
-- Weights are randomly initialized from a fixed seed.
+- The recycling count (one pass) and whether the confidence head is called
+  are pinned rather than sampled. MegaFold draws the first from
+  `randint(1, 4)` every step and calls the second every tenth. Verification
+  and the ADBench evaluation call the confidence head on every step, so that
+  its sites get a gradient; the tier-3 CLI leaves it off unless
+  `--confidence-head`.
+- The template embedder (its output is masked without templates) and the
+  recycling projections (multiplied by zero in the one pass) get no gradient
+  in this step and hold no sites (`workload.NOT_SITES`); they run their eager
+  spelling in every provider.
+- The triangle multiplication's combined projection carries a linear bias,
+  which the LayerNorm+Linear contract does not, and runs MegaFold's own code.
+- Weights are randomly initialized from a fixed seed. Verification and the
+  ADBench evaluation load a frozen warm start instead
+  (`integrations.warm_start`: 200 updates of MegaFold's own trainer recipe on
+  the structure), because at the initialization MegaFold's zero-initialized
+  output layers keep every gradient from the MSA module, the diffusion module
+  and the input embedder.
 - Step times are single-GPU compute per step. They are **not** comparable to
   the MegaFold paper's reported throughput, which is a multi-GPU end-to-end
   number over the real data pipeline.

@@ -175,6 +175,35 @@ class TestGeneratedBehaviour(unittest.TestCase):
                                 (torch.ones_like(out), torch.ones_like(summed)))
         self.assertEqual(seen["eps"], 4.25e-3)     # carried on ctx, not saved
 
+    def test_backward_accepts_omitted_keyword_only_and_variadic_scalars(self):
+        op = get_task(SINGLE)
+        seen = {}
+
+        def without_scalar(dy, saved):
+            return dy * 2, torch.zeros_like(saved[1])
+
+        def keyword_only(dy, saved, *, eps):
+            seen["eps"] = eps
+            return without_scalar(dy, saved)
+
+        def variadic(dy, saved, **kwargs):
+            seen.update(kwargs)
+            return without_scalar(dy, saved)
+
+        for backward in (without_scalar, keyword_only, variadic):
+            with self.subTest(backward=backward.__name__):
+                seen.clear()
+                module = build(op)
+                setattr(module, op.backward_fn_name, backward)
+                x = torch.ones(2, 3, requires_grad=True)
+                w = torch.ones(3, requires_grad=True)
+                y = deployment_entry(module)(x, w, 4.25e-3)
+                dx, dw = torch.autograd.grad(y.sum(), (x, w))
+                self.assertTrue(torch.equal(dx, torch.full_like(x, 2)))
+                self.assertTrue(torch.equal(dw, torch.zeros_like(w)))
+                if backward is not without_scalar:
+                    self.assertEqual(seen, {"eps": 4.25e-3})
+
     def test_saved_tensors_go_through_save_for_backward(self):
         op = get_task(STRUCTURED)
         module = build(op)

@@ -21,6 +21,7 @@ PACKAGES = {
     "convnextv2_tiny": "convnextv2_tiny",
     "qwen2_vl_2b": "qwen2_vl_2b",
     "olmoe_1b_7b": "olmoe_1b_7b",
+    "megafold": "megafold",
 }
 #: Other spellings accepted on the command line (package names).
 ALIASES: dict[str, str] = {"llama3_2_1b": "llama_3_2_1b"}

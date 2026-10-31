@@ -1,0 +1,103 @@
+{
+ "stage_key": {
+  "case": "dit_s_2_dit_modulation/blocks.modulation",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.0.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.1.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.2.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.3.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.4.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.5.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.6.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.7.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.8.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.9.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.10.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.11.mod_fn"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "37f25fb38497fd2c72ea1f5e149a0011bfeb08b3b1736d4a57b1ab0f28c402f8",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+    "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.0.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.1.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.2.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.3.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.4.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.5.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.6.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.7.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.8.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.9.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.10.mod_fn",
+    "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.11.mod_fn"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 0.6660637376988174,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.6618737368430689,
+     "high": 0.6706961873346046
+    },
+    "candidate_ms": 6.793728142976761,
+    "baseline_ms": 4.525055959820747,
+    "speedup_forward": 0.5306310554562588,
+    "speedup_backward": 0.6106562973035671
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.2087618808541578,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.2049262068912703,
+     "high": 1.2127128749932043
+    },
+    "candidate_ms": 6.720000118017197,
+    "baseline_ms": 8.122879981994629,
+    "speedup_forward": 2.2660984557221053,
+    "speedup_backward": 1.0322079454895414
+   }
+  }
+ }
+}

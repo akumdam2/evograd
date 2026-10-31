@@ -1,0 +1,135 @@
+{
+ "stage_key": {
+  "case": "rope/rope",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q",
+    "o303/rope/rope/model.layers.16.self_attn#rope_q",
+    "o303/rope/rope/model.layers.17.self_attn#rope_q",
+    "o303/rope/rope/model.layers.18.self_attn#rope_q",
+    "o303/rope/rope/model.layers.19.self_attn#rope_q",
+    "o303/rope/rope/model.layers.20.self_attn#rope_q",
+    "o303/rope/rope/model.layers.21.self_attn#rope_q",
+    "o303/rope/rope/model.layers.22.self_attn#rope_q",
+    "o303/rope/rope/model.layers.23.self_attn#rope_q",
+    "o303/rope/rope/model.layers.24.self_attn#rope_q",
+    "o303/rope/rope/model.layers.25.self_attn#rope_q",
+    "o303/rope/rope/model.layers.26.self_attn#rope_q",
+    "o303/rope/rope/model.layers.27.self_attn#rope_q"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "1ccc37366fc3afed26100144f71045d8b5af13090ec5bd5328e7562a753181f3",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/rope/rope/model.layers.0.self_attn#rope_q",
+    "o303/rope/rope/model.layers.1.self_attn#rope_q",
+    "o303/rope/rope/model.layers.2.self_attn#rope_q",
+    "o303/rope/rope/model.layers.3.self_attn#rope_q",
+    "o303/rope/rope/model.layers.4.self_attn#rope_q",
+    "o303/rope/rope/model.layers.5.self_attn#rope_q",
+    "o303/rope/rope/model.layers.6.self_attn#rope_q",
+    "o303/rope/rope/model.layers.7.self_attn#rope_q",
+    "o303/rope/rope/model.layers.8.self_attn#rope_q",
+    "o303/rope/rope/model.layers.9.self_attn#rope_q",
+    "o303/rope/rope/model.layers.10.self_attn#rope_q",
+    "o303/rope/rope/model.layers.11.self_attn#rope_q",
+    "o303/rope/rope/model.layers.12.self_attn#rope_q",
+    "o303/rope/rope/model.layers.13.self_attn#rope_q",
+    "o303/rope/rope/model.layers.14.self_attn#rope_q",
+    "o303/rope/rope/model.layers.15.self_attn#rope_q",
+    "o303/rope/rope/model.layers.16.self_attn#rope_q",
+    "o303/rope/rope/model.layers.17.self_attn#rope_q",
+    "o303/rope/rope/model.layers.18.self_attn#rope_q",
+    "o303/rope/rope/model.layers.19.self_attn#rope_q",
+    "o303/rope/rope/model.layers.20.self_attn#rope_q",
+    "o303/rope/rope/model.layers.21.self_attn#rope_q",
+    "o303/rope/rope/model.layers.22.self_attn#rope_q",
+    "o303/rope/rope/model.layers.23.self_attn#rope_q",
+    "o303/rope/rope/model.layers.24.self_attn#rope_q",
+    "o303/rope/rope/model.layers.25.self_attn#rope_q",
+    "o303/rope/rope/model.layers.26.self_attn#rope_q",
+    "o303/rope/rope/model.layers.27.self_attn#rope_q"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 2.4208480370201144,
+    "ci95": {
+     "iterations": 2000,
+     "low": 2.342836088343927,
+     "high": 2.4523662296621063
+    },
+    "candidate_ms": 5.663232006132603,
+    "baseline_ms": 13.709824085235596,
+    "speedup_forward": 6.154226133726061,
+    "speedup_backward": 2.6859199472869957
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.5395324317367056,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.4835346614179288,
+     "high": 1.559022855405275
+    },
+    "candidate_ms": 5.847551986575127,
+    "baseline_ms": 9.002495929598808,
+    "speedup_forward": 1.0912161447986295,
+    "speedup_backward": 1.2105168527067556
+   }
+  }
+ }
+}

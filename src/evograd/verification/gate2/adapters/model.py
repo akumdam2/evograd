@@ -90,13 +90,17 @@ class WorkloadModelScope(ScopeBase):
 
     scope = "model"
 
-    def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None):
+    def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None,
+                 replaced: Mapping[str, Any] | None = None):
         self.workload = workload
         spec = getattr(workload, "spec", None)
         self.device = str(getattr(spec, "device", "cpu"))
         self.dtype = str(getattr(spec, "dtype", "float32"))
         self.registry = workload.site_registry
         self._native = dict(native_sites or {})
+        #: Site -> the configurations (workloads) a deployment replaces there,
+        #: where it takes only some of the site's calls; see :meth:`control_site`.
+        self._replaced = {site: tuple(ws) for site, ws in (replaced or {}).items()}
         self._expected: dict[str, int] = {}
 
     def identity(self) -> dict[str, Any]:
@@ -104,7 +108,32 @@ class WorkloadModelScope(ScopeBase):
                 "workload": dict(self.workload.describe()),
                 "outputs": ["logits", "loss"],
                 "loss": "token-mean next-token NLL, float32, ignore_index=-100",
-                "site_references": self.site_references()}
+                "site_references": self.site_references(), **self.replaced_identity()}
+
+    def replaced_identity(self) -> dict[str, Any]:
+        """The replaced configurations, bound into the policy (nothing when whole sites are)."""
+        if not self._replaced:
+            return {}
+        return {"replaced_configurations": {
+            site: [{"dims": dict(w.dims), "dtype": w.dtype,
+                    "strides": [[n, list(st)] for n, st in
+                                (getattr(getattr(w, "provenance", None), "strides", None) or ())]}
+                   for w in workloads]
+            for site, workloads in sorted(self._replaced.items())}}
+
+    def control_site(self, site: str, call: Callable) -> Callable:
+        """``call`` (a control's implementation of ``site``) installed where the
+        deployment replaces: the whole site, or only its replaced configurations
+        with the native on every other call."""
+        if site not in self._replaced:
+            return call
+        from evograd.benchmark import get_task
+        from evograd.verification.common import dispatch
+
+        op = get_task(self.registry.require(site).op)
+        return dispatch.by_configuration(
+            op, {dispatch.configuration(op, w): call for w in self._replaced[site]},
+            self.native_site(site))
 
     def site_references(self) -> dict[str, Any]:
         """Each site's reference contract -- what boundary replay judges against.
@@ -219,8 +248,9 @@ class ObjectiveModelScope(WorkloadModelScope):
     prefix.
     """
 
-    def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None):
-        super().__init__(workload, native_sites=native_sites)
+    def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None,
+                 replaced: Mapping[str, Any] | None = None):
+        super().__init__(workload, native_sites=native_sites, replaced=replaced)
         self.primary = str(workload.primary_output_name)
 
     def identity(self) -> dict[str, Any]:
@@ -228,7 +258,7 @@ class ObjectiveModelScope(WorkloadModelScope):
                 "workload": dict(self.workload.describe()),
                 "outputs": [self.primary, "loss"],
                 "loss": str(self.workload.objective_definition),
-                "site_references": self.site_references()}
+                "site_references": self.site_references(), **self.replaced_identity()}
 
     def reference_parts(self) -> dict[str, Any]:
         return {"workload_class": type(self.workload),

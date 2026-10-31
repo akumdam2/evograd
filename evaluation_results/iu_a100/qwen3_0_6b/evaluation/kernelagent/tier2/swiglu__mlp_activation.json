@@ -1,0 +1,138 @@
+{
+ "stage_key": {
+  "case": "swiglu/mlp_activation",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/swiglu/mlp_activation/model.layers.0.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.1.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.2.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.3.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.4.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.5.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.6.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.7.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.8.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.9.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.10.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.11.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.12.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.13.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.14.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.15.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.16.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.17.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.18.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.19.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.20.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.21.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.22.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.23.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.24.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.25.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.26.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.27.mlp#act_mul"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "03bfd6b79830522d8bc9414e3fb8abfa2a930da5bb857ff709cf81a2647c4cc8",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+    "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/swiglu/mlp_activation/model.layers.0.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.1.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.2.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.3.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.4.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.5.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.6.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.7.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.8.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.9.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.10.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.11.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.12.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.13.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.14.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.15.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.16.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.17.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.18.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.19.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.20.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.21.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.22.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.23.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.24.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.25.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.26.mlp#act_mul",
+    "o303/swiglu/mlp_activation/model.layers.27.mlp#act_mul"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 4.0061413020209224,
+    "ci95": {
+     "iterations": 2000,
+     "low": 4.004206044378531,
+     "high": 4.007279400184628
+    },
+    "candidate_ms": 4.502016060054302,
+    "baseline_ms": 18.035712480545044,
+    "speedup_forward": 4.173913166827789,
+    "speedup_backward": 3.7113887817274396
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.6857370086818657,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.6674220665421469,
+     "high": 1.6960101468761095
+    },
+    "candidate_ms": 4.501504063606262,
+    "baseline_ms": 7.588351994752884,
+    "speedup_forward": 1.029526472449023,
+    "speedup_backward": 1.026567875316441
+   },
+   "megafold": {
+    "error": "ModuleNotFoundError: No module named 'megafold'"
+   }
+  }
+ }
+}

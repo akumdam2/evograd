@@ -1,0 +1,85 @@
+{
+ "stage_key": {
+  "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA A100-SXM4-40GB",
+   "torch": "2.11.0+cu128"
+  },
+  "inputs": {
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "order": 303,
+   "payload_ids": [
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act"
+   ],
+   "source": "real_training_payload",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "split": "acceptance"
+  },
+  "options": {
+   "blocks": 3,
+   "reps": 50,
+   "seed": 0,
+   "warmup": 10
+  },
+  "program_sha256": "ffc8cb3b0ef114dc733e3d2ddc94b7277e68cd82d7182e687fab8ed5a8bd824c",
+  "protocol": "evograd-evaluation-v3"
+ },
+ "result": {
+  "executable": true,
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's",
+   "corpus": {
+    "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+    "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+    "schema": "evograd-real-payload-corpus/1",
+    "reference": null
+   },
+   "payload_ids": [
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act"
+   ]
+  },
+  "tier2": {
+   "eager": {
+    "route": "autograd",
+    "speedup": 1.0103807022865339,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0092272909213635,
+     "high": 1.0115473985964223
+    },
+    "candidate_ms": 0.8878079652786255,
+    "baseline_ms": 0.8970240354537964,
+    "speedup_forward": 1.0170939602215323,
+    "speedup_backward": 1.0114285757050527
+   },
+   "torch_compile": {
+    "route": "autograd",
+    "speedup": 1.3000577626240808,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1943483715885912,
+     "high": 1.390751438688122
+    },
+    "candidate_ms": 0.8872959762811661,
+    "baseline_ms": 1.1535360217094421,
+    "speedup_forward": 1.0,
+    "speedup_backward": 1.1333333832256158
+   }
+  }
+ }
+}

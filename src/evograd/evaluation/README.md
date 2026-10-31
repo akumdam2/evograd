@@ -19,11 +19,14 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
 1. **Verify** each candidate on the model's real training payloads: Gate 1
    and operator Gate 2. A Level-2 candidate also gets model Gate 2 alone at its
    site and, after those three gates pass, single-site Gate 3 continuous
-   training. Passing every applicable gate makes a candidate *accepted*;
+   training, where Gate 3 applies to the model (`Model.gate3_applies`; not
+   MegaFold, which accepts on model Gate 2). Passing every applicable gate makes a candidate *accepted*;
    a skipped, failed or incomplete required gate cannot pass acceptance.
 2. **Tier 2** times every *executable* Level-1/Level-2 candidate, accepted or
-   not, on the recorded calls of its case: every call in the training step of
-   acceptance order 303 of the verification corpus, in call order. Candidate, eager, `torch.compile` and
+   not, on the recorded calls of its case: every call the verification corpus
+   records in the training step of acceptance order 303, in call order (all of
+   the case's calls, or the declared subset a model records: MegaFold keeps
+   three per case). Candidate, eager, `torch.compile` and
    declared library baselines all run forward through their deployment path
    and backward through `torch.autograd.grad`, without an optimizer or `.grad`
    accumulation. The candidate uses its artifact's deployment entry, or
@@ -48,7 +51,7 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    interval whose lower bound is strictly above one. These candidates are
    deployed together at their distinct model sites; Level-1 artifacts are not
    independently installed by this path. The combination gets model Gate 2
-   and Gate 3 again, then Tier 3 timing against eager and whole-model
+   and Gate 3 (where it applies) again, then Tier 3 timing against eager and whole-model
    `torch.compile`.
 5. The **summary** reports, for Level 1 and Level 2, the Tier 2 geometric-mean
    speedup over accepted configurations (configuration, then task, then family), coverage

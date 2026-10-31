@@ -1,0 +1,39 @@
+diff --git a/src/evograd/verification/payloads/gate1.py b/src/evograd/verification/payloads/gate1.py
+index dca31c1..f453a0d 100644
+--- a/src/evograd/verification/payloads/gate1.py
++++ b/src/evograd/verification/payloads/gate1.py
+@@ -165,9 +165,34 @@ def search_correctness(op: OpDecl, module, spec: Mapping[str, Any], *,
+         messages = [f.message for f in report.findings]
+         if messages:
+             summary["error_message"] = "; ".join(messages[:4])
++    else:
++        failure = _deployment_failure(op, module, device=device)
++        if failure:
++            summary["total"] = max(summary["total"], 1)
++            summary["passed"] = min(summary["passed"], summary["total"] - 1)
++            summary["error_message"] = failure
+     return summary
+ 
+ 
++def _deployment_failure(op: OpDecl, module, *, device: str) -> str | None:
++    """Why the candidate's deployment entry does not run, or ``None``.
++
++    Gate 1 calls the pair directly and passes a backward only the scalars its
++    signature names; Gate 2, tier 2 and tier 3 call the deployment entry, which
++    passes every declared scalar. One untimed forward+backward through it at the
++    case's configuration (execution, shape, dtype and finiteness, as seed
++    acceptance checks it; no second numerical policy) keeps search feedback from
++    accepting a pair the final gates cannot call.
++    """
++    from evograd.evaluation.common.seed import _deployment_case
++
++    try:
++        _deployment_case(op, module, op.correctness[0], device, "benchmark_deployment")
++    except Exception as exc:
++        return f"deployment interface: {type(exc).__name__}: {exc}"
++    return None
++
++
+ def coverage(corpus: Corpus, *, case_id: str, split: str) -> dict[str, Any]:
+     """Exact invocation coverage of one case in one split (for every report)."""
+     records = corpus.payloads(case_id=case_id, split=split)

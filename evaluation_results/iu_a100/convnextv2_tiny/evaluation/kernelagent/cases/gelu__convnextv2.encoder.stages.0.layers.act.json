@@ -1,0 +1,3483 @@
+{
+ "stage_key": {
+  "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+  "program_sha256": "6eefb85a1f81922a059a256c380d3e1661cd447e350ff09cb53721abc35c984d",
+  "corpus": {
+   "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+   "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.ops.level1.gelu.reference:forward",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor"
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "failed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "gelu",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_959128539061610912",
+    "source_hash": "f5502d183448b760ef9af4b7e09b2ed06097aebf92862fcb9bcac9e7fb3e12dd"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.ops.level1.gelu.reference:forward",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:dx": 1.4901161193847656e-08,
+    "out:out": 6.103515625e-05
+   },
+   "cases": [
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+    "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act"
+   ]
+  },
+  "case_counts": {
+   "passed": 6,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 7.62939453125e-06,
+       "worst_index": [
+        11,
+        57
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.25
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.25,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.1920928955078125e-07,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.0078125,
+       "worst_index": [
+        12116,
+        189
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 5,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.0.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38534109,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 1.52587890625e-05,
+       "worst_index": [
+        194,
+        265
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.125,
+       "rounding_floor": 0.125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.1920928955078125e-07,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.0078125,
+       "worst_index": [
+        96163,
+        209
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 11,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.1.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38531908,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 1.52587890625e-05,
+       "worst_index": [
+        12,
+        120
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.125,
+       "rounding_floor": 0.125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.1920928955078125e-07,
+       "max_rel_err": 0.007633587786259542,
+       "headroom": 0.01159580547247805,
+       "worst_index": [
+        11507,
+        237
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 7.62939453125e-06
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 7.62939453125e-06,
+       "rounding_floor": 7.62939453125e-06
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 17,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.2.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38532137,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 7.62939453125e-06,
+       "worst_index": [
+        11,
+        9
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.25
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.25,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.1920928955078125e-07,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.001953125,
+       "worst_index": [
+        6974,
+        37
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 6.103515625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 6.103515625e-05,
+       "rounding_floor": 6.103515625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 5,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.0.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38534119,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 1.52587890625e-05,
+       "worst_index": [
+        10,
+        172
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.125,
+       "rounding_floor": 0.125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 2.384185791015625e-07,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.0078125,
+       "worst_index": [
+        49600,
+        188
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 3.0517578125e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 11,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.1.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38531757,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 1.0,
+       "headroom": 1.52587890625e-05,
+       "worst_index": [
+        10,
+        95
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.125,
+       "rounding_floor": 0.125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 38535168,
+       "max_abs_err": 2.384185791015625e-07,
+       "max_rel_err": 0.007692307692307693,
+       "headroom": 0.0078125,
+       "worst_index": [
+        9294,
+        263
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 3.0517578125e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 3.0517578125e-05,
+       "rounding_floor": 3.0517578125e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 100352,
+      "hidden": 384
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "case": "gelu/convnextv2.encoder.stages.0.layers.act",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.encoder.stages.0.layers.act",
+       "index_in_step": 17,
+       "kind": "module:GELUActivation",
+       "layer": null,
+       "path": "convnextv2.encoder.stages.0.layers.2.act",
+       "role": "convnextv2.encoder.stages.0.layers.act"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 38531945,
+        "numel": 38535168,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "8e1fae11c7223b6ecbb22d531cb6378827bda2026427d8b7d7251680f5e17402",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/work/hdd/bcjw/wzhan/ADBench_eval/convnextv2_tiny/state/gate2/operator/7096a8fa75b2f9a2/gelu__convnextv2.encoder.stages.0.layers.act.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "failed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "gelu",
+    "forward": "evograd.ops.level1.gelu.reference:forward",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.ops.level1.gelu.reference:forward",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+     "source": null
+    },
+    "parameter_args": [],
+    "dims": {
+     "rows": 100352,
+     "hidden": 384
+    },
+    "dtype": "bfloat16",
+    "inputs": "real_training_payload",
+    "case_id": "gelu/convnextv2.encoder.stages.0.layers.act",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_959128539061610912"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+     "seed": 303000005,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.0.layers.0.act"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+     "seed": 303000011,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.0.layers.1.act"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+     "seed": 303000017,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.encoder.stages.0.layers.2.act"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+     "seed": 404000005,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.0.layers.0.act"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+     "seed": 404000011,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.0.layers.1.act"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+     "seed": 404000017,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.encoder.stages.0.layers.2.act"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "8e1fae11c7223b6ecbb22d531cb6378827bda2026427d8b7d7251680f5e17402",
+    "schema": "evograd-verification-gate2-policy/4",
+    "boundaries": false,
+    "sample_protocol": "disjoint_holdout",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "69a9f15537209be18fb168ae0a80abdb8f61358b816b03ebb4e2ed62889984ad",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 1,
+   "failed": 5,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [
+   "threshold_exceeded"
+  ],
+  "cases": [
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 5.023250298086085e-08,
+       "Emax": 2.533597239465791e-06,
+       "diff_l2": 0.00023475018989632256,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 4673.272800795235,
+       "ref_rms": 0.7528223519909836,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.1670715234874997e-05,
+       "Emax": 0.02491822176965975,
+       "diff_l2": 3.465924945183667e-07,
+       "diff_max": 1.1920928955078125e-07,
+       "ref_l2": 0.029697622428714758,
+       "ref_rms": 4.784020732006231e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0249 > 0.02 (1.25x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.02491822176965975,
+         "threshold": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "seed": 303000005,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.0.layers.0.act"
+      }
+     },
+     "reference": {
+      "execution_id": "beea050fe8c44677a2aef04ce5e88a93",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "seed": 303000005,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.0.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "8cc94cda1504dd4bdadcb385c817a6746192ca3a97528e34799bfee402d72b3b",
+      "sample_identity": {
+       "fingerprint": "f5ed962beca4afb57b7c5f6cda3480aeb87fa40e4f518071144eda3cb486e323",
+       "components": {
+        "seed": 303000005,
+        "inputs": "e3313f66c06237f1e23613f17a79a196b053a3123fb4beb878894e470015fda8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "441619d5f8c5dc290dac421c0eb3c785e1397bb8269035a42d75de4ac94ca5f4",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "318f65ac2f653fdb17c816b2b19449a59a1fc5bb0a5117da50e305865d12e131",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "438a75b44a9b7c23c685f990f8d915a291aa8b9df152ffd8319bee23e459c8b1",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6b40da6cbb8994b22790f04e851335c01eed9bb4362e2aa226869e81ac6bfab2",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.1992474180005956
+     },
+     "candidate": {
+      "execution_id": "19b4f75868294b86b7b2b070ea1571a5",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "seed": 303000005,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.0.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "8cc94cda1504dd4bdadcb385c817a6746192ca3a97528e34799bfee402d72b3b",
+      "sample_identity": {
+       "fingerprint": "f5ed962beca4afb57b7c5f6cda3480aeb87fa40e4f518071144eda3cb486e323",
+       "components": {
+        "seed": 303000005,
+        "inputs": "e3313f66c06237f1e23613f17a79a196b053a3123fb4beb878894e470015fda8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "441619d5f8c5dc290dac421c0eb3c785e1397bb8269035a42d75de4ac94ca5f4",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "318f65ac2f653fdb17c816b2b19449a59a1fc5bb0a5117da50e305865d12e131",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "438a75b44a9b7c23c685f990f8d915a291aa8b9df152ffd8319bee23e459c8b1",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6985a5ff19bbd94265270d0c48b925d38a6e37d7b9da45e4807ade45a9f0b257",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.7898514410044299
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 5.589983393361565e-08,
+       "Emax": 5.212104380489686e-06,
+       "diff_l2": 0.00012698608202965812,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 2271.6719012164076,
+       "ref_rms": 0.3659459775886724,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.340688943962518e-05,
+       "Emax": 0.035663145664933324,
+       "diff_l2": 2.781935833626743e-07,
+       "diff_max": 1.1920928955078125e-07,
+       "ref_l2": 0.02075004680358219,
+       "ref_rms": 3.342646514437922e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0357 > 0.02 (1.78x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.035663145664933324,
+         "threshold": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "seed": 303000011,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.0.layers.1.act"
+      }
+     },
+     "reference": {
+      "execution_id": "73158c2fcdbf4d0ab29570d9f57c00bd",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "seed": 303000011,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.1.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9929b72084736f6aafdc07c8bdd7e5b835493eaeac113e7bb19d73d1eabe4a1d",
+      "sample_identity": {
+       "fingerprint": "510982a720ade291a7fd135f970bb3271b92eaefd182c7c13163dd49329829f4",
+       "components": {
+        "seed": 303000011,
+        "inputs": "94b41f3c949579128b6baf20fbea8876dcdd37843df6b480d5b65a0c54aeb1bb",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "a0ce8f0240aac7e8d5ab0a3ba32ee484d7cd5cb34b8306364d6f3c1f3c2a8413",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "36054f9165dfa92505654d280662962864aee930c35834974de6d39b596116c2",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "7197d6efdff1157236dafae07c39ab8b947636125057e7043b14019aa57da7e3",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "a2b0add6d2b7d737c9184753f73c24ab5229402e72c8a7f95717cf848683cafd",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.1997785810090136
+     },
+     "candidate": {
+      "execution_id": "f359282a8bd44957815a28abaa7a2e69",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "seed": 303000011,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.1.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9929b72084736f6aafdc07c8bdd7e5b835493eaeac113e7bb19d73d1eabe4a1d",
+      "sample_identity": {
+       "fingerprint": "510982a720ade291a7fd135f970bb3271b92eaefd182c7c13163dd49329829f4",
+       "components": {
+        "seed": 303000011,
+        "inputs": "94b41f3c949579128b6baf20fbea8876dcdd37843df6b480d5b65a0c54aeb1bb",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "a0ce8f0240aac7e8d5ab0a3ba32ee484d7cd5cb34b8306364d6f3c1f3c2a8413",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "36054f9165dfa92505654d280662962864aee930c35834974de6d39b596116c2",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "7197d6efdff1157236dafae07c39ab8b947636125057e7043b14019aa57da7e3",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "77c23d6dce18bd38c9af10aca8f74082126617ada8df09c85534fc1b065c9357",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.7839848230069038
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 7.576020605860714e-08,
+       "Emax": 6.029677708197556e-06,
+       "diff_l2": 0.00014876671000464199,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 1963.6523941019634,
+       "ref_rms": 0.31632679640893463,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.6095246163441638e-05,
+       "Emax": 0.04029043597255326,
+       "diff_l2": 2.956203892613149e-07,
+       "diff_max": 1.1920928955078125e-07,
+       "ref_l2": 0.018366938054838827,
+       "ref_rms": 2.9587490597517798e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0403 > 0.02 (2.01x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.04029043597255326,
+         "threshold": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "seed": 303000017,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.encoder.stages.0.layers.2.act"
+      }
+     },
+     "reference": {
+      "execution_id": "165e941007584420b065e78c9a272c9a",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "seed": 303000017,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.2.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e897b578ff54cecdd93f45788929d45ee48d3f9c800520b884def5b809393f9d",
+      "sample_identity": {
+       "fingerprint": "66186cbe0eeb1b3d6ef340bdfb912193ca4736810f2a41223786070ef08c9a84",
+       "components": {
+        "seed": 303000017,
+        "inputs": "8c3791099e535217d2a196902fdcf17f6e1da53b026c841911ca1f5f26bdf063",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "c56360f6c08a5da6fc770e5bc998c318c36afdc8701ed13152c6370c7ec626b8",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d00ed362a61e11498f77d625845d0dddc169263f38414f4c9be143909ce80365",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "24e2d42e28165e40af7946c60ac2bb3a6afbe544be0cbb8d656d9ed50ac9b9bb",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "1a2c3a3f26a01c0c06a0ea11ad604936490f9743bd4adbf23d6543d129a5f06b",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.2090714950027177
+     },
+     "candidate": {
+      "execution_id": "5f93111c0cef4dda94e4fd98603d10b9",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "seed": 303000017,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.encoder.stages.0.layers.2.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "e897b578ff54cecdd93f45788929d45ee48d3f9c800520b884def5b809393f9d",
+      "sample_identity": {
+       "fingerprint": "66186cbe0eeb1b3d6ef340bdfb912193ca4736810f2a41223786070ef08c9a84",
+       "components": {
+        "seed": 303000017,
+        "inputs": "8c3791099e535217d2a196902fdcf17f6e1da53b026c841911ca1f5f26bdf063",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "c56360f6c08a5da6fc770e5bc998c318c36afdc8701ed13152c6370c7ec626b8",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d00ed362a61e11498f77d625845d0dddc169263f38414f4c9be143909ce80365",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "24e2d42e28165e40af7946c60ac2bb3a6afbe544be0cbb8d656d9ed50ac9b9bb",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "ecb6f8302a52f34f8c15872de9074fd809c1d070967504497d67f6ca527e5fe8",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.753431681994698
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 5.357363424003246e-08,
+       "Emax": 2.530423451339555e-06,
+       "diff_l2": 0.00025067822748770955,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 4679.134261539276,
+       "ref_rms": 0.7537665807684434,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 9.167760852777995e-06,
+       "Emax": 0.016026369716782982,
+       "diff_l2": 4.2331810819862147e-07,
+       "diff_max": 1.1920928955078125e-07,
+       "ref_l2": 0.046174645586479116,
+       "ref_rms": 7.438321445058393e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+      "seed": 404000005,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.0.layers.0.act"
+      }
+     },
+     "reference": {
+      "execution_id": "3bb24366ef114e4c8fe53c51c2e79f59",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "seed": 404000005,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.0.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b6d9d1632cacbe04cc9c636390b4a9cb58658f0d18ca5a1d3045c120969c1f11",
+      "sample_identity": {
+       "fingerprint": "1afb012970d898a5307a31b626e18ef50a7672dbd08a5daef422b819a843287b",
+       "components": {
+        "seed": 404000005,
+        "inputs": "57ebce1b1440f444dc0c8b38aee36bdef159f24e962134faa88e429f9712c15c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "e037ccb42a57099ed9ada2b74100b447bc463163265fb84f7b7a659c5b2b2ed0",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "b7e3a07d1bbb3e1dd3e7075bc0e713815d857e9b30427b717e3c59da92965dca",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "1decb3009010b6c3512bcb3b28f9c4440ea66c5b34dfcc71b99442a6b79ca6b1",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "bbe31ad9d6c93f1188515ecf9fde4deb76ca591c2e8e693965c901929fe3ca7a",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.150503122000373
+     },
+     "candidate": {
+      "execution_id": "f88098499b8444c991f2be7c011d0caa",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+       "seed": 404000005,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.0.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.0.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b6d9d1632cacbe04cc9c636390b4a9cb58658f0d18ca5a1d3045c120969c1f11",
+      "sample_identity": {
+       "fingerprint": "1afb012970d898a5307a31b626e18ef50a7672dbd08a5daef422b819a843287b",
+       "components": {
+        "seed": 404000005,
+        "inputs": "57ebce1b1440f444dc0c8b38aee36bdef159f24e962134faa88e429f9712c15c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "e037ccb42a57099ed9ada2b74100b447bc463163265fb84f7b7a659c5b2b2ed0",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "b7e3a07d1bbb3e1dd3e7075bc0e713815d857e9b30427b717e3c59da92965dca",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "1decb3009010b6c3512bcb3b28f9c4440ea66c5b34dfcc71b99442a6b79ca6b1",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "2f849db326b09be1c5aa6e6106bf13d86cb459f4b796f26accbce5e0527fad61",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.7772311470034765
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 5.4880545011870006e-08,
+       "Emax": 5.2596835512635305e-06,
+       "diff_l2": 0.0001235428201123595,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 2251.1223255096806,
+       "ref_rms": 0.3626356251707004,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.608694167315545e-05,
+       "Emax": 0.046130167187219503,
+       "diff_l2": 5.161277172665816e-07,
+       "diff_max": 2.384185791015625e-07,
+       "ref_l2": 0.03208364447095949,
+       "ref_rms": 5.168387492157563e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0461 > 0.02 (2.31x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.046130167187219503,
+         "threshold": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+      "seed": 404000011,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.0.layers.1.act"
+      }
+     },
+     "reference": {
+      "execution_id": "ae30637da3d74a8c91fd072207a2a74a",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "seed": 404000011,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.1.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "97a449cf0a1cffbd56f0645c66c46ba5f522256852391e3461561e3ed7e54dfd",
+      "sample_identity": {
+       "fingerprint": "34541ab22bf2359cfaefd2882cbe97db78f8d7a7bb01d85308e098f7b0897c10",
+       "components": {
+        "seed": 404000011,
+        "inputs": "0c61e56429018d11c5f2c63558242225fe3b6eda301eb964428d53ff6bb2e9be",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "4cea85403293df5d9bb333f019a8b76139168b0ca94adefabbbecc36e7003788",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "c64b8feb4516f36cc1928f0f1652d8b0a115cb4f69f5f7b3c58f846ff2e6f32f",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "f9c7425bd38694a3e70bcf7c0fe65ad1f373e8a022dce95fa2398518317d8cc3",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "f2ae097d54c1c89a38ecbd43003b317ae59113585ec9c2e1f3ded864899b3b65",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.1573804910003673
+     },
+     "candidate": {
+      "execution_id": "0e0e6f8d85934063ae8603b3d366287a",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+       "seed": 404000011,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.1.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.1.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "97a449cf0a1cffbd56f0645c66c46ba5f522256852391e3461561e3ed7e54dfd",
+      "sample_identity": {
+       "fingerprint": "34541ab22bf2359cfaefd2882cbe97db78f8d7a7bb01d85308e098f7b0897c10",
+       "components": {
+        "seed": 404000011,
+        "inputs": "0c61e56429018d11c5f2c63558242225fe3b6eda301eb964428d53ff6bb2e9be",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "4cea85403293df5d9bb333f019a8b76139168b0ca94adefabbbecc36e7003788",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "c64b8feb4516f36cc1928f0f1652d8b0a115cb4f69f5f7b3c58f846ff2e6f32f",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "f9c7425bd38694a3e70bcf7c0fe65ad1f373e8a022dce95fa2398518317d8cc3",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6c63dc863294ae3ebf3854a2970be49478680ec872bc6fa52b9d6f9742b99184",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.7559014340076828
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 7.542281235179494e-08,
+       "Emax": 6.140666212024987e-06,
+       "diff_l2": 0.0001454273002715138,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 1928.1606683293196,
+       "ref_rms": 0.31060939757276274,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "failed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.938093563746889e-05,
+       "Emax": 0.05215160843522069,
+       "diff_l2": 5.500165476607014e-07,
+       "diff_max": 2.384185791015625e-07,
+       "ref_l2": 0.028379256706129403,
+       "ref_rms": 4.571643833338533e-06,
+       "elements": 38535168,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         100352,
+         384
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         384,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": [
+       {
+        "code": "threshold_exceeded",
+        "outcome": "failed",
+        "message": "Emax 0.0522 > 0.02 (2.61x)",
+        "subject": "grad_in:x",
+        "details": {
+         "metric": "Emax",
+         "value": 0.05215160843522069,
+         "threshold": 0.02
+        }
+       }
+      ]
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+      "seed": 404000017,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.encoder.stages.0.layers.2.act"
+      }
+     },
+     "reference": {
+      "execution_id": "b779c4f3790c4299a78308d5360ceaec",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "seed": 404000017,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.2.act"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b45153a57cb57aab1e3324e581bbef415f59999942222a6a20766a05f8e32a0f",
+      "sample_identity": {
+       "fingerprint": "9ad8d1cd163ed7e7c91897332741353a4614d0b96280537536a97f16c28f607e",
+       "components": {
+        "seed": 404000017,
+        "inputs": "ab57b0d90e69371db506e437cf0f2f690a9a92f2d4a8be726e6fb651104fd55a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "0fe7c1ca9b37699dcd8846802d301ea94427070176e7d63a4d3b96ce3d2909b7",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1088bedb58ae63f36655cf33ac7171755c5e7b659cfb50fbda72a81cec5bfde4",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c8b44bcdb21785ac21d9fac25f2736b7937bdf8d9810ca7d9814f8e7ad46671f",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "c998bc4e20de644af80c0bb4b38131f663d27fc02180aa5eed7e2d0e804c39fc",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 1.2586818120034877
+     },
+     "candidate": {
+      "execution_id": "55318ad16c7246e7bc81731b2b939ee8",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_959128539061610912"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+       "seed": 404000017,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/convnextv2.encoder.stages.0.layers.act/convnextv2.encoder.stages.0.layers.2.act",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.encoder.stages.0.layers.2.act"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b45153a57cb57aab1e3324e581bbef415f59999942222a6a20766a05f8e32a0f",
+      "sample_identity": {
+       "fingerprint": "9ad8d1cd163ed7e7c91897332741353a4614d0b96280537536a97f16c28f607e",
+       "components": {
+        "seed": 404000017,
+        "inputs": "ab57b0d90e69371db506e437cf0f2f690a9a92f2d4a8be726e6fb651104fd55a",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "0fe7c1ca9b37699dcd8846802d301ea94427070176e7d63a4d3b96ce3d2909b7",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1088bedb58ae63f36655cf33ac7171755c5e7b659cfb50fbda72a81cec5bfde4",
+             "shape": [
+              100352,
+              384
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              384,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "c8b44bcdb21785ac21d9fac25f2736b7937bdf8d9810ca7d9814f8e7ad46671f",
+           "shape": [
+            100352,
+            384
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            384,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "dd675e437a1f9783e704b662be8e3895f43f5f63a23881781f46041e126ddcac",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.8684459869982675
+     },
+     "contract_digest": "59e33968eb13fec3b8ea3a499c0a6ad8b51a70b7d42c7dc189299d6193402e85"
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "disjoint_holdout"
+  }
+ }
+}

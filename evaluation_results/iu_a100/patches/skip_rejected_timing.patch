@@ -1,0 +1,51 @@
+diff --git a/src/evograd/evaluation/protocol.py b/src/evograd/evaluation/protocol.py
+index e94a05f..353f587 100644
+--- a/src/evograd/evaluation/protocol.py
++++ b/src/evograd/evaluation/protocol.py
+@@ -547,7 +547,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
+         for case_id, entry in verdict["candidates"].items():
+             result["cases"][case_id].update(entry)
+ 
+-        # 2. Tier 2, every executable candidate.
++        # 2. Tier 2, every executable candidate; only an accepted one is timed
++        # (IU: a rejected candidate's timing costs hours and enters no summary).
+         result["settings"]["timing"] = timing_mode()
+         for case_id in sorted(run.modules):
+             case, module = run.cases[case_id], run.modules[case_id]
+@@ -558,24 +559,30 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
+                    "options": dict(tier2_options), "environment": result["environment"]}
+             inputs = [(case.workload, partial(run.corpus.load, record, device=device))
+                       for record in tier2_calls[case_id]]
++            accepted = bool(result["cases"][case_id].get("accepted"))
+ 
+-            def tier2(op=op, module=module, inputs=inputs, binding=binding):
++            def tier2(op=op, module=module, inputs=inputs, binding=binding, accepted=accepted):
+                 try:
+                     check_executable(op, module, inputs[0][1]())
+                 except NotExecutable as exc:
+                     return {"executable": False, "error": str(exc), "tier2_inputs": binding}
++                if not accepted:
++                    return {"executable": True, "tier2_inputs": binding,
++                            "tier2_skipped": "rejected by verification"}
+                 return {"executable": True, "tier2_inputs": binding,
+                         "tier2": time_tier2(op, module, inputs)}
+ 
+-            timed = _cached(run.out / "tier2" / f"{case_id.replace('/', '__')}.json", key, tier2,
+-                            run.deadline)
++            timed = (_cached(run.out / "tier2" / f"{case_id.replace('/', '__')}.json", key, tier2,
++                             run.deadline) if accepted else tier2())
+             result["cases"][case_id].update(timed)
+             log(case_id, "tier2", {k: v.get("speedup", v.get("error")) for k, v in
+-                                   (timed.get("tier2") or {}).items()} or timed.get("error"))
++                                   (timed.get("tier2") or {}).items()}
++                or timed.get("error") or timed.get("tier2_skipped"))
+ 
+-        # 3. Tier 3, each executable Level-2 candidate alone.
++        # 3. Tier 3, each executable accepted Level-2 candidate alone.
+         level2 = [cid for cid in sorted(run.modules)
+-                  if run.cases[cid].level == 2 and result["cases"][cid].get("executable")]
++                  if run.cases[cid].level == 2 and result["cases"][cid].get("executable")
++                  and result["cases"][cid].get("accepted")]
+         tier3: dict[str, Any] = {}
+         if level2:
+             key = {"programs": {cid: run.programs[cid] for cid in level2},

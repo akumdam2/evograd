@@ -1,0 +1,12 @@
+--- a/src/evograd/evaluation/protocol.py
++++ b/src/evograd/evaluation/protocol.py
+@@ -545,6 +545,8 @@
+         verdict = verify_cases(run)
+         result["corpus"] = verdict["corpus"]
+         for case_id, entry in verdict["candidates"].items():
+             result["cases"][case_id].update(entry)
++        # Verification's cached blocks must not crowd Tier 2's timed calls (IU A100 40GB OOM).
++        _release_device_memory()
+
+         # 2. Tier 2, every executable candidate; only an accepted one is timed
+         # (IU: a rejected candidate's timing costs hours and enters no summary).
