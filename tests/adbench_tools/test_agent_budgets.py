@@ -480,7 +480,7 @@ def test_bench_refuses_to_reuse_finished_runs_with_an_incompatible_budget(
     before = (run_dir / "run.json").read_text()
     monkeypatch.setattr(bench.subprocess, "run", lambda *a, **k: pytest.fail("old run was relaunched"))
     args = argparse.Namespace(root=root, case_id=[cid], model="qwen3_0_6b", agent=agent,
-                              budget=10, redo=False, agent_args=[], time_limit=None)
+                              budget=10, agent_args=[], time_limit=None)
     with pytest.raises(SystemExit, match="requested 10-request budget"):
         bench.cmd_run(args)
     assert (run_dir / "run.json").read_text() == before
@@ -512,7 +512,7 @@ def test_bench_passes_the_requested_api_cap_and_packages_an_exhausted_run(
 
     monkeypatch.setattr(bench.subprocess, "run", run)
     args = argparse.Namespace(root=root, case_id=[cid], model="qwen3_0_6b", agent="codex",
-                              budget=4, redo=False, time_limit=None,
+                              budget=4, time_limit=None,
                               agent_args=["--model", "gpt-5.5", "--eval-budget", "3"])
     assert bench.cmd_run(args) == 0
     submission = root / "runs" / "codex" / bench.case_dir(cid) / "submission.py"
@@ -539,8 +539,8 @@ def test_bench_preserves_an_interrupted_run_and_its_spent_api_budget(
     monkeypatch.setattr(bench.subprocess, "run", lambda *a, **k: pytest.fail("run was relaunched"))
     monkeypatch.setattr(shutil, "rmtree", lambda *a, **k: pytest.fail("run was deleted"))
     args = argparse.Namespace(root=root, case_id=[cid], model="qwen3_0_6b", agent="gepa",
-                              budget=10, redo=False, agent_args=[], time_limit=None)
-    with pytest.raises(SystemExit, match="--redo"):
+                              budget=10, agent_args=[], time_limit=None)
+    with pytest.raises(SystemExit, match="aborted"):
         bench.cmd_run(args)
     assert {path.name: path.read_bytes() for path in run_dir.iterdir()} == before
     assert not run_dir.with_suffix(".log").exists()

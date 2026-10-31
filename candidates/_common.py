@@ -28,7 +28,7 @@ REPO = Path(__file__).resolve().parents[1]
 if str(REPO / "src") not in sys.path:
     sys.path.insert(0, str(REPO / "src"))
 
-DEFAULT_MODEL = os.environ.get("ADBENCH_MODEL", "gpt-5.6-sol")
+DEFAULT_MODEL = os.environ.get("ADBENCH_MODEL", "gpt-5.5")
 DEFAULT_API_BASE = os.environ.get("ADBENCH_API_BASE", "https://api.openai.com/v1")
 DEFAULT_ANTHROPIC_API_BASE = os.environ.get("ADBENCH_ANTHROPIC_API_BASE",
                                             "https://api.anthropic.com")

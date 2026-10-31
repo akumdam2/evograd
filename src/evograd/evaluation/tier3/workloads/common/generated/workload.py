@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 import hashlib
 import torch
+from evograd.evaluation.tier3.compile_baseline import (
+    whole_model_compile_kernels, whole_model_compile_requested, compile_model,
+)
 
 from evograd.benchmark.topdown.common.generated.spec import GeneratedSpec, canonical
 from evograd.benchmark.topdown.common.generated.model import (
@@ -139,6 +142,8 @@ class GeneratedWorkload:
         model = build_model(self.spec)
         if self.init_checkpoint:
             model.load_state_dict(self.initial_state()[0], strict=True)
+        if whole_model_compile_requested(kernels):
+            return compile_model(model, kernels)
         paths = {}
         for site in kernels.patched:
             fn = kernels.kernel_for(site)

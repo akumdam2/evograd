@@ -8,10 +8,10 @@
 #   BUDGET  candidate programs per agent, default 30
 #   OUT     default results/adbench_tools/<OP>
 #
-# Environment: OPENAI_API_KEY, ADBENCH_MODEL (default gpt-5.6-sol),
+# Environment: OPENAI_API_KEY, ADBENCH_MODEL (default gpt-5.5),
 # ADBENCH_API_BASE (default https://api.openai.com/v1), AGENTS (default
 # "evograd openevolve gepa kernelagent codex claude_code geak"), CLAUDE_MODEL
-# (Claude Code and GEAK only), TIME_LIMIT (seconds per agent, default 21600).
+# (Claude Code only), TIME_LIMIT (seconds per agent, default 21600).
 #
 # Agents run one after another on the same GPU (CUDA_VISIBLE_DEVICES), so no
 # two share a device while timing. A failed agent does not stop the others.
@@ -37,7 +37,7 @@ for agent in $AGENTS; do
     echo "=== $agent -> $run"
     extra=()
     case "$agent" in
-        geak|claude_code) [ -n "${CLAUDE_MODEL:-}" ] && extra+=(--claude-model "$CLAUDE_MODEL") ;;
+        claude_code) [ -n "${CLAUDE_MODEL:-}" ] && extra+=(--claude-model "$CLAUDE_MODEL") ;;
     esac
     timeout --signal=INT "$TIME_LIMIT" \
         python "$HERE/$agent/run.py" --task "$TASK" --run-dir "$run" --budget "$BUDGET" "${extra[@]}" \

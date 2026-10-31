@@ -64,6 +64,39 @@ match. `--deadline-min` suspends at a stage boundary or a Gate 3 checkpoint
 (exit 3). Single-site Gate 3 records live in `gate3_single_site/<case>/`,
 separate from `combination/`; both reuse compatible controls under `--state`.
 
+Operator Gate 2 also checks a fresh compiled control on the acceptance
+payloads against the frozen calibration limits. Those payloads never enlarge
+the limits. If the control fails, calibration is **incomplete**, with the
+full control report in `gate2_operator_calibration.evidence.holdout_validation`
+and the proposed limits in `evidence.unqualified_policy`. This identifies a
+control/calibration coverage problem separately from a candidate numerical
+failure. Gate 1 and executable-candidate timing remain diagnostic in that case;
+the candidate cannot be accepted without a qualified Gate 2 policy.
+
+Calibration caches bind compiler settings, floors, gamma, repeats, calibration
+and validation samples, and calibration implementation. Stage verdicts also
+bind verification implementation and environment. Older caches lacking these
+bindings are recomputed automatically. These rules are shared by Qwen3-0.6B,
+Llama, Qwen2-VL, ConvNeXt V2, DiT and DLRM; model-specific objectives and Gate 3
+training settings still apply. A new output root keeps pre-change results
+available for comparison when rerunning an experiment.
+
+To add only formal eager and whole-model compile baselines to a previously
+evaluated model, run inside a GPU allocation:
+
+```bash
+python candidates/evaluate_baselines.py qwen2_vl_2b --out-root "$HOME/adbench-evaluation-native-reuse-v1"
+```
+
+This reads `MODEL/all_agents.json` and the saved evaluation's workload and
+Tier 3 timing settings. It runs no candidate verification, Gate 2 calibration,
+Gate 3 trajectories or candidate timings. The compile provider still gets its
+independent full-model correctness check. Results go to
+`MODEL/shared/tier3/baselines_only.json`; existing candidate reports and the
+group plan are not changed. A compatible successful baseline-only report is
+reused; `--force` remeasures it. The report is separate evidence and does not
+retroactively create paired confidence intervals against old candidate runs.
+
 Tier 1 is used during search and for standalone pair diagnostics; it is not a
 final benchmark metric. Formal Tier 2 results use the `tier2` settings, cache
 and JSON fields. `summarize` requires v3 results: v1 timed Tier 1 and v2 timed

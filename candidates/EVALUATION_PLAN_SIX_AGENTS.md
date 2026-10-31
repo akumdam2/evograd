@@ -1,10 +1,10 @@
 # ADBench Six-Agent Evaluation Plan
 
-Date: 2026-10-27. Protocol: `evograd-evaluation-v3`. For rules not repeated here (request accounting, T2/T3 timing, the positive rule), see the [Qwen3-0.6B plan](EVALUATION_PLAN.md) and the [protocol](../src/evograd/evaluation/protocol.py).
+Date: 2026-10-27. GEAK backend revised 2026-10-28. Protocol: `evograd-evaluation-v3`. For rules not repeated here (request accounting, T2/T3 timing, the positive rule), see the [Qwen3-0.6B plan](EVALUATION_PLAN.md) and the [protocol](../src/evograd/evaluation/protocol.py).
 
 ## Goal
 
-Six agents each search once on 58 cases from eight models, with a budget of 10 per case: OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them and run the searches. wzhan runs evograd and the frontend-only seed. During search every agent gets Gate 1 as its correctness feedback; Gate 2, Gate 3 and the timings are run by wzhan on the submissions afterwards, once the verification settings are final, in one unified evaluation. Only that evaluation is reported.
+Six agents each search once on 58 cases from eight models, with 10 model requests per case (GEAK uses two optimization directions): OpenEvolve, GEPA, KernelAgent, Codex, Claude Code and GEAK. Two teammates divide the six agents between them and run the searches. wzhan runs evograd and the frontend-only seed. During search every agent gets Gate 1 as its correctness feedback; Gate 2, Gate 3 and the timings are run by wzhan on the submissions afterwards, once the verification settings are final, in one unified evaluation. Only that evaluation is reported.
 
 ## Cases
 
@@ -47,14 +47,16 @@ The rule is stored in each task pack and is the same for every agent; evograd's 
 
 | Agent | LLM | Budget 10 means | Flags after `--` |
 | --- | --- | --- | --- |
-| OpenEvolve | gpt-5.5 | 10 model requests | none |
-| GEPA | gpt-5.5 | 10 model requests | `--eval-timeout 900` |
-| KernelAgent | gpt-5.5 | 10 model requests | none |
-| Codex | gpt-5.5 | 10 model requests | `--effort high --time-limit 4800 --eval-timeout 900` |
+| OpenEvolve | gpt-5.5 | 10 model requests | `--model gpt-5.5` |
+| GEPA | gpt-5.5 | 10 model requests | `--model gpt-5.5 --eval-timeout 900` |
+| KernelAgent | gpt-5.5 | 10 model requests | `--model gpt-5.5` |
+| Codex | gpt-5.5 | 10 model requests | `--model gpt-5.5 --effort high --time-limit 4800 --eval-timeout 900` |
 | Claude Code | claude-opus-4-8 | 10 model requests | `--claude-model claude-opus-4-8 --effort high --time-limit 4800 --eval-timeout 900` |
-| GEAK | claude-opus-4-8 | 2 optimization directions; requests are counted, not capped | `--claude-model claude-opus-4-8 --effort high --geak-budget 2 --time-limit 4800` |
+| GEAK (Codex runtime) | gpt-5.5 | 2 optimization directions; requests are counted, not capped | `--backend codex --model gpt-5.5 --effort high --geak-budget 2 --time-limit 4800` |
 
-A local proxy counts model requests in `api_calls.jsonl`. Every admitted request counts, retries included, and request 11 is refused. Evaluator calls (`evaluations.jsonl`), tokens and wall time are recorded separately. GEAK's budget unit differs from the other agents', so it is reported in its own row.
+A local proxy counts model requests in `api_calls.jsonl`. Every admitted request counts, retries included; request 11 is refused for agents with the 10-request cap. GEAK requests are counted without a cap. Evaluator calls (`evaluations.jsonl`), tokens and wall time are recorded separately. GEAK's budget unit differs from the other agents', so it is reported in its own row.
+
+GEAK retains its workflow and roles; Codex executes its agent calls. It is distinct from the standalone Codex baseline. All OpenAI agents use `gpt-5.5`; Claude Code is the explicit model exception. Historical GEAK/Claude runs must remain separate and cannot satisfy the new Codex smoke checks.
 
 ## Setup
 
@@ -62,7 +64,7 @@ A local proxy counts model requests in `api_calls.jsonl`. Every admitted request
 - Build the Python environment from [`requirements-adbench.txt`](requirements-adbench.txt).
 - Install KernelAgent, GEAK (`bash candidates/geak/setup.sh`), codex-cli and Claude Code at the versions that file lists.
 - Do not put the conda environment on `/work/hdd`: activating environments there has hung.
-- Use your own OpenAI and Anthropic API keys. Claude Code and GEAK need `ANTHROPIC_API_KEY` (a `claude` login is not enough): the request proxy forwards with it.
+- Use your own OpenAI and Anthropic API keys. Claude Code needs `ANTHROPIC_API_KEY` (a `claude` login is not enough). GEAK now uses `OPENAI_API_KEY`, Node.js v20+, and the Codex CLI through its standalone runtime; custom API endpoints must support Responses. Refresh the working copy with `bash candidates/geak/setup.sh` from GEAK revision `0881e29473e5554f535ece584bfd15e2c09db906`.
 - Check your access to the shared data once. The command should print only `ADBench writable`:
 
   ```bash
@@ -107,7 +109,7 @@ python candidates/bench.py run --model $MODEL --agent $AGENT --case-id $CASE_ID 
 
   Check five things: the model actually used, the request count, that `submission.json` exists, that `evaluate` reaches exit 0, and each case's wall time. Start the trial searches only after all five pass. Smoke candidates never enter the trial; smoke costs are reported separately.
 - **When to start a case.** Start a case only if the allocation has at least twice the agent's longest smoke case left, and at least 20 minutes.
-- **Interrupted searches.** If a search is cut off by the allocation or a node failure, move its run directory and `.log` to `$ADBENCH_ROOT/$MODEL/aborted/` and run the case once more. The rerun replaces the interrupted run whatever its result, and both runs' costs are reported. Never use `--redo`.
+- **Interrupted searches.** If a search is cut off by the allocation or a node failure, move its run directory and `.log` to `$ADBENCH_ROOT/$MODEL/aborted/` and run the case once more. The rerun replaces the interrupted run whatever its result, and both runs' costs are reported.
 - **Failures.** A search that ends without a submission keeps its failure record and is not rerun. Final verdicts are never fed back to an agent.
 - **Task packs.** Never run `bench.py tasks`, in the smoke root or the trial root: the packs are prebuilt, read-only, and shared by every agent. Start the smoke only after wzhan says they are ready.
 
@@ -144,7 +146,7 @@ Codex, Claude Code and GEAK have a shell as their owner's Unix user, so they cou
    - The unified frontend: accept convolutions with padding 0.
    - Search feedback: Gate 1 on calibration payloads, with the compile envelope stored in the task pack, for every agent and for evograd's seed acceptance. The declared-tolerance rule is removed for model cases.
    - The request proxy: an Anthropic endpoint. Claude Code's background requests are turned off.
-   - GEAK: request counting and `--effort`.
+   - GEAK: Codex/OpenAI routing on `gpt-5.5`, request counting and `--effort`.
    - The requirements file.
 2. **Corpora.** Remove group write permission.
 3. **Weights.** Copy the Qwen3-0.6B weights into `/work/hdd/bcjw/wzhan/hf_cache`.

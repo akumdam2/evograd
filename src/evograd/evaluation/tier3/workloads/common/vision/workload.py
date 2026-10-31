@@ -3,6 +3,9 @@
 from dataclasses import dataclass
 import hashlib
 import torch
+from evograd.evaluation.tier3.compile_baseline import (
+    whole_model_compile_kernels, whole_model_compile_requested, compile_model,
+)
 from evograd.benchmark.topdown.common.vision.spec import VisionSpec, REVISIONS
 from evograd.benchmark.topdown.common.vision.model import build_model, make_inputs, forward
 from evograd.benchmark.topdown.common.vision.operators import FUNCTIONS
@@ -93,6 +96,8 @@ class VisionWorkload:
         if kernels.registry.name != self.spec.model:
             raise ValueError("kernel registry does not match workload")
         model = build_model(self.spec)
+        if whole_model_compile_requested(kernels):
+            return compile_model(model, kernels)
         provenance = install(model, kernels)
         expected = (
             {f"convnext_mlp_stage{i}": depth for i, depth in enumerate(self.spec.arch["depths"])}

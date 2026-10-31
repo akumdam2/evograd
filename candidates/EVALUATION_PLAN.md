@@ -263,7 +263,6 @@ python candidates/bench.py summarize --root "$REF_ROOT" --model "$MODEL" --agent
 | Budget exhausted or search ended without a submission | Keep the failure row and all costs. Do not omit the case or grant a free rerun. |
 | Finished run | `run` skips it, including finished failure states. Repeating the command does not repair it. |
 | Unfinished run or outer timeout | Preserve the API ledger and files; LLM sessions are not currently resumed. Confirm that the old process tree has stopped before other GPU work. |
-| `--redo` | Deletes the old run and resets its ledger, so it starts a new trial. Do not use it as if it resumed a formal search. |
 | Evaluate exit 3 | Keep submissions, case set, settings, and environment unchanged; rerun the same command. |
 | Evaluate exit 0 | The protocol finished. Read every verdict; this does not mean all candidates passed. |
 | Gate failed / incomplete | Preserve the reason and diagnostic timings. Exclude it from accepted aggregates and combinations; do not tune thresholds to make it pass. |

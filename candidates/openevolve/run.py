@@ -26,6 +26,7 @@ The shared proxy caps actual model requests, including retries; native
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -46,6 +47,11 @@ def write_config(task, args, path: Path) -> None:
     if args.prompt == "statement":
         config["prompt"]["system_message"] = task.statement
     config["random_seed"] = args.seed
+    if os.environ.get("ADBENCH_GPU_LOCK"):
+        # This watchdog includes waiting in our evaluator. The isolated GPU
+        # child still has its original 850s timeout after lock acquisition;
+        # bench.py enforces the shared 6000s end-to-end case limit.
+        config["evaluator"]["timeout"] = max(config["evaluator"]["timeout"], 6000)
     path.write_text(yaml.safe_dump(config, sort_keys=False, width=100), encoding="utf-8")
 
 

@@ -64,6 +64,7 @@ from evograd.verification.integrations.gates import (
 )
 
 PROTOCOL = "evograd-evaluation-v3"
+BASELINE_REVISION = "whole-model-baselines/1"
 REFERENCE = "eager"
 TIER2_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
 #: What Tier 2 times: recorded calls, fixed by the corpus and the same for every
@@ -348,12 +349,28 @@ def deployment_kernels(run: Run, case_ids: Sequence[str]):
     return kernels
 
 
+def baseline_implementation(workload):
+    import inspect
+    from evograd.evaluation.tier3 import compile_baseline, runner
+    from evograd.verification.integrations.base import sha_file
+    paths = [__file__, compile_baseline.__file__, runner.__file__,
+             inspect.getfile(type(workload))]
+    return {"revision": BASELINE_REVISION,
+            "sources": {str(path): sha_file(path) for path in paths}}
+
+
+def compile_baseline_valid(row):
+    return bool(row.get("ok")) and (row.get("correctness") or {}).get("status") == "passed"
+
+
 def whole_model_compile(workload):
     """The workload's whole-model ``torch.compile`` provider, if it offers one."""
     import sys
 
     make = getattr(sys.modules.get(type(workload).__module__), "whole_model_compile_kernels", None)
-    return None if make is None else make(workload.site_registry)
+    if make is None:
+        raise ValueError(f"{type(workload).__name__}: whole-model compile is unsupported")
+    return make(workload.site_registry)
 
 
 def provider_kernels(run: Run, spec):
@@ -372,13 +389,43 @@ def _tier3_child(model_name: str, candidates: dict, corpus_path: str, name: str,
     """One Tier 3 provider, in a process of its own (spawned by :func:`run_tier3`)."""
     import tempfile
 
-    from evograd.evaluation.tier3.runner import measure_one
+    from evograd.evaluation.model_cache import checkpoint_model_cache
     from evograd.verification.integrations import load
+    from evograd.verification.integrations.base import configure
 
-    with tempfile.TemporaryDirectory() as unused:
+    # Spawned processes do not inherit the parent's PyTorch runtime settings.
+    # Apply identical numerics and CPU threading before timing any provider.
+    configure()
+    if spec in ("eager", "torch_compile"):
+        candidates = {}
+    with checkpoint_model_cache(model_name), tempfile.TemporaryDirectory() as unused:
         run = open_run(load(model_name), candidates, corpus_path, unused, device=device)
-        return measure_one(run.workload, name, provider_kernels(run, spec), verify=False,
-                           device=device, **options)
+        return _measure_tier3_provider(run, name, spec, options)
+
+
+def _measure_tier3_provider(run, name, spec, options):
+    from evograd.evaluation.tier3.runner import measure_one
+    from evograd.evaluation.tier3.compile_baseline import check_correctness, require_compiled_graphs
+
+    correctness = None
+    try:
+        if spec == "torch_compile":
+            correctness = check_correctness(run.model, run.workload)
+            # Correctness graphs must not count as evidence for the timed model.
+            import torch._dynamo
+            from torch._dynamo.utils import counters
+            torch._dynamo.reset()
+            counters.clear()
+        timing_mode()
+        row = measure_one(run.workload, name, provider_kernels(run, spec), verify=False,
+                          device=run.device, **options)
+    except Exception as exc:
+        row = {"ok": False, "provider": name, "failed_at": "baseline" if spec == "torch_compile" else "build",
+               "error": f"{type(exc).__name__}: {exc}"}
+    if spec == "torch_compile":
+        row["correctness"] = correctness or {"status": "error", "error": row.get("error", "not checked")}
+        require_compiled_graphs(row)
+    return row
 
 
 def run_tier3(run: Run, providers: Mapping[str, Any], *,
@@ -392,7 +439,7 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
     optimizer state) never reach another's peak memory or step time, and a
     crash costs only its own row.
     """
-    from evograd.evaluation.tier3.runner import assemble_report, measure_one, provider_order
+    from evograd.evaluation.tier3.runner import assemble_report, provider_order
 
     options = dict(options)
     order = provider_order(providers, seed=int(options.get("seed", 0)))
@@ -400,8 +447,7 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
     for name in order:
         spec = providers[name]
         if not isolate:
-            results[name] = measure_one(run.workload, name, provider_kernels(run, spec),
-                                        verify=False, device=run.device, **options)
+            results[name] = _measure_tier3_provider(run, name, spec, options)
             continue
         import multiprocessing
         from concurrent.futures import ProcessPoolExecutor
@@ -423,15 +469,27 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
                                                       "learning_rate", "seed")})
 
 
+def merge_baselines(run, baselines, measured, options):
+    from evograd.evaluation.tier3.runner import assemble_report
+    raw = {**baselines["providers"], **measured["providers"]}
+    return assemble_report(run.workload, raw, list(raw), verify=False,
+                           isolation=measured.get("isolation", "shared model baselines"), **dict(options))
+
+
 def _tier3_row(report: Mapping[str, Any], name: str) -> dict[str, Any]:
     """One provider's training-step result against eager."""
     providers = report.get("providers") or {}
     entry, base = providers.get(name) or {}, providers.get(REFERENCE) or {}
     if not entry.get("ok"):
         return {"ok": False, "error": entry.get("error", "not measured"),
-                "failed_at": entry.get("failed_at")}
+                "failed_at": entry.get("failed_at"),
+                **{field: entry[field] for field in ("correctness", "dynamo", "compile_settings")
+                   if field in entry}}
     row = {"ok": True, "step_ms": entry["step_ms"], "peak_memory_bytes": entry.get("peak_memory_bytes"),
            "cpu_bound_fraction": entry.get("cpu_bound_fraction")}
+    for field in ("correctness", "dynamo", "compile_settings"):
+        if field in entry:
+            row[field] = entry[field]
     intervals = report.get("speedup_intervals") or {}
     against = ((intervals.get("vs_reference") or {}).get(name)
                if intervals.get("reference") == REFERENCE else None)
@@ -494,6 +552,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
 
     time_tier2 = time_tier2 or (lambda op, module, inputs: time_case(
         op, module, inputs, options=tier2_options))
+    from evograd.verification.reuse import settings as reuse_settings, check_report_mode
+    check_report_mode(Path(out) / "evaluation.json")
     verification_settings = configure()
     observed = {c.case_id for c in observed_cases(model)}
     unloadable = unimportable({cid: path for cid, path in candidates.items() if cid in observed}
@@ -506,13 +566,16 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     result: dict[str, Any] = {
         "protocol": PROTOCOL, "model": model.name, "workload": dict(model.workload_config),
         "environment": _environment(), "reference": REFERENCE,
-        "settings": {"verification": verification_settings, "tier2": dict(tier2_options),
+        "settings": {"verification": verification_settings, "calibration_reuse": reuse_settings(), "tier2": dict(tier2_options),
                      "tier2_inputs": dict(TIER2_INPUTS),
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
                               "frequency": c.frequency, "submitted": c.case_id in candidates}
                   for c in observed_cases(model)},
     }
+    import os
+    if os.environ.get("EVOGRAD_EVALUATION_MODEL_CACHE"):
+        result["settings"]["model_loading"] = "job-local pristine CPU snapshot; independent copies per build"
     for case_id, failure in unloadable.items():
         result["cases"][case_id].update({**failure, "submitted": True, "accepted": False,
                                          "executable": False})
@@ -569,15 +632,25 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         # 3. Tier 3, each executable Level-2 candidate alone.
         level2 = [cid for cid in sorted(run.modules)
                   if run.cases[cid].level == 2 and result["cases"][cid].get("executable")]
-        tier3: dict[str, Any] = {}
+        baseline_key = {"implementation": baseline_implementation(run.workload), "model": model.name,
+                        "workload": model.workload_config, "corpus": run.corpus.binding(),
+                        "options": dict(tier3_options), "environment": result["environment"],
+                        "isolated": isolate_tier3}
+        baseline_report = _cached(run.out / "tier3" / "baselines.json", baseline_key,
+            lambda: run_tier3(run, {REFERENCE: REFERENCE, "torch_compile": "torch_compile"},
+                             options=tier3_options, isolate=isolate_tier3), run.deadline)
+        tier3: dict[str, Any] = {"baselines": {
+            name: _tier3_row(baseline_report, name) for name in ENGINE_BASELINES}}
+        result["tier3"] = tier3
         if level2:
-            key = {"programs": {cid: run.programs[cid] for cid in level2},
+            key = {"baseline": baseline_key, "programs": {cid: run.programs[cid] for cid in level2},
                    "options": dict(tier3_options), "environment": result["environment"],
                    "isolated": isolate_tier3}
 
             def single_site():
-                providers = {REFERENCE: REFERENCE, **{cid: (cid,) for cid in level2}}
-                report = run_tier3(run, providers, options=tier3_options, isolate=isolate_tier3)
+                providers = {cid: (cid,) for cid in level2}
+                measured = run_tier3(run, providers, options=tier3_options, isolate=isolate_tier3)
+                report = merge_baselines(run, baseline_report, measured, tier3_options)
                 return {"report": report, "rows": {cid: _tier3_row(report, cid) for cid in level2}}
 
             single = _cached(run.out / "tier3" / "single_site.json", key, single_site, run.deadline)
@@ -593,16 +666,15 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         combination = verify_combination(run, chosen)
         result["settings"]["timing"] = timing_mode()
         if chosen:
-            key = {"programs": {cid: run.programs[cid] for cid in chosen},
+            key = {"baseline": baseline_key, "programs": {cid: run.programs[cid] for cid in chosen},
                    "options": dict(tier3_options), "environment": result["environment"],
                    "isolated": isolate_tier3}
 
             def combined():
-                providers = {REFERENCE: REFERENCE, "combination": tuple(chosen)}
-                if whole_model_compile(run.workload) is not None:
-                    providers["torch_compile"] = "torch_compile"
-                report = run_tier3(run, providers, options=tier3_options, isolate=isolate_tier3)
-                rows = {name: _tier3_row(report, name) for name in providers if name != REFERENCE}
+                measured = run_tier3(run, {"combination": tuple(chosen)},
+                                    options=tier3_options, isolate=isolate_tier3)
+                report = merge_baselines(run, baseline_report, measured, tier3_options)
+                rows = {name: _tier3_row(report, name) for name in ("combination", "torch_compile")}
                 return {"report": report, "rows": rows}
 
             timed = _cached(run.out / "tier3" / "combination.json", key, combined, run.deadline)
@@ -610,7 +682,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             if "torch_compile" in timed["rows"]:
                 compiled, own = timed["rows"]["torch_compile"], timed["rows"]["combination"]
                 combination["torch_compile_tier3"] = compiled
-                if compiled.get("ok") and own.get("ok"):
+                if compile_baseline_valid(compiled) and own.get("ok"):
                     combination["speedup_vs_torch_compile"] = compiled["step_ms"] / own["step_ms"]
         tier3["combination"] = combination
         result["tier3"] = tier3
@@ -693,6 +765,7 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                   "tier3": dict(row.get("tier3_single_site") or {})}
             for cid, row in sorted(ev["cases"].items()) if row["level"] == 2}
         models[ev["model"]] = {
+            "baselines": (ev.get("tier3") or {}).get("baselines", {}),
             "cases": combination.get("cases", []),
             "accepted": bool(combination.get("accepted")),
             "gate2_model": combination.get("gate2_model"), "gate3": combination.get("gate3"),
@@ -738,15 +811,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--tier3-blocks", type=int, default=TIER3_OPTIONS["blocks"],
                         help="timed blocks per Tier 3 provider; more narrow the interval the "
                              "combination rule reads")
+    from evograd.verification.reuse import add_arguments, options, calibration_reuse
+    add_arguments(parser)
     args = parser.parse_args(argv)
     model = load(args.model)
 
     def log(*parts):
         print(time.strftime("%H:%M:%S"), *parts, flush=True)
 
-    result = evaluate(model, dict(item.split("=", 1) for item in args.candidate), args.corpus,
-                      args.out, state=args.state, log=log, deadline_min=args.deadline_min,
-                      tier3_options={**TIER3_OPTIONS, "blocks": args.tier3_blocks})
+    with calibration_reuse(options(args), log=log):
+        result = evaluate(model, dict(item.split("=", 1) for item in args.candidate), args.corpus,
+                          args.out, state=args.state, log=log, deadline_min=args.deadline_min,
+                          tier3_options={**TIER3_OPTIONS, "blocks": args.tier3_blocks})
     if result.get("suspended"):
         print(json.dumps({"suspended": result["suspended"]}))
         return 3

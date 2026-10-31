@@ -108,9 +108,17 @@ def _load_pretrained(spec: WorkloadSpec):
     """
     from transformers import Qwen3_5ForCausalLM
 
-    model = Qwen3_5ForCausalLM.from_pretrained(
+    model, loading = Qwen3_5ForCausalLM.from_pretrained(
         pretrained_snapshot(spec), dtype=DTYPES[spec.dtype],
-        attn_implementation=spec.attn_implementation, use_cache=spec.use_cache)
+        attn_implementation=spec.attn_implementation, use_cache=spec.use_cache,
+        output_loading_info=True)
+    # Caching assumes the pretrained state does not depend on initialization
+    # draws. A partial checkpoint could leave random A_log (or other weights)
+    # in the model, so it must never silently become the reference snapshot.
+    if loading.get("missing_keys") or loading.get("mismatched_keys") or loading.get("error_msgs"):
+        raise RuntimeError("Incomplete Qwen3.5 pretrained checkpoint: " + str({
+            key: loading.get(key) for key in ("missing_keys", "mismatched_keys", "error_msgs")
+            if loading.get(key)}))
     mismatched = {key: (getattr(model.config, key, None), value)
                   for key, value in spec.arch.items() if getattr(model.config, key, None) != value}
     if mismatched:

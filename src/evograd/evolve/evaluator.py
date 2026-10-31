@@ -28,6 +28,7 @@ from typing import Any
 
 import torch
 
+from evograd.adbench_tools.gpu_lock import run_evaluation
 from evograd.opdecl.activity import OpDecl
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import (
@@ -723,12 +724,11 @@ def evaluate_isolated(
     }
     try:
         try:
-            process = subprocess.run(
+            process = run_evaluation(
                 [sys.executable, evaluator_file, program_path],
-                capture_output=True,
-                text=True,
                 timeout=timeout,
                 env=env,
+                label=f"evaluate_isolated {os.path.basename(program_path)}",
             )
         except subprocess.TimeoutExpired as exc:
             stderr = exc.stderr if isinstance(exc.stderr, str) else ""

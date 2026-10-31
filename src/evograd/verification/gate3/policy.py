@@ -244,7 +244,7 @@ def _is_global_policy(policy: Any) -> bool:
     from evograd.verification.gate3 import global_loss
 
     return isinstance(policy, global_loss.GlobalLossPolicy) or (
-        isinstance(policy, Mapping) and policy.get("schema") == global_loss.SCHEMA)
+        isinstance(policy, Mapping) and policy.get("schema") in (global_loss.SCHEMA, global_loss.SHARED_SCHEMA))
 
 
 def verify_training(candidate: Any, native: Any, *, policy: WindowLossPolicy | Mapping | None):

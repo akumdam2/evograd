@@ -164,22 +164,22 @@ def cmd_run(args) -> int:
         run_dir = args.root / "runs" / args.agent / case_dir(cid)
         run_json = run_dir / "run.json"
         done = run_json.is_file() and json.loads(run_json.read_text()).get("status") != "running"
-        if done and not args.redo:
+        if done:
             config = json.loads(run_json.read_text()).get("config", {})
             if args.agent in METERED_AGENTS and (
                     config.get("budget_unit") != "api_requests" or
                     config.get("budget") != args.budget):
                 raise SystemExit(f"{run_dir} was not run with the requested {args.budget}-request "
-                                 "budget; use a fresh --root or explicitly --redo")
+                                 "budget; use a fresh --root")
             print(f"[{args.agent}] {cid}: kept finished run at {run_dir}", flush=True)
         else:
+            # Nothing here ever deletes a run: its files and API ledger are the
+            # record of what was spent. An interrupted run is moved aside by hand.
             if run_dir.exists():
-                if not args.redo:
-                    raise SystemExit(f"{run_dir} contains an unfinished run; refusing to erase its "
-                                     "API budget ledger. Recover that run or use a fresh --root; "
-                                     "--redo explicitly starts a new trial.")
-                import shutil
-                shutil.rmtree(run_dir)
+                raise SystemExit(f"{run_dir} contains an unfinished run; refusing to touch its "
+                                 "API budget ledger. Inspect it and its .log; if the allocation "
+                                 f"or node was interrupted, move both to {args.root / 'aborted'}/ "
+                                 "and run the case again.")
             run_dir.parent.mkdir(parents=True, exist_ok=True)
             command = [sys.executable, str(driver), "--task", str(directory), "--run-dir",
                        str(run_dir), "--budget", str(args.budget), "--no-score", *args.agent_args]
@@ -360,8 +360,6 @@ def main(argv: list[str] | None = None) -> int:
                         "optimization directions are max(2, N // 5))")
     p.add_argument("--case-id", nargs="*", default=None)
     p.add_argument("--time-limit", type=int, default=0, help="seconds per case, 0 = none")
-    p.add_argument("--redo", action="store_true",
-                   help="start a new trial, replacing an existing run and its API ledger")
     p.add_argument("agent_args", nargs=argparse.REMAINDER,
                    help="flags for the agent's run.py, after --")
     p.set_defaults(run=cmd_run)

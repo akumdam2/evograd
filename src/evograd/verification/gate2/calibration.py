@@ -116,7 +116,7 @@ DEFAULT_FLOORS: dict[str, dict[str, float]] = {
 }
 
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = "gate2-calibration/2: compile repeat under the first run's boundary recording"
+CALIBRATION_PROCEDURE = "gate2-calibration/3: independent compile validation on operator holdout"
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE)
@@ -623,7 +623,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
               compile_fullgraph: bool = True, compile_options: Mapping[str, Any] | None = None,
               gamma: float = SAFETY_FACTOR_GAMMA,
               floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
-              boundaries: bool = False) -> CalibrationResult:
+              boundaries: bool = False,
+              validation_samples: Sequence[Sample] | None = None) -> CalibrationResult:
     """Derive and freeze a Gate 2 policy for ``patch_set`` on this adapter.
 
     Per calibration sample: one native reference, ``native_repeats - 1``
@@ -638,6 +639,12 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     The scope's sample protocol (:data:`SAMPLE_PROTOCOLS`) decides how the
     measurements become thresholds: pooled over samples (``disjoint_holdout``)
     or per sample (``matched_inputs``).
+
+    If ``validation_samples`` is supplied for operator scope, independently
+    check the compiled control on those held-out inputs against the frozen
+    policy. Validation errors never enlarge the thresholds. A control that
+    fails leaves calibration incomplete, rather than blaming candidates for
+    an error budget that does not admit its own trusted implementation.
 
     Returns no policy, with the reasons, if any control fails to qualify or
     any required threshold lacks evidence.
@@ -654,6 +661,9 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     if protocol is None:
         result.findings.append(missing("unknown_scope", f"scope {adapter.scope!r} is not a Gate 2 "
                                                         f"scope {tuple(SAMPLE_PROTOCOLS)}"))
+    if validation_samples is not None and (protocol != DISJOINT or not validation_samples):
+        result.findings.append(missing("invalid_calibration_parameters",
+                                       "validation_samples requires a nonempty operator holdout"))
     patch_set = tuple(sorted(patch_set))
     if not patch_set:
         result.findings.append(missing("empty_patch_set", "a policy is calibrated for replaced sites"))
@@ -695,7 +705,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         per_sample.append(record)
         sid = sample.sample_id
         kinds[sid] = {}
-        reference = execute(adapter, Deployment.native(), sample)
+        from evograd.verification.reuse import native_execution
+        reference = native_execution(adapter, sample, slot="calibration-reference", execute=execute)
         executions.append(reference.execution_id)
         record["native"] = reference.evidence()
         if reference.error:
@@ -738,7 +749,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                     "control_results_digests": {"native_repeats": [], "compile": None}}
         identities[sid] = identity
         for repeat in range(1, native_repeats):
-            again = execute(adapter, Deployment.native(), sample)
+            again = native_execution(adapter, sample, slot=f"calibration-repeat-{repeat}", execute=execute)
             executions.append(again.execution_id)
             identity["executions"]["native_repeats"].append(again.execution_id)
             identity["control_results_digests"]["native_repeats"].append(again.results_digest)
@@ -833,6 +844,22 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                   "compile_graphs": dict(graphs)},
         input_digests=input_digests, weight_digests=sorted(weight_digests),
         sample_identities=identities, executions=executions)
+    if validation_samples is not None:
+        from evograd.verification.gate2.runner import verify_integration
+
+        validation = verify_integration(adapter, control, policy=result.policy,
+                                        samples=validation_samples)
+        result.evidence["holdout_validation"] = validation.to_dict()
+        if validation.status != "passed":
+            # Keep the proposed limits for diagnosis, but do not issue an
+            # applicable policy or use the holdout to fit a larger budget.
+            result.evidence["unqualified_policy"] = result.policy.to_dict()
+            result.policy = None
+            result.findings.append(missing(
+                "control_holdout_disqualified",
+                "the compiled control did not pass the frozen policy on acceptance inputs; "
+                "operator calibration is incomplete", control_status=validation.status))
+    result.evidence["seconds"] = time.perf_counter() - started
     return result
 
 

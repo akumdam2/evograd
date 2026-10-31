@@ -288,9 +288,14 @@ class {c.function_cls}(torch.autograd.Function):
         for index, value in ctx.saved_values:
             saved.insert(index, value)
         saved = tuple(saved)
-        {grad_unpack} = {c.backward_fn}(
+        _input_grads = {c.backward_fn}(
             {upstream_arg}, saved{backward_scalars}
         )
+        # A single-gradient pair may return a bare Tensor. Do not unpack its rows.
+        _input_grads = (_input_grads,) if torch.is_tensor(_input_grads) else tuple(_input_grads)
+        if len(_input_grads) != {len(c.grad_names)}:
+            raise ValueError("{op.name}: backward returned an incorrect number of gradients")
+        {grad_unpack} = _input_grads
         # One value per forward argument, `None` for every inactive one.
         return {grad_terms}
 

@@ -12,7 +12,7 @@
 #   ENV/bin/python -m pip install --no-deps -e references/KernelAgent
 #
 # Not Python packages, pinned here for the record:
-#   GEAK         https://github.com/AMD-AGI/GEAK at 02095f2c8665a7d8741924546d27a30cc19794b3,
+#   GEAK         https://github.com/AMD-AGI/GEAK at 0881e29473e5554f535ece584bfd15e2c09db906,
 #                cloned to references/GEAK, then `bash candidates/geak/setup.sh`
 #   Codex        codex-cli 0.149.1, release binary codex-aarch64-unknown-linux-musl on PATH
 #   Claude Code  2.1.310 (its install.sh), run with DISABLE_AUTOUPDATER=1

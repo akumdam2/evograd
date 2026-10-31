@@ -133,7 +133,30 @@ def _stage(path: Path, key: Mapping[str, Any]) -> dict[str, Any] | None:
     return data if data.get("stage_key") == _jsonable(key) else None
 
 
-def _cached_policy(path: Path | None, scope, deployment, judged, gamma: float):
+def _calibration_request(scope, deployment, options):
+    """Bind cached calibration to all requested settings and its implementation."""
+    import inspect
+
+    from evograd.verification.gate2 import calibration, runner
+    from evograd.verification.common import contracts, tensors
+    from .base import sha_file
+
+    bound = inspect.signature(calibration.calibrate).bind(
+        scope, patch_set=deployment.patch_set, **options)
+    bound.apply_defaults()
+    settings = dict(bound.arguments)
+    settings.pop("adapter")
+    for name in ("samples", "validation_samples"):
+        if settings[name] is not None:
+            settings[name] = [sample.to_dict() for sample in settings[name]]
+    return _jsonable({"procedure": calibration.CALIBRATION_PROCEDURE,
+                      "sources": {name: sha_file(module.__file__) for name, module in
+                                  (("calibration", calibration), ("runner", runner),
+                                   ("metrics", tensors), ("contracts", contracts))},
+                      "settings": settings})
+
+
+def _cached_policy(path: Path | None, scope, deployment, judged, request):
     """A Gate 2 calibration saved under ``--state``, if it still binds to this run.
 
     A policy whose binding (scope, case, reference, environment, numerics,
@@ -151,33 +174,41 @@ def _cached_policy(path: Path | None, scope, deployment, judged, gamma: float):
     if path is None or not path.exists():
         return None
     try:
-        policy = Gate2Policy.from_dict(json.loads(path.read_text())["policy"])
+        data = json.loads(path.read_text())
+        if data.get("calibration_request") != request:
+            return None
+        policy = Gate2Policy.from_dict(data["policy"])
     except (CalibrationError, KeyError, ValueError):
         return None
-    if float(policy.gamma) != float(gamma):
+    if float(policy.gamma) != float(request["settings"]["gamma"]):
         return None
     # An operator policy frozen before Gate 1's compile envelope existed carries none.
     if any("envelope" not in entry for entry in (policy.to_dict().get("thresholds") or {}).values()):
         return None
     if {f.code for f in policy_findings(policy, scope, deployment, judged)} & BINDING_CODES:
         return None
-    return CalibrationResult(policy=policy, evidence={"reused_policy": str(path)})
+    evidence = {"reused_policy": str(path)}
+    validation = data.get("calibration", {}).get("evidence", {}).get("holdout_validation")
+    if request["settings"]["validation_samples"] is not None:
+        if not validation or validation.get("status") != "passed":
+            return None
+        evidence["holdout_validation"] = validation
+    return CalibrationResult(policy=policy, evidence=evidence)
 
 
 def _calibrate(scope, deployment, judged, cache: Path | None, **options):
     """Gate 2 calibration, reused from ``cache`` when it binds to the ``judged``
     samples; saved there when made."""
     from evograd.verification import gate2
-    from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
-
-    reused = _cached_policy(cache, scope, deployment, judged,
-                            options.get("gamma", SAFETY_FACTOR_GAMMA))
+    request = _calibration_request(scope, deployment, options) if cache is not None else None
+    reused = _cached_policy(cache, scope, deployment, judged, request)
     # A policy calibrated with boundary replay on (or off) does not judge a run without (with) it.
     if reused is not None and bool(reused.policy.boundaries) == bool(options.get("boundaries", False)):
         return reused
     calibration = gate2.calibrate(scope, patch_set=deployment.patch_set, **options)
     if cache is not None and calibration.policy is not None:
-        _write(cache, {"policy": calibration.policy.to_dict(), "calibration": calibration.to_dict()})
+        _write(cache, {"calibration_request": request,
+                       "policy": calibration.policy.to_dict(), "calibration": calibration.to_dict()})
     return calibration
 
 
@@ -229,7 +260,8 @@ def operator_calibration(model, case, corpus, *, device: str = "cuda",
     cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
              / f"{case.case_id.replace('/', '__')}.json")
     calibration = _calibrate(scope, stand_in, scope.samples("acceptance"), cache,
-                             samples=scope.samples("calibration"), compile_backend=compile_backend)
+                             samples=scope.samples("calibration"), compile_backend=compile_backend,
+                             validation_samples=scope.samples("acceptance"))
     return scope, calibration
 
 
@@ -341,7 +373,11 @@ def training_context(model, workload, patch_set) -> dict[str, Any]:
     """What every run of one Gate 3 group shares (bound into the policy)."""
     from .base import determinism_record, objective_of
 
-    return {"reference": {"contract": model.contract, **model.source_identity(),
+    from evograd.verification.reuse import enabled
+    from evograd.verification.gate3.global_loss import NATIVE_REUSE
+
+    return {**({"native_reuse": NATIVE_REUSE} if enabled("share_gate3_native") else {}),
+            "reference": {"contract": model.contract, **model.source_identity(),
                           "model": f"unpatched {model.name} at {model.workload_config.get('weights')}"},
             "data_recipe": {"train_order": TRAIN_ORDER, **objective_of(model).data_recipe(workload),
                             "data": workload.data_identity()},
@@ -368,9 +404,20 @@ def train(model, path: Path, deployment, workload, patch_set, *, reuse: bool,
     optimizer = gate3.adamw(**{"lr": LR, **dict(model.gate3_optimizer)})
     plan = gate3.TrainingPlan(steps=model.gate3_steps, window=1, checkpoints=(), validation=False,
                               accumulation=model.gate3_accumulation)
-    context = training_context(model, workload, patch_set)
+    from evograd.verification.reuse import enabled
+    native_shared = enabled("share_gate3_native") and deployment.role == "native"
+    context = training_context(model, workload, () if native_shared else patch_set)
     adapter = objective_of(model).training(workload, train_data=workload.train_batches(TRAIN_ORDER),
                                            optimizer=optimizer)
+    if native_shared:
+        from evograd.verification.common import contracts as C
+        # Path independent of the experiment's patch set, but bound to all
+        # observable execution settings. train() checks the stored identity too.
+        identity_key = C.stable_hash({"context": context, "adapter": adapter.identity(),
+                                     "optimizer": optimizer.config, "plan": plan.to_dict(),
+                                     "seed": TRAIN_SEED, "data": adapter.data_identity(),
+                                     "environment": C.environment_fingerprint(adapter.device)})
+        path = path.parent / "shared_native" / identity_key / path.name
     if path.exists():
         done = json.loads(path.read_text())
         identity = done.get("identity") or {}
@@ -410,9 +457,11 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
     if settings:
         # Controls of other training settings live beside, not over, the protocol's.
         group = group / "_".join(f"{key}={value}" for key, value in sorted(settings.items()))
-    native_a = train(model, group / "native_a.json", Deployment.native(), workload, patch_set,
+    from evograd.verification.reuse import enabled
+    native_group = controls / "gate3" if enabled("share_gate3_native") else group
+    native_a = train(model, native_group / "native_a.json", Deployment.native(), workload, patch_set,
                      reuse=True, log=log, deadline=deadline)
-    native_b = train(model, group / "native_b.json", Deployment.native(), workload, patch_set,
+    native_b = train(model, native_group / "native_b.json", Deployment.native(), workload, patch_set,
                      reuse=True, log=log, deadline=deadline)
     compiled, _graphs = compile_control(model_scope(model, workload), patch_set,
                                         backend=compile_backend)
@@ -420,7 +469,8 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
                         log=log, deadline=deadline)
     calibration = gate3.calibrate_global_loss([gate3.TrainingControl(native_a, native_b, compile_run)],
                                               floor_rms=FLOOR_RMS, floor_max=FLOOR_MAX,
-                                              gamma=gate3_gamma(model))
+                                              gamma=gate3_gamma(model),
+                                              share_native=enabled("share_gate3_native"))
     candidate = train(model, out / "gate3_candidate.json", deployment, workload, patch_set,
                       reuse=False, log=log, deadline=deadline)
     verdict = gate3.verify_global_loss(candidate, native_a, policy=calibration.policy)
@@ -482,6 +532,10 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     out = Path(out)
     state = Path(state) if state is not None else (
         Path(controls) if controls is not None else out / "controls")
+    from evograd.verification.reuse import FLAGS, settings as reuse_settings
+    reuse = reuse_settings()
+    if any(reuse[name] for name in FLAGS):
+        state = state / "native_reuse_v1" / "-".join(str(int(reuse[name])) for name in FLAGS)
     cases = {c.case_id: c for c in observed_cases(model)}
     unknown = sorted(set(candidates) - set(cases))
     if unknown:
@@ -497,6 +551,20 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
 
 def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) -> dict[str, str]:
     """Statuses of a stage: an earlier report of the same inputs, else ``judge()``'s."""
+    from evograd.verification.reuse import settings as reuse_settings
+    reuse = reuse_settings()
+    if any(reuse[name] for name in ("share_gate3_native", "share_gate2_calibration_native", "share_gate2_verification_reference")):
+        key = {**key, "calibration_reuse": reuse}
+    # A stage verdict must not outlive the calibration/comparison code that
+    # produced it, even if the candidate and corpus are unchanged.
+    from evograd.verification.gate2 import calibration, runner
+    from evograd.verification.common import contracts, tensors
+    from .base import sha_file
+    key = {**key, "verification_implementation": {
+        "gates": sha_file(__file__), "calibration": sha_file(calibration.__file__),
+        "comparison": sha_file(runner.__file__), "metrics": sha_file(tensors.__file__),
+        "contracts": sha_file(contracts.__file__)},
+        "verification_environment": contracts.environment_fingerprint(getattr(run, "device", None))}
     done = _stage(path, key)
     if done is not None:
         return dict(done["statuses"])

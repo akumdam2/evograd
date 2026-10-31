@@ -40,6 +40,8 @@ from evograd.verification.gate3.policy import SAFETY_FACTOR_GAMMA, TrainingContr
 from evograd.verification.gate3.stepwise import objectives, run_digest, step_binding
 
 SCHEMA = "evograd-verification-gate3-global-loss-policy/1"
+SHARED_SCHEMA = "evograd-verification-gate3-global-loss-policy/2"
+NATIVE_REUSE = "model-training-native/1"
 VERDICT = "evograd-verification-gate3-global-loss/1"
 METRICS = ("rms", "max_abs")
 FORMULA = ("d[t] = objective_test[t] - objective_reference[t]; R = sqrt(sum_t d[t]^2 / N); "
@@ -75,6 +77,23 @@ def loss_metrics(test: Sequence[float], reference: Sequence[float]) -> dict[str,
             "overflow": False}
 
 
+def _experiment_binding(run, experiment, *, shared_native=False):
+    """Compare shared native runs without assigning them a measured patch set."""
+    if not shared_native:
+        return step_binding(run)
+    import copy
+
+    view = copy.deepcopy(run)
+    context = view["identity"]["protocol_context"]
+    if context.get("native_reuse") != NATIVE_REUSE:
+        raise ValueError("shared-native run is missing its protocol marker")
+    if view["deployment"]["role"] == "native":
+        if view["deployment"]["patch_set"] or context["patch_set"]:
+            raise ValueError("shared native run must install no patches")
+        context["patch_set"] = list(experiment)
+    return step_binding(view)
+
+
 @dataclass(frozen=True)
 class GlobalLossPolicy:
     """Immutable canonical JSON of the two frozen whole-horizon limits."""
@@ -83,7 +102,7 @@ class GlobalLossPolicy:
 
     def __post_init__(self):
         data = json.loads(self.text)
-        if not isinstance(data, dict) or data.get("schema") != SCHEMA:
+        if not isinstance(data, dict) or data.get("schema") not in (SCHEMA, SHARED_SCHEMA):
             raise ValueError("not a global-loss policy of the current schema")
         if any(k not in data for k in REQUIRED):
             raise ValueError("policy fields are missing")
@@ -129,6 +148,8 @@ class GlobalLossPolicy:
                 "plan", "initial_state", "optimizer", "adapter", "environment",
                 "protocol_context", "data", "seed", "evaluator")):
             raise ValueError("policy binding incomplete")
+        if data["schema"] == SHARED_SCHEMA and binding["protocol_context"].get("native_reuse") != NATIVE_REUSE:
+            raise ValueError("shared-native policy is missing its protocol marker")
         if binding["plan"].get("steps") != steps:
             raise ValueError("the bound plan has another step count")
 
@@ -156,7 +177,8 @@ class GlobalCalibration:
 
 
 def calibrate_global_loss(controls: Sequence[TrainingControl], *, floor_rms: float,
-                          floor_max: float, gamma: float = SAFETY_FACTOR_GAMMA) -> GlobalCalibration:
+                          floor_max: float, gamma: float = SAFETY_FACTOR_GAMMA,
+                          share_native: bool = False) -> GlobalCalibration:
     """Freeze ``T_R``/``T_M`` from complete native/native/compile trajectories.
 
     Each control's metrics are computed on its own whole trajectory first,
@@ -184,9 +206,11 @@ def calibrate_global_loss(controls: Sequence[TrainingControl], *, floor_rms: flo
                     deployment.get("identity", {}).get("kind") != "torch_compile":
                 raise ValueError("compiled control must be identified torch_compile, never a "
                                  "candidate or fault")
-            this = step_binding(n)
+            experiment = c["identity"]["protocol_context"]["patch_set"]
+            this = _experiment_binding(c if share_native else n, experiment, shared_native=share_native)
             binding = binding if binding is not None else this
-            if any(step_binding(run) != binding for run in (n, r, c)):
+            if any(_experiment_binding(run, experiment, shared_native=share_native) != binding
+                   for run in (n, r, c)):
                 raise ValueError("calibration runs disagree on the workload binding")
             if deployment["patch_set"] != binding["protocol_context"]["patch_set"]:
                 raise ValueError("compiled patch set differs from the experiment")
@@ -219,7 +243,7 @@ def calibrate_global_loss(controls: Sequence[TrainingControl], *, floor_rms: flo
         thresholds = {m: gamma * max(floors[m], *(e[s][m] for e in evidence
                                                    for s in ("native_repeat", "trusted_compile")))
                       for m in METRICS}
-        data = {"schema": SCHEMA, "metrics": list(METRICS), "steps": steps, "binding": binding,
+        data = {"schema": SHARED_SCHEMA if share_native else SCHEMA, "metrics": list(METRICS), "steps": steps, "binding": binding,
                 "calibration_runs": runs, "controls": evidence, "gamma": gamma,
                 "floors": floors, "thresholds": thresholds, "formula": FORMULA,
                 "objective": "step record field 'objective' (scalar the backward differentiated)"}
@@ -270,8 +294,12 @@ def verify_global_loss(candidate: Any, native: Any, *, policy: GlobalLossPolicy 
         verdict.findings.extend(problems)
         ref_values, problems = objectives(n, label="native", reference=True)
         verdict.findings.extend(problems)
-        binding = step_binding(n)
-        if step_binding(c) != binding:
+        shared_native = (policy.to_dict() if isinstance(policy, GlobalLossPolicy)
+                         else dict(policy or {})).get("schema") == SHARED_SCHEMA
+        experiment = c["identity"]["protocol_context"]["patch_set"]
+        binding = _experiment_binding(c if shared_native else n, experiment, shared_native=shared_native)
+        if (_experiment_binding(n, experiment, shared_native=shared_native) != binding
+                or _experiment_binding(c, experiment, shared_native=shared_native) != binding):
             verdict.findings.append(missing("run_binding_mismatch",
                                             "the tested and reference runs differ in workload binding"))
         measured = None
@@ -282,7 +310,7 @@ def verify_global_loss(candidate: Any, native: Any, *, policy: GlobalLossPolicy 
             verdict.findings.append(missing("no_policy", "no frozen global-loss policy"))
         elif not isinstance(policy, GlobalLossPolicy):
             data = dict(policy)
-            if data.get("schema") != SCHEMA:
+            if data.get("schema") not in (SCHEMA, SHARED_SCHEMA):
                 verdict.findings.append(missing(
                     "wrong_policy_schema", f"{data.get('schema')!r} is not {SCHEMA!r}; a window or "
                     "stepwise policy is never reinterpreted as global limits"))

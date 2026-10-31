@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from evograd.adbench_tools.artifact import END, HEADER_MARK, PackagingError, package, unpackage
+from evograd.adbench_tools.gpu_lock import run_evaluation
 from evograd.adbench_tools.ledger import RunLedger
 from evograd.adbench_tools.task import DECLARED_RULE, TASK_FILE, AgentTask, load
 
@@ -148,9 +149,9 @@ def _run_child(module: str, program: Path, env: dict[str, str], timeout: int,
         result_path = Path(scratch) / "result.json"
         env = {**env, "EVOGRAD_RESULT_JSON": str(result_path)}
         try:
-            completed = subprocess.run(
+            completed = run_evaluation(
                 [sys.executable, "-m", module, *(extra or []), str(program)],
-                env=env, text=True, capture_output=True, timeout=timeout,
+                env=env, timeout=timeout, label=f"{module} {program.name}",
             )
         except subprocess.TimeoutExpired as exc:
             tail = exc.stderr if isinstance(exc.stderr, str) else ""

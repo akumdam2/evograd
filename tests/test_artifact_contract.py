@@ -105,6 +105,37 @@ class TestContractShape(unittest.TestCase):
 
 
 class TestGeneratedBehaviour(unittest.TestCase):
+    def test_single_gradient_accepts_tensor_tuple_and_list(self):
+        op = get_task("gelu")
+        for rows in (1, 3):
+            for container in (lambda dx: dx, lambda dx: (dx,), lambda dx: [dx]):
+                with self.subTest(rows=rows, container=container):
+                    module = types.ModuleType("single_gradient")
+                    module.torch = torch
+                    setattr(module, op.forward_fn_name,
+                            lambda x: (x * 2, (x,)))
+                    setattr(module, op.backward_fn_name,
+                            lambda dy, saved: container(dy * 2))
+                    exec(render_deployment_layer(op), module.__dict__)
+                    x = torch.randn(rows, 4, requires_grad=True)
+                    y = deployment_entry(module)(x)
+                    dy = torch.randn_like(y)
+                    dx, = torch.autograd.grad(y, x, dy)
+                    self.assertEqual(dx.shape, x.shape)
+                    self.assertTrue(torch.equal(dx, dy * 2))
+
+    def test_single_gradient_rejects_wrong_arity(self):
+        op = get_task("gelu")
+        module = types.ModuleType("wrong_gradient_arity")
+        module.torch = torch
+        setattr(module, op.forward_fn_name, lambda x: (x * 2, (x,)))
+        setattr(module, op.backward_fn_name, lambda dy, saved: (dy, dy))
+        exec(render_deployment_layer(op), module.__dict__)
+        x = torch.randn(3, 4, requires_grad=True)
+        y = deployment_entry(module)(x)
+        with self.assertRaisesRegex(ValueError, "incorrect number of gradients"):
+            torch.autograd.grad(y, x, torch.ones_like(y))
+
     def test_both_outputs_reach_backward_independently(self):
         op = get_task(STRUCTURED)
         # A forward whose second output depends on `r` alone isolates dsummed:

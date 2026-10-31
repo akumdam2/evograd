@@ -66,8 +66,8 @@ against eager and whole-model compile; its reported interval is against eager.
 
 Use a fresh run root for the new API-request budget. `bench.py run` refuses to
 reuse a metered agent's completed run if its budget unit or limit differs, and
-does not silently delete an unfinished run or reset its API ledger. `--redo`
-explicitly replaces that run as a new trial. Existing v1 and v2 evaluations must be
+never deletes a run or resets its API ledger; an interrupted run is moved to
+`<root>/aborted/` by hand before the case is run again. Existing v1 and v2 evaluations must be
 rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migration.
 
 ## Fairness protocol

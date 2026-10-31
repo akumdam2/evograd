@@ -150,9 +150,11 @@ class Execution:
     error: str | None = None
     error_stage: str | None = None
     seconds: float = 0.0
+    reused_from: str | None = None
 
     def evidence(self) -> dict[str, Any]:
         return {"execution_id": self.execution_id,
+                **({"reused_from": self.reused_from} if self.reused_from else {}),
                 "deployment": self.deployment.describe(), "sample": self.sample.to_dict(),
                 "site_calls": dict(self.counts), "expected_site_calls": dict(self.expected),
                 "mutated_inputs": list(self.mutated), "state_changed": list(self.state_changed),
@@ -726,7 +728,8 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
         # The previous sample's executions hold its results (for a whole model,
         # every parameter gradient); release them before running the next one.
         reference = cand = None
-        reference = execute(adapter, Deployment.native(), sample)
+        from evograd.verification.reuse import native_execution
+        reference = native_execution(adapter, sample, slot="verification", execute=execute)
         case.evidence["reference"] = reference.evidence()
         if reference.error:
             case.findings.append(missing("reference_runtime_error",

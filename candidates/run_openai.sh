@@ -19,7 +19,7 @@
 #
 # Environment: OPENAI_API_KEY (required for smoke/full), AGENTS (default
 # "evograd openevolve gepa kernelagent codex"), ADBENCH_MODEL
-# (default gpt-5.6-sol), ADBENCH_API_BASE (default https://api.openai.com/v1),
+# (default gpt-5.5), ADBENCH_API_BASE (default https://api.openai.com/v1),
 # CUDA_VISIBLE_DEVICES (default 0), TIME_LIMIT (seconds per agent in the full
 # run, default 21600), OUT (default results/adbench_tools/<OP>).
 set -uo pipefail
@@ -36,7 +36,7 @@ OUT="${OUT:-$REPO/results/adbench_tools/$OP}"
 TASK="$OUT/task"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export ADBENCH_MODEL="${ADBENCH_MODEL:-gpt-5.6-sol}"
+export ADBENCH_MODEL="${ADBENCH_MODEL:-gpt-5.5}"
 export ADBENCH_API_BASE="${ADBENCH_API_BASE:-https://api.openai.com/v1}"
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 
