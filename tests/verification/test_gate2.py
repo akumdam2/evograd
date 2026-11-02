@@ -521,6 +521,35 @@ class TestControls(unittest.TestCase):
         self.assertIsNone(result.policy)
         self.assertEqual([f.code for f in result.findings], ["control_disqualified"])
 
+    def test_a_compile_repeat_that_fails_is_a_failure_not_a_bitwise_difference(self):
+        # Qwen3.5-4B on GH200 (2026-11-02): the repeat ran out of GPU memory while the reference
+        # and the first compile run were still held, and was reported as non-bitwise.
+        from unittest import mock
+
+        from evograd.verification.gate2 import calibration as cal
+
+        real, controls = cal.execute, []
+
+        def second_compile_fails(adapter, deployment, sample, **kwargs):
+            if deployment.role == "control" and controls:
+                # the first compile run's results are released before the repeat runs
+                self.assertEqual(controls[0].results, {})
+                ex = gate2.runner.Execution(deployment, sample)
+                ex.error, ex.error_stage = "torch.OutOfMemoryError: CUDA out of memory", "outputs"
+                return ex
+            ex = real(adapter, deployment, sample, **kwargs)
+            if deployment.role == "control":
+                controls.append(ex)
+            return ex
+
+        with mock.patch.object(cal, "execute", second_compile_fails):
+            result = calibrate(F.toy_module_scope(), patch_set=("norm",),
+                               samples=samples("rep", [1]), compile_backend=FAST)
+        self.assertIsNone(result.policy)
+        self.assertEqual([f.code for f in result.findings], ["control_failed"])
+        self.assertIn("outputs", result.findings[0].message)
+        self.assertIn("out of memory", result.findings[0].details["trace"])
+
     def test_sites_compiled_in_one_process_keep_their_own_static_shapes(self):
         # A Gate 3 compile control over several sites (or several calibrations in one process)
         # must not turn one site's shapes dynamic because another site had other shapes: Qwen3.5's

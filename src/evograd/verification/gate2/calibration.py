@@ -820,19 +820,30 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         # recompiled graph can differ at rounding level (Qwen3-0.6B qkv_norm_rope
         # after residual_rmsnorm, 2026-10-23), which is the compiler's cache
         # behaviour, not the kernels' determinism this check is about.
+        # Only digests are compared from here on, so the reference's and the control's
+        # results are released before the repeat (boundary checks use the control's
+        # captured local payloads): three whole-model executions at once ran Qwen3.5-4B
+        # out of GPU memory in the repeat on GH200, which was then reported as a
+        # non-bitwise compile control (2026-11-02).
+        native_bitwise = all(d == reference.results_digest
+                             for d in identity["control_results_digests"]["native_repeats"])
+        del reference
+        ctl.results = {}
         again = execute(adapter, control, sample, record_boundaries=boundaries)
         executions.append(again.execution_id)
         identity["executions"]["compile_repeat"] = again.execution_id
         identity["repeatability"] = {
-            "native_bitwise": all(d == reference.results_digest
-                                  for d in identity["control_results_digests"]["native_repeats"]),
+            "native_bitwise": native_bitwise,
             "compile_bitwise": not again.error and again.results_digest == ctl.results_digest}
-        if not ctl.error and not identity["repeatability"]["compile_bitwise"]:
+        if again.error and not ctl.error:
+            result.findings.append(missing("control_failed", "the torch.compile control's repeat "
+                                           f"failed at {again.error_stage}", subject=sid,
+                                           trace=again.error))
+        elif not ctl.error and not identity["repeatability"]["compile_bitwise"]:
             result.findings.append(missing("control_disqualified",
                                            "the torch.compile control did not reproduce its own "
                                            "results bit for bit", subject=sid))
         del again
-        del reference  # boundary checks use the control's captured local payloads
         uncompiled = sorted(site for site, n in graphs.items() if n < 1)
         if uncompiled and not ctl.error:
             result.findings.append(missing("control_disqualified",
