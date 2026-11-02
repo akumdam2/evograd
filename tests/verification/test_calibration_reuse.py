@@ -27,14 +27,18 @@ class Gate2ReuseTests(unittest.TestCase):
             self.assertIsNotNone(first.policy, first.to_dict())
             self.assertIsNotNone(second.policy, second.to_dict())
             roles = [c.args[1].role for c in execute.call_args_list]
+            names = [c.args[1].name for c in execute.call_args_list]
             self.assertEqual(roles.count("native"), 2)
-            self.assertEqual(roles.count("control"), 4)
+            self.assertEqual(sum(n.startswith("torch_compile") for n in names), 4)
+            self.assertEqual(sum(n.startswith("rounding_perturbation") for n in names),
+                             2 * len(calibration.ROUNDING_SEEDS))
             a = first.policy.sample_identities["fixed"]["executions"]
             b = second.policy.sample_identities["fixed"]["executions"]
             self.assertEqual(a["native"], b["native"])
             self.assertEqual(a["native_repeats"], b["native_repeats"])
             self.assertNotEqual(a["native"], a["native_repeats"][0])
             self.assertNotEqual(a["compile"], b["compile"])
+            self.assertFalse(set(a["rounding_perturbation"]) & set(b["rounding_perturbation"]))
 
     def test_verification_reference_is_separate_from_calibration_and_fault_still_fails(self):
         sample = [Sample("fixed", 101)]

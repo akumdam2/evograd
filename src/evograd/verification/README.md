@@ -132,7 +132,14 @@ The sample protocol depends on scope:
   convolution), the fixed floor alone was about 100x below one bf16 rounding.
 - **Model:** calibrate separately per sample/result; fresh verification must
   match that sample's input, labels/context, cotangent, initial state, mode and
-  seed. A budget cannot be transferred to another model sample.
+  seed. A budget cannot be transferred to another model sample. A third control,
+  the rounding perturbation, adds its own term: the native site with each
+  floating output and input gradient moved one ulp with probability 1/3, each
+  tensor kept within one rounding (`E2` at most the unit roundoff), run under
+  four fixed seeds (11, 22, 33, 44) and taken at its largest. Where compile
+  reproduces the native site bit for bit, it is what a correct reimplementation
+  that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj:
+  logits `E2` 4-5%, against 0 from compile).
 
 Policies bind scope, reference, environment, numerical configuration, patch set,
 samples and result contracts. Candidate errors never set the budget. Missing or
@@ -176,7 +183,8 @@ boundary of one training step per data order becomes a payload of the case
 its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only).
 Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
-four batches with gamma 4, on the whole model's outputs and parameter gradients
+four batches (native repeats, compile and the rounding perturbation) with
+gamma 4, on the whole model's outputs and parameter gradients
 plus coverage and side effects. Per-call boundary replay is off at model scope
 (`GATE2_MODEL_BOUNDARIES`): the local checks of each call belong to operator Gate 2.
 

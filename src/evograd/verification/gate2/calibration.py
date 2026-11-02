@@ -18,7 +18,8 @@ Two sample protocols, one per scope, recorded in the policy
 
       T[z, m] = gamma * max( max_x max_r E_m(native repeat_r[x], native[x]),
                              max_x E_m(trusted compile[x], native[x]),
-                             floor[z, m] )
+                             floor[z, m],
+                             max_x max_k E_m(rounding perturbation_k[x], native[x]) )
 
   and judged on fresh executions of the *same* samples: a sample is used only
   when its content fingerprint (inputs, labels and other context, cotangents,
@@ -27,7 +28,12 @@ Two sample protocols, one per scope, recorded in the policy
   inputs (the operator scope's formula over its calibration payloads): a
   per-sample budget was a single draw of compile's rounding on that tensor,
   and a candidate whose rounding differs from compile's exceeded it on a few
-  scattered tensors per sample for no fault of its own.
+  scattered tensors per sample for no fault of its own. The rounding
+  perturbation (:func:`rounding_control`, under each of the fixed
+  :data:`ROUNDING_SEEDS`) is the native site with its outputs and input
+  gradients moved within one rounding: where compile reproduces the native
+  site bit for bit, it is what a correct reimplementation that rounds
+  differently does to the whole model.
 
 ``gamma`` is the named safety factor
 :data:`SAFETY_FACTOR_GAMMA` (initially 2); floors are the starting values
@@ -123,11 +129,18 @@ DEFAULT_FLOORS: dict[str, dict[str, float]] = {
 #: E2's is the unit roundoff of the result's dtype (:func:`rounding_floor`).
 ROUNDING_ULPS = 2.0
 
+#: Model scope's rounding perturbation: each finite nonzero element moves one ulp,
+#: up or down, with this probability, under each of these fixed seeds
+#: (:func:`rounding_control`). One seed is a single draw, not a bound.
+ROUNDING_PROBABILITY = 1.0 / 3.0
+ROUNDING_SEEDS = (11, 22, 33, 44)
+
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = "gate2-calibration/4: operator rounding floor"
+CALIBRATION_PROCEDURE = "gate2-calibration/4: operator rounding floor, model rounding perturbation"
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
-CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE)
+ROUNDING_PERTURBATION = "rounding_perturbation"
+CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE, ROUNDING_PERTURBATION)
 
 
 class CalibrationError(ValueError):
@@ -215,13 +228,14 @@ class ControlMeasurement:
 def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                       results: Mapping[str, str], gamma: float = SAFETY_FACTOR_GAMMA,
                       floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
-                      rounding: Mapping[str, Mapping[str, float]] | None = None
-                      ) -> dict[str, dict[str, Any]]:
+                      rounding: Mapping[str, Mapping[str, float]] | None = None,
+                      perturbed: bool = False) -> dict[str, dict[str, Any]]:
     """Per-tensor thresholds from trusted control measurements.
 
     ``results`` maps every result that needs a threshold to its kind. Each
-    needs at least one native-repeat and one trusted-compile measurement; a
-    result with either missing is an error, never a fallback. Measurements for
+    needs at least one native-repeat and one trusted-compile measurement, and
+    with ``perturbed`` (model scope) one rounding-perturbation measurement; a
+    result with any missing is an error, never a fallback. Measurements for
     names outside ``results`` are refused rather than pooled. ``rounding``
     (operator scope) gives every result its :func:`rounding_floor` term.
     """
@@ -230,6 +244,7 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
     if rounding is not None and set(rounding) != set(results):
         raise CalibrationError(f"rounding floors for {sorted(set(rounding) ^ set(results))} do not "
                                "match the calibrated results")
+    sources = (NATIVE_REPEAT, TRUSTED_COMPILE) + ((ROUNDING_PERTURBATION,) if perturbed else ())
     by_result: dict[str, dict[str, list[ControlMeasurement]]] = {
         name: {s: [] for s in CONTROL_SOURCES} for name in results}
     for m in measurements:
@@ -244,9 +259,11 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
     out: dict[str, dict[str, Any]] = {}
     for name, kind in results.items():
         groups = by_result[name]
-        lacking = [s for s in CONTROL_SOURCES if not groups[s]]
+        lacking = [s for s in sources if not groups[s]]
         if lacking:
             raise CalibrationError(f"{name}: no {' or '.join(lacking)} measurement")
+        if groups[ROUNDING_PERTURBATION] and not perturbed:
+            raise CalibrationError(f"{name}: a rounding perturbation outside model scope")
         floor = floors[family_of(kind)]
         entry: dict[str, Any] = {"kind": kind, "components": {}}
         for metric in METRICS:
@@ -255,6 +272,9 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                      "floor": floor[metric]}
             if rounding is not None:
                 terms["rounding"] = float(rounding[name][metric])
+            if perturbed:
+                terms[ROUNDING_PERTURBATION] = max(getattr(m, metric)
+                                                   for m in groups[ROUNDING_PERTURBATION])
             entry[metric] = gamma * max(terms.values())
             entry["components"][metric] = {**terms, "gamma": gamma,
                                            "binding": max((v, k) for k, v in terms.items())[1]}
@@ -347,8 +367,14 @@ FORMULAS = {
               f"rounding: E2 = unit roundoff of z's dtype, Emax = {ROUNDING_ULPS:g} ulps of "
               "max|native_c[z]| / RMS(native_c[z])",
     MATCHED: "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
-             "max_x E_m(compile[x], native[x]), floor[z,m]), judged on the calibrated samples x",
+             "max_x E_m(compile[x], native[x]), floor[z,m], "
+             "max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged on the calibrated "
+             f"samples x; rounding_perturbation_k: every replaced site's floating outputs and input "
+             f"gradients moved one ulp with probability {ROUNDING_PROBABILITY:.4g} under seed k, "
+             "each tensor within one rounding (E2 <= unit roundoff)",
 }
+#: The term each sample protocol adds to the control terms.
+PROTOCOL_TERMS = {DISJOINT: "rounding", MATCHED: ROUNDING_PERTURBATION}
 
 
 def _content_hash(data: Mapping[str, Any]) -> str:
@@ -375,11 +401,11 @@ def _check_thresholds(data: Mapping[str, Any]) -> None:
         if not isinstance(table, Mapping) or not table:
             raise CalibrationError(f"{label}: no thresholds")
         for name, entry in table.items():
-            _check_entry(f"{label}/{name}", entry, gamma, floors, rounding=protocol == DISJOINT)
+            _check_entry(f"{label}/{name}", entry, gamma, floors, term=PROTOCOL_TERMS[protocol])
 
 
 def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mapping[str, float]],
-                 *, rounding: bool) -> None:
+                 *, term: str) -> None:
     def number(value: Any) -> bool:
         return (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and math.isfinite(value) and value >= 0)
@@ -387,11 +413,13 @@ def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mappi
     if not isinstance(entry, Mapping):
         raise CalibrationError(f"{name}: malformed threshold entry")
     floor = floors[family_of(entry.get("kind"))]
-    terms = ("native_repeat", "trusted_compile", "floor") + (("rounding",) if rounding else ())
+    terms = ("native_repeat", "trusted_compile", "floor", term)
     for metric in METRICS:
         parts = (entry.get("components") or {}).get(metric) or {}
-        if not rounding and "rounding" in parts:
-            raise CalibrationError(f"{name}/{metric}: a rounding floor outside operator scope")
+        foreign = set(PROTOCOL_TERMS.values()) - {term}
+        if foreign & set(parts):
+            raise CalibrationError(f"{name}/{metric}: {sorted(foreign & set(parts))} is another "
+                                   "scope's term")
         values = [parts.get(k) for k in terms]
         if not (number(entry.get(metric)) and all(number(v) for v in values)):
             raise CalibrationError(f"{name}/{metric}: missing or non-finite threshold or component")
@@ -520,6 +548,102 @@ def compile_control(adapter: ScopeAdapter, patch_set: Sequence[str], *, backend:
     return Deployment(f"torch_compile[{backend}]", CONTROL, sites, identity), graphs
 
 
+def rounding_control(adapter: ScopeAdapter, patch_set: Sequence[str], seed: int) -> Deployment:
+    """The native implementation of every replaced site with its rounding moved under ``seed``.
+
+    Every floating output, and the gradient reaching every floating input that
+    requires grad, goes through :func:`move_rounding` with a generator seeded
+    once per deployment, so a run draws the same moves for the same calls.
+    The global random streams the sample's seed governs are not touched.
+    """
+    generator = torch.Generator(device=adapter.device).manual_seed(int(seed))
+    sites = {}
+    install = getattr(adapter, "control_site", None)
+    for name in patch_set:
+        fn = _moved(adapter.native_site(name), generator)
+        sites[name] = install(name, fn) if install is not None else fn
+    identity = {"kind": ROUNDING_PERTURBATION, "seed": int(seed),
+                "probability": ROUNDING_PROBABILITY,
+                "moves": "floating outputs and input gradients of each replaced site's native "
+                         "implementation, each tensor within one rounding"}
+    return Deployment(f"{ROUNDING_PERTURBATION}[{int(seed)}]", CONTROL, sites, identity)
+
+
+def _moved(native, generator: torch.Generator):
+    """``native`` with its floating outputs and input gradients through :func:`move_rounding`."""
+    from torch.utils._pytree import tree_map
+
+    def site(*args, **kwargs):
+        args, kwargs = tree_map(
+            lambda t: _MovedGradient.apply(t, generator)
+            if torch.is_tensor(t) and t.is_floating_point() and t.requires_grad else t,
+            (args, kwargs))
+        return tree_map(lambda t: _MovedOutput.apply(t, generator)
+                        if torch.is_tensor(t) and t.is_floating_point() else t,
+                        native(*args, **kwargs))
+    return site
+
+
+def move_rounding(t: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
+    """``t`` with each finite nonzero element moved one ulp up or down, each with
+    probability :data:`ROUNDING_PROBABILITY` / 2, kept within one rounding.
+
+    A moved element is off by between one and two unit roundoffs of itself, one
+    rounding by at most one, so a tensor whose norm a few elements hold (a
+    32-element head vector, an outlier) can exceed one rounding: then the
+    largest moves are dropped until ``E2 <= unit roundoff`` (operator scope's
+    :func:`rounding_floor`); Emax stays within its half by construction.
+    """
+    x = t.detach()
+    if not x.numel():
+        return x.clone()
+    draw = torch.rand(x.shape, generator=generator, device=x.device)
+    step = torch.where(draw < ROUNDING_PROBABILITY / 2, -1.0,
+                       torch.where(draw < ROUNDING_PROBABILITY, 1.0, 0.0)).double()
+    del draw
+    wide = x.double()
+    _, exponent = torch.frexp(wide)
+    out = (wide + step * torch.ldexp(torch.full_like(wide, torch.finfo(x.dtype).eps), exponent - 1)
+           ).to(x.dtype)
+    del step, exponent
+    out = torch.where((wide != 0) & torch.isfinite(out), out, x)
+    moves = (out.double() - wide).square().reshape(-1)
+    moves = torch.where(torch.isfinite(moves), moves, 0.0)
+    finite = torch.where(torch.isfinite(wide), wide, 0.0).reshape(-1)
+    budget = (torch.finfo(x.dtype).eps / 2) ** 2 * float(finite.square().sum()) * (1 - 1e-9)
+    total = float(moves.sum())
+    if total > budget:
+        order = torch.argsort(moves, descending=True)
+        dropped = int(torch.searchsorted(torch.cumsum(moves[order], 0),
+                                         torch.tensor(total - budget, dtype=torch.float64,
+                                                      device=x.device))) + 1
+        out = out.reshape(-1).clone()
+        out[order[:dropped]] = x.reshape(-1)[order[:dropped]]
+        out = out.reshape(x.shape)
+    return out
+
+
+class _MovedOutput(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, t, generator):
+        return move_rounding(t, generator)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad, None
+
+
+class _MovedGradient(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, t, generator):
+        ctx.generator = generator
+        return t.view_as(t)
+
+    @staticmethod
+    def backward(ctx, grad):
+        return move_rounding(grad, ctx.generator), None
+
+
 def _private_entry(fn):
     """``fn`` behind a function with its own code object.
 
@@ -587,8 +711,10 @@ def _qualify(contract: C.ResultContract, reference: Execution, control: Executio
 
 
 def _boundary_measurements(adapter: ScopeAdapter, control: Deployment, execution: Execution,
-                           native_repeat_fn) -> tuple[list[ControlMeasurement], dict[str, str], list[Finding]]:
-    """Site-level controls on the calls recorded under the trusted control."""
+                           native_repeat_fn, rounding_seeds: Sequence[int] = ()
+                           ) -> tuple[list[ControlMeasurement], dict[str, str], list[Finding]]:
+    """Site-level controls on the calls recorded under the trusted control (and the
+    rounding perturbation under each of ``rounding_seeds``)."""
     out: list[ControlMeasurement] = []
     kinds: dict[str, str] = {}
     problems: list[Finding] = []
@@ -597,6 +723,7 @@ def _boundary_measurements(adapter: ScopeAdapter, control: Deployment, execution
         # Do not retain the previous call's replay tensors while allocating the
         # next call. A CE gradient alone is several GiB at a model vocabulary.
         native = compiled = native_again = other = pairs = None
+        moved: list[Any] = []
         if call.unattributable_outputs:
             problems.append(missing("boundary_cotangent_unattributable",
                                     f"{call.key}: {call.unattributable_outputs}", subject=call.key))
@@ -615,11 +742,18 @@ def _boundary_measurements(adapter: ScopeAdapter, control: Deployment, execution
                 native_again = run_callable(native_repeat_fn(call.site), call.inputs,
                                             call.grad_paths, call.upstream,
                                             forward_context=adapter.numerics_context)
+            for seed in rounding_seeds:
+                site = _moved(native_repeat_fn(call.site),
+                              torch.Generator(device=adapter.device).manual_seed(int(seed)))
+                with isolated_rng(call.index, adapter.device):
+                    moved.append(run_callable(site, call.inputs, call.grad_paths, call.upstream,
+                                              forward_context=adapter.numerics_context))
         except Exception as exc:
             problems.append(missing("control_failed", f"boundary {call.key}: {exc}"))
             continue
         contract = boundary_contract(call, native)
-        for source, other in ((NATIVE_REPEAT, native_again), (TRUSTED_COMPILE, compiled)):
+        for source, other in ((NATIVE_REPEAT, native_again), (TRUSTED_COMPILE, compiled),
+                              *((ROUNDING_PERTURBATION, m) for m in moved)):
             pairs, presence = C.match_results(contract, other, native)
             if presence:
                 problems.append(missing("control_disqualified", f"boundary {call.key}: "
@@ -664,7 +798,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
               gamma: float = SAFETY_FACTOR_GAMMA,
               floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
               boundaries: bool = False,
-              validation_samples: Sequence[Sample] | None = None) -> CalibrationResult:
+              validation_samples: Sequence[Sample] | None = None,
+              rounding_seeds: Sequence[int] = ROUNDING_SEEDS) -> CalibrationResult:
     """Derive and freeze a Gate 2 policy for ``patch_set`` on this adapter.
 
     Per calibration sample: one native reference, ``native_repeats - 1``
@@ -674,7 +809,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     ``boundaries=True`` every call recorded at a replaced site under the
     compile control gets its own thresholds too, from the native site
     implementation run twice and the compiled one, on the call's own inputs
-    and upstream gradient.
+    and upstream gradient. At model scope, one :func:`rounding_control` per
+    seed in ``rounding_seeds`` as well.
 
     The scope's sample protocol (:data:`SAMPLE_PROTOCOLS`) decides how the
     measurements become thresholds: pooled over samples (``disjoint_holdout``)
@@ -718,6 +854,11 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     if not isinstance(native_repeats, int) or native_repeats < 2:
         result.findings.append(missing("invalid_calibration_parameters",
                                        "native_repeats must be an int >= 2"))
+    rounding_seeds = tuple(rounding_seeds)
+    if protocol == MATCHED and (not rounding_seeds or len(set(rounding_seeds)) != len(rounding_seeds)
+                                or not all(isinstance(k, int) for k in rounding_seeds)):
+        result.findings.append(missing("invalid_calibration_parameters",
+                                       "rounding_seeds must be distinct ints, at least one"))
     if result.findings:
         return result
     try:
@@ -790,7 +931,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                     "config": jsonable(dict(sample.config)),
                     "reference_results_digest": reference.results_digest,
                     "executions": {"native": reference.execution_id, "native_repeats": [],
-                                   "compile": None},
+                                   "compile": None,
+                                   **({ROUNDING_PERTURBATION: []} if protocol == MATCHED else {})},
                     "control_results_digests": {"native_repeats": [], "compile": None}}
         identities[sid] = identity
         for repeat in range(1, native_repeats):
@@ -803,6 +945,16 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             measurements.extend(got)
             result.findings.extend(problems)
             del again  # its evidence and scalar measurements have been recorded
+        for seed in rounding_seeds if protocol == MATCHED else ():
+            moved = execute(adapter, rounding_control(adapter, patch_set, seed), sample)
+            executions.append(moved.execution_id)
+            identity["executions"][ROUNDING_PERTURBATION].append(moved.execution_id)
+            result.findings.extend(_same_content(reference, moved, ROUNDING_PERTURBATION))
+            got, problems = _qualify(contract, reference, moved, ROUNDING_PERTURBATION)
+            measurements.extend(got)
+            result.findings.extend(problems)
+            del moved
+            gc.collect()  # one whole model at a time besides the reference
         ctl = execute(adapter, control, sample, record_boundaries=boundaries)
         executions.append(ctl.execution_id)
         identity["executions"]["compile"] = ctl.execution_id
@@ -858,7 +1010,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                                                "no boundary call was recorded at the replaced sites",
                                                subject=sid))
             got, bkinds, problems = _boundary_measurements(
-                adapter, control, ctl, native_repeat_fn=adapter.native_site)
+                adapter, control, ctl, native_repeat_fn=adapter.native_site,
+                rounding_seeds=rounding_seeds if protocol == MATCHED else ())
             measurements.extend(got)
             kinds[sid].update(bkinds)
             result.findings.extend(problems)
@@ -886,7 +1039,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for table in kinds.values():
             union.update(table)
         table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors,
-                                  rounding=rounding if protocol == DISJOINT else None)
+                                  rounding=rounding if protocol == DISJOINT else None,
+                                  perturbed=protocol == MATCHED)
         if protocol == MATCHED:
             # Pooled over the matched samples; the per-sample layout says which
             # samples the policy judges (each by its content identity).
@@ -902,7 +1056,10 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         thresholds=pooled, thresholds_by_sample=by_sample, gamma=gamma, floors=floors,
         boundaries=boundaries,
         controls={"native_repeats": native_repeats, "compile": control.describe(),
-                  "compile_graphs": dict(graphs)},
+                  "compile_graphs": dict(graphs),
+                  **({ROUNDING_PERTURBATION: {"seeds": list(rounding_seeds),
+                                              "probability": ROUNDING_PROBABILITY}}
+                     if protocol == MATCHED else {})},
         input_digests=input_digests, weight_digests=sorted(weight_digests),
         sample_identities=identities, executions=executions)
     if validation_samples is not None:

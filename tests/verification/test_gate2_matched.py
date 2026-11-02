@@ -25,7 +25,8 @@ from evograd.verification.common.reports import FAILED, INCOMPLETE, PASSED
 from evograd.verification.common.tensors import relative_error
 from evograd.verification.gate2.adapters.model import model_scope, next_token_mean_nll
 from evograd.verification.gate2.adapters.operator import OperatorScope
-from evograd.verification.gate2.calibration import CalibrationError, Gate2Policy, calibrate
+from evograd.verification.gate2.calibration import (
+    ROUNDING_SEEDS, CalibrationError, Gate2Policy, calibrate, rounding_control)
 from tests.verification import _fixtures as F
 
 warnings.filterwarnings("ignore")
@@ -180,14 +181,15 @@ class TestPerSampleBudgets(MatchedCase):
         worst: dict[tuple[str, str], float] = {}
         for sample in self.samples:
             native = gate2.execute(self.scope, Deployment.native(), sample)
-            again = gate2.execute(self.scope, Deployment.native(), sample)
-            compiled = gate2.execute(self.scope, self.control, sample)
+            controls = [gate2.execute(self.scope, Deployment.native(), sample),
+                        gate2.execute(self.scope, self.control, sample)]
+            controls += [gate2.execute(self.scope, rounding_control(self.scope, ("norm",), k), sample)
+                         for k in ROUNDING_SEEDS]
             for name in a:
-                e_rep = relative_error(again.results[name], native.results[name]).to_dict()
-                e_cmp = relative_error(compiled.results[name], native.results[name]).to_dict()
-                for metric in ("E2", "Emax"):
-                    worst[name, metric] = max(worst.get((name, metric), 0.0), e_rep[metric],
-                                              e_cmp[metric])
+                for run in controls:
+                    e = relative_error(run.results[name], native.results[name]).to_dict()
+                    for metric in ("E2", "Emax"):
+                        worst[name, metric] = max(worst.get((name, metric), 0.0), e[metric])
         for name, entry in a.items():
             family = C.FLOOR_FAMILY[entry["kind"]]
             for metric in ("E2", "Emax"):
@@ -201,6 +203,28 @@ class TestPerSampleBudgets(MatchedCase):
             own[sample.sample_id] = {name: relative_error(compiled.results[name], native.results[name])
                                      .to_dict()["E2"] for name in a}
         self.assertTrue(any(own[x][n] != own[y][n] for x in own for y in own for n in a))
+
+    def test_the_rounding_perturbation_runs_under_every_fixed_seed(self):
+        data = self.policy.to_dict()
+        self.assertEqual(data["controls"]["rounding_perturbation"]["seeds"], list(ROUNDING_SEEDS))
+        for sample in self.samples:
+            runs = data["sample_identities"][sample.sample_id]["executions"]["rounding_perturbation"]
+            self.assertEqual(len(runs), len(ROUNDING_SEEDS))
+            self.assertTrue(set(runs) <= set(data["calibration_executions"]))
+        entries = list(self.policy.thresholds_for(self.samples[0].sample_id).values())
+        self.assertTrue(all("rounding_perturbation" in e["components"][m]
+                            for e in entries for m in ("E2", "Emax")))
+        self.assertTrue(any(e["components"]["E2"]["rounding_perturbation"] > 0 for e in entries))
+
+    def test_the_rounding_perturbation_draws_the_same_moves_for_a_seed_and_leaves_the_rng(self):
+        sample = self.samples[0]
+        torch.manual_seed(5)
+        before = torch.random.get_rng_state()
+        runs = [gate2.execute(self.scope, rounding_control(self.scope, ("norm",), k), sample)
+                for k in (11, 11, 22)]
+        self.assertTrue(torch.equal(torch.random.get_rng_state(), before))
+        self.assertEqual(runs[0].results_digest, runs[1].results_digest)
+        self.assertNotEqual(runs[0].results_digest, runs[2].results_digest)
 
     def test_fresh_compile_meets_its_own_budget_with_gamma_applied_once(self):
         for order in (self.samples, list(reversed(self.samples))):
@@ -253,14 +277,14 @@ class TestCompileRepeatConditions(MatchedCase):
         real = C2.execute
 
         def spy(adapter, deployment, sample, **kwargs):
-            seen.append((deployment.role, kwargs.get("record_boundaries", False)))
+            seen.append((deployment.name, kwargs.get("record_boundaries", False)))
             return real(adapter, deployment, sample, **kwargs)
 
         with mock.patch.object(C2, "execute", spy):
             result = calibrate(lm_scope(), patch_set=("norm",), samples=fixed(),
                                compile_backend=FAST, boundaries=True)
         self.assertEqual(result.status, "calibrated", result.to_dict())
-        controls = [rec for role, rec in seen if role == "control"]
+        controls = [rec for name, rec in seen if name.startswith("torch_compile")]
         self.assertGreaterEqual(len(controls), 2)
         self.assertTrue(all(controls), controls)          # every compile run recorded
 
@@ -443,7 +467,7 @@ class TestProtocolsStayApart(MatchedCase):
         data["formula"] = gate2.calibration.FORMULAS[gate2.DISJOINT]
         for entry in data["thresholds"].values():
             for parts in entry["components"].values():
-                parts["rounding"] = 0.0
+                parts["rounding"] = parts.pop("rounding_perturbation")
         for key in ("policy_hash", "schema"):
             data.pop(key)
         forged = Gate2Policy.build(data)

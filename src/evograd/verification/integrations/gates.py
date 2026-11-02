@@ -14,11 +14,11 @@ against the model reference (``Model.reference_op``):
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
-  native repeats and compile at the same site, with :data:`GATE2_MODEL_GAMMA`
-  or the model's own ``Model.gate2_model_gamma`` (a whole model judges a
-  thousand propagated reductions per batch, the operator scope a handful of
-  results); coverage and input/parameter side
-  effects checked, no per-call boundary replay (:data:`GATE2_MODEL_BOUNDARIES`).
+  native repeats, compile and the rounding perturbation at the same site, with
+  :data:`GATE2_MODEL_GAMMA` or the model's own ``Model.gate2_model_gamma`` (a
+  whole model judges a thousand propagated reductions per batch, the operator
+  scope a handful of results); coverage and input/parameter side effects
+  checked, no per-call boundary replay (:data:`GATE2_MODEL_BOUNDARIES`).
 
 * Gate 3, single site (Level 2 only) -- continuous training with the candidate
   alone at its model site, after all of its preceding gates pass.

@@ -28,7 +28,7 @@ from evograd.verification.common.reports import (
     STRICT,
     continue_after,
 )
-from evograd.verification.common.tensors import module_state_digest
+from evograd.verification.common.tensors import module_state_digest, relative_error
 from evograd.verification.gate2.adapters.operator import OperatorScope
 from evograd.verification.gate2.calibration import (
     DEFAULT_FLOORS,
@@ -64,17 +64,16 @@ SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
                     "gradient": {"E2": 1e-12, "Emax": 1e-12}}
 
 
-def synthetic_entry(kind, limit, gamma=2.0, *, rounding=False):
-    """A threshold entry whose components reproduce ``limit`` under the formula
-    (``rounding``: with operator scope's rounding term, at 0)."""
+def synthetic_entry(kind, limit, gamma=2.0, *, term):
+    """A threshold entry whose components reproduce ``limit`` under the formula,
+    with the protocol's own ``term`` (``PROTOCOL_TERMS``) at 0."""
     floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
     entry = {"kind": kind, "components": {}}
     for metric in ("E2", "Emax"):
         entry[metric] = limit[metric]
         entry["components"][metric] = {"native_repeat": limit[metric] / gamma,
                                        "trusted_compile": 0.0, "floor": floor[metric],
-                                       "gamma": gamma, "binding": "native_repeat",
-                                       **({"rounding": 0.0} if rounding else {})}
+                                       "gamma": gamma, "binding": "native_repeat", term: 0.0}
     return entry
 
 
@@ -89,7 +88,8 @@ def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthet
     natives = {s.sample_id: gate2.execute(scope, Deployment.native(), s) for s in cal}
     contract = gate2.integration_contract(natives[cal[0].sample_id])
     matched = gate2.SAMPLE_PROTOCOLS[scope.scope] == gate2.MATCHED
-    table = {s.name: synthetic_entry(s.kind, thresholds_for(s), rounding=not matched)
+    table = {s.name: synthetic_entry(s.kind, thresholds_for(s),
+                                     term=gate2.calibration.PROTOCOL_TERMS[gate2.SAMPLE_PROTOCOLS[scope.scope]])
              for s in contract.compared() if not s.exact}
     identities = {sid: {**ex.sample_identity, "reference_results_digest": ex.results_digest}
                   for sid, ex in natives.items()}
@@ -418,6 +418,33 @@ class TestCalibrationArithmetic(unittest.TestCase):
         self.assertEqual(rounding_floor(torch.zeros(3))["Emax"], 0.0)
         self.assertEqual(rounding_floor(torch.tensor([1.0]))["E2"], 2.0 ** -24)
 
+    def test_a_rounding_move_stays_within_one_rounding(self):
+        from evograd.verification.gate2.calibration import move_rounding
+
+        g = torch.Generator().manual_seed(0)
+        spread = torch.randn(4096, generator=g).to(torch.bfloat16)
+        outlier = torch.cat([torch.tensor([60.0]), torch.randn(31, generator=g)]).to(torch.bfloat16)
+        zeros = torch.zeros(8, dtype=torch.bfloat16)
+        for t in (spread, outlier, spread.float(), zeros):
+            for seed in range(20):
+                moved = move_rounding(t, torch.Generator().manual_seed(seed))
+                self.assertEqual(moved.dtype, t.dtype)
+                e, floor = relative_error(moved, t), rounding_floor(t)
+                self.assertLessEqual(e.E2, floor["E2"])
+                self.assertLessEqual(e.Emax, floor["Emax"] / 2)
+                ulps = (moved.double() - t.double()).abs() / (torch.finfo(t.dtype).eps
+                                                             * t.double().abs().clamp_min(1e-30))
+                self.assertTrue(bool((ulps <= 1.0 + 1e-12).all()))    # at most one ulp per element
+        self.assertTrue(torch.equal(move_rounding(zeros, torch.Generator()), zeros))
+        moved = move_rounding(spread, torch.Generator().manual_seed(1))
+        share = (moved != spread).double().mean().item()
+        self.assertAlmostEqual(share, 1 / 3, delta=0.05)
+        # The outlier holds most of the norm: moving it alone is above one rounding,
+        # so its move is dropped whenever the draw picks it.
+        hits = sum(bool(move_rounding(outlier, torch.Generator().manual_seed(k))[0] != outlier[0])
+                   for k in range(60))
+        self.assertEqual(hits, 0)
+
     def test_rounding_term_binds_where_compile_is_bitwise(self):
         ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0),
               self.m("native_repeat", "out:b", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
@@ -430,16 +457,29 @@ class TestCalibrationArithmetic(unittest.TestCase):
             derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
                               rounding={"out:a": rounding["out:a"]})
 
-    def test_policy_entries_carry_the_rounding_term_in_operator_scope_only(self):
+    def test_policy_entries_carry_their_own_scopes_term_only(self):
         from evograd.verification.gate2.calibration import _check_entry
 
         limit = {"E2": 1e-3, "Emax": 1e-3}
-        operator, model = (synthetic_entry(C.OUTPUT, limit, rounding=r) for r in (True, False))
-        _check_entry("op", operator, 2.0, SYNTHETIC_FLOORS, rounding=True)
-        _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, rounding=False)
-        for entry, rounding in ((model, True), (operator, False)):
+        operator, model = (synthetic_entry(C.OUTPUT, limit, term=t)
+                           for t in ("rounding", "rounding_perturbation"))
+        _check_entry("op", operator, 2.0, SYNTHETIC_FLOORS, term="rounding")
+        _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
+        for entry, term in ((model, "rounding"), (operator, "rounding_perturbation")):
             with self.assertRaises(CalibrationError):
-                _check_entry("swapped", entry, 2.0, SYNTHETIC_FLOORS, rounding=rounding)
+                _check_entry("swapped", entry, 2.0, SYNTHETIC_FLOORS, term=term)
+
+    def test_rounding_perturbation_term_is_required_at_model_scope_only(self):
+        ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0),
+              self.m("rounding_perturbation", "out:a", 0.03, 5.0),
+              self.m("rounding_perturbation", "out:a", 0.04, 4.0, "s2")]
+        t = derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=4.0, perturbed=True)
+        self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (4 * 0.04, 4 * 5.0))   # max over draws
+        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "rounding_perturbation")
+        with self.assertRaises(CalibrationError):                  # not an operator-scope term
+            derive_thresholds(ms, results={"out:a": C.OUTPUT})
+        with self.assertRaises(CalibrationError):                  # nor optional at model scope
+            derive_thresholds(ms[:2], results={"out:a": C.OUTPUT}, perturbed=True)
 
     def test_thresholds_are_per_tensor(self):
         ms = [self.m("native_repeat", "out:a", 0.5, 0.5), self.m("trusted_compile", "out:a", 0.5, 0.5),
@@ -509,7 +549,7 @@ class TestControls(unittest.TestCase):
 
         def second_compile_differs(adapter, deployment, sample, **kwargs):
             ex = real(adapter, deployment, sample, **kwargs)
-            if deployment.role == "control":
+            if deployment.name.startswith("torch_compile"):
                 runs.append(sample.sample_id)
                 if len(runs) == 2:
                     ex.results_digest = "not-the-first-run"
@@ -531,14 +571,15 @@ class TestControls(unittest.TestCase):
         real, controls = cal.execute, []
 
         def second_compile_fails(adapter, deployment, sample, **kwargs):
-            if deployment.role == "control" and controls:
+            compiled = deployment.name.startswith("torch_compile")
+            if compiled and controls:
                 # the first compile run's results are released before the repeat runs
                 self.assertEqual(controls[0].results, {})
                 ex = gate2.runner.Execution(deployment, sample)
                 ex.error, ex.error_stage = "torch.OutOfMemoryError: CUDA out of memory", "outputs"
                 return ex
             ex = real(adapter, deployment, sample, **kwargs)
-            if deployment.role == "control":
+            if compiled:
                 controls.append(ex)
             return ex
 
