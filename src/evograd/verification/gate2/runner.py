@@ -38,6 +38,7 @@ replaced site, judged by the same comparator against matching thresholds.
 from __future__ import annotations
 
 import contextlib
+import gc
 import time
 import traceback
 import uuid
@@ -727,7 +728,11 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
         report.cases.append(case)
         # The previous sample's executions hold its results (for a whole model,
         # every parameter gradient); release them before running the next one.
+        # A run's model sits in reference cycles that only the cyclic collector
+        # frees (Qwen3.5-4B: ~7.5 GiB of GPU memory per sample, 2026-11-02).
         reference = cand = None
+        if adapter.scope == "model":
+            gc.collect()
         from evograd.verification.reuse import native_execution
         reference = native_execution(adapter, sample, slot="verification", execute=execute)
         case.evidence["reference"] = reference.evidence()
