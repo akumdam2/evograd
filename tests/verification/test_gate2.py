@@ -11,6 +11,7 @@ exercise arithmetic and binding; they are not calibration evidence.
 from __future__ import annotations
 
 import json
+import math
 import unittest
 import warnings
 
@@ -37,6 +38,7 @@ from evograd.verification.gate2.calibration import (
     calibrate,
     derive_thresholds,
     freeze_policy,
+    rounding_floor,
 )
 from tests.verification import _fixtures as F
 
@@ -62,15 +64,17 @@ SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
                     "gradient": {"E2": 1e-12, "Emax": 1e-12}}
 
 
-def synthetic_entry(kind, limit, gamma=2.0):
-    """A threshold entry whose components reproduce ``limit`` under the formula."""
+def synthetic_entry(kind, limit, gamma=2.0, *, rounding=False):
+    """A threshold entry whose components reproduce ``limit`` under the formula
+    (``rounding``: with operator scope's rounding term, at 0)."""
     floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
     entry = {"kind": kind, "components": {}}
     for metric in ("E2", "Emax"):
         entry[metric] = limit[metric]
         entry["components"][metric] = {"native_repeat": limit[metric] / gamma,
                                        "trusted_compile": 0.0, "floor": floor[metric],
-                                       "gamma": gamma, "binding": "native_repeat"}
+                                       "gamma": gamma, "binding": "native_repeat",
+                                       **({"rounding": 0.0} if rounding else {})}
     return entry
 
 
@@ -84,9 +88,9 @@ def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthet
     cal = [Sample(i, s) for i, s in calibration]
     natives = {s.sample_id: gate2.execute(scope, Deployment.native(), s) for s in cal}
     contract = gate2.integration_contract(natives[cal[0].sample_id])
-    table = {s.name: synthetic_entry(s.kind, thresholds_for(s))
-             for s in contract.compared() if not s.exact}
     matched = gate2.SAMPLE_PROTOCOLS[scope.scope] == gate2.MATCHED
+    table = {s.name: synthetic_entry(s.kind, thresholds_for(s), rounding=not matched)
+             for s in contract.compared() if not s.exact}
     identities = {sid: {**ex.sample_identity, "reference_results_digest": ex.results_digest}
                   for sid, ex in natives.items()}
     return freeze_policy(scope, patch_set=patch_set, contract=contract, samples=cal,
@@ -406,6 +410,36 @@ class TestCalibrationArithmetic(unittest.TestCase):
         self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "trusted_compile")
         self.assertEqual((t["grad:b"]["E2"], t["grad:b"]["Emax"]), (2e-4, 2e-2))   # gradient floors
         self.assertEqual(t["grad:b"]["components"]["E2"]["binding"], "floor")
+
+    def test_rounding_floor_is_one_rounding_in_the_dtype(self):
+        f = rounding_floor(torch.tensor([1.0, -0.5], dtype=torch.bfloat16))
+        self.assertEqual(f["E2"], 2.0 ** -8)                                   # bf16 unit roundoff
+        self.assertAlmostEqual(f["Emax"], 2 * 2.0 ** -7 / math.sqrt(0.625))     # 2 ulps of 1.0 / RMS
+        self.assertEqual(rounding_floor(torch.zeros(3))["Emax"], 0.0)
+        self.assertEqual(rounding_floor(torch.tensor([1.0]))["E2"], 2.0 ** -24)
+
+    def test_rounding_term_binds_where_compile_is_bitwise(self):
+        ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0),
+              self.m("native_repeat", "out:b", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
+        rounding = {"out:a": {"E2": 2.0 ** -8, "Emax": 0.04}, "out:b": {"E2": 2.0 ** -8, "Emax": 0.04}}
+        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT}, rounding=rounding)
+        self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (2 * 2.0 ** -8, 2 * 0.04))
+        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "rounding")
+        self.assertEqual(t["out:b"]["E2"], 1.0)                                # compile still binds
+        with self.assertRaises(CalibrationError):
+            derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
+                              rounding={"out:a": rounding["out:a"]})
+
+    def test_policy_entries_carry_the_rounding_term_in_operator_scope_only(self):
+        from evograd.verification.gate2.calibration import _check_entry
+
+        limit = {"E2": 1e-3, "Emax": 1e-3}
+        operator, model = (synthetic_entry(C.OUTPUT, limit, rounding=r) for r in (True, False))
+        _check_entry("op", operator, 2.0, SYNTHETIC_FLOORS, rounding=True)
+        _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, rounding=False)
+        for entry, rounding in ((model, True), (operator, False)):
+            with self.assertRaises(CalibrationError):
+                _check_entry("swapped", entry, 2.0, SYNTHETIC_FLOORS, rounding=rounding)
 
     def test_thresholds_are_per_tensor(self):
         ms = [self.m("native_repeat", "out:a", 0.5, 0.5), self.m("trusted_compile", "out:a", 0.5, 0.5),

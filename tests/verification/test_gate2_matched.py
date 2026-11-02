@@ -440,8 +440,10 @@ class TestProtocolsStayApart(MatchedCase):
         sid = fixed()[0].sample_id
         data["sample_protocol"] = gate2.DISJOINT          # forged: pooled, model scope
         data["thresholds"] = data.pop("thresholds_by_sample")[sid]
-        data["formula"] = "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), " \
-                          "max_c E_m(compile_c, native_c), floor[z,m])"
+        data["formula"] = gate2.calibration.FORMULAS[gate2.DISJOINT]
+        for entry in data["thresholds"].values():
+            for parts in entry["components"].values():
+                parts["rounding"] = 0.0
         for key in ("policy_hash", "schema"):
             data.pop(key)
         forged = Gate2Policy.build(data)

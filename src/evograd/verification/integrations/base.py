@@ -86,6 +86,9 @@ class Model:
     #: Model-scope Gate 2 safety factor where this model needs its own; ``None`` is
     #: the protocol's (``gates.GATE2_MODEL_GAMMA``).
     gate2_model_gamma: float | None = None
+    #: Operator-scope Gate 2 safety factor where this model needs its own; ``None`` is
+    #: the calibration default (``gate2.calibration.SAFETY_FACTOR_GAMMA``).
+    gate2_operator_gamma: float | None = None
     #: How a training step is run, recorded and judged
     #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
     objective: Any = None

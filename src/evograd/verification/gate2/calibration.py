@@ -8,9 +8,11 @@ Two sample protocols, one per scope, recorded in the policy
 
       T[z, m] = gamma * max( max_c E_m(native repeat_c, native_c),
                              max_c E_m(trusted compile_c, native_c),
-                             floor[z, m] )
+                             floor[z, m], max_c rounding_m(native_c[z]) )
 
   and judged on validation samples disjoint from them (id, seed, content).
+  ``rounding`` (:func:`rounding_floor`) is one rounding of every element in
+  the result's dtype, which a correct reimplementation may differ by.
 
 * ``matched_inputs`` (model scope). Pooled over the fixed samples ``x``::
 
@@ -70,7 +72,8 @@ import torch
 from evograd.verification.common import contracts as C
 from evograd.verification.common.execution import CONTROL, Deployment, Sample
 from evograd.verification.common.reports import Finding, jsonable, missing, summarize
-from evograd.verification.common.tensors import EPSILON, tensors_in, isolated_rng
+from evograd.verification.common.tensors import (
+    CHUNK, EPSILON, isolated_rng, largest_ulp, tensors_in)
 from evograd.verification.gate2.runner import (
     BOUNDARY,
     LIVE,
@@ -115,8 +118,12 @@ DEFAULT_FLOORS: dict[str, dict[str, float]] = {
     "gradient": {"E2": 1e-4, "Emax": 1e-2},
 }
 
+#: Operator scope's rounding floor in ulps of a result's largest magnitude (Emax);
+#: E2's is the unit roundoff of the result's dtype (:func:`rounding_floor`).
+ROUNDING_ULPS = 2.0
+
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = "gate2-calibration/3: independent compile validation on operator holdout"
+CALIBRATION_PROCEDURE = "gate2-calibration/4: operator rounding floor"
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE)
@@ -140,6 +147,25 @@ def validate_gamma(gamma: Any) -> float:
     if not math.isfinite(gamma) or gamma < 1.0:
         raise CalibrationError(f"gamma must be finite and >= 1 (a safety factor), got {gamma}")
     return gamma
+
+
+def rounding_floor(reference: torch.Tensor) -> dict[str, float]:
+    """One rounding of every element of ``reference`` in its dtype, as Gate 2's two statistics.
+
+    ``E2``: the unit roundoff. ``Emax``: :data:`ROUNDING_ULPS` ulps of the largest
+    magnitude over the RMS, Emax's denominator. Without it a result that the compile
+    control reproduces bit for bit (a vendor GEMM, SDPA or convolution) keeps only the
+    fixed floor, about 100x below one bf16 rounding, and a correct reimplementation
+    that rounds differently fails (C1 of the 2026-10-30 calibration audit).
+    """
+    if not reference.is_floating_point() or not reference.numel():
+        return {"E2": 0.0, "Emax": 0.0}
+    flat = reference.detach().reshape(-1)
+    squares = sum(float(flat[i:i + CHUNK].double().square().sum())
+                  for i in range(0, flat.numel(), CHUNK))
+    rms = math.sqrt(squares / flat.numel())
+    emax = ROUNDING_ULPS * largest_ulp(reference) / rms if math.isfinite(rms) and rms > 0 else 0.0
+    return {"E2": torch.finfo(reference.dtype).eps / 2, "Emax": emax}
 
 
 def validate_floors(floors: Mapping[str, Mapping[str, float]]) -> dict[str, dict[str, float]]:
@@ -187,17 +213,22 @@ class ControlMeasurement:
 
 def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                       results: Mapping[str, str], gamma: float = SAFETY_FACTOR_GAMMA,
-                      floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS
+                      floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
+                      rounding: Mapping[str, Mapping[str, float]] | None = None
                       ) -> dict[str, dict[str, Any]]:
     """Per-tensor thresholds from trusted control measurements.
 
     ``results`` maps every result that needs a threshold to its kind. Each
     needs at least one native-repeat and one trusted-compile measurement; a
     result with either missing is an error, never a fallback. Measurements for
-    names outside ``results`` are refused rather than pooled.
+    names outside ``results`` are refused rather than pooled. ``rounding``
+    (operator scope) gives every result its :func:`rounding_floor` term.
     """
     gamma = validate_gamma(gamma)
     floors = validate_floors(floors)
+    if rounding is not None and set(rounding) != set(results):
+        raise CalibrationError(f"rounding floors for {sorted(set(rounding) ^ set(results))} do not "
+                               "match the calibrated results")
     by_result: dict[str, dict[str, list[ControlMeasurement]]] = {
         name: {s: [] for s in CONTROL_SOURCES} for name in results}
     for m in measurements:
@@ -218,14 +249,14 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
         floor = floors[family_of(kind)]
         entry: dict[str, Any] = {"kind": kind, "components": {}}
         for metric in METRICS:
-            native = max(getattr(m, metric) for m in groups[NATIVE_REPEAT])
-            compiled = max(getattr(m, metric) for m in groups[TRUSTED_COMPILE])
-            entry[metric] = gamma * max(native, compiled, floor[metric])
-            entry["components"][metric] = {"native_repeat": native, "trusted_compile": compiled,
-                                           "floor": floor[metric], "gamma": gamma,
-                                           "binding": max((native, "native_repeat"),
-                                                          (compiled, "trusted_compile"),
-                                                          (floor[metric], "floor"))[1]}
+            terms = {"native_repeat": max(getattr(m, metric) for m in groups[NATIVE_REPEAT]),
+                     "trusted_compile": max(getattr(m, metric) for m in groups[TRUSTED_COMPILE]),
+                     "floor": floor[metric]}
+            if rounding is not None:
+                terms["rounding"] = float(rounding[name][metric])
+            entry[metric] = gamma * max(terms.values())
+            entry["components"][metric] = {**terms, "gamma": gamma,
+                                           "binding": max((v, k) for k, v in terms.items())[1]}
         # gamma x compile's largest elementwise deviation; Gate 1 rescales it to its own
         # factor (integrations.gates.gate1_envelope).
         entry["envelope"] = gamma * max(m.max_abs for m in groups[TRUSTED_COMPILE])
@@ -311,7 +342,9 @@ PROTOCOL_FIELDS = {DISJOINT: ("thresholds",), MATCHED: ("thresholds_by_sample",)
 
 FORMULAS = {
     DISJOINT: "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), "
-              "max_c E_m(compile_c, native_c), floor[z,m])",
+              "max_c E_m(compile_c, native_c), floor[z,m], max_c rounding_m(native_c[z])); "
+              f"rounding: E2 = unit roundoff of z's dtype, Emax = {ROUNDING_ULPS:g} ulps of "
+              "max|native_c[z]| / RMS(native_c[z])",
     MATCHED: "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
              "max_x E_m(compile[x], native[x]), floor[z,m]), judged on the calibrated samples x",
 }
@@ -341,11 +374,11 @@ def _check_thresholds(data: Mapping[str, Any]) -> None:
         if not isinstance(table, Mapping) or not table:
             raise CalibrationError(f"{label}: no thresholds")
         for name, entry in table.items():
-            _check_entry(f"{label}/{name}", entry, gamma, floors)
+            _check_entry(f"{label}/{name}", entry, gamma, floors, rounding=protocol == DISJOINT)
 
 
-def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mapping[str, float]]
-                 ) -> None:
+def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mapping[str, float]],
+                 *, rounding: bool) -> None:
     def number(value: Any) -> bool:
         return (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and math.isfinite(value) and value >= 0)
@@ -353,9 +386,12 @@ def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mappi
     if not isinstance(entry, Mapping):
         raise CalibrationError(f"{name}: malformed threshold entry")
     floor = floors[family_of(entry.get("kind"))]
+    terms = ("native_repeat", "trusted_compile", "floor") + (("rounding",) if rounding else ())
     for metric in METRICS:
         parts = (entry.get("components") or {}).get(metric) or {}
-        values = [parts.get(k) for k in ("native_repeat", "trusted_compile", "floor")]
+        if not rounding and "rounding" in parts:
+            raise CalibrationError(f"{name}/{metric}: a rounding floor outside operator scope")
+        values = [parts.get(k) for k in terms]
         if not (number(entry.get(metric)) and all(number(v) for v in values)):
             raise CalibrationError(f"{name}/{metric}: missing or non-finite threshold or component")
         if parts.get("floor") != floor[metric] or parts.get("gamma") != gamma:
@@ -697,6 +733,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
 
     measurements: list[ControlMeasurement] = []
     kinds: dict[str, dict[str, str]] = {}            # sample id -> result -> kind
+    rounding: dict[str, dict[str, float]] = {}       # result -> metric -> pooled rounding floor
     contract: C.ResultContract | None = None
     input_digests: dict[str, str | None] = {}
     identities: dict[str, dict[str, Any]] = {}
@@ -744,6 +781,10 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for spec in contract.compared():
             if not spec.exact:
                 kinds[sid][spec.name] = spec.kind
+                if protocol == DISJOINT:
+                    least = rounding.setdefault(spec.name, {m: 0.0 for m in METRICS})
+                    for m, value in rounding_floor(reference.results[spec.name]).items():
+                        least[m] = max(least[m], value)
         identity = {**reference.sample_identity, "seed": int(sample.seed),
                     "config": jsonable(dict(sample.config)),
                     "reference_results_digest": reference.results_digest,
@@ -828,7 +869,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         union: dict[str, str] = {}
         for table in kinds.values():
             union.update(table)
-        table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors)
+        table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors,
+                                  rounding=rounding if protocol == DISJOINT else None)
         if protocol == MATCHED:
             # Pooled over the matched samples; the per-sample layout says which
             # samples the policy judges (each by its content identity).

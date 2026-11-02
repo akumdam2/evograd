@@ -125,6 +125,11 @@ The sample protocol depends on scope:
 
 - **Operator:** pool per-result maxima over calibration samples, then evaluate
   on disjoint samples. This works for generated samples and recorded calls.
+  The floor term is the larger of the fixed floor and one rounding of every
+  element in the result's dtype, from the native reference: `E2` at the unit
+  roundoff, `Emax` at 2 ulps of the largest magnitude over the RMS. Where the
+  compile control reproduces native bit for bit (a vendor GEMM, SDPA or
+  convolution), the fixed floor alone was about 100x below one bf16 rounding.
 - **Model:** calibrate separately per sample/result; fresh verification must
   match that sample's input, labels/context, cotangent, initial state, mode and
   seed. A budget cannot be transferred to another model sample.

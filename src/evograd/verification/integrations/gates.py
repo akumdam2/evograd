@@ -81,6 +81,14 @@ def model_gamma(model) -> float:
     return GATE2_MODEL_GAMMA if model.gate2_model_gamma is None else float(model.gate2_model_gamma)
 
 
+def operator_gamma(model) -> float:
+    """Operator-scope Gate 2's safety factor for ``model`` (its own, else the calibration's)."""
+    from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
+
+    return (SAFETY_FACTOR_GAMMA if model.gate2_operator_gamma is None
+            else float(model.gate2_operator_gamma))
+
+
 def gate3_gamma(model) -> float:
     """Gate 3's safety factor for ``model`` (its own, else the protocol's)."""
     return GAMMA if model.gate3_gamma is None else float(model.gate3_gamma)
@@ -265,7 +273,7 @@ def operator_calibration(model, case, corpus, *, device: str = "cuda",
              / f"{case.case_id.replace('/', '__')}.json")
     calibration = _calibrate(scope, stand_in, scope.samples("acceptance"), cache,
                              samples=scope.samples("calibration"), compile_backend=compile_backend,
-                             validation_samples=scope.samples("acceptance"))
+                             gamma=operator_gamma(model), validation_samples=scope.samples("acceptance"))
     return scope, calibration
 
 

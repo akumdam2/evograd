@@ -22,9 +22,9 @@ magnitude (:func:`rounding_floor`), about what compile is off by elsewhere.
 
 from __future__ import annotations
 
-import math
-
 import torch
+
+from evograd.verification.common.tensors import largest_ulp
 
 MODEL_POLICY = "evograd-gate1-model-dtype-tolerances/5"
 #: Gate 1's own safety factor on the compile envelope, separate from operator Gate 2's
@@ -89,10 +89,6 @@ def rounding_floor(op, reference: torch.Tensor) -> float:
     and a correct implementation that only rounds differently fails on elements that
     are the difference of larger terms (Qwen3.5-4B's causal_conv1d seed, 2026-10-28).
     """
-    if not op.reference_contract or not reference.is_floating_point() or not reference.numel():
+    if not op.reference_contract:
         return 0.0
-    largest = float(reference.detach().abs().max())
-    if not math.isfinite(largest) or largest == 0.0:
-        return 0.0
-    # largest = m * 2**e with 0.5 <= m < 1, so its ulp is eps * 2**(e - 1)
-    return ENVELOPE_GAMMA * torch.finfo(reference.dtype).eps * 2.0 ** (math.frexp(largest)[1] - 1)
+    return ENVELOPE_GAMMA * largest_ulp(reference)

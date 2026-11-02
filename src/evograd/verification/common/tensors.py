@@ -259,6 +259,18 @@ def relative_error(candidate: torch.Tensor, reference: torch.Tensor) -> Relative
         reference_zero=ref_max == 0.0, bitwise=diff_max == 0.0, empty=False)
 
 
+def largest_ulp(t: torch.Tensor) -> float:
+    """The unit in the last place, in ``t``'s dtype, of ``t``'s largest magnitude; 0 for an
+    empty, all-zero, non-finite or non-floating tensor."""
+    if not t.is_floating_point() or not t.numel():
+        return 0.0
+    largest = float(t.detach().abs().max())
+    if not math.isfinite(largest) or largest == 0.0:
+        return 0.0
+    # largest = m * 2**e with 0.5 <= m < 1, so its ulp is eps * 2**(e - 1)
+    return torch.finfo(t.dtype).eps * 2.0 ** (math.frexp(largest)[1] - 1)
+
+
 @dataclass(frozen=True)
 class ElementwiseError:
     """Gate 1's per-element allowance for one tensor."""
