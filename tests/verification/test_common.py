@@ -132,6 +132,25 @@ class TestIsolation(unittest.TestCase):
         self.assertTrue(torch.equal(a, b))
 
 
+class TestDigests(unittest.TestCase):
+    def test_digests_hash_the_stored_bytes_as_before_in_order(self):
+        import hashlib
+
+        def stored(t):  # the digest's original formula: header, then a bytes copy
+            h = hashlib.sha256(f"{tuple(t.shape)}|{t.dtype}".encode())
+            flat = t.detach().reshape(-1).contiguous()
+            if flat.numel():
+                h.update(flat.view(torch.uint8).numpy().tobytes() if flat.dtype != torch.bool
+                         else flat.numpy().tobytes())
+            return h.hexdigest()
+
+        tensors = [torch.arange(12, dtype=torch.bfloat16).reshape(3, 4).t(), torch.tensor([True, False]),
+                   torch.zeros(0, 3), torch.randn(5, dtype=torch.complex64), torch.arange(7)]
+        tensors += [torch.randn(64, 64) for _ in range(20)]
+        self.assertEqual(T.tensor_digests(tensors), [stored(t) for t in tensors])
+        self.assertEqual([T.tensor_digest(t) for t in tensors], [stored(t) for t in tensors])
+
+
 class TestComparators(unittest.TestCase):
     def test_relative_error_definition_in_float64(self):
         r = torch.tensor([3.0, 4.0, 0.0, 0.0], dtype=torch.float64)

@@ -78,7 +78,7 @@ from evograd.verification.common.tensors import (
     relative_error,
     snapshot,
     synchronize,
-    tensor_digest,
+    tensor_digests,
     tensors_in,
 )
 
@@ -221,9 +221,9 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             seeds = isolate(dict(adapter.cotangents(outputs, invocation, sample)))
             seed_before = snapshot(seeds, metadata_only=tuple(
                 p.split(":", 1)[1] for p in mutable if p.startswith("cotangent:")))
+            items = list(tensors_in({"inputs": before_values(before), "cotangents": seeds}))
             ex.input_digest = C.stable_hash(
-                [(path, tensor_digest(t)) for path, t in tensors_in(
-                    {"inputs": before_values(before), "cotangents": seeds})])
+                list(zip([path for path, _ in items], tensor_digests([t for _, t in items]))))
             cotangents_id, opaque_cot = content_identity(seeds, "cotangent")
             ex.sample_identity = sample_identity(
                 sample, inputs=inputs_id, context=context_id, cotangents=cotangents_id,
@@ -287,7 +287,9 @@ def sample_identity(sample: Sample, *, inputs: Any, context: Any, cotangents: An
 
 def results_digest(results: Mapping[str, Any]) -> str:
     """Content hash of every collected result, by name."""
-    return C.stable_hash({name: (tensor_digest(v) if torch.is_tensor(v) else describe_tree(v))
+    names = [name for name, v in sorted(results.items()) if torch.is_tensor(v)]
+    digests = dict(zip(names, tensor_digests([results[name] for name in names])))
+    return C.stable_hash({name: digests[name] if name in digests else describe_tree(v)
                           for name, v in sorted(results.items())})
 
 

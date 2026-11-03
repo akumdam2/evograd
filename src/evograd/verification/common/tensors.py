@@ -143,16 +143,31 @@ def tensor_digest(t: torch.Tensor) -> str:
     h = hashlib.sha256(f"{tuple(t.shape)}|{t.dtype}".encode())
     flat = t.detach().reshape(-1).contiguous().cpu()
     if flat.numel():
-        h.update(flat.view(torch.uint8).numpy().tobytes() if flat.dtype != torch.bool
-                 else flat.numpy().tobytes())
+        # The array's own buffer: the same bytes as ``tobytes()`` without the copy.
+        h.update(flat.view(torch.uint8).numpy() if flat.dtype != torch.bool else flat.numpy())
     return h.hexdigest()
+
+
+def tensor_digests(tensors: list[torch.Tensor]) -> list[str]:
+    """:func:`tensor_digest` of each tensor, in order, on one thread per CPU (up to 8).
+
+    A whole model's state and gradients are ~25 GB per execution; hashlib and the
+    device copy release the GIL, so the tensors hash in parallel."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = min(8, len(os.sched_getaffinity(0)), len(tensors))
+    if workers < 2:
+        return [tensor_digest(t) for t in tensors]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(tensor_digest, tensors))
 
 
 def module_state_digest(module: torch.nn.Module) -> dict[str, str]:
     """Content hash per unique parameter and buffer, by name."""
-    out = {f"param:{n}": tensor_digest(p) for n, p in module.named_parameters()}
-    out.update({f"buffer:{n}": tensor_digest(b) for n, b in module.named_buffers()})
-    return out
+    named = [(f"param:{n}", p) for n, p in module.named_parameters()]
+    named += [(f"buffer:{n}", b) for n, b in module.named_buffers()]
+    return dict(zip([n for n, _ in named], tensor_digests([t for _, t in named])))
 
 
 # ── RNG ──────────────────────────────────────────────────────────────────────
