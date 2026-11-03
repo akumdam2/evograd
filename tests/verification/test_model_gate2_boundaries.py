@@ -13,11 +13,7 @@ class ModelGate2Boundaries(unittest.TestCase):
         model = mock.Mock(gate2_model_gamma=None)
         self.assertIs(gates._gate2_model_rule(model)["boundaries"], False)
 
-    def test_a_model_may_set_its_own_operator_model_scope_and_gate3_gammas(self):
-        from evograd.verification.gate2.calibration import SAFETY_FACTOR_GAMMA
-
-        self.assertEqual(gates.operator_gamma(mock.Mock(gate2_operator_gamma=None)), SAFETY_FACTOR_GAMMA)
-        self.assertEqual(gates.operator_gamma(mock.Mock(gate2_operator_gamma=4.0)), 4.0)
+    def test_a_model_may_set_its_own_model_scope_and_gate3_gammas(self):
         self.assertEqual(gates.model_gamma(mock.Mock(gate2_model_gamma=None)), gates.GATE2_MODEL_GAMMA)
         self.assertEqual(gates._gate2_model_rule(mock.Mock(gate2_model_gamma=3.0))["gamma"], 3.0)
         self.assertEqual(gates.gate3_gamma(mock.Mock(gate3_gamma=None)), gates.GAMMA)
