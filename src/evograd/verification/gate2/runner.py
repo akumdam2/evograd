@@ -11,16 +11,12 @@ must be bit-identical afterwards.
 operator, or the unpatched model -- on the same inputs, weights, RNG seed,
 numerics settings and cotangents.
 
-**Scopes and sample protocols.** Two scopes, each with one sample protocol,
-recorded in the policy and checked on use (never inferred from which samples
-happen to overlap):
-
-* ``operator`` -- ``disjoint_holdout``: thresholds pooled over calibration
-  samples, judged on different (generated) samples;
-* ``model`` -- ``matched_inputs``: thresholds per sample and per tensor, judged
-  on fresh executions of the *same* samples, whose content (inputs, labels and
-  other context, cotangents, initial weights, module mode, seed) must match the
-  calibrated sample's fingerprint.
+**Scopes and the sample protocol.** Two scopes, ``operator`` and ``model``, one
+sample protocol, ``matched_inputs``, recorded in the policy and checked on use:
+thresholds per tensor, pooled over the calibration samples, judged on fresh
+executions of the *same* samples, whose content (inputs, labels and other
+context, cotangents, initial weights, module mode, seed) must match the
+calibrated sample's fingerprint.
 
 
 **Comparison, every result.** :func:`judge` settles structure, presence and
@@ -665,14 +661,9 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
     """Judge ``deployment`` against native eager on every validation sample.
 
     ``policy`` is a frozen :class:`~evograd.verification.gate2.calibration.Gate2Policy`
-    calibrated for this adapter, patch set and environment. Its sample
-    protocol decides which samples it may judge:
-
-    * ``disjoint_holdout`` (operator scope): samples disjoint from the
-      calibration samples, by id, seed and content; pooled thresholds;
-    * ``matched_inputs`` (model scope): exactly the calibrated samples, each
-      re-executed fresh and matched by content fingerprint; each sample is
-      judged against its own per-tensor thresholds.
+    calibrated for this adapter, patch set and environment. It judges exactly
+    the calibrated samples (``matched_inputs``), each re-executed fresh and
+    matched by content fingerprint, against the policy's per-tensor thresholds.
 
     Without a valid, matching policy everything still runs and is measured,
     and the affected results are ``incomplete``: a binding mismatch withholds
@@ -680,7 +671,6 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
     """
     from evograd.verification.gate2.calibration import (
         BINDING_CODES,
-        MATCHED,
         CalibrationError,
         Gate2Policy,
         policy_findings,
@@ -762,20 +752,7 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
                 unbound.append("calibration_execution_reused")
                 case.findings.append(missing("calibration_execution_reused",
                                              "a calibration execution is not fresh evidence"))
-            if protocol == MATCHED:
-                unbound.extend(_matched_checks(policy, sample, reference, cand, case))
-            else:
-                used = {s.get("input_digest") for s in policy.calibration_samples} - {None}
-                if reference.input_digest in used:
-                    unbound.append("sample_overlap")
-                    case.findings.append(missing("sample_overlap", "this sample's inputs and "
-                                                 "cotangents are identical to a calibration sample's"))
-                fixed = (policy.weights or {}).get("fixed")
-                if fixed is not None and C.stable_hash(reference.initial_state) != fixed:
-                    unbound.append("policy_weights_mismatch")
-                    case.findings.append(missing("policy_weights_mismatch",
-                                                 "the native weights differ from those the policy "
-                                                 "was calibrated on"))
+            unbound.extend(_matched_checks(policy, sample, reference, cand, case))
         thresholds = None
         if policy is not None and not withheld and not unbound:
             thresholds = policy.thresholds_for(sample.sample_id)

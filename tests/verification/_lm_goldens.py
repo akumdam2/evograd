@@ -160,7 +160,7 @@ def _model_scope(workload, site: str) -> dict:
             "sample_fingerprint": ex.sample_identity["fingerprint"],
             "contract_digest": integration_contract(ex).digest(),
             "identity": json.loads(json.dumps(scope.identity(), default=str)),
-            "thresholds": policy.get("thresholds_by_sample") or policy.get("thresholds"),
+            "thresholds": policy["thresholds"],
             "control_measurements": cal.evidence["control_measurements"]}
 
 

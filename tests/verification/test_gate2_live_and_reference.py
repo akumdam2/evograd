@@ -277,7 +277,7 @@ class TestReferenceIdentity(unittest.TestCase):
 
     def test_policies_without_the_binding_are_refused(self):
         _, policy = self.calibrated({"s": native})
-        self.assertEqual(SCHEMA, "evograd-verification-gate2-policy/4")
+        self.assertEqual(SCHEMA, "evograd-verification-gate2-policy/5")
         data = policy.to_dict()
         data["reference"].pop("implementation")
         data.pop("policy_hash")

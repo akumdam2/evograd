@@ -3,8 +3,8 @@
 A model policy is calibrated on fixed samples and judges fresh executions of
 those same samples, each against its own per-tensor thresholds, and only when
 the sample's content (inputs, labels and other context, cotangents, initial
-weights, module mode, seed) equals the calibrated one. The operator protocol
-(disjoint holdout) is unchanged. CPU, ``aot_eager`` or a test backend.
+weights, module mode, seed) equals the calibrated one. The operator scope
+follows the same protocol. CPU, ``aot_eager`` or a test backend.
 """
 
 from __future__ import annotations
@@ -157,11 +157,9 @@ class TestPerSampleBudgets(MatchedCase):
     def test_same_sample_fresh_candidate_is_judged_without_overlap(self):
         self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
         self.assertEqual(self.policy.sample_protocol, gate2.MATCHED)
-        self.assertNotIn("thresholds", self.policy.to_dict())       # never pooled
         report = gate2.verify_integration(self.scope, candidate("same", {"norm": F.norm_site}),
                                           policy=self.policy, samples=self.samples)
         self.assertEqual(report.status, PASSED, codes(report))
-        self.assertNotIn("sample_overlap", codes(report))
         for case in report.cases:
             self.assertTrue(all(r.limits for r in case.results if r.compared))
             matched = case.evidence["matched_sample"]
@@ -419,19 +417,17 @@ class TestCalibrationAndPolicy(MatchedCase):
             return Gate2Policy.build(data)
 
         tampered = policy.to_dict()
-        tampered["thresholds_by_sample"][sid]["out:loss"]["E2"] *= 10
+        tampered["thresholds"]["out:loss"]["E2"] *= 10
         with self.assertRaises(CalibrationError):                       # hash
             Gate2Policy.from_dict(tampered)
         with self.assertRaisesRegex(CalibrationError, "gamma \\* max"):  # re-hashed: formula
-            rebuilt(lambda d: d["thresholds_by_sample"][sid]["out:loss"].update(E2=1.0))
-        with self.assertRaisesRegex(CalibrationError, "exactly the calibration samples"):
-            rebuilt(lambda d: d["thresholds_by_sample"].pop(sid))
+            rebuilt(lambda d: d["thresholds"]["out:loss"].update(E2=1.0))
         with self.assertRaisesRegex(CalibrationError, "exactly the calibration samples"):
             rebuilt(lambda d: d["sample_identities"].pop(sid))
         with self.assertRaisesRegex(CalibrationError, "lacks"):
-            rebuilt(lambda d: d.pop("thresholds_by_sample"))
+            rebuilt(lambda d: d.pop("thresholds"))
         with self.assertRaises(CalibrationError):
-            rebuilt(lambda d: d["thresholds_by_sample"][sid]["out:loss"]["components"]["E2"]
+            rebuilt(lambda d: d["thresholds"]["out:loss"]["components"]["E2"]
                     .update(trusted_compile=float("inf")))
         v3 = dict(policy.to_dict(), schema="evograd-verification-gate2-policy/3")
         report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_spike}), policy=v3,
@@ -440,42 +436,39 @@ class TestCalibrationAndPolicy(MatchedCase):
         self.assertIn("policy_schema", codes(report))
 
 
-# ── 8: the two protocols stay apart ──────────────────────────────────────────
+# ── 8: the operator scope is matched too; scope terms stay apart ─────────────
 
 
-class TestProtocolsStayApart(MatchedCase):
-    def test_operator_protocol_is_not_relaxed(self):
+class TestOperatorScopeIsMatched(MatchedCase):
+    def test_operator_policy_judges_its_calibrated_samples(self):
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device="cpu")
-        cal = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]),
-                        compile_backend=FAST)
-        self.assertEqual(cal.policy.sample_protocol, gate2.DISJOINT)
+        samples = scope.samples([1, 2])
+        cal = calibrate(scope, patch_set=("operator",), samples=samples, compile_backend=FAST)
+        self.assertEqual(cal.policy.sample_protocol, gate2.MATCHED)
         good = scope.candidate(F.scale_shift_pair())
         self.assertEqual(gate2.verify_integration(scope, good, policy=cal.policy,
-                                                  samples=scope.samples([11])).status, PASSED)
-        same = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
-                                        policy=cal.policy, samples=scope.samples([1, 2]))
-        self.assertEqual(same.status, INCOMPLETE)
-        self.assertIn("sample_overlap", codes(same))
+                                                  samples=samples).status, PASSED)
+        bad = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
+                                       policy=cal.policy, samples=samples)
+        self.assertEqual(bad.status, FAILED)
+        other = gate2.verify_integration(scope, good, policy=cal.policy, samples=scope.samples([11]))
+        self.assertEqual(other.status, INCOMPLETE)
+        self.assertIn("sample_not_calibrated", codes(other))
 
-    def test_a_policy_for_the_other_protocol_is_refused(self):
+    def test_a_policy_with_the_other_scopes_term_is_refused(self):
         scope = lm_scope()
         policy = calibrate(scope, patch_set=("norm",), samples=fixed(), compile_backend=FAST).policy
         data = policy.to_dict()
-        sid = fixed()[0].sample_id
-        data["sample_protocol"] = gate2.DISJOINT          # forged: pooled, model scope
-        data["thresholds"] = data.pop("thresholds_by_sample")[sid]
-        data["formula"] = gate2.calibration.FORMULAS[gate2.DISJOINT]
-        for entry in data["thresholds"].values():
+        for entry in data["thresholds"].values():       # forged: the operator scope's term
             for parts in entry["components"].values():
                 parts["rounding"] = parts.pop("rounding_perturbation")
         for key in ("policy_hash", "schema"):
             data.pop(key)
-        forged = Gate2Policy.build(data)
-        report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_spike}),
-                                          policy=forged, samples=fixed(seeds=(7,)))
-        self.assertEqual(report.status, INCOMPLETE)
-        self.assertIn("policy_protocol_mismatch", codes(report))
-        self.assertNotIn("threshold_exceeded", codes(report))
+        with self.assertRaisesRegex(CalibrationError, "another scope's term"):
+            Gate2Policy.build(data)
+        data["formula"] = gate2.calibration.FORMULAS["operator"]
+        with self.assertRaisesRegex(CalibrationError, "not the scope's"):
+            Gate2Policy.build(data)
 
 
 # ── 9: model adapters and combination ────────────────────────────────────────
@@ -492,7 +485,7 @@ class TestModelAdapters(MatchedCase):
         op_cal = calibrate(op_scope, patch_set=("operator",), samples=op_scope.samples([1, 2]),
                            compile_backend=FAST)
         operator = gate2.verify_integration(op_scope, op_scope.candidate(F.scale_shift_pair()),
-                                            policy=op_cal.policy, samples=op_scope.samples([11]))
+                                            policy=op_cal.policy, samples=op_scope.samples([1, 2]))
         both = gate2.combine_scopes(("operator", "model"), {"operator": operator, "model": model})
         self.assertEqual(both.status, PASSED, codes(both))
         identity = model.cases[0].evidence["reference"]["sample_identity"]

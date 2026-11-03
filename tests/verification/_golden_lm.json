@@ -2338,1680 +2338,840 @@
    "results_digest": "b47573ae60a61fec86b4ca524356f26cf39df290125653ef4288a61f5f0ea95e",
    "sample_fingerprint": "4365dfae2d89b622bf8c5bdcd9063d49386cc8a5a02328586bf26ae2783ae5a3",
    "thresholds": {
-    "golden/seed1": {
-     "grad:model.embed_tokens.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5915366364397363e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.1103429994231334e-06,
-        "trusted_compile": 0.0
-       }
+    "grad:model.embed_tokens.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.5915366364397363e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.1103429994231334e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.0098118372411384e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7721542327316352e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6922201660529018e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.456978820017534e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3441638636273738e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.9947716420974297e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2233513333119808e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.519420484156392e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.2083103750267853e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 9.671273487436696e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.435626602767349e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.517663027336606e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2686749981099837e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.392266235508052e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.271912889864251e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.9842480636565708e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.1697796098714314e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0632219932274026e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.8488505068818377e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1304768542429067e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.647979622714485e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.5294823238955476e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.622555534388138e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.554771522903252e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.571133939434993e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0489985587838047e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.814607129378251e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1453983401234254e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.170722800065204e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.017303079374532e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6926923351984726e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3488755577519163e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.871178799609909e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5750813686474228e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.4143698033682104e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.8312573421851942e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.4971646580110596e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 5.567429452146376e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "out:logits": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.429723467374758e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3150625999002832e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "out:loss": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.948106343229064e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.948106343229064e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
      }
     },
-    "golden/seed2": {
-     "grad:model.embed_tokens.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5915366364397363e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.1103429994231334e-06,
-        "trusted_compile": 0.0
-       }
+    "grad:model.layers.0.input_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.0098118372411384e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.7721542327316352e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.0098118372411384e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7721542327316352e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.down_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.6922201660529018e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.456978820017534e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6922201660529018e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.456978820017534e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.gate_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.3441638636273738e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.9947716420974297e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3441638636273738e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.9947716420974297e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.up_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.2233513333119808e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.519420484156392e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2233513333119808e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.519420484156392e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.post_attention_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.2083103750267853e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 9.671273487436696e-07,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.2083103750267853e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 9.671273487436696e-07,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.k_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.435626602767349e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.517663027336606e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.435626602767349e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.517663027336606e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.o_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.2686749981099837e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.392266235508052e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2686749981099837e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.392266235508052e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.q_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.271912889864251e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.9842480636565708e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.271912889864251e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.9842480636565708e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.v_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.1697796098714314e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.0632219932274026e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.1697796098714314e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0632219932274026e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.input_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.8488505068818377e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.1304768542429067e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.8488505068818377e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1304768542429067e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.down_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.647979622714485e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.5294823238955476e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.647979622714485e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.5294823238955476e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.gate_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.622555534388138e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.554771522903252e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.622555534388138e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.554771522903252e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.up_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.571133939434993e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.0489985587838047e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.571133939434993e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0489985587838047e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.post_attention_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.814607129378251e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.1453983401234254e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.814607129378251e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1453983401234254e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.k_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.170722800065204e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.017303079374532e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.170722800065204e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.017303079374532e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.o_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.6926923351984726e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.3488755577519163e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6926923351984726e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3488755577519163e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.q_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.871178799609909e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.5750813686474228e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.871178799609909e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5750813686474228e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.v_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.4143698033682104e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.8312573421851942e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.4143698033682104e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.8312573421851942e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.4971646580110596e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 5.567429452146376e-07,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.4971646580110596e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 5.567429452146376e-07,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "out:logits": {
+     "E2": 2e-05,
+     "Emax": 0.002,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 1e-05,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.429723467374758e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.3150625999002832e-06,
+       "trusted_compile": 0.0
       }
      },
-     "out:logits": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.429723467374758e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3150625999002832e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "output",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "out:loss": {
+     "E2": 2e-05,
+     "Emax": 0.002,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 1e-05,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.948106343229064e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.948106343229064e-07,
+       "trusted_compile": 0.0
       }
      },
-     "out:loss": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.948106343229064e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.948106343229064e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
+     "envelope": 0.0,
+     "kind": "output",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
      }
     }
    }
@@ -6619,1984 +5779,992 @@
    "results_digest": "2a09bdaa6c5bec2e252c3e9b9965502c43fb3706498777a949b5dcd1e9545985",
    "sample_fingerprint": "a18f80582f2272986d04a63ad76a5477b07f0ee5e9d0ad3f32cd3863813ac476",
    "thresholds": {
-    "golden/seed1": {
-     "grad:model.embed_tokens.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3569690564061517e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.258219546868733e-06,
-        "trusted_compile": 0.0
-       }
+    "grad:model.embed_tokens.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.3569690564061517e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.258219546868733e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.974403177853949e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1158108662481538e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2580891993470557e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.509547165008852e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.7904644717574846e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3849549870842903e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.881819609469458e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2501817055569573e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.7171771336972936e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6313817264527941e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.k_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 8.820183369859027e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.8440074877303497e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.366059332617185e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7228078833550406e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.9607704918776966e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7836272246306544e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.q_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 8.960137006830275e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.935275212222766e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.5585768006233825e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.1419723125833596e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.0.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.657837098819114e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.616488487078153e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.1849626422783296e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 9.468982757803703e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.9288674342863797e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.8154233837834542e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.826706473556331e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0673764326463886e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.780962876694716e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.335558496967076e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.0243085171298464e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1716697407616407e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.k_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.029682887819031e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.100466419164592e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.5934187628997576e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0765221905329626e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7421101423013795e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3609561305604036e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.q_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.726456080038771e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.258925321458563e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.58953059570575e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.143314706090549e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.layers.1.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.7001660465108214e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5487349670725668e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "grad:model.norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7858324009705568e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 5.97386508493524e-07,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "out:logits": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6311371833587895e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.324669857857358e-06,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
-     },
-     "out:loss": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 0.0,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 0.0,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
      }
     },
-    "golden/seed2": {
-     "grad:model.embed_tokens.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3569690564061517e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.258219546868733e-06,
-        "trusted_compile": 0.0
-       }
+    "grad:model.layers.0.input_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.974403177853949e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.1158108662481538e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.974403177853949e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1158108662481538e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.down_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.2580891993470557e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.509547165008852e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2580891993470557e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.509547165008852e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.gate_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.7904644717574846e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.3849549870842903e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.7904644717574846e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.3849549870842903e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.mlp.up_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.881819609469458e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.2501817055569573e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.881819609469458e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.2501817055569573e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.post_attention_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.7171771336972936e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.6313817264527941e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.7171771336972936e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6313817264527941e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.k_norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 8.820183369859027e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.8440074877303497e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.k_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 8.820183369859027e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.8440074877303497e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.k_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.366059332617185e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.7228078833550406e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.366059332617185e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7228078833550406e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.o_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.9607704918776966e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.7836272246306544e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.9607704918776966e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7836272246306544e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.q_norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 8.960137006830275e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.935275212222766e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.q_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 8.960137006830275e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.935275212222766e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.q_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.5585768006233825e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.1419723125833596e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.5585768006233825e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.1419723125833596e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.0.self_attn.v_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.657837098819114e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.616488487078153e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.0.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.657837098819114e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.616488487078153e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.input_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.1849626422783296e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 9.468982757803703e-07,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.input_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.1849626422783296e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 9.468982757803703e-07,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.down_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.9288674342863797e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.8154233837834542e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.down_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.9288674342863797e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.8154233837834542e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.gate_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.826706473556331e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.0673764326463886e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.gate_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.826706473556331e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0673764326463886e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.mlp.up_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.780962876694716e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.335558496967076e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.mlp.up_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.780962876694716e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.335558496967076e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.post_attention_layernorm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.0243085171298464e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.1716697407616407e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.post_attention_layernorm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.0243085171298464e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.1716697407616407e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.k_norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.029682887819031e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.100466419164592e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.k_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.029682887819031e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.100466419164592e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.k_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.5934187628997576e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.0765221905329626e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.k_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.5934187628997576e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.0765221905329626e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.o_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.7421101423013795e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.3609561305604036e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.o_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7421101423013795e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.3609561305604036e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.q_norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 4.726456080038771e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.258925321458563e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.q_norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 4.726456080038771e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.258925321458563e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.q_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 3.58953059570575e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.143314706090549e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.q_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 3.58953059570575e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.143314706090549e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.layers.1.self_attn.v_proj.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 2.7001660465108214e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.5487349670725668e-06,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.layers.1.self_attn.v_proj.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 2.7001660465108214e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.5487349670725668e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "grad:model.norm.weight": {
+     "E2": 0.0002,
+     "Emax": 0.02,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 0.0001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.7858324009705568e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.01,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 5.97386508493524e-07,
+       "trusted_compile": 0.0
       }
      },
-     "grad:model.norm.weight": {
-      "E2": 0.0002,
-      "Emax": 0.02,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 0.0001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.7858324009705568e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.01,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 5.97386508493524e-07,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "param_grad",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "out:logits": {
+     "E2": 2e-05,
+     "Emax": 0.002,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 1e-05,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.6311371833587895e-07,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "param_grad",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 1.324669857857358e-06,
+       "trusted_compile": 0.0
       }
      },
-     "out:logits": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.6311371833587895e-07,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 1.324669857857358e-06,
-        "trusted_compile": 0.0
-       }
+     "envelope": 0.0,
+     "kind": "output",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
+     }
+    },
+    "out:loss": {
+     "E2": 2e-05,
+     "Emax": 0.002,
+     "components": {
+      "E2": {
+       "binding": "floor",
+       "floor": 1e-05,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 0.0,
+       "trusted_compile": 0.0
       },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
+      "Emax": {
+       "binding": "floor",
+       "floor": 0.001,
+       "gamma": 2.0,
+       "native_repeat": 0.0,
+       "rounding_perturbation": 0.0,
+       "trusted_compile": 0.0
       }
      },
-     "out:loss": {
-      "E2": 2e-05,
-      "Emax": 0.002,
-      "components": {
-       "E2": {
-        "binding": "floor",
-        "floor": 1e-05,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 0.0,
-        "trusted_compile": 0.0
-       },
-       "Emax": {
-        "binding": "floor",
-        "floor": 0.001,
-        "gamma": 2.0,
-        "native_repeat": 0.0,
-        "rounding_perturbation": 0.0,
-        "trusted_compile": 0.0
-       }
-      },
-      "envelope": 0.0,
-      "kind": "output",
-      "samples": {
-       "native_repeat": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "rounding_perturbation": [
-        "golden/seed1",
-        "golden/seed2"
-       ],
-       "trusted_compile": [
-        "golden/seed1",
-        "golden/seed2"
-       ]
-      }
+     "envelope": 0.0,
+     "kind": "output",
+     "samples": {
+      "native_repeat": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "rounding_perturbation": [
+       "golden/seed1",
+       "golden/seed2"
+      ],
+      "trusted_compile": [
+       "golden/seed1",
+       "golden/seed2"
+      ]
      }
     }
    }

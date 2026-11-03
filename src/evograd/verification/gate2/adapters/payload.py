@@ -9,10 +9,8 @@ exact layouts, and every branch at a sample (native, its repeats, the compile
 control, the candidate) runs on isolated copies of the same payload.
 
 Sample ids carry the corpus, batch, case and call identity. ``Sample.seed``
-encodes ``data_order * 10**6 + index_in_step``: unique per invocation (the
-operator protocol requires distinct calibration seeds) and disjoint between
-batches, so the calibration/holdout separation (by id and by seed) keeps
-batches 101/202 apart from 303/404. The
+encodes ``data_order * 10**6 + index_in_step``: unique per invocation
+(calibration requires distinct seeds) and disjoint between batches. The
 adapter identity binds the corpus content, so a policy calibrated on generated
 inputs (or another corpus) is a binding mismatch here.
 """

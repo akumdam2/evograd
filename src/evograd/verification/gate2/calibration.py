@@ -1,39 +1,36 @@
 """Gate 2 calibration: thresholds from trusted controls only, frozen before use.
 
-Two sample protocols, one per scope, recorded in the policy
-(:data:`SAMPLE_PROTOCOLS`):
+One sample protocol at both scopes, ``matched_inputs``, recorded in the policy
+(:data:`SAMPLE_PROTOCOLS`). For every required result ``z`` and metric
+``m in {E2, Emax}``, pooled over the calibration samples ``x``::
 
-* ``disjoint_holdout`` (operator scope). For every required result ``z`` and
-  metric ``m in {E2, Emax}``, pooled over the calibration samples ``c``::
+    T[z, m] = gamma * max( max_x max_r E_m(native repeat_r[x], native[x]),
+                           max_x E_m(trusted compile[x], native[x]),
+                           floor[z, m], scope term[z, m] )
 
-      T[z, m] = gamma * max( max_c E_m(native repeat_c, native_c),
-                             max_c E_m(trusted compile_c, native_c),
-                             floor[z, m], max_c rounding_m(native_c[z]) )
+and judged on fresh executions of the *same* samples: a sample is used only
+when its content fingerprint (inputs, labels and other context, cotangents,
+initial weights, module mode, seed) equals the calibrated one. The budget of
+a tensor is the largest drift the controls showed on it over the inputs it is
+judged on. Neither a held-out sample nor a per-sample budget gives that: on
+held-out payloads the compile control itself exceeded a budget pooled over the
+other batches (Qwen2-VL vision_mlp ``grad:up_bias``, order 404, 2026-11-03),
+which left the case without a verdict for any candidate; a per-sample budget
+was a single draw of compile's rounding on that tensor, and a candidate whose
+rounding differs from compile's exceeded it on a few scattered tensors per
+sample for no fault of its own.
 
-  and judged on validation samples disjoint from them (id, seed, content).
-  ``rounding`` (:func:`rounding_floor`) is one rounding of every element in
-  the result's dtype, which a correct reimplementation may differ by.
+The scope term (:data:`SCOPE_TERMS`):
 
-* ``matched_inputs`` (model scope). Pooled over the fixed samples ``x``::
-
-      T[z, m] = gamma * max( max_x max_r E_m(native repeat_r[x], native[x]),
-                             max_x E_m(trusted compile[x], native[x]),
-                             floor[z, m],
-                             max_x max_k E_m(rounding perturbation_k[x], native[x]) )
-
-  and judged on fresh executions of the *same* samples: a sample is used only
-  when its content fingerprint (inputs, labels and other context, cotangents,
-  initial weights, module mode, seed) equals the calibrated one. The budget of
-  a tensor is the largest drift the controls showed on it over the calibrated
-  inputs (the operator scope's formula over its calibration payloads): a
-  per-sample budget was a single draw of compile's rounding on that tensor,
-  and a candidate whose rounding differs from compile's exceeded it on a few
-  scattered tensors per sample for no fault of its own. The rounding
-  perturbation (:func:`rounding_control`, under each of the fixed
-  :data:`ROUNDING_SEEDS`) is the native site with its outputs and input
-  gradients moved within one rounding: where compile reproduces the native
-  site bit for bit, it is what a correct reimplementation that rounds
-  differently does to the whole model.
+* operator scope, ``rounding`` (:func:`rounding_floor`): ``max_x
+  rounding_m(native[x][z])``, one rounding of every element in the result's
+  dtype, which a correct reimplementation may differ by;
+* model scope, ``rounding_perturbation``: ``max_x max_k E_m(rounding
+  perturbation_k[x], native[x])``. The rounding perturbation
+  (:func:`rounding_control`, under each of the fixed :data:`ROUNDING_SEEDS`)
+  is the native site with its outputs and input gradients moved within one
+  rounding: where compile reproduces the native site bit for bit, it is what
+  a correct reimplementation that rounds differently does to the whole model.
 
 ``gamma`` is the named safety factor
 :data:`SAFETY_FACTOR_GAMMA` (initially 2); floors are the starting values
@@ -51,14 +48,12 @@ Rules this module enforces:
   replaced site and a second run reproducing the first bit for bit). A
   disqualified or missing control yields no policy. Whether the native
   repeats were bitwise is recorded per sample (``repeatability``);
-* each tensor keeps its own thresholds, matched by stable name (and, for
-  ``matched_inputs``, by sample);
+* each tensor keeps its own thresholds, matched by stable name;
 * the policy binds scope, sample protocol, case identity, numerics,
   environment, patch set, output contract, reference and control identities,
   the calibration samples with their content identities, and the calibration
-  execution ids; :func:`policy_findings` refuses any mismatch; for
-  ``disjoint_holdout`` also any overlap between calibration and validation
-  samples, for ``matched_inputs`` any sample that was not calibrated.
+  execution ids; :func:`policy_findings` refuses any mismatch and any sample
+  that was not calibrated.
 * every threshold entry is re-derived from its recorded components when a
   policy is loaded; an entry that does not follow the formula is refused.
 """
@@ -99,21 +94,20 @@ from evograd.verification.gate2.runner import (
     run_callable,
 )
 
-#: /4 records the sample protocol (and per-sample thresholds and content
-#: identities for ``matched_inputs``). /3 policies are never reinterpreted.
-SCHEMA = "evograd-verification-gate2-policy/4"
+#: /5: matched inputs and one pooled threshold table at both scopes, with each
+#: calibration sample's content identity. /4 and older policies are never reinterpreted.
+SCHEMA = "evograd-verification-gate2-policy/5"
 
-#: Sample protocols. The scope decides which one applies; the policy records it.
-DISJOINT = "disjoint_holdout"
+#: The sample protocol of each scope; the policy records it.
 MATCHED = "matched_inputs"
-SAMPLE_PROTOCOLS = {"operator": DISJOINT, "model": MATCHED}
+SAMPLE_PROTOCOLS = {"operator": MATCHED, "model": MATCHED}
 
 #: Findings that make a policy's thresholds inapplicable to the whole run:
 #: verify_integration measures but withholds every numeric judgement.
 BINDING_CODES = frozenset({
     "policy_schema", "policy_protocol_mismatch", "policy_scope_mismatch", "policy_case_mismatch",
     "policy_numerics_mismatch", "policy_patch_set_mismatch", "policy_reference_mismatch",
-    "reference_unidentifiable", "policy_environment_mismatch", "sample_overlap", "unknown_scope",
+    "reference_unidentifiable", "policy_environment_mismatch", "unknown_scope",
 })
 
 #: The named safety factor. A design choice, not a guarantee.
@@ -136,7 +130,8 @@ ROUNDING_PROBABILITY = 1.0 / 3.0
 ROUNDING_SEEDS = (11, 22, 33, 44)
 
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = "gate2-calibration/4: operator rounding floor, model rounding perturbation"
+CALIBRATION_PROCEDURE = ("gate2-calibration/5: matched inputs at both scopes; operator rounding "
+                         "floor, model rounding perturbation")
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 ROUNDING_PERTURBATION = "rounding_perturbation"
@@ -306,9 +301,8 @@ class Gate2Policy:
                                    "recalibrate under the current protocol")
         absent = [k for k in REQUIRED_FIELDS if k not in data]
         protocol = data.get("sample_protocol")
-        if protocol not in (DISJOINT, MATCHED):
+        if protocol != MATCHED:
             raise CalibrationError(f"unknown sample protocol {protocol!r}")
-        absent += [k for k in PROTOCOL_FIELDS[protocol] if k not in data]
         if absent:
             raise CalibrationError(f"policy lacks {absent}")
         if not isinstance(data["reference"], dict) or not data["reference"].get("implementation"):
@@ -336,13 +330,10 @@ class Gate2Policy:
         return json.loads(self.text)
 
     def thresholds_for(self, sample_id: str) -> dict[str, Any] | None:
-        """The thresholds that judge ``sample_id``: the pooled ones under
-        ``disjoint_holdout``; that sample's own under ``matched_inputs``
-        (``None`` for a sample that was not calibrated)."""
+        """The thresholds that judge ``sample_id``: the pooled ones for a
+        calibrated sample, ``None`` for any other."""
         data = self.to_dict()
-        if data["sample_protocol"] == MATCHED:
-            return data["thresholds_by_sample"].get(sample_id)
-        return data["thresholds"]
+        return data["thresholds"] if sample_id in data["sample_identities"] else None
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_") or name == "text":
@@ -357,24 +348,21 @@ class Gate2Policy:
 REQUIRED_FIELDS = ("scope", "sample_protocol", "adapter", "numerics", "environment", "patch_set",
                    "reference", "contract", "contract_digest", "calibration_samples",
                    "sample_identities", "calibration_executions", "weights", "gamma", "floors",
-                   "epsilon", "boundaries", "formula", "policy_hash")
-#: And per sample protocol.
-PROTOCOL_FIELDS = {DISJOINT: ("thresholds",), MATCHED: ("thresholds_by_sample",)}
+                   "epsilon", "boundaries", "formula", "thresholds", "policy_hash")
 
+_CONTROL_TERMS = ("T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
+                  "max_x E_m(compile[x], native[x]), floor[z,m], ")
 FORMULAS = {
-    DISJOINT: "T[z,m] = gamma * max(max_c E_m(native_repeat_c, native_c), "
-              "max_c E_m(compile_c, native_c), floor[z,m], max_c rounding_m(native_c[z])); "
-              f"rounding: E2 = unit roundoff of z's dtype, Emax = {ROUNDING_ULPS:g} ulps of "
-              "max|native_c[z]| / RMS(native_c[z])",
-    MATCHED: "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
-             "max_x E_m(compile[x], native[x]), floor[z,m], "
-             "max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged on the calibrated "
-             f"samples x; rounding_perturbation_k: every replaced site's floating outputs and input "
-             f"gradients moved one ulp with probability {ROUNDING_PROBABILITY:.4g} under seed k, "
-             "each tensor within one rounding (E2 <= unit roundoff)",
+    "operator": _CONTROL_TERMS + "max_x rounding_m(native[x][z])), judged on the calibrated "
+                f"samples x; rounding: E2 = unit roundoff of z's dtype, Emax = {ROUNDING_ULPS:g} "
+                "ulps of max|native[x][z]| / RMS(native[x][z])",
+    "model": _CONTROL_TERMS + "max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged "
+             "on the calibrated samples x; rounding_perturbation_k: every replaced site's floating "
+             f"outputs and input gradients moved one ulp with probability {ROUNDING_PROBABILITY:.4g} "
+             "under seed k, each tensor within one rounding (E2 <= unit roundoff)",
 }
-#: The term each sample protocol adds to the control terms.
-PROTOCOL_TERMS = {DISJOINT: "rounding", MATCHED: ROUNDING_PERTURBATION}
+#: The term each scope adds to the control terms.
+SCOPE_TERMS = {"operator": "rounding", "model": ROUNDING_PERTURBATION}
 
 
 def _content_hash(data: Mapping[str, Any]) -> str:
@@ -383,25 +371,21 @@ def _content_hash(data: Mapping[str, Any]) -> str:
 
 def _check_thresholds(data: Mapping[str, Any]) -> None:
     """Every entry must follow the policy's formula from its own components."""
-    protocol = data["sample_protocol"]
-    if data.get("formula") != FORMULAS[protocol]:
-        raise CalibrationError("the policy formula is not the protocol's")
+    scope = data["scope"]
+    if scope not in FORMULAS:
+        raise CalibrationError(f"unknown scope {scope!r}")
+    if data.get("formula") != FORMULAS[scope]:
+        raise CalibrationError("the policy formula is not the scope's")
     gamma = validate_gamma(data["gamma"])
     floors = validate_floors(data["floors"])
-    if protocol == MATCHED:
-        ids = [s.get("sample_id") for s in data["calibration_samples"]]
-        if sorted(data["thresholds_by_sample"]) != sorted(ids) or \
-                sorted(data["sample_identities"]) != sorted(ids) or len(set(ids)) != len(ids):
-            raise CalibrationError("per-sample thresholds and identities must cover exactly the "
-                                   "calibration samples")
-        groups = list(data["thresholds_by_sample"].items())
-    else:
-        groups = [("pooled", data["thresholds"])]
-    for label, table in groups:
-        if not isinstance(table, Mapping) or not table:
-            raise CalibrationError(f"{label}: no thresholds")
-        for name, entry in table.items():
-            _check_entry(f"{label}/{name}", entry, gamma, floors, term=PROTOCOL_TERMS[protocol])
+    ids = [s.get("sample_id") for s in data["calibration_samples"]]
+    if sorted(data["sample_identities"]) != sorted(ids) or len(set(ids)) != len(ids):
+        raise CalibrationError("sample identities must cover exactly the calibration samples")
+    table = data["thresholds"]
+    if not isinstance(table, Mapping) or not table:
+        raise CalibrationError("no thresholds")
+    for name, entry in table.items():
+        _check_entry(name, entry, gamma, floors, term=SCOPE_TERMS[scope])
 
 
 def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mapping[str, float]],
@@ -416,7 +400,7 @@ def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mappi
     terms = ("native_repeat", "trusted_compile", "floor", term)
     for metric in METRICS:
         parts = (entry.get("components") or {}).get(metric) or {}
-        foreign = set(PROTOCOL_TERMS.values()) - {term}
+        foreign = set(SCOPE_TERMS.values()) - {term}
         if foreign & set(parts):
             raise CalibrationError(f"{name}/{metric}: {sorted(foreign & set(parts))} is another "
                                    "scope's term")
@@ -485,32 +469,22 @@ def policy_findings(policy: Any, adapter: ScopeAdapter, deployment: Deployment,
     if differences:
         out.append(missing("policy_environment_mismatch", "; ".join(differences[:6]),
                            differences=differences))
-    calibration = data.get("calibration_samples") or []
-    if data.get("sample_protocol") == MATCHED:
-        # The same samples, re-executed: each must be a calibrated sample (same
-        # id, seed and recipe; its content is checked when it runs), and every
-        # calibrated sample is required -- none may be left out.
-        known = {s["sample_id"]: s for s in calibration}
-        for sample in samples:
-            stored = known.get(sample.sample_id)
-            if stored is None or int(stored["seed"]) != int(sample.seed) or \
-                    dict(stored.get("config") or {}) != jsonable(dict(sample.config)):
-                out.append(missing("sample_not_calibrated",
-                                   f"{sample.sample_id!r} (seed {sample.seed}) is not a calibrated "
-                                   "sample of this matched-input policy; no budget applies",
-                                   subject=sample.sample_id))
-        absent = sorted(set(known) - set(ids))
-        if absent:
-            out.append(missing("required_sample_missing",
-                               f"calibrated samples not verified: {absent}", samples=absent))
-        return out
-    used_ids = {s["sample_id"] for s in calibration}
-    used_seeds = {int(s["seed"]) for s in calibration}
-    overlap = sorted({s.sample_id for s in samples if s.sample_id in used_ids} |
-                     {s.sample_id for s in samples if int(s.seed) in used_seeds})
-    if overlap:
-        out.append(missing("sample_overlap", "validation samples were used for calibration "
-                                             f"(by id or seed): {overlap}", samples=overlap))
+    # The same samples, re-executed: each must be a calibrated sample (same id,
+    # seed and recipe; its content is checked when it runs), and every
+    # calibrated sample is required -- none may be left out.
+    known = {s["sample_id"]: s for s in data.get("calibration_samples") or []}
+    for sample in samples:
+        stored = known.get(sample.sample_id)
+        if stored is None or int(stored["seed"]) != int(sample.seed) or \
+                dict(stored.get("config") or {}) != jsonable(dict(sample.config)):
+            out.append(missing("sample_not_calibrated",
+                               f"{sample.sample_id!r} (seed {sample.seed}) is not a calibrated "
+                               "sample of this matched-input policy; no budget applies",
+                               subject=sample.sample_id))
+    absent = sorted(set(known) - set(ids))
+    if absent:
+        out.append(missing("required_sample_missing",
+                           f"calibrated samples not verified: {absent}", samples=absent))
     return out
 
 
@@ -798,7 +772,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
               gamma: float = SAFETY_FACTOR_GAMMA,
               floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
               boundaries: bool = False,
-              validation_samples: Sequence[Sample] | None = None,
               rounding_seeds: Sequence[int] = ROUNDING_SEEDS) -> CalibrationResult:
     """Derive and freeze a Gate 2 policy for ``patch_set`` on this adapter.
 
@@ -810,17 +783,9 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     compile control gets its own thresholds too, from the native site
     implementation run twice and the compiled one, on the call's own inputs
     and upstream gradient. At model scope, one :func:`rounding_control` per
-    seed in ``rounding_seeds`` as well.
-
-    The scope's sample protocol (:data:`SAMPLE_PROTOCOLS`) decides how the
-    measurements become thresholds: pooled over samples (``disjoint_holdout``)
-    or per sample (``matched_inputs``).
-
-    If ``validation_samples`` is supplied for operator scope, independently
-    check the compiled control on those held-out inputs against the frozen
-    policy. Validation errors never enlarge the thresholds. A control that
-    fails leaves calibration incomplete, rather than blaming candidates for
-    an error budget that does not admit its own trusted implementation.
+    seed in ``rounding_seeds`` as well; at operator scope, each result's
+    :func:`rounding_floor`. The thresholds are pooled over ``samples`` and
+    judge fresh executions of exactly those samples.
 
     Returns no policy, with the reasons, if any control fails to qualify or
     any required threshold lacks evidence.
@@ -837,9 +802,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     if protocol is None:
         result.findings.append(missing("unknown_scope", f"scope {adapter.scope!r} is not a Gate 2 "
                                                         f"scope {tuple(SAMPLE_PROTOCOLS)}"))
-    if validation_samples is not None and (protocol != DISJOINT or not validation_samples):
-        result.findings.append(missing("invalid_calibration_parameters",
-                                       "validation_samples requires a nonempty operator holdout"))
+    perturbed = adapter.scope == "model"   # its scope term; the operator scope's is the rounding floor
     patch_set = tuple(sorted(patch_set))
     if not patch_set:
         result.findings.append(missing("empty_patch_set", "a policy is calibrated for replaced sites"))
@@ -855,8 +818,8 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         result.findings.append(missing("invalid_calibration_parameters",
                                        "native_repeats must be an int >= 2"))
     rounding_seeds = tuple(rounding_seeds)
-    if protocol == MATCHED and (not rounding_seeds or len(set(rounding_seeds)) != len(rounding_seeds)
-                                or not all(isinstance(k, int) for k in rounding_seeds)):
+    if perturbed and (not rounding_seeds or len(set(rounding_seeds)) != len(rounding_seeds)
+                      or not all(isinstance(k, int) for k in rounding_seeds)):
         result.findings.append(missing("invalid_calibration_parameters",
                                        "rounding_seeds must be distinct ints, at least one"))
     if result.findings:
@@ -923,7 +886,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for spec in contract.compared():
             if not spec.exact:
                 kinds[sid][spec.name] = spec.kind
-                if protocol == DISJOINT:
+                if not perturbed:
                     least = rounding.setdefault(spec.name, {m: 0.0 for m in METRICS})
                     for m, value in rounding_floor(reference.results[spec.name]).items():
                         least[m] = max(least[m], value)
@@ -932,7 +895,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                     "reference_results_digest": reference.results_digest,
                     "executions": {"native": reference.execution_id, "native_repeats": [],
                                    "compile": None,
-                                   **({ROUNDING_PERTURBATION: []} if protocol == MATCHED else {})},
+                                   **({ROUNDING_PERTURBATION: []} if perturbed else {})},
                     "control_results_digests": {"native_repeats": [], "compile": None}}
         identities[sid] = identity
         for repeat in range(1, native_repeats):
@@ -945,7 +908,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             measurements.extend(got)
             result.findings.extend(problems)
             del again  # its evidence and scalar measurements have been recorded
-        for seed in rounding_seeds if protocol == MATCHED else ():
+        for seed in rounding_seeds if perturbed else ():
             moved = execute(adapter, rounding_control(adapter, patch_set, seed), sample)
             executions.append(moved.execution_id)
             identity["executions"][ROUNDING_PERTURBATION].append(moved.execution_id)
@@ -1011,7 +974,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                                                subject=sid))
             got, bkinds, problems = _boundary_measurements(
                 adapter, control, ctl, native_repeat_fn=adapter.native_site,
-                rounding_seeds=rounding_seeds if protocol == MATCHED else ())
+                rounding_seeds=rounding_seeds if perturbed else ())
             measurements.extend(got)
             kinds[sid].update(bkinds)
             result.findings.extend(problems)
@@ -1039,44 +1002,20 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for table in kinds.values():
             union.update(table)
         table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors,
-                                  rounding=rounding if protocol == DISJOINT else None,
-                                  perturbed=protocol == MATCHED)
-        if protocol == MATCHED:
-            # Pooled over the matched samples; the per-sample layout says which
-            # samples the policy judges (each by its content identity).
-            by_sample = {sid: table for sid in kinds}
-            pooled = None
-        else:
-            pooled, by_sample = table, None
+                                  rounding=None if perturbed else rounding, perturbed=perturbed)
     except CalibrationError as exc:
         result.findings.append(missing("insufficient_calibration", str(exc)))
         return result
     result.policy = freeze_policy(
         adapter, patch_set=patch_set, contract=contract, samples=samples,
-        thresholds=pooled, thresholds_by_sample=by_sample, gamma=gamma, floors=floors,
-        boundaries=boundaries,
+        thresholds=table, gamma=gamma, floors=floors, boundaries=boundaries,
         controls={"native_repeats": native_repeats, "compile": control.describe(),
                   "compile_graphs": dict(graphs),
                   **({ROUNDING_PERTURBATION: {"seeds": list(rounding_seeds),
                                               "probability": ROUNDING_PROBABILITY}}
-                     if protocol == MATCHED else {})},
+                     if perturbed else {})},
         input_digests=input_digests, weight_digests=sorted(weight_digests),
         sample_identities=identities, executions=executions)
-    if validation_samples is not None:
-        from evograd.verification.gate2.runner import verify_integration
-
-        validation = verify_integration(adapter, control, policy=result.policy,
-                                        samples=validation_samples)
-        result.evidence["holdout_validation"] = validation.to_dict()
-        if validation.status != "passed":
-            # Keep the proposed limits for diagnosis, but do not issue an
-            # applicable policy or use the holdout to fit a larger budget.
-            result.evidence["unqualified_policy"] = result.policy.to_dict()
-            result.policy = None
-            result.findings.append(missing(
-                "control_holdout_disqualified",
-                "the compiled control did not pass the frozen policy on acceptance inputs; "
-                "operator calibration is incomplete", control_status=validation.status))
     result.evidence["seconds"] = time.perf_counter() - started
     return result
 
@@ -1098,14 +1037,12 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
                   controls: Mapping[str, Any], gamma: float, floors: Mapping[str, Any],
                   boundaries: bool, input_digests: Mapping[str, str | None] | None = None,
                   weight_digests: Sequence[str] = (),
-                  thresholds_by_sample: Mapping[str, Mapping[str, Any]] | None = None,
                   sample_identities: Mapping[str, Mapping[str, Any]] | None = None,
                   executions: Sequence[str] = ()) -> Gate2Policy:
     """Bind thresholds to everything they were measured under, and freeze them.
 
-    The sample protocol is the scope's. ``thresholds`` (pooled) for
-    ``disjoint_holdout``; ``thresholds_by_sample`` and the samples' content
-    ``sample_identities`` for ``matched_inputs``.
+    ``thresholds`` are pooled over the calibration samples and judge the
+    samples of ``sample_identities`` (their content identities), no other.
 
     :func:`calibrate` is the only producer of real policies. Tests use this to
     freeze explicitly labelled synthetic thresholds through the same binding.
@@ -1130,19 +1067,15 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
                                 for s in samples],
         "sample_identities": dict(sample_identities or {}),
         "calibration_executions": list(executions),
-        # One native initial state across all calibration samples binds the
-        # policy to those weights; weights drawn per sample cannot be bound
-        # this way (under matched_inputs each sample's identity binds its own).
+        # The native initial states of the calibration samples (evidence; each
+        # sample's identity binds its own).
         "weights": {"initial_state_digests": list(weight_digests),
                     "fixed": weight_digests[0] if len(weight_digests) == 1 else None},
         "gamma": gamma,
         "floors": dict(floors),
         "epsilon": EPSILON,
         "boundaries": bool(boundaries),
-        "formula": FORMULAS[protocol],
+        "formula": FORMULAS[adapter.scope],
+        "thresholds": dict(thresholds or {}),
     }
-    if protocol == MATCHED:
-        content["thresholds_by_sample"] = dict(thresholds_by_sample or {})
-    else:
-        content["thresholds"] = dict(thresholds or {})
     return Gate2Policy.build(content)

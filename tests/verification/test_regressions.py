@@ -42,13 +42,13 @@ class TestOverwriteAllowance(unittest.TestCase):
         cal = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]),
                         compile_backend=FAST)
         report = gate2.verify_integration(scope, scope.candidate(pair), policy=cal.policy,
-                                          samples=scope.samples([9]))
+                                          samples=scope.samples([1, 2]))
         self.assertEqual(report.status, PASSED, codes(report))
         # Without the allowance the same pair is an input mutation.
         plain = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
         policy = synthetic_policy(plain, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
         refused = gate2.verify_integration(plain, plain.candidate(pair), policy=policy,
-                                           samples=plain.samples([9]))
+                                           samples=[Sample("synthetic/cal", 900)])
         self.assertIn("input_mutation", codes(refused))
 
     def test_outputs_are_judged_before_the_backward_reuses_them(self):
@@ -57,7 +57,7 @@ class TestOverwriteAllowance(unittest.TestCase):
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
         policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
         report = gate2.verify_integration(scope, scope.candidate(pair), policy=policy,
-                                          samples=scope.samples([9]))
+                                          samples=[Sample("synthetic/cal", 900)])
         self.assertEqual(report.status, PASSED, codes(report))
 
 

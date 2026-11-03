@@ -66,7 +66,7 @@ SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
 
 def synthetic_entry(kind, limit, gamma=2.0, *, term):
     """A threshold entry whose components reproduce ``limit`` under the formula,
-    with the protocol's own ``term`` (``PROTOCOL_TERMS``) at 0."""
+    with the scope's own ``term`` (``SCOPE_TERMS``) at 0."""
     floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
     entry = {"kind": kind, "components": {}}
     for metric in ("E2", "Emax"):
@@ -81,22 +81,18 @@ def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthet
                      boundaries=False):
     """Freeze hand-written thresholds through the real binding. Not calibration.
 
-    The scope's sample protocol decides the layout: pooled thresholds for an
-    operator, the same table for each (natively executed) sample for a model.
+    One pooled table, judging the (natively executed) calibration samples.
     """
     cal = [Sample(i, s) for i, s in calibration]
     natives = {s.sample_id: gate2.execute(scope, Deployment.native(), s) for s in cal}
     contract = gate2.integration_contract(natives[cal[0].sample_id])
-    matched = gate2.SAMPLE_PROTOCOLS[scope.scope] == gate2.MATCHED
     table = {s.name: synthetic_entry(s.kind, thresholds_for(s),
-                                     term=gate2.calibration.PROTOCOL_TERMS[gate2.SAMPLE_PROTOCOLS[scope.scope]])
+                                     term=gate2.calibration.SCOPE_TERMS[scope.scope])
              for s in contract.compared() if not s.exact}
     identities = {sid: {**ex.sample_identity, "reference_results_digest": ex.results_digest}
                   for sid, ex in natives.items()}
     return freeze_policy(scope, patch_set=patch_set, contract=contract, samples=cal,
-                         thresholds=None if matched else table,
-                         thresholds_by_sample={sid: table for sid in natives} if matched else None,
-                         sample_identities=identities,
+                         thresholds=table, sample_identities=identities,
                          input_digests={sid: ex.input_digest for sid, ex in natives.items()},
                          controls={"synthetic": True}, gamma=2.0, floors=SYNTHETIC_FLOORS,
                          boundaries=boundaries)
@@ -117,7 +113,7 @@ class TestOperatorScope(unittest.TestCase):
         policy = self.calibration.policy
         self.assertEqual(sorted(policy.thresholds), ["grad:b", "grad:w", "grad_in:x", "out:y"])
         report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=policy, samples=self.scope.samples([11, 12]))
+                                          policy=policy, samples=self.scope.samples([1, 2]))
         self.assertEqual(report.status, PASSED, codes(report))
         self.assertEqual(report.cases[0].evidence["candidate"]["deployment"]["identity"]
                          ["adapter_kind"], "legacy_bind_pair")
@@ -127,7 +123,7 @@ class TestOperatorScope(unittest.TestCase):
     def test_wrong_backward_fails_by_name(self):
         report = gate2.verify_integration(
             self.scope, self.scope.candidate(F.scale_shift_pair(dw_scale=1.01)),
-            policy=self.calibration.policy, samples=self.scope.samples([11]))
+            policy=self.calibration.policy, samples=self.scope.samples([1, 2]))
         self.assertEqual(report.status, FAILED)
         self.assertEqual(failing(report), ["grad:w"])
 
@@ -137,13 +133,13 @@ class TestOperatorScope(unittest.TestCase):
         self.assertEqual(direct.status, PASSED)                    # the pair itself is right
         good = gate2.verify_integration(self.mul_scope, self.mul_scope.candidate(F.mul_artifact()),
                                         policy=self.mul_calibration.policy,
-                                        samples=self.mul_scope.samples([21]))
+                                        samples=self.mul_scope.samples([1, 2]))
         self.assertEqual(good.status, PASSED, codes(good))
         self.assertEqual(good.cases[0].evidence["candidate"]["deployment"]["identity"]
                          ["adapter_kind"], "direct_deployment_entry")
         bad = gate2.verify_integration(self.mul_scope, self.mul_scope.candidate(artifact),
                                        policy=self.mul_calibration.policy,
-                                       samples=self.mul_scope.samples([21]))
+                                       samples=self.mul_scope.samples([1, 2]))
         self.assertEqual(bad.status, FAILED)
         self.assertEqual(failing(bad), ["grad:b", "grad_in:a"])
 
@@ -323,22 +319,24 @@ class TestPolicyBinding(unittest.TestCase):
     def test_synthetic_policy_passes_when_everything_matches(self):
         self.assertEqual(self.run_with(self.policy).status, PASSED)
 
-    def test_operator_sample_overlap_by_id_or_seed(self):
-        # The operator protocol is unchanged: calibration and validation stay disjoint.
+    def test_operator_policy_judges_only_its_calibrated_samples(self):
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
         policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        self.assertEqual(policy.sample_protocol, gate2.DISJOINT)
+        self.assertEqual(policy.sample_protocol, gate2.MATCHED)
         good = scope.candidate(F.scale_shift_pair())
         self.assertEqual(gate2.verify_integration(scope, good, policy=policy,
-                                                  samples=[Sample("other", 5)]).status, PASSED)
-        by_id = gate2.verify_integration(scope, good, policy=policy,
-                                         samples=[Sample("synthetic/cal", 5)])
-        by_seed = gate2.verify_integration(scope, good, policy=policy, samples=[Sample("other", 900)])
+                                                  samples=[Sample("synthetic/cal", 900)]).status,
+                         PASSED)
+        other = gate2.verify_integration(scope, good, policy=policy, samples=[Sample("other", 5)])
+        by_seed = gate2.verify_integration(scope, good, policy=policy,
+                                           samples=[Sample("synthetic/cal", 5)])
         wrong = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
                                          policy=policy, samples=[Sample("other", 900)])
-        for report in (by_id, by_seed, wrong):
+        for report in (other, by_seed, wrong):
             self.assertEqual(report.status, INCOMPLETE)          # withheld, never judged
-            self.assertIn("sample_overlap", codes(report))
+            self.assertIn("sample_not_calibrated", codes(report))
+        self.assertIn("required_sample_missing", codes(other))
+        self.assertNotIn("threshold_exceeded", codes(wrong))
 
     def test_environment_config_numerics_and_patch_set_mismatch(self):
         data = self.policy.to_dict()
@@ -362,7 +360,7 @@ class TestPolicyBinding(unittest.TestCase):
 
     def test_tampered_or_old_schema_policies_are_refused(self):
         data = self.policy.to_dict()
-        data["thresholds_by_sample"]["synthetic/cal"]["out:y"]["E2"] = 1.0   # widened after freezing
+        data["thresholds"]["out:y"]["E2"] = 1.0   # widened after freezing
         with self.assertRaises(CalibrationError):
             Gate2Policy.from_dict(data)
         report = self.run_with(data)
@@ -692,7 +690,7 @@ class TestInductorControl(unittest.TestCase):
         self.assertGreater(result.policy.controls["compile_graphs"]["operator"], 0)
         self.assertEqual(result.policy.controls["compile"]["identity"]["backend"], "inductor")
         report = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair()),
-                                          policy=result.policy, samples=scope.samples([11, 12]))
+                                          policy=result.policy, samples=scope.samples([1, 2]))
         self.assertEqual(report.status, PASSED, codes(report))
         model = F.toy_module_scope()
         fixed = samples("ind", [1, 2])

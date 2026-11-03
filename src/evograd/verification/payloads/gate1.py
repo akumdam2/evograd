@@ -122,8 +122,8 @@ def search_spec() -> dict[str, Any] | None:
 def search_payload_ids(corpus: Corpus, case_id: str) -> list[str]:
     """The payloads search feedback is judged on (:data:`SEARCH_SELECTION`).
 
-    Only the calibration split: the acceptance payloads stay held out for the
-    gates that judge the final submission.
+    Only the calibration split: search never sees the acceptance payloads,
+    which the gates judge the final submission on as well.
     """
     by_order: dict[Any, list] = {}
     for record in corpus.payloads(case_id=case_id, split="calibration"):

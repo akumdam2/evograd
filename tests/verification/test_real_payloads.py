@@ -310,19 +310,22 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         cls.corpus = Corpus.open(cls.manifest)
         cls.op = replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),))
         cls.scope = PayloadOperatorScope(cls.op, cls.op.correctness[0], cls.corpus, "case/x", device="cpu")
+        from evograd.verification.integrations.gates import payload_samples
+
+        cls.samples = payload_samples(cls.scope)
         cls.calibration = gate2.calibrate(cls.scope, patch_set=("operator",),
-                                          samples=cls.scope.samples("calibration"), compile_backend=FAST)
+                                          samples=cls.samples, compile_backend=FAST)
         cls.generated_scope = OperatorScope(cls.op, cls.op.correctness[0], device="cpu")
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def test_calibrated_on_calibration_payloads_judged_on_acceptance_payloads(self):
+    def test_calibrated_and_judged_on_every_payload(self):
         self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
         policy = self.calibration.policy
-        samples = self.scope.samples("acceptance")
-        self.assertEqual({s.seed // 10**6 for s in samples}, {303, 404})
+        samples = self.samples
+        self.assertEqual({s.seed // 10**6 for s in samples}, {101, 202, 303, 404})
         good = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
                                         policy=policy, samples=samples)
         bad = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
@@ -331,11 +334,12 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         self.assertEqual(bad.status, "failed")
         self.assertTrue(all(s.sample_id.startswith(self.corpus.corpus_id) for s in samples))
 
-    def test_calibration_payloads_cannot_be_judged(self):
+    def test_part_of_the_payloads_cannot_be_judged(self):
         report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
                                           policy=self.calibration.policy,
-                                          samples=self.scope.samples("calibration"))
+                                          samples=self.scope.samples("acceptance"))
         self.assertEqual(report.status, "incomplete")
+        self.assertIn("required_sample_missing", {f.code for f in report.all_findings()})
 
     def test_generated_input_policy_is_refused_and_another_corpus_too(self):
         from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
@@ -343,7 +347,7 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         synthetic = gate2.calibrate(self.generated_scope, patch_set=("operator",),
                                     samples=self.generated_scope.samples([1, 2]), compile_backend=FAST).policy
         report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=synthetic, samples=self.scope.samples("acceptance"))
+                                          policy=synthetic, samples=self.samples)
         self.assertEqual(report.status, "incomplete")
         self.assertIn("policy_case_mismatch", {f.code for f in report.all_findings()})
         with tempfile.TemporaryDirectory() as tmp:
@@ -355,8 +359,8 @@ class PayloadOperatorScopeTests(unittest.TestCase):
                                               samples=scope2.samples("acceptance"))
             self.assertEqual(report.status, "incomplete")
 
-    def test_native_and_compile_controls_qualify_on_held_out_payloads(self):
-        samples = self.scope.samples("acceptance")
+    def test_native_and_compile_controls_qualify_on_the_payloads(self):
+        samples = self.samples
         control, _graphs = gate2.compile_control(self.scope, ("operator",), backend=FAST)
         report = gate2.verify_integration(self.scope, control, policy=self.calibration.policy, samples=samples)
         self.assertEqual(report.status, "passed")

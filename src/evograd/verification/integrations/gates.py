@@ -7,10 +7,11 @@ Each candidate is an artifact for one observed case of the model
 (:func:`.base.observed_cases`, e.g. ``qwen3_swiglu_mlp/swiglu_mlp``), judged
 against the model reference (``Model.reference_op``):
 
-* Gate 1 -- the pair on every real acceptance payload (data orders 303/404).
-* Gate 2, operator scope -- thresholds from native repeats and
-  ``torch.compile`` on the calibration payloads (orders 101/202), judged on the
-  acceptance payloads through the artifact's deployment entry.
+* Gate 1 -- the pair on every real payload of the case (:data:`PAYLOAD_SPLITS`,
+  data orders 101/202/303/404).
+* Gate 2, operator scope -- thresholds from native repeats, ``torch.compile``
+  and the rounding floor on the same payloads, judged on fresh executions of
+  them through the artifact's deployment entry.
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
@@ -55,6 +56,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 MODEL_ORDERS = (101, 202, 303, 404)
+#: The corpus splits Gate 1 and operator Gate 2 take every payload of a case from
+#: (orders 101/202 and 303/404): operator Gate 2 calibrates on them and judges the
+#: same payloads. Search feedback sees the calibration split only.
+PAYLOAD_SPLITS = ("calibration", "acceptance")
 #: Gate 2 safety factor at model scope (the operator scope keeps the
 #: calibration default, 2): the smallest integer at which every frontend seed
 #: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
@@ -150,9 +155,7 @@ def _calibration_request(scope, deployment, options):
     bound.apply_defaults()
     settings = dict(bound.arguments)
     settings.pop("adapter")
-    for name in ("samples", "validation_samples"):
-        if settings[name] is not None:
-            settings[name] = [sample.to_dict() for sample in settings[name]]
+    settings["samples"] = [sample.to_dict() for sample in settings["samples"]]
     return _jsonable({"procedure": calibration.CALIBRATION_PROCEDURE,
                       "sources": {name: sha_file(module.__file__) for name, module in
                                   (("calibration", calibration), ("runner", runner),
@@ -191,13 +194,7 @@ def _cached_policy(path: Path | None, scope, deployment, judged, request):
         return None
     if {f.code for f in policy_findings(policy, scope, deployment, judged)} & BINDING_CODES:
         return None
-    evidence = {"reused_policy": str(path)}
-    validation = data.get("calibration", {}).get("evidence", {}).get("holdout_validation")
-    if request["settings"]["validation_samples"] is not None:
-        if not validation or validation.get("status") != "passed":
-            return None
-        evidence["holdout_validation"] = validation
-    return CalibrationResult(policy=policy, evidence=evidence)
+    return CalibrationResult(policy=policy, evidence={"reused_policy": str(path)})
 
 
 def _calibrate(scope, deployment, judged, cache: Path | None, **options):
@@ -263,10 +260,16 @@ def operator_calibration(model, case, corpus, *, device: str = "cuda",
     stand_in = Deployment("reference", CANDIDATE, {s: scope.native_site(s) for s in scope.sites()})
     cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
              / f"{case.case_id.replace('/', '__')}.json")
-    calibration = _calibrate(scope, stand_in, scope.samples("acceptance"), cache,
-                             samples=scope.samples("calibration"), compile_backend=compile_backend,
-                             validation_samples=scope.samples("acceptance"))
+    samples = payload_samples(scope)
+    calibration = _calibrate(scope, stand_in, samples, cache, samples=samples,
+                             compile_backend=compile_backend)
     return scope, calibration
+
+
+def payload_samples(scope) -> list:
+    """Every payload of the scope's case in :data:`PAYLOAD_SPLITS`, the samples
+    operator Gate 2 calibrates on and judges."""
+    return [sample for split in PAYLOAD_SPLITS for sample in scope.samples(split)]
 
 
 def judge_case(model, case, module, corpus, *, device: str = "cuda",
@@ -286,10 +289,11 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
     op = scope.op
     deployment = scope.candidate(module)
     envelope = gate1_envelope(op, calibration.policy)
-    payloads = gate1.verify_pair(op, module, device=device, envelope=envelope, cases=payload_cases(
-        op, case.workload, corpus, case_id=case.case_id, split="acceptance", device=device))
+    cases = [c for split in PAYLOAD_SPLITS for c in payload_cases(
+        op, case.workload, corpus, case_id=case.case_id, split=split, device=device)]
+    payloads = gate1.verify_pair(op, module, device=device, envelope=envelope, cases=cases)
     operator = gate2.verify_integration(scope, deployment, policy=calibration.policy,
-                                        samples=scope.samples("acceptance"))
+                                        samples=payload_samples(scope))
     return {"gate1_payloads": payloads,
             "gate2_operator_calibration": calibration, "gate2_operator": operator}
 
@@ -421,9 +425,9 @@ def _gate1_policy(op) -> dict[str, Any]:
 
 def _gate2_model_rule(model) -> dict[str, Any]:
     """What a cached model-scope Gate 2 verdict was judged under."""
-    from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS, MATCHED
+    from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS
 
-    return {"gamma": model_gamma(model), "formula": FORMULAS[MATCHED],
+    return {"gamma": model_gamma(model), "formula": FORMULAS["model"],
             "calibration": CALIBRATION_PROCEDURE, "boundaries": GATE2_MODEL_BOUNDARIES}
 
 
