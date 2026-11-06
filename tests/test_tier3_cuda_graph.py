@@ -108,6 +108,7 @@ def test_replay_reproduces_eager_and_is_timed():
     row = measure_cuda_graph(_Workload(), model, optimizer, batch, warmup=2, steps=3, blocks=2)
     assert row["ok"], row
     assert row["check"]["agrees"] and row["check"]["replay"] == {"loss": 0.0, "grad": 0.0}
+    assert len(row["check"]["eager_repeats"]) == 2
     assert row["step_ms"] > 0 and len(row["per_block_ms"]) == 2
     # timing trains: the replayed gradients reach the optimizer
     assert any(not torch.equal(p, b) for p, b in zip(model.parameters(), before))
