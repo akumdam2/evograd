@@ -228,6 +228,113 @@ def make_training_step(workload: TrainingWorkload, model, optimizer, batch):
     return step
 
 
+# ── the same step, replayed from a CUDA graph ────────────────────────────────
+
+#: The second execution of the timed step (T3-G), reported beside the eager one.
+CUDA_GRAPH = "cuda_graph"
+#: The replay is timed only if, at the same weights and batch, its loss and
+#: gradients are no further from an eager step than this many times a second
+#: eager step is (exact agreement wherever eager repeats bit for bit).
+REPLAY_MARGIN = 2.0
+CUDA_GRAPH_PROTOCOL = (
+    "the same step with loss and backward captured once into one CUDA graph and replayed; "
+    "AdamW stays eager outside it, as in NVIDIA's MLPerf Llama 3.1 405B (FullCudaGraphWrapper). "
+    "Capture as PyTorch's whole-network recipe: side-stream warmup, gradients set to None so "
+    "backward allocates them in the graph's pool; a replay rewrites them, so the step has no "
+    "zero_grad. Same model, batch and optimizer as the eager step, timed after it with the same "
+    "warmup and blocks, and only if the first replay agrees with eager at the same weights: "
+    f"|loss| and max-over-parameters max|grad delta|/rms within {REPLAY_MARGIN:g}x a second "
+    "eager step's")
+
+
+def capture_training_step(workload: TrainingWorkload, model, optimizer, batch, *, warmup: int = 3):
+    """``(step, loss)``: ``step()`` replays loss and backward on ``batch``, then steps AdamW.
+
+    The parameters are not changed: warmup and capture run no optimizer step.
+    ``loss`` is the graph's output tensor, rewritten by every replay.
+    """
+    optimizer.zero_grad(set_to_none=True)
+    side = torch.cuda.Stream()
+    side.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(side):
+        for _ in range(warmup):
+            workload.loss(model, batch).backward()
+            optimizer.zero_grad(set_to_none=True)
+    torch.cuda.current_stream().wait_stream(side)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        loss = workload.loss(model, batch)
+        loss.backward()
+
+    def step():
+        graph.replay()
+        optimizer.step()
+        return loss
+
+    step.graph = graph
+    return step, loss
+
+
+def _grad_distance(params, reference) -> float:
+    """Largest ``max|grad - reference| / rms(reference)`` over the parameters."""
+    worst = 0.0
+    for param, ref in zip(params, reference):
+        if param.grad is None or ref is None:
+            if param.grad is not ref:
+                return float("inf")
+            continue
+        if torch.equal(param.grad, ref):
+            continue
+        delta = (param.grad.float() - ref.float()).abs().max().item()
+        rms = ref.float().pow(2).mean().sqrt().item()
+        worst = max(worst, delta / rms if rms > 0 else float("inf"))
+    return worst
+
+
+def measure_cuda_graph(workload: TrainingWorkload, model, optimizer, batch, *,
+                       warmup: int, steps: int, blocks: int) -> dict[str, Any]:
+    """T3-G on the provider's own model: check the replay against eager, then time it.
+
+    A failure here is this execution's own row; the eager measurement stands.
+    """
+    if not torch.cuda.is_available():
+        return {"ok": False, "failed_at": "capture", "error": "CUDA graphs need a CUDA device"}
+    params = list(model.parameters())
+
+    def eager_loss():
+        optimizer.zero_grad(set_to_none=True)
+        loss = workload.loss(model, batch)
+        loss.backward()
+        return float(loss)
+
+    stage = "capture"
+    try:
+        first = eager_loss()
+        reference = [None if p.grad is None else p.grad.detach().clone() for p in params]
+        repeat = {"loss": abs(eager_loss() - first), "grad": _grad_distance(params, reference)}
+        _sync()
+        started = time.perf_counter()
+        step, loss = capture_training_step(workload, model, optimizer, batch, warmup=warmup)
+        _sync()
+        capture_s = time.perf_counter() - started
+        stage = "measurement"
+        step.graph.replay()
+        replay = {"loss": abs(float(loss) - first), "grad": _grad_distance(params, reference)}
+        del reference
+        check = {"eager_repeat": repeat, "replay": replay, "margin": REPLAY_MARGIN,
+                 "agrees": all(replay[k] <= REPLAY_MARGIN * repeat[k] for k in replay)}
+        if not check["agrees"]:
+            return {"ok": False, "failed_at": "replay_check", "capture_s": capture_s, "check": check,
+                    "error": "the replayed step does not reproduce the eager step"}
+        timing = measure_step(step, warmup=warmup, steps=steps, blocks=blocks)
+        check_loss(step(), where="cuda graph, after the timed blocks")
+        return {"ok": True, **timing, "capture_s": capture_s, "check": check}
+    except Exception as exc:  # the graph's failure is its own row
+        return {"ok": False, "failed_at": stage, "error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        optimizer.zero_grad(set_to_none=True)
+
+
 def _sync() -> None:
     """Drain the GPU, or do nothing when there is not one.
 
@@ -470,13 +577,15 @@ def measure_provider(
     ops: dict[str, Any] | None = None,
     verify: bool = True,
     device: str = "cuda",
+    cuda_graph: bool = False,
 ) -> dict[str, Any]:
     """One kernel set on one workload: verify, then loss trajectory, then timing.
 
     ``provider`` is the name this measurement will be filed under. It reaches
     the build because a workload whose providers are different *trees* rather
     than different kernels cannot tell them apart from the kernel set alone;
-    workloads that do not declare it never see it.
+    workloads that do not declare it never see it. ``cuda_graph`` also times
+    the same step replayed from a CUDA graph (:func:`measure_cuda_graph`).
     """
     verification = (
         preflight(kernels, ops, device=device)
@@ -526,9 +635,12 @@ def measure_provider(
     # either side of them are, which catches a kernel that only diverges after
     # the optimizer has moved -- the failure mode a single pre-check misses.
     check_loss(step(), where="after the timed blocks")
+    graph = (measure_cuda_graph(workload, model, optimizer, batch, warmup=warmup, steps=steps,
+                                blocks=blocks) if cuda_graph else None)
     units = workload.units_per_step()
     return {
         **timing,
+        **({CUDA_GRAPH: graph} if cuda_graph else {}),
         "units_per_second": units / (timing["step_ms"] / 1e3),
         "unit_name": workload.unit_name,
         "peak_memory_bytes": peak_memory,
@@ -616,16 +728,27 @@ def _bootstrap_ratio(
 
 
 def speedup_intervals(
-    report: dict[str, Any], reference: str = "eager", *, seed: int = 0
+    report: dict[str, Any], reference: str = "eager", *, seed: int = 0,
+    execution: str | None = None,
 ) -> dict[str, Any]:
-    """Per-provider step-time ratio against the reference, with a 95% interval."""
+    """Per-provider step-time ratio against the reference, with a 95% interval.
+
+    ``execution`` names a provider's second execution (``CUDA_GRAPH``): its own
+    rows, against the reference's row of the same execution.
+    """
+    def timed(entry):
+        if execution is not None:
+            entry = (entry or {}).get(execution) if (entry or {}).get("ok") else None
+        return entry if entry and entry.get("ok") else None
+
     providers = report.get("providers") or {}
-    base = providers.get(reference)
-    if not base or not base.get("ok"):
+    base = timed(providers.get(reference))
+    if base is None:
         return {"reference": reference, "available": False}
     out: dict[str, Any] = {"reference": reference, "available": True, "vs_reference": {}}
     for index, (name, entry) in enumerate(sorted(providers.items())):
-        if name == reference or not entry.get("ok"):
+        entry = timed(entry)
+        if name == reference or entry is None:
             continue
         out["vs_reference"][name] = {
             "step_ms_ratio": base["step_ms"] / entry["step_ms"],
@@ -652,6 +775,7 @@ def run_tier3(
     ops: dict[str, Any] | None = None,
     verify: bool = True,
     device: str = "cuda",
+    cuda_graph: bool = False,
 ) -> dict[str, Any]:
     """Every provider on one workload.
 
@@ -674,13 +798,13 @@ def run_tier3(
         results[name] = measure_one(
             workload, name, providers[name], warmup=warmup, steps=steps,
             blocks=blocks, loss_steps=loss_steps, learning_rate=learning_rate,
-            seed=seed, ops=ops, verify=verify, device=device,
+            seed=seed, ops=ops, verify=verify, device=device, cuda_graph=cuda_graph,
         )
 
     return assemble_report(
         workload, results, order,
         warmup=warmup, steps=steps, blocks=blocks, loss_steps=loss_steps,
-        learning_rate=learning_rate, seed=seed, verify=verify,
+        learning_rate=learning_rate, seed=seed, verify=verify, cuda_graph=cuda_graph,
         isolation="in-process (see tier3_cli for one child process per provider)",
     )
 
@@ -742,6 +866,7 @@ def assemble_report(
     seed: int,
     verify: bool,
     isolation: str,
+    cuda_graph: bool = False,
 ) -> dict[str, Any]:
     """The report shell, filled with whatever the providers produced.
 
@@ -801,6 +926,7 @@ def assemble_report(
                 "cost, or blocking on an implicit synchronization such as "
                 "allocator pressure. Not a dispatch-only measurement"
             ),
+            **({CUDA_GRAPH: CUDA_GRAPH_PROTOCOL} if cuda_graph else {}),
         },
         "verification_policy": verification_policy(workload, verify=verify),
         "site_registry": site_registry_for(workload).to_dict(),
@@ -808,6 +934,9 @@ def assemble_report(
         "providers": results,
     }
     report["speedup_intervals"] = speedup_intervals(report, seed=seed)
+    if cuda_graph:
+        report["cuda_graph_speedup_intervals"] = speedup_intervals(report, seed=seed,
+                                                                   execution=CUDA_GRAPH)
     return report
 
 

@@ -94,7 +94,51 @@ def require_transformers(classes: ModelClasses):
             f"transformers {transformers.__version__} is too old for this "
             f"workload.\n" + hint
         )
+    traced_causal_mask_as_eager()
     return transformers
+
+
+def traced_causal_mask_as_eager() -> None:
+    """Give a traced or captured step the attention eager runs: SDPA with ``is_causal``.
+
+    Transformers skips two data checks while ``is_tracing()``, which is true under
+    dynamo *and* during CUDA-graph capture: the packed-sequence check on
+    ``position_ids`` and the ``is_causal`` shortcut of ``_ignore_causal_mask_sdpa``
+    (both read tensor data, which a graph cannot). It then materialises a 4D causal
+    mask and calls SDPA with ``is_causal=False``: a whole-model ``torch.compile`` or
+    a captured step computes attention differently from eager, and slower (Qwen3-0.6B
+    on GH200: attention 10.9 -> 24-26 ms per step, transformers 5.16.1).
+
+    Every workload built here trains on unpadded rows with no cache: no
+    ``attention_mask``, ``position_ids`` the model's own ``arange``. For exactly that
+    case -- no padding mask, ``q_length == kv_length``, no local window -- the
+    shortcut is what eager takes, so under tracing it is taken too. Outside tracing
+    both functions are the originals, so eager is unchanged. Installed once,
+    when the model is constructed and by ``verification.integrations.base.configure``.
+    """
+    try:
+        import transformers.masking_utils as masking
+    except ImportError:  # no Transformers model can be built either
+        return
+
+    if getattr(masking, "_evograd_traced_causal_mask", False):
+        return
+    ignore_causal_mask, find_packed = masking._ignore_causal_mask_sdpa, masking.find_packed_sequence_indices
+
+    def _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, q_offset, kv_offset,
+                                 local_attention_size=None):
+        if (padding_mask is None and q_length == kv_length and local_attention_size is None
+                and masking.is_tracing()):
+            return True
+        return ignore_causal_mask(padding_mask, q_length, kv_length, q_offset, kv_offset,
+                                  local_attention_size)
+
+    def find_packed_sequence_indices(position_ids):
+        return None if masking.is_tracing() else find_packed(position_ids)
+
+    masking._ignore_causal_mask_sdpa = _ignore_causal_mask_sdpa
+    masking.find_packed_sequence_indices = find_packed_sequence_indices
+    masking._evograd_traced_causal_mask = True
 
 
 def build_config(spec: WorkloadSpec, classes: ModelClasses):

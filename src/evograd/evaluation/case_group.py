@@ -213,8 +213,7 @@ def evaluate_group(plan, *, deadline, tier3_options=None, model=None, log=print,
                 if "torch_compile" in base_raw:
                     compiled = P._tier3_row(combined_report, "torch_compile")
                     combination["torch_compile_tier3"] = compiled
-                    if own.get("ok") and P.compile_baseline_valid(compiled):
-                        combination["speedup_vs_torch_compile"] = compiled["step_ms"] / own["step_ms"]
+                    combination.update(P.speedups_vs_compile(own, compiled))
         for result in results.values():
             result["settings"]["timing"] = P.timing_mode()
             result["shared_measurements"] = str(shared)

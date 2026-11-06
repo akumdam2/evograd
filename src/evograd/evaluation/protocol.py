@@ -65,7 +65,8 @@ from evograd.verification.integrations.gates import (
 )
 
 PROTOCOL = "evograd-evaluation-v3"
-BASELINE_REVISION = "whole-model-baselines/1"
+#: /2: whole-model torch.compile takes the eager SDPA path (``traced_causal_mask_as_eager``).
+BASELINE_REVISION = "whole-model-baselines/2"
 REFERENCE = "eager"
 TIER2_OPTIONS = {"warmup": 10, "reps": 50, "blocks": 3, "seed": 0}
 #: What Tier 2 times: recorded calls, fixed by the corpus and the same for every
@@ -76,8 +77,10 @@ TIER2_INPUTS = {"source": "real_training_payload", "split": "acceptance",
                 "calls": ("every call of the case the corpus records in that order's training step, "
                            "in call order: all of them, or the subset the model declares"),
                 "speedup": "sum of the baseline's per-call medians over the candidate's"}
+#: ``cuda_graph``: each provider is also timed replaying the step from one CUDA
+#: graph (T3-G, ``runner.measure_cuda_graph``), beside the eager step (T3).
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
-                 "learning_rate": 1e-4, "seed": 0}
+                 "learning_rate": 1e-4, "seed": 0, "cuda_graph": True}
 COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager "
                     "has a 95% bootstrap interval with its lower bound above 1")
 #: Baselines included in the per-level aggregate; every T2 baseline uses autograd.
@@ -471,6 +474,7 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
     return assemble_report(run.workload, results, order, verify=False,
                            isolation=("one spawned process per provider" if isolate
                                       else "in-process"),
+                           cuda_graph=bool(options.get("cuda_graph")),
                            **{k: options[k] for k in ("warmup", "steps", "blocks", "loss_steps",
                                                       "learning_rate", "seed")})
 
@@ -504,7 +508,27 @@ def _tier3_row(report: Mapping[str, Any], name: str) -> dict[str, Any]:
         row["ci95"] = against["ci95"]
     if base.get("ok") and base.get("peak_memory_bytes") and entry.get("peak_memory_bytes"):
         row["peak_memory_ratio"] = entry["peak_memory_bytes"] / base["peak_memory_bytes"]
+    graph = entry.get("cuda_graph")
+    if graph is not None:
+        row["cuda_graph"] = {field: graph[field] for field in
+                             ("ok", "step_ms", "cpu_bound_fraction", "capture_s", "check",
+                              "failed_at", "error") if field in graph}
+        against = ((report.get("cuda_graph_speedup_intervals") or {}).get("vs_reference") or {}).get(name)
+        if against is not None:
+            row["cuda_graph"]["speedup"] = against["step_ms_ratio"]
+            row["cuda_graph"]["ci95"] = against["ci95"]
     return row
+
+
+def speedups_vs_compile(own: Mapping[str, Any], compiled: Mapping[str, Any]) -> dict[str, float]:
+    """A combination against whole-model compile, in each execution both rows completed."""
+    if not (own.get("ok") and compile_baseline_valid(compiled)):
+        return {}
+    out = {"speedup_vs_torch_compile": compiled["step_ms"] / own["step_ms"]}
+    graph, compiled_graph = own.get("cuda_graph") or {}, compiled.get("cuda_graph") or {}
+    if graph.get("ok") and compiled_graph.get("ok"):
+        out["cuda_graph_speedup_vs_torch_compile"] = compiled_graph["step_ms"] / graph["step_ms"]
+    return out
 
 
 def _positive(case: Mapping[str, Any]) -> bool:
@@ -689,8 +713,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             if "torch_compile" in timed["rows"]:
                 compiled, own = timed["rows"]["torch_compile"], timed["rows"]["combination"]
                 combination["torch_compile_tier3"] = compiled
-                if compile_baseline_valid(compiled) and own.get("ok"):
-                    combination["speedup_vs_torch_compile"] = compiled["step_ms"] / own["step_ms"]
+                combination.update(speedups_vs_compile(own, compiled))
         tier3["combination"] = combination
         result["tier3"] = tier3
         log("combination", {k: v for k, v in combination.items() if k != "tier3"})
@@ -779,9 +802,13 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "speedup": timed.get("speedup"), "ci95": timed.get("ci95"),
             "speedup_vs_torch_compile": combination.get("speedup_vs_torch_compile"),
             "peak_memory_ratio": timed.get("peak_memory_ratio"),
-            "cpu_bound_fraction": timed.get("cpu_bound_fraction")}
+            "cpu_bound_fraction": timed.get("cpu_bound_fraction"),
+            "cuda_graph": {"speedup": (timed.get("cuda_graph") or {}).get("speedup"),
+                           "speedup_vs_torch_compile":
+                               combination.get("cuda_graph_speedup_vs_torch_compile")}}
     counted = [m for m in models.values() if m["accepted"] and _finite(m["speedup"])]
     memory = [m["peak_memory_ratio"] for m in counted if _finite(m["peak_memory_ratio"])]
+    graphed = [m["cuda_graph"]["speedup"] for m in counted if _finite(m["cuda_graph"]["speedup"])]
     return {
         "models": sorted(models),
         "level1": _level_summary(rows, 1),
@@ -789,6 +816,8 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "level3": {"models": models,
                    "speedup": {"geomean": geomean([m["speedup"] for m in counted]) if counted else None,
                                "models_covered": len(counted)},
+                   "cuda_graph_speedup": {"geomean": geomean(graphed) if graphed else None,
+                                          "models_covered": len(graphed)},
                    "coverage": len(counted) / len(models) if models else None,
                    "peak_memory_ratio_geomean": geomean(memory) if memory else None},
     }
