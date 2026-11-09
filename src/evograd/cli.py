@@ -2,8 +2,8 @@
 
     evograd ops                                  # list declared operators
     evograd seed unified --pack PACK --output-dir ...  # generate a seed (pipeline unified|a|b|c|d)
-    evograd evolve --op rmsnorm --seed seed.py --output-dir ...
-    evograd ncu --op rmsnorm --candidate best.py --output-dir ...
+    evograd evolve --pack PACK --seed seed.py --output-dir ...
+    evograd ncu --pack PACK --candidate best.py --output-dir ...
     evograd evaluate qwen3_0_6b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
     evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json  # the benchmark protocol
 """
@@ -36,12 +36,16 @@ def _seed(argv: list[str]) -> int:
 
 def _evolve(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="evograd evolve")
-    parser.add_argument("--op", required=True)
-    parser.add_argument("--declaration", default=None, help="external path.py:op declaration")
-    parser.add_argument("--forward", default=None, help="override the declaration forward")
+    parser.add_argument(
+        "--pack",
+        type=Path,
+        required=True,
+        help="task pack of one model case (python -m evograd.adbench_tools task); its "
+             "search rule, Gate 1 on the case's calibration payloads, judges every candidate",
+    )
     parser.add_argument("--seed", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--scoring", default="speed_memory")
+    parser.add_argument("--scoring", default=None, help="default: the pack's scoring policy")
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--config", type=Path, default=None)
     parser.add_argument("--save-best-to", type=Path, default=None)
@@ -56,12 +60,11 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--primary-model", default="gpt-5.6-sol")
     parser.add_argument("--secondary-model", default="gpt-5.6-sol")
     parser.add_argument("--api-base", default="https://api.openai.com/v1")
-    parser.add_argument("--benchmark-suite", default=None)
     parser.add_argument(
         "--baseline",
-        default="auto",
+        default=None,
         help=(
-            "auto, pytorch_autograd (eager), torch_compile, "
+            "default: the pack's; auto, pytorch_autograd (eager), torch_compile, "
             "torch_compile_max_autotune, or a declaration baseline such as cublas_pair"
         ),
     )
@@ -93,47 +96,24 @@ def _evolve(argv: list[str]) -> int:
     parser.add_argument("--ncu-timeout", type=int, default=120)
     parser.add_argument("--ncu-optimizer-timeout", type=int, default=360)
     parser.add_argument("--ncu-skip-at-roofline-pct", type=float, default=95.0)
-    parser.add_argument(
-        "--benchmark-dtype",
-        action="append",
-        choices=("float32", "float16", "bfloat16"),
-    )
-    parser.add_argument(
-        "--dtype",
-        default=None,
-        choices=("float32", "float16", "bfloat16"),
-        help=(
-            "evolve a dtype specialist: gate correctness on this dtype only, and "
-            "measure on it unless --benchmark-dtype says otherwise (Pipeline D seeds)"
-        ),
-    )
     args = parser.parse_args(argv)
 
+    from evograd.adbench_tools.task import load
     from evograd.evolve.run import run_evolve
-    from dataclasses import replace
-    from evograd.benchmark import get_task, load_task
 
-    op = load_task(args.declaration) if args.declaration else get_task(args.op)
-    if op.name != args.op:
-        parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
-    if args.forward:
-        op = replace(op, forward=args.forward)
-        op.validate()
+    task = load(args.pack)
     return run_evolve(
-        op,
+        task,
         seed_path=args.seed,
         output_dir=args.output_dir,
-        scoring=args.scoring,
+        scoring=args.scoring or task.spec["scoring"],
         iterations=args.iterations,
         config_path=args.config,
         save_best_to=args.save_best_to,
         primary_model=args.primary_model,
         secondary_model=args.secondary_model,
         api_base=args.api_base,
-        benchmark_suite=args.benchmark_suite,
-        benchmark_dtypes=tuple(args.benchmark_dtype) if args.benchmark_dtype else None,
-        dtype=args.dtype,
-        performance_baseline=args.baseline,
+        performance_baseline=args.baseline or task.spec["performance_baseline"],
         save_programs=args.save_programs,
         feature_dimensions=tuple(args.feature_dim) if args.feature_dim else None,
         feature_bins=args.feature_bins,

@@ -179,8 +179,8 @@ op = declare_op(
     # The eager baseline is timed through the spelling Qwen3MLP actually
     # executes, not through the float32-accumulated oracle. Timing the oracle
     # would compare a candidate against a slower-than-real PyTorch and inflate
-    # every speedup; `verify_runtime_forward` proves the two agree before any
-    # timing is trusted.
+    # every speedup. The model reference (`reference_op`) differentiates this
+    # spelling itself.
     runtime_forward=(
         "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.reference:qwen3_swiglu_mlp_forward_hf"
     ),

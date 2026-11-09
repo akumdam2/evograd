@@ -54,7 +54,7 @@ def select_workload(op: OpDecl, *, dtype: str | None = None,
 
 
 def scoped_op(op: OpDecl, workload: Workload, *, declaration: str | None = None) -> OpDecl:
-    """The same operator/oracle/tolerances, restricted to the captured c.
+    """The same operator and oracle, restricted to one configuration.
 
     Each scalar argument's default becomes the value the input generator passes
     at ``workload`` (``case_scalars``), so every signature and argument list
@@ -79,8 +79,8 @@ def _write_json(path: Path, value) -> None:
 
 
 def _write_declaration(path: Path, op: OpDecl, workload: Workload) -> None:
-    # Reuse the trusted input factory, oracle and tolerances through the original
-    # declaration. This file also lets the existing evolve/verify CLIs use c.
+    # Reuse the trusted input factory and oracle through the original declaration:
+    # the seed's own record of the configuration it was synthesized at.
     # The workload is written whole: its provenance (recorded strides, a norm's
     # eps, the model a generator reads its tables from) decides the inputs the
     # declaration generates, so dropping it would scope a different case.
@@ -181,7 +181,7 @@ def synthesize_unified_seed(config: UnifiedSeedConfig) -> int:
             return 1
         candidate.replace(published)
         print(f"[unified] Verified seed: {published}")
-        print(f"[unified] Use --declaration {declaration}:op when verifying or evolving this fixed-configuration seed")
+        print(f"[unified] Evolve it on the same pack: evograd evolve --pack {config.pack} --seed {published}")
         return 0
     except Exception:
         failure = {"phase": phase, "error": traceback.format_exc()}

@@ -88,12 +88,7 @@ def _tolerance_text(gate1: dict) -> str:
         f"- `{name}` ({r['dtype']}): atol={r['atol']:.3g}, rtol={r['rtol']:.3g}"
         for name, r in gate1["results"].items()
     )
-    gamma = gate1.get("envelope_gamma")
-    if gamma is None:
-        return f"""Correctness tolerances at this configuration, per output and gradient
-(`|candidate - oracle| <= atol + rtol * |oracle|`, elementwise):
-
-{results}"""
+    gamma = gate1["envelope_gamma"]
     return f"""Acceptance compares every output and gradient with the reference, element by
 element in float64, on real recorded training calls held out from you:
 `|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
@@ -110,15 +105,11 @@ larger.
 
 def _search_text(spec: dict) -> str:
     """How the evaluator checks correctness during search (``search_correctness``)."""
-    from evograd.verification.payloads.gate1 import SEARCH_RULE
-
-    search = spec.get("search_correctness") or {}
-    if search.get("rule") == SEARCH_RULE:
-        return (f" Its correctness check applies the acceptance rule of section 2 to "
-                f"{len(search['payload_ids'])} recorded training calls (the first, middle and "
-                "last call of this operator in each of two training steps); the calls "
-                "acceptance judges are not among them.")
-    return ""
+    search = spec["search_correctness"]
+    return (f" Its correctness check applies the acceptance rule of section 2 to "
+            f"{len(search['payload_ids'])} recorded training calls (the first, middle and "
+            "last call of this operator in each of two training steps); the calls "
+            "acceptance judges are not among them.")
 
 
 def render_statement(task: "AgentTask") -> str:

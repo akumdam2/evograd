@@ -122,17 +122,15 @@ def search_feedback(task) -> None:
     """Point every evaluator this run starts at the pack's search-correctness rule.
 
     Evaluators started through ``evograd.adbench_tools.evaluate`` read it from
-    the pack; OpenEvolve's (``run_evolve``) inherit this process's environment.
-    Under the payload rule the corpus and its named payloads must be there now:
-    a run never starts on a rule it cannot apply, and never falls back.
+    the pack; OpenEvolve's (``run_evolve``) are given it as well. The corpus and
+    its named payloads must be there now: a run never starts on a rule it cannot
+    apply, and never falls back.
     """
     from evograd.adbench_tools.evaluate import search_rule
     from evograd.verification.payloads.corpus import Corpus, CorpusError
-    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
-    if search_rule(task) != SEARCH_RULE:
-        os.environ.pop(SEARCH_CORRECTNESS_ENV, None)
-        return
+    search_rule(task)
     spec = task.spec["search_correctness"]
     try:
         corpus = Corpus.open(spec["corpus"]["manifest"])

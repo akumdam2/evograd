@@ -1,13 +1,14 @@
 #!/bin/bash
 # Test and run the OpenAI-model agents (evograd, raw OpenEvolve, GEPA,
-# KernelAgent, Codex) on one operator, end to end. GEAK and Claude Code are
+# KernelAgent, Codex) on one model case, end to end. GEAK and Claude Code are
 # left out.
 #
-#   bash candidates/run_openai.sh [OP] [DTYPE] [BUDGET]
+#   bash candidates/run_openai.sh MODEL CASE_ID CORPUS [BUDGET]
 #
-#   OP      default llama3_swiglu_mlp
-#   DTYPE   default bfloat16
-#   BUDGET  candidate programs per agent in the full run, default 30
+#   MODEL    a verified model, e.g. llama_3_2_1b
+#   CASE_ID  one of its observed cases, e.g. llama3_swiglu_mlp/swiglu_mlp
+#   CORPUS   the model's payload corpus (its manifest.json)
+#   BUDGET   candidate programs per agent in the full run, default 30
 #
 # Stages, in order (STAGES picks a subset, e.g. STAGES="sanity smoke"):
 #   setup   install GEPA and KernelAgent at the pinned commits (only when SETUP=1)
@@ -21,18 +22,20 @@
 # "evograd openevolve gepa kernelagent codex"), ADBENCH_MODEL
 # (default gpt-5.5), ADBENCH_API_BASE (default https://api.openai.com/v1),
 # CUDA_VISIBLE_DEVICES (default 0), TIME_LIMIT (seconds per agent in the full
-# run, default 21600), OUT (default results/adbench_tools/<OP>).
+# run, default 21600), OUT (default results/adbench_tools/<MODEL>/<CASE_ID>).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 cd "$REPO"
 
-OP="${1:-llama3_swiglu_mlp}"
-DTYPE="${2:-bfloat16}"
-BUDGET="${3:-${ADBENCH_BUDGET:-10}}"
+USAGE="usage: run_openai.sh MODEL CASE_ID CORPUS [BUDGET]"
+MODEL="${1:?$USAGE}"
+CASE_ID="${2:?$USAGE}"
+CORPUS="${3:?$USAGE}"
+BUDGET="${4:-${ADBENCH_BUDGET:-10}}"
 STAGES="${STAGES:-setup unit task sanity smoke full}"
 AGENTS="${AGENTS:-evograd openevolve gepa kernelagent codex}"
-OUT="${OUT:-$REPO/results/adbench_tools/$OP}"
+OUT="${OUT:-$REPO/results/adbench_tools/$MODEL/${CASE_ID//\//__}}"
 TASK="$OUT/task"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
@@ -48,7 +51,7 @@ uses() { [[ " $AGENTS " == *" $1 "* ]]; }
 banner() { echo; echo "=============== $* ==============="; }
 die() { echo "FAILED: $*" >&2; exit 1; }
 
-echo "op=$OP dtype=$DTYPE budget=$BUDGET model=$ADBENCH_MODEL gpu=$CUDA_VISIBLE_DEVICES"
+echo "case=$MODEL $CASE_ID budget=$BUDGET model=$ADBENCH_MODEL gpu=$CUDA_VISIBLE_DEVICES"
 echo "stages: $STAGES"
 echo "output: $OUT"
 
@@ -87,7 +90,8 @@ if want task; then
     if [ -f "$TASK/task.json" ]; then
         echo "kept existing $TASK"
     else
-        python -m evograd.adbench_tools task --op "$OP" --dtype "$DTYPE" --output-dir "$TASK" || die "task pack"
+        python -m evograd.adbench_tools task --model "$MODEL" --case-id "$CASE_ID" \
+            --corpus "$CORPUS" --output-dir "$TASK" || die "task pack"
     fi
     python -c "import json,sys; s=json.load(open(sys.argv[1])); print('task', s['task_id']); print('dims', s['workload']['dims']); print('primitives', s['allowed_primitives'])" "$TASK/task.json"
 fi
@@ -103,8 +107,7 @@ if want sanity; then
     echo "ok: skeleton rejected"
 
     banner "sanity: evograd seed must pass"
-    DIMS=$(python -c "import json,sys; d=json.load(open(sys.argv[1]))['workload']['dims']; print(' '.join(f'{k}={v}' for k,v in d.items()))" "$TASK/task.json")
-    evograd seed unified --op "$OP" --dtype "$DTYPE" --dims $DIMS --output-dir "$S/seed" || die "evograd seed unified"
+    evograd seed unified --pack "$TASK" --output-dir "$S/seed" || die "evograd seed unified"
     SEED="$S/seed/initial_program_autograd_pair.py"
     python -m evograd.adbench_tools evaluate --task "$TASK" --json "$S/seed_eval.json" "$SEED" >/dev/null \
         || die "the seed should pass the in-loop evaluator (see $S/seed_eval.json)"
@@ -164,5 +167,5 @@ fi
 if want full; then
     banner "full run: budget $BUDGET"
     AGENTS="$AGENTS" TIME_LIMIT="${TIME_LIMIT:-21600}" OUT="$OUT" \
-        bash "$HERE/run_all.sh" "$OP" "$DTYPE" "$BUDGET" "$OUT"
+        bash "$HERE/run_all.sh" "$MODEL" "$CASE_ID" "$CORPUS" "$BUDGET" "$OUT"
 fi

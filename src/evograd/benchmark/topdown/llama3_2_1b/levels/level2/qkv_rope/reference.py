@@ -28,8 +28,7 @@ are inputs here and receive no gradient.
 
 The output layout is part of the contract. ``q`` is ``[B, HQ, T, D]`` with
 head-major strides because the model reaches it by
-``.view(B, T, HQ, D).transpose(1, 2)``; both spellings must produce that, and
-``verify_runtime_forward`` compares strides as well as values.
+``.view(B, T, HQ, D).transpose(1, 2)``; both spellings must produce that.
 """
 
 import torch

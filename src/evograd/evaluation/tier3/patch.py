@@ -154,10 +154,6 @@ class KernelSource:
     #: "candidate", "baseline:fla", "identity_control", "callable".
     origin: str = "callable"
 
-    @property
-    def verifiable(self) -> bool:
-        return self.op_name is not None and self.module is not None
-
     def to_dict(self) -> dict[str, Any]:
         return {"site": self.site, "op": self.op_name, "origin": self.origin}
 

@@ -14,7 +14,6 @@ exercised separately.
 
 from __future__ import annotations
 
-import json
 import unittest
 
 try:  # torch is absent on some dev boxes; the whole file needs it
@@ -32,18 +31,18 @@ if HAVE_TORCH:
         assert_tensors_unchanged,
         pytorch_autograd_provider,
         renamed_provider,
+        run_once,
         snapshot_tensors,
-        verify_pair_provider,
     )
     from evograd.evaluation.common.report import from_tier2_report
     from evograd.evaluation.tier2.runner import (
         OperatorModule,
         build_parameters,
-        check_module,
         eager_module,
         identity_control_specs,
     )
-    from evograd.opdecl.inputs import upstream_grad_values
+    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
+    from evograd.opdecl.oracle import oracle
     from evograd.benchmark import get_task
 
 #: (op, declared outputs). One single-output operator of each interesting shape,
@@ -57,6 +56,22 @@ def _case(name):
     op = get_task(name)
     workload = op.correctness[0]
     return op, workload, build_parameters(op, workload, device="cpu")
+
+
+def _against_oracle(op, values, outputs, gradients):
+    """``{name: (result, oracle's)}`` for every declared output and gradient, in order."""
+    reference, expected = oracle(op, values)
+    results = dict(zip(op.output_names, zip(outputs, as_output_tuple(op, reference))))
+    if len(gradients) != len(op.grad_names()):
+        raise ValueError(f"{len(gradients)} gradients for {list(op.grad_names())}")
+    results.update({name: (got, expected[name]) for name, got in zip(op.grad_names(), gradients)})
+    return results
+
+
+def _assert_matches(test, results):
+    for name, (got, want) in results.items():
+        with test.subTest(result=name):
+            torch.testing.assert_close(got, want)
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
@@ -122,32 +137,28 @@ class TestParameterRoles(unittest.TestCase):
 class TestTierOnePairProtocol(unittest.TestCase):
     """The direct pair: providers, per-output gates, identity, mutation."""
 
-    def _verify(self, name):
-        op, workload, _values = _case(name)
-        provider = pytorch_autograd_provider(op)
-        return op, verify_pair_provider(op, provider, (workload,), device="cpu")
+    def _run(self, name, provider=None):
+        op, _workload, values = _case(name)
+        provider = provider or pytorch_autograd_provider(op)
+        return op, _against_oracle(op, values, *run_once(op, provider, values))
 
     def test_a_single_output_operator_is_gated_exactly_as_before(self):
-        op, report = self._verify("layernorm")
-        self.assertTrue(report.ok, report.to_dict())
-        self.assertEqual(
-            [c.name for c in report.cases[0].checks],
-            ["y", "dx", "dweight", "dbias"],
-        )
+        op, results = self._run("layernorm")
+        _assert_matches(self, results)
+        self.assertEqual(list(results), ["y", "dx", "dweight", "dbias"])
         self.assertFalse(op.is_multi_output)
 
     def test_three_outputs_are_each_gated_under_their_declared_name(self):
-        op, report = self._verify("qwen3_qkv_norm_rope")
-        self.assertTrue(report.ok, report.to_dict())
-        names = [c.name for c in report.cases[0].checks]
+        op, results = self._run("qwen3_qkv_norm_rope")
+        _assert_matches(self, results)
+        names = list(results)
         self.assertEqual(names[:3], ["q", "k", "v"])
         self.assertEqual(names[3:], list(op.grad_names()))
 
     def test_the_residual_sum_is_gated_alongside_the_normalized_output(self):
-        _op, report = self._verify("fused_add_rms_norm")
-        self.assertTrue(report.ok, report.to_dict())
-        names = [c.name for c in report.cases[0].checks]
-        self.assertEqual(names[:2], ["out", "summed"])
+        _op, results = self._run("fused_add_rms_norm")
+        _assert_matches(self, results)
+        self.assertEqual(list(results)[:2], ["out", "summed"])
 
     def test_the_upstream_gradients_match_the_declared_outputs(self):
         for name in MULTI_OUTPUT:
@@ -166,7 +177,7 @@ class TestTierOnePairProtocol(unittest.TestCase):
                 self.assertTrue(torch.is_tensor(upstream_grad_values(op, values)))
 
     def test_a_provider_returning_one_of_three_outputs_is_refused(self):
-        op, workload, _values = _case("qwen3_qkv_norm_rope")
+        op, _workload, _values = _case("qwen3_qkv_norm_rope")
         honest = pytorch_autograd_provider(op)
 
         def forward(values):
@@ -180,9 +191,9 @@ class TestTierOnePairProtocol(unittest.TestCase):
             source_hash=honest.source_hash,
             adapter_kind=honest.adapter_kind,
         )
-        report = verify_pair_provider(op, truncated, (workload,), device="cpu")
-        self.assertFalse(report.ok)
-        self.assertIn("3 outputs", report.cases[0].error or "")
+        with self.assertRaises(ValueError) as caught:
+            self._run("qwen3_qkv_norm_rope", truncated)
+        self.assertIn("3 outputs", str(caught.exception))
 
     def test_a_mismatched_upstream_gradient_count_is_named(self):
         outputs = (torch.zeros(2), torch.zeros(2))
@@ -192,18 +203,17 @@ class TestTierOnePairProtocol(unittest.TestCase):
         self.assertEqual(len(_grad_outputs(outputs, outputs)), 2)
 
     def test_the_identity_control_reuses_the_exact_callables(self):
-        op, workload, _values = _case("qwen3_qkv_norm_rope")
+        op, _workload, _values = _case("qwen3_qkv_norm_rope")
         provider = pytorch_autograd_provider(op)
         control = renamed_provider(provider, "eager_control")
         self.assertIs(control.forward, provider.forward)
         self.assertIs(control.backward, provider.backward)
         self.assertEqual(control.source_hash, provider.source_hash)
-        # Same callables on both sides must clear the same gate; whatever a
+        # Same callables on both sides must give the same results; whatever a
         # timed run of this pairing reports is the protocol's noise floor.
         for side in (provider, control):
-            self.assertTrue(
-                verify_pair_provider(op, side, (workload,), device="cpu").ok
-            )
+            _op, results = self._run("qwen3_qkv_norm_rope", side)
+            _assert_matches(self, results)
 
     def test_input_mutation_is_caught_for_a_multi_output_operator(self):
         _op, _workload, values = _case("fused_add_rms_norm")
@@ -230,73 +240,64 @@ class TestTierOnePairProtocol(unittest.TestCase):
 class TestTierTwoOperatorProtocol(unittest.TestCase):
     """The operator through the autograd engine: routing, naming, serialization."""
 
+    @staticmethod
+    def _step(op, module, values):
+        """One step through the module as training runs it: ``.grad`` of every
+        activation and parameter after ``torch.autograd.backward``."""
+        activations = [a.detach().clone().requires_grad_(True)
+                       for a in module.activations(values)]
+        outputs = as_output_tuple(op, module(*activations))
+        upstream = upstream_grad_values(op, values)
+        torch.autograd.backward(outputs, upstream if isinstance(upstream, tuple) else (upstream,))
+        got = dict(zip(module._activation_names, (a.grad for a in activations)))
+        got.update({name: getattr(module, name).grad for name in module._parameter_names})
+        by_grad = {arg.grad_name: arg.name for arg in op.active_args()}
+        return _against_oracle(op, values, outputs,
+                               [got.get(by_grad[g]) for g in op.grad_names()])
+
     def _check(self, name):
-        op, workload, values = _case(name)
-        module = eager_module(op, values)
-        return op, check_module(op, module, values, workload)
+        op, _workload, values = _case(name)
+        return op, self._step(op, eager_module(op, values), values)
 
     def test_a_single_output_operator_still_passes(self):
-        op, verdict = self._check("layernorm")
-        self.assertTrue(verdict["ok"], verdict)
-        self.assertEqual(
-            list(verdict["checks"]),
-            ["y", "dx", "dweight", "dbias"],
-        )
-        # The forward check is keyed by the declared output name, not a fixed
+        op, results = self._check("layernorm")
+        _assert_matches(self, results)
+        self.assertEqual(list(results), ["y", "dx", "dweight", "dbias"])
+        # The forward result is keyed by the declared output name, not a fixed
         # "y", so a report reads the same whatever the operator calls it.
         self.assertEqual(op.output_names, ("y",))
 
     def test_qkv_norm_rope_routes_all_three_output_gradients(self):
-        op, verdict = self._check("qwen3_qkv_norm_rope")
-        self.assertTrue(verdict["ok"], verdict)
-        self.assertEqual(list(verdict["checks"])[:3], ["q", "k", "v"])
-        # Every parameter gradient is checked against the oracle, so a backward
+        op, results = self._check("qwen3_qkv_norm_rope")
+        # Every parameter gradient is compared with the oracle, so a backward
         # that dropped dk or dv would fail here rather than merely look small.
-        for grad_name in op.grad_names():
-            self.assertIn(grad_name, verdict["checks"])
+        _assert_matches(self, results)
+        self.assertEqual(list(results)[:3], ["q", "k", "v"])
+        self.assertEqual(list(results)[3:], list(op.grad_names()))
 
     def test_fused_add_rms_norm_checks_the_sum_as_well_as_the_norm(self):
-        _op, verdict = self._check("fused_add_rms_norm")
-        self.assertTrue(verdict["ok"], verdict)
-        self.assertEqual(list(verdict["checks"])[:2], ["out", "summed"])
+        _op, results = self._check("fused_add_rms_norm")
+        _assert_matches(self, results)
+        self.assertEqual(list(results)[:2], ["out", "summed"])
 
     def test_qwen3_attention_gradients_reach_q_k_v_and_the_projection(self):
-        op, workload, values = _case("qwen3_attention")
-        module = eager_module(op, values)
-        verdict = check_module(op, module, values, workload)
-        self.assertTrue(verdict["ok"], verdict)
-        self.assertEqual(
-            [n for n in verdict["checks"] if n != "out"],
-            ["dq", "dk", "dv", "do_weight"],
-        )
+        _op, results = self._check("qwen3_attention")
+        _assert_matches(self, results)
+        self.assertEqual([n for n in results if n != "out"], ["dq", "dk", "dv", "do_weight"])
 
     def test_causal_gqa_attention_measures_without_parameters(self):
-        _op, verdict = self._check("causal_gqa_attention")
-        self.assertTrue(verdict["ok"], verdict)
-        self.assertEqual(list(verdict["checks"]), ["o", "dq", "dk", "dv"])
+        _op, results = self._check("causal_gqa_attention")
+        _assert_matches(self, results)
+        self.assertEqual(list(results), ["o", "dq", "dk", "dv"])
 
     def test_a_module_dropping_an_output_is_refused_not_averaged(self):
-        op, workload, values = _case("qwen3_qkv_norm_rope")
+        op, _workload, values = _case("qwen3_qkv_norm_rope")
         module = eager_module(op, values)
         original = module._call
         module._call = lambda *args, **kwargs: original(*args, **kwargs)[0]
         with self.assertRaises(ValueError) as caught:
-            check_module(op, module, values, workload)
+            self._step(op, module, values)
         self.assertIn("3 outputs", str(caught.exception))
-
-    def test_every_check_serializes_per_output(self):
-        for name in (*SINGLE_OUTPUT, *MULTI_OUTPUT):
-            with self.subTest(op=name):
-                op, verdict = self._check(name)
-                encoded = json.loads(json.dumps(verdict))
-                for out in op.outputs:
-                    entry = encoded["checks"][out.name]
-                    self.assertTrue(entry["ok"], entry)
-                    self.assertTrue(entry["finite"])
-                    # Stride is measured and published; see `_compare` for why
-                    # it is reported rather than gated at this tier.
-                    self.assertIn("stride", entry)
-                    self.assertIn("stride_match", entry)
 
     def test_the_identity_control_is_two_eager_modules(self):
         specs = identity_control_specs()

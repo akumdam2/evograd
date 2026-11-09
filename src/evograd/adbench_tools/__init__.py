@@ -7,12 +7,12 @@ and evograd itself) lives outside the package, under ``candidates/<agent>/``.
 
 The fairness protocol it implements, in the order a run meets it:
 
-1. **One task pack per operator configuration** (:mod:`.task`). It holds what
-   the evograd frontend is given and nothing else: the declared PyTorch forward
-   reference, its argument activity and shapes, and one fixed configuration
-   (dims, dtype) selected exactly as ``evograd seed unified`` selects it. The
-   declaration it writes is the frontend's own scoped declaration, so the
-   oracle, the tolerances and the timed case are the ones evograd is measured
+1. **One task pack per model case** (:mod:`.task`). It holds what the evograd
+   frontend is given and nothing else: the model's PyTorch forward reference,
+   its argument activity and shapes, and the one configuration the model
+   trains at. ``evograd seed --pack`` and ``evograd evolve --pack`` run on the
+   same pack, so the reference, the search rule (Gate 1 on the case's
+   calibration payloads) and the timed case are the ones evograd is measured
    on.
 2. **One problem statement** (:mod:`.statement`). Its first section is the
    evograd agent's OpenEvolve system message for this operator, verbatim; the

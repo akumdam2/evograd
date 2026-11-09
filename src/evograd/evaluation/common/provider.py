@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-import traceback
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -33,11 +32,7 @@ import torch
 from evograd.evaluation.tier1.fast import describe_saved, normalize_saved
 from evograd.opdecl.activity import OpDecl, Workload
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
-from evograd.opdecl.inputs import (
-    as_output_tuple,
-    make_case_inputs,
-    upstream_grad_values,
-)
+from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
 from evograd.opdecl.oracle import resolve_runtime_forward
 
 
@@ -354,63 +349,43 @@ def torch_compile_provider(
     )
 
 
-def verify_pair_provider(
-    op: OpDecl,
-    provider: PairProvider,
-    workloads: tuple[Workload, ...],
-    *,
-    device: str = "cuda",
-):
-    """Correctness-check a provider on the exact shapes that will be timed.
+def run_once(op: OpDecl, provider: PairProvider, values: dict[str, Any]):
+    """One forward and backward of ``provider`` on its own copy of ``values``;
+    the outputs and gradients. Raises if it changes its inputs."""
+    from evograd.verification.common.tensors import isolate
 
-    This is especially important for ``torch_compile_provider``: using the same
-    provider here both validates the compiled results and warms its per-shape
-    compilation cache, instead of compiling a throwaway callable on an unrelated
-    correctness grid before the benchmark starts.
+    own = isolate(values)
+    snapshot = snapshot_tensors(own, may_overwrite=tuple(op.backward_may_overwrite or ()))
+    output, saved = provider.forward(own)
+    grads = provider.backward(upstream_grad_values(op, own), saved, own)
+    assert_tensors_unchanged(own, snapshot, provider=provider.name)
+    return as_output_tuple(op, output), tuple(grads)
+
+
+def check_baseline(op: OpDecl, provider: PairProvider, values: dict[str, Any],
+                   workload: Workload) -> None:
+    """A declared library baseline must compute what eager does on ``values``
+    (one recorded call) before it is timed.
+
+    Each result is held to Gate 1's dtype default for it
+    (:func:`evograd.verification.gate1.tolerances.result_tolerances`), stated for
+    unit-scale values. Recorded gradients are far below an absolute tolerance (a
+    baseline returning zeros would pass), so both sides are first divided by the
+    largest magnitude of eager's result.
     """
-    from evograd.opdecl.oracle import oracle
-    from evograd.opdecl.verify import CaseResult, VerifyReport, _check
+    from evograd.verification.gate1.tolerances import result_tolerances
 
-    cases = []
-    for workload in workloads:
-        dims, dtype = dict(workload.dims), workload.dtype
-        try:
-            values = make_case_inputs(op, workload, device=device)
-            expected_output, expected_grads = oracle(op, values)
-            output, saved = provider.forward(values)
-            gradients = provider.backward(
-                upstream_grad_values(op, values), saved, values
-            )
-            gradients = (
-                (gradients,) if torch.is_tensor(gradients) else tuple(gradients)
-            )
-            if len(gradients) != len(op.grad_names()):
-                raise ValueError(
-                    f"provider returned {len(gradients)} gradients, expected "
-                    f"{len(op.grad_names())}: {op.grad_names()}"
-                )
-            # One check per declared output, each against its own tolerance and
-            # under its own name, so a multi-output task is not gated by
-            # whichever result happens to have the largest magnitude.
-            actual_outputs = as_output_tuple(op, output)
-            expected_outputs = as_output_tuple(op, expected_output)
-            checks = []
-            for out, actual, expected in zip(
-                op.outputs, actual_outputs, expected_outputs
-            ):
-                atol, rtol = op.tolerance_for(workload, out.name)
-                checks.append(_check(out.name, actual, expected, atol, rtol))
-            for grad_name, actual in zip(op.grad_names(), gradients):
-                atol, rtol = op.tolerance_for(workload, grad_name)
-                checks.append(
-                    _check(grad_name, actual, expected_grads[grad_name], atol, rtol)
-                )
-            cases.append(CaseResult(dims=dims, dtype=dtype, checks=tuple(checks)))
-        except Exception:
-            cases.append(
-                CaseResult(dims=dims, dtype=dtype, error=traceback.format_exc())
-            )
-    return VerifyReport(op_name=op.name, cases=tuple(cases))
+    output, grads = run_once(op, provider, values)
+    ref_output, ref_grads = run_once(op, pytorch_autograd_provider(op), values)
+    names = [*op.output_names, *op.grad_names()]
+    for name, got, ref in zip(names, (*output, *grads), (*ref_output, *ref_grads)):
+        atol, rtol = result_tolerances(op, workload, name, ref)
+        scale = ref.detach().float().abs().amax().clamp_min(torch.finfo(torch.float32).tiny)
+        if (got.shape != ref.shape or got.dtype != ref.dtype
+                or not torch.allclose(got.float() / scale, ref.float() / scale,
+                                      atol=atol, rtol=rtol)):
+            raise RuntimeError(f"{op.name}: the {provider.name} baseline differs from eager in "
+                               f"{name!r} on a recorded call")
 
 
 def renamed_provider(provider: PairProvider, name: str) -> PairProvider:

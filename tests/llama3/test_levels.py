@@ -217,15 +217,6 @@ class TestQkvRopeDeclaration(unittest.TestCase):
         )
 
     @unittest.skipIf(torch is None, "torch is required")
-    def test_the_two_spellings_agree(self):
-        """``forward`` is the float32 oracle; ``runtime_forward`` is the exact
-        ``LlamaAttention`` spelling, and is what the eager baseline is timed
-        through. Their gap is the floor no correct kernel can beat."""
-        from evograd.opdecl.baselines import verify_runtime_forward
-
-        verify_runtime_forward(self.op, device="cpu")
-
-    @unittest.skipIf(torch is None, "torch is required")
     def test_the_pair_runs_forward_and_backward_on_every_correctness_case(self):
         from evograd.evaluation.tier3.patch import eager_pair_for
 

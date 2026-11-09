@@ -85,10 +85,9 @@ def compile_forward(op: OpDecl, mode: str | None, dynamic: bool | None,
 def reference_run(op: OpDecl, inputs: dict, *, mode: str | None, dynamic: bool | None):
     """Run the compiled forward/backward once and return ``(y, {grad_name: g})``.
 
-    Same shape as :func:`evograd.opdecl.oracle.oracle`, so the verification gate
-    can compare a compiled baseline against the eager oracle before trusting its
-    timings — a miscompile that silently changes numerics would otherwise show
-    up only as a suspiciously good baseline.
+    Same shape as :func:`evograd.opdecl.oracle.oracle`, so the compiled
+    forward and backward can be compared with eager as one call
+    (``verification.gate1.adapters.pair_from_baseline``).
     """
     import torch
 

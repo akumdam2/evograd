@@ -334,11 +334,11 @@ class TestKernelProvenanceTravels(unittest.TestCase):
                               origin="candidate")
         kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None, source=source)
         self.assertIs(kernels.source_for("swiglu"), source)
-        self.assertTrue(source.verifiable)
 
-    def test_a_raw_callable_is_recorded_as_unverifiable(self):
+    def test_a_raw_callable_is_recorded_as_a_callable(self):
         kernels = patch(KernelSet(registry=SAMPLE_SITES), "swiglu", lambda g, u: None)
-        self.assertFalse(kernels.source_for("swiglu").verifiable)
+        source = kernels.source_for("swiglu")
+        self.assertEqual((source.module, source.origin), (None, "callable"))
 
     def test_restricting_keeps_the_sources_of_the_sites_it_keeps(self):
         source = KernelSource(site="swiglu", op_name="swiglu", module=object())

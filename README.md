@@ -44,9 +44,11 @@ otherwise tend to be duplicated per operator:
 - A typed declaration of inputs, outputs, shapes, differentiation activity,
   workloads, and tolerances.
 - A compiler-aware unified seed pipeline and four research baselines.
-- A PyTorch-autograd oracle derived from the declared forward reference.
-- A hard correctness gate for the candidate forward and every requested
-  gradient, including shape and dtype checks.
+- A PyTorch-autograd oracle derived from the declared forward reference; for a
+  model case, the model's own computation.
+- A hard correctness gate (Gate 1) for the candidate forward and every requested
+  gradient on a model case's recorded training calls, including shape and dtype
+  checks.
 - A generic OpenEvolve evaluator with speed and memory-aware scoring policies.
 - A benchmark harness for backward latency, full-step latency, and saved state.
 - Optional Nsight Compute-guided refinement with a strict keep-only-if-faster gate.
@@ -86,11 +88,12 @@ evograd seed b \
     --output-dir /tmp/B_layernorm
 ```
 
-Optimize it with OpenEvolve:
+Optimize it with OpenEvolve on the same pack; every candidate is judged by the
+pack's search rule (Gate 1 on the case's calibration payloads) before it is timed:
 
 ```bash
 evograd evolve \
-    --op layernorm \
+    --pack /path/to/task_pack \
     --seed /tmp/B_layernorm/initial_program_autograd_pair.py \
     --scoring speed_memory \
     --iterations 10 \
@@ -105,8 +108,10 @@ it, OpenEvolve returns only the best program and the rest of the population is
 unrecoverable.
 
 Judge and time a model's candidates with [`evograd evaluate`](#evaluation).
-ADBench task packs (`python -m evograd.adbench_tools task ...`) and the agent
-baselines that run on them are in [`candidates/`](candidates/README.md).
+A task pack is one model's observed case (`python -m evograd.adbench_tools task
+--model MODEL --case-id TASK/COMPONENT --corpus CORPUS/manifest.json --output-dir
+PACK`); the agent baselines that run on the same packs are in
+[`candidates/`](candidates/README.md).
 Three evaluation tiers, the `fast`/`fair` measurement modes, correctness gates,
 and report semantics: [the evaluation guide](src/evograd/evaluation/README.md).
 
@@ -120,25 +125,23 @@ optimization belong to the subsequent evolution stage. Compiler-generated
 Triton is retained as diagnostic evidence, not copied into the seed.
 
 ```bash
-evograd seed unified --op layernorm --dtype float32 \
-    --dims rows=8 hidden=64 --output-dir /tmp/unified_layernorm
+evograd seed unified --pack /path/to/task_pack --output-dir /tmp/unified_case
 
-evograd evolve --op layernorm --declaration /tmp/unified_layernorm/declaration.py:op \
-    --seed /tmp/unified_layernorm/initial_program_autograd_pair.py \
-    --scoring speed_memory_min --output-dir /tmp/unified_layernorm_evolved
+evograd evolve --pack /path/to/task_pack \
+    --seed /tmp/unified_case/initial_program_autograd_pair.py \
+    --scoring speed_memory_min --output-dir /tmp/unified_case_evolved
 ```
 
-Unified specializes to one exact shape, dtype, CUDA device and set of scalar parameters; without
-`--dims`, it uses the first declared workload of the selected dtype. The emitted
-`declaration.py` keeps verification and evolution on that same configuration.
+Unified specializes to the pack's configuration: one exact shape, dtype and set
+of scalar parameters (the model case's), on one CUDA device. The seed's own
+`declaration.py` records that configuration.
 
-Only a seed that passes forward/all-gradient oracle checks and native autograd
-deployment checks is published as `initial_program_autograd_pair.py`. Unified also
-checks reproducible factory reseeds, independent upstream gradients, and large
-activation/cancellation cases where the declaration's input domain permits them.
-Invalid stress references are recorded separately, never counted as passes;
-these finite checks do not prove correctness for every possible input. There is
-no `--skip-verify` or synthesis repair search. Outputs include `graphs/`,
+Only a seed that passes Gate 1 on the pack's search payloads (recorded training
+calls of the case, against the model reference) and a deployment check through
+native autograd on one of those payloads is published as
+`initial_program_autograd_pair.py`. These finite checks do not prove
+correctness for every possible input. There is no `--skip-verify` or synthesis
+repair search. Outputs include `graphs/`,
 `compiler_prior/`, `partition.json`, `verification_report.json`, and
 `unified_contract.json`. Evolution pins the latter outside the candidate and
 checks fixed library/deployment code, preserved call sites, and actual library
@@ -160,7 +163,8 @@ configuration per task, including its expanded numerical variants. These are
 the tested scopes, not a claim of complete ATen coverage. Unsupported domains
 (for example large sorting axes or unsupported sorting dtypes) raise explicitly.
 
-The four research baselines target the same pair API and PyTorch-autograd oracle:
+The four research baselines target the same pair API and the same seed
+acceptance (Gate 1 on the pack's search payloads):
 
 | Pipeline                   | Inputs                                                | Generation method                                                                                      | LLM required |
 | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------ |
@@ -170,10 +174,10 @@ The four research baselines target the same pair API and PyTorch-autograd oracle
 | **D — Inductor capture**   | Forward reference only                                | AOTAutograd traces the joint graph, the min-cut partitioner splits it, and Inductor lowers both halves | No           |
 
 ```bash
-evograd seed a --op rmsnorm --output-dir /tmp/A_rmsnorm --model gpt-5.5
-evograd seed b --op rmsnorm --output-dir /tmp/B_rmsnorm
-evograd seed c --op rmsnorm --output-dir /tmp/C_rmsnorm --model gpt-5.5
-evograd seed d --op rmsnorm --output-dir /tmp/D_rmsnorm
+evograd seed a --pack /path/to/task_pack --output-dir /tmp/A_rmsnorm --model gpt-5.5
+evograd seed b --pack /path/to/task_pack --output-dir /tmp/B_rmsnorm
+evograd seed c --pack /path/to/task_pack --output-dir /tmp/C_rmsnorm --model gpt-5.5
+evograd seed d --pack /path/to/task_pack --output-dir /tmp/D_rmsnorm
 ```
 
 ### Pipeline D and the saved-tensor contract
@@ -190,32 +194,24 @@ production compiler's answer to the same question the search explores, so a run
 that moves off the captured save-set is a measurable result rather than an
 assumption. The chosen set is recorded in `partitioner_save_set.json`.
 
-A Pipeline D run emits **one seed per dtype**. Inductor specializes on dtype, so
-a single seed handles a single dtype; shapes are generic because the capture uses
-dynamic shapes. Each seed holds exactly one forward and one backward kernel set:
+A Pipeline D seed handles **one dtype**: Inductor specializes on dtype; shapes
+are generic because the capture uses dynamic shapes. A task pack fixes one
+dtype, so `evograd seed d --pack` emits one seed, directly into `--output-dir`,
+holding exactly one forward and one backward kernel set:
 
 ```text
 /tmp/D_rmsnorm/
-├── float32/
-│   ├── inductor_raw/{forward,backward}.py   # unmodified Inductor modules
-│   ├── partitioner_save_set.json            # the min-cut's choice, and its byte cost
-│   ├── initial_program_autograd_pair.py     # 1 forward + 1 backward kernel
-│   └── verification_report.json
-├── float16/
-│   └── ...
-└── seeds.json                               # index over the specialists
+├── inductor_raw/{forward,backward}.py   # unmodified Inductor modules
+├── partitioner_save_set.json            # the min-cut's choice, and its byte cost
+├── initial_program_autograd_pair.py     # 1 forward + 1 backward kernel
+└── verification_report.json
 ```
 
-With `--dtype float16` the single seed is written directly into `--output-dir`
-instead, so it drops into the existing tooling unchanged.
-
-Evolve a specialist with `--dtype`, which gates correctness on that dtype alone
-and measures on it by default:
+Evolve it on the same pack:
 
 ```bash
-evograd evolve --op rmsnorm \
-    --seed /tmp/D_rmsnorm/float16/initial_program_autograd_pair.py \
-    --dtype float16 --output-dir /tmp/E_rmsnorm_f16
+evograd evolve --pack /path/to/task_pack \
+    --seed /tmp/D_rmsnorm/initial_program_autograd_pair.py --output-dir /tmp/E_rmsnorm
 ```
 
 Three properties of the capture are worth knowing:
@@ -472,14 +468,16 @@ that names it.
 
 ## Evolution
 
-OpenEvolve mutates a seed program; evograd supplies the operator-specific
+OpenEvolve mutates a seed program; evograd supplies the case-specific
 environment around it — the correctness gate, the benchmark, and the single
-number the search maximizes.
+number the search maximizes. `evograd evolve --pack PACK` takes all three from
+one model case's task pack.
 
 That number comes from the tier-1 `fast` measurement mode (see
 [the evaluation guide](src/evograd/evaluation/README.md)), collapsed to a scalar by a
 scoring policy. Correctness is a hard gate before it: only candidates that pass
-every declared workload are timed at all, and a failure scores far below any
+the pack's search rule (Gate 1 on the case's calibration payloads, every output
+and gradient against the model reference) are timed at all, and a failure scores far below any
 working kernel rather than being ranked among them.
 
 Available scoring policies are:
@@ -492,13 +490,14 @@ Available scoring policies are:
 | `speed_memory_min_geomean`          | Geometric-mean minimum speedup, memory-penalized                   |
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
-The default is `speed_memory`. `--baseline auto` is PyTorch autograd (eager).
-A declaration may also expose a reviewed library pair baseline (`megafold`,
-`fla`); naming one that is not available hard-fails rather than silently
-changing the comparison:
+The default is the pack's scoring policy, and its baseline (`auto`: PyTorch
+autograd, eager). A declaration may also expose a reviewed library pair baseline
+(`megafold`, `fla`); naming one that is not available hard-fails rather than
+silently changing the comparison, and one that differs from eager on the pack's
+first search payload fails the candidate's evaluation rather than being timed:
 
 ```bash
-evograd evolve --op swiglu --seed seed.py --output-dir /tmp/evolve_swiglu --baseline megafold
+evograd evolve --pack PACK --seed seed.py --output-dir /tmp/evolve_swiglu --baseline megafold
 ```
 
 Liger-Kernel is no longer a baseline.
@@ -507,15 +506,15 @@ Two built-in `torch.compile` baselines are available for every operator without
 any declaration support — `torch_compile` and `torch_compile_max_autotune`:
 
 ```bash
-evograd evolve --op layernorm --seed seed.py --output-dir /tmp/evolve_layernorm \
+evograd evolve --pack PACK --seed seed.py --output-dir /tmp/evolve_layernorm \
     --baseline torch_compile
 ```
 
 They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
 D seed is captured from AOTAutograd + Inductor — roughly what `torch.compile`
 itself would emit — so beating eager is expected and says little about the
-kernel. Both compiled baselines are checked against the eager oracle before
-their timings are used, and they are never selected by `--baseline auto`: each
+kernel. The compiled baselines are the gates' trusted control and are not
+checked again; they are never selected by `--baseline auto`: each
 benchmark case compiles a shape specialist, which costs real wall time on the
 first run (it is absorbed by warmup and by the persistent baseline timing
 cache).
@@ -527,7 +526,7 @@ patching OpenEvolve internals:
 
 ```bash
 evograd evolve \
-    --op rmsnorm \
+    --pack PACK \
     --seed seed.py \
     --output-dir /tmp/evolve_rmsnorm \
     --ncu
@@ -540,7 +539,8 @@ evaluator again. It replaces the best program only when the rewrite is correct
 and has a strictly higher combined score. The original/proposed programs,
 `.ncu-rep`, metrics, diagnosis, and outcome are stored under `ncu_passes/`.
 
-`evograd ncu` applies the same accepted-only pass to an existing candidate.
+`evograd ncu --pack PACK --candidate PROGRAM --output-dir DIR` applies the same
+accepted-only pass to an existing candidate.
 OpenEvolve 0.3.2 has no public per-candidate hook, so evograd refines each
 evolution group’s returned best at the supported library boundary rather than
 retaining the fork’s private every-N worker patch.
@@ -640,13 +640,6 @@ Pipeline B's MoE seed uses a coverage-safe dense-expert
 BMM decomposition plus Triton routing/scatter primitives, leaving top-k/grouped
 fusion as an explicit evolution target.
 
-LayerNorm also includes the legacy and TritonBench shape suites:
-
-```bash
-evograd evolve --op layernorm --seed seed.py --output-dir /tmp/evolve_layernorm \
-    --benchmark-suite tb_mixed --benchmark-dtype float16
-```
-
 ## Adding an operator
 
 Create one package containing a declaration and forward reference:
@@ -676,7 +669,7 @@ or structured tensor outputs. Integer/bool tensor inputs are supported as `Inact
 
 ```text
 src/evograd/
-├── opdecl/                    # declaration types, oracle, binding, verification
+├── opdecl/                    # declaration types, oracle, binding
 ├── ops/                       # operator contracts, references, tolerances, shapes
 │   └── level1/                # reusable primitive declarations
 ├── benchmark/                 # what is benchmarked
@@ -725,8 +718,9 @@ See [result paths](docs/RESULTS_LAYOUT.md) for the storage conventions.
 operator/model integration checks, and Gate 3 global loss-trajectory checks.
 It also provides generic recorded-payload adapters. See the
 [verification API guide](src/evograd/verification/README.md) for input contracts,
-calibration rules, limits, and CPU tests. Existing evaluator entry points are
-not automatically redirected to these APIs.
+calibration rules, limits, and CPU tests. They are the only numerical judges:
+seed acceptance and the evolution evaluator apply Gate 1 to a task pack's
+payloads, and `evograd evaluate` applies Gates 1/2/3.
 
 ## Testing
 

@@ -368,20 +368,12 @@ def _op_case(op, workload, device: str = "cuda") -> dict:
     grads = torch.autograd.grad(run_out, list(leaves.values()), douts, allow_unused=True)
     record = {"dims": dict(workload.dims), "dtype": workload.dtype, "results": {}}
     for out, actual, expected in zip(op.outputs, run_out, ref_out):
-        entry = _compare(actual, expected)
-        atol, rtol = op.tolerance_for(workload, out.name)
-        entry["within_provisional"] = bool(torch.allclose(actual.float(), expected.float(),
-                                                          atol=atol, rtol=rtol))
-        record["results"][out.name] = entry
+        record["results"][out.name] = _compare(actual, expected)
     for name, grad in zip(leaves, grads):
         if grad is None:
             record["results"][name] = {"error": "runtime produced no gradient"}
             continue
-        entry = _compare(grad, ref_grads[name])
-        atol, rtol = op.tolerance_for(workload, name)
-        entry["within_provisional"] = bool(torch.allclose(grad.float(), ref_grads[name].float(),
-                                                          atol=atol, rtol=rtol))
-        record["results"][name] = entry
+        record["results"][name] = _compare(grad, ref_grads[name])
     record.update(peak())
     record["wall_time_s"] = time.perf_counter() - tick
     return record

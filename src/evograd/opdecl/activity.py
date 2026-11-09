@@ -266,9 +266,9 @@ class OpDecl:
     # because there the primitive spelling *is* the best available PyTorch, and
     # timing against it is honest.
     #
-    # The two must agree numerically — ``verify_runtime_forward`` checks it
-    # before any timing is trusted, since otherwise this would silently compare
-    # the runtimes of two different functions.
+    # The two must agree numerically, or this would silently compare the
+    # runtimes of two different functions. A model-reference declaration has
+    # none: its ``forward`` is the model's own spelling, timed and judged alike.
     runtime_forward: str | None = None
 
     # ── benchmark taxonomy ────────────────────────────────────────────────

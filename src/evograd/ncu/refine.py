@@ -28,12 +28,11 @@ def _evaluate_program(
 
     # evaluator_entry resolves EVOGRAD_OP at module import time. Point the child
     # process at the file without importing it in this (unconfigured) process.
+    # The task pack's search rule (EVOGRAD_SEARCH_CORRECTNESS) is the caller's.
     baseline = resolve_performance_baseline(op, baseline)
     env = {
         "EVOGRAD_OP": op.name,
-        "EVOGRAD_FORWARD_OVERRIDE": op.forward,
         "EVOGRAD_SCORING": "speed_memory_min",
-        "EVOGRAD_BENCHMARK_SUITE": "full",
         "EVOGRAD_BENCHMARK_WARMUP": str(warmup),
         "EVOGRAD_BENCHMARK_REPS": str(reps),
         "EVOGRAD_PERFORMANCE_BASELINE": baseline,
@@ -170,8 +169,8 @@ def main(argv=None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--op", required=True)
-    parser.add_argument("--declaration", default=None)
+    parser.add_argument("--pack", type=Path, required=True,
+                        help="task pack of one model case; its search rule judges both programs")
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--baseline", default="auto")
@@ -182,22 +181,25 @@ def main(argv=None) -> int:
     parser.add_argument("--optimizer-timeout", type=int, default=360)
     parser.add_argument("--skip-at-roofline-pct", type=float, default=95.0)
     args = parser.parse_args(argv)
-    from evograd.benchmark import get_task, load_task
+    from evograd.adbench_tools.evaluate import search_rule
+    from evograd.adbench_tools.task import TASK_FILE, load
+    from evograd.evolve.run import _temporary_environ
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
-    op = load_task(args.declaration) if args.declaration else get_task(args.op)
-    if op.name != args.op:
-        parser.error(f"declaration name {op.name!r} does not match --op {args.op!r}")
-    record = refine_candidate(
-        op,
-        args.candidate,
-        output_dir=args.output_dir,
-        baseline=args.baseline,
-        model=args.model,
-        api_base=args.api_base,
-        api_key=args.api_key,
-        ncu_timeout=args.ncu_timeout,
-        optimizer_timeout=args.optimizer_timeout,
-        skip_at_roofline_pct=args.skip_at_roofline_pct,
-    )
+    task = load(args.pack)
+    search_rule(task)
+    with _temporary_environ({SEARCH_CORRECTNESS_ENV: str(task.root / TASK_FILE)}):
+        record = refine_candidate(
+            task.op(),
+            args.candidate,
+            output_dir=args.output_dir,
+            baseline=args.baseline,
+            model=args.model,
+            api_base=args.api_base,
+            api_key=args.api_key,
+            ncu_timeout=args.ncu_timeout,
+            optimizer_timeout=args.optimizer_timeout,
+            skip_at_roofline_pct=args.skip_at_roofline_pct,
+        )
     print(json.dumps(record, indent=2, sort_keys=True))
     return 0 if not str(record["outcome"]).startswith("skipped: input") else 1

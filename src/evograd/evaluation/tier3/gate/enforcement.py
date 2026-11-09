@@ -35,7 +35,6 @@ changes whether the runner is allowed to continue past it.
 
 from __future__ import annotations
 
-import argparse
 import os
 from typing import Any, Iterable, Mapping
 
@@ -86,27 +85,6 @@ def set_active_mode(name: str | None) -> str:
     chosen = mode(name)
     os.environ[ENV] = chosen
     return chosen
-
-
-def add_enforcement_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--numerical-enforcement", dest="numerical_enforcement", default=None,
-        choices=("strict", "report-first", REPORT_FIRST),
-        help=("what a numerical mismatch does at Tier 3. 'strict' (default): it stops the "
-              "provider before training and timing, as before. 'report-first': finite "
-              "numerical mismatches and unavailable comparisons are recorded in full and "
-              "execution continues, so an end-to-end training and timing result exists "
-              "beside them; missing gradients, non-finite values, purity, permissions, "
-              "patch coverage and runtime failures still stop the provider. The numerical "
-              "verdict itself is identical in both modes"))
-
-
-def apply_enforcement_argument(args: argparse.Namespace) -> str:
-    """Select the mode this run asked for, and export it to child processes."""
-    requested = getattr(args, "numerical_enforcement", None)
-    if requested:
-        return set_active_mode(requested)
-    return active_mode()
 
 
 def finding(stage: str, kind: str, reason: str, **extra: Any) -> dict[str, Any]:
@@ -218,7 +196,6 @@ def summarize(findings: Iterable[dict[str, Any]], *, gate: str, active: str | No
 __all__ = [
     "ALWAYS_BLOCKING", "DEFAULT_MODE", "DESCRIPTION", "ENV", "EXECUTION", "KINDS",
     "MODES", "NUMERICAL", "REPORT_FIRST", "STRICT", "STRUCTURAL", "UNAVAILABLE",
-    "active_mode", "add_enforcement_argument", "apply_enforcement_argument",
-    "blocks", "boundary_finding_kind", "finding", "mode", "preflight_numerical_only",
+    "active_mode", "blocks", "boundary_finding_kind", "finding", "mode", "preflight_numerical_only",
     "set_active_mode", "summarize",
 ]

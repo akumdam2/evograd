@@ -339,20 +339,23 @@ final.json × agents ──► compare ──► Markdown table
 
 ### 5.1 The task pack
 
-`python -m evograd.adbench_tools task --op OP --dtype DTYPE --output-dir DIR`
-builds one directory, which every agent then runs on. It refuses to overwrite
-an existing pack, so all agents in a comparison see the same bytes.
+`python -m evograd.adbench_tools task --model MODEL --case-id TASK/COMPONENT
+--corpus CORPUS/manifest.json --output-dir DIR` builds one directory for one
+model's observed case, which every agent then runs on. It refuses to overwrite
+an existing pack, so all agents in a comparison see the same bytes. Building it
+calibrates the compile envelope (operator Gate 2) on the case's payloads, so it
+needs a GPU; `--state` keeps or reuses that calibration.
 
 | File | Content | Built from |
 |---|---|---|
-| `declaration.py` | The operator's declaration narrowed to the one configuration: correctness cases, tolerances, timed shape | The unified frontend's own `select_workload` + `_write_declaration`, byte-identical to what `evograd seed unified` writes |
+| `declaration.py` | The model's reference declaration (`Model.reference_op`) narrowed to the observed case: its configuration, provenance and scalars | `scoped_op` over the observed case's workload |
 | `reference.py` | The forward reference as a self-contained file, ending in `reference_forward = <fn>` | `reference_closure`: starts from the declared forward, copies in every evograd helper and constant it uses, and turns library names into imports. Checked bit-identical to the declared forward for all 63 operators |
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
 | `adbench_primitives.py` | A local `vendor_gemm` so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
 | `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
-The task id looks like `llama3_swiglu_mlp.bf16.B2_H2048_I8192_T2048`.
+The task id looks like `llama_3_2_1b.llama3_swiglu_mlp.swiglu_mlp` (model, then the case id).
 `compare` refuses to mix results from different task ids or statement hashes.
 
 ### 5.2 `TASK.md`: the problem statement
@@ -371,12 +374,11 @@ can't drift from what evograd uses or enforces.
    - the reference source in a ```` ```python ```` block;
    - the fixed configuration;
    - each argument and output with its shape, dtype and gradient role;
-   - the tolerance Gate 1 accepts each output and gradient under: for a
-     model's observed case, the `torch.testing.assert_close` default for the
-     result's dtype or 2x `torch.compile`'s own largest elementwise deviation
-     on that result, whichever is larger, measured on held-out real recorded
-     calls (`gate1.tolerances`); for an operator pack without a model, the
-     declared tolerances, which Gate 1 uses there.
+   - the tolerance Gate 1 accepts each output and gradient under: the
+     `torch.testing.assert_close` default for the result's dtype or 4x
+     `torch.compile`'s own largest elementwise deviation on that result (never
+     less than 4 ulps of the largest value), whichever is larger, measured on
+     held-out real recorded calls (`gate1.tolerances`).
 3. **Deliverable and rules.**
    - The exact signatures to define.
    - The `saved_tensors` contract and the gradient order.
@@ -434,7 +436,7 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
 
 | Depth | Runs | Used by |
 |---|---|---|
-| **full** | `evograd.evolve.evaluator_entry` in a child process, with the environment `run_evolve` sets: scoped declaration, forward override, scoring policy, performance baseline, baseline timing cache, granted primitives. It runs static rules → import → correctness of every output and gradient → a run at the timed shape → timing → `combined_score` | evograd, raw OpenEvolve, GEPA, GEAK, Claude Code, Codex, final score |
+| **full** | `evograd.evolve.evaluator_entry` in a child process, with the environment `run_evolve` sets: scoped declaration, search rule (`EVOGRAD_SEARCH_CORRECTNESS`), scoring policy, performance baseline, baseline timing cache, granted primitives. It runs static rules → import → the search rule (Gate 1 on the case's calibration payloads, every output and gradient) → a run at the timed shape → timing → `combined_score` | evograd, raw OpenEvolve, GEPA, GEAK, Claude Code, Codex, final score |
 | **correctness** | The same up to the timed-shape run, without timing (`_check.py`) | KernelAgent's test, GEAK's and the coding agents' `--correctness` mode |
 
 - **Correctness during search** follows the pack's `search_correctness`

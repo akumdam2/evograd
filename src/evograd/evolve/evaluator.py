@@ -1,9 +1,10 @@
-"""Generic OpenEvolve evaluator: one implementation for every operator.
+"""Generic OpenEvolve evaluator: one implementation for every model case.
 
 ``build_evaluate(op, policy)`` returns the ``evaluate(program_path)`` callable
-OpenEvolve expects. Correctness is a hard gate (checked against the autograd
-oracle derived from the declaration); only correct candidates are benchmarked
-and scored by the chosen :class:`ScoringPolicy`.
+OpenEvolve expects. Correctness is a hard gate: the task pack's search rule
+(Gate 1 on the case's calibration payloads, named by
+``EVOGRAD_SEARCH_CORRECTNESS``); only correct candidates are benchmarked and
+scored by the chosen :class:`ScoringPolicy`.
 
 Replaces the per-bench ``evaluator_autograd_pair*.py`` families (7 files for
 layernorm alone) — metric names and artifact schema are preserved so old and
@@ -31,19 +32,12 @@ import torch
 from evograd.adbench_tools.gpu_lock import run_evaluation
 from evograd.opdecl.activity import OpDecl
 from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
-from evograd.opdecl.inputs import (
-    as_output_tuple,
-    make_case_inputs,
-    upstream_grad_values,
-)
-from evograd.opdecl.oracle import oracle
+from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 from evograd.evaluation.tier1.fast import (
     DEFAULT_REPS,
     DEFAULT_WARMUP,
-    describe_saved,
     normalize_saved,
     run_benchmarks,
-    saved_bytes,
 )
 from evograd.evolve.scoring import (
     CUSTOM_FEATURE_DIMENSION_DEFAULTS,
@@ -285,126 +279,46 @@ def _load_module(program_path: str):
     return module
 
 
-def _max_errors(candidate: torch.Tensor, reference: torch.Tensor) -> tuple[float, float]:
-    diff = (candidate.float() - reference.float()).abs()
-    max_abs = float(diff.max())
-    max_rel = float((diff / reference.float().abs().clamp(min=1e-8)).max())
-    return max_abs, max_rel
-
-
-def _compare_tensor(candidate, reference, atol: float, rtol: float) -> tuple[bool, float, float]:
-    """Check values and the public tensor contract (shape and dtype)."""
-    if not torch.is_tensor(candidate):
-        return False, float("inf"), float("inf")
-    if candidate.shape != reference.shape or candidate.dtype != reference.dtype:
-        return False, float("inf"), float("inf")
-    max_abs, max_rel = _max_errors(candidate, reference)
-    ok = bool(
-        torch.allclose(candidate.float(), reference.float(), atol=atol, rtol=rtol)
+def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]:
+    """Search feedback: the task pack's ``search_correctness`` (Gate 1 on the case's
+    calibration payloads). Without a pack there is nothing to judge by, and nothing
+    else is tried."""
+    from evograd.verification.payloads.gate1 import (
+        SEARCH_CORRECTNESS_ENV,
+        search_correctness,
+        search_spec,
     )
-    return ok, max_abs, max_rel
+
+    spec = search_spec()
+    if spec is None:
+        raise RuntimeError(f"{SEARCH_CORRECTNESS_ENV} is not set: candidates are judged only by a "
+                           "task pack's search rule (evograd evolve --pack)")
+    return search_correctness(op, module, spec, device=device)
 
 
-def _numerical_variants_apply(module) -> bool:
-    """Whether a unified-lineage program also faces the stress variants. They judge by the
-    declaration's tolerances on generated inputs, which a pack's payload rule replaces."""
+def check_performance_baseline(op: OpDecl, baseline: str, *, device: str = "cuda") -> None:
+    """A declared library baseline must compute what eager does before its timings
+    score a candidate: :func:`~evograd.evaluation.common.provider.check_baseline` on
+    the first of the pack's search payloads, as ``evograd evaluate`` checks it on a
+    recorded call. Eager and the compiled controls are not checked."""
+    if baseline not in op.performance_baselines:
+        return
+    from evograd.evaluation.common.provider import (
+        candidate_autograd_provider,
+        check_baseline,
+        renamed_provider,
+    )
+    from evograd.opdecl.baselines import baseline_candidate_module
+    from evograd.verification.payloads.corpus import Corpus
     from evograd.verification.payloads.gate1 import search_spec
 
-    return hasattr(module, "UNIFIED_DEPLOYMENT_CONFIG") and search_spec() is None
-
-
-def _run_correctness(op: OpDecl, module, device: str = "cuda") -> dict[str, Any]:
-    from evograd.verification.payloads.gate1 import search_correctness, search_spec
-
-    # An ADBench task pack may judge search feedback by Gate 1 on recorded payloads.
-    if (spec := search_spec()) is not None:
-        return search_correctness(op, module, spec, device=device)
-    fwd, bwd = lookup_pair(op, module)
-    grad_names = op.grad_names()
-    reports = []
-    passed = 0
-    passed_by_output = {name: 0 for name in grad_names}
-    forward_passed = 0
-
-    for workload in op.correctness:
-        report: dict[str, Any] = {"dims": dict(workload.dims), "dtype": workload.dtype}
-        try:
-            inputs = make_case_inputs(op, workload, device=device)
-            y_ref, expected = oracle(op, inputs)
-            positional = [inputs.get(a.name, getattr(a, "default", None)) for a in op.args]
-            y, saved = fwd(*positional)
-            kwargs = backward_inactive_kwargs(op, bwd, inputs)
-            actual = bwd(upstream_grad_values(op, inputs), saved, **kwargs)
-            actual = (actual,) if torch.is_tensor(actual) else tuple(actual)
-            torch.cuda.synchronize()
-
-            with torch.no_grad():
-                _y2, saved2 = fwd(*positional)
-                saved_tensors = normalize_saved(saved2)
-            outputs = as_output_tuple(op, y)
-            references = as_output_tuple(op, y_ref)
-            report["forward_shape"] = (
-                [list(t.shape) for t in outputs]
-                if op.is_multi_output
-                else list(outputs[0].shape)
-            )
-            report["saved_tensors"] = describe_saved(saved_tensors)
-            report["saved_bytes"] = saved_bytes(saved_tensors)
-
-            # One comparison per declared output, then the conjunction. A
-            # multi-output candidate that got one output right and another wrong
-            # must not read as a passing forward.
-            forward_ok, forward_abs, forward_rel = True, 0.0, 0.0
-            for out, got, ref in zip(op.outputs, outputs, references):
-                atol, rtol = op.tolerance_for(workload, out.name)
-                ok, max_abs, max_rel = _compare_tensor(got, ref, atol, rtol)
-                if op.is_multi_output:
-                    report[f"{out.name}_correct"] = ok
-                    report[f"{out.name}_max_abs_error"] = max_abs
-                    report[f"{out.name}_max_rel_error"] = max_rel
-                forward_ok = forward_ok and ok
-                forward_abs = max(forward_abs, max_abs)
-                forward_rel = max(forward_rel, max_rel)
-            report["forward_correct"] = forward_ok
-            report["forward_max_abs_error"] = forward_abs
-            report["forward_max_rel_error"] = forward_rel
-            forward_passed += int(forward_ok)
-            correct = forward_ok and len(actual) == len(grad_names)
-            if len(actual) != len(grad_names):
-                report["error_message"] = (
-                    f"backward returned {len(actual)} gradients, expected {len(grad_names)}"
-                )
-            for name, got in zip(grad_names, actual):
-                ref = expected[name]
-                grad_atol, grad_rtol = op.tolerance_for(workload, name)
-                ok, max_abs, max_rel = _compare_tensor(got, ref, grad_atol, grad_rtol)
-                report[f"{name}_correct"] = ok
-                report[f"{name}_max_abs_error"] = max_abs
-                report[f"{name}_max_rel_error"] = max_rel
-                correct = correct and ok
-                passed_by_output[name] += int(ok)
-            report["correct"] = correct
-            passed += int(correct)
-        except Exception as exc:
-            report.update(
-                {
-                    "correct": False,
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "traceback": traceback.format_exc(limit=8),
-                }
-            )
-        reports.append(report)
-
-    total = max(1, len(op.correctness))
-    return {
-        "passed": passed,
-        "total": len(op.correctness),
-        "partial_correctness": passed / total,
-        "forward_correctness": forward_passed / total,
-        **{f"{name}_correctness": passed_by_output[name] / total for name in grad_names},
-        "reports": reports,
-    }
+    spec = search_spec()
+    if spec is None:
+        raise RuntimeError("the baseline check needs the task pack's search payloads")
+    values = Corpus.open(spec["corpus"]["manifest"]).load(spec["payload_ids"][0], device=device)
+    provider = renamed_provider(
+        candidate_autograd_provider(op, baseline_candidate_module(op, baseline)), baseline)
+    check_baseline(op, provider, values, op.correctness[0])
 
 
 def _smoke_benchmark_shapes(
@@ -525,7 +439,6 @@ def build_evaluate(
             )
 
         correctness = None
-        numerical_variants = None
         benchmark = None
         native_output_path = None
         try:
@@ -533,17 +446,10 @@ def build_evaluate(
                 native_output_path = captured_path
                 correctness = _run_correctness(op, module)
                 if correctness["passed"] == correctness["total"]:
-                    if _numerical_variants_apply(module):
-                        from evograd.pipelines.unified.validation import validate_numerical_variants
-
-                        numerical_variants = validate_numerical_variants(op, module)
-                        if not numerical_variants["ok"]:
-                            return emit({"combined_score": -1e6, "correct": 0.0},
-                                        {"correctness": correctness,
-                                         "numerical_variants": numerical_variants})
                     smoke_workloads = op.coverage if op.coverage else benchmark_workloads
                     smoke_failure = _smoke_benchmark_shapes(op, module, smoke_workloads)
                     if smoke_failure is None:
+                        check_performance_baseline(op, performance_baseline)
                         benchmark = run_benchmarks(
                             op,
                             module,
@@ -699,8 +605,7 @@ def build_evaluate(
         benchmark["primitives"] = primitive_usage
         return emit(
             metrics,
-            {"correctness": correctness, "benchmark": benchmark,
-             **({"numerical_variants": numerical_variants} if numerical_variants is not None else {})},
+            {"correctness": correctness, "benchmark": benchmark},
             cases=benchmark["cases"],
         )
 
@@ -773,27 +678,33 @@ def evaluate_isolated(
 
 
 def main(argv: list[str]) -> int:
-    """Standalone: python -m evograd.evolve.evaluator --op X [--scoring Y] PROGRAM"""
+    """Standalone: python -m evograd.evolve.evaluator --pack PACK [--scoring Y] PROGRAM"""
     import argparse
 
+    from evograd.adbench_tools.evaluate import search_rule
+    from evograd.adbench_tools.task import TASK_FILE, load
     from evograd.evolve.scoring import get_policy
-    from evograd.benchmark import get_task
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--op", required=True)
-    parser.add_argument("--scoring", default="speed_memory")
+    parser.add_argument("--pack", type=pathlib.Path, required=True,
+                        help="task pack of one model case; its search rule judges the program")
+    parser.add_argument("--scoring", default=None, help="default: the pack's scoring policy")
     parser.add_argument(
         "--baseline",
-        default=os.environ.get("EVOGRAD_PERFORMANCE_BASELINE", "pytorch_autograd"),
-        help="performance baseline (matches evaluator_entry's env default)",
+        default=None,
+        help="performance baseline (default: the pack's)",
     )
     parser.add_argument("program")
     args = parser.parse_args(argv)
 
+    task = load(args.pack)
+    search_rule(task)
+    os.environ[SEARCH_CORRECTNESS_ENV] = str(task.root / TASK_FILE)
     evaluate = build_evaluate(
-        get_task(args.op),
-        get_policy(args.scoring),
-        performance_baseline=args.baseline,
+        task.op(),
+        get_policy(args.scoring or task.spec["scoring"]),
+        performance_baseline=args.baseline or task.spec["performance_baseline"],
     )
     result = evaluate(args.program)
     print(json.dumps({"metrics": result.metrics, "artifacts": result.artifacts}, indent=2))

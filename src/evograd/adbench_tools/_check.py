@@ -1,9 +1,10 @@
 """Correctness-only evaluation of one packaged artifact, in a child process.
 
 The same gates, in the same order, as ``evograd.evolve.evaluator`` applies
-before it times anything: the pair API, the static primitive rules, every
-declared output and gradient against the autograd oracle, and a run at each
-coverage shape. Writes ``{"metrics", "artifacts"}`` to ``$EVOGRAD_RESULT_JSON``.
+before it times anything: the pair API, the static primitive rules, the task
+pack's search rule (Gate 1 on the case's calibration payloads, named by
+``$EVOGRAD_SEARCH_CORRECTNESS``), and a run at each coverage shape. Writes
+``{"metrics", "artifacts"}`` to ``$EVOGRAD_RESULT_JSON``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ import json
 import os
 import sys
 import traceback
-from dataclasses import replace
 from pathlib import Path
 
 
@@ -70,8 +70,6 @@ def main(argv: list[str] | None = None) -> int:
     op = load_task(args.declaration)
     if op.name != args.op:
         raise SystemExit(f"declaration is {op.name!r}, expected {args.op!r}")
-    if os.environ.get("EVOGRAD_FORWARD_OVERRIDE"):
-        op = replace(op, forward=os.environ["EVOGRAD_FORWARD_OVERRIDE"])
     try:
         metrics, artifacts = _check(op, args.program)
     except Exception as exc:  # the parent must always receive a verdict

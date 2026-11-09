@@ -26,9 +26,7 @@ import torch
 from evograd.benchmark import TASKS
 from evograd.benchmark.topdown.qwen3_5_4b.architecture import config_record
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import capture_tools, manifest
-from evograd.evaluation.tier3.patch import eager_pair_for
-from evograd.opdecl import bind_shape, verify
-from evograd.opdecl.baselines import verify_runtime_forward
+from evograd.opdecl import bind_shape
 from evograd.opdecl.models import QWEN3_5_4B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
@@ -90,18 +88,6 @@ class TestDeclarations(unittest.TestCase):
                 self.assertIn("#: Calibrated: see the calibrated-tolerances block", source)
                 self.assertNotIn("Not calibrated", source)
                 self.assertIn("#: Calibrated for Qwen3.5-4B (run ", source)
-
-    def test_oracle_and_production_agree_on_the_grid(self):
-        for site, task in manifest.SITE_TASKS.items():
-            with self.subTest(site=site):
-                verify_runtime_forward(TASKS[task], device="cpu")
-
-    def test_the_eager_pair_passes_the_gate(self):
-        for site, task in manifest.SITE_TASKS.items():
-            op = TASKS[task]
-            with self.subTest(site=site):
-                report = verify(op, eager_pair_for(op), device="cpu")
-                self.assertTrue(report.ok, report.to_dict())
 
     def test_library_baselines_are_declared(self):
         self.assertIn("fla", TASKS["qwen3_5_gated_delta_rule"].performance_baselines)

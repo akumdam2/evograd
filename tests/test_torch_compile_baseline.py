@@ -69,8 +69,7 @@ class TestResolution(unittest.TestCase):
         self.assertIsNone(default.compiled_mode)
         self.assertEqual(tuned.compiled_mode, "max-autotune")
         self.assertFalse(default.compiled_dynamic)
-        # reference_run is what verify_performance_baseline checks against the
-        # eager oracle before any timing is trusted.
+        # reference_run is the compiled forward and backward as one call.
         self.assertTrue(callable(default.reference_run))
         self.assertTrue(default.available())
 
@@ -199,37 +198,6 @@ class TestFairProvider(unittest.TestCase):
         torch.testing.assert_close(grads[0], dout * values["weight"])
         torch.testing.assert_close(grads[1], (dout * values["x"]).sum(0))
         torch.testing.assert_close(grads[2], dout.sum(0))
-
-    def test_exact_workload_provider_gate(self):
-        import torch
-
-        from evograd.evaluation.tier1.fair import PairProvider, verify_pair_provider
-        from evograd.opdecl.activity import Workload
-
-        op = get_task("layernorm")
-
-        def forward(values):
-            x = values["x"].detach().requires_grad_(True)
-            weight = values["weight"].detach().requires_grad_(True)
-            bias = values["bias"].detach().requires_grad_(True)
-            values.update(x=x, weight=weight, bias=bias)
-            output = torch.nn.functional.layer_norm(
-                x, (x.shape[-1],), weight, bias, values["eps"]
-            )
-            return output, (output,)
-
-        def backward(dout, saved, values):
-            return torch.autograd.grad(
-                saved[0],
-                (values["x"], values["weight"], values["bias"]),
-                dout,
-            )
-
-        provider = PairProvider("compiled", forward, backward, "hash", "test")
-        workloads = (Workload({"rows": 3, "hidden": 7}, "float32"),)
-        report = verify_pair_provider(op, provider, workloads, device="cpu")
-        self.assertTrue(report.ok, report.to_dict())
-        self.assertEqual(report.cases[0].dims, {"rows": 3, "hidden": 7})
 
 
 if __name__ == "__main__":

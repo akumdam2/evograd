@@ -1,6 +1,6 @@
 """python -m evograd.adbench_tools <command>
 
-    task       build a task pack for one operator configuration or a model's observed case
+    task       build the task pack of one model's observed case
     statement  print a task pack's shared problem statement
     package    wrap an agent module into an evaluable artifact
     evaluate   evaluate one candidate (see evograd.adbench_tools.evaluate)
@@ -15,48 +15,29 @@ import sys
 from pathlib import Path
 
 
-def _dims(values: list[str] | None) -> dict[str, int] | None:
-    if not values:
-        return None
-    dims: dict[str, int] = {}
-    for binding in values:
-        name, separator, value = binding.partition("=")
-        if not separator or name in dims:
-            raise SystemExit(f"invalid or duplicate dimension: {binding}")
-        dims[name] = int(value)
-    return dims
-
-
 def _task(argv: list[str]) -> int:
-    from evograd.adbench_tools.task import CASE_SELECTIONS, LIBRARY_POLICIES, build_task
+    from evograd.adbench_tools.task import LIBRARY_POLICIES, build_task
 
     parser = argparse.ArgumentParser(prog="python -m evograd.adbench_tools task",
                                      description="Build a task pack (see evograd.adbench_tools.task).")
-    parser.add_argument("--op", default=None)
-    parser.add_argument("--model", default=None,
-                        help="with --case-id: a verified model's observed case, under the model's "
-                             "reference (what `evograd evaluate` judges); replaces --op and the "
-                             "configuration flags")
-    parser.add_argument("--case-id", default=None, metavar="TASK/COMPONENT")
-    parser.add_argument("--declaration", default=None, help="external path.py:op declaration")
-    parser.add_argument("--dtype", choices=("float32", "float16", "bfloat16"))
-    parser.add_argument("--dims", nargs="+", metavar="NAME=SIZE",
-                        help="default: the first declared workload of the dtype, as "
-                             "`evograd seed unified` selects it")
-    parser.add_argument("--case", choices=CASE_SELECTIONS, default="benchmark",
-                        help="without --dims: the first timed benchmark case (default) or, "
-                             "as `evograd seed unified` defaults, the first correctness case")
+    parser.add_argument("--model", required=True,
+                        help="a verified model (evograd.verification.integrations)")
+    parser.add_argument("--case-id", required=True, metavar="TASK/COMPONENT",
+                        help="the model's observed case, under the model's reference (what "
+                             "`evograd evaluate` judges)")
+    parser.add_argument("--corpus", type=Path, required=True,
+                        help="the model's payload corpus (its manifest.json): search feedback is "
+                             "Gate 1 on the case's calibration payloads")
+    parser.add_argument("--state", type=Path, default=None,
+                        help="reuse or keep the operator Gate 2 calibration here")
     parser.add_argument("--library", choices=LIBRARY_POLICIES, default="auto")
     parser.add_argument("--scoring", default="speed_memory")
     parser.add_argument("--performance-baseline", default="auto")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
-    if (args.op is None) == (args.model is None):
-        parser.error("give --op, or --model with --case-id")
-    task = build_task(args.op, args.output_dir, declaration=args.declaration, dtype=args.dtype,
-                      dims=_dims(args.dims), library=args.library, scoring=args.scoring,
-                      performance_baseline=args.performance_baseline, case=args.case,
-                      model=args.model, case_id=args.case_id)
+    task = build_task(args.output_dir, model=args.model, case_id=args.case_id, corpus=args.corpus,
+                      state=args.state, library=args.library, scoring=args.scoring,
+                      performance_baseline=args.performance_baseline)
     print(f"task {task.task_id}: {task.root}")
     print(f"  configuration: {task.workload}")
     print(f"  library primitives: {list(task.allowed_primitives)} "

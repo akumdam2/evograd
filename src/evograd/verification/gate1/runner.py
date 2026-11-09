@@ -1,16 +1,19 @@
-"""Gate 1: the local pair against the declared PyTorch oracle. One core.
+"""Gate 1: the local pair against the model reference, on recorded calls. One core.
 
 **What is compared.** Every declared forward output, and every gradient the
 declaration requires (``op.grad_names()``), from the candidate's own forward
 and backward: the backward receives the candidate forward's saved state.
 
+**On what.** The cases the caller supplies: recorded training payloads
+(:func:`evograd.verification.payloads.payload_cases`) or values given the same
+way. There is no default case set and no generated input.
+
 **Against what.** ``OpDecl.forward`` evaluated eagerly under autograd
-(:func:`evograd.opdecl.oracle.oracle`), at ``reference_dtype`` when the
-declaration sets one, with the results cast back to the required dtypes. For a
-model-reference declaration (``op.reference_contract``, e.g. every Qwen3-0.6B
-task) ``forward`` is the pinned model's own computation, differentiated at the
-operands' real dtypes; ``reference_dtype`` is refused there. The report's
-``subject.reference`` records which contract applied
+(:func:`evograd.opdecl.oracle.oracle`). Gate 1 judges only a model-reference
+declaration (``op.reference_contract``, e.g. every Qwen3-0.6B task): ``forward``
+is the pinned model's own computation, differentiated at the operands' real
+dtypes. Any other declaration is refused (:mod:`.tolerances`). The report's
+``subject.reference`` records the contract
 (:func:`evograd.opdecl.oracle.reference_identity`).
 
 **How.** Per element, per result:
@@ -23,8 +26,7 @@ result over the calibration payloads (passed in by the caller from the
 operator Gate 2 policy; absent, 0), but never less than that factor times one
 ulp of the reference result's largest magnitude
 (:func:`.tolerances.rounding_floor`). Declaration overrides,
-multipliers and shape hooks do not apply to model tasks. Generic tasks retain
-``op.tolerance_for(workload, result)``. Computed in float64.
+multipliers and shape hooks do not apply. Computed in float64.
 
 **What this core adds to the earlier verifiers** (all listed in the package
 README): explicit finiteness (a non-finite candidate fails, a non-finite
@@ -46,7 +48,6 @@ import torch
 from evograd.opdecl.activity import Active, OpDecl, Workload, bind_shape
 from evograd.opdecl.inputs import (
     arg_dtype_name,
-    make_case_inputs,
     resolve_dtype,
     upstream_grad_values,
 )
@@ -105,25 +106,16 @@ class PairUnderTest:
 
 @dataclass(frozen=True)
 class Gate1Case:
-    """One concrete case. ``values=None`` means "the declaration's inputs"."""
+    """One concrete case: a recorded payload (loaded by its ``materialize``) or
+    supplied values, named like the declaration's arguments and output cotangents."""
 
     case_id: str
     workload: Workload
-    values: Mapping[str, Any] | None = None
+    values: Mapping[str, Any]
     #: ``required`` cases decide the verdict. A ``probe`` (e.g. a stress
     #: pattern) whose reference is invalid is recorded as skipped, never passed.
     role: str = REQUIRED_CASE
     provenance: Mapping[str, Any] = field(default_factory=dict)
-
-
-def case_id_for(op: OpDecl, workload: Workload, variant: str = "declared") -> str:
-    dims = ",".join(f"{k}={v}" for k, v in sorted(workload.dims.items()))
-    return f"{op.name}/{dims}/{workload.dtype}/{variant}"
-
-
-def declared_cases(op: OpDecl, workloads: Sequence[Workload] | None = None) -> tuple[Gate1Case, ...]:
-    selected = op.correctness if workloads is None else tuple(workloads)
-    return tuple(Gate1Case(case_id_for(op, w), w) for w in selected)
 
 
 def result_contract(op: OpDecl, workload: Workload | None = None) -> C.ResultContract:
@@ -165,8 +157,7 @@ def verify_pair(
     op: OpDecl,
     candidate: Any,
     *,
-    cases: Sequence[Gate1Case] | None = None,
-    workloads: Sequence[Workload] | None = None,
+    cases: Sequence[Gate1Case],
     device: str = "cuda",
     mode: str = ORACLE,
     input_mutation: str = REJECT,
@@ -182,7 +173,7 @@ def verify_pair(
     ``candidate`` is a :class:`PairUnderTest`, a seed module exposing
     ``forward_with_saved``/``backward_from_saved`` (generic or op-prefixed), or
     a ``PairProvider``-like object; see :func:`gate1.adapters.as_pair`.
-    ``cases`` overrides ``workloads`` (default: ``op.correctness``).
+    ``cases`` are what it is judged on; an empty set never passes.
 
     ``mode="smoke"`` runs the pair and checks only the declared shapes, dtypes
     and finiteness. Its report is never ``passed``: it says ``incomplete``
@@ -199,7 +190,7 @@ def verify_pair(
     if input_mutation not in (REJECT, RECORD):
         raise ValueError(f"input_mutation must be {REJECT!r} or {RECORD!r}")
     pair = as_pair(op, candidate)
-    selected = tuple(cases) if cases is not None else declared_cases(op, workloads)
+    selected = tuple(cases)
     report = VerificationReport(
         gate=GATE, protocol=PROTOCOL if mode == ORACLE else SMOKE_PROTOCOL,
         subject={"op": op.name, "candidate": pair.name, "candidate_identity": dict(pair.identity),
@@ -233,13 +224,9 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
     contract = result_contract(op, case.workload)
     report.evidence["contract"] = contract.to_dict()
 
-    # 1. the inputs: generated from the declaration, or supplied by the caller.
+    # 1. the inputs: a recorded payload, or values supplied by the caller.
     try:
-        if case.values is None:
-            with isolated_rng(None, device):
-                values = make_case_inputs(op, case.workload, device=device)
-            report.evidence["inputs"] = "declaration"
-        elif callable(getattr(case.values, "materialize", None)):
+        if callable(getattr(case.values, "materialize", None)):
             # A recorded payload, loaded only now (exact layouts and aliases).
             values = dict(case.values.materialize())
             report.evidence["inputs"] = str(case.provenance.get("inputs", "materialized"))

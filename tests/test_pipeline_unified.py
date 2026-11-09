@@ -379,12 +379,21 @@ class TestFixedConfiguration(unittest.TestCase):
             spec = importlib.util.spec_from_file_location('_unified_evaluator_test', entry_path)
             entry = importlib.util.module_from_spec(spec)
             environment = {'EVOGRAD_OP': op.name, 'EVOGRAD_DECLARATION': f'{declaration}:op'}
+            # Without a task pack's search rule the entry refuses to start.
+            with patch.dict(os.environ, environment, clear=True), \
+                    patch.object(evaluator, 'build_evaluate', return_value=lambda _: None) as build, \
+                    self.assertRaisesRegex(RuntimeError, 'EVOGRAD_SEARCH_CORRECTNESS is not set'):
+                spec.loader.exec_module(entry)
+            build.assert_not_called()
+            environment['EVOGRAD_SEARCH_CORRECTNESS'] = str(Path(directory) / 'task.json')
+            entry = importlib.util.module_from_spec(spec)
             with patch.dict(os.environ, environment, clear=True), \
                     patch.object(evaluator, 'build_evaluate', return_value=lambda _: None) as build:
                 spec.loader.exec_module(entry)
             selected = build.call_args.args[0]
             self.assertEqual(selected.correctness, (workload,))
-            self.assertEqual(build.call_args.kwargs['benchmark_workloads'], (workload,))
+            self.assertEqual(selected.benchmark, (workload,))
+            self.assertNotIn('benchmark_workloads', build.call_args.kwargs)
             self.assertEqual(selected.tolerances, op.tolerances)
 
 

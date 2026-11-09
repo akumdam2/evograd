@@ -195,12 +195,6 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
             with self.subTest(dims=workload.dims):
                 self.assertEqual(out.stride(), values["x"].stride())
 
-    def test_the_runtime_gate_passes(self):
-        from evograd.opdecl import baselines
-
-        baselines._RUNTIME_FORWARD_VERIFIED.discard("rope")
-        baselines.verify_runtime_forward(get_task("rope"), device="cpu")
-
 
 class TestComposition(unittest.TestCase):
     def test_the_biasless_projections_still_compose_into_level_two(self):

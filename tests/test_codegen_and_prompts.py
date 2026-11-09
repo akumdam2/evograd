@@ -524,11 +524,14 @@ class TestEvolveConfigRendering(unittest.TestCase):
         for dim, default in CUSTOM_FEATURE_DIMENSION_DEFAULTS.items():
             self.assertEqual(result.metrics.get(dim), default)
 
-    def test_run_wrapper_propagates_declaration_native_benchmark_selection(self):
+    def test_run_wrapper_points_the_evaluator_at_the_pack(self):
         from evograd.evolve.run import run_evolve
+        from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
+        from tests.adbench_tools.test_adbench_tools import payload_rule_task
 
         with TemporaryDirectory() as td:
             root = Path(td)
+            task = payload_rule_task(root / "pack", "qwen3_0_6b", "rmsnorm/rmsnorm")
             seed = root / "seed.py"
             seed.write_text("# EVOLVE-BLOCK-START\npass\n# EVOLVE-BLOCK-END\n")
             observed_env = {}
@@ -545,17 +548,38 @@ class TestEvolveConfigRendering(unittest.TestCase):
                 ),
             ):
                 code = run_evolve(
-                    get_task("layernorm"),
+                    task.root,
                     seed_path=seed,
                     output_dir=root / "out",
-                    benchmark_suite="tb_i12",
-                    benchmark_dtypes=("bfloat16",),
                     performance_baseline="cublas_pair",
                 )
             self.assertEqual(code, 1)
-            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_SUITE"], "tb_i12")
-            self.assertEqual(observed_env["EVOGRAD_BENCHMARK_DTYPES"], "bfloat16")
+            self.assertEqual(observed_env["EVOGRAD_DECLARATION"], task.declaration)
+            self.assertEqual(observed_env["EVOGRAD_OP"], "rmsnorm")
+            self.assertEqual(observed_env[SEARCH_CORRECTNESS_ENV], str(task.root / "task.json"))
             self.assertEqual(observed_env["EVOGRAD_PERFORMANCE_BASELINE"], "cublas_pair")
+            for retired in ("EVOGRAD_BENCHMARK_SUITE", "EVOGRAD_BENCHMARK_DTYPES",
+                            "EVOGRAD_CORRECTNESS_DTYPES", "EVOGRAD_FORWARD_OVERRIDE"):
+                self.assertNotIn(retired, observed_env)
+
+    def test_run_wrapper_refuses_a_pack_without_the_payload_rule(self):
+        import json
+
+        from evograd.evolve.run import run_evolve
+        from tests.adbench_tools.test_adbench_tools import payload_rule_task
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            task = payload_rule_task(root / "pack", "qwen3_0_6b", "rmsnorm/rmsnorm")
+            spec = json.loads((task.root / "task.json").read_text())
+            spec["search_correctness"] = {"rule": "declared_tolerances"}
+            (task.root / "task.json").write_text(json.dumps(spec))
+            seed = root / "seed.py"
+            seed.write_text("# EVOLVE-BLOCK-START\npass\n# EVOLVE-BLOCK-END\n")
+            with mock.patch("openevolve.run_evolution") as evolution:
+                with self.assertRaisesRegex(ValueError, "rebuild the pack"):
+                    run_evolve(task.root, seed_path=seed, output_dir=root / "out")
+            evolution.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -48,7 +48,6 @@ from evograd.evaluation.common.provider import (  # noqa: F401  (re-export)
     saved_state_report,
     snapshot_tensors,
     torch_compile_provider,
-    verify_pair_provider,
 )
 from evograd.evaluation.common.provider import saved_state_report as _saved_state_report  # noqa: F401
 

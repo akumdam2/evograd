@@ -55,7 +55,8 @@ rejects incompatible policies. Unidentifiable references fail closed.
 ## Gate 1: local numerical verification
 
 ```python
-report = gate1.verify_pair(op, candidate_module, device="cpu")
+cases = payload_cases(op, workload, corpus, case_id=case_id, split="acceptance")
+report = gate1.verify_pair(op, candidate_module, cases=cases, envelope=envelope)
 assert report.status == "passed", report.to_dict()
 ```
 
@@ -64,11 +65,13 @@ output and required gradient is checked by name, structure, shape, dtype,
 finiteness, and the elementwise rule `abs(c-r) <= max(atol + rtol*abs(r), envelope)`,
 where `envelope` is gamma times the largest elementwise deviation the trusted
 `torch.compile` control showed on that result over the operator Gate 2
-calibration payloads (0 for a generic task). Comparisons use float64. Candidate input mutation fails unless the declaration
+calibration payloads, never less than gamma ulps of the reference's largest
+magnitude. Comparisons use float64. Candidate input mutation fails unless the declaration
 explicitly allows it; allowed content overwrites must preserve layout.
 
-Generic tasks use the declaration's effective tolerance. Model-reference tasks
-use a fixed, versioned table based on the reference result's dtype:
+Gate 1 judges only model-reference tasks; any other declaration is refused, so
+a declaration's own tolerances judge nothing. The tolerance is a fixed,
+versioned table based on the reference result's dtype:
 
 | Result dtype | atol | rtol |
 | --- | ---: | ---: |
@@ -83,10 +86,10 @@ larger. Model tasks bypass declaration overrides, result multipliers, and shape
 scaling. The policy identity is recorded in the report. This is the selected numerical policy, not a proof that all meaningful
 errors are detected; tiny gradients can still fall below the absolute floor.
 
-Callers may supply `Gate1Case` values, lazy recorded payloads, or declaration-
-generated cases. `mode="smoke"` checks execution and contracts but never passes
-numerical verification. This core API does not enforce an application-wide
-choice of real versus generated inputs.
+Callers supply the cases: lazy recorded payloads (`payload_cases`) or values
+given the same way (`Gate1Case`). There is no default case set and no
+generated input; an empty case set never passes. `mode="smoke"` checks
+execution and contracts but never passes numerical verification.
 
 ## Gate 2: framework integration
 

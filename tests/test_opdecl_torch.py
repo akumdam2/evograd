@@ -67,18 +67,16 @@ def _toy_seed_module(correct=True, forward_offset=0.0, save_scalar=False):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestLazyExports(unittest.TestCase):
     def test_submodule_import_does_not_shadow_lazy_exports(self):
-        # oracle/bind/verify name both a submodule and its main function; the
-        # import system pins the submodule onto the package after these
-        # imports, which must not shadow the function exports.
+        # oracle/bind name both a submodule and its main function; the import
+        # system pins the submodule onto the package after these imports, which
+        # must not shadow the function exports.
         import evograd.opdecl.bind  # noqa: F401
         import evograd.opdecl.oracle  # noqa: F401
-        import evograd.opdecl.verify  # noqa: F401
 
-        from evograd.opdecl import bind, oracle, verify
+        from evograd.opdecl import bind, oracle
 
         self.assertTrue(callable(oracle))
         self.assertTrue(callable(bind))
-        self.assertTrue(callable(verify))
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
@@ -221,31 +219,6 @@ class TestBind(unittest.TestCase):
         fn(x, w, inputs["mask"]).backward(inputs["dy"])
         self.assertIsNotNone(x.grad)
         self.assertIsNotNone(w.grad)
-
-
-@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
-class TestVerify(unittest.TestCase):
-    def test_correct_seed_passes(self):
-        from evograd.opdecl import verify
-
-        report = verify(toy_op(), _toy_seed_module(), device="cpu")
-        self.assertTrue(report.ok, report.to_dict())
-
-    def test_wrong_gradient_fails_named_check(self):
-        from evograd.opdecl import verify
-
-        report = verify(toy_op(), _toy_seed_module(correct=False), device="cpu")
-        self.assertFalse(report.ok)
-        failing = [c.name for case in report.cases for c in case.checks if not c.ok]
-        self.assertEqual(failing, ["dw"])  # exactly the sabotaged gradient
-
-    def test_wrong_forward_fails_even_with_correct_backward(self):
-        from evograd.opdecl import verify
-
-        report = verify(toy_op(), _toy_seed_module(forward_offset=1.0), device="cpu")
-        self.assertFalse(report.ok)
-        failing = [c.name for case in report.cases for c in case.checks if not c.ok]
-        self.assertEqual(failing, ["y"])
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")

@@ -29,9 +29,7 @@ from evograd.benchmark import TASKS
 from evograd.benchmark.topdown.olmoe_1b_7b.architecture import config_record
 from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import capture_tools, manifest
 from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2.task_tools import PROVISIONAL
-from evograd.evaluation.tier3.patch import eager_pair_for
-from evograd.opdecl import bind_shape, verify
-from evograd.opdecl.baselines import verify_runtime_forward
+from evograd.opdecl import bind_shape
 from evograd.opdecl.models import OLMOE_1B_7B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
@@ -99,18 +97,6 @@ class TestDeclarations(unittest.TestCase):
         self.assertEqual(op.output_names, ("q", "k", "v"))
         self.assertEqual(op.grad_names(), ("dx", "dq_weight", "dk_weight", "dv_weight",
                                            "dq_norm_weight", "dk_norm_weight"))
-
-    def test_oracle_and_production_agree_on_the_grid(self):
-        for site, task in manifest.SITE_TASKS.items():
-            with self.subTest(site=site):
-                verify_runtime_forward(TASKS[task], device="cpu")
-
-    def test_the_eager_pair_passes_the_gate(self):
-        for site, task in manifest.SITE_TASKS.items():
-            op = TASKS[task]
-            with self.subTest(site=site):
-                report = verify(op, eager_pair_for(op), device="cpu")
-                self.assertTrue(report.ok, report.to_dict())
 
     def test_the_experts_production_kernels_agree(self):
         from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2.moe_experts.reference import (

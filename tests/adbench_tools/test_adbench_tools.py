@@ -1,10 +1,11 @@
 """The agent-neutral comparison harness, without a GPU, an LLM or an agent.
 
-What these pin is what makes the comparison fair: the task pack is the
-frontend's own scoped declaration, the statement carries evograd's system
-message verbatim, the reference an agent reads computes exactly the declared
-forward, every line an agent writes is under the evaluator's static rules, and
-nothing outside the evolve block survives into the final measurement.
+What these pin is what makes the comparison fair: the task pack is a model's
+observed case under the model's reference, the statement carries evograd's
+system message verbatim, the reference an agent reads computes exactly the
+declared forward, every line an agent writes is under the evaluator's static
+rules, search feedback is Gate 1 on the case's payloads, and nothing outside
+the evolve block survives into the final measurement.
 """
 
 import argparse
@@ -35,34 +36,24 @@ from evograd.adbench_tools.task import build_task, load, reference_closure  # no
 
 REPO = Path(__file__).resolve().parents[2]
 
-#: A correct PyTorch pair for the SwiGLU task: elementwise torch plus the
-#: granted vendor_gemm, which is all the static rules allow besides Triton.
-SWIGLU = '''
+#: A correct PyTorch pair for the linear task (torchrec_dlrm's dense layer):
+#: tensor ops plus the granted vendor_gemm, which is all the static rules allow
+#: besides Triton.
+LINEAR = '''
 import torch
 
 
-def llama3_swiglu_mlp_forward_with_saved(x, gate_weight, up_weight, down_weight):
-    rows = x.reshape(-1, x.shape[-1])
-    gate = vendor_gemm(rows, gate_weight.t()).float()
-    up = vendor_gemm(rows, up_weight.t()).float()
-    hidden = (gate * torch.sigmoid(gate) * up).to(x.dtype)
-    out = vendor_gemm(hidden, down_weight.t()).to(x.dtype)
-    return out.view(*x.shape[:-1], -1), (x, gate_weight, up_weight, down_weight, gate, up, hidden)
+def linear_forward_with_saved(x, weight, bias):
+    return vendor_gemm(x, weight.t()) + bias, (x, weight)
 
 
-def llama3_swiglu_mlp_backward_from_saved(dout, saved_tensors):
-    x, gate_weight, up_weight, down_weight, gate, up, hidden = saved_tensors
-    rows = x.reshape(-1, x.shape[-1])
-    d = dout.reshape(-1, dout.shape[-1])
-    ddown = vendor_gemm(d.t(), hidden).to(down_weight.dtype)
-    dh = vendor_gemm(d, down_weight).float()
-    s = torch.sigmoid(gate)
-    dup = (dh * gate * s).to(x.dtype)
-    dgate = (dh * up * s * (1 + gate * (1 - s))).to(x.dtype)
-    dx = vendor_gemm(dgate, gate_weight) + vendor_gemm(dup, up_weight)
-    return (dx.to(x.dtype).view_as(x), vendor_gemm(dgate.t(), rows).to(gate_weight.dtype),
-            vendor_gemm(dup.t(), rows).to(up_weight.dtype), ddown)
+def linear_backward_from_saved(dy, saved_tensors):
+    x, weight = saved_tensors
+    return vendor_gemm(dy, weight), vendor_gemm(dy.t(), x), dy.sum(0)
 '''
+
+#: The case behind ``small_task``: a dense layer small enough for a CPU.
+SMALL_MODEL, SMALL_CASE = "torchrec_dlrm", "linear/dense_layers"
 
 
 def _module(path: Path, name: str):
@@ -72,46 +63,24 @@ def _module(path: Path, name: str):
     return module
 
 
-@pytest.fixture(scope="module")
-def timed_task(tmp_path_factory):
-    return build_task("llama3_swiglu_mlp", tmp_path_factory.mktemp("timed") / "task")
+def linear_payloads(seed: int = 0):
+    """Recorded-call-like payloads of :data:`SMALL_CASE`: three calls in each of the
+    two calibration orders, at the case's shapes."""
+    g = torch.Generator().manual_seed(seed)
+    return [(call, order, {"x": torch.randn(32, 13, generator=g),
+                           "weight": 0.3 * torch.randn(512, 13, generator=g),
+                           "bias": torch.randn(512, generator=g)},
+             {"dy": torch.randn(32, 512, generator=g)})
+            for order in (101, 202) for call in "abc"]
 
 
 @pytest.fixture(scope="module")
 def small_task(tmp_path_factory):
-    return build_task("llama3_swiglu_mlp", tmp_path_factory.mktemp("small") / "task",
-                      case="correctness", dtype="float32")
+    return payload_rule_task(tmp_path_factory.mktemp("small") / "task", SMALL_MODEL, SMALL_CASE,
+                             payloads=linear_payloads())
 
 
 # ── the task pack ────────────────────────────────────────────────────────────
-
-
-def test_the_default_task_is_the_timed_case(timed_task):
-    op = timed_task.op()
-    assert timed_task.workload == {"dims": {"B": 2, "T": 2048, "H": 2048, "I": 8192},
-                                   "dtype": "bfloat16"}
-    assert op.correctness == op.benchmark == op.coverage
-    assert timed_task.allowed_primitives == ("vendor_gemm",)
-    assert (timed_task.root / "adbench_primitives.py").is_file()
-
-
-def test_the_declaration_is_the_frontends_scoped_declaration(small_task, tmp_path):
-    """Byte-identical to the declaration.py `evograd seed unified` writes."""
-    from evograd.benchmark import get_task
-    from evograd.pipelines.unified.synthesize import _write_declaration, select_workload
-
-    base = get_task("llama3_swiglu_mlp")
-    _write_declaration(tmp_path / "declaration.py", base, select_workload(base, dtype="float32"))
-    assert (small_task.root / "declaration.py").read_text() == \
-        (tmp_path / "declaration.py").read_text()
-    op = small_task.op()
-    assert op.correctness == op.benchmark == op.coverage
-    assert op.forward == base.forward
-    # Without a model reference, Gate 1 judges by the declaration's own tolerances.
-    workload = op.correctness[0]
-    assert {name: [r["atol"], r["rtol"]] for name, r in
-            small_task.spec["gate1_tolerances"]["results"].items()} == \
-        {name: list(op.tolerance_for(workload, name)) for name in [*op.output_names, *op.grad_names()]}
 
 
 def test_the_statement_carries_evograds_system_message_verbatim(small_task):
@@ -125,7 +94,7 @@ def test_the_statement_carries_evograds_system_message_verbatim(small_task):
 
 def test_a_task_pack_is_never_overwritten(small_task):
     with pytest.raises(FileExistsError):
-        build_task("llama3_swiglu_mlp", small_task.root)
+        build_task(small_task.root, model=SMALL_MODEL, case_id=SMALL_CASE)
 
 
 @pytest.mark.parametrize("name", ["llama3_swiglu_mlp", "llama3_qkv_rope", "layernorm",
@@ -154,12 +123,12 @@ def test_the_reference_an_agent_reads_is_the_declared_forward(name):
 def test_packaging_puts_the_whole_module_under_the_static_rules(small_task, tmp_path):
     from evograd.pipelines.shared.primitives import check_source
 
-    artifact = package(small_task, extract_code(f"Sure:\n```python\n{SWIGLU}```\n", small_task))
+    artifact = package(small_task, extract_code(f"Sure:\n```python\n{LINEAR}```\n", small_task))
     usage = check_source(artifact, allowed=small_task.allowed_primitives)
-    assert usage["primitive_call_sites"]["vendor_gemm"] == 9
-    assert unpackage(artifact).strip() == SWIGLU.strip()
+    assert usage["primitive_call_sites"]["vendor_gemm"] == 3
+    assert unpackage(artifact).strip() == LINEAR.strip()
     with pytest.raises(Exception, match="matrix-multiply"):
-        check_source(package(small_task, SWIGLU + "\nZ = 1 @ 2\n"),
+        check_source(package(small_task, LINEAR + "\nZ = 1 @ 2\n"),
                      allowed=small_task.allowed_primitives)
 
 
@@ -172,7 +141,7 @@ def test_packaging_puts_the_whole_module_under_the_static_rules(small_task, tmp_
 ])
 def test_packaging_refuses_what_the_harness_owns(small_task, bad, message):
     with pytest.raises(PackagingError, match=message):
-        package(small_task, SWIGLU + "\n" + bad)
+        package(small_task, LINEAR + "\n" + bad)
 
 
 def test_packaging_requires_the_pair(small_task):
@@ -182,13 +151,13 @@ def test_packaging_requires_the_pair(small_task):
 
 def test_the_standalone_primitive_import_is_replaced(small_task):
     artifact = package(small_task, "from __future__ import annotations\n"
-                                   "from adbench_primitives import vendor_gemm\n" + SWIGLU)
+                                   "from adbench_primitives import vendor_gemm\n" + LINEAR)
     assert "adbench_primitives" not in artifact
     assert artifact.index("from __future__ import annotations") < artifact.index("import torch")
 
 
 def test_code_outside_the_block_never_reaches_the_final_measurement(small_task, tmp_path):
-    artifact = package(small_task, SWIGLU, origin="openevolve")
+    artifact = package(small_task, LINEAR, origin="openevolve")
     assert fixed_code_intact(small_task, artifact) is True
     tampered = artifact.replace("DEPLOYMENT_ENTRY = ", "BACKDOOR = 1\nDEPLOYMENT_ENTRY = ")
     assert tampered.split(END, 1)[1] != artifact.split(END, 1)[1]
@@ -197,15 +166,23 @@ def test_code_outside_the_block_never_reaches_the_final_measurement(small_task, 
     assert "BACKDOOR" not in rebuilt.read_text()
 
 
-def test_a_packaged_pair_is_correct_against_the_oracle(small_task, tmp_path, monkeypatch):
+def test_a_packaged_pair_passes_the_packs_search_rule(small_task, tmp_path, monkeypatch):
+    """Gate 1 on the case's six calibration payloads, through the evaluator's own check."""
     pytest.importorskip("triton")
     from evograd.evolve.evaluator import _load_module, _run_correctness
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
     monkeypatch.setattr(torch.cuda, "synchronize", lambda *a, **k: None)
+    monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, str(small_task.root / "task.json"))
     path = tmp_path / "artifact.py"
-    path.write_text(package(small_task, SWIGLU))
+    path.write_text(package(small_task, LINEAR))
     report = _run_correctness(small_task.op(), _load_module(str(path)), device="cpu")
-    assert report["passed"] == report["total"] == 1, report["reports"]
+    assert report["status"] == "passed"
+    assert report["passed"] == report["total"] == 6, report["reports"]
+    wrong = tmp_path / "wrong.py"
+    wrong.write_text(package(small_task, LINEAR.replace("dy.sum(0)", "1.01 * dy.sum(0)")))
+    report = _run_correctness(small_task.op(), _load_module(str(wrong)), device="cpu")
+    assert report["status"] == "failed" and report["dbias_correctness"] == 0.0
 
 
 # ── results ──────────────────────────────────────────────────────────────────
@@ -244,7 +221,7 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
     namespace: dict = {}
     sys.path.insert(0, str(small_task.root))
     try:
-        exec(compile("from adbench_primitives import vendor_gemm\n" + SWIGLU
+        exec(compile("from adbench_primitives import vendor_gemm\n" + LINEAR
                      + kernelagent.kernel_function_source(small_task), "kernel", "exec"), namespace)
     finally:
         sys.path.remove(str(small_task.root))
@@ -265,17 +242,19 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
-def payload_rule_task(output_dir: Path, model: str, case_id: str):
-    """A model case's pack without a GPU: a tiny real corpus holds its calibration calls;
-    only the operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
+def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None):
+    """A model case's pack without a GPU: a tiny real corpus holds its calibration calls
+    (placeholders unless ``payloads`` gives them at the case's interface); only the
+    operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
     from types import SimpleNamespace
     from unittest import mock
 
     from evograd.verification.integrations import base, gates
     from tests.verification.test_real_payloads import _write_corpus
 
-    payloads = [(call, order, {"x": torch.ones(1)}, {"dy": torch.ones(1)})
-                for order in (101, 202) for call in "abc"]
+    if payloads is None:
+        payloads = [(call, order, {"x": torch.ones(1)}, {"dy": torch.ones(1)})
+                    for order in (101, 202) for call in "abc"]
     manifest = _write_corpus(output_dir.parent / f"{output_dir.name}_corpus", payloads,
                              case_id=case_id, task=case_id.split("/")[0])
 
@@ -284,7 +263,7 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str):
 
     with mock.patch.object(gates, "operator_calibration", calibration), \
             mock.patch.object(base, "configure", lambda: None):
-        return build_task(None, output_dir, model=model, case_id=case_id, corpus=manifest)
+        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest)
 
 
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
@@ -323,20 +302,22 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert task.spec["search_correctness"]["rule"] == "gate1_calibration_payloads"
     assert "the declaration's own tolerances" not in task.statement
     with pytest.raises(ValueError, match="needs the model's payload corpus"):
-        build_task(None, tmp_path / "nocorpus", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
+        build_task(tmp_path / "nocorpus", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm")
     with pytest.raises(TypeError, match="search_correctness"):
-        build_task(None, tmp_path / "declared", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+        build_task(tmp_path / "declared", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                    search_correctness="declared_tolerances")
     with pytest.raises(ValueError, match="no observed case"):
-        build_task(None, tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
-    with pytest.raises(ValueError, match="fixes the declaration"):
-        build_task(None, tmp_path / "mixed", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+        build_task(tmp_path / "missing", model="qwen3_0_6b", case_id="rmsnorm/nope")
+    # The case fixes the declaration and configuration; there is nothing to choose.
+    with pytest.raises(TypeError, match="dtype"):
+        build_task(tmp_path / "mixed", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                    dtype="float32")
+    with pytest.raises(TypeError, match="model"):
+        build_task(tmp_path / "operator", case_id="rmsnorm/rmsnorm")
 
 
 def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tmp_path,
-                                                                              monkeypatch,
-                                                                              small_task):
+                                                                              monkeypatch):
     """The default rule: Gate 1 on the first, middle and last calibration call
     of each order, with the envelope operator Gate 2's calibration gives the
     case; every evaluator the pack starts is pointed at it, and only by the pack."""
@@ -363,7 +344,7 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
 
     monkeypatch.setattr(gates, "operator_calibration", calibration)
     monkeypatch.setattr(base, "configure", lambda: calibrated.append("configured"))
-    task = build_task(None, tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+    task = build_task(tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
                       corpus=manifest, state=tmp_path / "state")
     search = task.spec["search_correctness"]
     assert search["rule"] == SEARCH_RULE and search["case_id"] == "rmsnorm/rmsnorm"
@@ -375,24 +356,27 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
     monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
     assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
-    # An operator pack has no payloads and keeps the declaration's tolerances; a model
-    # pack that names them (built before that rule was removed) is refused, never judged.
-    assert small_task.spec["search_correctness"] == {"rule": "declared_tolerances"}
-    assert SEARCH_CORRECTNESS_ENV not in evaluator_env(small_task)
+    # A pack judged by the declaration's tolerances -- an operator pack, or a model pack
+    # built before that rule was removed -- is refused, never judged, and still loads.
+    from evograd.adbench_tools.evaluate import search_rule
     from evograd.adbench_tools.task import AgentTask
 
     stale = AgentTask(task.root, {**task.spec,
                                   "search_correctness": {"rule": "declared_tolerances"}})
-    with pytest.raises(ValueError, match="a model case is judged by"):
-        evaluator_env(stale)
-    with pytest.raises(ValueError, match="only a model's observed case"):
-        build_task("llama3_swiglu_mlp", tmp_path / "op", corpus=manifest)
+    operator = AgentTask(task.root, {k: v for k, v in task.spec.items()
+                                     if k not in ("model", "case_id", "search_correctness")})
+    for pack in (stale, operator):
+        with pytest.raises(ValueError, match="rebuild the pack from a model case"):
+            evaluator_env(pack)
+        with pytest.raises(ValueError, match="rebuild the pack from a model case"):
+            search_rule(pack)
+        assert pack.op().name == "rmsnorm"
 
 
-def test_the_evaluator_judges_correctness_by_the_packs_rule(tmp_path, monkeypatch):
-    """With the pack's ``task.json`` in the environment, the evolution
-    evaluator's correctness check is Gate 1 on its payloads, not generated inputs,
-    for every program, evograd's unified lineage included."""
+def test_the_evaluator_judges_correctness_only_by_the_packs_rule(tmp_path, monkeypatch):
+    """With the pack's ``task.json`` in the environment, the evolution evaluator's
+    correctness check is Gate 1 on its payloads, not generated inputs, for every
+    program. Without it the check fails; nothing else is tried."""
     from evograd.evolve import evaluator
     from evograd.verification.payloads import gate1 as payload_gate1
 
@@ -403,15 +387,13 @@ def test_the_evaluator_judges_correctness_by_the_packs_rule(tmp_path, monkeypatc
                         lambda op, module, s, device: seen.append(s) or {"passed": 1, "total": 1})
     monkeypatch.setattr(evaluator, "make_case_inputs",
                         lambda *a, **k: pytest.fail("generated inputs used"))
-    unified = type("UnifiedLineage", (), {"UNIFIED_DEPLOYMENT_CONFIG": {}})
     monkeypatch.delenv(payload_gate1.SEARCH_CORRECTNESS_ENV, raising=False)
-    assert evaluator._numerical_variants_apply(unified)
-    assert not evaluator._numerical_variants_apply(object())
+    with pytest.raises(RuntimeError, match="is not set"):
+        evaluator._run_correctness(object(), object())
+    assert seen == []
     monkeypatch.setenv(payload_gate1.SEARCH_CORRECTNESS_ENV, str(tmp_path / "task.json"))
     assert evaluator._run_correctness(object(), object()) == {"passed": 1, "total": 1}
     assert seen == [spec]
-    # The unified lineage's stress variants judge by the declaration's tolerances.
-    assert not evaluator._numerical_variants_apply(unified)
 
 
 #: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
@@ -551,13 +533,13 @@ def test_the_coding_agents_deliverable_is_their_own_verified_choice(small_task, 
     assert choose(small_task, ledger, "claude_code", final) == (None, "none")
     final.write_text((small_task.root / "skeleton.py").read_text())
     assert choose(small_task, ledger, "claude_code", final) == (None, "none")
-    final.write_text(SWIGLU)
+    final.write_text(LINEAR)
     assert choose(small_task, ledger, "claude_code", final) == (final, "final_unverified")
-    faster = evaluated(SWIGLU + "\nFASTER = 1\n", 2.0)
-    evaluated(SWIGLU + "\nWRONG = 1\n", 9.0, correct=False)
-    evaluated(SWIGLU + "\nCHECKED = 1\n", None, kind="correctness")
+    faster = evaluated(LINEAR + "\nFASTER = 1\n", 2.0)
+    evaluated(LINEAR + "\nWRONG = 1\n", 9.0, correct=False)
+    evaluated(LINEAR + "\nCHECKED = 1\n", None, kind="correctness")
     assert choose(small_task, ledger, "claude_code", final) == (faster, "best_evaluated")
-    evaluated(SWIGLU, 1.0, kind="correctness")
+    evaluated(LINEAR, 1.0, kind="correctness")
     assert choose(small_task, ledger, "claude_code", final) == (final, "final")
 
 

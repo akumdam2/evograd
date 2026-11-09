@@ -1,4 +1,4 @@
-"""Tier-2 timing and declared correctness: actual driver, isolation, input identity."""
+"""Tier-2 timing: actual driver, isolation, input identity."""
 
 from __future__ import annotations
 
@@ -47,25 +47,6 @@ class TestTimingDriver(unittest.TestCase):
         self.assertEqual(result["full_step"],
                          {"median_ms": 1.0, "q20_ms": 0.8, "q80_ms": 1.2})
         self.assertEqual(result["peak_memory_bytes"], 1234)
-
-
-class TestDeclaredNumerics(unittest.TestCase):
-    def test_retired_profile_environment_cannot_change_tier1_or_tier2(self):
-        from evograd.opdecl.verify import _check
-        from evograd.evaluation.tier2.runner import _compare
-
-        want = torch.full((16,), 32.0, dtype=torch.bfloat16)
-        actual = want.clone()
-        actual[0] = 32.25
-        for mode in ("strict", "report_first"):
-            with mock.patch.dict("os.environ", {
-                "EVOGRAD_NUMERICAL_PROFILE": "dtype_default",
-                "EVOGRAD_TIER3_ENFORCEMENT": mode,
-            }):
-                self.assertFalse(_check("out", actual, want, 1e-2, 1e-3).ok)
-                result = _compare(actual, want, 1e-2, 1e-3)
-                self.assertFalse(result["ok"])
-                self.assertEqual((result["atol"], result["rtol"]), (1e-2, 1e-3))
 
 
 class TestInputIdentity(unittest.TestCase):

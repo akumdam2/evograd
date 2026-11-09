@@ -204,35 +204,21 @@ def _shape_dtype(values) -> list[tuple[tuple[int, ...], str] | None]:
     return [(tuple(v.shape), str(v.dtype)) if torch.is_tensor(v) else None for v in values]
 
 
-def _run_once(op, provider, values):
-    """One forward and backward of ``provider`` on its own copy of ``values``;
-    the outputs and gradients. Raises if it changes its inputs."""
-    from evograd.evaluation.common.provider import assert_tensors_unchanged, snapshot_tensors
-    from evograd.opdecl.inputs import as_output_tuple, upstream_grad_values
-    from evograd.verification.common.tensors import isolate
-
-    own = isolate(values)
-    snapshot = snapshot_tensors(own, may_overwrite=tuple(op.backward_may_overwrite or ()))
-    output, saved = provider.forward(own)
-    grads = provider.backward(upstream_grad_values(op, own), saved, own)
-    assert_tensors_unchanged(own, snapshot, provider=provider.name)
-    return as_output_tuple(op, output), tuple(grads)
-
-
 def check_executable(op, module, values) -> None:
     """One forward and backward through the route Tier 2 times, on ``values``
     (one recorded call); raises :class:`NotExecutable` with the reason."""
     from evograd.evaluation.common.provider import (
         candidate_autograd_provider,
         pytorch_autograd_provider,
+        run_once,
     )
     from evograd.pipelines.shared.artifact import deployment_entry, validate_artifact
 
     try:
         if deployment_entry(module) is not None:
             validate_artifact(op, module)
-        output, grads = _run_once(op, candidate_autograd_provider(op, module), values)
-        ref_output, ref_grads = _run_once(op, pytorch_autograd_provider(op), values)
+        output, grads = run_once(op, candidate_autograd_provider(op, module), values)
+        ref_output, ref_grads = run_once(op, pytorch_autograd_provider(op), values)
     except NotExecutable:
         raise
     except Exception as exc:
@@ -243,32 +229,6 @@ def check_executable(op, module, values) -> None:
         raise NotExecutable(f"outputs {got[0]}, the declaration's are {want[0]}")
     if got[1] != want[1]:
         raise NotExecutable(f"gradients {got[1]}, the declaration's are {want[1]}")
-
-
-def check_baseline(op, provider, values, workload) -> None:
-    """A declared library baseline must compute what eager does on ``values``
-    (one recorded call) before it is timed.
-
-    The declared tolerances are stated for unit-scale values, and recorded
-    gradients are far below an absolute tolerance (a baseline returning zeros
-    would pass), so each result is compared after dividing both sides by the
-    largest magnitude of eager's.
-    """
-    import torch
-
-    from evograd.evaluation.common.provider import pytorch_autograd_provider
-
-    output, grads = _run_once(op, provider, values)
-    ref_output, ref_grads = _run_once(op, pytorch_autograd_provider(op), values)
-    names = [*op.output_names, *op.grad_names()]
-    for name, got, ref in zip(names, (*output, *grads), (*ref_output, *ref_grads)):
-        atol, rtol = op.tolerance_for(workload, name)
-        scale = ref.detach().float().abs().amax().clamp_min(torch.finfo(torch.float32).tiny)
-        if (got.shape != ref.shape or got.dtype != ref.dtype
-                or not torch.allclose(got.float() / scale, ref.float() / scale,
-                                      atol=atol, rtol=rtol)):
-            raise RuntimeError(f"{op.name}: the {provider.name} baseline differs from eager in "
-                               f"{name!r} on a recorded call")
 
 
 def time_case(op, module, inputs, *, options: Mapping[str, Any] = TIER2_OPTIONS) -> dict[str, Any]:
@@ -284,6 +244,7 @@ def time_case(op, module, inputs, *, options: Mapping[str, Any] = TIER2_OPTIONS)
     """
     from evograd.evaluation.common.provider import (
         candidate_autograd_provider,
+        check_baseline,
         pytorch_autograd_provider,
         renamed_provider,
         torch_compile_provider,
@@ -853,7 +814,7 @@ def summarize_main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["evaluate", "summarize", "check_executable", "check_baseline", "time_case",
+__all__ = ["evaluate", "summarize", "check_executable", "time_case",
            "tier2_payloads", "tier2_binding", "NotExecutable", "COMBINATION_RULE", "PROTOCOL",
            "TIER2_INPUTS", "main", "summarize_main"]
 

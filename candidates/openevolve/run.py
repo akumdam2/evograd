@@ -78,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     rc = 1
     try:
         rc = run_evolve(
-            task.op(), seed_path=seed, output_dir=evolve_dir, scoring=task.spec["scoring"],
+            task, seed_path=seed, output_dir=evolve_dir, scoring=task.spec["scoring"],
             iterations=args.budget, config_path=config, save_best_to=best,
             primary_model=args.model, secondary_model=args.model, api_base=args.api_base,
             performance_baseline=task.spec["performance_baseline"], save_programs=True,

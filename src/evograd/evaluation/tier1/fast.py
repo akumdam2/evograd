@@ -30,7 +30,6 @@ from evograd.opdecl.baselines import (
     available_baselines,
     baseline_hook,
     resolve_performance_baseline,
-    verify_performance_baseline,
 )
 from evograd.opdecl.bind import backward_inactive_kwargs, bind, lookup_pair
 from evograd.opdecl.inputs import (
@@ -389,6 +388,9 @@ def run_benchmarks(
 ) -> dict[str, Any]:
     """Time a candidate against the performance baseline on every workload.
 
+    Timing only: the evolution evaluator checks a declared library baseline on
+    a recorded call first (``evolve.evaluator.check_performance_baseline``).
+
     ``on_error`` controls what happens when setup or a single workload raises:
 
       * ``"raise"`` (default) propagates, so callers that treat any failure as a
@@ -402,9 +404,6 @@ def run_benchmarks(
         raise ValueError(f"on_error must be 'raise' or 'record', got {on_error!r}")
     try:
         performance_baseline = resolve_performance_baseline(op, performance_baseline)
-        verify_performance_baseline(
-            op, performance_baseline, device=device
-        )
         selected = op.benchmark if workloads is None else workloads
         if not selected:
             raise ValueError(f"{op.name}: no benchmark workloads selected")

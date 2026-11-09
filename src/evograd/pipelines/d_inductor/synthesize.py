@@ -267,8 +267,8 @@ def synthesize_inductor_seed(config: InductorSeedConfig) -> int:
         for summary in summaries:
             if summary.get("seed"):
                 print(
-                    f"      evograd evolve --op {op.name} --seed {summary['seed']} "
-                    f"--dtype {summary['dtype']} --output-dir <dir>"
+                    f"      evograd evolve --pack {config.pack} --seed {summary['seed']} "
+                    "--output-dir <dir>"
                 )
 
     print(f"\n[D] {len(dtypes) - failures}/{len(dtypes)} dtype seeds ok")

@@ -175,42 +175,6 @@ def summarize_error(error: Any, *, limit: int = 200) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def declared_input_bytes(op, case: dict[str, Any]) -> float:
-    """Bytes of the inputs the saved-memory ratio is measured against.
-
-    The fair protocol records what a provider retained but not what it was
-    given, so the denominator is reconstructed from the declaration's shapes
-    bound to this case's dims — the same set ``memory_input_names()`` selects,
-    so integer labels and rotary tables stay out of it exactly as they do on
-    the low-overhead path.
-    """
-    if op is None:
-        return 0.0
-    memory_inputs = tuple(op.memory_input_names())
-    if not memory_inputs:
-        return 0.0
-    from evograd.opdecl.activity import bind_shape
-
-    dims = case.get("dims") or {}
-    dtype_bytes = {"float32": 4, "float16": 2, "bfloat16": 2, "float64": 8}
-    element = dtype_bytes.get(case.get("dtype", ""), 4)
-    by_name = {arg.name: arg for arg in op.args}
-    total = 0.0
-    for name in memory_inputs:
-        arg = by_name.get(name)
-        if arg is None or not getattr(arg, "shape", None):
-            continue
-        try:
-            shape = bind_shape(arg.shape, dims)
-        except Exception:
-            continue
-        count = 1
-        for extent in shape:
-            count *= extent
-        total += count * element
-    return float(total)
-
-
 # ── protocol readers ─────────────────────────────────────────────────────────
 # Each reader is a field mapping and nothing else: no arithmetic, no policy, no
 # defaults on measured values. Keeping them this thin is what makes them
@@ -219,113 +183,6 @@ def declared_input_bytes(op, case: dict[str, Any]) -> float:
 # Structural metadata (was there a setup error, did this case run) may be
 # absent, because absence there is unambiguous. A missing *measurement* is not:
 # it is the thing that becomes a zero and then an average.
-
-
-def from_harness_report(
-    op_name: str,
-    report: dict[str, Any],
-    *,
-    tier: str = TIER_PAIR,
-    protocol: str = PROTOCOL_FAST,
-) -> BenchReport:
-    """Read a ``harness.run_benchmarks(..., on_error='record')`` report."""
-    cases: list[CaseMetrics] = []
-    for case in report.get("cases") or []:
-        if not case.get("ok"):
-            cases.append(
-                CaseMetrics(
-                    dims=dict(case.get("dims") or {}),
-                    dtype=str(case.get("dtype", "")),
-                    ok=False,
-                    error=summarize_error(case.get("error")) or None,
-                )
-            )
-            continue
-        cases.append(
-            CaseMetrics(
-                dims=dict(_require(case, "dims")),
-                dtype=str(_require(case, "dtype")),
-                ok=True,
-                candidate_forward_ms=float(_require(case, "forward_ms")),
-                candidate_backward_ms=float(_require(case, "backward_from_saved_ms")),
-                candidate_full_ms=float(
-                    _require(case, "raw_forward_backward_full_step_ms")
-                ),
-                # The harness does not time the baseline's forward alone.
-                baseline_forward_ms=None,
-                baseline_backward_ms=float(_require(case, "baseline_backward_ms")),
-                baseline_full_ms=float(_require(case, "baseline_raw_full_step_ms")),
-                saved_bytes=float(_require(case, "saved_bytes")),
-                input_bytes=float(_require(case, "input_bytes")),
-            )
-        )
-    setup_error = report.get("error")
-    return BenchReport(
-        op=op_name,
-        tier=tier,
-        protocol=protocol,
-        baseline=str(_require(report, "performance_baseline")),
-        cases=tuple(cases),
-        error=summarize_error(setup_error) or None,
-    )
-
-
-def from_fair_report(
-    op_name: str,
-    report: dict[str, Any],
-    *,
-    baseline: str,
-    op=None,
-    tier: str = TIER_PAIR,
-    protocol: str = PROTOCOL_FAIR,
-    candidate_name: str = "candidate",
-) -> BenchReport:
-    """Read a ``fair.run_fair_benchmarks`` report.
-
-    ``baseline`` names the baseline provider, whose per-case block is keyed by
-    that name. Deliberately required rather than inferred as "whichever
-    provider is not the candidate": a wrong guess would report the baseline's
-    own retained memory as the candidate's, and the number would look entirely
-    plausible.
-
-    ``op`` supplies the saved-memory denominator, which this protocol does not
-    record; without it ``input_bytes`` stays 0 and the ratio reads as 0.
-    """
-    cases: list[CaseMetrics] = []
-    for case in report.get("cases") or []:
-        # Always walk from the case, never from an already-extracted provider
-        # block: the value of a strict reader is the path in its error message,
-        # and "missing 'saved_state'" without the provider that lacks it is a
-        # worse diagnostic than the one this module replaced.
-        def candidate(*path: str, _case=case) -> Any:
-            return _require(_case, "providers", candidate_name, *path)
-
-        def reference(*path: str, _case=case) -> Any:
-            return _require(_case, "providers", baseline, *path)
-
-        cases.append(
-            CaseMetrics(
-                dims=dict(_require(case, "dims")),
-                dtype=str(_require(case, "dtype")),
-                ok=True,  # the fair protocol raises rather than recording a failure
-                candidate_forward_ms=float(candidate("forward", "median_ms")),
-                candidate_backward_ms=float(candidate("backward", "median_ms")),
-                candidate_full_ms=float(candidate("pair_full", "median_ms")),
-                baseline_forward_ms=float(reference("forward", "median_ms")),
-                baseline_backward_ms=float(reference("backward", "median_ms")),
-                baseline_full_ms=float(reference("pair_full", "median_ms")),
-                saved_bytes=float(candidate("saved_state", "logical_saved_bytes")),
-                input_bytes=declared_input_bytes(op, case),
-            )
-        )
-    return BenchReport(
-        op=op_name,
-        tier=tier,
-        protocol=protocol,
-        baseline=baseline,
-        cases=tuple(cases),
-        environment=dict(report.get("environment") or {}),
-    )
 
 
 def from_tier2_report(
@@ -346,7 +203,7 @@ def from_tier2_report(
     cost. Both names are required rather than inferred — guessing which provider
     is the reference is how a report ends up quoting the wrong one plausibly.
 
-    A provider that failed correctness or died at one shape marks that case not
+    A provider that died at one shape marks that case not
     ok, so it contributes no speedup and still counts against coverage.
     """
     cases: list[CaseMetrics] = []

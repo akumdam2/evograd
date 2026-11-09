@@ -324,32 +324,6 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         for name in (*OP.output_names, *OP.grad_names()):
             self.assertEqual(OP.tolerance_for(observed, name)[1], 2e-2)
 
-    def test_the_real_pair_passes_verify_runtime_forward(self):
-        from evograd.opdecl import baselines
-
-        baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
-        baselines.verify_runtime_forward(OP, device="cpu")
-
-    def test_a_perturbed_production_spelling_is_rejected_per_output(self):
-        from evograd.opdecl import baselines
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope import reference as forward_ref
-        original = forward_ref.qwen3_qkv_norm_rope_forward_production
-
-        def perturbed(*args, **kwargs):
-            q, k, v = original(*args, **kwargs)
-            return q, k * 1.05, v  # only the middle output is wrong
-
-        forward_ref.qwen3_qkv_norm_rope_forward_production = perturbed
-        try:
-            baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
-            with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(OP, device="cpu")
-            message = str(ctx.exception)
-            self.assertIn("output 'k'", message)
-        finally:
-            forward_ref.qwen3_qkv_norm_rope_forward_production = original
-            baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
-
 
 class TestSnapshotEntry(unittest.TestCase):
     def test_the_entry_is_derived_from_five_harvested_records(self):

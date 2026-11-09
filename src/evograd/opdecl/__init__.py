@@ -1,8 +1,8 @@
 """Typed operator declarations: the contract every evograd component derives from.
 
-Torch-facing derivations (oracle, bind, verify, make_case_inputs) are exported
-lazily so declarations stay importable on machines
-without torch (dev boxes have no CUDA; only GPU nodes run the real stack).
+Torch-facing derivations (oracle, bind, make_case_inputs) are exported lazily
+so declarations stay importable on machines without torch (dev boxes have no
+CUDA; only GPU nodes run the real stack).
 """
 
 import importlib
@@ -26,8 +26,6 @@ _LAZY = {
     "oracle": "evograd.opdecl.oracle",
     "resolve_forward": "evograd.opdecl.oracle",
     "bind": "evograd.opdecl.bind",
-    "verify": "evograd.opdecl.verify",
-    "VerifyReport": "evograd.opdecl.verify",
     "make_case_inputs": "evograd.opdecl.inputs",
 }
 
@@ -43,8 +41,8 @@ def __getattr__(name: str):
 class _Module(types.ModuleType):
     """Keeps the lazy function exports authoritative.
 
-    ``oracle``, ``bind`` and ``verify`` name both a submodule and its main
-    function. After ``import evograd.opdecl.oracle`` the import system pins the
+    ``oracle`` and ``bind`` name both a submodule and its main function. After
+    ``import evograd.opdecl.oracle`` the import system pins the
     *submodule* onto this package via setattr, which would shadow the function
     on every later ``from evograd.opdecl import oracle`` — in whichever order
     the two imports happen. Dropping the pin keeps ``__getattr__`` (and its
@@ -66,7 +64,6 @@ __all__ = [
     "Inactive",
     "OpDecl",
     "Provenance",
-    "VerifyReport",
     "Workload",
     "WorkloadDecl",
     "bind",
@@ -77,5 +74,4 @@ __all__ = [
     "make_case_inputs",
     "oracle",
     "resolve_forward",
-    "verify",
 ]

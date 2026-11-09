@@ -18,8 +18,8 @@ import torch
 from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 from evograd.opdecl.models import QWEN3_0_6B, rederive_dims
 from evograd.opdecl.oracle import oracle
-from evograd.opdecl.verify import verify
 from evograd.benchmark import get_task
+from evograd.verification import gate1
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.task import QWEN3_FUSION_SITES
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.reference import (
     fused_add_rms_norm_forward_ref,
@@ -141,25 +141,37 @@ class TestInputsAndOracle(unittest.TestCase):
         self.assertTrue(torch.allclose(grads["dx"], grads["dr"], atol=0, rtol=0))
 
 
+def gate1_report(module):
+    """Gate 1 on the declaration's inputs, supplied as recorded-call values, with the
+    declaration under a model-reference contract (the only kind Gate 1 judges)."""
+    from dataclasses import replace
+
+    op = replace(OP, reference_contract="test-fused-add-rms-norm/1", runtime_forward=None)
+    cases = [gate1.Gate1Case(f"case{i}", w, make_case_inputs(op, w, device="cpu"))
+             for i, w in enumerate(op.correctness)]
+    return gate1.verify_pair(op, module, cases=cases, device="cpu")
+
+
 class TestCorrectnessGate(unittest.TestCase):
     def _failed(self, module):
-        report = verify(OP, module, device="cpu")
-        names = []
+        """Declared names of the failing results; ``error`` for a case-level failure."""
+        report = gate1_report(module)
+        names = set()
         for case in report.cases:
-            if case.error:
-                names.append("error")
-            else:
-                names.extend(c.name for c in case.checks if not c.ok)
-        return set(names)
+            if any(f.outcome == "failed" for f in case.findings):
+                names.add("error")
+            names.update(r.name.split(":", 1)[1] for r in case.results if r.status == "failed")
+        return names
 
     def test_a_correct_pair_passes(self):
-        report = verify(OP, _Module(*_reference_pair()), device="cpu")
+        report = gate1_report(_Module(*_reference_pair()))
+        self.assertEqual(report.status, "passed")
         for case in report.cases:
-            self.assertIsNone(case.error)
-            self.assertEqual(
-                [c.name for c in case.checks], ["out", "summed", "dx", "dr", "dweight"]
-            )
-            self.assertTrue(all(c.ok for c in case.checks), [c for c in case.checks if not c.ok])
+            self.assertEqual([r.name for r in case.results],
+                             ["out:out", "out:summed", "grad_in:dx", "grad_in:dr",
+                              "grad_in:dweight"])
+            self.assertTrue(all(r.status == "passed" for r in case.results),
+                            [r.to_dict() for r in case.results if r.status != "passed"])
 
     def test_a_backward_that_ignores_dsummed_is_rejected(self):
         """The negative control. It gets `dweight` exactly right, so a gate that
@@ -178,7 +190,8 @@ class TestCorrectnessGate(unittest.TestCase):
             (normalized, _summed), saved = forward(x, r, weight, eps)
             return normalized, saved
 
-        self.assertEqual(self._failed(_Module(single, backward)), {"error"})
+        # The structure is refused, and neither declared output counts as produced.
+        self.assertEqual(self._failed(_Module(single, backward)), {"error", "out", "summed"})
 
     def test_swapped_outputs_are_rejected(self):
         forward, backward = _reference_pair()

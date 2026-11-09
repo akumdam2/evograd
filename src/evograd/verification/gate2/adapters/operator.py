@@ -14,7 +14,7 @@ is the deployment:
 * control    -- the native callable under ``torch.compile``.
 
 Reused from the old tree: input recipes, ``bind``, the artifact contract and
-the module wrapper. Not reused: ``check_module`` and its oracle comparison.
+the module wrapper.
 """
 
 from __future__ import annotations

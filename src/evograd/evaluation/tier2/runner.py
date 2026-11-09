@@ -50,7 +50,7 @@ from evograd.opdecl.inputs import (
     make_case_inputs,
     upstream_grad_values,
 )
-from evograd.opdecl.oracle import oracle, resolve_runtime_forward
+from evograd.opdecl.oracle import resolve_runtime_forward
 
 TIER2_PROTOCOL_VERSION = "evograd-tier2-operator-v1"
 
@@ -62,7 +62,7 @@ DEFAULT_WARMUP_MS = 25
 QUANTILES = (0.5, 0.2, 0.8)
 
 #: Untimed iterations before sampling. Enough to finish Triton autotuning and
-#: settle the allocator; compilation is already done by the correctness gate.
+#: settle the allocator.
 WARMUP_ITERS = 10
 
 
@@ -203,8 +203,8 @@ def eager_module(
     ``resolve_runtime_forward`` is ``F.layer_norm`` where the declaration has a
     fused equivalent — the same function ``nn.LayerNorm.forward`` calls, so this
     module is that module, built generically. Timing the primitive ``forward``
-    instead would measure a strawman; ``verify_runtime_forward`` has already
-    checked the two agree numerically.
+    instead would measure a strawman. A model-reference declaration has no
+    separate runtime spelling: its ``forward`` is the model's own computation.
     """
     reference = resolve_runtime_forward(op)
     module = OperatorModule(
@@ -326,140 +326,6 @@ def baseline_pair_module(
         adapter_kind=f"declared_{baseline}_pair_module",
         values=values,
     )
-
-
-# ── correctness ──────────────────────────────────────────────────────────────
-
-
-def check_module(
-    op: OpDecl,
-    module: OperatorModule,
-    values: dict[str, Any],
-    workload: Workload,
-) -> dict[str, Any]:
-    """Verify a provider through the path that will be timed.
-
-    Tier 1 checks ``forward_with_saved`` / ``backward_from_saved`` directly.
-    That is not what tier 2 runs: here the gradients arrive via
-    ``AccumulateGrad`` into ``.grad`` after ``y.backward(dy)``, through
-    ``bind``'s slot routing. A pair can be correct called directly and wrong
-    once wrapped — a misplaced gradient slot looks exactly like that — so the
-    gate has to exercise the wrapped path.
-    """
-    workload_values = {
-        name: (value.detach().clone() if torch.is_tensor(value) else value)
-        for name, value in values.items()
-    }
-    # One upstream gradient per declared output, in declared order.
-    upstream = upstream_grad_values(op, workload_values)
-    dys = upstream if isinstance(upstream, tuple) else (upstream,)
-    y_ref, expected = oracle(op, workload_values)
-
-    activations = [
-        a.detach().clone().requires_grad_(True) for a in module.activations(workload_values)
-    ]
-    for parameter in module.parameters():
-        parameter.grad = None
-    y = module(*activations)
-    outputs = as_output_tuple(op, y)
-    # `torch.autograd.backward`, not `y.backward(dy)`: a multi-output module has
-    # no single `y` to call it on, and every output has to contribute its own
-    # gradient or the parameters would be checked against a partial backward.
-    torch.autograd.backward(outputs, dys)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-
-    checks: dict[str, Any] = {}
-    # Each output under its own declared name, with its own tolerance -- a task
-    # whose results have genuinely different magnitudes (a normalized value and
-    # the plain sum it came from) is not gated by whichever one is largest.
-    for out, actual, reference in zip(
-        op.outputs, outputs, as_output_tuple(op, y_ref)
-    ):
-        atol, rtol = op.tolerance_for(workload, out.name)
-        checks[out.name] = _compare(actual, reference, atol, rtol)
-
-    by_grad_name = {arg.grad_name: arg.name for arg in op.active_args()}
-    got: dict[str, torch.Tensor | None] = {}
-    for name, activation in zip(module._activation_names, activations):
-        got[name] = activation.grad
-    for name in module._parameter_names:
-        got[name] = getattr(module, name).grad
-    for grad_name in op.grad_names():
-        source = by_grad_name[grad_name]
-        grad_atol, grad_rtol = op.tolerance_for(workload, grad_name)
-        checks[grad_name] = _compare(
-            got.get(source), expected[grad_name], grad_atol, grad_rtol
-        )
-
-    return {"ok": all(c["ok"] for c in checks.values()), "checks": checks}
-
-
-def _compare(actual, expected, atol: float, rtol: float) -> dict[str, Any]:
-    """Compare one result against the oracle: shape, dtype, stride, finiteness, values.
-
-    ``stride_match`` is measured and reported but does not gate ``ok``. The
-    providers at this tier are different implementations of the same
-    mathematics, and a compiled or fused one may legitimately hand back an
-    equivalently-valued tensor under another layout; tier 1's gate does not
-    require stride equality either, so requiring it here would fail operators
-    tier 1 accepts for a property nothing downstream of this report reads. It
-    is recorded because a layout change is worth seeing when it happens.
-    """
-    if not torch.is_tensor(actual):
-        return {"ok": False, "reason": "no gradient produced",
-                "atol": atol, "rtol": rtol}
-    if actual.shape != expected.shape or actual.dtype != expected.dtype:
-        return {
-            "ok": False,
-            "reason": (
-                f"shape/dtype {tuple(actual.shape)}/{actual.dtype} != "
-                f"{tuple(expected.shape)}/{expected.dtype}"
-            ),
-            "stride": list(actual.stride()),
-            "expected_stride": list(expected.stride()),
-            "stride_match": tuple(actual.stride()) == tuple(expected.stride()),
-            "atol": atol,
-            "rtol": rtol,
-        }
-    difference = (actual.detach().float() - expected.detach().float()).abs()
-    finite = bool(torch.isfinite(actual.detach()).all())
-    # The threshold travels with the measurement. A recorded `max_abs_error`
-    # alone cannot say how close a result came to being rejected, and comparing
-    # it against `atol` is off by orders of magnitude wherever the `rtol` term
-    # dominates.
-    #
-    # `allclose` is *elementwise*: every element is allowed
-    # `atol + rtol * |expected_i|`, computed from its own reference value. So
-    # the allowance has to be built elementwise too. Dividing the largest error
-    # by the largest element's allowance compares two different elements --
-    # the one that fails typically has a large error and a *small* |expected|,
-    # hence a small allowance -- and reports a comfortable fraction for a
-    # result the gate rejected.
-    #
-    # Taking the elementwise maximum makes `headroom` exact: it is <= 1 for
-    # precisely the results `allclose` accepts, so it never disagrees with
-    # `ok`.
-    reference = expected.detach().float().abs()
-    reference_absmax = float(reference.max())
-    allowance = (atol + rtol * reference).clamp_min(torch.finfo(torch.float32).tiny)
-    max_abs_error = float(difference.max())
-    headroom = float((difference / allowance).max()) if finite else None
-    return {
-        "ok": bool(
-            finite
-            and torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol)
-        ),
-        "max_abs_error": max_abs_error,
-        "atol": atol,
-        "rtol": rtol,
-        "ref_absmax": reference_absmax,
-        "headroom": headroom,
-        "finite": finite,
-        "stride": list(actual.stride()),
-        "expected_stride": list(expected.stride()),
-        "stride_match": tuple(actual.stride()) == tuple(expected.stride()),
-    }
 
 
 # ── timing ───────────────────────────────────────────────────────────────────
@@ -681,11 +547,10 @@ def run_case(
     device: str = "cuda",
     rep_ms: int = DEFAULT_REP_MS,
     warmup_ms: int = DEFAULT_WARMUP_MS,
-    check: bool = True,
     order_seed: int = 0,
     only: str | None = None,
 ) -> dict[str, Any]:
-    """One shape, every provider, correctness before timing."""
+    """One shape, every provider, timed. Correctness is the verification gates' job."""
     values = build_parameters(op, workload, device=device)
     # Order is randomized and recorded. A fixed order lets slow drift -- clocks,
     # thermals, allocator state -- land on whichever provider is always last,
@@ -701,14 +566,6 @@ def run_case(
         entry: dict[str, Any] = {"kind": spec.kind}
         try:
             module = build_provider(op, spec, values)
-            if check:
-                verdict = check_module(op, module, values, workload)
-                entry["correctness"] = verdict
-                if not verdict["ok"]:
-                    entry["ok"] = False
-                    entry["error"] = "failed correctness at this shape"
-                    providers[spec.name] = entry
-                    continue
             entry.update(measure_module(
                 op, module, values, rep_ms=rep_ms, warmup_ms=warmup_ms
             ))
@@ -741,7 +598,6 @@ def run_tier2(
     device: str = "cuda",
     rep_ms: int = DEFAULT_REP_MS,
     warmup_ms: int = DEFAULT_WARMUP_MS,
-    check: bool = True,
 ) -> dict[str, Any]:
     _require_declared_split(op)
     from evograd.evaluation.tier1.fair import environment_fingerprint
@@ -749,7 +605,7 @@ def run_tier2(
     cases = [
         run_case(
             op, workload, specs,
-            device=device, rep_ms=rep_ms, warmup_ms=warmup_ms, check=check,
+            device=device, rep_ms=rep_ms, warmup_ms=warmup_ms,
         )
         for workload in workloads
     ]

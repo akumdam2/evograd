@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     rc = 1
     try:
         rc = run_evolve(
-            task.op(), seed_path=seed, output_dir=evolve_dir,
+            task, seed_path=seed, output_dir=evolve_dir,
             scoring=args.scoring or spec["scoring"], iterations=iterations,
             save_best_to=best, primary_model=args.model, secondary_model=args.model,
             api_base=args.api_base, performance_baseline=spec["performance_baseline"],

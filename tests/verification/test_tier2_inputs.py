@@ -104,12 +104,14 @@ def forbidden(*args, **kwargs):
 
 
 def swiglu():
-    """The ``swiglu`` declaration with its own input hook forbidden too."""
+    """The ``swiglu`` declaration with its own input hook forbidden too, under a
+    model-reference contract as every case ``evograd evaluate`` times is."""
     from dataclasses import replace
 
     from evograd.benchmark import get_task
 
-    return replace(get_task("swiglu"), make_inputs=forbidden)
+    return replace(get_task("swiglu"), make_inputs=forbidden, runtime_forward=None,
+                   reference_contract="test-swiglu-reference/1")
 
 
 @contextlib.contextmanager
@@ -354,7 +356,6 @@ class TimeCase(unittest.TestCase):
         with timing, \
                 mock.patch("evograd.evaluation.common.provider.torch_compile_provider",
                            side_effect=lambda op, **kwargs: pytorch_autograd_provider(op)), \
-                mock.patch("evograd.opdecl.baselines.verify_performance_baseline", forbidden), \
                 no_generator():
             options = {"warmup": 1, "reps": 2, "blocks": 1, "seed": 0}
             return time_case(op, candidate, inputs, options=options), seen
@@ -371,7 +372,7 @@ class TimeCase(unittest.TestCase):
         self.assertEqual(result["library"]["speedup"], 1.2)
 
     def test_a_library_baseline_that_differs_from_eager_on_a_recorded_call_is_not_timed(self):
-        # A 5% gradient error, and gradients of zero: both far below the declared
+        # A 5% gradient error, and gradients of zero: both far below Gate 1's
         # absolute tolerance at the recorded scale, both rejected.
         for scale in (1.05, 0.0):
             with self.subTest(scale=scale):

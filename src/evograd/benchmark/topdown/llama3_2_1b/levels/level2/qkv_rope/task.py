@@ -148,7 +148,7 @@ _CONFIGURED = Provenance(
     # The model reaches q/k/v by view-then-transpose, so what a kernel receives
     # and must return is the non-contiguous head-major view. Qwen3 reads this
     # off recorded strides; here it is a property of the spelling above, which
-    # `forward_ref` reproduces and `verify_runtime_forward` checks.
+    # `forward_ref` reproduces.
     layout="head_major_view",
 )
 

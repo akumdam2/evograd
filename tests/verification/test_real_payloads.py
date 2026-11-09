@@ -174,7 +174,8 @@ class Gate1PayloadCaseTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.manifest = _write_corpus(Path(self.tmp.name), _scale_shift_payloads())
         self.corpus = Corpus.open(self.manifest)
-        self.op = replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),))
+        self.op = F.model_reference(
+            replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),)))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -186,7 +187,7 @@ class Gate1PayloadCaseTests(unittest.TestCase):
     def test_cases_are_exactly_the_split_payloads_and_bypass_generation(self):
         with mock.patch("evograd.verification.gate1.adapters.declared_values",
                         side_effect=AssertionError("generated inputs used")), \
-             mock.patch("evograd.verification.gate1.runner.make_case_inputs",
+             mock.patch("evograd.opdecl.inputs.make_case_inputs",
                         side_effect=AssertionError("generated inputs used")):
             cases = self.cases()
             report = gate1.verify_pair(self.op, F.scale_shift_pair(), cases=cases, device="cpu")
@@ -246,7 +247,8 @@ class SearchFeedbackTests(unittest.TestCase):
                     for call in calls]
         self.manifest = _write_corpus(Path(self.tmp.name), payloads)
         self.corpus = Corpus.open(self.manifest)
-        self.op = replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),))
+        self.op = F.model_reference(
+            replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),)))
         self.ids = search_payload_ids(self.corpus, "case/x")
 
     def tearDown(self):
@@ -274,7 +276,7 @@ class SearchFeedbackTests(unittest.TestCase):
             search_payload_ids(self.corpus, "case/none")
 
     def test_a_correct_pair_passes_and_a_wrong_one_fails_on_those_payloads(self):
-        with mock.patch("evograd.verification.gate1.runner.make_case_inputs",
+        with mock.patch("evograd.opdecl.inputs.make_case_inputs",
                         side_effect=AssertionError("generated inputs used")):
             good = self.judge(F.scale_shift_pair())
             bad = self.judge(F.scale_shift_pair(dw_scale=1.01))

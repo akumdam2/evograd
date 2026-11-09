@@ -359,63 +359,6 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         self.assertNotIn("llama_3_2_1b_observed", op.benchmark_suites)
 
 
-
-    def test_the_real_pair_passes_verify_runtime_forward(self):
-        from evograd.opdecl import baselines
-
-        baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_swiglu_mlp")
-        baselines.verify_runtime_forward(get_task("qwen3_swiglu_mlp"), device="cpu")
-
-    def test_a_materially_perturbed_implementation_is_rejected(self):
-        """The negative control for the tightened gate.
-
-        A 2% error in the SwiGLU intermediate is far larger than any rounding
-        difference between the two spellings, and far smaller than a broken
-        kernel. The old 8e-2 tolerance accepted it; 1e-2 does not.
-        """
-        import torch
-
-        from evograd.opdecl import baselines
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp import reference as forward_ref
-        def perturbed(x, gate_weight, up_weight, down_weight):
-            gate = torch.nn.functional.linear(x, gate_weight)
-            up = torch.nn.functional.linear(x, up_weight)
-            hidden = (torch.nn.functional.silu(gate.float()) * up.float() * 1.02).to(x.dtype)
-            return torch.nn.functional.linear(hidden, down_weight)
-
-        original = forward_ref.qwen3_swiglu_mlp_forward_hf
-        forward_ref.qwen3_swiglu_mlp_forward_hf = perturbed
-        try:
-            baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_swiglu_mlp")
-            with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(get_task("qwen3_swiglu_mlp"), device="cpu")
-            self.assertIn("disagrees with forward", str(ctx.exception))
-
-            # And the tolerance this replaced would have let it through.
-            op = get_task("qwen3_swiglu_mlp")
-            case = next(w for w in op.correctness if w.dtype == "bfloat16")
-            values = make_case_inputs(op, case, device="cpu")
-            args = (
-                values["x"],
-                values["gate_weight"],
-                values["up_weight"],
-                values["down_weight"],
-            )
-            reference = forward_ref.qwen3_swiglu_mlp_forward_ref(*args)
-            wrong = perturbed(*args)
-            self.assertTrue(
-                torch.allclose(wrong.float(), reference.float(), atol=8e-2, rtol=8e-2),
-                "the old 8e-2 tolerance should have accepted this, or the test "
-                "is not demonstrating a tightening",
-            )
-            self.assertFalse(
-                torch.allclose(wrong.float(), reference.float(), atol=1e-2, rtol=1e-2)
-            )
-        finally:
-            forward_ref.qwen3_swiglu_mlp_forward_hf = original
-            baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_swiglu_mlp")
-
-
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
 class TestExtractionAndVerification(unittest.TestCase):
     """A real MLP invocation, taken from a real (tiny) captured layer."""

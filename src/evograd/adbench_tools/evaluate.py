@@ -4,10 +4,11 @@ Two depths, both in a killable child process:
 
 * **full** -- ``evograd.evolve.evaluator_entry``, the file ``evograd evolve``
   hands OpenEvolve, under the environment ``evograd.evolve.run.run_evolve``
-  sets: scoped declaration, forward override, scoring policy, performance
-  baseline, baseline timing cache. Static rules, import, correctness on every
-  declared output and gradient, a run at the timed shape, then timing and
-  ``combined_score``. This is the in-loop score and feedback.
+  sets: scoped declaration, search rule, scoring policy, performance baseline,
+  baseline timing cache. Static rules, import, the pack's search rule (Gate 1
+  on the case's calibration payloads, every output and gradient), a run at the
+  timed shape, then timing and ``combined_score``. This is the in-loop score
+  and feedback.
 * **correctness** -- the same static rules, import and correctness/coverage
   checks, without timing. For agents whose loop gates on a pass/fail test
   (KernelAgent's test file, GEAK's oracle) and does its own timing.
@@ -38,7 +39,7 @@ from typing import Any
 from evograd.adbench_tools.artifact import END, HEADER_MARK, PackagingError, package, unpackage
 from evograd.adbench_tools.gpu_lock import run_evaluation
 from evograd.adbench_tools.ledger import RunLedger
-from evograd.adbench_tools.task import DECLARED_RULE, TASK_FILE, AgentTask, load
+from evograd.adbench_tools.task import TASK_FILE, AgentTask, load
 
 FAILED = -1e9
 DEFAULT_TIMEOUT = 900
@@ -99,7 +100,6 @@ def evaluator_env(task: AgentTask, *, cache_dir: str | Path | None = None,
     env = evograd_env()
     env["EVOGRAD_OP"] = op.name
     env["EVOGRAD_SCORING"] = task.spec["scoring"]
-    env["EVOGRAD_FORWARD_OVERRIDE"] = op.forward
     env["EVOGRAD_DECLARATION"] = task.declaration
     env["EVOGRAD_ALLOWED_PRIMITIVES"] = ",".join(task.allowed_primitives)
     cache = Path(cache_dir) if cache_dir else task.root / ".cache"
@@ -121,25 +121,24 @@ def evaluator_env(task: AgentTask, *, cache_dir: str | Path | None = None,
         env.pop(CONTRACT_ENV, None)
     for name in ("EVOGRAD_PROGRAM_ARCHIVE_DIR", "EVOGRAD_EVAL_CHILD", "EVOGRAD_RESULT_JSON"):
         env.pop(name, None)
-    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
     # The pack alone decides how correctness is judged, never the caller's environment.
-    if search_rule(task) == SEARCH_RULE:
-        env[SEARCH_CORRECTNESS_ENV] = str(task.root / TASK_FILE)
-    else:
-        env.pop(SEARCH_CORRECTNESS_ENV, None)
+    search_rule(task)
+    env[SEARCH_CORRECTNESS_ENV] = str(task.root / TASK_FILE)
     return env
 
 
 def search_rule(task: AgentTask) -> str:
-    """The pack's search-feedback correctness rule: Gate 1 on calibration payloads for a
-    model case, never the declaration's tolerances; those for an operator pack."""
+    """The pack's search-feedback correctness rule, which must be Gate 1 on the case's
+    calibration payloads. A pack without it (an operator pack, or a model pack built
+    before the rule existed) is refused, never judged by the declaration's tolerances."""
     from evograd.verification.payloads.gate1 import SEARCH_RULE
 
-    rule = (task.spec.get("search_correctness") or {}).get("rule", DECLARED_RULE)
-    if "model" in task.spec and rule != SEARCH_RULE:
-        raise ValueError(f"{task.root}: a model case is judged by {SEARCH_RULE!r}, not "
-                         f"{rule!r}; rebuild the pack")
+    rule = (task.spec.get("search_correctness") or {}).get("rule")
+    if "model" not in task.spec or rule != SEARCH_RULE:
+        raise ValueError(f"{task.root}: search feedback is judged by {SEARCH_RULE!r} on a model "
+                         f"case's payloads, not {rule!r}; rebuild the pack from a model case")
     return rule
 
 

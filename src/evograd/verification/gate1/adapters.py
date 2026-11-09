@@ -7,11 +7,11 @@ Inputs to :func:`evograd.verification.gate1.runner.verify_pair`:
 * :func:`pair_from_provider` -- anything with the ``PairProvider`` surface
   (``forward(values)``, ``backward(dout, saved, values)``, optional
   ``prepare``). Duck-typed, so this package does not import the provider
-  module;
-* case builders -- the declaration's inputs at another generator seed,
-  upstream-gradient patterns, and caller-named stress probes. Nothing here
-  knows an operator family: which activations a stress pattern may touch is
-  the caller's statement.
+  module.
+
+Cases are recorded payloads (:func:`evograd.verification.payloads.payload_cases`).
+:func:`declared_values` is not a case builder: it is the input recipe operator
+Gate 2's ``OperatorScope`` names in its reference identity.
 
 Outputs: :func:`evolution_correctness` (the per-result rates the evolution
 evaluator reports) and :func:`saved_state_observer` (saved-state bytes and
@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
-from dataclasses import replace
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Mapping
 
 import torch
 
@@ -32,15 +31,8 @@ from evograd.opdecl.bind import backward_inactive_kwargs, lookup_pair
 from evograd.opdecl.inputs import apply_recorded_strides, case_seed, make_case_inputs
 from evograd.verification.common import contracts as C
 from evograd.verification.common.reports import VerificationReport
-from evograd.verification.common.tensors import isolate, isolated_rng, tensors_in
-from evograd.verification.gate1.runner import (
-    PROBE_CASE,
-    REQUIRED_CASE,
-    Gate1Case,
-    PairUnderTest,
-    case_id_for,
-    declared_name,
-)
+from evograd.verification.common.tensors import isolated_rng, tensors_in
+from evograd.verification.gate1.runner import PairUnderTest, declared_name
 
 
 # ── candidates ───────────────────────────────────────────────────────────────
@@ -172,78 +164,6 @@ def declared_values(op: OpDecl, workload: Workload, *, device: str,
         return apply_recorded_strides(op, workload, values)
 
 
-def generated_case(op: OpDecl, workload: Workload, *, device: str, seed_offset: int = 0,
-                   role: str = REQUIRED_CASE) -> Gate1Case:
-    """A declared case at ``seed_offset``; the provenance lists what the shift changed."""
-    values = declared_values(op, workload, device=device, seed_offset=seed_offset)
-    provenance: dict[str, Any] = {"generator": "declaration", "seed_offset": int(seed_offset),
-                                  "case_seed": case_seed(workload)}
-    if seed_offset:
-        base = declared_values(op, workload, device=device)
-        provenance["changed_tensors"] = [
-            n for n, v in values.items()
-            if torch.is_tensor(v) and torch.is_tensor(base.get(n)) and not torch.equal(v, base[n])]
-        if not provenance["changed_tensors"]:
-            # The recipe ignores the seed it was given: this is the default case again.
-            provenance["note"] = "the input recipe did not respond to the seed shift"
-    variant = "declared" if not seed_offset else f"seed+{seed_offset}"
-    return Gate1Case(case_id_for(op, workload, variant), workload, values, role, provenance)
-
-
-def upstream_variants(op: OpDecl, case: Gate1Case, *, device: str,
-                      patterns: Iterable[str] = ("ones", "alternating")) -> list[Gate1Case]:
-    """The same primals with structured upstream gradients."""
-    base = dict(case.values) if case.values is not None else declared_values(
-        op, case.workload, device=device)
-    out = []
-    for pattern in patterns:
-        values = isolate(base)
-        for name in op.upstream_grad_names:
-            values[name] = _pattern(values[name], pattern)
-        out.append(Gate1Case(f"{case.case_id}+upstream_{pattern}", case.workload, values,
-                             case.role, {**case.provenance, "upstream_pattern": pattern}))
-    return out
-
-
-def stress_probes(op: OpDecl, case: Gate1Case, names: Iterable[str], *, device: str,
-                  patterns: Iterable[str] = ("large_constant", "cancellation"),
-                  magnitude: float = 1000.0) -> list[Gate1Case]:
-    """Probe cases that set the named floating inputs to stress patterns.
-
-    ``names`` is the caller's statement of which activations the operator's
-    domain allows to take these values; nothing is inferred from a family. A
-    probe whose oracle is invalid is recorded as skipped, never as passed.
-    """
-    names = tuple(names)
-    base = dict(case.values) if case.values is not None else declared_values(
-        op, case.workload, device=device)
-    unknown = [n for n in names if not (torch.is_tensor(base.get(n)) and base[n].is_floating_point())]
-    if unknown:
-        raise ValueError(f"{op.name}: stress inputs {unknown} are not floating tensor inputs")
-    out = []
-    for pattern in patterns:
-        values = isolate(base)
-        for name in names:
-            values[name] = _pattern(values[name], pattern, magnitude)
-        out.append(Gate1Case(f"{case.case_id}+stress_{pattern}", case.workload, values,
-                             PROBE_CASE, {**case.provenance, "stress_pattern": pattern,
-                                          "stress_inputs": list(names), "magnitude": magnitude}))
-    return out
-
-
-def _pattern(value: torch.Tensor, pattern: str, magnitude: float = 1.0) -> torch.Tensor:
-    if pattern == "ones":
-        return torch.ones_like(value)
-    if pattern == "large_constant":
-        return torch.full_like(value, magnitude)
-    signs = (torch.arange(value.numel(), device=value.device) % 2).reshape(value.shape)
-    if pattern == "alternating":
-        return (2 * signs - 1).to(value.dtype)
-    if pattern == "cancellation":
-        return ((1 - 2 * signs) * magnitude).to(value.dtype)
-    raise ValueError(f"unknown pattern {pattern!r}")
-
-
 # ── report adapters ──────────────────────────────────────────────────────────
 
 
@@ -320,6 +240,3 @@ def saved_state_observer(context: Mapping[str, Any]) -> dict[str, Any]:
     return {"logical_saved_bytes": logical, "unique_saved_storage_bytes": sum(unique.values()),
             "retained_input_bytes": sum(retained.values()), "saved": described}
 
-
-def with_role(case: Gate1Case, role: str) -> Gate1Case:
-    return replace(case, role=role)

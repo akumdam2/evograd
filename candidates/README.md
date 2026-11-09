@@ -227,12 +227,13 @@ npm install -g @openai/codex@0.149.1             # Codex; uses OPENAI_API_KEY, -
 
 ## Commands
 
-Build the task pack once per operator configuration. Every agent then runs on
-that same directory.
+Build the task pack once per model case (a GPU calibrates its compile
+envelope). Every agent then runs on that same directory.
 
 ```bash
-TASK=results/adbench_tools/llama3_swiglu_mlp/task
-python -m evograd.adbench_tools task --op llama3_swiglu_mlp --dtype bfloat16 --output-dir $TASK
+TASK=results/adbench_tools/llama_3_2_1b/llama3_swiglu_mlp/task
+python -m evograd.adbench_tools task --model llama_3_2_1b --case-id llama3_swiglu_mlp/swiglu_mlp \
+    --corpus $CORPUS/manifest.json --output-dir $TASK
 python -m evograd.adbench_tools statement $TASK | less      # what every agent is told
 ```
 
@@ -240,7 +241,7 @@ Run each agent. Every command ends with the diagnostic measurement in
 `<run-dir>/final.json`:
 
 ```bash
-R=results/adbench_tools/llama3_swiglu_mlp/runs
+R=results/adbench_tools/llama_3_2_1b/llama3_swiglu_mlp/runs
 python candidates/evograd/run.py     --task $TASK --run-dir $R/evograd     --budget 10
 python candidates/openevolve/run.py  --task $TASK --run-dir $R/openevolve  --budget 10
 python candidates/gepa/run.py        --task $TASK --run-dir $R/gepa        --budget 10
@@ -257,11 +258,13 @@ Compare them:
 python -m evograd.adbench_tools compare $R/*/final.json
 ```
 
-Or run everything for one operator, one agent after another on the same GPU:
+Or run everything for one model case, one agent after another on the same GPU:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 bash candidates/run_all.sh llama3_swiglu_mlp bfloat16 10
-AGENTS="evograd gepa" bash candidates/run_all.sh llama3_attention        # a subset
+CUDA_VISIBLE_DEVICES=0 bash candidates/run_all.sh llama_3_2_1b llama3_swiglu_mlp/swiglu_mlp \
+    $CORPUS/manifest.json 10
+AGENTS="evograd gepa" bash candidates/run_all.sh llama_3_2_1b \
+    llama3_attention/causal_gqa_attention $CORPUS/manifest.json        # a subset
 ```
 
 To check and run the five OpenAI-model agents (no GEAK or Claude Code) in one go, use
@@ -269,8 +272,9 @@ To check and run the five OpenAI-model agents (no GEAK or Claude Code) in one go
 of the evaluator, a tiny-budget smoke run of each agent, then the full run:
 
 ```bash
-SETUP=1 bash candidates/run_openai.sh llama3_swiglu_mlp bfloat16 10   # first time: also installs GEPA/KernelAgent
-STAGES="sanity smoke" bash candidates/run_openai.sh                    # just the checks
+CASE="llama_3_2_1b llama3_swiglu_mlp/swiglu_mlp $CORPUS/manifest.json"
+SETUP=1 bash candidates/run_openai.sh $CASE 10                  # first time: also installs GEPA/KernelAgent
+STAGES="sanity smoke" bash candidates/run_openai.sh $CASE       # just the checks
 ```
 
 Score or re-score any program by hand. It may be a bare agent module or a

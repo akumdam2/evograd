@@ -1,30 +1,19 @@
-"""GPU smoke test for the opdecl stack. Run on a CUDA node:
+"""GPU smoke test for the opdecl stack's oracle. Run on a CUDA node:
 
-    # oracle only: shapes/dtypes of ground-truth grads for every op
-    PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only
-
-    # verify a candidate seed against the oracle
-    PYTHONPATH=src python scripts/gpu_smoke.py --op layernorm --candidate path/to/seed.py
+    # shapes/dtypes of ground-truth grads for every op
+    PYTHONPATH=src python scripts/gpu_smoke.py
 
     # smoke an externally generated declaration
-    PYTHONPATH=src python scripts/gpu_smoke.py \
-        --declaration output/scaffold/my_op.py:op --oracle-only
+    PYTHONPATH=src python scripts/gpu_smoke.py --declaration output/scaffold/my_op.py:op
+
+A candidate is judged by Gate 1 on its task pack's payloads (``evograd seed
+--pack`` or ``python -m evograd.adbench_tools evaluate``), not here.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
-import json
 import sys
-from pathlib import Path
-
-
-def load_module(path: Path):
-    spec = importlib.util.spec_from_file_location(path.stem, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def output_shapes(op, y) -> dict[str, tuple[int, ...]]:
@@ -72,46 +61,15 @@ def oracle_smoke(device: str, declaration: str | None = None) -> int:
     return 1 if failed else 0
 
 
-def verify_candidate(
-    op_name: str | None,
-    candidate: Path,
-    device: str,
-    declaration: str | None = None,
-) -> int:
-    from evograd.opdecl import verify
-    from evograd.benchmark import get_task, load_task
-
-    if declaration:
-        op = load_task(declaration)
-    else:
-        assert op_name is not None
-        op = get_task(op_name)
-    report = verify(op, load_module(candidate), device=device)
-    print(json.dumps(report.to_dict(), indent=2))
-    return 0 if report.ok else 1
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--op", help="operator name (see evograd.ops.TASKS)")
     parser.add_argument(
         "--declaration",
-        help="external declaration as path.py:op (instead of a built-in --op)",
+        help="external declaration as path.py:op (instead of every registered task)",
     )
-    parser.add_argument("--candidate", type=Path, help="path to a seed module to verify")
-    parser.add_argument("--oracle-only", action="store_true")
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
-
-    if args.oracle_only:
-        return oracle_smoke(args.device, args.declaration)
-    if not (args.candidate and (args.op or args.declaration)):
-        parser.error(
-            "either --oracle-only, or --candidate with --op/--declaration"
-        )
-    return verify_candidate(
-        args.op, args.candidate, args.device, declaration=args.declaration
-    )
+    return oracle_smoke(args.device, args.declaration)
 
 
 if __name__ == "__main__":

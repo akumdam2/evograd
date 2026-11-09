@@ -98,7 +98,7 @@ def cmd_tasks(args) -> int:
                 raise SystemExit(f"{directory} holds {task.task_id}, not {args.model} {cid}")
             print(f"kept {task.task_id}: {directory} (search correctness {search_rule(task)})")
             continue
-        task = build_task(None, directory, model=args.model, case_id=cid, library=args.library,
+        task = build_task(directory, model=args.model, case_id=cid, library=args.library,
                           corpus=args.corpus, state=args.state)
         print(f"built {task.task_id}: {directory} (L{task.spec['level']}, "
               f"primitives {list(task.allowed_primitives)}, "

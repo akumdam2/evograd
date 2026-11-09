@@ -1,10 +1,14 @@
 """The evaluator file handed to ``openevolve-run``.
 
 OpenEvolve loads an evaluator by file path and calls its module-level
-``evaluate``. This single entry file serves every operator: the target op and
-scoring policy come from the environment, set by ``evograd.evolve.run``:
+``evaluate``. This single entry file serves every model case: the task pack and
+scoring policy come from the environment, set by ``evograd.evolve.run`` (or
+``evograd.adbench_tools.evaluate.evaluator_env``):
 
-    EVOGRAD_OP       — operator name (required, see evograd.ops.OPS)
+    EVOGRAD_DECLARATION — the pack's scoped declaration, ``path.py:op`` (required)
+    EVOGRAD_OP       — its operator name (required; checked against the declaration)
+    EVOGRAD_SEARCH_CORRECTNESS — the pack's ``task.json``, whose search rule
+                       judges every candidate (required)
     EVOGRAD_SCORING  — scoring policy name (default: speed_memory)
     EVOGRAD_PROGRAM_ARCHIVE_DIR — when set, keep every evaluated candidate here
                                   (evograd evolve --save-programs)
@@ -21,11 +25,11 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import replace
 
 from evograd.evolve.evaluator import archive_program, build_evaluate, evaluate_isolated
 from evograd.evolve.scoring import get_policy
-from evograd.benchmark import get_task, load_task
+from evograd.benchmark import load_task
+from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
 
 def _env(name: str, legacy: str | None = None) -> str | None:
@@ -71,59 +75,12 @@ def _int_env(name: str, legacy: str | None = None, minimum: int = 0) -> int | No
     return parsed
 
 
-def _benchmark_selection(op):
-    suite = os.environ.get("EVOGRAD_BENCHMARK_SUITE")
-    if suite is None and op.name == "layernorm":
-        suite = os.environ.get("LAYERNORM_BENCHMARK_SUITE") or os.environ.get(
-            "AUTOGRAD_PAIR_SHAPE_PROFILE"
-        )
-    raw_dtypes = os.environ.get("EVOGRAD_BENCHMARK_DTYPES")
-    if raw_dtypes is None and op.name == "layernorm":
-        raw_dtypes = os.environ.get("LAYERNORM_BENCHMARK_DTYPES")
-    aliases = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
-    dtypes = None
-    if raw_dtypes:
-        dtypes = tuple(
-            aliases.get(part.strip().lower(), part.strip().lower())
-            for part in raw_dtypes.split(",")
-            if part.strip()
-        )
-    return op.benchmark_workloads(suite=suite, dtypes=dtypes)
-
-
-def _restrict_correctness(op):
-    """Gate a dtype-specialist candidate on its own dtype only.
-
-    Pipeline D seeds are dtype specialists -- Inductor specializes on dtype, so
-    one seed handles one -- and would fail the other declared dtypes by design.
-    Mirrors EVOGRAD_BENCHMARK_DTYPES on the correctness side.
-    """
-    raw = os.environ.get("EVOGRAD_CORRECTNESS_DTYPES")
-    if not raw:
-        return op
-    aliases = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
-    wanted = {
-        aliases.get(part.strip().lower(), part.strip().lower())
-        for part in raw.split(",")
-        if part.strip()
-    }
-    selected = tuple(w for w in op.correctness if w.dtype in wanted)
-    if not selected:
-        raise ValueError(
-            f"{op.name}: EVOGRAD_CORRECTNESS_DTYPES={raw!r} matches no declared "
-            f"correctness workload; available: {sorted({w.dtype for w in op.correctness})}"
-        )
-    return replace(op, correctness=selected)
-
-
-_DECLARATION = os.environ.get("EVOGRAD_DECLARATION")
-_OP = load_task(_DECLARATION) if _DECLARATION else get_task(os.environ["EVOGRAD_OP"])
+if not os.environ.get(SEARCH_CORRECTNESS_ENV):
+    raise RuntimeError(f"{SEARCH_CORRECTNESS_ENV} is not set: this evaluator judges candidates "
+                       "only by a task pack's search rule (evograd evolve --pack)")
+_OP = load_task(os.environ["EVOGRAD_DECLARATION"])
 if _OP.name != os.environ["EVOGRAD_OP"]:
     raise ValueError("evaluator declaration does not match EVOGRAD_OP")
-if os.environ.get("EVOGRAD_FORWARD_OVERRIDE"):
-    _OP = replace(_OP, forward=os.environ["EVOGRAD_FORWARD_OVERRIDE"])
-    _OP.validate()
-_OP = _restrict_correctness(_OP)
 
 _evaluate_direct = build_evaluate(
     _OP,
@@ -132,7 +89,6 @@ _evaluate_direct = build_evaluate(
         "EVOGRAD_BENCHMARK_WARMUP", "LAYERNORM_BENCHMARK_WARMUP", minimum=0
     ),
     reps=_int_env("EVOGRAD_BENCHMARK_REPS", "LAYERNORM_BENCHMARK_REPS", minimum=1),
-    benchmark_workloads=_benchmark_selection(_OP),
     performance_baseline=os.environ.get(
         "EVOGRAD_PERFORMANCE_BASELINE",
         os.environ.get("AUTOGRAD_PAIR_PERF_BASELINE", "pytorch_autograd"),
@@ -157,7 +113,8 @@ else:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        print(f"Usage: EVOGRAD_OP=<op> {argv[0]} PROGRAM_PATH")
+        print(f"Usage: EVOGRAD_DECLARATION=... EVOGRAD_OP=... {SEARCH_CORRECTNESS_ENV}=... "
+              f"{argv[0]} PROGRAM_PATH")
         return 2
     result = evaluate(argv[1])
     payload = {"metrics": result.metrics, "artifacts": result.artifacts}

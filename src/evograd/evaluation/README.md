@@ -116,23 +116,27 @@ generated inputs; both must be reevaluated, not relabeled.
 Levels describe tasks: L1 primitive, L2 composite operator, L3 whole model.
 An L2 candidate can be evaluated at T2 and installed in the T3 model.
 
-## Unified seed admission and evolution
+## Seed admission and evolution
 
-`evograd seed unified` publishes only a seed that passes direct-pair oracle
-checks, native autograd deployment checks, and the numerical variants in
-`pipelines/unified/validation.py`. The isolated admission entry point is
-`evograd.evaluation.common.seed`; it runs without timing, using the generated
-`declaration.py` to restrict checks to the captured shape, dtype and scalars.
-Variants include reproducible input-factory reseeds, independent upstream
-gradients, and eligible activation stress inputs. Invalid stress references are
-reported separately and do not count as passes. Tolerances still come from the
-declaration.
+Every seed pipeline (`evograd seed {unified,a,b,c,d} --pack PACK`) publishes
+only a seed that passes the task pack's search rule -- Gate 1 on the case's
+calibration payloads (recorded training calls, against the model reference,
+with the pack's compile envelope) -- and then one forward and backward through
+its deployment entry under native autograd on one of those payloads. The
+isolated admission entry point is `evograd.evaluation.common.seed --pack`; it
+runs without timing. No check judges a seed on generated inputs or by the
+declaration's tolerances.
 
-Evolution loads that scoped declaration and pins `unified_contract.json`
-outside generated candidates through `EVOGRAD_UNIFIED_CONTRACT_PATH`. It checks
-fixed provider/deployment code and preserved call sites, then counts actual
-external-library calls in forward and backward. Unified numerical variants
-must pass before timing. NCU refinement inherits the same declaration and gates.
+Evolution (`evograd evolve --pack PACK`) loads the pack's scoped declaration and
+judges every candidate by the same search rule before it is timed: the
+evaluator reads the pack's `task.json` from `EVOGRAD_SEARCH_CORRECTNESS` and
+refuses to run without it. A declared library baseline is checked against
+eager on the pack's first search payload before its timings score a candidate.
+For a unified-lineage seed, evolution also pins `unified_contract.json` outside
+generated candidates through `EVOGRAD_UNIFIED_CONTRACT_PATH`; it checks fixed
+provider/deployment code and preserved call sites, then counts actual
+external-library calls in forward and backward. NCU refinement inherits the
+same pack and gates.
 
 ## Where shapes, inputs and gradients come from
 

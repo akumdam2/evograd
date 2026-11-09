@@ -587,7 +587,7 @@ def generate_dispatch_program(graph: dict) -> str:
 
         # Layout ops: substitute embedded Triton copies / zero-copy forms so the
         # emitted seed is evolvable Triton instead of opaque PyTorch fallbacks.
-        # atenir's dispatch registry (used for in-process verification) is
+        # atenir's dispatch registry (which builds B's lowering context) is
         # unaffected; this rewrites the generated program only.
         if args_ordered:
             _node_names = [e["name"] for e in args_ordered if e["kind"] == "node"]

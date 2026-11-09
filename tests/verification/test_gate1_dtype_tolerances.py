@@ -11,7 +11,8 @@ from evograd.verification import gate1
 from evograd.verification.common import contracts as C
 from evograd.verification.gate1.runner import compare_results, PROTOCOL
 from evograd.verification.gate1.tolerances import (
-    ENVELOPE_GAMMA, MODEL_POLICY, model_policy_identity, result_tolerances, rounding_floor,
+    ENVELOPE_GAMMA, MODEL_POLICY, model_policy_identity, policy_identity, result_tolerances,
+    rounding_floor,
 )
 from tests.verification import _fixtures as F
 
@@ -90,14 +91,14 @@ class DtypeToleranceTests(unittest.TestCase):
         self.assertEqual((check.limits["envelope"], check.limits["rounding_floor"]), (floor, floor))
         self.assertEqual(self.compare(ref, (ref.float() * 1.05).to(ref.dtype)).status, "failed")
         self.assertEqual(rounding_floor(self.op, torch.zeros(3, dtype=torch.bfloat16)), 0.0)
-        self.assertEqual(rounding_floor(F.SPLIT, ref), 0.0)          # generic task: declared rule
 
     def test_unknown_model_result_dtype_is_not_assigned_a_guessed_tolerance(self):
         with self.assertRaisesRegex(ValueError, "unsupported result dtype"):
             result_tolerances(self.op, self.workload, "y", torch.ones(1, dtype=torch.complex64))
 
     def test_policy_identity_includes_effective_table_and_report_version(self):
-        report = gate1.verify_pair(self.op, F.split_pair(), device="cpu")
+        report = gate1.verify_pair(self.op, F.split_pair(), cases=F.supplied_cases(self.op),
+                                   device="cpu")
         self.assertEqual(report.status, "passed")
         self.assertEqual(report.protocol, PROTOCOL)
         self.assertEqual(report.subject["tolerance_policy"], model_policy_identity())
@@ -106,11 +107,14 @@ class DtypeToleranceTests(unittest.TestCase):
             self.assertEqual((result.limits["atol"], result.limits["rtol"]), (1e-5, 1.3e-6))
             self.assertEqual(result.limits["envelope"], result.limits["rounding_floor"])
 
-    def test_generic_declaration_multipliers_and_hooks_are_preserved(self):
+    def test_a_declaration_without_a_model_reference_has_no_gate1_tolerance(self):
+        # Its own tolerances (multipliers, hooks) judge nothing: every entry refuses it.
         workload = F.SPLIT.correctness[0]
-        for name in ("lo", "dw"):
-            self.assertEqual(result_tolerances(F.SPLIT, workload, name, torch.ones(1)),
-                             F.SPLIT.tolerance_for(workload, name))
+        for check in (lambda: result_tolerances(F.SPLIT, workload, "lo", torch.ones(1)),
+                      lambda: rounding_floor(F.SPLIT, torch.ones(1)),
+                      lambda: policy_identity(F.SPLIT)):
+            with self.assertRaisesRegex(ValueError, "model-reference"):
+                check()
 
 
 if __name__ == "__main__":

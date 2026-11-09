@@ -186,13 +186,12 @@ class Evaluate(unittest.TestCase):
 
         import torch
 
-        from evograd.benchmark import get_task
         from tests.verification.test_tier2_inputs import forbidden, layout, no_generator
 
         seen = []
         model = self.model
         # Declaration-level input hooks are generators too.
-        self.model = replace(model, reference_op=lambda task: replace(get_task(task),
+        self.model = replace(model, reference_op=lambda task: replace(model.reference_op(task),
                                                                       make_inputs=forbidden))
         try:
             with no_generator():
@@ -369,7 +368,6 @@ class Tier2Timing(unittest.TestCase):
 
         from functools import partial
 
-        from evograd.benchmark import get_task
         from evograd.evaluation.common.provider import pytorch_autograd_provider
         from evograd.evaluation.protocol import TIER2_OPTIONS, time_case
         from evograd.opdecl.inputs import upstream_grad_values
@@ -378,7 +376,7 @@ class Tier2Timing(unittest.TestCase):
         from tests.verification import _toy_integration as T
         from tests.verification.test_tier2_inputs import case, write_corpus
 
-        op = get_task("swiglu")
+        op = T.reference_op("swiglu")      # a model reference, as every timed case is
         module = types.ModuleType("tier2_direct_deployment")
         source = (T.CANDIDATE.format(scale=1.0)
                   + f"\n{op.forward_fn_name} = forward_with_saved\n"

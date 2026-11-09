@@ -1,19 +1,20 @@
-"""The task pack: what every agent is given for one operator configuration.
+"""The task pack: what every agent is given for one model's observed case.
 
 ``build_task`` writes a directory that is self-contained and portable (every
 path inside it is relative to it):
 
     task.json        machine-readable task: op, configuration, ABI, rules
-    declaration.py   evograd's scoped declaration -- the unified frontend's own
+    declaration.py   the model reference scoped to the case (``scoped_op``)
     reference.py     the PyTorch forward reference with its dependencies
     TASK.md          the shared problem statement (see ``statement``)
     skeleton.py      the deliverable's signatures, bodies unimplemented
 
-The configuration is selected by ``evograd.pipelines.unified.synthesize``'s
-``select_workload`` and scoped by its ``scoped_op``; ``declaration.py`` is
-written by the same function that writes the frontend's. So the correctness
-cases, tolerances and timed case are exactly the ones ``evograd seed unified``
-followed by ``evograd evolve`` is measured on.
+The case is one of the model's observed L1/L2 sites, as ``evograd evaluate``
+judges it: the configuration the model trains at and the model's own reference
+computation. ``task.json``'s ``search_correctness`` is the rule every agent's
+candidates are judged by during search (Gate 1 on the case's calibration
+payloads); ``evograd seed --pack`` and ``evograd evolve --pack`` use the same
+pack.
 """
 
 from __future__ import annotations
@@ -39,8 +40,6 @@ SKELETON_FILE = "skeleton.py"
 #: to a vendor library is granted), ``none`` grants nothing, or an explicit
 #: comma-separated list of ``evograd.pipelines.shared.primitives`` names.
 LIBRARY_POLICIES = ("auto", "none", "vendor_gemm", "vendor_sdpa", "vendor_gemm,vendor_sdpa")
-#: Which declared configuration a task targets when no dims are given.
-CASE_SELECTIONS = ("benchmark", "correctness")
 
 #: Calls in a forward reference that the unified frontend leaves to a vendor
 #: library (Inductor's extern mm/bmm/addmm/convolution). ``auto`` grants the
@@ -191,10 +190,9 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
 
     Names and dtypes come from Gate 1's result contract (whose dtype the
     reference result must have), the rule and per-result ``(atol, rtol)`` from
-    its tolerance policy. A model-reference task gets the fixed dtype defaults
-    and the compile envelope; the envelope's value needs a GPU calibration on
-    the model's payloads, so only its rule and Gate 1's factor
-    (``gate1.tolerances.ENVELOPE_GAMMA``) are recorded.
+    its tolerance policy: the fixed dtype defaults and the compile envelope. The
+    envelope's value needs a GPU calibration on the model's payloads, so only its
+    rule and Gate 1's factor (``gate1.tolerances.ENVELOPE_GAMMA``) are recorded.
     """
     import torch
 
@@ -212,14 +210,7 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
         reference = torch.empty(0, dtype=resolve_dtype(spec.dtype), device="meta")
         atol, rtol = result_tolerances(op, workload, name, reference)
         results[name] = {"dtype": spec.dtype, "atol": atol, "rtol": rtol}
-    policy = policy_identity(op)
-    return {"policy": policy, "results": results,
-            **({"envelope_gamma": ENVELOPE_GAMMA} if "envelope" in policy else {})}
-
-
-#: The evaluator's correctness check by the declaration's tolerances on generated
-#: inputs: an operator pack's, which has no payloads. A model case never uses it.
-DECLARED_RULE = "declared_tolerances"
+    return {"policy": policy_identity(op), "results": results, "envelope_gamma": ENVELOPE_GAMMA}
 
 
 def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
@@ -267,12 +258,6 @@ def _evograd_revision() -> dict[str, Any]:
     return {"commit": commit or None, "dirty": dirty}
 
 
-def _task_id(op_name: str, workload) -> str:
-    dims = "_".join(f"{k}{v}" for k, v in sorted(workload.dims.items()))
-    short = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}[workload.dtype]
-    return f"{op_name}.{short}.{dims}"
-
-
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
@@ -312,36 +297,25 @@ op = scoped_op(_base, _case, declaration=str(Path(__file__).resolve()) + ":op")
 
 
 def build_task(
-    op_name: str | None,
     output_dir: str | Path,
     *,
-    declaration: str | None = None,
-    dtype: str | None = None,
-    dims: dict[str, int] | None = None,
+    model: str,
+    case_id: str,
+    corpus: str | Path | None = None,
     library: str = "auto",
     scoring: str = "speed_memory",
     performance_baseline: str = "auto",
-    case: str = "benchmark",
-    model: str | None = None,
-    case_id: str | None = None,
-    corpus: str | Path | None = None,
     device: str = "cuda",
     state: str | Path | None = None,
 ) -> AgentTask:
-    """Write a task pack for one operator configuration and return it loaded.
+    """Write the task pack of ``model``'s observed case ``case_id`` and return it loaded.
 
-    ``case="benchmark"`` (default) targets the operator's first declared timed
-    case of ``dtype``; ``case="correctness"`` reproduces ``evograd seed
-    unified``'s default, the first correctness case. Explicit ``dims`` win.
-
-    With ``model`` and ``case_id`` the task is that model's observed case
-    (``evograd evaluate``'s unit): the configuration the model trains at and
-    the model's own reference computation, so what the agent optimizes is what
-    the gates judge. ``op_name``, ``declaration``, ``dtype``, ``dims`` and
-    ``case`` are then taken from the case. The evaluator judges every agent's
-    candidates by :data:`~evograd.verification.payloads.gate1.SEARCH_RULE`
-    during search, which needs the model's ``corpus`` and a GPU; an operator
-    task has no payloads and keeps :data:`DECLARED_RULE`.
+    The case is ``evograd evaluate``'s unit: the configuration the model trains
+    at and the model's own reference computation, so what the agent optimizes is
+    what the gates judge. The evaluator judges every agent's candidates by
+    :data:`~evograd.verification.payloads.gate1.SEARCH_RULE` during search,
+    which needs the model's payload ``corpus`` and a GPU (the compile envelope's
+    calibration).
     """
     from dataclasses import replace
 
@@ -351,70 +325,27 @@ def build_task(
         render_skeleton,
     )
     from evograd.adbench_tools.statement import render_statement, system_message
-    from evograd.benchmark import get_task, load_task
     from evograd.evolve.scoring import get_policy
     from evograd.opdecl.baselines import resolve_performance_baseline
-    from evograd.pipelines.unified.synthesize import (
-        _write_declaration,
-        scoped_op,
-        select_workload,
-    )
+    from evograd.pipelines.unified.synthesize import scoped_op
 
     get_policy(scoring)
-    observed = None
-    if (model is None) != (case_id is None):
-        raise ValueError("model and case_id go together")
-    if model is not None:
-        if declaration or dtype or dims or case != "benchmark":
-            raise ValueError("a model's observed case fixes the declaration and configuration")
-        model_obj, observed = observed_case(model, case_id)
-        base, workload = model_obj.reference_op(observed.task), observed.workload
-        op_name = base.name
-        selection = f"observed case {case_id} of {model}"
-    else:
-        if corpus is not None:
-            raise ValueError("only a model's observed case has payloads to judge search feedback on")
-        if op_name is None:
-            raise ValueError("op_name is required without a model")
-        dims_given = dims is not None
-        if case not in CASE_SELECTIONS:
-            raise ValueError(f"case must be one of {CASE_SELECTIONS}, got {case!r}")
-        base = load_task(declaration) if declaration else get_task(op_name)
-        if base.name != op_name:
-            raise ValueError(f"declaration name {base.name!r} does not match {op_name!r}")
-        if declaration:
-            path, _, attribute = declaration.partition(":")
-            base = replace(base, declaration=f"{Path(path).resolve()}:{attribute}")
-        selection = "explicit dims" if dims_given else case
-        if dims is None and case == "benchmark":
-            timed = [w for w in base.benchmark_workloads() if dtype is None or w.dtype == dtype]
-            if timed:
-                dims, dtype = dict(timed[0].dims), timed[0].dtype
-            else:
-                # Nothing timed is declared (an operator kept for correctness
-                # coverage); the frontend's own default is all there is.
-                selection = "correctness (no declared benchmark case" + (
-                    f" of dtype {dtype})" if dtype else ")")
-        # With explicit dims this is exactly `evograd seed unified --dims ... --dtype ...`.
-        workload = select_workload(base, dtype=dtype, dims=dims)
+    model_obj, observed = observed_case(model, case_id)
+    base, workload = model_obj.reference_op(observed.task), observed.workload
+    op_name = base.name
 
     root = Path(output_dir).resolve()
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
     # Before the pack exists: a calibration that fails leaves no half-written pack.
-    search = (_search_correctness(model_obj, observed, corpus, device=device,
-                                  state=Path(state) if state else None)
-              if observed is not None else {"rule": DECLARED_RULE})
+    search = _search_correctness(model_obj, observed, corpus, device=device,
+                                 state=Path(state) if state else None)
     root.mkdir(parents=True, exist_ok=True)
 
-    if observed is not None:
-        # The model reference, scoped to the case; the pack's own declaration
-        # is then the base every agent (and evograd's seed) starts from.
-        _write_model_declaration(root / DECLARATION_FILE, model, observed.task, workload)
-        base = replace(base, declaration=f"{(root / DECLARATION_FILE).resolve()}:op")
-    else:
-        # The frontend's own scoped declaration, written by the frontend's writer.
-        _write_declaration(root / DECLARATION_FILE, base, workload)
+    # The model reference, scoped to the case; the pack's own declaration is then
+    # the base every agent (and evograd's seed) starts from.
+    _write_model_declaration(root / DECLARATION_FILE, model, observed.task, workload)
+    base = replace(base, declaration=f"{(root / DECLARATION_FILE).resolve()}:op")
     reference, entry = reference_closure(base.forward)
     (root / REFERENCE_FILE).write_text(reference, encoding="utf-8")
     allowed, library_reason = resolve_library(library, reference)
@@ -423,18 +354,17 @@ def build_task(
     baseline = resolve_performance_baseline(scoped, performance_baseline)
     spec: dict[str, Any] = {
         "schema": TASK_SCHEMA,
-        "task_id": (f"{model}.{case_id.replace('/', '.')}" if observed is not None
-                    else _task_id(op_name, workload)),
+        "task_id": f"{model}.{case_id.replace('/', '.')}",
         "op": op_name,
         "base_declaration": base.declaration,
         "forward": base.forward,
         "reference_entry": entry,
-        "level": observed.level if observed is not None else base.level,
+        "level": observed.level,
         "family": base.family,
         "workload": {"dims": dict(workload.dims), "dtype": workload.dtype},
-        "case_selection": selection,
-        **({"model": model, "case_id": case_id, "frequency": observed.frequency,
-            "reference_contract": base.reference_contract} if observed is not None else {}),
+        "case_selection": f"observed case {case_id} of {model}",
+        "model": model, "case_id": case_id, "frequency": observed.frequency,
+        "reference_contract": base.reference_contract,
         "abi": describe_abi(scoped, workload),
         "semantics": {
             "forward": scoped.forward_semantics,

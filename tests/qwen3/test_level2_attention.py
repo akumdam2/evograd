@@ -325,32 +325,6 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         self.assertLess(atol, 1e-2 * 6.5 * 3.0)       # and only modestly
         self.assertEqual(rtol, 1e-2)                  # rtol never moves
 
-    def test_the_real_pair_passes_verify_runtime_forward(self):
-        from evograd.opdecl import baselines
-
-        baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_attention")
-        baselines.verify_runtime_forward(get_task("qwen3_attention"), device="cpu")
-
-    def test_a_materially_perturbed_implementation_is_rejected(self):
-        from evograd.opdecl import baselines
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention import reference as forward_ref
-        original = forward_ref.qwen3_attention_forward_production
-
-        def perturbed(q, k, v, o_weight):
-            # Bound to the original, not to the module attribute: the patch
-            # below replaces that attribute.
-            return original(q, k, v, o_weight) * 1.02
-
-        forward_ref.qwen3_attention_forward_production = perturbed
-        try:
-            baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_attention")
-            with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(get_task("qwen3_attention"), device="cpu")
-            self.assertIn("disagrees with forward", str(ctx.exception))
-        finally:
-            forward_ref.qwen3_attention_forward_production = original
-            baselines._RUNTIME_FORWARD_VERIFIED.discard("qwen3_attention")
-
 
 class TestSnapshotEntry(unittest.TestCase):
     def test_the_attention_entry_is_derived_not_hand_written(self):

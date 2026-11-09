@@ -1,8 +1,9 @@
-"""Drive an OpenEvolve run for one operator + seed + scoring policy.
+"""Drive an OpenEvolve run for one model case's task pack + seed + scoring policy.
 
-* renders the config template with the op's contract,
+* renders the config template with the pack's scoped declaration,
 * calls OpenEvolve's supported ``run_evolution`` library API,
-* points it at the shared evaluator with declaration selection in the environment,
+* points it at the shared evaluator with the pack's declaration and search rule
+  in the environment,
 * writes the returned best code directly to the requested destination.
 """
 
@@ -12,6 +13,7 @@ import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from evograd.opdecl.activity import OpDecl
 from evograd.evolve.scoring import (
@@ -19,6 +21,9 @@ from evograd.evolve.scoring import (
     validate_feature_dimensions,
 )
 from evograd.pipelines.shared.runner import evograd_env
+
+if TYPE_CHECKING:
+    from evograd.adbench_tools.task import AgentTask
 
 _TEMPLATE = Path(__file__).with_name("config_template.yaml")
 _MAP_SHAPE_TEMPLATE = Path(__file__).with_name("config_map_shape_template.yaml")
@@ -137,7 +142,7 @@ def _temporary_environ(values: dict[str, str]):
 
 
 def run_evolve(
-    op: OpDecl,
+    pack: "Path | AgentTask",
     *,
     seed_path: Path,
     output_dir: Path,
@@ -149,9 +154,6 @@ def run_evolve(
     primary_model: str = "gpt-5.6-sol",
     secondary_model: str = "gpt-5.6-sol",
     api_base: str = "https://api.openai.com/v1",
-    benchmark_suite: str | None = None,
-    benchmark_dtypes: tuple[str, ...] | None = None,
-    dtype: str | None = None,
     performance_baseline: str = "auto",
     save_programs: bool = False,
     feature_dimensions: tuple[str, ...] | None = None,
@@ -168,9 +170,17 @@ def run_evolve(
     ncu_optimizer_timeout: int = 360,
     ncu_skip_at_roofline_pct: float = 95.0,
 ) -> int:
+    """Evolve ``seed_path`` on ``pack``'s case: candidates are judged by the pack's
+    search rule (Gate 1 on its calibration payloads) and timed at its configuration."""
+    from evograd.adbench_tools.evaluate import search_rule
+    from evograd.adbench_tools.task import TASK_FILE, AgentTask, load
     from evograd.opdecl.baselines import resolve_performance_baseline
     from evograd.evolve.scoring import get_policy
+    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
 
+    task = pack if isinstance(pack, AgentTask) else load(pack)
+    search_rule(task)
+    op = task.op()
     get_policy(scoring)
     feature_dimensions = (
         tuple(feature_dimensions) if feature_dimensions else DEFAULT_FEATURE_DIMENSIONS
@@ -226,31 +236,12 @@ def run_evolve(
         env[CONTRACT_ENV] = str(contract_target.resolve())
     env["EVOGRAD_OP"] = op.name
     env["EVOGRAD_SCORING"] = scoring
-    env["EVOGRAD_FORWARD_OVERRIDE"] = op.forward
-    if op.declaration:
-        env["EVOGRAD_DECLARATION"] = op.declaration
+    env["EVOGRAD_DECLARATION"] = task.declaration
+    env[SEARCH_CORRECTNESS_ENV] = str(task.root / TASK_FILE)
     env.setdefault(
         "EVOGRAD_BASELINE_TIMING_CACHE_PATH",
         str(output_dir / ".baseline_timing_cache.json"),
     )
-    if benchmark_suite:
-        # Validate before paying the startup cost of an OpenEvolve subprocess.
-        op.benchmark_workloads(suite=benchmark_suite, dtypes=benchmark_dtypes)
-        env["EVOGRAD_BENCHMARK_SUITE"] = benchmark_suite
-    elif benchmark_dtypes:
-        op.benchmark_workloads(dtypes=benchmark_dtypes)
-    if benchmark_dtypes:
-        env["EVOGRAD_BENCHMARK_DTYPES"] = ",".join(benchmark_dtypes)
-    if dtype:
-        # Dtype-specialist run (Pipeline D seeds): gate correctness on this
-        # dtype alone, and measure on it too unless the caller asked otherwise.
-        if not any(w.dtype == dtype for w in op.correctness):
-            raise ValueError(
-                f"{op.name}: no declared correctness workload with dtype {dtype!r}; "
-                f"available: {sorted({w.dtype for w in op.correctness})}"
-            )
-        env["EVOGRAD_CORRECTNESS_DTYPES"] = dtype
-        env.setdefault("EVOGRAD_BENCHMARK_DTYPES", dtype)
     if performance_baseline != "pytorch_autograd":
         env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
     programs_dir = output_dir / "programs"

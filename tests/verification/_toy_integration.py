@@ -125,15 +125,25 @@ def cases():
                                                  dtype="float32"), 1),)
 
 
-def model(gate3_steps: int = 4):
+def reference_op(task: str):
+    """The registry task under the toy's model-reference contract, as every model's is."""
+    import dataclasses
+
     from evograd.benchmark import get_task
+
+    op = get_task(task)
+    return dataclasses.replace(op, forward=op.runtime_forward or op.forward, runtime_forward=None,
+                               reference_dtype=None, reference_contract="toy-reference/1")
+
+
+def model(gate3_steps: int = 4):
     from evograd.verification.integrations.base import Model
     from evograd.verification.integrations.objectives import PrimaryOutput
 
     workload = ToyWorkload()
     return Model(name="toy", suite="toy_observed", workload_config={"weights": "toy"},
                  load_workload=lambda: workload, train_batches=train_batches,
-                 live_capture=ToyCapture, invocations=invocations, reference_op=get_task,
+                 live_capture=ToyCapture, invocations=invocations, reference_op=reference_op,
                  contract="toy-reference/1", source_identity=lambda: {"toy": 1},
                  objective=PrimaryOutput(ToyWorkload.primary_output_name,
                                          ToyWorkload.objective_definition),

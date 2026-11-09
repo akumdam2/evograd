@@ -89,10 +89,11 @@ class TestArchiveProgram(unittest.TestCase):
 class TestRunEvolveWiring(unittest.TestCase):
     def _run(self, **kwargs):
         from evograd.evolve.run import run_evolve
-        from evograd.benchmark import get_task
+        from tests.adbench_tools.test_adbench_tools import payload_rule_task
 
         with TemporaryDirectory() as td:
             root = Path(td)
+            task = payload_rule_task(root / "pack", "qwen3_0_6b", "rmsnorm/rmsnorm")
             seed = root / "seed.py"
             seed.write_text("# EVOLVE-BLOCK-START\npass\n# EVOLVE-BLOCK-END\n")
             observed = {}
@@ -103,7 +104,7 @@ class TestRunEvolveWiring(unittest.TestCase):
 
             with mock.patch("openevolve.run_evolution", side_effect=fake_run_evolution):
                 run_evolve(
-                    get_task("layernorm"),
+                    task,
                     seed_path=seed,
                     output_dir=root / "out",
                     **kwargs,

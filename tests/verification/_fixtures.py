@@ -130,6 +130,35 @@ MUL = declare_op(
 )
 
 
+# ── Gate 1 judges model-reference declarations on supplied cases ────────────
+
+
+def model_reference(op, contract: str = "vt-model-reference/1"):
+    """``op`` under a model-reference contract, the only kind Gate 1 judges."""
+    from dataclasses import replace
+
+    return replace(op, reference_contract=contract, runtime_forward=None)
+
+
+def supplied_cases(op, workloads=None, *, device: str = "cpu"):
+    """Gate 1 cases holding the declaration's inputs as recorded-call values."""
+    from evograd.opdecl.inputs import make_case_inputs
+    from evograd.verification.gate1 import Gate1Case
+
+    selected = op.correctness if workloads is None else tuple(workloads)
+    return [Gate1Case(f"{op.name}/case{i}", w, make_case_inputs(op, w, device=device))
+            for i, w in enumerate(selected)]
+
+
+def gate1_report(op, candidate, *, workloads=None, device: str = "cpu", **options):
+    """Gate 1 on ``op`` (as a model reference) over :func:`supplied_cases`."""
+    from evograd.verification import gate1
+
+    op = model_reference(op)
+    return gate1.verify_pair(op, candidate, cases=supplied_cases(op, workloads, device=device),
+                             device=device, **options)
+
+
 # ── candidate pairs ──────────────────────────────────────────────────────────
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import types
 import unittest
 import warnings
+from unittest import mock
 
 import torch
 
@@ -37,7 +38,7 @@ class TestOverwriteAllowance(unittest.TestCase):
     def test_declared_overwrite_is_honoured_at_both_gates(self):
         op = F.SCALE_SHIFT_OVERWRITE
         pair = F.scale_shift_pair(overwrite_x=True)
-        self.assertEqual(gate1.verify_pair(op, pair, device=CPU).status, PASSED)
+        self.assertEqual(F.gate1_report(op, pair).status, PASSED)
         scope = OperatorScope(op, op.correctness[0], device=CPU)
         cal = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]),
                         compile_backend=FAST)
@@ -53,7 +54,7 @@ class TestOverwriteAllowance(unittest.TestCase):
 
     def test_outputs_are_judged_before_the_backward_reuses_them(self):
         pair = F.scale_shift_pair(clobber_output=True)
-        self.assertEqual(gate1.verify_pair(F.SCALE_SHIFT, pair, device=CPU).status, PASSED)
+        self.assertEqual(F.gate1_report(F.SCALE_SHIFT, pair).status, PASSED)
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
         policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
         report = gate2.verify_integration(scope, scope.candidate(pair), policy=policy,
@@ -227,9 +228,15 @@ class TestAutocastBoundary(unittest.TestCase):
 
 
 class TestErrorsBecomeFindings(unittest.TestCase):
-    def test_gate1_workload_without_a_tolerance(self):
-        wl = Workload({"R": 4, "C": 8}, "float16")
-        report = gate1.verify_pair(F.SCALE_SHIFT, F.scale_shift_pair(), device=CPU, workloads=[wl])
+    def test_gate1_result_without_a_tolerance(self):
+        # A result the policy has no tolerance for (e.g. an unsupported dtype) is
+        # unavailable, never guessed and never a crash.
+        wl = Workload({"R": 4, "C": 8}, "float32")
+        reference = F.model_reference(F.SCALE_SHIFT)
+        with mock.patch("evograd.verification.gate1.runner.result_tolerances",
+                        side_effect=ValueError("unsupported result dtype")):
+            report = gate1.verify_pair(reference, F.scale_shift_pair(), device=CPU,
+                                       cases=F.supplied_cases(reference, [wl]))
         self.assertEqual(report.status, INCOMPLETE)
         self.assertIn("tolerance_unavailable", codes(report))
 

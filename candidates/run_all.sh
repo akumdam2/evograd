@@ -1,12 +1,13 @@
 #!/bin/bash
-# Run every agent on one operator configuration and compare them.
+# Run every agent on one model case and compare them.
 #
-#   bash candidates/run_all.sh OP [DTYPE] [BUDGET] [OUT]
+#   bash candidates/run_all.sh MODEL CASE_ID CORPUS [BUDGET] [OUT]
 #
-#   OP      an evograd task, e.g. llama3_swiglu_mlp (`evograd ops` lists them)
-#   DTYPE   default bfloat16; the task is the op's first timed case of DTYPE
-#   BUDGET  candidate programs per agent, default 30
-#   OUT     default results/adbench_tools/<OP>
+#   MODEL    a verified model, e.g. llama_3_2_1b
+#   CASE_ID  one of its observed cases, e.g. llama3_swiglu_mlp/swiglu_mlp
+#   CORPUS   the model's payload corpus (its manifest.json)
+#   BUDGET   candidate programs per agent, default 30
+#   OUT      default results/adbench_tools/<MODEL>/<CASE_ID>
 #
 # Environment: OPENAI_API_KEY, ADBENCH_MODEL (default gpt-5.5),
 # ADBENCH_API_BASE (default https://api.openai.com/v1), AGENTS (default
@@ -18,17 +19,20 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-OP="${1:?usage: run_all.sh OP [DTYPE] [BUDGET] [OUT]}"
-DTYPE="${2:-bfloat16}"
-BUDGET="${3:-${ADBENCH_BUDGET:-10}}"
-OUT="${4:-$REPO/results/adbench_tools/$OP}"
+USAGE="usage: run_all.sh MODEL CASE_ID CORPUS [BUDGET] [OUT]"
+MODEL="${1:?$USAGE}"
+CASE_ID="${2:?$USAGE}"
+CORPUS="${3:?$USAGE}"
+BUDGET="${4:-${ADBENCH_BUDGET:-10}}"
+OUT="${5:-$REPO/results/adbench_tools/$MODEL/${CASE_ID//\//__}}"
 AGENTS="${AGENTS:-evograd openevolve gepa kernelagent codex claude_code geak}"
 TIME_LIMIT="${TIME_LIMIT:-21600}"
 export PYTHONPATH="$REPO/src${PYTHONPATH:+:$PYTHONPATH}"
 
 TASK="$OUT/task"
 if [ ! -f "$TASK/task.json" ]; then
-    python -m evograd.adbench_tools task --op "$OP" --dtype "$DTYPE" --output-dir "$TASK" || exit 1
+    python -m evograd.adbench_tools task --model "$MODEL" --case-id "$CASE_ID" --corpus "$CORPUS" \
+        --output-dir "$TASK" || exit 1
 fi
 STAMP="$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$OUT/runs"

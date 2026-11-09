@@ -59,9 +59,8 @@ def measure_case(op, providers, values, *, warmup=10, reps=50, blocks=3, seed=0)
 def time_case(op, modules, inputs, *, options):
     """Each candidate and baseline appears once per block of each recorded call."""
     from evograd.evaluation.common.provider import (
-        candidate_autograd_provider, pytorch_autograd_provider,
+        candidate_autograd_provider, check_baseline, pytorch_autograd_provider,
         renamed_provider, torch_compile_provider)
-    from evograd.evaluation import protocol
     from evograd.evaluation.tier1.fair import _block_bootstrap_speedup
     from evograd.opdecl.baselines import baseline_candidate_module
     from evograd.verification.payloads import CorpusError
@@ -81,7 +80,7 @@ def time_case(op, modules, inputs, *, options):
             provider = renamed_provider(
                 candidate_autograd_provider(op, baseline_candidate_module(op, name)), name)
             workload, load = inputs[0]
-            protocol.check_baseline(op, provider, load(), workload)
+            check_baseline(op, provider, load(), workload)
             providers[name] = provider
         except CorpusError:
             raise

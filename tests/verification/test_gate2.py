@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from evograd.verification import gate1, gate2
+from evograd.verification import gate2
 from evograd.verification.common import contracts as C
 from evograd.verification.common.execution import Deployment, Sample, candidate
 from evograd.verification.common.reports import (
@@ -129,7 +129,7 @@ class TestOperatorScope(unittest.TestCase):
 
     def test_correct_pair_but_wrong_autograd_routing_is_rejected(self):
         artifact = F.mul_artifact(swap=True)
-        direct = gate1.verify_pair(F.MUL, artifact, device=CPU)
+        direct = F.gate1_report(F.MUL, artifact)
         self.assertEqual(direct.status, PASSED)                    # the pair itself is right
         good = gate2.verify_integration(self.mul_scope, self.mul_scope.candidate(F.mul_artifact()),
                                         policy=self.mul_calibration.policy,

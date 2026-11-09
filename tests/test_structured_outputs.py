@@ -18,8 +18,8 @@ from evograd.opdecl import Active, Inactive, Workload, declare_op
 from evograd.opdecl.bind import bind
 from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
 from evograd.opdecl.oracle import oracle
-from evograd.opdecl.verify import verify
 from evograd.benchmark import get_task
+from evograd.verification import gate1
 
 from tests import _structured_fixture as fixture
 
@@ -123,32 +123,48 @@ class TestInputsAndOracle(unittest.TestCase):
             as_output_tuple(single, (torch.zeros(2),))
 
 
+def gate1_report(module):
+    """Gate 1 on the declaration's inputs, supplied as recorded-call values, with the
+    fixture under a model-reference contract (the only kind Gate 1 judges)."""
+    from dataclasses import replace
+
+    op = replace(OP, reference_contract="test-structured-reference/1", runtime_forward=None)
+    cases = [gate1.Gate1Case(f"case{i}", w, make_case_inputs(op, w, device="cpu"))
+             for i, w in enumerate(op.correctness)]
+    return gate1.verify_pair(op, module, cases=cases, device="cpu")
+
+
 class TestCorrectnessGate(unittest.TestCase):
     def _verify(self, module):
-        return verify(OP, module, device="cpu")
+        return gate1_report(module)
 
     def test_a_correct_pair_passes(self):
         report = self._verify(fixture.good_module())
+        self.assertEqual(report.status, "passed")
         for case in report.cases:
-            self.assertIsNone(case.error)
-            self.assertEqual([c.name for c in case.checks], ["hi", "lo", "dx", "dw"])
-            self.assertTrue(all(c.ok for c in case.checks))
+            self.assertEqual([r.name for r in case.results],
+                             ["out:hi", "out:lo", "grad_in:dx", "grad_in:dw"])
+            self.assertTrue(all(r.status == "passed" for r in case.results))
 
     def _failed_checks(self, module):
+        """Declared names of the failing results; ``error`` for a case-level failure."""
         report = self._verify(module)
-        names = []
+        self.assertEqual(report.status, "failed")
+        names = set()
         for case in report.cases:
-            if case.error:
-                names.append("error")
-            else:
-                names.extend(c.name for c in case.checks if not c.ok)
-        return set(names)
+            if any(f.outcome == "failed" for f in case.findings):
+                names.add("error")
+            names.update(r.name.split(":", 1)[1] for r in case.results if r.status == "failed")
+        return names
 
     def test_a_single_tensor_where_a_tuple_is_declared_fails(self):
-        self.assertEqual(self._failed_checks(fixture.single_output_module()), {"error"})
+        # The structure is refused, and no declared output counts as produced.
+        self.assertEqual(self._failed_checks(fixture.single_output_module()),
+                         {"error", "hi", "lo"})
 
     def test_a_wrong_output_count_fails(self):
-        self.assertEqual(self._failed_checks(fixture.wrong_arity_module()), {"error"})
+        self.assertEqual(self._failed_checks(fixture.wrong_arity_module()),
+                         {"error", "hi", "lo"})
 
     def test_swapped_outputs_fail(self):
         """Ordering is part of the contract, not a detail."""
@@ -177,10 +193,10 @@ class TestCorrectnessGate(unittest.TestCase):
 
 class TestLayoutAndAutograd(unittest.TestCase):
     def test_a_non_contiguous_output_is_visible_in_the_report(self):
-        report = verify(OP, fixture.non_contiguous_output_module(), device="cpu")
+        report = gate1_report(fixture.non_contiguous_output_module())
         # Values still agree, so the numeric gate passes; the layout difference
         # is what a stride-sensitive consumer would see.
-        self.assertTrue(all(c.ok for case in report.cases for c in case.checks))
+        self.assertEqual(report.status, "passed")
         values = make_case_inputs(OP, CASE, device="cpu")
         module = fixture.non_contiguous_output_module()
         (hi, _lo), _saved = getattr(module, OP.forward_fn_name)(values["x"], values["w"])
@@ -196,32 +212,6 @@ class TestLayoutAndAutograd(unittest.TestCase):
         _out, expected = oracle(OP, values)
         self.assertTrue(torch.allclose(x.grad, expected["dx"], atol=1e-5))
         self.assertTrue(torch.allclose(w.grad, expected["dw"], atol=1e-5))
-
-
-class TestRuntimeForward(unittest.TestCase):
-    def test_a_matching_production_spelling_passes(self):
-        from evograd.opdecl import baselines
-
-        baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
-        baselines.verify_runtime_forward(OP, device="cpu")
-
-    def test_a_production_spelling_that_differs_on_one_output_is_rejected(self):
-        from evograd.opdecl import baselines
-
-        def wrong(x, w, alpha=2.0):
-            scaled = x * w
-            return scaled * alpha, scaled.sum(-1) + 1.0
-
-        original = fixture.split_scale_forward_production
-        fixture.split_scale_forward_production = wrong
-        try:
-            baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
-            with self.assertRaises(RuntimeError) as ctx:
-                baselines.verify_runtime_forward(OP, device="cpu")
-            self.assertIn("output 'lo'", str(ctx.exception))
-        finally:
-            fixture.split_scale_forward_production = original
-            baselines._RUNTIME_FORWARD_VERIFIED.discard(OP.name)
 
 
 class TestSingleOutputRegression(unittest.TestCase):

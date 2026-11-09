@@ -652,7 +652,6 @@ class TestMultiOutputFixturesAreNotPatchSites(unittest.TestCase):
         source = KernelSource(
             site="rms_norm", op_name="fused_add_rms_norm", module=object()
         )
-        self.assertTrue(source.verifiable)
         self.assertEqual(source.to_dict()["op"], "fused_add_rms_norm")
 
 

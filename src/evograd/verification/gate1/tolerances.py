@@ -4,7 +4,9 @@ The table is frozen from torch.testing.assert_close in PyTorch 2.11, rather
 than imported from a private PyTorch helper whose defaults could change.
 Values are (atol, rtol), unlike PyTorch's internal (rtol, atol) helper.
 Model tasks ignore declaration overrides, result multipliers and shape hooks.
-Generic mathematical tasks retain their existing declaration policy.
+Gate 1 judges only model-reference tasks (``op.reference_contract``): for any
+other declaration every function here raises, so a declaration's own
+tolerances never judge a candidate.
 
 Under the model policy an element's allowance is the larger of that rule and
 the *envelope*: :data:`ENVELOPE_GAMMA` times the largest elementwise deviation
@@ -37,7 +39,6 @@ MODEL_POLICY = "evograd-gate1-model-dtype-tolerances/5"
 ENVELOPE_GAMMA = 4.0
 ENVELOPE = ("ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator "
             "Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)")
-DECLARED_POLICY = "evograd-gate1-declared-tolerances/1"
 SOURCE = "torch.testing.assert_close defaults, PyTorch 2.11"
 
 _DEFAULTS = {
@@ -65,16 +66,20 @@ def model_policy_identity() -> dict:
     }
 
 
+def _require_model_reference(op) -> None:
+    if not op.reference_contract:
+        raise ValueError(f"{op.name}: Gate 1 judges only a model-reference task "
+                         "(op.reference_contract); this declaration has none")
+
+
 def policy_identity(op) -> dict:
-    if op.reference_contract:
-        return model_policy_identity()
-    return {"schema": DECLARED_POLICY, "source": "op.tolerance_for(workload, result)"}
+    _require_model_reference(op)
+    return model_policy_identity()
 
 
 def result_tolerances(op, workload, result_name: str, reference: torch.Tensor) -> tuple[float, float]:
     """Return (atol, rtol) for this result, not the workload's activation dtype."""
-    if not op.reference_contract:
-        return op.tolerance_for(workload, result_name)
+    _require_model_reference(op)
     try:
         return _DEFAULTS[reference.dtype]
     except KeyError:
@@ -83,12 +88,11 @@ def result_tolerances(op, workload, result_name: str, reference: torch.Tensor) -
 
 def rounding_floor(op, reference: torch.Tensor) -> float:
     """The least envelope of a model task's result: :data:`ENVELOPE_GAMMA` ulps of the
-    reference's largest magnitude; 0 for generic tasks.
+    reference's largest magnitude.
 
     Without it a result the compile control reproduces bit for bit has envelope 0,
     and a correct implementation that only rounds differently fails on elements that
     are the difference of larger terms (Qwen3.5-4B's causal_conv1d seed, 2026-10-28).
     """
-    if not op.reference_contract:
-        return 0.0
+    _require_model_reference(op)
     return ENVELOPE_GAMMA * largest_ulp(reference)

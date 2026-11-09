@@ -122,21 +122,6 @@ class TestReportStatesTheMode(_Mode):
 class TestTier2IsUntouchedByTheMode(_Mode):
     """The Tier-3 enforcement mode is not a Tier-2 or Tier-1 concept."""
 
-    def test_the_declared_tier2_comparison_is_unchanged_under_report_first(self):
-        from evograd.evaluation.tier2.runner import _compare
-
-        want = torch.full((16,), 32.0, dtype=torch.bfloat16)
-        flipped = want.clone()
-        flipped[1] = 32.25
-        enf.set_active_mode(enf.STRICT)
-        strict = _compare(flipped, want, 1e-2, 1e-3)
-        enf.set_active_mode(enf.REPORT_FIRST)
-        loose = _compare(flipped, want, 1e-2, 1e-3)
-        self.assertEqual(strict["ok"], loose["ok"])
-        self.assertFalse(loose["ok"])                      # still a Tier-2 failure
-        self.assertEqual(strict["headroom"], loose["headroom"])
-        self.assertEqual(strict["atol"], loose["atol"])
-
     def test_the_tier2_runner_never_reads_the_enforcement_variable(self):
         import inspect
 
