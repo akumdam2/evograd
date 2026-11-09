@@ -59,7 +59,7 @@ def backward_from_saved(*args, **kwargs):
 
 #: Two primitives with different levels of nothing in common, so a selection
 #: that silently widened or narrowed would show up.
-SELECTED = ("rmsnorm", "softmax")
+SELECTED = ("rmsnorm", "cross_entropy")
 
 
 def _fair_report(op_name: str, cases: int) -> dict:

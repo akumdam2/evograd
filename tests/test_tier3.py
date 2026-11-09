@@ -162,18 +162,18 @@ class TestRankAdapter(unittest.TestCase):
 
         self.assertEqual(_declared_rank(get_task("rmsnorm").args[0].shape), 2)
         self.assertEqual(_declared_rank(get_task("swiglu").args[0].shape), 2)
-        flce = get_task("fused_linear_cross_entropy")
-        self.assertEqual(_declared_rank(flce.args[0].shape), 2)   # x
-        self.assertEqual(_declared_rank(flce.args[2].shape), 1)   # target
+        ce = get_task("cross_entropy")
+        self.assertEqual(_declared_rank(ce.args[0].shape), 2)   # logits
+        self.assertEqual(_declared_rank(ce.args[1].shape), 1)   # target
 
     def test_a_scalar_output_is_never_unflattened(self):
-        # fused_linear_cross_entropy returns a scalar loss. Restoring leading
+        # cross_entropy returns a scalar loss. Restoring leading
         # dimensions onto it would be nonsense, and indexing shape[0] would
         # raise -- so rank 0 has to skip the restore rather than attempt it.
         from evograd.evaluation.tier3.patch import _declared_rank
 
         self.assertEqual(
-            _declared_rank(get_task("fused_linear_cross_entropy").output.shape), 0
+            _declared_rank(get_task("cross_entropy").output.shape), 0
         )
 
     def test_row_shaped_outputs_are_restored(self):
@@ -511,8 +511,8 @@ class TestCli(unittest.TestCase):
 
         Read from the registry rather than a hardcoded list: a workload added or
         removed should not need this test edited, which is exactly how the
-        AlphaFold3 entries came to be absent from ``--model`` while the flags
-        that serve them survived.
+        protein workload's entries came to be absent from ``--model`` while the
+        flags that serve them survived.
         """
         from evograd.evaluation.tier3.cli import MODELS
         from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS, tier3_adapter
@@ -524,8 +524,8 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(tier3_adapter(name).name, name)
 
     def test_dtype_follows_the_model_unless_stated(self):
-        """AlphaFold3 trains fp32 (as MegaFold does) while the language models
-        train bf16; the parser leaves dtype unset so the workload decides."""
+        """MegaFold trains fp32 while the language models train bf16; the
+        parser leaves dtype unset so the workload decides."""
         from evograd.evaluation.tier3.cli import _parser
 
         self.assertIsNone(_parser().parse_args([]).dtype)

@@ -21,12 +21,6 @@ from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as qwen3_5_manifest
 from evograd.ops import PRIMITIVES, get_primitive
 
-GENERIC_LEVEL2 = (
-    "fused_linear_cross_entropy",
-    "fused_moe_swiglu",
-    "gemm_leaky_relu",
-    "layernorm_linear",
-)
 QWEN_LEVEL2 = (
     "fused_add_rms_norm",
     "qwen3_attention",
@@ -59,8 +53,19 @@ OLMOE_LEVEL2 = (
     "olmoe_qkv_norm_rope",
     "olmoe_residual_rmsnorm",
 )
-VISION_LEVEL2 = ("convnextv2_tiny_convnext_mlp", "qwen2_vl_2b_text_mlp", "qwen2_vl_2b_vision_mlp")
-MODEL_LEVEL2 = QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + OLMOE_LEVEL2 + VISION_LEVEL2
+VISION_LEVEL2 = (
+    "convnextv2_tiny_convnext_mlp",
+    "dit_s_2_dit_mlp",
+    "dit_s_2_dit_modulation",
+    "qwen2_vl_2b_text_mlp",
+    "qwen2_vl_2b_vision_mlp",
+)
+MEGAFOLD_LEVEL2 = ("megafold_evoattention", "megafold_layernorm_linear")
+DLRM_LEVEL2 = ("torchrec_dlrm_dlrm_interaction",)
+MODEL_LEVEL2 = (
+    QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + OLMOE_LEVEL2 + VISION_LEVEL2
+    + MEGAFOLD_LEVEL2 + DLRM_LEVEL2
+)
 DELETED_LEGACY = ("af3_single_repr_block", "llama3_decoder_layer")
 
 
@@ -74,17 +79,15 @@ class TestPrimitiveRegistry(unittest.TestCase):
         self.assertEqual(
             sorted(PRIMITIVES),
             [
-                "causal_conv1d", "causal_gqa_attention", "causal_softmax", "conv2d",
-                "cross_entropy", "dyt", "evoattention", "gated_rmsnorm", "gdn_gating",
-                "geglu", "gelu", "gemma_rmsnorm", "gqa_pv", "gqa_scaled_scores", "grn", "jsd",
-                "kl_div", "l2norm", "layernorm", "linear", "linear_no_bias", "matmul",
-                "partial_rope", "poly_norm", "quick_gelu", "relu_squared",
-                "rmsnorm", "rope", "softmax", "sparsemax", "spatial_conv2d", "swiglu", "tvd",
+                "causal_conv1d", "causal_gqa_attention", "cross_entropy", "embedding_bag",
+                "gated_rmsnorm", "gdn_gating", "gelu", "gemma_rmsnorm", "grn", "l2norm",
+                "layernorm", "linear", "linear_no_bias", "partial_rope", "quick_gelu",
+                "rmsnorm", "rope", "spatial_conv2d", "swiglu",
             ],
         )
 
     def test_no_fused_or_model_specific_task_appears(self):
-        for name in GENERIC_LEVEL2 + MODEL_LEVEL2 + DELETED_LEGACY:
+        for name in MODEL_LEVEL2 + DELETED_LEGACY:
             with self.subTest(op=name):
                 self.assertNotIn(name, PRIMITIVES)
 
@@ -112,15 +115,8 @@ class TestPrimitiveRegistry(unittest.TestCase):
 class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
-        self.assertEqual(
-            len(TASKS), len(PRIMITIVES) + len(GENERIC_LEVEL2) + len(MODEL_LEVEL2)
-        )
-
-    def test_contains_the_generic_level_two_tasks(self):
-        for name in GENERIC_LEVEL2:
-            with self.subTest(op=name):
-                self.assertIn(name, TASKS)
-                self.assertEqual(TASKS[name].level, 2)
+        self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
+        self.assertEqual(len(TASKS), 46)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:

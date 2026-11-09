@@ -245,7 +245,7 @@ class TestEntries(unittest.TestCase):
 class TestAgainstTheOldVerifier(unittest.TestCase):
     """Targeted agreement on finite, legal samples of real declarations."""
 
-    OPS = ("layernorm", "rmsnorm", "softmax", "swiglu", "cross_entropy", "geglu",
+    OPS = ("layernorm", "rmsnorm", "l2norm", "swiglu", "cross_entropy", "gelu",
            "fused_add_rms_norm", "llama3_swiglu_mlp")
 
     def test_same_verdicts_for_correct_and_perturbed_pairs(self):

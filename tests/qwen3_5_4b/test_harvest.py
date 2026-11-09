@@ -259,7 +259,9 @@ class TestLevel1Bindings(unittest.TestCase):
         self.assertEqual(len(OBSERVED_BINDINGS), 10)
         self.assertEqual({b.suite for b in OBSERVED_BINDINGS}, {"qwen3_5_4b_observed"})
         self.assertEqual(set(COMPOSES_INTO), {b.task for b in OBSERVED_BINDINGS})
-        self.assertEqual(_observed_bindings()[-10:], OBSERVED_BINDINGS)
+        bindings = _observed_bindings()
+        start = bindings.index(OBSERVED_BINDINGS[0])
+        self.assertEqual(bindings[start:start + 10], OBSERVED_BINDINGS)
 
     def test_partial_rope_cases_rotate_at_the_models_theta(self):
         from evograd.benchmark import TASKS

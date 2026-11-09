@@ -4,7 +4,7 @@
     PYTHONPATH=src python scripts/gpu_smoke.py --oracle-only
 
     # verify a candidate seed against the oracle
-    PYTHONPATH=src python scripts/gpu_smoke.py --op evoattention --candidate path/to/seed.py
+    PYTHONPATH=src python scripts/gpu_smoke.py --op layernorm --candidate path/to/seed.py
 
     # smoke an externally generated declaration
     PYTHONPATH=src python scripts/gpu_smoke.py \

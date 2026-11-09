@@ -16,9 +16,6 @@ What the templates provided and how they map here:
   USE_FAST_ACCUM = False      → acc += tl.dot(…) form
   GROUP_M = 8                 → kept as constexpr for L2 reordering
   ALLOW_TF32                  → passed as constexpr, default True
-
-Dense NCHW convolution is implemented separately in ``conv.py`` for the
-shape-specialized stride=1, padding=0, dilation=1, groups=1 contract.
 """
 
 from __future__ import annotations

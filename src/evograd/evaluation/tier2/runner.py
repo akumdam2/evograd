@@ -19,7 +19,7 @@ Four providers, one shape. Each is an ``nn.Module`` holding the declared
 
     eager      resolve_runtime_forward(op)          — F.layer_norm, autograd's own
     compile    torch.compile(eager, dynamic=False)
-    <baseline> bind(op, baseline_candidate_module(op, name))   — cublas_pair, fla…
+    <baseline> bind(op, baseline_candidate_module(op, name))   — fla, megafold…
     candidate  bind(op, evolved_module)             — the evolved Triton pair
 
 The last two go through ``opdecl.bind``, which is the same
@@ -169,8 +169,8 @@ def _require_declared_split(op: OpDecl) -> None:
     """The declaration must say which Active args are module state.
 
     Only ``None`` — undeclared — is refused. An empty tuple is a positive
-    statement that the operator has no parameters, which is true of ``geglu``,
-    ``softmax`` and every pure elementwise op, and is perfectly measurable
+    statement that the operator has no parameters, which is true of ``swiglu``,
+    ``gelu`` and every pure elementwise op, and is perfectly measurable
     here: the framework overhead this tier exists to charge — graph recording,
     engine scheduling, ``AccumulateGrad`` into the activations' ``.grad`` — is
     paid whether or not the module owns state. (An earlier version of this
@@ -319,7 +319,7 @@ def native_module(op: OpDecl, call, *, values: dict[str, Any],
 def baseline_pair_module(
     op: OpDecl, baseline: str, values: dict[str, Any]
 ) -> OperatorModule:
-    """A reviewed pair baseline (cublas_pair, fla, …) as an nn.Module."""
+    """A reviewed pair baseline (fla, megafold, …) as an nn.Module."""
     return pair_module(
         op,
         baseline_candidate_module(op, baseline),

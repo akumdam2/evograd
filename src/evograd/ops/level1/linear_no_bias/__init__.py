@@ -9,7 +9,7 @@ so the model-derived grids live here and ``linear`` keeps only its explicitly
 biased ablation.
 
 ``weight`` is ``[N, K]`` -- ``nn.Linear``'s stored layout, and the one the
-harvest recorded. ``matmul``'s ``[K, N]`` is a different interface over the same
+harvest recorded. A ``[K, N]`` weight is a different interface over the same
 mathematics; mapping the observed projections onto it would benchmark a
 transpose the model does not perform.
 """

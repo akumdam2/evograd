@@ -85,5 +85,5 @@ evaluator:
 diff_based_evolution: true
 # A safety limit on runaway generation, not a style budget. Inductor-captured
 # seeds (Pipeline D) carry generated kernels and already reach ~66k characters
-# on evoattention, and a child that adds its own kernels grows from there.
+# on megafold_evoattention, and a child that adds its own kernels grows from there.
 max_code_length: 120000

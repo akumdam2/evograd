@@ -561,9 +561,10 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         configs.append((matrix, matrix.correctness[0]))
         fused = get_task('fused_add_rms_norm')
         configs.append((fused, fused.correctness[0]))
-        convolution = get_task('conv2d')
+        convolution = get_task('spatial_conv2d')
         configs.append((convolution, convolution.correctness[0]))
-        configs.append((get_task('softmax'), Workload(dims={'rows': 7, 'cols': 31}, dtype='float32')))
+        configs.append((get_task('cross_entropy'),
+                        Workload(dims={'rows': 7, 'cols': 31}, dtype='float32')))
         for op, workload in configs:
             captured = capture_unified_pair(op, workload)
             source = generate_unified_seed(op, workload, captured)
@@ -641,7 +642,7 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         from evograd.pipelines.unified.execution import validate_external_execution
         from evograd.pipelines.unified.synthesize import scoped_op
 
-        artifact = self.artifacts[('conv2d', 'float32')]
+        artifact = self.artifacts[('spatial_conv2d', 'float32')]
         op, workload, captured, source, module = artifact
         self.assertTrue(any(region.side == 'forward' and 'convolution' in region.target
                             for region in captured.external_regions))
@@ -651,7 +652,7 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         self._assert_pair_and_deployment(artifact)
 
     def test_softmax_semantics_and_generated_helper_dependencies(self):
-        artifact = self.artifacts[('softmax', 'float32')]
+        artifact = self.artifacts[('cross_entropy', 'float32')]
         self.assertEqual(artifact[2].external_regions, ())
         self.assertTrue(any(node.get('target', '').startswith('aten.amax')
                             for node in artifact[2].forward_graph['nodes']))

@@ -35,11 +35,6 @@ dlrm = ["numpy>=1.26"]
 # Compatibility alias: Criteo preprocessing uses NumPy directly and does not
 # import TorchRec's optional FBGEMM/CUDA extensions.
 dlrm_preprocess = ["numpy>=1.26"]
-# The alphafold3 training-step workload, which the MegaFold one replaced as the
-# registered Level-3 task. alphafold3-pytorch is the implementation MegaFold
-# builds on; the declaration and its adapters are still in the tree, so the
-# extra stays.
-af3 = ["alphafold3-pytorch>=0.8.3,<0.9"]
 # There is deliberately no `megafold` extra. MegaFold is a source checkout, not
 # a distribution: it ships no setup.py and no pyproject.toml, so there is
 # nothing for pip to resolve and no version to pin. The Level-3 workload finds

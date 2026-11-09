@@ -49,7 +49,7 @@ def lookup_pair(op: OpDecl, module):
 
 def backward_inactive_kwargs(op: OpDecl, bwd, values: dict) -> dict:
     """Scalar Inactive args are re-passed to the backward — but only those its
-    signature accepts (legacy seeds take eps, evoattention seeds take none)."""
+    signature accepts (legacy seeds take eps, others take none)."""
     params = inspect.signature(bwd).parameters
     accepts_kwargs = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
     return {

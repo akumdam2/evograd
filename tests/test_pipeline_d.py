@@ -253,8 +253,8 @@ class TestSeedAssembly(unittest.TestCase):
         self.assertIn("*_build_backward_args(", seed)
 
     def test_gradient_selection_follows_the_declared_contract(self):
-        op = get_task("evoattention")
-        # res_mask is tensor arg 3 and gets a None slot; the contract skips it.
+        op = get_task("megafold_evoattention")
+        # key_mask is tensor arg 3 and gets a None slot; the contract skips it.
         seed = generate_inductor_seed(
             op, "float16", capture_for(op, grad_indices=(0, 1, 2, 4))
         )
@@ -523,7 +523,7 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
         self.assertEqual(list(out.dims.values()), [8, 9, 10])
 
     def test_prefers_a_declared_workload_with_distinct_dims(self):
-        op = get_task("matmul")
+        op = get_task("linear")
         selected = select_capture_workloads(op, ("float32", "float16"))
         for dtype, workload in selected.items():
             values = list(workload.dims.values())
@@ -532,7 +532,7 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
     def test_static_capture_takes_the_declared_case_exactly(self):
         # Equal dims are part of a static case (attention's QO = HQ * D).
         case = Workload(dims=dict(M=128, K=128, N=256), dtype="float16")
-        op = replace(get_task("matmul"), correctness=(case,))
+        op = replace(get_task("linear"), correctness=(case,))
         static = select_capture_workloads(op, ("float16",), dynamic=False)["float16"]
         self.assertEqual(static, case)
         dynamic = select_capture_workloads(op, ("float16",))["float16"]

@@ -17,7 +17,7 @@ from typing import Callable
 
 import torch
 
-from . import conv, elementwise, gemm, reduction, scatter_gather
+from . import elementwise, gemm, reduction, scatter_gather
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -307,37 +307,6 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return a.reshape(tuple(int(s) for s in shape)).contiguous()
 
         return _view_rt
-
-    if has_shape_list and "aten.convolution_backward" in target:
-        lists = [value for value in scalar_args if isinstance(value, (list, tuple))]
-        stride = tuple(lists[0]) if len(lists) > 0 else (1, 1)
-        padding = tuple(lists[1]) if len(lists) > 1 else (0, 0)
-        dilation = tuple(lists[2]) if len(lists) > 2 else (1, 1)
-        output_padding = tuple(lists[3]) if len(lists) > 3 else (0, 0)
-        output_mask = tuple(lists[4]) if len(lists) > 4 else (True, True, True)
-        bools = [value for value in scalar_args if isinstance(value, bool)]
-        ints = [
-            value
-            for value in scalar_args
-            if isinstance(value, int) and not isinstance(value, bool)
-        ]
-        transposed = bools[0] if bools else False
-        groups = ints[-1] if ints else 1
-        if (
-            stride != (1, 1)
-            or padding != (0, 0)
-            or dilation != (1, 1)
-            or transposed
-            or output_padding != (0, 0)
-            or groups != 1
-            or output_mask != (True, True, True)
-        ):
-            raise ValueError("Triton conv2d backward supports only the declared fixed contract")
-
-        def _conv2d_backward(dy, x, weight, bias_sizes):
-            return conv.conv2d_backward(dy, x, weight, bias_sizes)
-
-        return _conv2d_backward
 
     if has_shape_list and "aten.index_put" in target:
         accumulate = bool(scalar_args[-1]) if scalar_args else False
@@ -996,35 +965,6 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _addmm
 
-    if "aten.convolution.default" in target:
-        lists = [value for value in scalar_args if isinstance(value, (list, tuple))]
-        stride = tuple(lists[0]) if len(lists) > 0 else (1, 1)
-        padding = tuple(lists[1]) if len(lists) > 1 else (0, 0)
-        dilation = tuple(lists[2]) if len(lists) > 2 else (1, 1)
-        output_padding = tuple(lists[3]) if len(lists) > 3 else (0, 0)
-        bools = [value for value in scalar_args if isinstance(value, bool)]
-        ints = [
-            value
-            for value in scalar_args
-            if isinstance(value, int) and not isinstance(value, bool)
-        ]
-        transposed = bools[0] if bools else False
-        groups = ints[-1] if ints else 1
-        if (
-            stride != (1, 1)
-            or padding != (0, 0)
-            or dilation != (1, 1)
-            or transposed
-            or output_padding != (0, 0)
-            or groups != 1
-        ):
-            raise ValueError("Triton conv2d forward supports only the declared fixed contract")
-
-        def _conv2d_forward(x, weight, bias):
-            return conv.conv2d_forward(x, weight, bias)
-
-        return _conv2d_forward
-
     # ── init / allocation ops ─────────────────────────────────────────────────
 
     if "zeros_like" in target:
@@ -1142,7 +1082,7 @@ def _kernel_label(fn: Callable) -> str:
         return tag
     module = getattr(fn, "__module__", "") or ""
     qname = getattr(fn, "__qualname__", "") or getattr(fn, "__name__", repr(fn))
-    for seg in ("conv", "elementwise", "gemm", "reduction", "scatter_gather"):
+    for seg in ("elementwise", "gemm", "reduction", "scatter_gather"):
         if seg in module:
             short = seg.replace("_gather", "")
             return f"triton/{short}:{qname}"

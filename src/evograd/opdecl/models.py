@@ -2,10 +2,9 @@
 
 Every timed workload in the suite is supposed to be traceable to a layer of a
 real network. Before this module the traceability existed only in comments —
-``matmul`` benchmarked ``(M=8192, K=4096, N=14336)`` and ``cross_entropy``
-benchmarked ``(4096, 128256)``, which *are* Llama-3-8B's MLP and vocabulary, but
-nothing recorded that and nothing would have caught an edit that drifted away
-from them.
+``cross_entropy`` benchmarked ``(4096, 128256)``, which *is* Llama-3-8B's
+vocabulary, but nothing recorded that and nothing would have caught an edit that
+drifted away from it.
 
 So shapes are derived here rather than typed into declarations, and
 :class:`evograd.opdecl.activity.Provenance` records which config and which
@@ -78,7 +77,7 @@ class ModelConfig:
         return {"rows": tokens, "cols": self.intermediate}
 
     def elementwise_dims(self, *, tokens: int) -> dict[str, int]:
-        """Pointwise ops on the residual stream (relu_squared, dyt, poly_norm)."""
+        """Pointwise ops on the residual stream (the residual add + RMSNorm)."""
         return {"rows": tokens, "cols": self.hidden}
 
     def logits_dims(self, *, tokens: int) -> dict[str, int]:
@@ -786,9 +785,9 @@ LLAMA_3_8B = ModelConfig(
 #: and the key its Level-2 tasks cite in their ``Provenance`` -- so it is
 #: registered in :data:`MODELS` under ``llama_3_2_1b`` and ``rederive_dims`` can
 #: check them. :data:`LLAMA_3_8B` above stays at the 8B numbers, under its own
-#: key, because the operator suite's vocabulary-regime cases (``kl_div``,
-#: ``fused_linear_cross_entropy``) were chosen to represent a *large* LLM's loss
-#: shapes, and shrinking them would change what those tasks are for.
+#: key, because the operator suite's vocabulary-regime cases (``cross_entropy``)
+#: were chosen to represent a *large* LLM's loss shapes, and shrinking them would
+#: change what those cases are for.
 #:
 #: Unlike Meta-Llama-3-8B: ``head_dim`` is 64 rather than 128, and the
 #: embeddings are tied, so there is no second ``vocab x hidden`` matrix.
@@ -945,16 +944,12 @@ ALPHAFOLD3_2L = replace(
 #: baseline on a 40 GB card.
 LLAMA_TOKEN_SWEEP = (1024, 2048, 4096, 8192, 16384)
 
-#: Token counts for the vocabulary-width operators (the losses, and softmax /
-#: sparsemax over logits). These cannot reuse the sweep above: one
-#: 16384 x 128256 bf16 logits tensor is 4.2 GB, and a loss step needs the
+#: Token counts for the vocabulary-width operators (the loss over logits). These
+#: cannot reuse the sweep above: one 16384 x 128256 bf16 logits tensor is
+#: 4.2 GB, and a loss step needs the
 #: logits, their gradient, and a baseline's copy simultaneously. 8192 tokens
 #: (2.1 GB per tensor) is the largest that fits comfortably.
 LLAMA_VOCAB_TOKEN_SWEEP = (512, 1024, 2048, 4096, 8192)
-
-#: float32 doubles every byte above, so the vocabulary sweep stops one step
-#: earlier when a declaration benchmarks fp32.
-LLAMA_VOCAB_TOKEN_SWEEP_FP32 = (512, 1024, 2048, 4096)
 
 #: Where the small/large shape regimes split, for grids derived from the sweeps
 #: above. Because a model configuration fixes the column width, the token count
@@ -1018,7 +1013,6 @@ __all__ = [
     "LLAMA_TOKEN_SWEEP",
     "LLAMA_VOCAB_REGIME_SPLIT",
     "LLAMA_VOCAB_TOKEN_SWEEP",
-    "LLAMA_VOCAB_TOKEN_SWEEP_FP32",
     "MODELS",
     "ModelConfig",
     "MoeModelConfig",

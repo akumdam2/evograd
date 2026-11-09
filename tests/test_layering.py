@@ -358,8 +358,7 @@ class TestOlmoeOwnershipSplit(unittest.TestCase):
                 self.assertNotIn(marker, source, f"{path} defines {marker.strip('def (')}")
 
     def test_the_benchmark_side_depends_on_no_other_workload_package(self):
-        """The experts oracle is copied from the operator suite's task rather
-        than imported: a workload package depends on no other task package."""
+        """A workload package depends on no other task package."""
         for path in _python_files(self.BENCH):
             offenders = [name for name in _resolved_imports(path)
                          if name.startswith("evograd.benchmark.operator_suite")
@@ -369,7 +368,7 @@ class TestOlmoeOwnershipSplit(unittest.TestCase):
 
 
 class TestTaskNamesAreUnique(unittest.TestCase):
-    """Aggregating three sources is where a name collision would first bite."""
+    """Aggregating two sources is where a name collision would first bite."""
 
     def test_no_task_name_is_claimed_twice(self):
         from evograd.benchmark import TASKS

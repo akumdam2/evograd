@@ -184,7 +184,7 @@
       "swiglu": 0
     },
     "site_ops": {
-      "cross_entropy": "fused_linear_cross_entropy",
+      "cross_entropy": "cross_entropy",
       "rms_norm": "rmsnorm",
       "swiglu": "swiglu"
     },

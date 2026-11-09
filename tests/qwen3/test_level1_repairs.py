@@ -53,20 +53,11 @@ class TestBiaslessLinear(unittest.TestCase):
                 self.assertEqual(list(values["weight"].shape), [n, k])
                 self.assertTrue(values["weight"].is_contiguous())
 
-    def test_the_weight_interface_is_not_matmuls(self):
-        """``matmul`` takes ``[K, N]``; ``nn.Linear`` stores ``[N, K]``. Mapping
-        the observed projections onto ``matmul`` would benchmark a transpose the
-        model does not perform."""
+    def test_the_weight_interface_is_nn_linears(self):
+        """``nn.Linear`` stores ``[N, K]``. A ``[K, N]`` weight interface would
+        benchmark a transpose the model does not perform."""
         no_bias = get_task("linear_no_bias")
-        matmul = get_task("matmul")
         self.assertEqual([a.shape for a in no_bias.args], ["[M, K]", "[N, K]"])
-        self.assertIn("[K, N]", [a.shape for a in matmul.args])
-        self.assertTrue(
-            all(
-                w.provenance is None or w.provenance.model != "qwen3_0_6b"
-                for w in matmul.coverage
-            )
-        )
 
     def test_runtime_forward_passes_none_rather_than_zeros(self):
         import inspect

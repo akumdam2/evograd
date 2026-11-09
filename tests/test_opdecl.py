@@ -16,68 +16,43 @@ class TestNativeContractRendering(unittest.TestCase):
         self.assertEqual(op.backward_returns(), "dx, dweight, dbias")
 
     def test_per_output_tolerance_multipliers(self):
-        evo = get_task("evoattention")
+        evo = get_task("megafold_evoattention")
         case = evo.correctness[0]
-        self.assertEqual(evo.tolerance_for(case), (2e-2, 2e-2))
-        self.assertEqual(evo.tolerance_for(case, "d_pair_bias"), (4e-2, 2e-2))
+        self.assertEqual(evo.tolerance_for(case), (1e-4, 1e-4))
+        self.assertEqual(evo.tolerance_for(case, "d_pair_bias"), (2e-4, 1e-4))
 
-        fused = get_task("layernorm_linear")
-        case = fused.correctness[0]
-        self.assertEqual(fused.tolerance_for(case, "dweight"), (1.6e-1, 2e-2))
+        attention = get_task("causal_gqa_attention")
+        case = attention.correctness[0]
+        atol, rtol = attention.tolerance_for(case, "dq")
+        self.assertAlmostEqual(atol, 4.4e-5)
+        self.assertEqual(rtol, 2e-5)
 
     def test_layernorm_declares_all_legacy_shape_suites(self):
         op = get_task("layernorm")
         for suite in ("mixed", "small", "large", "tb_sweep", "tb_i27"):
             self.assertTrue(op.benchmark_workloads(suite))
 
-    def test_dense_compute_benchmarks_use_explicit_baseline_provenance(self):
-        self.assertEqual(
-            {case.dtype for case in get_task("matmul").benchmark},
-            {"bfloat16"},
-        )
-        large_matmul = get_task("matmul").benchmark_workloads("large_bf16")
-        self.assertEqual(len(large_matmul), 4)
-        self.assertTrue(all(case.dims["K"] == 4096 for case in large_matmul))
-        extreme_matmul = get_task("matmul").benchmark_workloads("extreme_bf16")
-        self.assertEqual(len(extreme_matmul), 1)
-        self.assertEqual(
-            extreme_matmul[0].dims,
-            {"M": 8192, "K": 4096, "N": 14336},
-        )
-        self.assertEqual(
-            set(get_task("matmul").performance_baselines),
-            {"cublas_pair"},
-        )
-        self.assertFalse(get_task("conv2d").performance_baselines)
-        self.assertEqual(
-            set(get_task("gemm_leaky_relu").performance_baselines),
-            {"triton_tutorial"},
-        )
-        self.assertFalse(get_task("fused_moe_swiglu").performance_baselines)
-
-    def test_conv2d_pipeline_b_contract_is_scalar_specialized(self):
-        op = get_task("conv2d")
-        self.assertEqual(op.forward_parameters(), "x, weight, bias")
-        for case in (*op.correctness, *op.benchmark):
-            dims = case.dims
-            self.assertEqual(dims["OH"], dims["H"] - dims["KH"] + 1)
-            self.assertEqual(dims["OW"], dims["W"] - dims["KW"] + 1)
-
 
 class TestDerivedNaming(unittest.TestCase):
     def test_grad_name_override(self):
-        op = get_task("evoattention")
+        op = get_task("megafold_evoattention")
         self.assertEqual(op.grad_names(), ("dq", "dk", "dv", "d_pair_bias"))
         self.assertEqual(op.upstream_grad_name, "do")
 
     def test_grad_order_override(self):
-        op = get_task("layernorm_linear")
+        op = _minimal(
+            dims=("M", "K", "N"),
+            args=(Active("x", "[M, K]"), Active("weight", "[K]"), Active("bias", "[K]"),
+                  Active("linear_weight", "[K, N]")),
+            output=Active("out", "[M, N]"),
+            grad_order=("dx", "dlinear_weight", "dweight", "dbias"),
+        )
         self.assertEqual(op.grad_names(), ("dx", "dlinear_weight", "dweight", "dbias"))
         self.assertEqual(op.upstream_grad_name, "dout")
 
     def test_inactive_tensor_is_no_grad_input(self):
-        op = get_task("evoattention")
-        self.assertEqual([c.name for c in op.tensor_inactive_args()], ["res_mask"])
+        op = get_task("megafold_evoattention")
+        self.assertEqual([c.name for c in op.tensor_inactive_args()], ["key_mask"])
 
     def test_registry_is_grouped_by_benchmark_level(self):
         by_level = {}
@@ -92,45 +67,28 @@ class TestDerivedNaming(unittest.TestCase):
                     # The one primitive a decoder-only step runs that had no
                     # generic task before the Qwen3 Level-1 mapping.
                     "causal_gqa_attention",
-                    # The three primitives the attention boundary decomposes
-                    # into (scores -> causal softmax -> PV); derived, not observed.
-                    "causal_softmax",
-                    "conv2d",
                     "cross_entropy",
-                    "dyt",
                     "embedding_bag",
-                    "evoattention",
                     # The GDN output norm and gates.
                     "gated_rmsnorm",
                     "gdn_gating",
-                    "geglu",
                     "gelu",
                     # The zero-centred (1 + w) RMSNorm.
                     "gemma_rmsnorm",
-                    "gqa_pv",
-                    "gqa_scaled_scores",
                     "grn",
-                    "jsd",
-                    "kl_div",
                     # The delta rule's q/k normalization.
                     "l2norm",
                     "layernorm",
                     "linear",
                     # Biasless projections -- what a modern decoder runs.
                     "linear_no_bias",
-                    "matmul",
                     # Gated attention's 64-of-256-channel rotary embedding.
                     "partial_rope",
-                    "poly_norm",
                     "quick_gelu",
-                    "relu_squared",
                     "rmsnorm",
                     "rope",
-                    "softmax",
-                    "sparsemax",
                     "spatial_conv2d",
                     "swiglu",
-                    "tvd",
                 ],
                 2: [
                     "convnextv2_tiny_convnext_mlp",
@@ -139,10 +97,6 @@ class TestDerivedNaming(unittest.TestCase):
                     # Qwen3-0.6B's residual fusion, under the generic key it
                     # was declared with before a second architecture existed.
                     "fused_add_rms_norm",
-                    "fused_linear_cross_entropy",
-                    "fused_moe_swiglu",
-                    "gemm_leaky_relu",
-                    "layernorm_linear",
                     # Each harvested workload's own four decoder boundaries,
                     # rather than operators specified up front. Three of the
                     # four compute the same mathematics in both models and
@@ -188,27 +142,6 @@ class TestDerivedNaming(unittest.TestCase):
         with self.assertRaises(ValueError):
             _minimal(level=3, family="synthetic_block")
 
-    def test_liger_paper_kernels_are_all_declared(self):
-        """The seven kernels the Liger paper reports must each have a task
-        (Liger itself is no longer a baseline).
-
-        RoPE and fused-linear-cross-entropy were the two missing before v1, and
-        they are the second and third most-patched Liger operators after
-        RMSNorm — so their absence meant the benchmark skipped most of what a
-        Llama training step actually spends its kernel time on.
-        """
-        for name in (
-            "rmsnorm",
-            "layernorm",
-            "rope",
-            "swiglu",
-            "geglu",
-            "cross_entropy",
-            "fused_linear_cross_entropy",
-        ):
-            with self.subTest(op=name):
-                self.assertEqual(get_task(name).name, name)
-
     def test_registry_is_discovery_based(self):
         import inspect
         import evograd.ops
@@ -223,10 +156,10 @@ class TestDerivedNaming(unittest.TestCase):
         ``forward`` names that package.
 
         Where the package lives depends on what the task is: a primitive under
-        ``ops/level1``, a generic fusion under the operator suite, a
-        model-specific one under that model's top-down package. The
-        declaration's ``forward`` is what ties the three cases together, so the
-        check is written against it rather than against a directory guess.
+        ``ops/level1``, a model-specific one under that model's top-down
+        package. The declaration's ``forward`` is what ties the two cases
+        together, so the check is written against it rather than against a
+        directory guess.
         """
         from pathlib import Path
 
@@ -335,17 +268,8 @@ class TestLigerSuiteMigration(unittest.TestCase):
     # historical grids rather than silently discarding them.
     _FORK_COUNTS = {
         "cross_entropy": (6, 42),
-        "dyt": (6, 15),
         "fused_add_rms_norm": (6, 16),
-        "geglu": (6, 42),
-        "jsd": (6, 14),
-        "kl_div": (6, 39),
-        "poly_norm": (6, 14),
-        "relu_squared": (6, 14),
-        "softmax": (6, 36),
-        "sparsemax": (4, 15),
         "swiglu": (6, 42),
-        "tvd": (6, 14),
     }
 
     def test_final_fork_workload_counts_are_preserved_as_ablation_suites(self):
@@ -359,66 +283,18 @@ class TestLigerSuiteMigration(unittest.TestCase):
                     f"{name}: the fork's benchmark grid must survive as 'legacy'",
                 )
 
-    def test_fused_moe_keeps_its_liger_grid_as_the_timed_suite(self):
-        # The one Liger-derived operator whose grid is not model-derived: it is
-        # quoted from Liger's own MoE sweep, so there is nothing to migrate.
-        op = get_task("fused_moe_swiglu")
-        self.assertEqual((len(op.correctness), len(op.benchmark)), (2, 6))
-        self.assertEqual(op.benchmark[0].provenance.source, "paper")
-
-    #: Operators whose timed grid cannot be model-derived, and why. Being on this
-    #: list is not an exemption from provenance — it is a stronger requirement:
-    #: the declaration has to justify its own numbers in a note, which
-    #: ``test_weaker_provenance_claims_explain_themselves`` enforces.
-    _NOT_MODEL_DERIVED = {
-        "sparsemax": "no shipped architecture contains sparsemax",
-    }
-
     def test_timed_suites_are_model_derived(self):
         for name in self._FORK_COUNTS:
-            if name in self._NOT_MODEL_DERIVED:
-                continue
             with self.subTest(op=name):
                 op = get_task(name)
                 sources = {case.provenance.source for case in op.benchmark}
                 self.assertEqual(sources, {"hf_config"}, name)
 
-    def test_weaker_provenance_claims_explain_themselves(self):
-        """An operator that cannot derive its shapes must say so, in writing.
-
-        Dropping to ``handpicked`` is allowed — inventing a model configuration
-        to justify a number would be worse — but it may not be silent, or the
-        distinction between a derived shape and a chosen one stops being
-        visible to anyone reading the results.
-        """
-        for name, reason in self._NOT_MODEL_DERIVED.items():
-            with self.subTest(op=name):
-                op = get_task(name)
-                for case in op.benchmark:
-                    self.assertNotEqual(
-                        case.provenance.source,
-                        "hf_config",
-                        f"{name}: {reason}, so it must not claim hf_config",
-                    )
-                    self.assertTrue(
-                        case.provenance.note.strip(),
-                        f"{name}: a weaker provenance claim needs a note saying why",
-                    )
-
     def test_shape_regime_suites_partition_full_suite(self):
         for name in (
             "cross_entropy",
-            "dyt",
             "fused_add_rms_norm",
-            "geglu",
-            "jsd",
-            "kl_div",
-            "poly_norm",
-            "relu_squared",
-            "softmax",
-            "sparsemax",
             "swiglu",
-            "tvd",
         ):
             with self.subTest(op=name):
                 op = get_task(name)
@@ -431,8 +307,6 @@ class TestLigerSuiteMigration(unittest.TestCase):
 
     def test_inactive_targets_do_not_count_toward_memory_budget(self):
         self.assertEqual(get_task("cross_entropy").memory_input_names(), ("logits",))
-        self.assertEqual(get_task("kl_div").memory_input_names(), ("y_pred",))
-        self.assertEqual(get_task("jsd").memory_input_names(), ("log_q",))
 
     def test_no_task_declares_a_liger_baseline(self):
         """Liger was retired to ``evograd.legacy.liger``; nothing registers it."""

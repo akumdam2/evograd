@@ -5,7 +5,7 @@ is deliberately *more* accurate than what Transformers runs: ``Qwen3MLP`` calls
 ``self.act_fn(...) * self.up_proj(x)`` entirely in the model dtype. A reference
 exists to be the correct answer, not to reproduce a particular rounding, and
 every other declaration here follows the same convention (see
-``fused_moe_swiglu``). The cost of that choice is measured rather than assumed:
+``olmoe_moe_experts``). The cost of that choice is measured rather than assumed:
 the Level-2 verification reports the reference against the captured
 ``Qwen3MLP`` invocation *and* against the BF16 spelling, so the difference
 between the two is a number in a report instead of a footnote.

@@ -1,11 +1,9 @@
 """Where a declaration lives must agree with what kind of thing it is.
 
-Three packages own declarations and the boundary between them is the point of
+Two packages own declarations and the boundary between them is the point of
 the layout:
 
 * ``evograd/ops/level1/<name>/`` -- reusable primitives, and nothing else;
-* ``evograd/benchmark/operator_suite/tasks/level<N>/<name>/`` -- fusions that
-  belong to no single model;
 * ``evograd/benchmark/topdown/<model>/levels/level<N>/<site>/`` -- tasks whose
   identity comes from one captured model.
 
@@ -23,7 +21,6 @@ from evograd.ops import PRIMITIVES
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "evograd"
 OPS_ROOT = SRC / "ops"
-SUITE_TASKS = SRC / "benchmark" / "operator_suite" / "tasks"
 QWEN_L2 = SRC / "benchmark" / "topdown" / "qwen3_0_6b" / "levels" / "level2"
 
 #: Site package -> the task key it serves. The two differ on purpose.
@@ -101,17 +98,6 @@ class TestPrimitivesOwnOnlyLevelOne(unittest.TestCase):
 
 
 class TestFusedTasksLiveInBenchmark(unittest.TestCase):
-    def test_generic_level_two_tasks_resolve_from_the_operator_suite(self):
-        for name in ("fused_linear_cross_entropy", "fused_moe_swiglu",
-                     "gemm_leaky_relu", "layernorm_linear"):
-            with self.subTest(op=name):
-                self.assertIn(name, TASKS)
-                self.assertEqual(TASKS[name].level, 2)
-                self.assertTrue(
-                    (SUITE_TASKS / "level2" / name / "__init__.py").is_file(),
-                    f"{name} is a generic fusion and belongs to operator_suite/tasks",
-                )
-
     def test_qwen_level_two_tasks_resolve_from_the_model_package(self):
         for site, task in sorted(QWEN_SITE_TASKS.items()):
             with self.subTest(site=site):
@@ -153,9 +139,9 @@ class TestRegistryComposition(unittest.TestCase):
         counts: dict[int, int] = {}
         for op in TASKS.values():
             counts[op.level] = counts.get(op.level, 0) + 1
-        self.assertEqual(counts, {1: 34, 2: 31})
-        self.assertEqual(len(PRIMITIVES), 34)
-        self.assertEqual(len(TASKS), 65)
+        self.assertEqual(counts, {1: 19, 2: 27})
+        self.assertEqual(len(PRIMITIVES), 19)
+        self.assertEqual(len(TASKS), 46)
         for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope",
                      "llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp",
                      "llama3_residual_rmsnorm", "olmoe_qkv_norm_rope", "olmoe_attention",

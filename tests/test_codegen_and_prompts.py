@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 
+from evograd.opdecl import Active, Inactive, Workload, declare_op
 from evograd.opdecl.activity import example_input_spec
 from evograd.atenir.primitive_triton.dispatch import make_kernel
 from evograd.benchmark import get_task
@@ -23,6 +24,18 @@ from evograd.pipelines.b_dispatch.wrapper_codegen import (
     grad_indices,
     render_autograd_pair_wrapper,
 )
+
+
+def _declaration(name, args, output, **fields):
+    """A minimal declaration for a wrapper property no registered task has."""
+    dims = sorted({dim for arg in (*args, output) if getattr(arg, "shape", None)
+                   for dim in arg.shape.strip("[]").replace(" ", "").split(",")})
+    return declare_op(
+        name=name, forward="m:f", dims=tuple(dims), args=args, output=output,
+        forward_semantics="test declaration", backward_semantics="test declaration",
+        correctness=(Workload(dims={dim: 2 for dim in dims}, dtype="float32"),),
+        tolerances={"float32": (1e-5, 1e-5)}, **fields,
+    )
 
 
 class TestWrapperCodegen(unittest.TestCase):
@@ -42,7 +55,7 @@ class TestWrapperCodegen(unittest.TestCase):
     def test_single_tensor_op_unpacks_rather_than_binding_the_tuple(self):
         # `x = saved_tensors[:1]` is a plain assignment, so a one-tensor op
         # would bind the whole tuple and fail on the first `.contiguous()`.
-        for name in ("softmax", "relu_squared", "sparsemax"):
+        for name in ("gelu", "quick_gelu", "l2norm"):
             op = get_task(name)
             wrapper = render_autograd_pair_wrapper("m:f", op)
             self.assertIn("x, = saved_tensors[:1]", wrapper, name)
@@ -50,7 +63,7 @@ class TestWrapperCodegen(unittest.TestCase):
     def test_generated_backward_wrapper_executes(self):
         import torch
 
-        for name in ("softmax", "layernorm"):
+        for name in ("gelu", "layernorm"):
             op = get_task(name)
             source = (
                 "def run_graph_program(*a):\n"
@@ -66,8 +79,13 @@ class TestWrapperCodegen(unittest.TestCase):
             grads = namespace[op.backward_fn_name](torch.zeros(2, 3), saved)
             self.assertEqual(len(grads), len(op.grad_names()), name)
 
-    def test_evoattention_drops_inactive_gradient(self):
-        op = get_task("evoattention")
+    def test_floating_inactive_tensor_gradient_is_dropped(self):
+        op = _declaration(
+            "masked_attention",
+            (Active("q", "[N, D]"), Active("k", "[N, D]"), Active("v", "[N, D]"),
+             Inactive("res_mask", "[N, D]"), Active("pair_bias", "[N, D]")),
+            Active("o", "[N, D]"),
+        )
         # res_mask is tensor arg index 3; its graph gradient is skipped.
         self.assertEqual(grad_indices(op), [0, 1, 2, 4])
         wrapper = render_autograd_pair_wrapper("m:f", op)
@@ -76,11 +94,17 @@ class TestWrapperCodegen(unittest.TestCase):
             "_grads[2].to(v.dtype), _grads[4].to(pair_bias.dtype))",
             wrapper,
         )
-        self.assertIn("def evoattention_backward_from_saved(do, saved_tensors):", wrapper)
+        self.assertIn("def masked_attention_backward_from_saved(do, saved_tensors):", wrapper)
         self.assertNotIn("eps", wrapper)  # no scalar consts on this op
 
-    def test_layernorm_linear_honors_grad_order(self):
-        op = get_task("layernorm_linear")
+    def test_wrapper_honors_grad_order(self):
+        op = _declaration(
+            "norm_projection",
+            (Active("x", "[M, K]"), Active("weight", "[K]"), Active("bias", "[K]"),
+             Active("linear_weight", "[K, N]")),
+            Active("out", "[M, N]"),
+            grad_order=("dx", "dlinear_weight", "dweight", "dbias"),
+        )
         # contract order: dx, dlinear_weight, dweight, dbias
         self.assertEqual(grad_indices(op), [0, 3, 1, 2])
         wrapper = render_autograd_pair_wrapper("m:f", op)
@@ -91,13 +115,9 @@ class TestWrapperCodegen(unittest.TestCase):
         )
 
     def test_inactive_tensor_does_not_create_graph_gradient_slot(self):
-        op = get_task("fused_moe_swiglu")
+        op = get_task("olmoe_moe_experts")
         self.assertEqual(grad_indices(op), [0, 1, 2, 3])
-        wrapper = render_autograd_pair_wrapper(
-            "evograd.benchmark.operator_suite.tasks.level2.fused_moe_swiglu.forward_ref:"
-            "fused_moe_swiglu_forward_ref",
-            op,
-        )
+        wrapper = render_autograd_pair_wrapper(op.forward, op)
         self.assertNotIn("_grads[4]", wrapper)
 
     def test_wrapper_compiles_for_every_single_output_op(self):
@@ -188,28 +208,8 @@ class TestDispatchProgramCodegen(unittest.TestCase):
         )
         self.assertEqual(scalar_first, "_k1(t_input)")
 
-    def test_symbolic_conv_and_moe_nodes_have_handwritten_routes(self):
+    def test_symbolic_moe_nodes_have_handwritten_routes(self):
         cases = (
-            {
-                "name": "conv_bwd",
-                "target": "aten.convolution_backward.default",
-                "args_ordered": [
-                    {"kind": "node", "name": "dy"},
-                    {"kind": "node", "name": "x"},
-                    {"kind": "node", "name": "weight"},
-                    {
-                        "kind": "shape_list",
-                        "items": [{"kind": "sym_node", "name": "channels"}],
-                    },
-                    {"kind": "scalar", "value": [1, 1]},
-                    {"kind": "scalar", "value": [0, 0]},
-                    {"kind": "scalar", "value": [1, 1]},
-                    {"kind": "scalar", "value": False},
-                    {"kind": "scalar", "value": [0, 0]},
-                    {"kind": "scalar", "value": 1},
-                    {"kind": "scalar", "value": [True, True, True]},
-                ],
-            },
             {
                 "name": "expert_index",
                 "target": "aten.index.Tensor",
@@ -254,13 +254,11 @@ class TestExampleInputSpec(unittest.TestCase):
             "[(8,64) f32, (64) f32]",
         )
 
-    def test_evoattention_includes_inactive_mask_with_fixed_dtype(self):
-        # First correctness workload with every dim >= 2 (so no symbolic dim
-        # specializes to 1 during extraction): B=2 S=2 H=4 N=128 D=64, bfloat16.
+    def test_megafold_evoattention_includes_bool_mask_with_fixed_dtype(self):
         self.assertEqual(
-            example_input_spec(get_task("evoattention")),
-            "[(2,2,128,4,64) bf16, (2,2,128,4,64) bf16, (2,2,128,4,64) bf16, "
-            "(2,2,1,1,128) f32, (2,1,4,128,128) f32]",
+            example_input_spec(get_task("megafold_evoattention")),
+            "[(1,1,23,4,8) f32, (1,1,23,4,8) f32, (1,1,23,4,8) f32, "
+            "(1,1,23) bool, (1,1,4,23,23) f32]",
         )
 
     def test_cross_entropy_includes_integer_labels_and_scalar_output(self):
@@ -274,16 +272,17 @@ class TestPromptRendering(unittest.TestCase):
     def test_pipeline_a_rules_include_contract_and_no_grad(self):
         from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
 
-        rules = render_pair_rules(get_task("evoattention"))
-        self.assertIn("def evoattention_forward_with_saved(q, k, v, res_mask, pair_bias):", rules)
+        rules = render_pair_rules(get_task("megafold_evoattention"))
+        self.assertIn(
+            "def megafold_evoattention_forward_with_saved(q, k, v, key_mask, pair_bias):", rules)
         self.assertIn("return dq, dk, dv, d_pair_bias", rules)
-        self.assertIn("`res_mask`", rules)  # no-grad warning present
+        self.assertIn("`key_mask`", rules)  # no-grad warning present
 
     def test_pipeline_c_rules_include_contract(self):
         from evograd.pipelines.c_forward_only.prompts import render_pair_rules
 
-        rules = render_pair_rules(get_task("layernorm_linear"))
-        self.assertIn("return dx, dlinear_weight, dweight, dbias", rules)
+        rules = render_pair_rules(get_task("megafold_layernorm_linear"))
+        self.assertIn("return dx, dweight, dbias, dlinear_weight", rules)
 
     def test_pipeline_a_grant_text_follows_the_grant(self):
         from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
@@ -448,7 +447,7 @@ class TestEvolveConfigRendering(unittest.TestCase):
     def test_all_placeholders_replaced(self):
         from evograd.evolve.run import render_config
 
-        for name in ("layernorm", "evoattention"):
+        for name in ("layernorm", "megafold_evoattention"):
             with self.subTest(op=name):
                 config = render_config(get_task(name), iterations=7)
                 self.assertNotIn("__", config)

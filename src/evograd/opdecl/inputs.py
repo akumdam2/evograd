@@ -2,7 +2,7 @@
 
 Builds every primal plus the upstream gradient from the declaration alone,
 deterministically seeded by the workload. Ops whose ``Inactive`` tensors have
-semantics (e.g. evoattention's additive keep/drop mask) supply a
+semantics (e.g. megafold_evoattention's boolean key mask) supply a
 ``make_inputs`` hook on their declaration instead.
 """
 

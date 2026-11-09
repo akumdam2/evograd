@@ -15,7 +15,7 @@ once. ``linear_no_bias_runtime_ref`` is ``F.linear(x, weight, None)`` -- what a
 model runs and what the eager baseline is timed through.
 
 ``weight`` is ``[N, K]``, which is how ``nn.Linear`` stores it and how the
-harvest observed it. That is deliberately *not* ``matmul``'s ``[K, N]``
+harvest observed it. That is deliberately *not* a ``[K, N]`` weight
 interface: the two are different memory layouts for the same mathematics, and a
 kernel written for one is not a kernel for the other.
 """

@@ -16,8 +16,7 @@ Naming rules made explicit (previously string conventions):
 * The upstream gradient is the output's gradient name (``y`` -> ``dy``,
   ``c`` -> ``dc``, ``out`` -> ``dout``, ``o`` -> ``do``).
 * Backward returns gradients of the ``Active`` args in declaration order
-  unless ``grad_order`` overrides it (e.g. layernorm_linear returns
-  ``dlinear_weight`` before ``dweight``/``dbias``).
+  unless ``grad_order`` overrides it.
 """
 
 from __future__ import annotations
@@ -216,8 +215,7 @@ class Provenance:
 class Workload:
     """One concrete binding of the operator's symbolic dims, plus dtype.
 
-    ``atol``/``rtol`` override the op-level per-dtype tolerance for this case
-    (e.g. evoattention's Dim=128 register-pressure case is looser).
+    ``atol``/``rtol`` override the op-level per-dtype tolerance for this case.
 
     ``provenance`` traces the shape back to a real model. It is optional on the
     type so ablation suites (``legacy_*``, ``tb_*``) and externally scaffolded
@@ -264,9 +262,9 @@ class OpDecl:
     # than a strawman, and inflates every speedup.
     #
     # When set, the eager baseline is timed through this instead. Operators
-    # PyTorch has no fused implementation for (dyt, poly_norm, sparsemax, jsd,
-    # tvd) leave it None, because there the primitive spelling *is* the best
-    # available PyTorch, and timing against it is honest.
+    # PyTorch has no fused implementation for (gdn_gating, grn) leave it None,
+    # because there the primitive spelling *is* the best available PyTorch, and
+    # timing against it is honest.
     #
     # The two must agree numerically — ``verify_runtime_forward`` checks it
     # before any timing is trusted, since otherwise this would silently compare
@@ -315,7 +313,7 @@ class OpDecl:
     tolerances: dict[str, tuple[float, float]] = field(default_factory=dict)
     # Per-result multipliers applied to the workload/dtype tolerance. This
     # preserves cases where one reduction is intrinsically noisier than the
-    # other outputs (e.g. evoattention d_pair_bias reduces over N_seq).
+    # other outputs (e.g. megafold_evoattention's d_pair_bias reduces over S).
     tolerance_multipliers: dict[str, tuple[float, float]] = field(default_factory=dict)
     # Optional named benchmark suites. ``benchmark`` remains the default suite;
     # named suites let one declaration expose legacy/TritonBench profiles
@@ -338,16 +336,15 @@ class OpDecl:
     # does not exist: every argument is passed positionally at every call. It
     # appears the moment the operator is measured as an ``nn.Module``, which
     # takes only activations as call arguments and holds parameters as its own
-    # state. Shape cannot be inferred from: ``linear``, ``matmul`` and ``geglu``
-    # each break the "does it carry the batch dim" rule differently, and
-    # ``matmul``'s second operand is a parameter in one context and an
-    # activation in another. So it is declared.
+    # state. Shape cannot be inferred from: a GEMM's second operand is a
+    # parameter in one context (``linear``'s weight) and an activation in
+    # another (attention's ``v``). So it is declared.
     #
     # ``None`` means *undeclared*, and the operator tier refuses to measure it:
     # silently treating LayerNorm's ``weight`` as an activation would produce a
     # benchmark that runs fine and compares the wrong thing. An empty tuple is
     # a positive statement that the operator has no parameters — true of
-    # ``geglu``, ``softmax`` and every pure elementwise op — and is perfectly
+    # ``swiglu``, ``gelu`` and every pure elementwise op — and is perfectly
     # measurable at that tier, because the framework overhead the tier exists
     # to charge is paid whether or not the module owns state.
     parameter_args: tuple[str, ...] | None = None
@@ -366,7 +363,7 @@ class OpDecl:
     # Takes the torch module as a parameter so op declarations stay importable
     # without torch (dev boxes have no CUDA). Default: randn per Active input,
     # zeros per Inactive tensor — override when an Inactive input has semantics (e.g.
-    # evoattention's additive keep/drop mask).
+    # megafold_evoattention's boolean key mask).
     make_inputs: object | None = None
     # Inputs whose storage the backward is permitted to overwrite with their own
     # gradient. The fair-bench protocol otherwise rejects any implementation

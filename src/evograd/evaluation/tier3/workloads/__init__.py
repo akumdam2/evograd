@@ -31,12 +31,6 @@ TIER3_ADAPTERS: dict[str, str] = {
     "llama_3_2_1b": (
         "evograd.evaluation.tier3.workloads.llama3_2_1b.adapter:ADAPTER"
     ),
-    "alphafold3_2l": (
-        "evograd.evaluation.tier3.workloads.alphafold3.adapter:ADAPTER_2L"
-    ),
-    "alphafold3": (
-        "evograd.evaluation.tier3.workloads.alphafold3.adapter:ADAPTER"
-    ),
     "megafold_2l": (
         "evograd.evaluation.tier3.workloads.megafold.adapter:ADAPTER_2L"
     ),

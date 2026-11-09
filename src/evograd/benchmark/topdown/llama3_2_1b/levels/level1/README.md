@@ -106,13 +106,10 @@ enters at BF16 `[2, 2048, 128256]` and reaches the flattened cross entropy at
 FP32 `[4096, 128256]` — the upcast happens inside `ForCausalLMLoss`. Both are
 kept so the task can be declared at whichever one it needs.
 
-## Two deliberate non-mappings
+## A deliberate non-mapping
 
 Stated here rather than left as an absence someone has to notice:
 
-- **There is no standalone `softmax` case.** The model runs fused SDPA and
-  never materializes one, so a Llama softmax workload would be a shape no step
-  executes.
 - **The observed `silu` record maps onto `swiglu`, not a bare activation
   task.** The production pointwise boundary is `silu(gate) * up` — the
   activation never appears without the multiply. The SiLU record survives as

@@ -40,8 +40,7 @@ _TORCH_DENIED = frozenset({
     "scaled_dot_product_attention", "compile", "rms_norm", "layer_norm",
     "group_norm", "batch_norm",
     # Opaque softmax spellings: an attention decomposition whose softmax stage
-    # is ``torch.softmax`` has been wrapped, not evolved, and the same holds
-    # for the row-wise softmax primitive itself.
+    # is ``torch.softmax`` has been wrapped, not evolved.
     "softmax", "log_softmax",
 })
 

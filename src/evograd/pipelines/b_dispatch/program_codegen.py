@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 import torch
 
-_SUBMODULE_NAMES = ("conv", "elementwise", "reduction", "gemm", "scatter_gather")
+_SUBMODULE_NAMES = ("elementwise", "reduction", "gemm", "scatter_gather")
 
 
 def _scalar_literal(value: Any) -> str:

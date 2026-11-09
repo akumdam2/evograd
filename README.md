@@ -83,10 +83,10 @@ Run the complete path for a declared op:
 
 ```bash
 evograd run \
-    --op softmax \
+    --op rmsnorm \
     --iterations 10 \
     --gpus 1 \
-    --output-dir /tmp/evograd_softmax
+    --output-dir /tmp/evograd_rmsnorm
 ```
 
 This generates and verifies a seed, evolves full/small/large programs when the
@@ -146,7 +146,7 @@ default forward and contract:
 ```python
 from evograd import evograd
 
-result = evograd(op="softmax", output_dir="/tmp/softmax", iterations=10)
+result = evograd(op="rmsnorm", output_dir="/tmp/rmsnorm", iterations=10)
 print(result.program)
 print(result.report)
 ```
@@ -322,9 +322,8 @@ GPU, not to produce a seed anyone evolves.
 Pipeline D needs no primitive coverage — anything Inductor can lower, it can
 seed. Where Inductor falls back to a vendor library, the seed contains an
 `extern_kernels` call rather than a kernel, and only the surrounding work is
-open to the search. `matmul` is the extreme case: its seed contains **zero**
-generated kernels, because both the forward and the backward are cuBLAS calls.
-`linear` has one (the `dbias` reduction) and `evoattention` has six.
+open to the search. `linear`'s seed, for example, contains one generated kernel
+(the `dbias` reduction); its GEMMs are cuBLAS calls.
 
 A successful Pipeline B run writes:
 
@@ -448,9 +447,8 @@ RuntimeError: aten::_log_softmax() expected at most 3 argument(s) but received 5
 RuntimeError: aten::sort() expected at most 3 argument(s) but received 5 argument(s)
 ```
 
-Four operators' seeds failed their verification gate for this reason —
-`cross_entropy`, `poly_norm`, `sparsemax` and `fused_linear_cross_entropy` — and
-`sparsemax` was reported as 0% covered because of it. Any seed generated before
+Seeds with such a fallback failed their verification gate for this reason,
+`cross_entropy`'s among them. Any seed generated before
 this fix whose graph contains an `aten` fallback with scalar arguments is
 affected and should be regenerated.
 
@@ -563,12 +561,12 @@ Available scoring policies are:
 | `speed_memory_min_weighted_geomean` | Weighted geometric mean with a worst-case guard and memory penalty |
 
 The default is `speed_memory`. `--baseline auto` is PyTorch autograd (eager).
-A declaration may also expose a reviewed library pair baseline (`cublas_pair`,
-`megafold`, `fla`, `triton_tutorial`); naming one that is not available
-hard-fails rather than silently changing the comparison:
+A declaration may also expose a reviewed library pair baseline (`megafold`,
+`fla`); naming one that is not available hard-fails rather than silently
+changing the comparison:
 
 ```bash
-evograd bench --op matmul --candidate best.py --baseline cublas_pair
+evograd bench --op swiglu --candidate best.py --baseline megafold
 ```
 
 Liger-Kernel is no longer a baseline; its former adapters are kept, unregistered,
@@ -597,9 +595,9 @@ patching OpenEvolve internals:
 
 ```bash
 evograd evolve \
-    --op softmax \
+    --op rmsnorm \
     --seed seed.py \
-    --output-dir /tmp/evolve_softmax \
+    --output-dir /tmp/evolve_rmsnorm \
     --ncu
 ```
 
@@ -628,21 +626,9 @@ provenance rules, and how the levels are aggregated.
 | --------------- | ---------- | ----------------------------------------- | --------------------------------- | -------------- |
 | `layernorm`     | norm       | LayerNorm                                 | `dx`, `dweight`, `dbias`          | —              |
 | `rmsnorm`       | norm       | RMSNorm                                   | `dx`, `dweight`                   | —              |
-| `poly_norm`     | norm       | polynomial normalization                  | `dx`, `dweight`, `dbias`          | —              |
-| `dyt`           | norm       | dynamic tanh                              | `dx`, `dalpha`, `dgamma`, `dbeta` | —              |
-| `softmax`       | reduction  | row-wise softmax                          | `dx`                              | —              |
-| `sparsemax`     | reduction  | simplex projection                        | `dx`                              | —              |
 | `swiglu`        | activation | SwiGLU activation                         | `da`, `db`                        | `megafold`     |
-| `geglu`         | activation | GeGLU activation                          | `da`, `db`                        | —              |
-| `relu_squared`  | activation | `relu(x)²`                                | `dx`                              | —              |
 | `cross_entropy` | loss       | mean cross-entropy loss                   | `dlogits`                         | —              |
-| `kl_div`        | loss       | KL divergence                             | `d_input`                         | —              |
-| `jsd`           | loss       | Jensen-Shannon divergence                 | `dlog_q`                          | —              |
-| `tvd`           | loss       | total-variation distance                  | `dp`, `dq`                        | —              |
-| `matmul`        | gemm       | `a @ b`                                   | `da`, `db`                        | `cublas_pair`  |
 | `linear`        | gemm       | `x @ weight.T + bias`                     | `dx`, `dweight`, `dbias`          | —              |
-| `conv2d`        | conv       | dense NCHW convolution                    | `dx`, `dweight`, `dbias`          | —              |
-| `evoattention`  | attention  | AlphaFold3-style attention with pair bias | `dq`, `dk`, `dv`, `d_pair_bias`   | `megafold`     |
 | `rope`          | positional | rotary position embedding                 | `dx`                              | —              |
 
 ### Level 2 — composite operators
@@ -650,10 +636,6 @@ provenance rules, and how the levels are aggregated.
 | Operator                     | Family | Forward                                        | Requested gradients                                   | Pair baseline            |
 | ---------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------- | ------------------------ |
 | `fused_add_rms_norm`         | norm   | residual add plus RMSNorm                      | `dx`, `dr`, `dweight`                                 | —                        |
-| `fused_linear_cross_entropy` | loss   | lm_head projection fused with the loss         | `dx`, `dweight`                                       | —                        |
-| `layernorm_linear`           | gemm   | LayerNorm followed by Linear                   | `dx`, `dlinear_weight`, `dweight`, `dbias`            | `megafold`               |
-| `gemm_leaky_relu`            | gemm   | GEMM with fused Leaky-ReLU epilogue            | `da`, `db`                                            | `triton_tutorial`        |
-| `fused_moe_swiglu`           | moe    | routed grouped GEMM + SwiGLU + down projection | `dx`, `dgate_up_proj`, `ddown_proj`, `dtop_k_weights` | —                        |
 
 ### Level 3 — whole-model workloads
 
@@ -661,8 +643,8 @@ provenance rules, and how the levels are aggregated.
 [MegaFold](https://github.com/Supercomputing-System-AI-Lab/MegaFold) training
 step (arXiv:2506.20686), with evolved kernels patched into the module tree by
 surgery. MegaFold is the implementation every AlphaFold3 shape in
-`src/evograd/opdecl/models.py` was transcribed from, so the Level-1/2 operator
-grids and the attention this model executes are the same widths by
+`src/evograd/opdecl/models.py` was transcribed from, so the Level-1 `layernorm`
+and `swiglu` grids and the sites this model executes are the same widths by
 construction.
 
 **The shapes are declared from MegaFold's configuration, not harvested from a
@@ -713,8 +695,7 @@ check before a first real run.
 It needs a visible GPU: MegaFold builds its fused Triton modules at import
 time, so on a CPU-only node the import fails even with every dependency
 present. Use `megafold_2l` (the same architecture at two pairformer blocks) to
-iterate, and report from `megafold`. The `alphafold3` declaration it replaced
-is still in the tree and still valid, but is no longer part of the suite.
+iterate, and report from `megafold`.
 
 See [docs/BENCHMARK.md](docs/BENCHMARK.md) for the full task specification.
 
@@ -726,17 +707,8 @@ measure. The pre-v1 hand-picked grids survive as `legacy` ablation suites.
 
 Every operator is timed against eager PyTorch and `torch.compile`; the pair
 baseline column lists the reviewed library pair it may also be timed against.
-`matmul` exposes cuBLAS as a pair, and `conv2d` compares against PyTorch/cuDNN.
-`gemm_leaky_relu` additionally exposes the reviewed `triton_tutorial` pair
-baseline; its forward uses the tutorial's grouped GEMM ordering and fused
-epilogue, while its backward uses the same GEMM kernel plus a pointwise
-activation derivative. `fused_moe_swiglu` is a routed grouped-GEMM+activation
-benchmark on Liger's published grid; it must not be interpreted as a generic
-dense GEMM baseline.
 
-Pipeline B provides handwritten Triton lowerings for the fixed `conv2d`
-contract (NCHW/OIHW, stride 1, padding 0, dilation 1, groups 1), including
-forward, dX, dWeight, and dBias. Its MoE seed uses a coverage-safe dense-expert
+Pipeline B's MoE seed uses a coverage-safe dense-expert
 BMM decomposition plus Triton routing/scatter primitives, leaving top-k/grouped
 fusion as an explicit evolution target.
 
@@ -833,7 +805,7 @@ program database, LLM orchestration, and checkpointing.
 
 Operator declarations, seed pipelines and OpenEvolve integration are available.
 Tier 3 runs the whole-model workloads (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B, OLMoE-1B-7B,
-MegaFold, AlphaFold3). Hardware-specific results and their limitations are
+MegaFold). Hardware-specific results and their limitations are
 recorded in [benchmark reports](docs/experiments/benchmark_run_20260915.md).
 
 Generated candidates, raw measurements and internal design notes stay local.

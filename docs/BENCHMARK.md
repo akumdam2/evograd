@@ -19,7 +19,7 @@ L2 sites take their real invocations from is a data source
 - `evograd.ops` owns reusable primitive contracts and correctness cases.
 - `benchmark/operator_suite` owns operator performance grids and aggregation.
 - `benchmark/topdown/<model>` owns model configurations, harvested cases and
-  captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and AlphaFold3.
+  captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and MegaFold.
 - Qwen3.5-4B (`benchmark/topdown/qwen3_5_4b`, text model): L3 at B1 x T2048 on one
   GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), seven
   calibrated L2 sites and ten bound L1 primitives; L2 invocations come from
@@ -42,13 +42,14 @@ sites on every layer. They are registered through `TIER3_ADAPTERS`; they are not
 monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
 - `benchmark/operator_suite/` is the implementation-neutral operator suite. It
-  owns the fused tasks that belong to no single model, under
-  `operator_suite/tasks/level2/`, and aggregates by family and Level. Liger is
-  not a baseline; its former adapters are under `src/evograd/legacy/liger/`.
+  owns the primitives' performance grids and aggregates by family and Level.
+  Every Level-2 task belongs to a model. Liger is not a baseline; its former
+  adapters are under `src/evograd/legacy/liger/`.
 - `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
-  snapshots. It currently contains `qwen3_0_6b`, `llama3_8b`, `megafold`, and
-  the retired AlphaFold3 declaration, and owns the Level-2 tasks whose identity
-  comes from a captured model.
+  snapshots. It contains one package per model (`qwen3_0_6b`, `llama3_2_1b`,
+  `qwen3_5_4b`, `olmoe_1b_7b`, `convnextv2_tiny`, `qwen2_vl_2b`, `dit_s_2`,
+  `torchrec_dlrm`, `megafold`) and owns the Level-2 tasks whose identity comes
+  from a captured model.
 
 ## Provenance
 
@@ -72,9 +73,9 @@ with evolved kernels patched into the module tree by surgery.
 MegaFold ([arXiv:2506.20686](https://arxiv.org/abs/2506.20686)) is the
 implementation every AlphaFold3 shape in `src/evograd/opdecl/models.py` was
 transcribed from. Running it here closes the provenance chain at both ends: the
-Level-1/2 operator grids came from this model's configuration, and this task
-runs that configuration, so `evoattention`'s benchmark grid and the attention
-the model executes are the same widths by construction.
+Level-1 `layernorm` and `swiglu` grids came from this model's configuration,
+and this task runs that configuration, so those grids and the sites the model
+executes are the same widths by construction.
 
 **Real data, harvested cases.** The step runs on one real PDB structure
 (7a4d, 384 tokens after MegaFold's crop, a 12,097-row MSA), featurized once by
@@ -208,9 +209,6 @@ than an opaque Triton traceback.
 blocks. Every width, head count and input-feature dimension is the real
 configuration, so the kernels see the true shapes while a step stays cheap
 enough to iterate on. Iterate on it; report from `megafold`.
-
-The `alphafold3` declaration it replaced is still in the tree and still valid,
-with its Tier-3 adapters registered. It is no longer part of the suite.
 
 ## Registries
 

@@ -126,7 +126,7 @@ class TestAggregation(unittest.TestCase):
         4.0 and 1.0.
         """
         tasks = [_task(f"norm{i}", 1, "norm", [4.0]) for i in range(10)]
-        tasks.append(_task("matmul", 1, "gemm", [1.0]))
+        tasks.append(_task("linear", 1, "gemm", [1.0]))
         report = SuiteReport(tasks=tasks)
         macro = report.to_dict()["overall"]["speedup_full_step_macro"]
         self.assertAlmostEqual(macro, math.sqrt(4.0 * 1.0))
@@ -137,7 +137,7 @@ class TestAggregation(unittest.TestCase):
     def test_a_wholly_failed_family_lowers_coverage_not_the_speedup(self):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
-            _task("conv2d", 1, "conv", [], cases_total=4),
+            _task("spatial_conv2d", 1, "conv", [], cases_total=4),
         ]
         overall = SuiteReport(tasks=tasks).to_dict()["overall"]
         # A zero folded into a geometric mean would zero the whole report.
@@ -148,7 +148,7 @@ class TestAggregation(unittest.TestCase):
     def test_levels_are_reported_separately(self):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
-            _task("flce", 2, "loss", [3.0]),
+            _task("fused_add_rms_norm", 2, "norm", [3.0]),
             _task("megafold", 3, "protein", [1.5]),
         ]
         levels = SuiteReport(tasks=tasks).to_dict()["levels"]
@@ -174,16 +174,17 @@ class TestMarkdown(unittest.TestCase):
     def test_renders_levels_operators_and_failures(self):
         tasks = [
             _task("swiglu", 1, "activation", [2.0]),
-            _task("conv2d", 1, "conv", [], cases_total=4),
+            _task("spatial_conv2d", 1, "conv", [], cases_total=4),
             _task("megafold", 3, "protein", [1.5]),
         ]
         text = SuiteReport(tasks=tasks).to_markdown()
         self.assertIn("full-step", text)
         self.assertIn("`swiglu`", text)
         self.assertIn("Not fully covered", text)
-        self.assertIn("`conv2d`", text)
+        self.assertIn("`spatial_conv2d`", text)
         # An operator with no measurement must not print a fabricated speedup.
-        conv_row = next(line for line in text.splitlines() if "`conv2d`" in line and "|" in line)
+        conv_row = next(line for line in text.splitlines()
+                        if "`spatial_conv2d`" in line and "|" in line)
         self.assertIn("—", conv_row)
 
 

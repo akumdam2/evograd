@@ -65,7 +65,7 @@ class TestModelRegistry(unittest.TestCase):
                 continue
             for workload in op.benchmark:
                 self.assertEqual(workload.provenance.model, "llama_3_2_1b", name)
-        for name in ("rmsnorm", "swiglu", "kl_div"):
+        for name in ("rmsnorm", "swiglu", "cross_entropy"):
             for workload in TASKS[name].benchmark:
                 self.assertEqual(workload.provenance.model, "llama_3_8b", name)
 

@@ -72,7 +72,7 @@ class TestParameterArgs(unittest.TestCase):
         self.assertIn("parameter_args", str(caught.exception))
 
     def test_a_parameter_free_operator_is_accepted(self):
-        # geglu, softmax, swiglu: no module state, but the autograd engine
+        # swiglu, gelu: no module state, but the autograd engine
         # still charges graph recording and AccumulateGrad on the activations,
         # which is the whole difference between this tier and tier 1.
         _require_declared_split(_decl(parameter_args=()))
@@ -99,7 +99,7 @@ class TestDeclaredOperators(unittest.TestCase):
         self.assertEqual(undeclared, [])
 
     def test_a_parameter_free_operator_keeps_all_its_args_as_activations(self):
-        op = get_task("geglu")
+        op = get_task("swiglu")
         self.assertEqual(op.parameter_args, ())
         self.assertEqual([a.name for a in op.active_args()], ["a", "b"])
 
@@ -168,7 +168,7 @@ class TestIntegratedUsesTheDeclaration(unittest.TestCase):
     def test_a_parameter_free_operator_keeps_both_activations(self):
         from evograd.evaluation.tier2.integrated import activation_and_parameter_args
 
-        activations, parameters = activation_and_parameter_args(get_task("geglu"))
+        activations, parameters = activation_and_parameter_args(get_task("swiglu"))
         self.assertEqual([a.name for a in activations], ["a", "b"])
         self.assertEqual(parameters, ())
 

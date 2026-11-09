@@ -147,7 +147,7 @@ class TestTwoIndependentRegistries(unittest.TestCase):
             {
                 "rms_norm": "rmsnorm",
                 "swiglu": "swiglu",
-                "cross_entropy": "fused_linear_cross_entropy",
+                "cross_entropy": "cross_entropy",
             },
         )
 
@@ -197,6 +197,27 @@ class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
+def _with_toy_pair(task: str) -> dict:
+    """The task registry with one task given a plain-torch ``toy_pair`` baseline."""
+    from dataclasses import replace
+
+    from evograd.ops._common import make_pair_baseline
+
+    def factory():
+        def forward(a, b):
+            return a * b, (a, b)
+
+        def backward(dc, saved):
+            a, b = saved
+            return dc * b, dc * a
+
+        return forward, backward
+
+    op = TASKS[task]
+    baselines = {**op.performance_baselines, "toy_pair": make_pair_baseline(factory, ("a", "b"))}
+    return {**TASKS, task: replace(op, performance_baselines=baselines)}
+
+
 class TestBaselineAndCandidateSelection(unittest.TestCase):
     def test_candidates_are_bound_against_the_named_registry(self):
         qwen = _qwen_like_registry()
@@ -218,11 +239,11 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
 
         registry = SiteRegistry(
             name="toy",
-            sites=(Site("mm", "matmul", print), Site("attn", "qwen3_attention", print)),
+            sites=(Site("gate", "swiglu", print), Site("attn", "qwen3_attention", print)),
         )
-        kernels, covered = _baseline_kernels("cublas_pair", TASKS, registry)
+        kernels, covered = _baseline_kernels("toy_pair", _with_toy_pair("swiglu"), registry)
         self.assertIsNotNone(kernels)
-        self.assertEqual(covered, ["mm"])
+        self.assertEqual(covered, ["gate"])
 
     def test_a_registry_whose_ops_have_no_such_baseline_finds_nothing(self):
         from evograd.evaluation.tier3.cli import _baseline_kernels
@@ -230,7 +251,7 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
         registry = SiteRegistry(
             name="toy", sites=(Site("only", "qwen3_attention", print),)
         )
-        kernels, covered = _baseline_kernels("cublas_pair", TASKS, registry)
+        kernels, covered = _baseline_kernels("toy_pair", _with_toy_pair("swiglu"), registry)
         self.assertIsNone(kernels)
         self.assertEqual(covered, [])
 
@@ -600,32 +621,31 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 if adapter.providers is not None:
                     self.assertTrue(callable(adapter.providers))
 
-    def test_alphafold3_is_registered_and_buildable(self):
-        """The regression this guards: AlphaFold3's workload, its site registry
-        and its ``--residues`` flag all landed, but nothing added it to
-        ``TIER3_ADAPTERS`` -- so ``--model alphafold3_2l`` was an invalid choice
-        while the flags that serve it sat in the parser looking supported."""
-        from evograd.evaluation.tier3.cli import _parser, build_workload, check_options
+    @staticmethod
+    def _megafold_case(*flags):
+        """The case the MegaFold adapter builds from ``flags``, captured before
+        the MegaFold checkout the workload itself needs is imported."""
+        from unittest import mock
 
-        for name in ("alphafold3_2l", "alphafold3"):
-            with self.subTest(model=name):
-                args = _parser().parse_args(
-                    ["--model", name, "--device", "cpu", "--residues", "32",
-                     "--baseline", "none"]
-                )
-                check_options(args)
-                workload = build_workload(args)
-                self.assertEqual(workload.site_registry.name, "alphafold3")
-                self.assertTrue(workload.site_registry.names)
+        from evograd.evaluation.tier3.cli import _parser, build_workload
+
+        args = _parser().parse_args(
+            ["--model", "megafold_2l", "--device", "cpu", "--baseline", "none", *flags]
+        )
+        with mock.patch(
+            "evograd.evaluation.tier3.workloads.megafold.workload.make_workload",
+            side_effect=lambda case, **_: case,
+        ):
+            return build_workload(args)
 
     def test_each_workload_supplies_its_own_canonical_dtype(self):
         """``--dtype`` has no parser default, so an unset flag must reach each
         workload's own value -- not ``None``. This broke Qwen3 outright when the
-        default was removed for AlphaFold3's sake."""
+        default was removed for the protein workload's sake."""
         from evograd.evaluation.tier3.cli import _parser, build_workload
 
-        expected = {"qwen3_0_6b": "bfloat16", "alphafold3_2l": "float32",
-                    "qwen3_5_4b": "bfloat16", "olmoe_1b_7b": "bfloat16"}
+        expected = {"qwen3_0_6b": "bfloat16", "qwen3_5_4b": "bfloat16",
+                    "olmoe_1b_7b": "bfloat16"}
         for name, dtype in expected.items():
             with self.subTest(model=name):
                 args = _parser().parse_args(
@@ -633,6 +653,8 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
                 )
                 self.assertIsNone(args.dtype)
                 self.assertEqual(build_workload(args).describe()["dtype"], dtype)
+        with self.subTest(model="megafold_2l"):
+            self.assertEqual(self._megafold_case().dtype, "float32")
 
     def test_qwen3_5_is_registered_with_its_own_batch(self):
         """Qwen3.5-4B's canonical batch is 1, not the CLI's or another
@@ -650,13 +672,7 @@ class TestTier3WorkloadRegistry(unittest.TestCase):
         self.assertIs(described["model_gate"]["implemented"], False)
 
     def test_an_explicit_dtype_still_overrides_the_workloads_own(self):
-        from evograd.evaluation.tier3.cli import _parser, build_workload
-
-        args = _parser().parse_args(
-            ["--model", "alphafold3_2l", "--device", "cpu",
-             "--dtype", "bfloat16", "--baseline", "none"]
-        )
-        self.assertEqual(build_workload(args).describe()["dtype"], "bfloat16")
+        self.assertEqual(self._megafold_case("--dtype", "bfloat16").dtype, "bfloat16")
 
     def test_an_unknown_workload_names_the_ones_that_exist(self):
         from evograd.evaluation.tier3.workloads import UnknownWorkload, tier3_adapter

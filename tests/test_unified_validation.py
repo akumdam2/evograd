@@ -107,19 +107,19 @@ class TestUnifiedNumericalVariants(unittest.TestCase):
         self.assertFalse(torch.equal(first[0][1]["x"], first[1][1]["x"]))
         self.assertFalse(torch.equal(first[1][1]["x"], first[2][1]["x"]))
 
-    def test_kl_factory_reseeding_preserves_probability_domain(self):
-        from evograd.ops.level1.kl_div import op as declared
+    def test_cross_entropy_factory_reseeding_keeps_targets_in_range(self):
+        from evograd.ops.level1.cross_entropy import op as declared
 
         op = replace(declared, correctness=(Workload({"rows": 2, "cols": 8}, "float32"),))
         variants = list(_variants(op, op.correctness[0], SimpleNamespace(), "cpu"))
         self.assertEqual(len(variants), 5)
-        self.assertFalse(torch.equal(variants[0][1]["y_pred"], variants[1][1]["y_pred"]))
+        self.assertFalse(torch.equal(variants[0][1]["logits"], variants[1][1]["logits"]))
         for name, values, stress, _ in variants:
             with self.subTest(variant=name):
                 self.assertFalse(stress)
-                self.assertTrue(bool((values["y_true"] > 0).all()))
-                torch.testing.assert_close(values["y_true"].sum(-1), torch.ones(2))
-                torch.testing.assert_close(values["y_pred"].exp().sum(-1), torch.ones(2))
+                self.assertEqual(values["target"].dtype, torch.int64)
+                self.assertTrue(bool((values["target"] >= 0).all()))
+                self.assertTrue(bool((values["target"] < 8).all()))
         report = validate_numerical_variants(op, _reference_pair(op), device="cpu")
         self.assertTrue(report["ok"], report)
 

@@ -88,13 +88,6 @@ from evograd.opdecl.activity import Workload
 from evograd.opdecl.models import ALPHAFOLD3, ALPHAFOLD3_2L, AlphaFoldConfig
 from evograd.benchmark.topdown.megafold import MEGAFOLD_SITE_OPS
 
-# The LayerNorm replacement is AlphaFold3's, imported rather than copied: the
-# two models wrap the same affine nn.LayerNorm and the same evolved layernorm
-# pair, and a second identical class would be a second thing to keep correct.
-# That module reaches alphafold3-pytorch only inside its own functions, so this
-# import costs nothing at import time.
-from evograd.evaluation.tier3.workloads.alphafold3.workload import _PatchedLayerNorm
-
 #: MegaFold's own default, and not a value ``configs/megafold_1x1.yaml`` sets.
 #: Reported by :meth:`MegaFoldWorkload.describe` regardless, because it sizes
 #: the diffusion loss batch and therefore the step.
@@ -426,8 +419,24 @@ class _KernelSwiGLU(nn.Module):
         return out.reshape(gates.shape)
 
 
+class _PatchedLayerNorm(nn.Module):
+    """An affine ``nn.LayerNorm``, rerouted through an evolved ``layernorm`` pair."""
+
+    def __init__(self, original: nn.LayerNorm, kernel):
+        super().__init__()
+        # The original's parameters, not copies: surgery must carry trained
+        # state across, or the model is silently reinitialized.
+        self.weight = original.weight
+        self.bias = original.bias
+        self.eps = original.eps
+        self.kernel = kernel
+
+    def forward(self, x):
+        return self.kernel(x, self.weight, self.bias, self.eps)
+
+
 class _MegaFoldPatchedLayerNorm(_PatchedLayerNorm):
-    """AlphaFold3's patched LayerNorm, in MegaFold's precision.
+    """The patched LayerNorm, in MegaFold's precision.
 
     Subclassed rather than copied: the constructor that carries the original's
     weight and bias across is the same one. What is new is the precision:
@@ -507,13 +516,13 @@ class _PatchedAttend(nn.Module):
     def __init__(self, original: nn.Module, kernel: Callable):
         super().__init__()
         if original.is_local_attn:
-            raise ValueError("evoattention site cannot take a windowed Attend")
+            raise ValueError("megafold_evoattention site cannot take a windowed Attend")
         if original.scale is not None:
-            raise ValueError("evoattention assumes the default 1/sqrt(d) scale")
+            raise ValueError("megafold_evoattention assumes the default 1/sqrt(d) scale")
         if original.enable_attn_softclamp:
-            raise ValueError("evoattention does not implement logit softclamp")
+            raise ValueError("megafold_evoattention does not implement logit softclamp")
         if original.dropout:
-            raise ValueError("evoattention does not implement attention dropout")
+            raise ValueError("megafold_evoattention does not implement attention dropout")
         self.kernel = kernel
 
     def forward(
@@ -531,7 +540,7 @@ class _PatchedAttend(nn.Module):
     ):
         if windowed_mask is not None or memory_kv is not None:
             raise ValueError(
-                "evoattention site received windowed/memory-kv attention inputs"
+                "megafold_evoattention site received windowed/memory-kv attention inputs"
             )
         batch, heads, n, d = q.shape
         # Layout. MegaFold folds the leading axes into one batch before

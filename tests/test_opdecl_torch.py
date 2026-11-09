@@ -316,7 +316,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
         from evograd.opdecl.oracle import oracle
         from evograd.benchmark import get_task
 
-        op = get_task("matmul")
+        op = get_task("linear")
         workload = op.correctness[0]
         values = make_case_inputs(op, workload, device="cpu")
         expected_output, expected_grads = oracle(

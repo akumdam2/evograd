@@ -280,7 +280,7 @@ def kernel_from_pair(op: OpDecl, module) -> Callable:
     Around that sits a rank adapter, because the model and the declaration
     disagree about shape and both are right. A model carries activations as
     ``[batch, tokens, hidden]``; every declaration here is written for rows --
-    ``rmsnorm`` takes ``[rows, hidden]``, ``fused_linear_cross_entropy`` takes
+    ``rmsnorm`` takes ``[rows, hidden]``, ``cross_entropy`` takes
     ``target: [rows]``. Eager PyTorch hides the difference by broadcasting over
     leading dimensions, so the unpatched model runs and a patched one fails
     inside someone else's kernel with an unpacking error.

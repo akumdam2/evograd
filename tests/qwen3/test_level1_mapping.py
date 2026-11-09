@@ -165,12 +165,6 @@ class TestMappingShape(unittest.TestCase):
     def test_standalone_softmax_is_deliberately_unmapped(self):
         """The model runs fused SDPA and never materializes a softmax."""
         self.assertNotIn("softmax", LEVEL1)
-        # No suite at all, rather than an empty one: an empty suite would look
-        # like a mapping that happened to find nothing.
-        self.assertNotIn("qwen3_0_6b_observed", get_task("softmax").benchmark_suites)
-        self.assertTrue(
-            all(w.provenance.model != "qwen3_0_6b" for w in get_task("softmax").benchmark)
-        )
 
     def test_the_silu_record_maps_onto_swiglu_not_a_bare_activation(self):
         self.assertEqual(LEVEL1["swiglu"]["harvested_task"], "silu")

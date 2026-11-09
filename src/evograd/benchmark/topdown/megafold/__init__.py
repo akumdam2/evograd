@@ -8,9 +8,9 @@ The model is `MegaFold <https://github.com/Supercomputing-System-AI-Lab/MegaFold
 (arXiv:2506.20686), which is where every AlphaFold3 shape in
 :mod:`evograd.opdecl.models` came from. Using it here closes the provenance
 chain at both ends: the level-1/2 operator grids were transcribed from this
-model's configuration, and this task runs that same configuration, so
-``evoattention``'s benchmark grid and the attention this model executes are the
-same widths by construction rather than by coincidence.
+model's configuration, and this task runs that same configuration, so the
+``layernorm`` and ``swiglu`` benchmark grids and the sites this model executes
+are the same widths by construction rather than by coincidence.
 
 MegaFold also supplies the comparison this level exists to make. It ships its
 own fused kernels for four of the five sites below, so a run puts three

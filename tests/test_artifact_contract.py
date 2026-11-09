@@ -421,12 +421,12 @@ class TestRankAdaptationCases(unittest.TestCase):
             self.assertIn(f"{name} = {name}.view(*_leading, {name}.shape[-1])", layer)
 
     def test_a_scalar_output_declaration_gets_no_adaptation(self):
-        # tvd: p, q are [rows, cols] but the output is a scalar []. There is no
-        # leading shape to restore onto a scalar, so the entry calls at the
-        # declared rank instead of inventing one.
-        layer = self._layer("tvd")
+        # cross_entropy: logits are [rows, cols] but the output is a scalar [].
+        # There is no leading shape to restore onto a scalar, so the entry calls
+        # at the declared rank instead of inventing one.
+        layer = self._layer("cross_entropy")
         self.assertNotIn("_leading", layer)
-        self.assertIn("return TvdFunction.apply(p, q)", layer)
+        self.assertIn("return CrossEntropyFunction.apply(logits, target)", layer)
 
     def test_a_mixed_rank_declaration_gets_no_adaptation(self):
         # qwen3_attention takes [B, HQ, T, D] and returns [B, T, H]: inputs and
@@ -455,5 +455,5 @@ class TestRankAdaptationCases(unittest.TestCase):
         # for operators nobody re-checked.
         self.assertIn("fused_add_rms_norm", adapting)
         self.assertIn("rmsnorm", adapting)
-        self.assertNotIn("tvd", adapting)
+        self.assertNotIn("cross_entropy", adapting)
         self.assertNotIn("qwen3_attention", adapting)

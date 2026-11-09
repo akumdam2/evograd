@@ -49,10 +49,9 @@ def activation_and_parameter_args(
 
     Read from the declaration's ``parameter_args``, never inferred. This used to
     guess -- "the first Active tensor is the layer's input, the rest are its
-    weights" -- which is true of LayerNorm's ``x, weight, bias`` and of nine
-    other declarations, and false of nine more. ``geglu(a, b)`` and
-    ``swiglu(a, b)`` take two activations and own no weights at all, so the
-    guess registered a tensor flowing through the network as an
+    weights" -- which is true of LayerNorm's ``x, weight, bias`` and false of
+    others. ``swiglu(a, b)`` takes two activations and owns no weights at all,
+    so the guess registered a tensor flowing through the network as an
     ``nn.Parameter``; ``fused_add_rms_norm(x, r, weight)`` did the same to the
     residual. Nothing raised. The module built fine and the training step it
     measured was not the one the operator describes.
@@ -99,7 +98,7 @@ def scalar_kwargs(op: OpDecl) -> dict[str, Any]:
 #
 # Reusing it also fixes a wrapper this file never had: `OperatorModule`
 # registers tensor `Inactive` args as buffers, so operators carrying rotary
-# tables or label tensors (`rope`, `cross_entropy`, `evoattention`) can be
+# tables or label tensors (`rope`, `cross_entropy`) can be
 # wrapped at all. The local wrapper passed only activations, parameters and
 # scalars, and raised a `KeyError` on the rest.
 
@@ -135,7 +134,7 @@ def case_tensors(op: OpDecl, workload: Workload, *, device: str = "cuda"):
     """Activations, upstream gradient(s), and parameter values for one workload.
 
     Returns a *list* of activations: an operator may take more than one --
-    ``geglu(a, b)`` takes two and owns no parameters at all. ``dy`` mirrors the
+    ``swiglu(a, b)`` takes two and owns no parameters at all. ``dy`` mirrors the
     declared output shape: a Tensor for one output, an ordered tuple of them
     for several. The third element is the full declared input dict, which the
     shared module wrapper reads its parameters and buffers from.

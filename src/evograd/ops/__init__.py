@@ -22,14 +22,13 @@ frozen snapshot, an evaluation policy or the benchmark itself, why importing it
 in a fresh interpreter loads none of them, and why the executable task registry
 is :data:`evograd.benchmark.TASKS` rather than this one.
 
-Reviewed pair baselines (``cublas.py``, ``megafold_pair.py``) stay in the primitive
+Reviewed pair baselines (``megafold_pair.py``) stay in the primitive
 package. An adapter implements *this* contract and is discovered through the
 declaration that names it, so co-locating it is the arrangement, not an
 oversight.
 
-Levels above 1 are therefore not found here. A fused task that belongs to no
-single model lives in :mod:`evograd.benchmark.operator_suite.tasks`; one whose
-identity comes from a captured model lives under that model's package in
+Levels above 1 are therefore not found here. A fused task's identity comes
+from a captured model, so it lives under that model's package in
 :mod:`evograd.benchmark.topdown`.
 """
 
@@ -72,8 +71,7 @@ def _collect(search_path, prefix: str, discovered: dict[str, OpDecl], *, depth: 
             raise ValueError(
                 f"{module_info.name}: evograd.ops holds Level-1 primitives only, but "
                 f"{op.name!r} declares level {op.level!r}. A fused task belongs to "
-                f"evograd.benchmark.operator_suite.tasks or to a model package under "
-                f"evograd.benchmark.topdown."
+                f"a model package under evograd.benchmark.topdown."
             )
         if op.name in discovered:
             raise ValueError(f"duplicate primitive declaration {op.name!r}")

@@ -32,7 +32,7 @@ benchmark/
     ├── llama3_2_1b/      the Llama-3.2-1B workload and harvest
     ├── qwen3_5_4b/       the Qwen3.5-4B (text) L3-to-L1 path
     ├── olmoe_1b_7b/      the OLMoE-1B-7B (routed MoE) L3-to-L1 path
-    └── alphafold3/       the AlphaFold3 whole-model declaration
+    └── megafold/         the MegaFold whole-model declaration
 ```
 
 `evograd.ops` contains operator contracts, references, tolerances, and operator
@@ -81,8 +81,8 @@ to run and evaluation to run it, which is composition rather than definition,
 so it lives at the root in `evograd.suite_cli`. Nothing under `benchmark`
 imports `evaluation`, and the dependency-direction test carries no exemption.
 
-Reviewed pair baselines (`cublas.py`, `megafold_pair.py`, `triton_tutorial.py`) stay
-beside the task or primitive whose contract they implement. That is deliberate:
+Reviewed pair baselines (`megafold_pair.py`) stay beside the primitive whose
+contract they implement. That is deliberate:
 an adapter is an implementation of one declaration, discovered through the
 declaration that names it, not a case collection.
 

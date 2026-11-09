@@ -1,15 +1,12 @@
 """The unified registry of executable benchmark tasks.
 
-One name resolves one contract. Three kinds of contract reach this table and
+One name resolves one contract. Two kinds of contract reach this table and
 they are kept distinguishable rather than merged:
 
 * **Level-1 primitives** come from :mod:`evograd.ops`, which owns the
   mathematics and nothing about any model. Their model-observed cases are
   attached here by :mod:`evograd.benchmark.cases`, so the primitive package
   stays reusable and the cases stay owned by the workload that observed them.
-* **Generic Level-2 tasks** come from
-  :mod:`evograd.benchmark.operator_suite.tasks`. They are fusions any
-  transformer-shaped run performs, so no model owns their identity.
 * **Model-specific tasks** come from each workload package under
   :mod:`evograd.benchmark.topdown`. Their shapes, frequencies and provenance
   are one captured step's, and their identity belongs to that model even where
@@ -35,7 +32,7 @@ class DuplicateTask(ValueError):
 
 
 def _discover_package(package_name: str, discovered: dict[str, tuple[str, OpDecl]],
-                      *, depth: int, require_matching_name: bool) -> None:
+                      *, depth: int) -> None:
     """Register every ``op`` found in ``package_name``, recursing into groups."""
     package = importlib.import_module(package_name)
     for module_info in pkgutil.iter_modules(package.__path__, f"{package_name}."):
@@ -48,18 +45,10 @@ def _discover_package(package_name: str, discovered: dict[str, tuple[str, OpDecl
         op = getattr(module, "op", None)
         if op is None:
             if depth > 0:
-                _discover_package(
-                    module_info.name, discovered,
-                    depth=depth - 1, require_matching_name=require_matching_name,
-                )
+                _discover_package(module_info.name, discovered, depth=depth - 1)
             continue
         if not isinstance(op, OpDecl):
             raise TypeError(f"{module_info.name}.op must be OpDecl, got {type(op).__name__}")
-        if require_matching_name and op.name != short_name:
-            raise ValueError(
-                f"{module_info.name}: declaration name {op.name!r} must match "
-                f"module {short_name!r}"
-            )
         _register(discovered, op, module_info.name)
 
 
@@ -126,17 +115,11 @@ def _discover() -> dict[str, OpDecl]:
             f"evograd.ops.level1.{name}",
         )
 
-    # 2. Fusions that belong to no single model.
-    _discover_package(
-        "evograd.benchmark.operator_suite.tasks", discovered,
-        depth=1, require_matching_name=True,
-    )
-
-    # 3. Model-specific tasks. A site package is named for the place in the
+    # 2. Model-specific tasks. A site package is named for the place in the
     #    model, not for the task key it serves, so the two are allowed to differ
     #    here; the workload's manifest is what ties them together.
     for workload in _model_task_packages():
-        _discover_package(workload, discovered, depth=1, require_matching_name=False)
+        _discover_package(workload, discovered, depth=1)
 
     return {name: op for name, (_owner, op) in sorted(discovered.items())}
 

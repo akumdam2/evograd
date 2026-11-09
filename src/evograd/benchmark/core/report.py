@@ -85,8 +85,8 @@ class TaskResult:
     input_bytes: float = 0.0
     error: str | None = None
     #: Distinct reasons the failing cases gave, in first-seen order. A published
-    #: benchmark has to say *why* a case did not run: "Liger's sparsemax refuses
-    #: a 128256-wide row" is a finding about the baseline, while a bare "4 of 4
+    #: benchmark has to say *why* a case did not run: "the baseline refuses a
+    #: 128256-wide row" is a finding about the baseline, while a bare "4 of 4
     #: cases failed" reads as a defect in the harness.
     case_errors: tuple[str, ...] = ()
 

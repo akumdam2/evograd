@@ -67,8 +67,8 @@ a different specialist contract and requires a new harvest/calibration.
 | ConvNeXt | `spatial_conv2d`, `linear`, `layernorm`, `gelu`, `grn` | `convnext_mlp_stage0` … `stage3` → `convnextv2_tiny_convnext_mlp` |
 | Qwen2-VL | `linear`, `linear_no_bias`, `layernorm`, `rmsnorm`, `quick_gelu`, `gelu` | `text_mlp` → `qwen2_vl_2b_text_mlp`; `vision_mlp` → `qwen2_vl_2b_vision_mlp` |
 
-`spatial_conv2d` is a new biased, square-kernel Conv2D contract supporting
-stride, padding and groups (dilation 1). The older `conv2d` contract is unchanged.
+`spatial_conv2d` is a biased, square-kernel Conv2D contract supporting
+stride, padding and groups (dilation 1).
 GRN preserves its spatial reduction axes. Qwen2's vision activation is
 **QuickGELU**, not GELU or SwiGLU. Epsilons and tensor strides are recorded in
 observed cases. Row-based L1 contracts flatten leading axes; a copy is explicit

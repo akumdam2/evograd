@@ -8,9 +8,7 @@ expert's gate rows followed by its up rows) and ``down_proj [E, H, I]``.
 
 **Oracle.** Every expert applied to every token in float32, then the sparse
 routing weights applied -- a dense ``[T, E, 2I]`` intermediate, which states the
-mathematics without any gather, sort or scatter. The spelling is the one the
-operator suite's ``fused_moe_swiglu`` task carries, copied here rather than
-imported so a workload package depends on no other task's package.
+mathematics without any gather, sort or scatter.
 
 **Production.** The grouped-GEMM experts kernel Transformers 5 dispatches an
 unmodified ``OlmoeForCausalLM`` to (``experts_implementation="grouped_mm"``):

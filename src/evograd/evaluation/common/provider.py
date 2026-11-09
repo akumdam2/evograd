@@ -124,9 +124,8 @@ def candidate_provider(op: OpDecl, module) -> PairProvider:
 def declared_provider(op: OpDecl, name: str) -> PairProvider:
     """Wrap any declaration-provided pair baseline in the common boundary.
 
-    Any declared name: the protein trunk block is compared against MegaFold's
-    kernels, ``matmul`` declares a cuBLAS pair, and the Qwen3.5 sites declare
-    FLA's.
+    Any declared name: ``swiglu`` is compared against MegaFold's kernel, and
+    the Qwen3.5 sites declare FLA's.
     """
     try:
         hook = op.performance_baselines[name]
@@ -171,7 +170,7 @@ def candidate_autograd_provider(op: OpDecl, module) -> PairProvider:
 
     ``candidate_provider`` above calls the pair's ``backward_from_saved``
     directly, with no engine in between -- which is what tier 1 is *for*, and
-    is the right measurement when the baseline is also a raw pair (cublas_pair,
+    is the right measurement when the baseline is also a raw pair (megafold,
     fla). It is the wrong one against ``pytorch_autograd`` or
     ``torch_compile``, whose backwards run ``torch.autograd.grad``: the
     baseline is then charged for engine traversal and gradient accumulation and

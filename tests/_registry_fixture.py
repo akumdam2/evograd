@@ -10,9 +10,7 @@ invariant that two registries never share a namespace, two of them. So they are
 built here, out of declared tasks, and owned by the tests.
 
 ``SAMPLE_SITES`` deliberately reuses the three sites the deleted built-in
-carried: ``rmsnorm``, ``swiglu`` and ``fused_linear_cross_entropy`` are real
-declarations with real pair baselines, which is what lets the baseline-discovery
-tests find something to discover.
+carried, over real declarations: ``rmsnorm``, ``swiglu`` and ``cross_entropy``.
 
 The three production spellings a site is patched *over* used to be imported
 from the legacy ``llama3_decoder_layer`` reference. That declaration has been
@@ -40,16 +38,8 @@ def float32_swiglu(gate, up):
     return (F.silu(gate.float()) * up.float()).to(gate.dtype)
 
 
-def eager_cross_entropy(hidden: torch.Tensor, weight: torch.Tensor,
-                        target: torch.Tensor):
-    """Logits materialized, then cross-entropy -- what an unfused head costs.
-
-    At a 128256 vocabulary this tensor is the memory story: 2.1 GB at 8192
-    tokens in bfloat16, and the same again for its gradient. A fused loss never
-    materializes it, which is why it moves peak memory rather than latency, and
-    why peak memory is a reported metric at this tier.
-    """
-    logits = F.linear(hidden, weight)
+def eager_cross_entropy(logits: torch.Tensor, target: torch.Tensor):
+    """Cross-entropy over flattened tokens, with the logits upcast to float32."""
     return F.cross_entropy(logits.float().flatten(0, -2), target.flatten())
 
 
@@ -59,7 +49,7 @@ SAMPLE_SITES = SiteRegistry(
     sites=(
         Site("rms_norm", "rmsnorm", fused_rms_norm),
         Site("swiglu", "swiglu", float32_swiglu),
-        Site("cross_entropy", "fused_linear_cross_entropy", eager_cross_entropy),
+        Site("cross_entropy", "cross_entropy", eager_cross_entropy),
     ),
 )
 

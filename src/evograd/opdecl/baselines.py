@@ -132,7 +132,7 @@ def baseline_candidate_module(op: OpDecl, baseline: str):
     The suite measures candidates, so without this the benchmark cannot report a
     number until something has been generated for every operator. A reviewed
     baseline is already an autograd pair that has been verified against the
-    oracle, which makes it the one honest stand-in: running `cublas_pair` or
+    oracle, which makes it the one honest stand-in: running `megafold` or
     `fla` as the candidate against `pytorch_autograd` as the baseline produces
     a reference line — what a hand-written production kernel achieves over eager
     PyTorch — rather than a placeholder.

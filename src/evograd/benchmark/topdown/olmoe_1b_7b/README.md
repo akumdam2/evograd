@@ -52,7 +52,7 @@ the expert tensors uninitialized -- and seeded inputs).
 | `qkv_norm_rope` | `olmoe_qkv_norm_rope` | q/k/v projections, RMSNorm over the **whole** q (2048) and k (2048) projections, RoPE over the full head -- **new contract** (Qwen3 normalizes per head, Llama not at all) |
 | `attention` | `olmoe_attention` | causal SDPA 16/16 D128 + o_proj |
 | `residual_rmsnorm` | `olmoe_residual_rmsnorm` | residual add + RMSNorm 2048, two outputs |
-| `moe_experts` | `olmoe_moe_experts` | the routed experts: `x [4096, 2048]`, `gate_up_proj [64, 2048, 2048]`, `down_proj [64, 2048, 1024]`, the router's `top_k_index`/`top_k_weights [4096, 8]` -> `out`; the operator suite's `fused_moe_swiglu` boundary at this model's widths, under this model's key |
+| `moe_experts` | `olmoe_moe_experts` | the routed experts: `x [4096, 2048]`, `gate_up_proj [64, 2048, 2048]`, `down_proj [64, 2048, 1024]`, the router's `top_k_index`/`top_k_weights [4096, 8]` -> `out`; the routed SwiGLU experts boundary at this model's widths, under this model's key |
 
 Each site package has `task.py`, `reference.py` (float32 oracle and the
 production spelling, bitwise the layer's own -- for the experts, Transformers'

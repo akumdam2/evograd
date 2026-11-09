@@ -181,11 +181,10 @@ class TestRankAdaptation(unittest.TestCase):
         self.assertEqual(tuple(v.shape), tuple(k.shape))
 
     def test_a_scalar_output_is_never_unflattened(self):
-        op, kernel = self._control("fused_linear_cross_entropy")
-        hidden = torch.randn(2, 5, 16, requires_grad=True)
-        weight = torch.randn(32, 16, requires_grad=True)
+        op, kernel = self._control("cross_entropy")
+        logits = torch.randn(2, 5, 32, requires_grad=True)
         target = torch.randint(0, 32, (2, 5))
-        loss = kernel(hidden, weight, target)
+        loss = kernel(logits, target)
         self.assertEqual(tuple(loss.shape), ())
 
     def test_the_adapter_matches_calling_the_declaration_directly(self):

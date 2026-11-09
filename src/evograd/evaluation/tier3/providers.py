@@ -131,7 +131,7 @@ def kernels_from_patches(patches: dict[str, str], registry, ops=None, *,
                             source=KernelSource(site=site, op_name=decl.op, module=None,
                                                 origin="trusted_torch_compile"))
         elif decl.op and spec in getattr(ops.get(decl.op), "performance_baselines", {}):
-            # A reviewed library pair by its declared name (fla, cublas_pair, ...).
+            # A reviewed library pair by its declared name (fla, megafold, ...).
             op = ops[decl.op]
             module = baseline_candidate_module(op, spec)
             kernels = patch(kernels, site, kernel_from_pair(op, module),

@@ -90,7 +90,7 @@ class TestExternalDeclaration(unittest.TestCase):
 
 class TestShapeDispatch(unittest.TestCase):
     def test_emitted_dispatcher_compiles_and_uses_plain_route_tag(self):
-        op = get_task("softmax")
+        op = get_task("rmsnorm")
         with TemporaryDirectory() as td:
             root = Path(td)
             programs = {}
@@ -108,7 +108,7 @@ class TestShapeDispatch(unittest.TestCase):
 
 class TestNCUHelpers(unittest.TestCase):
     def test_profile_scripts_compile(self):
-        op = get_task("softmax")
+        op = get_task("rmsnorm")
         for warmup in (5, None):
             source = _script(
                 op,

@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "auto, pytorch_autograd, torch_compile, "
             "torch_compile_max_autotune, or any baseline the declaration "
-            "provides (cublas_pair, fla, triton_tutorial, ...)."
+            "provides (fla, megafold, ...)."
         ),
     )
     parser.add_argument(
@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             "deployment entry through torch.autograd.grad, as the model does. "
             "`auto` (default) matches the baseline: engine-mediated baselines "
             "(pytorch_autograd, torch_compile) get `autograd`, raw-pair "
-            "baselines (cublas_pair, fla) get `pair`. Timing a direct call "
+            "baselines (fla, megafold) get `pair`. Timing a direct call "
             "against an engine-mediated baseline charges the baseline for the "
             "autograd engine and the candidate for nothing"
         ),

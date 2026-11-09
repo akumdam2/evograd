@@ -87,7 +87,7 @@ def _grad_indices(op: OpDecl) -> tuple[int, ...]:
 
     AOTAutograd emits one slot per *tensor input* in input order, holding None
     where the input does not require grad -- so Inactive tensors such as
-    ``res_mask`` occupy a slot too. ``op.grad_names()`` may reorder the
+    ``key_mask`` occupy a slot too. ``op.grad_names()`` may reorder the
     contract (``grad_order``) or expose fewer, so select by index.
     """
     tensor_names = _tensor_arg_names(op)

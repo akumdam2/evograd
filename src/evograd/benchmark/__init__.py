@@ -6,10 +6,9 @@ frozen manifests that make them reproducible, and the aggregation that turns
 per-task results into a report all live here.
 
 :data:`TASKS` is the one registry an executing caller resolves a name through.
-It aggregates the reusable Level-1 primitives that :mod:`evograd.ops` owns,
-the generic fusions in :mod:`evograd.benchmark.operator_suite.tasks`, and each
-model's own tasks under :mod:`evograd.benchmark.topdown` -- and it refuses two
-packages claiming one name.
+It aggregates the reusable Level-1 primitives that :mod:`evograd.ops` owns
+and each model's own tasks under :mod:`evograd.benchmark.topdown` -- and it
+refuses two packages claiming one name.
 
 What it does not own is judgment. Whether a candidate passes, within what
 tolerance, against which control, and how long it took are

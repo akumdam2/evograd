@@ -2,8 +2,8 @@
 
 Every one of the 16 layers runs it after the router: 4096 tokens, 64 experts of
 2048 -> 1024 -> 2048, 8 per token, so 32,768 token-expert pairs per layer. The
-contract is the operator suite's ``fused_moe_swiglu`` boundary at this model's
-widths and routing, under this model's own key, cases and provenance -- with
+contract is the routed SwiGLU experts boundary at this model's widths and
+routing, under this model's own key, cases and provenance -- with
 ``top_k_index`` in the ``int64`` the model's ``torch.topk`` produces, and
 ``top_k_weights`` the raw softmax probabilities (``norm_topk_prob`` is false).
 """

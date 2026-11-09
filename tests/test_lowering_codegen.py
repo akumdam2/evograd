@@ -133,7 +133,7 @@ class TestAutogradPairSeedLayout(unittest.TestCase):
         from evograd.pipelines.b_dispatch.program_codegen import generate_autograd_pair_program
         from evograd.pipelines.shared.artifact import validate_artifact
 
-        op = get_task("layernorm_linear")
+        op = get_task("megafold_layernorm_linear")
         inputs = [torch.randn(6, 8), torch.randn(8), torch.randn(8), torch.randn(8, 4)]
         graph = _serialise(extract_autograd(op.forward, inputs, scalars={"eps": 1e-5}))
         source = generate_autograd_pair_program(

@@ -41,10 +41,9 @@ from evograd.ops import PRIMITIVES
 
 REPO = Path(__file__).resolve().parents[1]
 
-#: Every primitive whose timed grid comes from a published model configuration.
-#: ``conv2d``'s grid is hand-picked ResNet-style rather than model-derived, and
-#: is here for the same reason: it is a performance grid, so the suite owns it.
-SUITE_CASE_OWNERS = frozenset(PRIMITIVES)
+#: Every primitive whose timed grid the operator suite defines. ``embedding_bag``
+#: has none: its only cases are the ones the DLRM manifest observed.
+SUITE_CASE_OWNERS = frozenset(PRIMITIVES) - {"embedding_bag"}
 
 
 class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
@@ -98,7 +97,7 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         count, loaded = result.stdout.strip().splitlines()
-        self.assertEqual(count, "33")
+        self.assertEqual(count, "19")
         self.assertEqual(loaded, "[]", f"importing primitives loaded {loaded}")
 
 
@@ -140,7 +139,8 @@ class TestSuiteOwnsThePerformanceCases(unittest.TestCase):
 
 class TestBindingDoesNotMutateThePrimitive(unittest.TestCase):
     def test_binding_returns_a_new_declaration(self):
-        for name, primitive in sorted(PRIMITIVES.items()):
+        for name in sorted(SUITE_CASE_OWNERS):
+            primitive = PRIMITIVES[name]
             with self.subTest(op=name):
                 bound = bind_benchmark_cases(primitive, QWEN3_0_6B_OBSERVED)
                 self.assertIsNot(bound, primitive)
@@ -354,6 +354,9 @@ class TestObservedBindingOwnership(unittest.TestCase):
             REPO / "src/evograd/benchmark/topdown/olmoe_1b_7b/levels/level1/manifest.py",
             REPO / "src/evograd/benchmark/topdown/convnextv2_tiny/levels/level1/manifest.py",
             REPO / "src/evograd/benchmark/topdown/qwen2_vl_2b/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/dit_s_2/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/torchrec_dlrm/levels/level1/manifest.py",
+            REPO / "src/evograd/benchmark/topdown/megafold/levels/level1/manifest.py",
         }
         declaring = []
         for path in (REPO / "src/evograd").rglob("*.py"):
@@ -438,7 +441,7 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
     def test_a_primitive_no_binding_names_is_untouched(self):
         base = self._primitive()
         self.assertIs(
-            bind_observed_cases(base, [self._Supplied("w", "softmax", "s")]), base
+            bind_observed_cases(base, [self._Supplied("w", "layernorm", "s")]), base
         )
 
     def test_binding_over_an_existing_suite_is_refused(self):
@@ -589,7 +592,8 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
 
         workloads = {b.workload for b in _observed_bindings()}
         self.assertEqual(workloads, {"qwen3_0_6b", "llama_3_2_1b", "qwen3_5_4b", "olmoe_1b_7b",
-                                     "convnextv2_tiny", "qwen2_vl_2b"})
+                                     "convnextv2_tiny", "qwen2_vl_2b", "dit_s_2",
+                                     "torchrec_dlrm", "megafold"})
 
 
 if __name__ == "__main__":

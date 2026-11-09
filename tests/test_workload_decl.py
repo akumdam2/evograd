@@ -1,8 +1,8 @@
 """Level-3 workload declarations: validation rules and the registry.
 
 What these pin is the declaration contract — what a whole-model task must
-state before it can claim a place in the suite — and that the AlphaFold3
-declaration's shapes re-derive from the model configuration it cites, the same
+state before it can claim a place in the suite — and that the registered
+workload's shapes re-derive from the model configuration it cites, the same
 provenance discipline every level-1..3 benchmark case is held to.
 """
 
@@ -14,7 +14,6 @@ from evograd.opdecl import Provenance, Workload, declare_workload
 from evograd.opdecl.models import ALPHAFOLD3, rederive_dims
 from evograd.benchmark import WORKLOADS, get_workload
 from evograd.benchmark import TASKS
-from evograd.benchmark.topdown.alphafold3 import workload as af3_declaration
 
 
 def _case(dims=None, model="alphafold3", component="train_step", free=None):
@@ -29,8 +28,8 @@ def _case(dims=None, model="alphafold3", component="train_step", free=None):
 
 def _declare(**overrides):
     kwargs = dict(
-        name="alphafold3",
-        factory="evograd.evaluation.tier3.workloads.alphafold3.workload:make_workload",
+        name="megafold",
+        factory="evograd.evaluation.tier3.workloads.megafold.workload:make_workload",
         family="protein",
         model="alphafold3",
         sites={"layer_norm": "layernorm"},
@@ -102,29 +101,6 @@ class TestTheRegisteredWorkload(unittest.TestCase):
     def test_unknown_workload_names_fail_loudly(self):
         with self.assertRaises(KeyError):
             get_workload("alphafold4")
-
-
-class TestTheAlphafold3Declaration(unittest.TestCase):
-    """Kept in the tree and kept valid, but no longer part of the suite.
-
-    MegaFold replaced it in ``WORKLOADS``: it is the implementation every
-    AlphaFold3 shape was transcribed from, and it ships fused kernels for the
-    sites, so the level-3 comparison has a production baseline rather than only
-    eager. This declaration is still a valid one and still re-derives from the
-    configuration it cites, which is what these check.
-    """
-
-    def test_it_is_no_longer_registered(self):
-        self.assertNotIn("alphafold3", WORKLOADS)
-
-    def test_it_is_still_a_valid_declaration(self):
-        self.assertEqual(af3_declaration.level, 3)
-        self.assertTrue(callable(af3_declaration.resolve_factory()))
-
-    def test_every_benchmark_case_still_rederives_from_the_config(self):
-        for case in af3_declaration.benchmark:
-            with self.subTest(dims=case.dims):
-                self.assertEqual(rederive_dims(case.provenance), case.dims)
 
 
 if __name__ == "__main__":

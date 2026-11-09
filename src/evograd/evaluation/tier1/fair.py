@@ -117,8 +117,8 @@ def _adaptive_reps(estimate_ms: float, reps: int, budget_ms: float) -> int:
     that is not only about spending measurement time evenly. A block runs
     without synchronizing — that is the point, it keeps event overhead out of
     the samples — so every iteration's intermediates stay resident until the
-    block ends. ``fused_linear_cross_entropy`` allocates 3 GiB per forward at
-    its largest workload; fifty of those is 150 GiB on a 95 GiB card, and the
+    block ends. An operator that allocates 3 GiB per forward at its largest
+    workload needs 150 GiB for fifty of those on a 95 GiB card, and the
     allocator does not fail cleanly, it thrashes. Fast kernels still get their
     full ``reps``; slow, memory-hungry ones get as many as fit the budget.
     """

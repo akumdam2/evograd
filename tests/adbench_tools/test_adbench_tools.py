@@ -129,7 +129,7 @@ def test_a_task_pack_is_never_overwritten(small_task):
 
 
 @pytest.mark.parametrize("name", ["llama3_swiglu_mlp", "llama3_qkv_rope", "layernorm",
-                                  "poly_norm", "qwen3_qkv_norm_rope"])
+                                  "rmsnorm", "qwen3_qkv_norm_rope"])
 def test_the_reference_an_agent_reads_is_the_declared_forward(name):
     from evograd.benchmark import get_task
     from evograd.opdecl.importing import resolve_callable
