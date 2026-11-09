@@ -1,7 +1,7 @@
 """CLI for Pipeline C: forward-source-only autograd-pair synthesis ablation.
 
     python -m evograd.pipelines.c_forward_only.cli \\
-        --op rmsnorm --output-dir /tmp/C_rmsnorm --model gpt-5.5
+        --pack <task pack> --output-dir /tmp/C_rmsnorm --model gpt-5.5
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from evograd.pipelines.c_forward_only.synthesize import (
 from evograd.pipelines.shared.cli_common import (
     add_exec_args,
     add_llm_args,
-    add_op_arg,
+    add_pack_arg,
     resolve_op,
 )
 
@@ -26,7 +26,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Pipeline C — forward-source-only autograd-pair ablation"
     )
-    add_op_arg(parser)
+    add_pack_arg(parser)
     add_llm_args(parser)
     add_exec_args(parser)
     parser.add_argument("--output-dir", required=True)
@@ -35,11 +35,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    op, forward, _example_input = resolve_op(args)
+    op, _example_input, pack = resolve_op(args)
     return synthesize_forward_only(
         ForwardOnlyConfig(
             op=op,
-            forward=forward,
+            forward=op.forward,
             output_dir=Path(args.output_dir).resolve(),
             api_base=args.api_base,
             model=args.model,
@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             eval_timeout=args.eval_timeout,
             dry_run=args.dry_run,
             skip_verify=args.skip_verify,
+            pack=pack,
         )
     )
 

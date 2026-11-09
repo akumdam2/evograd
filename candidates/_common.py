@@ -213,28 +213,17 @@ def best_evaluated(ledger, fallback: Path | None = None) -> Path | None:
 
 
 def unified_seed(task, ledger, *, eval_timeout: int = 180) -> Path | None:
-    """evograd's frontend on the task: ``evograd seed unified`` at the task's
-    exact configuration, from the pack's own declaration. No LLM call. Returns
-    the accepted seed artifact, or ``None`` (``<run>/seed/failure.json`` says why)."""
-    from dataclasses import replace
+    """evograd's frontend on the task: ``evograd seed unified --pack`` at the
+    task's exact configuration. No LLM call. Returns the accepted seed artifact,
+    or ``None`` (``<run>/seed/failure.json`` says why)."""
+    from evograd.pipelines.unified.synthesize import UnifiedSeedConfig, synthesize_unified_seed
 
-    from evograd.benchmark import get_task, load_task
-    from evograd.pipelines.unified.synthesize import (
-        UnifiedSeedConfig,
-        select_workload,
-        synthesize_unified_seed,
-    )
-
-    spec = task.spec
-    if spec["base_declaration"]:
-        # As `evograd seed unified --declaration` does: keep the absolute reference.
-        base = replace(load_task(spec["base_declaration"]), declaration=spec["base_declaration"])
-    else:
-        base = get_task(task.op_name)
-    workload = select_workload(base, dtype=spec["workload"]["dtype"], dims=spec["workload"]["dims"])
+    base = task.op()
+    (workload,) = base.benchmark
     seed_dir = ledger.root / "seed"
     status = synthesize_unified_seed(UnifiedSeedConfig(
-        op=base, workload=workload, output_dir=seed_dir, eval_timeout=eval_timeout))
+        op=base, workload=workload, output_dir=seed_dir, pack=task.root,
+        eval_timeout=eval_timeout))
     seed = seed_dir / "initial_program_autograd_pair.py"
     if status != 0 or not seed.is_file():
         return None

@@ -1,7 +1,7 @@
 """CLI for Pipeline B: LLM-free hand-written dispatch autograd-pair seed.
 
     python -m evograd.pipelines.b_dispatch.cli \\
-        --op rmsnorm --output-dir /tmp/B_rmsnorm --dtype float32 --dtype float16
+        --pack <task pack> --output-dir /tmp/B_rmsnorm
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from evograd.pipelines.b_dispatch.synthesize import (
 from evograd.pipelines.shared.cli_common import (
     add_exec_args,
     add_grant_arg,
-    add_op_arg,
+    add_pack_arg,
     resolve_op,
 )
 
@@ -28,25 +28,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    add_op_arg(parser)
+    add_pack_arg(parser)
     add_exec_args(parser)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument(
-        "--dtype",
-        action="append",
-        default=None,
-        choices=["float32", "fp32", "float16", "fp16", "bfloat16", "bf16"],
-        help="Data type(s) to verify (repeatable; default: every declared correctness dtype)",
-    )
-    parser.add_argument("--atol", type=float, default=2e-5)
-    parser.add_argument("--rtol", type=float, default=2e-5)
-    parser.add_argument("--fp16-atol", type=float, default=5e-2)
-    parser.add_argument("--fp16-rtol", type=float, default=5e-2)
-    parser.add_argument(
-        "--no-autograd-pair-seed",
-        action="store_true",
-        help="Emit only dispatch_program.py, skip the autograd-pair wrapper.",
-    )
     parser.add_argument(
         "--static-shapes",
         action="store_true",
@@ -63,30 +47,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    op, forward, example_input = resolve_op(args)
+    op, example_input, pack = resolve_op(args)
     return synthesize_handwritten_dispatch(
         HandwrittenDispatchConfig(
             op=op,
-            forward=forward,
+            forward=op.forward,
             example_input=example_input,
             output_dir=Path(args.output_dir).resolve(),
-            dtypes=tuple(
-                args.dtype
-                or dict.fromkeys(workload.dtype for workload in op.correctness)
-            ),
-            atol=args.atol,
-            rtol=args.rtol,
-            fp16_atol=args.fp16_atol,
-            fp16_rtol=args.fp16_rtol,
             python=args.python,
             eval_timeout=args.eval_timeout,
-            emit_autograd_pair_seed=not args.no_autograd_pair_seed,
             dynamic_shapes=not args.static_shapes,
             allowed_primitives=tuple(args.allow_primitive),
             skip_verify=args.skip_verify,
+            pack=pack,
         )
     )
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

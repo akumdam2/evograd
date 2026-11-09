@@ -4,9 +4,8 @@
 agent's own loop trusted:
 
 1. **Acceptance** -- ``evograd.evaluation.common.seed`` through
-   ``verify_candidate(seed_acceptance=True)``, the gate the unified frontend's
-   seed must pass before ``evograd`` publishes it: the deployment entry,
-   every declared output/gradient against the oracle, and the timed shape.
+   ``verify_candidate``, the rule every seed must pass before it is published:
+   Gate 1 on the pack's search payloads, then the deployment entry on one.
 2. **Timing** -- the full evaluator with more warmup and repetitions than the
    in-loop evaluations (defaults 25/100; both recorded).
 3. **Ledger** -- the run's evaluation count, recorded LLM usage and wall time.
@@ -77,9 +76,8 @@ def score(task_dir: str | Path, program: str | Path, *, run_dir: str | Path,
     result["program_sha256"] = hashlib.sha256(final_program.read_bytes()).hexdigest()
 
     acceptance = verify_candidate(
-        python=sys.executable, op_name=task.op_name, program_path=final_program,
-        declaration=task.declaration, forward=task.op().forward,
-        log_dir=run_dir / "final" / "acceptance", timeout=timeout, seed_acceptance=True,
+        python=sys.executable, pack=task.root, program_path=final_program,
+        log_dir=run_dir / "final" / "acceptance", timeout=timeout,
     )
     result["accepted"] = report_passed(acceptance)
     (run_dir / "final" / "acceptance.json").write_text(

@@ -7,8 +7,7 @@
    - ``unified`` (default): ``evograd seed unified`` -- the same ``select_workload``
      call the task pack made, so the seed's scoped declaration is the task's. Its
      library calls are fixed outside the evolve block by the unified contract.
-   - ``a``, ``b``, ``d``: ``evograd seed a|b|d`` on the pack's declaration with the
-     task's grant. Only A calls a model. With ``--fallback-unified``, a case that
+   - ``a``, ``b``, ``d``: ``evograd seed a|b|d --pack`` with the task's grant. Only A calls a model. With ``--fallback-unified``, a case that
      gets no accepted seed this way is seeded by ``unified`` in the same run, and
      from then on runs as ``--frontend unified`` would; ``<run>/seed_a|b|d`` keeps
      the failed frontend's output.
@@ -34,35 +33,31 @@ import _common  # noqa: E402
 
 AGENT = "evograd"
 FRONTENDS = ("unified", "a", "b", "d")
-#: Seed verification timeout for A, B and D: real-size oracle checks, as the
-#: GPU seed check ran them.
+#: Seed acceptance timeout for A, B and D: Gate 1 on real-size payloads.
 PIPELINE_EVAL_TIMEOUT = 900
 
 
 def pipeline_seed(task, ledger, args) -> Path | None:
-    """``evograd seed a|b|d`` on the pack's declaration with the task's grant.
+    """``evograd seed a|b|d --pack`` with the task's grant.
     Returns the published seed, or ``None`` (``<run>/seed.log`` says why)."""
     from evograd.pipelines.shared.runner import evograd_env
 
     seed_dir = ledger.root / "seed"
-    command = [sys.executable, "-m", "evograd.cli", "seed", args.frontend, "--op", task.op_name,
-               "--declaration", f"{task.root / 'declaration.py'}:op",
+    command = [sys.executable, "-m", "evograd.cli", "seed", args.frontend, "--pack", str(task.root),
                "--output-dir", str(seed_dir), "--eval-timeout", str(PIPELINE_EVAL_TIMEOUT)]
     for name in task.allowed_primitives:
         command += ["--allow-primitive", name]
     if args.frontend == "a":
         # The metered endpoint and its placeholder key; the proxy holds the real one.
         command += ["--api-base", args.api_base, "--api-key", "adbench-local", "--model", args.model]
-    else:
-        command += ["--dtype", task.spec["workload"]["dtype"]]
     if args.frontend == "d":
         command += ["--static-shapes", "--no-autotune"]
     with open(ledger.root / "seed.log", "w", encoding="utf-8") as log:
         status = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT,
                                 env=evograd_env()).returncode
     seed = seed_dir / ("best" if args.frontend == "a" else "") / "initial_program_autograd_pair.py"
-    # D publishes its seed before the static rules and the oracle run, so a file
-    # alone does not mean the seed passed.
+    # D publishes its seed before the static rules and seed acceptance run, so a
+    # file alone does not mean the seed passed.
     if status != 0 or not seed.is_file():
         return None
     ledger.log_evaluation({"kind": "seed_acceptance", "origin": args.frontend, "correct": True,

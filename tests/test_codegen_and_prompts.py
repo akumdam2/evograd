@@ -339,7 +339,7 @@ class TestPromptRendering(unittest.TestCase):
         from evograd.pipelines.a_atenir_llm.cli import parse_args as parse_a
         from evograd.pipelines.c_forward_only.cli import parse_args as parse_c
 
-        argv = ["--op", "rmsnorm", "--output-dir", "out"]
+        argv = ["--pack", "pack", "--output-dir", "out"]
         a, c = parse_a(argv), parse_c(argv)
         self.assertEqual((a.timeout, a.eval_timeout, a.max_attempts), (600, 300, 3))
         self.assertEqual((c.timeout, c.eval_timeout), (180, 120))

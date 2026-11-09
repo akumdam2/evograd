@@ -1,35 +1,27 @@
 """Shared CLI argument handling for the seed pipelines.
 
-Every pipeline targets an operator by name (``--op``); the forward reference
-and extraction example-input are derived from the declaration and only exist
-as flags for overrides (e.g. pointing at an out-of-repo forward)."""
+Every pipeline targets one model case through its task pack (``--pack``, built
+by ``adbench-tools build-task``): the pack's declaration is the operator, its
+forward the reference, and Gate 1 on its search payloads accepts the seed. The
+AtenIR extraction input is derived from the declaration and only exists as a
+flag for overrides."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import replace
+from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl, example_input_spec
-from evograd.benchmark import TASKS, get_task, load_task
 from evograd.pipelines.shared.primitives import REGISTRY
 
 
-def add_op_arg(parser: argparse.ArgumentParser) -> None:
+def add_pack_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--op",
+        "--pack",
+        type=Path,
         required=True,
-        help=f"target operator (built-ins: {', '.join(sorted(TASKS))})",
-    )
-    parser.add_argument(
-        "--declaration",
-        default=None,
-        help="external declaration as path.py:op",
-    )
-    parser.add_argument(
-        "--forward",
-        default=None,
-        help="override the declaration's forward reference (module.path:callable)",
+        help="task pack of one model case; its Gate 1 search rule accepts the seed",
     )
     parser.add_argument(
         "--example-input",
@@ -76,16 +68,10 @@ def add_grant_arg(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def resolve_op(args: argparse.Namespace) -> tuple[OpDecl, str, str]:
-    """Return (op, forward, example_input) with derived defaults applied."""
-    op = load_task(args.declaration) if args.declaration else get_task(args.op)
-    if op.name != args.op:
-        raise ValueError(
-            f"external declaration name {op.name!r} does not match --op {args.op!r}"
-        )
-    forward = args.forward or op.forward
-    if forward != op.forward:
-        op = replace(op, forward=forward)
-        op.validate()
-    example_input = args.example_input or example_input_spec(op)
-    return op, forward, example_input
+def resolve_op(args: argparse.Namespace) -> tuple[OpDecl, str, Path]:
+    """Return (op, example_input, pack root) for ``--pack``."""
+    from evograd.adbench_tools.task import load as load_pack
+
+    task = load_pack(args.pack)
+    op = task.op()
+    return op, args.example_input or example_input_spec(op), task.root

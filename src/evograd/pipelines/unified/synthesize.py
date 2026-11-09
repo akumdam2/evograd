@@ -18,6 +18,8 @@ class UnifiedSeedConfig:
     op: OpDecl
     workload: Workload
     output_dir: Path
+    #: The model case's task pack; Gate 1 on its search payloads accepts the seed.
+    pack: Path | None = None
     python: str = sys.executable
     device: str = "cuda"
     eval_timeout: int = 180
@@ -168,12 +170,10 @@ def synthesize_unified_seed(config: UnifiedSeedConfig) -> int:
         declaration = root / "declaration.py"
         _write_declaration(declaration, config.op, config.workload)
         phase = "verification"
-        print("[unified] Verify forward, every gradient and the deployment interface at the captured configuration")
+        print("[unified] Seed acceptance: Gate 1 on the task pack's search payloads, then the deployment")
         report = verify_candidate(
-            python=config.python, op_name=config.op.name, program_path=candidate,
-            declaration=f"{declaration}:op", forward=config.op.forward,
+            python=config.python, pack=config.pack, program_path=candidate,
             log_dir=root, timeout=config.eval_timeout, device=config.device,
-            seed_acceptance=True,
         )
         _write_json(root / "verification_report.json", report)
         if not report_passed(report):

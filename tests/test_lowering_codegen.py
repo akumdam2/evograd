@@ -129,7 +129,7 @@ class TestAutogradPairSeedLayout(unittest.TestCase):
     def test_seed_passes_the_static_rules_under_its_grant(self):
         from evograd.atenir.extract import extract_autograd
         from evograd.benchmark import get_task
-        from evograd.opdecl.verify_cli import load_candidate
+        from evograd.opdecl.importing import load_candidate
         from evograd.pipelines.b_dispatch.program_codegen import generate_autograd_pair_program
         from evograd.pipelines.shared.artifact import validate_artifact
 
@@ -157,7 +157,7 @@ class TestAutogradPairSeedLayout(unittest.TestCase):
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA required for emitted primitive kernels")
 class TestGeneratedPrimitiveCuda(unittest.TestCase):
     def test_symbolic_arange_generated_program_executes_with_new_size(self):
-        from evograd.opdecl.verify_cli import load_candidate
+        from evograd.opdecl.importing import load_candidate
 
         graph = graph_for(
             lambda x: torch.arange(1, x.shape[0] + 1, dtype=torch.int64, pin_memory=False),

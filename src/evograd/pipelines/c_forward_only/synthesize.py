@@ -47,6 +47,8 @@ class ForwardOnlyConfig:
     eval_timeout: int = 120
     dry_run: bool = False
     skip_verify: bool = False
+    #: The model case's task pack; Gate 1 on its search payloads accepts the seed.
+    pack: Path | None = None
 
 
 def _load_callable(spec: str):
@@ -65,11 +67,9 @@ def _verify(config: ForwardOnlyConfig, program_path: Path) -> dict:
         return {"metrics": {"correct": 1.0}, "verification": "skipped"}
     return verify_candidate(
         python=config.python,
-        op_name=config.op.name,
+        pack=config.pack,
         program_path=program_path,
         log_dir=program_path.parent,
-        forward=config.forward,
-        declaration=config.op.declaration,
         timeout=config.eval_timeout,
     )
 

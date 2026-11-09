@@ -1,11 +1,11 @@
 """Pipeline A: AtenIR-grounded LLM autograd-pair synthesis.
 
 forward reference source + AtenIR graph summary -> LLM plan -> LLM codegen
--> oracle verification (retry with repair prompts).
+-> seed acceptance (retry with repair prompts).
 
-Everything operator-specific comes from the :class:`OpDecl`: the forward
-reference path, the extraction example input, the prompt contract, and the
-verification oracle.
+Everything operator-specific comes from the task pack's :class:`OpDecl`: the
+forward reference path, the extraction example input and the prompt contract.
+Seed acceptance is Gate 1 on the pack's search payloads.
 """
 
 from __future__ import annotations
@@ -61,9 +61,11 @@ class AutogradPairConfig:
     #: default Triton-only search space.
     allowed_primitives: tuple[str, ...] = ()
     dry_run: bool = False
-    # Skip oracle verification (accept the first attempt). Only useful on
+    # Skip seed acceptance (accept the first attempt). Only useful on
     # machines without CUDA; verified runs are the default.
     skip_verify: bool = False
+    #: The model case's task pack; Gate 1 on its search payloads accepts the seed.
+    pack: Path | None = None
 
 
 #: Outside its EVOLVE-BLOCK the model's module may hold only `import torch` (exactly)
@@ -126,11 +128,9 @@ def _verify(config: AutogradPairConfig, program_path: Path, body: str) -> dict:
                 "artifact_contract": contract}
     report = verify_candidate(
         python=config.python,
-        op_name=config.op.name,
+        pack=config.pack,
         program_path=program_path,
         log_dir=program_path.parent,
-        forward=config.forward,
-        declaration=config.op.declaration,
         timeout=config.eval_timeout,
     )
     report["artifact_contract"] = contract

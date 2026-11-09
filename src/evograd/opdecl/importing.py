@@ -46,6 +46,17 @@ def resolve_callable(spec: str):
     return value
 
 
+def load_candidate(path: Path):
+    """A candidate program file as a fresh module (never a cached import)."""
+    path = Path(path)
+    spec = importlib.util.spec_from_file_location(f"evograd_candidate_{path.stem}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 # ── the forward reference, as a standalone module ────────────────────────────
 
 

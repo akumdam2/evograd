@@ -1,7 +1,7 @@
 """CLI for Pipeline A: AtenIR-grounded LLM autograd-pair synthesis.
 
     python -m evograd.pipelines.a_atenir_llm.cli \\
-        --op rmsnorm --output-dir /tmp/A_rmsnorm --model gpt-5.5
+        --pack <task pack> --output-dir /tmp/A_rmsnorm --model gpt-5.5
 """
 
 from __future__ import annotations
@@ -18,18 +18,18 @@ from evograd.pipelines.shared.cli_common import (
     add_exec_args,
     add_grant_arg,
     add_llm_args,
-    add_op_arg,
+    add_pack_arg,
     resolve_op,
 )
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pipeline A — AtenIR autograd-pair fusion agent")
-    add_op_arg(parser)
+    add_pack_arg(parser)
     add_llm_args(parser)
     add_exec_args(parser)
     # Longer than C's defaults: one whole-module generation by a reasoning model
-    # can outlast 180 s, and the oracle compiles and checks real-size workloads.
+    # can outlast 180 s, and seed acceptance compiles and checks real-size payloads.
     parser.set_defaults(timeout=600, eval_timeout=300)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--lowering-context-file", default=None)
@@ -39,14 +39,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    op, forward, example_input = resolve_op(args)
+    op, example_input, pack = resolve_op(args)
     lowering_context = None
     if args.lowering_context_file:
         lowering_context = Path(args.lowering_context_file).read_text(encoding="utf-8")
     return synthesize_autograd_pair(
         AutogradPairConfig(
             op=op,
-            forward=forward,
+            forward=op.forward,
             example_input=example_input,
             output_dir=Path(args.output_dir).resolve(),
             api_base=args.api_base,
@@ -62,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
             allowed_primitives=tuple(args.allow_primitive),
             dry_run=args.dry_run,
             skip_verify=args.skip_verify,
+            pack=pack,
         )
     )
 

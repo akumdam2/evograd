@@ -1,11 +1,10 @@
 """CLI for Pipeline D: Inductor-generated autograd-pair seed.
 
     python -m evograd.pipelines.d_inductor.cli \\
-        --op rmsnorm --output-dir /tmp/D_rmsnorm
+        --pack <task pack> --output-dir /tmp/D_rmsnorm
 
-    # a scoped ADBench case: exact shape, pinned configs, the task's grant
-    evograd seed d --op qwen3_attention --declaration <pack>/declaration.py:op \\
-        --dtype bf16 --static-shapes --no-autotune \\
+    # exact shape, pinned configs, the task's grant
+    evograd seed d --pack <task pack> --static-shapes --no-autotune \\
         --allow-primitive vendor_gemm --allow-primitive vendor_sdpa --output-dir <dir>
 """
 
@@ -19,7 +18,7 @@ from evograd.pipelines.d_inductor.synthesize import (
     InductorSeedConfig,
     synthesize_inductor_seed,
 )
-from evograd.pipelines.shared.cli_common import add_grant_arg, add_op_arg, resolve_op
+from evograd.pipelines.shared.cli_common import add_grant_arg, add_pack_arg, resolve_op
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -28,15 +27,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    add_op_arg(parser)
+    add_pack_arg(parser)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument(
-        "--dtype",
-        action="append",
-        default=None,
-        choices=["float32", "fp32", "float16", "fp16", "bfloat16", "bf16"],
-        help="Data type(s) to verify (repeatable; default: every declared correctness dtype)",
-    )
     parser.add_argument(
         "--device",
         default="cuda",
@@ -74,23 +66,20 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--skip-verify",
         action="store_true",
-        help="emit the seed without checking it against the oracle",
+        help="emit the seed without seed acceptance",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    op, forward, _example_input = resolve_op(args)
+    op, _example_input, pack = resolve_op(args)
     return synthesize_inductor_seed(
         InductorSeedConfig(
             op=op,
-            forward=forward,
+            forward=op.forward,
             output_dir=Path(args.output_dir).resolve(),
-            dtypes=tuple(
-                args.dtype
-                or dict.fromkeys(workload.dtype for workload in op.correctness)
-            ),
+            dtypes=tuple(dict.fromkeys(workload.dtype for workload in op.benchmark)),
             python=args.python,
             device=args.device,
             dynamic_shapes=not args.static_shapes,
@@ -98,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             eval_timeout=args.eval_timeout,
             skip_verify=args.skip_verify,
             allowed_primitives=tuple(args.allow_primitive),
+            pack=pack,
         )
     )
 

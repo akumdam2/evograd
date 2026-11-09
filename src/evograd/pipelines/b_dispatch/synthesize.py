@@ -6,7 +6,7 @@
    hand-written primitive kernel registry — no LLM.
 3. Wrap it into an autograd-pair artifact (``candidate.py``) using the
    declaration-native wrapper codegen, and check the static rules.
-4. Verify the pair against the declaration's oracle per dtype; only a passing
+4. Seed acceptance (Gate 1 on the task pack's search payloads); only a passing
    candidate is published as ``initial_program_autograd_pair.py``.
 5. Write ``lowering_context.md`` (grounding context reusable by LLM pipelines).
 """
@@ -23,20 +23,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import torch
-
 from evograd.opdecl.activity import OpDecl
-from evograd.pipelines.shared.runner import extract_graph, report_passed, verify_candidate
-
-_DTYPES = {
-    "float32": torch.float32,
-    "fp32": torch.float32,
-    "float16": torch.float16,
-    "fp16": torch.float16,
-    "bfloat16": torch.bfloat16,
-    "bf16": torch.bfloat16,
-}
-
+from evograd.pipelines.shared.runner import (
+    acceptance_cases,
+    extract_graph,
+    report_passed,
+    verify_candidate,
+)
 
 @dataclass(frozen=True)
 class HandwrittenDispatchConfig:
@@ -44,21 +37,17 @@ class HandwrittenDispatchConfig:
     forward: str        # callable spec "pkg.mod:fn"
     example_input: str  # spec string "[(8,64) f32, (64) f32, (64) f32]"
     output_dir: Path
-    dtypes: tuple[str, ...]
-    atol: float
-    rtol: float
-    fp16_atol: float
-    fp16_rtol: float
     python: str
     eval_timeout: int = 120
-    emit_autograd_pair_seed: bool = True
     # Extract the AtenIR graph with symbolic shapes so the generated program is
     # correct at any input shape (no traced dims baked into expand/view/scalars).
     dynamic_shapes: bool = True
     # Trusted Level-1 primitives the run grants, recorded in ARTIFACT_CONTRACT.
     allowed_primitives: tuple[str, ...] = ()
-    # Publish the statically checked pair without the oracle (no-CUDA machines).
+    # Publish the statically checked pair without seed acceptance (no-CUDA machines).
     skip_verify: bool = False
+    #: The model case's task pack; Gate 1 on its search payloads accepts the seed.
+    pack: Path | None = None
 
 
 def declared_scalars(op: OpDecl) -> dict[str, Any]:
@@ -238,100 +227,11 @@ def generate_dispatch_context(graph_path: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-# ── per-dtype verification ────────────────────────────────────────────────────
-
-
-def _run_dtype(
-    *,
-    forward: str,
-    graph_path: Path,
-    dtype_name: str,
-    atol: float,
-    rtol: float,
-    seed: int = 0,
-) -> dict[str, Any]:
-    if not torch.cuda.is_available():
-        return {"passed": False, "dtype": dtype_name, "error": "CUDA not available"}
-
-    from evograd.atenir.compose import run_graph
-    from evograd.atenir.primitive_triton.dispatch import make_registry
-
-    graph = json.loads(graph_path.read_text(encoding="utf-8"))
-    placeholders = [n for n in graph["nodes"] if n["op"] == "placeholder"]
-
-    try:
-        registry = make_registry(graph)
-    except Exception as exc:
-        return {
-            "passed": False, "dtype": dtype_name,
-            "error_type": type(exc).__name__, "error": str(exc),
-            "traceback": traceback.format_exc(limit=8),
-        }
-
-    dtype = _DTYPES[dtype_name]
-    from evograd.opdecl.importing import resolve_callable
-
-    forward_fn = resolve_callable(forward)
-    fwd_shapes = [tuple(ph["shape"]) for ph in placeholders[1:]]
-
-    torch.manual_seed(seed)
-    try:
-        inputs = [torch.randn(s, dtype=dtype, device="cuda") for s in fwd_shapes]
-        ref_inputs = [t.detach().clone().requires_grad_(True) for t in inputs]
-        out = forward_fn(*ref_inputs)
-        if isinstance(out, (tuple, list)):
-            out = out[0]
-        grad_out = torch.randn_like(out)
-        expected_grads = tuple(torch.autograd.grad(out, ref_inputs, grad_outputs=grad_out))
-
-        env_tensors = [grad_out.detach().contiguous()] + [t.detach().contiguous() for t in inputs]
-        if len(placeholders) != len(env_tensors):
-            return {
-                "passed": False, "dtype": dtype_name,
-                "error_type": "PlaceholderMismatch",
-                "error": (
-                    f"graph has {len(placeholders)} placeholders "
-                    f"but built {len(env_tensors)} env tensors"
-                ),
-            }
-        env = {ph["name"]: t for ph, t in zip(placeholders, env_tensors)}
-        actual_grads = run_graph(str(graph_path), env, registry)
-    except Exception as exc:
-        return {
-            "passed": False, "dtype": dtype_name,
-            "error_type": type(exc).__name__, "error": str(exc),
-            "traceback": traceback.format_exc(limit=8),
-        }
-
-    grad_reports, passed = [], True
-    for i, (actual, expected) in enumerate(zip(actual_grads, expected_grads)):
-        diff = (actual.float() - expected.float()).abs()
-        max_abs = float(diff.max())
-        max_rel = float((diff / expected.float().abs().clamp(min=1e-8)).max())
-        ok = bool(torch.allclose(actual.float(), expected.float(), atol=atol, rtol=rtol))
-        grad_reports.append({
-            "index": i, "passed": ok, "shape": list(actual.shape),
-            "max_abs": max_abs, "max_rel": max_rel, "atol": atol, "rtol": rtol,
-        })
-        passed = passed and ok
-
-    n_passed = sum(1 for r in grad_reports if r["passed"])
-    return {
-        "passed": passed,
-        "passed_cases": n_passed,
-        "failed_cases": len(grad_reports) - n_passed,
-        "total_cases": len(grad_reports),
-        "dtype": dtype_name,
-        "grad_reports": grad_reports,
-    }
-
-
 # ── orchestrator ──────────────────────────────────────────────────────────────
 
 
 def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
     config.output_dir.mkdir(parents=True, exist_ok=True)
-    pair_path = None
     # Published only once accepted; stale results must not read as this run's.
     published = config.output_dir / "initial_program_autograd_pair.py"
     report_path = config.output_dir / "verification_report.json"
@@ -375,21 +275,20 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
         program_path = config.output_dir / "dispatch_program.py"
         program_path.write_text(program, encoding="utf-8")
         print(f"  → {program_path} ({len(program)} chars)")
-        if config.emit_autograd_pair_seed:
-            from evograd.opdecl.verify_cli import load_candidate
-            from evograd.pipelines.shared.artifact import validate_artifact
+        from evograd.opdecl.importing import load_candidate
+        from evograd.pipelines.shared.artifact import validate_artifact
 
-            pair_program = generate_autograd_pair_program(
-                graph, forward=config.forward, op=config.op, scalars=scalars,
-                allowed_primitives=config.allowed_primitives,
-            )
-            pair_path = config.output_dir / "candidate.py"
-            pair_path.write_text(pair_program, encoding="utf-8")
-            print(f"  → {pair_path} ({len(pair_program)} chars)")
-            # The artifact contract and static rules, under the run's grant.
-            validate_artifact(config.op, load_candidate(pair_path), source=pair_program,
-                              allowed_primitives=config.allowed_primitives)
-            print("  artifact contract and static rules: OK")
+        pair_program = generate_autograd_pair_program(
+            graph, forward=config.forward, op=config.op, scalars=scalars,
+            allowed_primitives=config.allowed_primitives,
+        )
+        pair_path = config.output_dir / "candidate.py"
+        pair_path.write_text(pair_program, encoding="utf-8")
+        print(f"  → {pair_path} ({len(pair_program)} chars)")
+        # The artifact contract and static rules, under the run's grant.
+        validate_artifact(config.op, load_candidate(pair_path), source=pair_program,
+                          allowed_primitives=config.allowed_primitives)
+        print("  artifact contract and static rules: OK")
     except Exception as exc:
         print(f"  ERROR: dispatch program generation failed: {exc}")
         (config.output_dir / "generation_error.txt").write_text(
@@ -397,70 +296,33 @@ def synthesize_handwritten_dispatch(config: HandwrittenDispatchConfig) -> int:
         )
         return 1
 
-    if pair_path is not None and config.skip_verify:
+    if config.skip_verify:
         report_path.write_text(json.dumps({"verification": "skipped"}), encoding="utf-8")
         pair_path.replace(published)
         print(f"[B] Verification skipped (--skip-verify); unverified seed: {published}")
         return 0
-    if pair_path is not None:
-        normalized_dtypes = tuple(
-            {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}.get(d, d)
-            for d in config.dtypes
-        )
-        print(f"[B] Verify emitted autograd pair on declared workloads: {normalized_dtypes}")
-        result = verify_candidate(
-            python=config.python,
-            op_name=config.op.name,
-            program_path=pair_path,
-            log_dir=config.output_dir,
-            dtypes=normalized_dtypes,
-            forward=config.forward,
-            declaration=config.op.declaration,
-            timeout=config.eval_timeout,
-        )
-        passed = report_passed(result)
-        verify_report = result.get("verify", {})
-        cases = verify_report.get("cases", [])
-        passed_cases = sum(int(case.get("ok", False)) for case in cases)
-        total_cases = len(cases)
-        result.update(
-            {
-                "passed": passed,
-                "passed_cases": passed_cases,
-                "failed_cases": total_cases - passed_cases,
-                "total_cases": total_cases,
-                "dtypes": list(normalized_dtypes),
-            }
-        )
-    else:
-        # Legacy dispatch-program-only mode has no candidate pair API. Retain
-        # its extraction-shape graph check for users who explicitly request it.
-        reports = []
-        for dtype_name in config.dtypes:
-            is_fp16 = dtype_name in {"float16", "fp16", "bfloat16", "bf16"}
-            report = _run_dtype(
-                forward=config.forward,
-                graph_path=graph_path,
-                dtype_name=dtype_name,
-                atol=config.fp16_atol if is_fp16 else config.atol,
-                rtol=config.fp16_rtol if is_fp16 else config.rtol,
-            )
-            reports.append(report)
-        passed = all(r.get("passed") for r in reports)
-        passed_cases = sum(r.get("passed_cases", 0) for r in reports)
-        total_cases = sum(r.get("total_cases", 0) for r in reports)
-        result = {
+    print("[B] Seed acceptance: Gate 1 on the task pack's search payloads")
+    result = verify_candidate(
+        python=config.python,
+        pack=config.pack,
+        program_path=pair_path,
+        log_dir=config.output_dir,
+        timeout=config.eval_timeout,
+    )
+    passed = report_passed(result)
+    passed_cases, total_cases = acceptance_cases(result)
+    result.update(
+        {
             "passed": passed,
             "passed_cases": passed_cases,
             "failed_cases": total_cases - passed_cases,
             "total_cases": total_cases,
-            "dtypes": list(config.dtypes),
-            "reports": reports,
         }
+    )
     report_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(f"\n[B] {'PASS' if passed else 'FAIL'}  ({passed_cases}/{total_cases} cases)")
     print(f"    report: {report_path}")
-    if passed and pair_path is not None:
+    if passed:
         pair_path.replace(published)
         print(f"    accepted seed: {published}")
     return 0 if passed else 1

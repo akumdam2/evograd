@@ -30,7 +30,7 @@ from pathlib import Path
 
 from evograd.opdecl.activity import OpDecl, Workload
 from evograd.pipelines.shared.primitives import PrimitiveViolation, check_source
-from evograd.pipelines.shared.runner import report_passed, verify_candidate
+from evograd.pipelines.shared.runner import acceptance_cases, report_passed, verify_candidate
 
 _DTYPE_ALIASES = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
 
@@ -49,6 +49,8 @@ class InductorSeedConfig:
     skip_verify: bool = False
     #: Trusted primitives this run grants (see shared/primitives.py).
     allowed_primitives: tuple[str, ...] = ()
+    #: The model case's task pack; Gate 1 on its search payloads accepts the seed.
+    pack: Path | None = None
 
 
 def _dims_are_distinct(workload: Workload) -> bool:
@@ -202,24 +204,20 @@ def _emit_one(
 
     result = verify_candidate(
         python=config.python,
-        op_name=op.name,
+        pack=config.pack,
         program_path=pair_path,
         log_dir=seed_dir,
-        dtypes=(dtype,),
-        forward=config.forward,
-        declaration=op.declaration,
         timeout=config.eval_timeout,
         device=config.device,
     )
     passed = report_passed(result)
-    cases = result.get("verify", {}).get("cases", [])
-    passed_cases = sum(int(case.get("ok", False)) for case in cases)
+    passed_cases, total_cases = acceptance_cases(result)
     result.update(
         {
             "passed": passed,
             "passed_cases": passed_cases,
-            "failed_cases": len(cases) - passed_cases,
-            "total_cases": len(cases),
+            "failed_cases": total_cases - passed_cases,
+            "total_cases": total_cases,
             "dtypes": [dtype],
             "save_set": save_set,
         }
@@ -227,10 +225,10 @@ def _emit_one(
     (seed_dir / "verification_report.json").write_text(
         json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
     )
-    print(f"  {'PASS' if passed else 'FAIL'} ({passed_cases}/{len(cases)} cases)")
+    print(f"  {'PASS' if passed else 'FAIL'} ({passed_cases}/{total_cases} cases)")
     return (
         0 if passed else 1,
-        {**summary, "passed": passed, "cases": f"{passed_cases}/{len(cases)}"},
+        {**summary, "passed": passed, "cases": f"{passed_cases}/{total_cases}"},
     )
 
 

@@ -6,9 +6,9 @@ an explicit PYTHONPATH (derived from the installed package location), so
 pipelines work identically from a source checkout or a pip install — no
 ``cwd=repo_root`` assumptions.
 
-Verification is always declaration-driven: candidates are checked by
-``evograd.opdecl.verify_cli`` against the op's autograd oracle. This replaces
-the old ``--evaluator path/to/evaluator_autograd_pair.py`` per-bench wiring.
+Every seed is accepted by one rule, in a killable subprocess
+(``evograd.evaluation.common.seed``): Gate 1 on the payloads a model case's
+task pack names for search, then its deployment on one of them.
 """
 
 from __future__ import annotations
@@ -115,48 +115,30 @@ def extract_graph(
 def verify_candidate(
     *,
     python: str,
-    op_name: str,
+    pack: Path | None,
     program_path: Path,
     log_dir: Path | None = None,
-    dtypes: tuple[str, ...] | None = None,
-    forward: str | None = None,
-    declaration: str | None = None,
     timeout: int = 120,
     device: str = "cuda",
-    seed_acceptance: bool = False,
-    benchmark_suite: str | None = None,
 ) -> dict:
-    """Verify a candidate against the op's autograd oracle in a subprocess."""
-    # Validated before the command is built, so a misuse cannot be half-applied.
-    if seed_acceptance and dtypes:
-        raise ValueError("seed acceptance checks every declared correctness dtype")
-    if benchmark_suite is not None and not seed_acceptance:
-        raise ValueError("benchmark_suite requires seed_acceptance")
+    """Seed acceptance of ``program_path`` for the model case of task pack ``pack``.
+
+    The rule is the pack's search rule (Gate 1 on its calibration payloads), the
+    same one search feedback is judged by; see :mod:`evograd.evaluation.common.seed`.
+    """
+    if pack is None:
+        raise ValueError("seed acceptance needs a model case's task pack (--pack)")
     cmd = [
         python,
         "-m",
-        "evograd.evaluation.common.seed" if seed_acceptance else "evograd.opdecl.verify_cli",
-        "--op",
-        op_name,
+        "evograd.evaluation.common.seed",
+        "--pack",
+        str(Path(pack).resolve()),
         "--device",
         device,
+        str(program_path),
     ]
-    if forward:
-        cmd.extend(["--forward", forward])
-    if declaration:
-        cmd.extend(["--declaration", declaration])
-    for dtype in dtypes or ():
-        cmd.extend(["--dtype", dtype])
-    if benchmark_suite is not None:
-        cmd.extend(["--benchmark-suite", benchmark_suite])
-    cmd.append(str(program_path))
-    completed = _run(
-        cmd,
-        log_dir,
-        "verify",
-        {"EVOGRAD_DECLARATION": declaration} if declaration else None,
-        timeout,
-    )
+    completed = _run(cmd, log_dir, "verify", None, timeout)
     try:
         report = json.loads(completed.stdout)
     except json.JSONDecodeError:
@@ -174,6 +156,12 @@ def verify_candidate(
         report["metrics"] = {**report.get("metrics", {}), "correct": 0.0}
         report["returncode"] = completed.returncode
     return report
+
+
+def acceptance_cases(report: dict) -> tuple[int, int]:
+    """``(passed, total)`` Gate 1 payload cases of a seed acceptance report."""
+    summary = report.get("search_correctness") or {}
+    return int(summary.get("passed", 0)), int(summary.get("total", 0))
 
 
 def report_passed(report: dict) -> bool:
