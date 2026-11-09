@@ -48,11 +48,10 @@ op = declare_op(
     output=(Active("hi", "[R, C]"), Active("lo", "[R]")),
     forward_semantics="hi = x * w * alpha; lo = sum(x * w, dim=-1).",
     backward_semantics="Return dx then dw.",
-    correctness=(
+    benchmark=(
         Workload(dims={"R": 4, "C": 8}, dtype="float32"),
         Workload(dims={"R": 7, "C": 5}, dtype="float32"),
     ),
-    tolerances={"float32": (1e-5, 1e-5)},
     make_inputs=make_split_scale_inputs,
 )
 

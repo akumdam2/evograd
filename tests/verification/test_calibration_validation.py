@@ -16,7 +16,7 @@ from tests.verification import _fixtures as F
 
 @pytest.fixture
 def scope():
-    return OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device="cpu")
+    return OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
 
 
 def options(scope):

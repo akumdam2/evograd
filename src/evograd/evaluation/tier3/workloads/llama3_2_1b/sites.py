@@ -24,8 +24,9 @@ Two ways to reach a kernel, deliberately kept apart:
   to the unmodified model. That is `structural identity`.
 * **bound** -- the declared operator through ``opdecl.bind``, i.e. a
   ``torch.autograd.Function`` built from the declaration, which is the path a
-  future evolved kernel takes. That is `bound-pair identity`, and it is gated by
-  the declared tolerances rather than by bitwise equality.
+  future evolved kernel takes. That is `bound-pair identity`; it is not bitwise
+  identical, because the declared reference and the production spelling are
+  different computations.
 
 An unpatched site always uses `production`, so patching one site never silently
 changes another.
@@ -271,12 +272,10 @@ def production_residual_rmsnorm(norm_call, branch, residual):
 
 
 def _observed(op_name: str):
-    """The calibrated observed configurations for one operator, if it has any.
+    """The observed configurations for one operator, if it has any.
 
-    Returns ``()`` when the Llama harvest has not been run, which is the state
-    this workload is in today. An empty preflight suite means the site is gated
-    on the declaration's own correctness grid only -- weaker than Qwen3's gate,
-    and the difference is exactly one snapshot.
+    Returns ``()`` when the Llama harvest has not been run; the site then has no
+    model-derived preflight case.
     """
     from evograd.benchmark import get_task
 

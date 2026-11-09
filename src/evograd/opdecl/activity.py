@@ -2,12 +2,14 @@
 
 An :class:`OpDecl` is the single source of truth for one operator: which
 arguments are differentiable (``Active``) vs non-differentiable
-(``Inactive``), their symbolic shapes, the workloads and tolerances used for
-correctness/benchmarking, and the prose semantics shown to LLM pipelines.
+(``Inactive``), their symbolic shapes, the workloads it is timed and run at,
+and the prose semantics shown to LLM pipelines. Correctness is not declared
+here: Gate 1/2/3 judge a candidate on recorded payloads under the model
+reference (:mod:`evograd.verification`).
 
 Everything downstream derives from it: seed-generation prompts (pipelines
-A/C), deterministic wrapper codegen (pipeline B), the autograd oracle, the
-correctness verifier, and the OpenEvolve evaluator.
+A/C), deterministic wrapper codegen (pipeline B), the autograd oracle, and
+the OpenEvolve evaluator.
 
 Naming rules made explicit (previously string conventions):
 
@@ -215,8 +217,6 @@ class Provenance:
 class Workload:
     """One concrete binding of the operator's symbolic dims, plus dtype.
 
-    ``atol``/``rtol`` override the op-level per-dtype tolerance for this case.
-
     ``provenance`` traces the shape back to a real model. It is optional on the
     type so ablation suites (``legacy_*``, ``tb_*``) and externally scaffolded
     declarations stay expressible, but every case in a benchmark task's default
@@ -225,6 +225,9 @@ class Workload:
 
     dims: dict[str, int]
     dtype: str
+    # Ignored: nothing reads them. Kept only so task packs and seeds written
+    # before declared tolerances were removed (``Workload(..., atol=..., rtol=...)``)
+    # still load.
     atol: float | None = None
     rtol: float | None = None
     provenance: Provenance | None = None
@@ -304,17 +307,11 @@ class OpDecl:
     reference_contract: str | None = None
     extra_constraints: str = ""
     grad_order: tuple[str, ...] | None = None
-    correctness: tuple[Workload, ...] = ()
     # Untimed compile/runtime coverage gate. These workloads need not be part
     # of the performance objective, but every publishable candidate must run
     # forward and backward on all of them.
     coverage: tuple[Workload, ...] = ()
     benchmark: tuple[Workload, ...] = ()
-    tolerances: dict[str, tuple[float, float]] = field(default_factory=dict)
-    # Per-result multipliers applied to the workload/dtype tolerance. This
-    # preserves cases where one reduction is intrinsically noisier than the
-    # other outputs (e.g. megafold_evoattention's d_pair_bias reduces over S).
-    tolerance_multipliers: dict[str, tuple[float, float]] = field(default_factory=dict)
     # Optional named benchmark suites. ``benchmark`` remains the default suite;
     # named suites let one declaration expose legacy/TritonBench profiles
     # without environment-dependent module import side effects.
@@ -355,9 +352,6 @@ class OpDecl:
     regime_feature: object | None = None
     regime_split: float | None = None
     case_weight: object | None = None
-    # Optional workload-aware tolerance hook:
-    # (workload, result_name, base_atol, base_rtol) -> (atol, rtol).
-    tolerance_hook: object | None = None
     # Optional override for input construction, signature
     # (torch, op, workload, device) -> dict of {arg name: tensor/scalar, upstream grad name: tensor}.
     # Takes the torch module as a parameter so op declarations stay importable
@@ -639,24 +633,6 @@ class OpDecl:
                 f"return names: {shared}"
             )
 
-        # A multiplier may name any result the gate compares: an output as well
-        # as a gradient. Outputs became eligible with structured outputs, where
-        # two results of one operator can need genuinely different tolerances --
-        # a normalized value and the plain sum it was computed from, say.
-        known_results = set(self.grad_names()) | set(self.output_names)
-        unknown_tolerances = set(self.tolerance_multipliers) - known_results
-        if unknown_tolerances:
-            raise ValueError(
-                f"{self.name}: tolerance multipliers name unknown results "
-                f"{sorted(unknown_tolerances)}; known results are "
-                f"{sorted(known_results)}"
-            )
-
-        for name, multipliers in self.tolerance_multipliers.items():
-            if len(multipliers) != 2 or any(value <= 0 for value in multipliers):
-                raise ValueError(
-                    f"{self.name}: tolerance multiplier for {name} must be two positive values"
-                )
         invalid_baselines = [
             name
             for name, hook in self.performance_baselines.items()
@@ -714,8 +690,6 @@ class OpDecl:
                 raise ValueError(f"{self.name}: regime_split must be positive")
             if self.case_weight is not None and not callable(self.case_weight):
                 raise ValueError(f"{self.name}: case_weight must be callable")
-        if self.tolerance_hook is not None and not callable(self.tolerance_hook):
-            raise ValueError(f"{self.name}: tolerance_hook must be callable")
 
         suites = [self.benchmark, *self.benchmark_suites.values()]
         # Recorded strides may name a tensor argument or an upstream gradient:
@@ -724,8 +698,7 @@ class OpDecl:
                        if getattr(arg, "shape", None) not in (None, "unspecified")}
         tensor_args.update({out.grad_name: out for out in self.outputs
                             if getattr(out, "shape", None) not in (None, "unspecified")})
-        for workload in (*self.correctness, *self.coverage,
-                         *(w for suite in suites for w in suite)):
+        for workload in (*self.coverage, *(w for suite in suites for w in suite)):
             for name, stride in getattr(workload.provenance, "strides", ()) or ():
                 arg = tensor_args.get(name)
                 if arg is None:
@@ -738,11 +711,7 @@ class OpDecl:
                         f"{self.name}: recorded stride {stride} for {name!r} does not "
                         f"match its rank at {workload.dims}"
                     )
-        for workload in (
-            *self.correctness,
-            *self.coverage,
-            *(w for suite in suites for w in suite),
-        ):
+        for workload in (*self.coverage, *(w for suite in suites for w in suite)):
             missing = set(self.dims) - set(workload.dims)
             extra = set(workload.dims) - set(self.dims)
             if missing or extra:
@@ -750,16 +719,6 @@ class OpDecl:
                     f"{self.name}: workload dims {sorted(workload.dims)} do not "
                     f"match declared dims {self.dims} "
                     f"(missing={sorted(missing)}, extra={sorted(extra)})"
-                )
-            if (workload.atol is None) != (workload.rtol is None):
-                raise ValueError(
-                    f"{self.name}: workload atol and rtol must be specified together"
-                )
-            has_case_tol = workload.atol is not None and workload.rtol is not None
-            if not has_case_tol and workload.dtype not in self.tolerances:
-                raise ValueError(
-                    f"{self.name}: no tolerance for dtype {workload.dtype!r} "
-                    f"(neither per-case atol/rtol nor op-level tolerances)"
                 )
 
     def _validate_shape(self, arg_name: str, shape: str) -> None:
@@ -776,19 +735,6 @@ class OpDecl:
                 f"{self.name}.{arg_name}: shape dim {token!r} is neither a "
                 f"declared dim {self.dims} nor an integer literal"
             )
-
-    def tolerance_for(
-        self, workload: Workload, result_name: str | None = None
-    ) -> tuple[float, float]:
-        if workload.atol is not None and workload.rtol is not None:
-            base = (workload.atol, workload.rtol)
-        else:
-            base = self.tolerances[workload.dtype]
-        scale = self.tolerance_multipliers.get(result_name or "", (1.0, 1.0))
-        atol, rtol = base[0] * scale[0], base[1] * scale[1]
-        if self.tolerance_hook is not None:
-            atol, rtol = self.tolerance_hook(workload, result_name, atol, rtol)
-        return float(atol), float(rtol)
 
     def memory_input_names(self) -> tuple[str, ...]:
         if self.memory_inputs is not None:
@@ -853,14 +799,14 @@ def example_input_spec(op: OpDecl, workload: Workload | None = None) -> str:
     hand-typed strings in the old repo's README commands.
     """
     if workload is None:
-        if not op.correctness:
-            raise ValueError(f"{op.name}: no correctness workloads to derive an example input from")
+        if not op.benchmark:
+            raise ValueError(f"{op.name}: no benchmark workload to derive an example input from")
         # Symbolic tracing specializes sizes 0/1 (see atenir.extract), so an
         # example input with a size-1 symbolic dim bakes that dim into the
         # extracted graph. Prefer the first workload with every dim >= 2.
         workload = next(
-            (w for w in op.correctness if all(int(v) >= 2 for v in w.dims.values())),
-            op.correctness[0],
+            (w for w in op.benchmark if all(int(v) >= 2 for v in w.dims.values())),
+            op.benchmark[0],
         )
     entries = []
     for arg in op.args:
@@ -888,11 +834,8 @@ def declare_op(
     reference_dtype: str | None = None,
     extra_constraints: str = "",
     grad_order: tuple[str, ...] | None = None,
-    correctness: tuple[Workload, ...] = (),
     coverage: tuple[Workload, ...] = (),
     benchmark: tuple[Workload, ...] = (),
-    tolerances: dict[str, tuple[float, float]] | None = None,
-    tolerance_multipliers: dict[str, tuple[float, float]] | None = None,
     benchmark_suites: dict[str, tuple[Workload, ...]] | None = None,
     performance_baselines: dict[str, object] | None = None,
     memory_inputs: tuple[str, ...] | None = None,
@@ -900,7 +843,6 @@ def declare_op(
     regime_feature: object | None = None,
     regime_split: float | None = None,
     case_weight: object | None = None,
-    tolerance_hook: object | None = None,
     make_inputs: object | None = None,
     backward_may_overwrite: tuple[str, ...] = (),
     runtime_forward: str | None = None,
@@ -921,13 +863,8 @@ def declare_op(
         reference_dtype=reference_dtype,
         extra_constraints=extra_constraints,
         grad_order=tuple(grad_order) if grad_order is not None else None,
-        correctness=tuple(correctness),
         coverage=tuple(coverage),
         benchmark=tuple(benchmark),
-        tolerances=dict(tolerances) if tolerances is not None else {},
-        tolerance_multipliers=(
-            dict(tolerance_multipliers) if tolerance_multipliers is not None else {}
-        ),
         benchmark_suites=(
             {name: tuple(cases) for name, cases in benchmark_suites.items()}
             if benchmark_suites is not None
@@ -943,7 +880,6 @@ def declare_op(
         regime_feature=regime_feature,
         regime_split=regime_split,
         case_weight=case_weight,
-        tolerance_hook=tolerance_hook,
         make_inputs=make_inputs,
         backward_may_overwrite=tuple(backward_may_overwrite),
         runtime_forward=runtime_forward,

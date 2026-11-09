@@ -1,13 +1,7 @@
 """Operator declaration: hard-label mean cross entropy."""
 
 from evograd.opdecl import Active, Inactive, declare_op
-from evograd.ops._common import dtype_for, workloads_2d
-
-_TOLERANCES = {
-    "float32": (2e-5, 1e-3),
-    "float16": (5e-4, 1e-2),
-    "bfloat16": (2e-3, 2e-2),
-}
+from evograd.ops._common import dtype_for
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -20,15 +14,6 @@ def _inputs(torch, op, workload, device="cuda"):
         "dloss": torch.rand((), device=device, dtype=dtype) + 0.5,
     }
 
-
-_CORRECTNESS = (
-    workloads_2d(((8, 512), (16, 1024)), ("float32",), tolerances=_TOLERANCES)
-    + workloads_2d(
-        ((32, 4096), (64, 2048)),
-        ("float16", "bfloat16"),
-        tolerances=_TOLERANCES,
-    )
-)
 
 #: The single cross entropy a Qwen3-0.6B step runs, at the shape the flattened
 #: call actually receives: [4096, 151936] float32. The BF16 [2, 2048, 151936]
@@ -57,8 +42,6 @@ op = declare_op(
         "Return dlogits = dloss * (softmax(logits)-onehot(target)) / rows; "
         "target is inactive and receives no gradient."
     ),
-    correctness=_CORRECTNESS,
-    tolerances=_TOLERANCES,
     memory_inputs=("logits",),
     make_inputs=_inputs,
 )

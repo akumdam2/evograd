@@ -25,7 +25,6 @@ orthogonal.
 ```text
 benchmark/
 ├── core/                 task registry and cross-task aggregation
-├── operator_suite/       the primitives' performance grids
 └── topdown/
     ├── common/           harvest, snapshot, smoke, and workload facilities
     ├── qwen3_0_6b/       the Qwen3-0.6B L3-to-L1 path
@@ -35,33 +34,23 @@ benchmark/
     └── megafold/         the MegaFold whole-model declaration
 ```
 
-`evograd.ops` contains operator contracts, references, tolerances, and operator
-workload shapes. `operator_suite` selects those declarations; it does not copy
-`OpDecl`. Whole-model declarations are registered in
-`evograd.benchmark.WORKLOADS`.
+`evograd.ops` contains operator contracts, references and input generators.
+Whole-model declarations are registered in `evograd.benchmark.WORKLOADS`.
+Correctness is not declared on a task: Gate 1/2/3 judge a candidate on recorded
+payloads under the model reference (`evograd.verification`).
 
-Performance cases are bound onto primitive contracts here rather than written
-into them. `evograd.benchmark.cases` is the binder and it applies two layers,
-in this order:
-
-1. `operator_suite/cases/<primitive>.py` — the suite's timed grid, its untimed
-   benchmark coverage, its named suites, the shape-regime split and the case
-   weighting. Grids whose dimensions were computed from a published Llama-3 or
-   AlphaFold3 configuration live here: the dimensions came from a model, but
-   the case belongs to the suite, and calling it top-down coverage would claim
-   evidence that does not exist.
-2. `topdown/<model>/` — cases *observed* in that model's captured run, read
-   from its frozen snapshot. Two models may bind the same primitive: each
-   contributes its own named suite (`qwen3_0_6b_observed`,
-   `llama_3_2_1b_observed`) and the binder keeps both, in the order the registry
-   supplies them. Only a real collision — the same primitive under the same
-   suite name — is refused. A workload whose harvest has not been run
-   contributes nothing and blocks no import; a snapshot that exists and fails
-   its hash check still raises. Which primitives a model binds, under which suite
-   name, whether the cases precede or follow the primitive's own coverage and
-   which suite mirrors that coverage are all that model's decisions, and live
-   in its own manifest — for Qwen3-0.6B, `OBSERVED_BINDINGS` in
-   `topdown/qwen3_0_6b/levels/level1/manifest.py`.
+Cases are bound onto primitive contracts here rather than written into them.
+`evograd.benchmark.cases` is the binder: `topdown/<model>/` holds the cases
+*observed* in that model's captured run, read from its frozen snapshot. Two
+models may bind the same primitive: each contributes its own named suite
+(`qwen3_0_6b_observed`, `llama_3_2_1b_observed`) and the binder keeps both, in
+the order the registry supplies them. Only a real collision — the same primitive
+under the same suite name — is refused. A workload whose harvest has not been
+run contributes nothing and blocks no import; a snapshot that exists and fails
+its hash check still raises. Which primitives a model binds, under which suite
+name and whether the cases precede or follow the coverage bound before them are
+that model's decisions, and live in its own manifest — for Qwen3-0.6B,
+`OBSERVED_BINDINGS` in `topdown/qwen3_0_6b/levels/level1/manifest.py`.
 
 `benchmark/cases.py` is the mechanism and only the mechanism: it names no
 model, holds no task list, and takes the configuration as an argument.
@@ -70,9 +59,7 @@ which models exist, importing each one's table and handing it to the binder.
 Adding a second harvested architecture means writing a table in its manifest
 and naming it there; no primitive package and no shared module changes.
 
-Both return a new `OpDecl`; the primitive is never mutated, and a primitive
-that declared its own grid would be refused rather than silently merged, so a
-case collection has exactly one owner. That is why `evograd.ops` reaches
+Binding returns a new `OpDecl`; the primitive is never mutated. That is why `evograd.ops` reaches
 neither a snapshot nor a model configuration table, and why importing it in a
 fresh interpreter loads no benchmark module at all.
 
@@ -93,19 +80,17 @@ rotations and a hard-coded constant would let a kernel be self-consistent and
 wrong. Resolving a workload's model key to its published configuration needs
 that table. The rule the generator implements is generic; only the fallback
 used when a case carries no provenance names a model, and changing it would
-change the inputs generated for the provenance-free correctness cases. It is
+change the inputs generated for provenance-free cases. It is
 declaration infrastructure rather than a benchmark manifest, so importing the
 primitives still loads no benchmark package and no frozen snapshot.
 
 L3 workloads are evaluated by `evograd evaluate <model>` at Tier 3: the whole
 training step, with candidate kernels patched into their sites. They are `WorkloadDecl`s, never `OpDecl`s.
 
-## Two benchmark families
+## The benchmark
 
-- The operator suite selects tasks from the declared operators, then aggregates coverage, full-step speedup, and retained
-  state by family and Level.
-- The top-down benchmark starts from a real L3 workload and traces through a
-  harvest and frozen snapshot to L2/L1.
+The top-down benchmark starts from a real L3 workload and traces through a
+harvest and frozen snapshot to L2/L1.
 
 Registry counts must be queried from `evograd.ops.PRIMITIVES`,
 `evograd.benchmark.TASKS`, `evograd.benchmark.WORKLOADS`, and
@@ -118,7 +103,6 @@ Existing `results/` and external caches remain in place and read-only. Only new
 runs use:
 
 ```text
-results/benchmark/operator_suite/...
 results/benchmark/topdown/<workload>/...
 ```
 

@@ -38,16 +38,14 @@ harvest, and it is weaker on purpose rather than by oversight: the shapes here
 are what the architecture *will* run, derived from the config, and they do not
 become claims about an observation just because a harvest later appears next to
 them. :data:`HARVESTED` is what says whether one has, and it gates the observed
-suite alone. See :data:`CALIBRATED` for what is still owed on tolerances.
+suite alone.
 """
 
 from evograd.benchmark.topdown import has_snapshot as _has_snapshot
 from evograd.opdecl import Active, Inactive, Provenance, Workload, declare_op
 # The workload pins Llama-3.2-1B. `opdecl.models` also carries LLAMA_3_8B,
-# the 8B config the operator suite's vocabulary-regime cases are declared
-# against; that one did not move and is a different model.
+# a different model.
 from evograd.opdecl.models import LLAMA_3_2_1B
-from evograd.opdecl.tolerance import ReductionScaledAtol
 
 #: The workload these dims describe; also the ``Provenance`` model key.
 _WORKLOAD = "llama_3_2_1b"
@@ -57,70 +55,6 @@ _WORKLOAD = "llama_3_2_1b"
 #: this is true; the observed suite is attached only when it is.
 HARVESTED = _has_snapshot(_WORKLOAD)
 
-#: Has the tolerance been measured at the shape the *model* runs?
-#:
-#: **Yes, at Llama-3.2-1B's own width.** Measured on a GH200 (torch 2.11.0+cu128)
-#: at ``[2, 2048, 2048]`` (32 query heads of 64, 8 key/value heads) with the
-#: full 4096-token contraction, on 2026-09-15, from the canonical layer-8
-#: artifact of run ``results/experiments/llama3_2_1b_l2_l3/20260915``
-#: (``calibration/llama3_qkv_rope-tolerance.json``). An earlier table taken at
-#: Meta-Llama-3-8B's ``[2, 2048, 4096]`` (32 heads of 128) is superseded by
-#: this one and is kept only in that run's history; it is not relabelled here.
-#: Measured with synthetic inputs at the model's widths, because the harvested
-#: capture cannot answer this question: its gradients arrive at ``ref_absmax``
-#: 0.0 with errors near 1e-07, so it exercises the forward tolerances and
-#: nothing else (the harvested invocation itself needs ``q`` 7.72e-03 and
-#: ``k`` 7.33e-03). Required base ``t`` at the synthetic model-width case,
-#: against the 2e-2 the declaration carries:
-#:
-#:     result       required_t   declared atol   supplied / required
-#:     q             1.001e-02      3.657e-02          3.7x
-#:     k             7.916e-03      3.933e-02          5.0x
-#:     v             0                3.933e-02        --
-#:     dx            2.358e-02      4.245e-02          1.5x
-#:     dq_weight     1.684e-01      1.687e+00          ~1.9x
-#:     dk_weight     1.626e-01      2.182e+00          ~2.5x
-#:     dv_weight     0                4.546e-01        --
-#:
-#: The two weight-gradient ratios are approximate because ``required_t`` couples
-#: atol and rtol (it is the smallest ``t`` accepting at ``atol=ma*t, rtol=t``)
-#: while the declaration holds rtol at the base; read
-#: ``minimal_atol_multiplier["2e-02"]`` in the artifact for the decoupled
-#: number. Both are above the 1.5x the multipliers were declared with -- the
-#: hook's ``gain=2.0`` is deliberately conservative past the anchor -- and
-#: `levels.level2.negative_controls` says that headroom costs nothing
-#: measurable: every result's scaled-fault floor is 2.0% (``v`` 5%), matching
-#: ``llama3_attention`` and ``llama3_swiglu_mlp``, because ``rtol`` is what
-#: catches a scaled fault and the hook never touches it. ``dx`` sits exactly on
-#: the 1.5x policy (1.500x), as it did at the 8B width; the declaration was not
-#: loosened to buy it more.
-#:
-#: ``v`` and ``dv_weight`` measure exactly 0.0 at every shape -- the value path
-#: has no rotation, so the two *spellings* are the same computation there. That
-#: is a fact about the oracle pair, not about a candidate: a generated kernel
-#: accumulating ``dv_weight`` over 4096 tokens in bfloat16 has the same rounding
-#: growth as the other two, which is why they keep the hook's term rather than
-#: being pinned to a measurement of zero.
-#:
-#: The *correctness grid* is a different question, and it has been measured --
-#: see :data:`GRID_CALIBRATED`. The grid is declared in this file and both
-#: spellings are in ``forward_ref``, so nothing about a GPU or a harvest is
-#: needed to compare them.
-CALIBRATED = True
-
-#: Have the correctness-grid tolerances been measured rather than inherited?
-#:
-#: **Yes.** ``levels.level2.qkv_rope calibrate --skip-canonical`` compared the
-#: declared float32 reference against ``runtime_forward`` on every workload in
-#: :data:`_CORRECTNESS`, which is the smallest disagreement any correct
-#: implementation can have with the oracle. The numbers are in the
-#: ``tolerance_multipliers`` comment below.
-#:
-#: Measured on **CPU**. The two spellings differ in bfloat16 rounding, and a GPU
-#: accumulates ``F.linear`` differently (tensor cores, split-k), so the values
-#: can shift. That is why each declared multiplier carries a 1.5x margin over
-#: its measurement rather than being the measurement.
-GRID_CALIBRATED = True
 
 #: Once per decoder layer. Read off the published layer count rather than a
 #: harvest, so this is what the canonical step *will* invoke, not what one did.
@@ -152,89 +86,9 @@ _CONFIGURED = Provenance(
     layout="head_major_view",
 )
 
-_SHRUNK = Provenance(
-    model=_WORKLOAD,
-    component="qkv_norm_rope",
-    free={},
-    source="handpicked",
-    scaled=True,
-    note=(
-        "hidden size, head count, head dimension and sequence length reduced "
-        "from Llama-3-8B's 4096/32-8 heads/128-wide heads/2048 tokens so the "
-        "correctness cases run on CPU; the 4:1 grouped-query ratio, the absence "
-        "of projection biases and the head-major output layout are preserved, "
-        "and one 2:1 case is included so a kernel cannot hard-code the ratio"
-    ),
-)
 
 _BENCHMARK = (
     Workload(dims=dict(_CONFIG_DIMS), dtype="bfloat16", provenance=_CONFIGURED),
-)
-
-_CORRECTNESS = tuple(
-    Workload(
-        dims={
-            "B": batch,
-            "T": tokens,
-            "H": hidden,
-            "HQ": heads,
-            "HK": kv_heads,
-            "D": head_dim,
-            "QO": heads * head_dim,
-            "KVO": kv_heads * head_dim,
-        },
-        dtype=dtype,
-        provenance=_SHRUNK,
-    )
-    for batch, tokens, hidden, heads, kv_heads, head_dim, dtype in (
-        # Llama's own 4:1 grouping, and QO == H as in the real model.
-        (1, 16, 32, 4, 1, 8, "float32"),
-        (2, 32, 64, 4, 1, 16, "float32"),
-        (2, 32, 64, 4, 1, 16, "bfloat16"),
-        # 2:1 grouping and QO != H, so a kernel that folded the query fan-out
-        # into the hidden size -- which Llama-3 alone would let it get away
-        # with -- fails here.
-        (1, 24, 32, 4, 2, 16, "bfloat16"),
-    )
-)
-
-
-#: The bf16 correctness case the declared multipliers were measured on, and the
-#: largest case in the grid: every other case is at or below it on every term,
-#: so the hook below is *exactly* the identity on the whole grid at both dtypes
-#: (worst raw factor 1.000) and cannot loosen a case that passes today.
-_ANCHOR = {"B": 2, "T": 32, "H": 64, "HQ": 4, "HK": 1, "D": 16, "QO": 64, "KVO": 16}
-
-#: What the grid cannot see. The three projection gradients accumulate one term
-#: per token, and the model runs 4096 of them where the grid's longest is 64 --
-#: the random walk alone is 8x, before the element-count term. ``q``, ``k``,
-#: ``v`` and ``dx`` keep the token axis and so have no reduction; they pick up
-#: the extreme-value term only, which is a property of how many elements
-#: ``allclose`` maximizes over rather than of the arithmetic.
-#:
-#: The same structure as ``qwen3_qkv_norm_rope``'s at the same boundary, minus
-#: the two per-head norm weights Llama does not have. It supplies 1.83x to 1.97x
-#: on the outputs and ``dx``, and 21.6x to 22.7x on the three projection
-#: gradients, at the observed shape. Both ends are now checked: it is exactly
-#: the identity on the grid, and :data:`CALIBRATED` records the measurement that
-#: says the growth it supplies covers the growth that was needed.
-_REDUCTION_SCALED = ReductionScaledAtol(
-    anchor_dims=_ANCHOR,
-    reduction_dims={
-        "dq_weight": ("B", "T"),
-        "dk_weight": ("B", "T"),
-        "dv_weight": ("B", "T"),
-    },
-    result_dims={
-        "q": ("B", "HQ", "T", "D"),
-        "k": ("B", "HK", "T", "D"),
-        "v": ("B", "HK", "T", "D"),
-        "dx": ("B", "T", "H"),
-        "dq_weight": ("QO", "H"),
-        "dk_weight": ("KVO", "H"),
-        "dv_weight": ("KVO", "H"),
-    },
-    gain=2.0,
 )
 
 
@@ -242,8 +96,7 @@ def make_llama3_qkv_rope_inputs(torch, op, workload, device="cuda"):
     """Inputs at the magnitudes a real step has, and real rotary tables.
 
     ``cos``/``sin`` are built from an inverse-frequency schedule rather than
-    drawn at random: a random pair is not a rotation, and the reference's
-    accuracy -- and therefore any tolerance calibrated against it -- would then
+    drawn at random: a random pair is not a rotation, and the case would then
     describe a computation the model never performs. ``rope_theta`` is
     Llama-3's 500000, not Llama-2's 10000.
     """
@@ -358,7 +211,6 @@ op = declare_op(
         "For Llama-3-8B QO happens to equal H; do not rely on that."
     ),
     grad_order=("dx", "dq_weight", "dk_weight", "dv_weight"),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     # The observed suite is what a *harvest* recorded, so it appears only once
@@ -369,58 +221,5 @@ op = declare_op(
         {"llama_3_2_1b_observed": _BENCHMARK} if HARVESTED else {}
     ),
     memory_inputs=("x", "q_weight", "k_weight", "v_weight", "cos", "sin"),
-    # Measured, not chosen -- on the correctness grid.
-    # `levels.level2.qkv_rope calibrate --skip-canonical` compares the declared
-    # float32 reference against `runtime_forward`, the spelling the model runs
-    # and therefore the smallest disagreement any correct implementation can
-    # have with the oracle, and reports the smallest base `t` for which
-    # `allclose(atol=ma*t, rtol=t)` accepts each result.
-    #
-    # float32: 0.0 on every result of every case. The two spellings differ only
-    # in whether the rotation is carried in float32, and at float32 input they
-    # are the same computation. 2e-5 is the repository's ordinary float32 base.
-    #
-    # bfloat16, worst over both grid cases:
-    #   q 5.18e-03   k 5.18e-03   v 0
-    #   dx 1.52e-02  dq_weight 5.21e-02  dk_weight 6.32e-02  dv_weight 0
-    #
-    # `v` and `dv_weight` measure exactly 0.0 at both dtypes: the value path has
-    # no rotation, so the two spellings are the same computation there.
-    #
-    # The base is set by the forward outputs -- `q` at 5.18e-03 -- so the
-    # outputs are gated by the base alone and only the reductions carry
-    # multipliers. 2e-2 leaves 3.9x on `q`. Going lower would mean putting a
-    # multiplier on a forward output, which hides the number a candidate is
-    # primarily judged on.
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (2e-2, 2e-2)},
-    # Each multiplier is the measured minimum at base 2e-2 times a 1.5 safety
-    # margin, rounded up to one decimal. The weight gradients need the largest
-    # because they reduce over all B*T tokens with cancelling signs; `q`, `k`,
-    # `v` and `dv_weight` measured below 1.0 and so have none.
-    #
-    #   result        required_t   min ma at t=2e-2   declared
-    #   dx             1.52e-02          0.76           1.2
-    #   dq_weight      5.21e-02          2.60           3.9
-    #   dk_weight      6.32e-02          3.16           4.8
-    #
-    # `dx` measures below 1.0 and is still declared: a modest GPU-vs-CPU shift
-    # in accumulation order would otherwise put it over the base, and the cost
-    # of stating it is 1.2x on one gradient.
-    tolerance_multipliers={
-        "dx": (1.2, 1.0),
-        "dq_weight": (3.9, 1.0),
-        "dk_weight": (4.8, 1.0),
-    },
-    # Those multipliers were measured on the correctness grid, whose longest
-    # token reduction is 64 terms. The model runs 4096, and a constant cannot
-    # describe a quantity that grows with the sum. This operator ran without the
-    # hook for exactly one release, and `levels.level2.negative_controls`
-    # reported what the file predicted it would: `clean accepted: False` at the
-    # observed shape -- the grid's constants rejecting a *correct* kernel at
-    # production width. The hook supplies the missing term and is the identity
-    # at and below the anchor, so every correctness case keeps the tolerance it
-    # has. The term it supplies covers the term that was needed, with the
-    # margins `CALIBRATED` records.
-    tolerance_hook=_REDUCTION_SCALED,
     make_inputs=make_llama3_qkv_rope_inputs,
 )

@@ -28,7 +28,7 @@ class UnifiedSeedConfig:
 def select_workload(op: OpDecl, *, dtype: str | None = None,
                     dims: dict[str, int] | None = None) -> Workload:
     """Select an exact configuration, without perturbing dimensions."""
-    cases = op.correctness or op.benchmark
+    cases = op.benchmark
     if dtype is None:
         if not cases:
             raise ValueError("supply --dtype and --dims for a declaration without workloads")
@@ -69,7 +69,7 @@ def scoped_op(op: OpDecl, workload: Workload, *, declaration: str | None = None)
     # A user-selected deployment shape is not an official benchmark case and
     # must not invent model provenance to satisfy the benchmark taxonomy.
     return replace(op, level=None, family=None, args=args,
-                   correctness=(workload,), coverage=(workload,), benchmark=(workload,),
+                   coverage=(workload,), benchmark=(workload,),
                    benchmark_suites={}, regime_feature=None, regime_split=None, case_weight=None,
                    declaration=declaration if declaration is not None else op.declaration)
 

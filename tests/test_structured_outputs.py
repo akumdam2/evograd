@@ -22,9 +22,10 @@ from evograd.benchmark import get_task
 from evograd.verification import gate1
 
 from tests import _structured_fixture as fixture
+from tests._small_cases import SMALL
 
 OP = fixture.op
-CASE = OP.correctness[0]
+CASE = OP.benchmark[0]
 
 
 class TestDeclaration(unittest.TestCase):
@@ -130,7 +131,7 @@ def gate1_report(module):
 
     op = replace(OP, reference_contract="test-structured-reference/1", runtime_forward=None)
     cases = [gate1.Gate1Case(f"case{i}", w, make_case_inputs(op, w, device="cpu"))
-             for i, w in enumerate(op.correctness)]
+             for i, w in enumerate(op.benchmark)]
     return gate1.verify_pair(op, module, cases=cases, device="cpu")
 
 
@@ -262,7 +263,7 @@ class TestSingleOutputRegression(unittest.TestCase):
 
     def test_single_output_inputs_and_oracle_are_unchanged(self):
         op = get_task("layernorm")
-        case = op.correctness[0]
+        case = SMALL["layernorm"][0]
         values = make_case_inputs(op, case, device="cpu")
         self.assertIn(op.upstream_grad_name, values)
         grads = upstream_grad_values(op, values)

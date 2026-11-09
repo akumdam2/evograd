@@ -16,19 +16,18 @@ L2 sites take their real invocations from is a data source
 
 ## Cases and ownership
 
-- `evograd.ops` owns reusable primitive contracts and correctness cases.
-- `benchmark/operator_suite` owns operator performance grids and aggregation.
+- `evograd.ops` owns reusable primitive contracts, references and input
+  generators.
 - `benchmark/topdown/<model>` owns model configurations, harvested cases and
   captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and MegaFold.
 - Qwen3.5-4B (`benchmark/topdown/qwen3_5_4b`, text model): L3 at B1 x T2048 on one
   GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), seven
-  calibrated L2 sites and ten bound L1 primitives; L2 invocations come from
+  L2 sites and ten bound L1 primitives; L2 invocations come from
   layers 14 and 15, captured or config-derived. No L3 gate yet; see
   `docs/QWEN3_5_4B.md`.
 - OLMoE-1B-7B (`benchmark/topdown/olmoe_1b_7b`): L3 at B2 x T2048 with
   grouped-GEMM experts (16 layers of multi-head attention and 64 routed SwiGLU
-  experts, 8 active), four L2 sites with provisional tolerances and six bound
-  L1 primitives; L2 invocations come from layer 8, captured or config-derived.
+  experts, 8 active), four L2 sites and six bound L1 primitives; L2 invocations come from layer 8, captured or config-derived.
   No GPU session yet and no L3 gate; see `docs/OLMOE_1B_7B.md`.
 - `evograd.evaluation` owns execution, numerical checks, calibration and timing.
 
@@ -41,9 +40,7 @@ The L3 workloads (`evaluation/tier3/workloads`) build the whole model and
 install providers at their declared sites on every layer; they are not
 monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
-- `benchmark/operator_suite/` is the implementation-neutral operator suite. It
-  owns the primitives' performance grids and aggregates by family and Level.
-  Every Level-2 task belongs to a model. Liger is not a baseline.
+- Every Level-2 task belongs to a model. Liger is not a baseline.
 - `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
   snapshots. It contains one package per model (`qwen3_0_6b`, `llama3_2_1b`,
   `qwen3_5_4b`, `olmoe_1b_7b`, `convnextv2_tiny`, `qwen2_vl_2b`, `dit_s_2`,

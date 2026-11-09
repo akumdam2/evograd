@@ -8,7 +8,7 @@ the framework a user would actually run. Nothing here is declared through
 distort both.
 
 What Level 3 exists to provide is a *reference execution* that later stages can
-observe. The operator suites answer "is this kernel faster than that kernel";
+observe. A synthetic grid answers "is this kernel faster than that kernel";
 only a real training step can answer "does this kernel appear in the model at
 all, at which shapes, and how often".
 

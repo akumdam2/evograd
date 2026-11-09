@@ -1,6 +1,6 @@
 """Summed embedding bags with jagged offsets and dense weight gradients."""
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
 
 def make_inputs(torch, op, workload, device="cuda"):
@@ -24,10 +24,5 @@ op = declare_op(
     output=Active("out", "[B, D]"), parameter_args=("weight",),
     forward_semantics="Sum embedding rows between consecutive offsets; include the final bag through the end of indices. Fixed M entries per bag, L=B*M.",
     backward_semantics="Accumulate a dense weight gradient for repeated indices; integer indices and offsets are inactive.",
-    correctness=tuple(Workload(dims=dict(N=n, D=d, B=b, M=m, L=b*m), dtype=dtype)
-                      for n, d, b, m, dtype in ((17, 8, 3, 1, "float32"),
-                                               (11, 7, 4, 3, "float32"),
-                                               (17, 8, 3, 2, "bfloat16"))),
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
     make_inputs=make_inputs,
 )

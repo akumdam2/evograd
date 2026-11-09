@@ -175,13 +175,13 @@ class Gate1PayloadCaseTests(unittest.TestCase):
         self.manifest = _write_corpus(Path(self.tmp.name), _scale_shift_payloads())
         self.corpus = Corpus.open(self.manifest)
         self.op = F.model_reference(
-            replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),)))
+            replace(F.SCALE_SHIFT, benchmark=(Workload({"R": 4, "C": 8}, "float32"),)))
 
     def tearDown(self):
         self.tmp.cleanup()
 
     def cases(self, split="acceptance"):
-        return payload_cases(self.op, self.op.correctness[0], self.corpus, case_id="case/x",
+        return payload_cases(self.op, self.op.benchmark[0], self.corpus, case_id="case/x",
                              split=split, device="cpu")
 
     def test_cases_are_exactly_the_split_payloads_and_bypass_generation(self):
@@ -225,10 +225,10 @@ class Gate1PayloadCaseTests(unittest.TestCase):
 
     def test_missing_case_or_interface_mismatch_is_a_setup_error(self):
         with self.assertRaises(CorpusError):
-            payload_cases(self.op, self.op.correctness[0], self.corpus, case_id="case/none",
+            payload_cases(self.op, self.op.benchmark[0], self.corpus, case_id="case/none",
                           split="acceptance", device="cpu")
         with self.assertRaises(CorpusError):
-            payload_cases(F.MUL, F.MUL.correctness[0], self.corpus, case_id="case/x",
+            payload_cases(F.MUL, F.MUL.benchmark[0], self.corpus, case_id="case/x",
                           split="acceptance", device="cpu")
 
 
@@ -248,7 +248,7 @@ class SearchFeedbackTests(unittest.TestCase):
         self.manifest = _write_corpus(Path(self.tmp.name), payloads)
         self.corpus = Corpus.open(self.manifest)
         self.op = F.model_reference(
-            replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),)))
+            replace(F.SCALE_SHIFT, benchmark=(Workload({"R": 4, "C": 8}, "float32"),)))
         self.ids = search_payload_ids(self.corpus, "case/x")
 
     def tearDown(self):
@@ -310,14 +310,14 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.manifest = _write_corpus(Path(cls.tmp.name), _scale_shift_payloads())
         cls.corpus = Corpus.open(cls.manifest)
-        cls.op = replace(F.SCALE_SHIFT, correctness=(Workload({"R": 4, "C": 8}, "float32"),))
-        cls.scope = PayloadOperatorScope(cls.op, cls.op.correctness[0], cls.corpus, "case/x", device="cpu")
+        cls.op = replace(F.SCALE_SHIFT, benchmark=(Workload({"R": 4, "C": 8}, "float32"),))
+        cls.scope = PayloadOperatorScope(cls.op, cls.op.benchmark[0], cls.corpus, "case/x", device="cpu")
         from evograd.verification.integrations.gates import payload_samples
 
         cls.samples = payload_samples(cls.scope)
         cls.calibration = gate2.calibrate(cls.scope, patch_set=("operator",),
                                           samples=cls.samples, compile_backend=FAST)
-        cls.generated_scope = OperatorScope(cls.op, cls.op.correctness[0], device="cpu")
+        cls.generated_scope = OperatorScope(cls.op, cls.op.benchmark[0], device="cpu")
 
     @classmethod
     def tearDownClass(cls):
@@ -354,7 +354,7 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         self.assertIn("policy_case_mismatch", {f.code for f in report.all_findings()})
         with tempfile.TemporaryDirectory() as tmp:
             other = Corpus.open(_write_corpus(Path(tmp), _scale_shift_payloads(seed=5)))
-            scope2 = PayloadOperatorScope(self.op, self.op.correctness[0], other, "case/x", device="cpu")
+            scope2 = PayloadOperatorScope(self.op, self.op.benchmark[0], other, "case/x", device="cpu")
             self.assertNotEqual(scope2.identity(), self.scope.identity())
             report = gate2.verify_integration(scope2, scope2.candidate(F.scale_shift_pair()),
                                               policy=self.calibration.policy,

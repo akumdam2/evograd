@@ -100,18 +100,17 @@ def _observed_bindings() -> tuple:
 
 
 def _discover() -> dict[str, OpDecl]:
-    from evograd.benchmark.cases import bind_benchmark_cases
+    from evograd.benchmark.cases import bind_observed_cases
     from evograd.ops import PRIMITIVES
 
     discovered: dict[str, tuple[str, OpDecl]] = {}
     observed = _observed_bindings()
 
-    # 1. Reusable primitives, with their benchmark cases bound on: the
-    #    operator suite's performance grid, then any model's observed cases.
+    # 1. Reusable primitives, with every model's observed cases bound on.
     for name, primitive in PRIMITIVES.items():
         _register(
             discovered,
-            bind_benchmark_cases(primitive, observed),
+            bind_observed_cases(primitive, observed),
             f"evograd.ops.level1.{name}",
         )
 

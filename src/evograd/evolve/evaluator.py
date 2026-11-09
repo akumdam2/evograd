@@ -318,7 +318,7 @@ def check_performance_baseline(op: OpDecl, baseline: str, *, device: str = "cuda
     values = Corpus.open(spec["corpus"]["manifest"]).load(spec["payload_ids"][0], device=device)
     provider = renamed_provider(
         candidate_autograd_provider(op, baseline_candidate_module(op, baseline)), baseline)
-    check_baseline(op, provider, values, op.correctness[0])
+    check_baseline(op, provider, values, op.benchmark[0])
 
 
 def _smoke_benchmark_shapes(

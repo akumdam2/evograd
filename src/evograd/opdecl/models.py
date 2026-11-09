@@ -757,13 +757,12 @@ class MoeModelConfig:
         return {"M": tokens, "K": self.hidden, "N": self.vocab}
 
 
-#: Meta-Llama-3-8B. The operator suite's timed grids (``rmsnorm``, ``swiglu``,
-#: the vocabulary-regime loss kernels, ...) are derived from *these* widths, and
-#: every historical suite report records them under the key ``llama_3_8b``.
-#: The key therefore stays ``llama_3_8b`` even though the top-down workload
-#: moved to :data:`LLAMA_3_2_1B`: relabelling 4096-wide shapes as a 2048-wide
-#: model would make ``Provenance.model`` say something false about every
-#: operator-suite case and about every result already on record.
+#: Meta-Llama-3-8B. ``fused_add_rms_norm``'s default timed grid is derived from
+#: *these* widths, and every historical suite report records them under the key
+#: ``llama_3_8b``. The key therefore stays ``llama_3_8b`` even though the
+#: top-down workload moved to :data:`LLAMA_3_2_1B`: relabelling 4096-wide shapes
+#: as a 2048-wide model would make ``Provenance.model`` say something false about
+#: every such case and about every result already on record.
 LLAMA_3_8B = ModelConfig(
     name="llama_3_8b",
     hidden=4096,
@@ -785,9 +784,7 @@ LLAMA_3_8B = ModelConfig(
 #: and the key its Level-2 tasks cite in their ``Provenance`` -- so it is
 #: registered in :data:`MODELS` under ``llama_3_2_1b`` and ``rederive_dims`` can
 #: check them. :data:`LLAMA_3_8B` above stays at the 8B numbers, under its own
-#: key, because the operator suite's vocabulary-regime cases (``cross_entropy``)
-#: were chosen to represent a *large* LLM's loss shapes, and shrinking them would
-#: change what those cases are for.
+#: key.
 #:
 #: Unlike Meta-Llama-3-8B: ``head_dim`` is 64 rather than 128, and the
 #: embeddings are tied, so there is no second ``vocab x hidden`` matrix.

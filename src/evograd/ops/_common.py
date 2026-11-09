@@ -1,4 +1,4 @@
-"""Shared declaration helpers for the Level-1 operator suite."""
+"""Shared declaration helpers for operator and model task declarations."""
 
 from __future__ import annotations
 
@@ -10,56 +10,17 @@ from evograd.opdecl import Provenance, Workload
 from evograd.opdecl.models import AlphaFoldConfig, ModelConfig
 
 
-STANDARD_TOLERANCES = {
-    "float32": (2e-5, 2e-5),
-    "float16": (5e-2, 5e-2),
-    "bfloat16": (8e-2, 8e-2),
-}
-STANDARD_CORRECTNESS_SHAPES = {
-    "float32": ((8, 64), (17, 128)),
-    "float16": ((32, 256), (64, 512)),
-    "bfloat16": ((32, 256), (64, 512)),
-}
-
-
 def workloads_2d(
     shapes: Iterable[tuple[int, int]],
     dtypes: Iterable[str],
     *,
     row_dim: str = "rows",
     col_dim: str = "cols",
-    tolerances: dict[str, tuple[float, float]] | None = None,
 ) -> tuple[Workload, ...]:
-    tolerances = tolerances or {}
     return tuple(
-        Workload(
-            dims={row_dim: rows, col_dim: cols},
-            dtype=dtype,
-            atol=tolerances.get(dtype, (None, None))[0],
-            rtol=tolerances.get(dtype, (None, None))[1],
-        )
+        Workload(dims={row_dim: rows, col_dim: cols}, dtype=dtype)
         for rows, cols in shapes
         for dtype in dtypes
-    )
-
-
-def standard_correctness(
-    *,
-    dtypes: Iterable[str] = ("float32", "float16", "bfloat16"),
-    row_dim: str = "rows",
-    col_dim: str = "cols",
-    tolerances: dict[str, tuple[float, float]] | None = None,
-) -> tuple[Workload, ...]:
-    tolerances = tolerances or STANDARD_TOLERANCES
-    return tuple(
-        Workload(
-            dims={row_dim: rows, col_dim: cols},
-            dtype=dtype,
-            atol=tolerances[dtype][0],
-            rtol=tolerances[dtype][1],
-        )
-        for dtype in dtypes
-        for rows, cols in STANDARD_CORRECTNESS_SHAPES[dtype]
     )
 
 
@@ -69,7 +30,6 @@ def model_workloads(
     free_sweep: Iterable[dict[str, int]],
     dtypes: Iterable[str],
     *,
-    tolerances: dict[str, tuple[float, float]] | None = None,
     scaled: bool = False,
     note: str = "",
 ) -> tuple[Workload, ...]:
@@ -91,18 +51,14 @@ def model_workloads(
             f"{config.name}: no component {component!r} "
             f"(expected a {component}_dims method)"
         )
-    tolerances = tolerances or {}
     workloads = []
     for free in free_sweep:
         dims = builder(**free)
         for dtype in dtypes:
-            atol, rtol = tolerances.get(dtype, (None, None))
             workloads.append(
                 Workload(
                     dims=dims,
                     dtype=dtype,
-                    atol=atol,
-                    rtol=rtol,
                     provenance=Provenance(
                         model=config.name,
                         component=component,
@@ -122,12 +78,8 @@ def fixed_shape_suites(
 
     Variable-shape evaluation asks for one deployable implementation across a
     whole grid; fixed-shape evaluation lets a candidate specialize hard for one
-    configuration. The second mode needs a suite containing exactly one case,
-    and ``EVOGRAD_BENCHMARK_SUITE`` already routes any named suite through
-    evolution, so nothing downstream changes.
-
-    This generalizes what ``layernorm`` did by hand with ``tb_i12``..``tb_i27``:
-    those were bespoke names for the same idea, usable by exactly one operator.
+    configuration, which needs a suite containing exactly one case. Each suite
+    is selectable by name (``OpDecl.benchmark_workloads(suite=...)``).
     """
     suites: dict[str, tuple[Workload, ...]] = {}
     for workload in workloads:

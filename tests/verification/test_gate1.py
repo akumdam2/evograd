@@ -93,7 +93,7 @@ class TestPairContract(unittest.TestCase):
         """Finite hardening: ``allclose`` treats inf == inf as close, so an
         allclose comparator accepts this output. The core calls the reference
         invalid and does not pass."""
-        wl = SCALE_SHIFT.correctness[0]
+        wl = SCALE_SHIFT.benchmark[0]
         values = make_case_inputs(SCALE_SHIFT, wl, device=CPU)
         values["b"] = values["b"].clone()
         values["b"][0] = float("inf")
@@ -115,7 +115,7 @@ class TestPairContract(unittest.TestCase):
         with self.assertRaises(TypeError):
             gate1.verify_pair(SCALE_SHIFT, F.scale_shift_pair(), device=CPU)
         with self.assertRaises(TypeError):
-            gate1.Gate1Case("no_values", SCALE_SHIFT.correctness[0])
+            gate1.Gate1Case("no_values", SCALE_SHIFT.benchmark[0])
 
     def test_a_declaration_without_a_model_reference_is_refused(self):
         cases = F.supplied_cases(F.SCALE_SHIFT)
@@ -145,7 +145,7 @@ class TestReferenceAndTolerance(unittest.TestCase):
         # A candidate that computes in float32 and rounds once equals the
         # float32-then-cast oracle; the same-dtype oracle rounds x + 1000 to
         # bfloat16 and loses x.
-        values = make_case_inputs(F.CANCEL_F32_REF, F.CANCEL_F32_REF.correctness[0], device=CPU)
+        values = make_case_inputs(F.CANCEL_F32_REF, F.CANCEL_F32_REF.benchmark[0], device=CPU)
         promoted, _ = oracle(F.CANCEL_F32_REF, values)
         same, _ = oracle(F.CANCEL_SAME_DTYPE, values)
         candidate, _ = F.cancel_f32_pair().forward_with_saved(values["x"])
@@ -154,7 +154,7 @@ class TestReferenceAndTolerance(unittest.TestCase):
         self.assertFalse(torch.equal(same, candidate))
 
     def test_an_error_inside_the_dtype_default_passes(self):
-        wl = SPLIT.correctness[0]
+        wl = SPLIT.benchmark[0]
         values = make_case_inputs(SPLIT, wl, device=CPU)
         _, grads = oracle(SPLIT, values)
         atol, rtol = 1e-5, 1.3e-6                                       # float32 defaults
@@ -208,7 +208,7 @@ class TestEntries(unittest.TestCase):
 
     def test_a_probe_with_an_invalid_reference_is_skipped_not_passed(self):
         op = F.model_reference(F.SUMSQ_SAME_DTYPE)
-        wl = op.correctness[0]
+        wl = op.benchmark[0]
         values = make_case_inputs(op, wl, device=CPU)
         values["x"] = torch.full_like(values["x"], 1e30)            # sum of squares overflows
         probe = gate1.Gate1Case("stress", wl, values, gate1.PROBE_CASE)
@@ -217,7 +217,7 @@ class TestEntries(unittest.TestCase):
         self.assertEqual(report.status, INCOMPLETE)                # nothing decisive ran
 
     def test_supplied_inputs_must_match_the_declaration(self):
-        wl = SCALE_SHIFT.correctness[0]
+        wl = SCALE_SHIFT.benchmark[0]
         values = make_case_inputs(SCALE_SHIFT, wl, device=CPU)
         values["x"] = values["x"][:, :-1]
         report = gate1.verify_pair(SCALE_SHIFT, F.scale_shift_pair(), device=CPU,

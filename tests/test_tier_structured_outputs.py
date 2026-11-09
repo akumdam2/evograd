@@ -15,6 +15,7 @@ exercised separately.
 from __future__ import annotations
 
 import unittest
+from tests._small_cases import SMALL
 
 try:  # torch is absent on some dev boxes; the whole file needs it
     import torch
@@ -52,9 +53,9 @@ MULTI_OUTPUT = ("qwen3_qkv_norm_rope", "fused_add_rms_norm")
 
 
 def _case(name):
-    """An operator, its smallest declared correctness shape, and CPU inputs."""
+    """An operator, a CPU-sized case of it, and CPU inputs."""
     op = get_task(name)
-    workload = op.correctness[0]
+    workload = SMALL[name][0]
     return op, workload, build_parameters(op, workload, device="cpu")
 
 
@@ -398,7 +399,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
         for name in ("rope", "cross_entropy"):
             with self.subTest(op=name):
                 op = get_task(name)
-                workload = op.correctness[0]
+                workload = SMALL[name][0]
                 activations, dy, values = integrated.case_tensors(
                     op, workload, device="cpu"
                 )
@@ -411,7 +412,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
         import evograd.evaluation.tier2.integrated as integrated
 
         op = get_task("fused_add_rms_norm")
-        workload = op.correctness[0]
+        workload = SMALL["fused_add_rms_norm"][0]
         activations, dy, values = integrated.case_tensors(op, workload, device="cpu")
         self.assertIsInstance(dy, tuple)
         self.assertEqual(len(dy), 2)
@@ -428,7 +429,7 @@ class TestIntegratedStepUsesTheSharedAdapter(unittest.TestCase):
         from evograd.ops.level1.swiglu import forward_ref  # noqa: F401
 
         op = get_task("swiglu")
-        workload = op.correctness[0]
+        workload = SMALL["swiglu"][0]
         activations, dy, values = integrated.case_tensors(op, workload, device="cpu")
 
         class _Pair:

@@ -76,8 +76,7 @@ def _rotate_half(x: torch.Tensor) -> torch.Tensor:
 
 
 # It does: `llama3_qkv_rope_forward_production` below is the spelling
-# `LlamaAttention.forward` executes, and `tests/llama3/test_levels.py`
-# runs both over the correctness grid and requires them to agree exactly.
+# `LlamaAttention.forward` executes.
 def llama3_qkv_rope_forward_ref(x, q_weight, k_weight, v_weight, cos, sin):
     head_dim = _check(x, q_weight, k_weight, v_weight, cos, sin)
     shape = (*x.shape[:-1], -1, head_dim)

@@ -13,9 +13,13 @@ import unittest
 
 import torch
 
+from evograd.opdecl import Workload
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import oracle, resolve_forward, resolve_runtime_forward
 from evograd.benchmark import TASKS, get_task
+from tests._small_cases import SMALL
+
+SMALL_LINEAR = SMALL["linear_no_bias"][0]
 
 try:
     from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
@@ -42,7 +46,7 @@ class TestBiaslessLinear(unittest.TestCase):
 
     def test_inputs_carry_no_bias_and_the_weight_is_out_by_in(self):
         op = get_task("linear_no_bias")
-        for workload in op.correctness + op.benchmark_workloads("qwen3_0_6b_observed")[:1]:
+        for workload in (SMALL_LINEAR, *op.benchmark_workloads("qwen3_0_6b_observed")[:1]):
             with self.subTest(dims=workload.dims):
                 values = make_case_inputs(op, workload, device="cpu")
                 self.assertNotIn("bias", values)
@@ -91,7 +95,7 @@ class TestBiaslessLinear(unittest.TestCase):
 
     def test_backward_returns_two_gradients(self):
         op = get_task("linear_no_bias")
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        values = make_case_inputs(op, SMALL_LINEAR, device="cpu")
         y, grads = oracle(op, values)
         self.assertEqual(sorted(grads), ["dweight", "dx"])
         self.assertEqual(list(y.shape), [64, 64])
@@ -124,19 +128,11 @@ class TestNoQwenBiasContract(unittest.TestCase):
 
     def test_the_biased_linear_task_has_no_qwen_workloads_at_all(self):
         op = get_task("linear")
-        for group in (op.correctness, op.coverage, op.benchmark):
+        for group in (op.coverage, op.benchmark):
             for workload in group:
                 if workload.provenance is not None:
                     self.assertNotEqual(workload.provenance.model, "qwen3_0_6b")
         self.assertNotIn("qwen3_0_6b_observed", op.benchmark_suites)
-
-    def test_the_biased_grid_no_longer_claims_to_model_llama_faithfully(self):
-        op = get_task("linear")
-        for workload in op.benchmark:
-            self.assertTrue(workload.provenance.scaled)
-            self.assertIn("no projection biases", workload.provenance.note)
-            self.assertIn("linear_no_bias", workload.provenance.note)
-
 
 class TestRopeRuntimeBaseline(unittest.TestCase):
     def test_the_task_declares_both_spellings(self):
@@ -178,7 +174,7 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
         from evograd.ops.level1.rope.forward_ref import rope_forward_ref, rope_runtime_ref
 
         op = get_task("rope")
-        workload = next(w for w in op.correctness if w.dtype == "bfloat16")
+        workload = Workload(dims=dict(B=1, n_heads=4, T=16, head_dim=64), dtype="bfloat16")
         values = make_case_inputs(op, workload, device="cpu")
         a = rope_forward_ref(values["x"], values["cos"], values["sin"]).float()
         b = rope_runtime_ref(values["x"], values["cos"], values["sin"]).float()
@@ -189,7 +185,8 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
         from evograd.ops.level1.rope.forward_ref import rope_runtime_ref
 
         op = get_task("rope")
-        for workload in (op.benchmark[0], op.benchmark_workloads("qwen3_0_6b_observed")[0]):
+        contiguous = Workload(dims=dict(B=2, n_heads=8, T=128, head_dim=128), dtype="bfloat16")
+        for workload in (contiguous, op.benchmark_workloads("qwen3_0_6b_observed")[0]):
             values = make_case_inputs(op, workload, device="cpu")
             out = rope_runtime_ref(values["x"], values["cos"], values["sin"])
             with self.subTest(dims=workload.dims):

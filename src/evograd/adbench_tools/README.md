@@ -270,7 +270,7 @@ Other limits:
 | Per-evaluation timeout | 900 s (GEPA, the CLI, the coding agents' `evaluate.py`), 1200 s (KernelAgent test) |
 | Per-agent wall time in `run_all.sh` | `TIME_LIMIT`, default 21600 s (6 h); the coding agents also stop at `--time-limit` (default 6 h) |
 | Smoke run (`run_openai.sh`) | budget 2 per agent; KernelAgent 8 with `--skip-optimization`; 1 h each |
-| Task configuration | The operator's first timed benchmark case (`--case benchmark`), or the first correctness case if none is declared |
+| Task configuration | The model's observed case the pack is built for |
 
 ---
 
@@ -446,13 +446,10 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
   the case in each calibration order (101, 202), with the envelope operator
   Gate 2's calibration gives the case; the acceptance calls (303, 404) stay
   held out. `bench.py tasks` needs the model's `--corpus` and a GPU for it.
-  `declared_tolerances` (operator packs, and a model pack built with
-  `--search-correctness declared_tolerances`) keeps the declaration's
-  tolerances on generated inputs. The evaluator sets
-  `EVOGRAD_SEARCH_CORRECTNESS` from the pack alone, and a driver refuses to
-  start when the pack's corpus or payloads are missing; there is no fallback
-  between rules. To roll the rule back, rebuild every pack with the other one
-  before any search, never during a trial.
+  A pack with any other rule (such as the retired `declared_tolerances`) is
+  refused. The evaluator sets `EVOGRAD_SEARCH_CORRECTNESS` from the pack alone,
+  and a driver refuses to start when the pack's corpus or payloads are missing;
+  there is no fallback.
 - `EvalRecord.feedback()` renders the verdict in the format OpenEvolve shows
   its model. Every agent gets this text.
 - `agent_score()` is `combined_score` if correct, else 0, for optimizers that

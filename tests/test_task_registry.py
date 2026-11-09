@@ -221,12 +221,6 @@ class TestObservedCaseBinding(unittest.TestCase):
             with self.subTest(op=name):
                 self.assertNotIn("qwen3_0_6b_observed", PRIMITIVES[name].benchmark_suites)
 
-    def test_a_suite_mirroring_coverage_follows_it(self):
-        """``rmsnorm`` serves its coverage under a name as well as a field."""
-        task = TASKS["rmsnorm"]
-        self.assertEqual(task.benchmark_suites["coverage"], task.coverage)
-
-
 class TestQwenLevelTwoInvariance(unittest.TestCase):
     """Site-to-task mapping, output names and gradient order are contracts."""
 
@@ -333,15 +327,9 @@ class TestQwen3_5LevelTwoInvariance(unittest.TestCase):
                 self.assertEqual(TASKS[task].output_names, names)
                 self.assertEqual(TASKS[task].grad_names(), self.EXPECTED_GRADS[task])
 
-    def test_every_task_is_calibrated_and_resolves_from_its_site(self):
-        import importlib
-
+    def test_every_task_resolves_from_its_site(self):
         for site, task in qwen3_5_manifest.SITE_TASKS.items():
             with self.subTest(site=site):
-                module = importlib.import_module(
-                    f"evograd.benchmark.topdown.qwen3_5_4b.levels.level2.{site}.task")
-                self.assertIs(module.PROVISIONAL_TOLERANCES, False)
-                self.assertIs(module.CALIBRATED, True)
                 self.assertTrue(TASKS[task].forward.startswith(
                     f"evograd.benchmark.topdown.qwen3_5_4b.levels.level2.{site}.reference:"))
                 self.assertIn("qwen3_5_4b_observed", TASKS[task].benchmark_suites)

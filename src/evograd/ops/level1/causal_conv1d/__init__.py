@@ -7,25 +7,11 @@ width, any sequence length.
 
 import math
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 from evograd.ops._common import dtype_for, make_pair_baseline
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "C", "T", "K")
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, C=c, T=t, K=k), dtype=dtype)
-    for b, c, t, k, dtype in (
-        (1, 8, 16, 4, "float32"),
-        (2, 16, 33, 4, "float32"),
-        # A kernel width other than the model's, so a hard-coded 4 fails.
-        (1, 12, 20, 2, "float32"),
-        (2, 32, 64, 4, "bfloat16"),
-        (1, 24, 70, 4, "bfloat16"),
-    )
-)
 
 
 def make_causal_conv1d_inputs(torch, op, workload, device="cuda"):
@@ -39,7 +25,6 @@ def make_causal_conv1d_inputs(torch, op, workload, device="cuda"):
     ).to(dtype)
     dy = torch.randn((dims["B"], dims["C"], dims["T"]), device=device, dtype=dtype)
     return {"x": x, "weight": weight, "silu": 1, "dy": dy}
-
 
 
 def _fla_factory():
@@ -63,39 +48,6 @@ def _fla_factory():
         return dx.transpose(1, 2), dweight
 
     return forward_with_saved, backward_from_saved
-
-
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261013_l1calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   dweight                 0     0.49      8.81     1     1     3     1.77
-#:   dx                0.00117    0.555     0.954     1     1   1.5      1.7
-#:   y                0.000111        0         0     1     1     0      nan
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 2, "C": 32, "K": 4, "T": 64},
-    reduction_dims={"dweight": ('B', 'T')},
-    result_dims={"dweight": ('C', 'K'), "dx": ('B', 'C', 'T'), "y": ('B', 'C', 'T')},
-    gain=0.0,
-    result_gain={"dweight": 3, "dx": 1.5},
-    dtype_multipliers={},
-)
-# --- end calibrated tolerances ---
 
 
 op = declare_op(
@@ -135,10 +87,6 @@ op = declare_op(
         "transposing a [B, T, C] projection. weight is the depthwise kernel "
         "with its singleton input-channel axis removed."
     ),
-    correctness=_CORRECTNESS,
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     performance_baselines={
         "fla": make_pair_baseline(_fla_factory, ("x", "weight", "silu"), sidecar="fla")},
     make_inputs=make_causal_conv1d_inputs,

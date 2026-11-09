@@ -157,7 +157,7 @@ def _ops(argv: list[str]) -> int:
         level = f"L{op.level}" if op.level else "-"
         print(
             f"{name:26s} {level:3s} {op.family or '-':12s} "
-            f"correctness: {len(op.correctness):2d} benchmark: {len(op.benchmark):3d}"
+            f"coverage: {len(op.coverage):3d} benchmark: {len(op.benchmark):3d}"
         )
         print(f"{'':26s}     grads: {', '.join(op.grad_names())}")
     return 0

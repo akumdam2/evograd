@@ -98,8 +98,7 @@ python -m evograd.benchmark.topdown.qwen2_vl_2b.harvest.harvest \
 ```
 
 Only a canonical run can publish a tracked snapshot. Before that, the model
-adapters and reduced correctness grids are available, but observed benchmark
-suites are empty. Site verification still uses explicitly labelled
+adapters are available, but observed benchmark suites are empty. Site verification still uses explicitly labelled
 configuration-derived shapes; changing a workload cannot silently reuse another
 configuration’s verification cases. A fresh process loads the new snapshots and binds those
 cases to each task under `<model>_observed`. Harvest fails on missing/nonfinite
@@ -170,6 +169,5 @@ spatial/channel configuration; repeated layers within that stage share it.
 Reduced CPU tests cover both full models, visual/merger gradients, tied weights,
 structural identity, pair binding, stride replay and harvest coverage.
 Canonical CUDA/BF16 harvests, real-data runs and timing
-measurements have not been performed on the development Mac. The default
-operator tolerances are provisional until GPU qualification. Do not present
+measurements have not been performed on the development Mac. Do not present
 CPU fixtures or uncalibrated timing as paper results.

@@ -15,6 +15,7 @@ import torch
 
 from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot as snapshot_module
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import COMPOSES_INTO, mapping
+from evograd.opdecl import Workload
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.models import QWEN3_0_6B, rederive_dims
 from evograd.benchmark import TASKS as REGISTERED_TASKS, get_task
@@ -80,10 +81,6 @@ class TestMappingShape(unittest.TestCase):
                 self.assertFalse(config["attrs"]["bias"])
 
     def test_the_biased_task_labels_itself_an_ablation(self):
-        biased = get_task("linear")
-        self.assertTrue(all(w.provenance.scaled for w in biased.benchmark))
-        for workload in biased.benchmark:
-            self.assertIn("no projection biases", workload.provenance.note)
         import evograd.ops.level1.linear as linear_module
 
         # `op.__doc__` is OpDecl's; the claim lives in the module that declares it.
@@ -206,34 +203,8 @@ class TestProvenance(unittest.TestCase):
         self.assertEqual(payload["snapshot_hash"], snapshot_module.snapshot_hash(payload))
 
 
-class TestDefaultsPreserved(unittest.TestCase):
-    """The Qwen cases are added; the Llama-derived defaults are not replaced."""
-
-    # The default grids are derived from Meta-Llama-3-8B's widths (hidden 4096,
-    # vocab 128256) and every historical suite report records them under that
-    # key. The top-down workload moved to Llama-3.2-1B; these grids did not.
-    def test_default_benchmark_grids_stay_llama_derived(self):
-        for task in ("linear_no_bias", "rmsnorm", "rope", "swiglu", "cross_entropy"):
-            with self.subTest(task=task):
-                models = {w.provenance.model for w in get_task(task).benchmark}
-                self.assertEqual(models, {"llama_3_8b"})
-
-    def test_the_new_task_also_has_a_llama_default(self):
-        models = {w.provenance.model for w in get_task("causal_gqa_attention").benchmark}
-        self.assertEqual(models, {"llama_3_8b"})
-
-    def test_legacy_ablation_suites_survive(self):
-        self.assertEqual(len(get_task("swiglu").benchmark_workloads("legacy")), 42)
-        self.assertEqual(len(get_task("cross_entropy").benchmark_workloads("legacy")), 42)
-
-    def test_regime_suites_still_partition_the_default_grid(self):
-        for task in ("rmsnorm", "rope", "swiglu", "cross_entropy", "causal_gqa_attention"):
-            with self.subTest(task=task):
-                op = get_task(task)
-                full = op.benchmark_workloads("full")
-                small = op.benchmark_workloads("small")
-                large = op.benchmark_workloads("large")
-                self.assertEqual(len(full), len(small) + len(large))
+class TestObservedCoverage(unittest.TestCase):
+    """The Qwen cases join each task's coverage."""
 
     def test_the_observed_cases_are_in_coverage(self):
         for task in TASKS:
@@ -286,20 +257,11 @@ class TestObservedLayout(unittest.TestCase):
                 self.assertEqual(list(values[name].shape), entry["shape"])
                 self.assertEqual(list(values[name].stride()), entry["stride"])
 
-    def test_the_llama_grids_keep_their_contiguous_layout(self):
-        """Changing them would make old numbers incomparable."""
-        for task in ("rope", "causal_gqa_attention"):
-            op = get_task(task)
-            values = make_case_inputs(op, op.benchmark[0], device="cpu")
-            name = "x" if task == "rope" else "q"
-            with self.subTest(task=task):
-                self.assertTrue(values[name].is_contiguous())
-
     def test_rope_uses_the_model_s_own_rotary_base(self):
         """Llama-3's 500000 and Qwen3's 1000000 are different functions."""
         op = get_task("rope")
         qwen = make_case_inputs(op, op.benchmark_workloads("qwen3_0_6b_observed")[0], device="cpu")
-        llama = make_case_inputs(op, op.benchmark[0], device="cpu")
+        llama = make_case_inputs(op, op.benchmark_workloads("llama_3_2_1b_observed")[0], device="cpu")
         # Column 0 is theta^0 = 1 for every base and column -1 is the slowest
         # frequency, where both angles are near zero. Column 1 at a token far
         # enough along separates 500000 from 1000000 unmistakably.
@@ -370,7 +332,8 @@ class TestCausalGqaAttentionTask(unittest.TestCase):
         from evograd.opdecl.oracle import oracle
 
         op = get_task("causal_gqa_attention")
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        workload = Workload(dims=dict(B=1, HQ=4, HK=2, T=16, D=16), dtype="float32")
+        values = make_case_inputs(op, workload, device="cpu")
         out, grads = oracle(op, values)
         self.assertEqual(sorted(grads), ["dk", "dq", "dv"])
         self.assertEqual(list(out.shape), [1, 4, 16, 16])

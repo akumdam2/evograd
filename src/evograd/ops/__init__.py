@@ -6,17 +6,14 @@ input generator and reviewed baselines live in that same package. No central
 list is edited when a primitive is added.
 
 **This package owns mathematics, not benchmarks.** A primitive declares the
-contract an implementation must satisfy, a reference that defines it, the
-generic cases that prove an implementation correct, and how to build inputs for
-them. It declares no timed grid, no benchmark coverage, no named suite, no
+contract an implementation must satisfy, a reference that defines it, and how
+to build inputs for it. It declares no timed grid, no benchmark coverage, no named suite, no
 shape-regime split and no case weighting: those say which shapes are worth
 *measuring* and how much each one counts, which is a benchmark decision even
 when the shapes are this primitive's own.
 
 :mod:`evograd.benchmark` attaches them when it builds the task registry --
-the suite's performance grids from
-:mod:`evograd.benchmark.operator_suite.cases`, a model's observed cases from
-its top-down manifest -- returning a new declaration rather than editing the
+each model's observed cases, from its top-down manifest -- returning a new declaration rather than editing the
 one served here. That is why nothing in this package imports a workload, a
 frozen snapshot, an evaluation policy or the benchmark itself, why importing it
 in a fresh interpreter loads none of them, and why the executable task registry

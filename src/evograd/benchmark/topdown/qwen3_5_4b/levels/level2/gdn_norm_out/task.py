@@ -5,28 +5,16 @@ head, scaled, gated by ``silu(z)`` and projected back to the residual width
 (4096 -> 2560 in Qwen3.5-4B).
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 from evograd.ops._common import make_pair_baseline
 
 from .. import library
-from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
+from ..task_tools import OBSERVED_SUITE, observed, seed_of
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "T", "HV", "D", "VD", "H")
 
 _BENCHMARK = observed("gdn_norm_out")
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, T=t, HV=hv, D=d, VD=hv * d, H=h), dtype=dtype,
-             provenance=shrunk("gdn_norm_out"))
-    for b, t, hv, d, h, dtype in (
-        (1, 12, 2, 8, 32, "float32"),
-        (2, 20, 4, 16, 64, "float32"),
-        (2, 24, 4, 16, 64, "bfloat16"),
-    )
-)
 
 
 #: ``o`` is drawn at a per-token scale, log-uniform over 10**[-5, 0]. The captured
@@ -63,41 +51,6 @@ def make_gdn_norm_out_inputs(torch, op, workload, device="cuda"):
     return {"o": o, "z": z, "w_norm": w_norm, "w_out": w_out, "eps": EPS, "dy": dy}
 
 
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261011_calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on captured, correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   do                      0    0.103     0.108     1     1     0     9.27
-#:   dw_norm                 0    0.192      8.83     1     1     1     2.77
-#:   dw_out                  0     0.49      5.24     1     1     1     1.74
-#:   dz                      0        0  6.79e-05     1     1     0 1.47e+04
-#:   y                       0     0.25      0.41     1     1     0     2.44
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 2, "D": 16, "H": 64, "HV": 4, "T": 24, "VD": 64},
-    reduction_dims={"dw_norm": ('B', 'HV', 'T'), "dw_out": ('B', 'T')},
-    result_dims={"do": ('B', 'T', 'HV', 'D'), "dw_norm": ('D',), "dw_out": ('H', 'VD'), "dz": ('B', 'T', 'HV', 'D'), "y": ('B', 'T', 'H')},
-    gain=0.0,
-    result_gain={"dw_norm": 1, "dw_out": 1},
-    dtype_multipliers={},
-)
-# --- end calibrated tolerances ---
-
-
 op = declare_op(
     name="qwen3_5_gdn_norm_out",
     level=2,
@@ -131,13 +84,9 @@ op = declare_op(
         "dh * s * xhat, and with gn = dh * s * w_norm, do = r * (gn - xhat * "
         "mean(gn * xhat, -1)). Accumulate in float32; each gradient in its input's dtype."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     performance_baselines={"fla": make_pair_baseline(
         library.fla_gdn_norm_out, ("o", "z", "w_norm", "w_out", "eps"), ("w_out",), sidecar="fla")},
     make_inputs=make_gdn_norm_out_inputs,

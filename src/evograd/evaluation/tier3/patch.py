@@ -53,9 +53,9 @@ class Site:
 
     ``op`` names the declaration a candidate for this site must implement, and
     ``default`` is the production spelling the unpatched model runs. ``preflight``
-    carries model-derived correctness workloads the operator's own declared grid
-    does not contain -- the shapes this model actually presents, which is where
-    a kernel that is correct at 32 rows and wrong at 4096 gets caught.
+    carries the model-derived workloads -- the shapes this model actually
+    presents, which is where a kernel that is correct at 32 rows and wrong at
+    4096 gets caught.
     """
 
     name: str

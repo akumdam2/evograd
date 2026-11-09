@@ -6,6 +6,7 @@ from evograd.benchmark import TASKS
 from evograd.opdecl.inputs import make_case_inputs
 from evograd.opdecl.oracle import resolve_runtime_forward
 from evograd.evaluation.tier3.patch import eager_pair_for, kernel_from_pair
+from tests._small_cases import SMALL
 
 
 @pytest.mark.parametrize(
@@ -22,7 +23,7 @@ from evograd.evaluation.tier3.patch import eager_pair_for, kernel_from_pair
 )
 def test_pair_binding_all_gradients(name):
     op = TASKS[name]
-    for case in op.correctness:
+    for case in SMALL[name]:
         if case.dtype != "float32":
             continue
         values = make_case_inputs(op, case, device="cpu")

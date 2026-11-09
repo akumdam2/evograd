@@ -25,8 +25,10 @@ from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.referen
     fused_add_rms_norm_forward_ref,
     fused_add_rms_norm_runtime_ref,
 )
+from tests._small_cases import SMALL as SMALL_CASES
 
 OP = get_task("fused_add_rms_norm")
+SMALL = SMALL_CASES["fused_add_rms_norm"]
 
 
 class _Module:
@@ -109,7 +111,7 @@ class TestContract(unittest.TestCase):
 
 class TestInputsAndOracle(unittest.TestCase):
     def test_two_independent_upstream_gradients_are_generated(self):
-        values = make_case_inputs(OP, OP.correctness[0], device="cpu")
+        values = make_case_inputs(OP, SMALL[0], device="cpu")
         self.assertIn("dout", values)
         self.assertIn("dsummed", values)
         self.assertFalse(torch.allclose(values["dout"], values["dsummed"]))
@@ -119,7 +121,7 @@ class TestInputsAndOracle(unittest.TestCase):
         self.assertEqual(len(grads), 2)
 
     def test_the_oracle_returns_both_outputs(self):
-        values = make_case_inputs(OP, OP.correctness[0], device="cpu")
+        values = make_case_inputs(OP, SMALL[0], device="cpu")
         outputs, grads = oracle(OP, values)
         self.assertIsInstance(outputs, tuple)
         self.assertEqual(len(outputs), 2)
@@ -127,7 +129,7 @@ class TestInputsAndOracle(unittest.TestCase):
 
     def test_dsummed_reaches_x_and_r_but_not_weight(self):
         """The whole point of the second output path."""
-        values = make_case_inputs(OP, OP.correctness[0], device="cpu")
+        values = make_case_inputs(OP, SMALL[0], device="cpu")
         _out, full = oracle(OP, values)
         values["dsummed"] = torch.zeros_like(values["dsummed"])
         _out, without = oracle(OP, values)
@@ -136,7 +138,7 @@ class TestInputsAndOracle(unittest.TestCase):
         self.assertTrue(torch.allclose(full["dweight"], without["dweight"]))
 
     def test_dx_and_dr_are_the_same_gradient(self):
-        values = make_case_inputs(OP, OP.correctness[0], device="cpu")
+        values = make_case_inputs(OP, SMALL[0], device="cpu")
         _out, grads = oracle(OP, values)
         self.assertTrue(torch.allclose(grads["dx"], grads["dr"], atol=0, rtol=0))
 
@@ -148,7 +150,7 @@ def gate1_report(module):
 
     op = replace(OP, reference_contract="test-fused-add-rms-norm/1", runtime_forward=None)
     cases = [gate1.Gate1Case(f"case{i}", w, make_case_inputs(op, w, device="cpu"))
-             for i, w in enumerate(op.correctness)]
+             for i, w in enumerate(SMALL)]
     return gate1.verify_pair(op, module, cases=cases, device="cpu")
 
 

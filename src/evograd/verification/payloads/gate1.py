@@ -154,7 +154,7 @@ def search_correctness(op: OpDecl, module, spec: Mapping[str, Any], *,
     if corpus.corpus_id != spec["corpus"]["corpus_id"]:
         raise CorpusError(f"{spec['corpus']['manifest']} is {corpus.corpus_id}, "
                           f"not {spec['corpus']['corpus_id']}")
-    cases = payload_cases(op, op.correctness[0], corpus, case_id=spec["case_id"],
+    cases = payload_cases(op, op.benchmark[0], corpus, case_id=spec["case_id"],
                           split="calibration", device=device, payload_ids=spec["payload_ids"])
     report = gate1.verify_pair(op, module, cases=cases, device=device,
                                envelope=spec.get("envelope") or {})

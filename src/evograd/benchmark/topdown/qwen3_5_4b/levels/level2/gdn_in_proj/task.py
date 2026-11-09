@@ -8,12 +8,10 @@ over q|k|v, the gates, and the repeat of q and k up to the value-head count.
 deinterleave.
 """
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 
-from ..task_tools import OBSERVED_SUITE, PROVISIONAL, head_major, observed, seed_of, shrunk
+from ..task_tools import OBSERVED_SUITE, head_major, observed, seed_of
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "T", "H", "C", "VD", "HV", "K", "D")
 
@@ -33,28 +31,6 @@ def model_strides(dims):
 
 
 _BENCHMARK = observed("gdn_in_proj", strides=model_strides)
-
-
-def _dims(batch, tokens, hidden, hk, hv, d, taps=4):
-    return {"B": batch, "T": tokens, "H": hidden, "C": 2 * hk * d + hv * d, "VD": hv * d,
-            "HV": hv, "K": taps, "D": d}
-
-
-_CORRECTNESS = tuple(
-    Workload(dims=_dims(*shape), dtype=dtype, provenance=shrunk("gdn_in_proj"))
-    for shape, dtype in (
-        ((1, 12, 32, 2, 4, 8), "float32"),
-        ((2, 20, 64, 2, 4, 16), "float32"),
-        # HV == HK: no repeat; a kernel that always repeats fails here.
-        ((1, 16, 32, 2, 2, 8), "float32"),
-        ((2, 24, 64, 2, 4, 16), "bfloat16"),
-    )
-) + (
-    # The model's gradient layouts, so a backward that assumed contiguous
-    # upstream gradients is caught on the grid.
-    Workload(dims=_dims(2, 20, 64, 2, 4, 16), dtype="float32",
-             provenance=shrunk("gdn_in_proj", model_strides(_dims(2, 20, 64, 2, 4, 16)))),
-)
 
 
 def make_gdn_in_proj_inputs(torch, op, workload, device="cuda"):
@@ -86,50 +62,6 @@ def make_gdn_in_proj_inputs(torch, op, workload, device="cuda"):
         "dbeta": randn(batch, tokens, hv),
         "dg": randn(batch, tokens, hv, out=torch.float32),
     }
-
-
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261011_calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on captured, correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   beta                    0        0         0     1     1     0      nan
-#:   dA_log                  0        0  5.28e-07     1     1     0 1.89e+06
-#:   dconv_w           0.00776     1.86      19.4     1   2.8   1.5     1.76
-#:   ddt_bias                0        0  2.52e-07     1     1     0 3.96e+06
-#:   dw_a                    0      5.5       117     1   8.3     3     1.84
-#:   dw_b                    0    0.482      6.67     1     1   1.5     2.02
-#:   dw_qkv             0.0663     2.83      45.9     1   4.3     2     1.58
-#:   dw_z                    0        0    0.0088     1     1     0      114
-#:   dx                 0.0107    0.825      1.62     1   1.3     3     1.74
-#:   g                       0        0         0     1     1     0      nan
-#:   k                0.000623   0.0925     0.329     1     1     0     3.04
-#:   q                0.000852    0.108     0.345     1     1     0     2.89
-#:   v                4.29e-05    0.179     0.346     1     1     0     2.89
-#:   z                       0        0  0.000259     1     1     0 3.86e+03
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 2, "C": 128, "D": 16, "H": 64, "HV": 4, "K": 4, "T": 24, "VD": 64},
-    reduction_dims={"dA_log": ('B', 'T'), "dconv_w": ('B', 'T'), "ddt_bias": ('B', 'T'), "dw_a": ('B', 'T'), "dw_b": ('B', 'T'), "dw_qkv": ('B', 'T'), "dw_z": ('B', 'T')},
-    result_dims={"beta": ('B', 'T', 'HV'), "dA_log": ('HV',), "dconv_w": ('C', 'K'), "ddt_bias": ('HV',), "dw_a": ('HV', 'H'), "dw_b": ('HV', 'H'), "dw_qkv": ('C', 'H'), "dw_z": ('VD', 'H'), "dx": ('B', 'T', 'H'), "g": ('B', 'T', 'HV'), "k": ('B', 'T', 'HV', 'D'), "q": ('B', 'T', 'HV', 'D'), "v": ('B', 'T', 'HV', 'D'), "z": ('B', 'T', 'HV', 'D')},
-    gain=0.0,
-    result_gain={"dconv_w": 1.5, "dw_a": 3, "dw_b": 1.5, "dw_qkv": 2, "dx": 3},
-    dtype_multipliers={"bfloat16": {"dconv_w": 2.8, "dw_a": 8.3, "dw_qkv": 4.3, "dx": 1.3}},
-)
-# --- end calibrated tolerances ---
 
 
 op = declare_op(
@@ -190,13 +122,9 @@ op = declare_op(
         "own order. Outputs keep the model's layouts: q, k, z, beta, g contiguous; v "
         "is a view of the transposed [B, C, T] convolution output. Dk == Dv == D."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     memory_inputs=("x", "w_qkv", "w_z", "w_b", "w_a", "conv_w"),
     make_inputs=make_gdn_in_proj_inputs,
 )

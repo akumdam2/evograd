@@ -7,21 +7,8 @@ same delta-rule kernel; a fused kernel would produce them together.
 
 import math
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 from evograd.ops._common import dtype_for
-
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(rows=rows, heads=heads), dtype=dtype)
-    for rows, heads, dtype in (
-        (16, 4, "float32"),
-        (33, 8, "float32"),
-        (64, 32, "bfloat16"),
-        (130, 8, "bfloat16"),
-    )
-)
 
 
 def make_gdn_gating_inputs(torch, op, workload, device="cuda"):
@@ -41,43 +28,6 @@ def make_gdn_gating_inputs(torch, op, workload, device="cuda"):
         "dg": torch.randn((rows, heads), device=device, dtype=torch.float32),
         "dbeta": torch.randn((rows, heads), device=device, dtype=dtype),
     }
-
-
-
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261013_l1calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   beta                    0        0         0     1     1     0      nan
-#:   dA_log                  0        0         0     1     1     0      nan
-#:   da                      0        0         0     1     1     0      nan
-#:   db                      0        0         0     1     1     0      nan
-#:   ddt_bias                0        0         0     1     1     0      nan
-#:   g                       0        0         0     1     1     0      nan
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"heads": 32, "rows": 64},
-    reduction_dims={"dA_log": ('rows',), "ddt_bias": ('rows',)},
-    result_dims={"beta": ('rows', 'heads'), "dA_log": ('heads',), "da": ('rows', 'heads'), "db": ('rows', 'heads'), "ddt_bias": ('heads',), "g": ('rows', 'heads')},
-    gain=0.0,
-    result_gain={},
-    dtype_multipliers={},
-)
-# --- end calibrated tolerances ---
 
 
 op = declare_op(
@@ -112,9 +62,5 @@ op = declare_op(
         "dg/dA_log = g); db = dbeta * beta * (1 - beta). Accumulate the row "
         "sums in float32 and return each gradient in its input's dtype."
     ),
-    correctness=_CORRECTNESS,
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     make_inputs=make_gdn_gating_inputs,
 )

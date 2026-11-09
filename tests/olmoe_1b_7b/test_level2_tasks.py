@@ -2,9 +2,8 @@
 
 Three claims per task:
 
-* the declaration is coherent: its oracle and its production spelling agree on
-  every correctness case, the eager pair passes the gate, and the tolerances are
-  the provisional ones, said so;
+* the declaration is coherent: its production spelling traces under compile, and
+  the experts site's kernels agree with its oracle on CPU-sized cases;
 * its canonical case is the configuration's (``hf_config`` provenance that
   re-derives) at B2 x T2048;
 * ``capture.py`` takes a real invocation out of a tiny layer -- config-derived,
@@ -28,12 +27,14 @@ import torch
 from evograd.benchmark import TASKS
 from evograd.benchmark.topdown.olmoe_1b_7b.architecture import config_record
 from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import capture_tools, manifest
-from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2.task_tools import PROVISIONAL
 from evograd.opdecl import bind_shape
 from evograd.opdecl.models import OLMOE_1B_7B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
 from tests.olmoe_1b_7b._tiny import BATCH, LAYER, SEQ, TINY_ARCH
+from tests._small_cases import SMALL
+
+
 
 _SOURCES: dict = {}
 
@@ -71,15 +72,6 @@ class TestDeclarations(unittest.TestCase):
                 self.assertEqual(op.coverage, op.benchmark)
                 self.assertIn("olmoe_1b_7b_observed", op.benchmark_suites)
 
-    def test_every_task_says_it_is_provisional(self):
-        for site in manifest.SITES:
-            module = importlib.import_module(
-                f"evograd.benchmark.topdown.olmoe_1b_7b.levels.level2.{site}.task")
-            with self.subTest(site=site):
-                self.assertIs(module.PROVISIONAL_TOLERANCES, True)
-                self.assertEqual(module.op.tolerances, PROVISIONAL)
-                self.assertFalse(getattr(module, "CALIBRATED", False))
-
     def test_the_experts_contract(self):
         op = TASKS["olmoe_moe_experts"]
         self.assertEqual(op.output_names, ("out",))
@@ -104,7 +96,7 @@ class TestDeclarations(unittest.TestCase):
         from evograd.opdecl.inputs import make_case_inputs
 
         op = TASKS["olmoe_moe_experts"]
-        for case in op.correctness:
+        for case in SMALL["olmoe_moe_experts"]:
             values = make_case_inputs(op, case, device="cpu")
             args = [values[a.name] for a in op.args]
             with self.subTest(dims=case.dims, dtype=case.dtype):
@@ -220,7 +212,7 @@ class TestProductionCompiles(unittest.TestCase):
         for task in manifest.TASKS:
             with self.subTest(task=task):
                 op = TASKS[task]
-                workload = next(c for c in op.correctness if c.dtype == "float32")
+                workload = SMALL[task][0]
                 values = make_case_inputs(op, workload, device="cpu")
                 args = [values.get(a.name, getattr(a, "default", None)) for a in op.args]
                 production = resolve_runtime_forward(op)

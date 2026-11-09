@@ -37,18 +37,6 @@ class DtypeToleranceTests(unittest.TestCase):
                 atol, rtol = result_tolerances(self.op, self.workload, "y", torch.ones(1, dtype=dtype))
                 self.assertEqual((rtol, atol), default_tolerances(dtype))
 
-    def test_model_results_ignore_every_legacy_tolerance_override(self):
-        op = replace(self.op, tolerances={"bfloat16": (99, 99)},
-                     tolerance_multipliers={"dw": (1000, 1000)},
-                     tolerance_hook=mock.Mock(side_effect=AssertionError("legacy hook called")))
-        ref = torch.tensor([1.0], dtype=torch.bfloat16)
-        bad = torch.tensor([1.0625], dtype=torch.bfloat16)   # 8 ulps: beyond the rounding floor
-        for name in ("out:hi", "out:lo", "grad_in:dw"):
-            with self.subTest(name=name):
-                check = self.compare(ref, bad, name=name, op=op)
-                self.assertEqual((check.limits["atol"], check.limits["rtol"]), (1e-5, 0.016))
-                self.assertEqual(check.status, "failed")
-
     def test_bfloat16_boundary_matches_assert_close(self):
         # The dtype defaults alone, without the rounding floor.
         ref = torch.tensor([1.0, 0.0], dtype=torch.bfloat16)
@@ -108,8 +96,8 @@ class DtypeToleranceTests(unittest.TestCase):
             self.assertEqual(result.limits["envelope"], result.limits["rounding_floor"])
 
     def test_a_declaration_without_a_model_reference_has_no_gate1_tolerance(self):
-        # Its own tolerances (multipliers, hooks) judge nothing: every entry refuses it.
-        workload = F.SPLIT.correctness[0]
+        # Every entry refuses it.
+        workload = F.SPLIT.benchmark[0]
         for check in (lambda: result_tolerances(F.SPLIT, workload, "lo", torch.ones(1)),
                       lambda: rounding_floor(F.SPLIT, torch.ones(1)),
                       lambda: policy_identity(F.SPLIT)):

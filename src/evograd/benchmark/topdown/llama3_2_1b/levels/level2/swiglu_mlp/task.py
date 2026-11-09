@@ -2,11 +2,7 @@
 
 The same computation Qwen3-0.6B runs at this boundary, at Llama-3-8B's widths:
 hidden 2048 against 1024, and an intermediate of 8192 against 3072. Same
-mathematics, different case -- and the wider intermediate is exactly why this
-must be its own task. See ``tolerance_multipliers`` below: ``out`` accumulates
-over ``I``, and at 8192 it needs a gate Qwen3's 3072-wide case never did.
-Carrying that widening on Qwen3's task would have loosened a measured gate for
-a shape Qwen3 never runs.
+mathematics, different case, its own task key.
 
 The timed case is derived from the frozen Llama-3-8B configuration rather than
 from a harvest snapshot: the shape is a property of the architecture, and
@@ -18,12 +14,10 @@ from evograd.benchmark.topdown.common.level2_references import (
     gated_mlp_forward_model_dtype as _model_dtype,
     gated_mlp_forward_ref as _definition,
 )
-from evograd.opdecl import Active, Provenance, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 # The workload pins Llama-3.2-1B. `opdecl.models` also carries LLAMA_3_8B,
-# the 8B config the operator suite's vocabulary-regime cases are declared
-# against; that one did not move and is a different model.
+# a different model.
 from evograd.opdecl.models import LLAMA_3_2_1B
-from evograd.opdecl.tolerance import ReductionScaledAtol
 from evograd.ops._common import model_workloads as _model_workloads
 
 #: The workload these cases belong to; also the ``Provenance`` model key.
@@ -42,50 +36,6 @@ _BENCHMARK = _model_workloads(
     ("bfloat16",),
 )
 
-_SHRUNK = Provenance(
-    model="llama_3_2_1b",
-    component="swiglu_mlp",
-    free={},
-    source="handpicked",
-    scaled=True,
-    note=(
-        "hidden and intermediate reduced from Qwen3-0.6B's 1024/3072 so the "
-        "correctness cases run on CPU in a normal test; the gate/up/down "
-        "structure and the 3x hidden-to-intermediate ratio are preserved"
-    ),
-)
-
-_CORRECTNESS = tuple(
-    Workload(
-        dims={"B": batch, "T": seq, "H": hidden, "I": 3 * hidden},
-        dtype=dtype,
-        provenance=_SHRUNK,
-    )
-    for batch, seq, hidden, dtype in (
-        (1, 8, 16, "float32"),
-        (2, 16, 32, "float32"),
-        (2, 16, 32, "bfloat16"),
-    )
-)
-
-_ANCHOR = {"B": 2, "T": 16, "H": 32, "I": 96}
-
-_REDUCTION_SCALED = ReductionScaledAtol(
-    anchor_dims=_ANCHOR,
-    reduction_dims={
-        "dgate_weight": ("B", "T"),
-        "dup_weight": ("B", "T"),
-        "ddown_weight": ("B", "T"),
-    },
-    result_dims={
-        "out": ("B", "T", "H"),
-        "dx": ("B", "T", "H"),
-        "dgate_weight": ("I", "H"),
-        "dup_weight": ("I", "H"),
-        "ddown_weight": ("H", "I"),
-    },
-    gain=2.0,
-)
 
 def make_llama3_swiglu_mlp_inputs(torch, op, workload, device="cuda"):
     dims = workload.dims
@@ -156,34 +106,9 @@ op = declare_op(
         "tensors are CUDA tensors."
     ),
     grad_order=("dx", "dgate_weight", "dup_weight", "ddown_weight"),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"llama_3_2_1b_observed": _BENCHMARK},
     memory_inputs=("x", "gate_weight", "up_weight", "down_weight"),
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "bfloat16": (1e-2, 1e-2),
-    },
-    tolerance_multipliers={
-        # `out` accumulates over `I`, which the reduction hook does not model
-        # (its `result_dims` count output elements and `out` has no
-        # `reduction_dims` entry). Measured at this workload's 8192-wide
-        # intermediate: the harvested invocation needs atol 3.242e-02 against
-        # the 2.098e-02 the hook supplies, so 2.4x carries it with the 1.5x
-        # margin (0.0504 / 0.0324 = 1.55x). Scoped to this result because only
-        # this result needed it -- the four gradients require 5e-08..5e-07 at
-        # that shape and keep their measured, tighter gates.
-        #
-        # This is the multiplier the upstream Llama work measured. It lives
-        # here, on Llama's own task, and not on `qwen3_swiglu_mlp`, whose
-        # 3072-wide intermediate measured 1.00 for `out` and keeps no entry.
-        "out": (2.4, 2.4),
-        "dx": (2.3, 1.0),
-        "dgate_weight": (3.7, 1.0),
-        "dup_weight": (4.9, 1.0),
-        "ddown_weight": (6.5, 1.0),
-    },
-    tolerance_hook=_REDUCTION_SCALED,
     make_inputs=make_llama3_swiglu_mlp_inputs,
 )

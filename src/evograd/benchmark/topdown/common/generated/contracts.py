@@ -43,11 +43,6 @@ def _observed(model, name):
 def declaration(model, site):
     name = model + "_" + site
     observed = _observed(model, name)
-    example = tuple(Workload(dims=DIMS[site], dtype=dtype,
-                             provenance=Provenance(model=model, component=site,
-                                                   source="handpicked", scaled=True,
-                                                   note="Reduced correctness fixture, not a timing case"))
-                    for dtype in ("float32", "bfloat16"))
     output = {"dit_modulation": "[B, J]", "dit_mlp": "[B, T, H]",
               "dlrm_interaction": "[B, O]"}[site]
     return declare_op(name=name, level=2, family={"dit_modulation": "normalization",
@@ -61,7 +56,6 @@ def declaration(model, site):
                                          "dit_mlp": "Biased linear, tanh-approximate GELU, biased linear",
                                          "dlrm_interaction": "Dense vector and strict triangular pairwise dot products"}[site],
                       backward_semantics="Autograd gradients for every active input and parameter",
-                      correctness=example, coverage=observed, benchmark=observed,
+                      coverage=observed, benchmark=observed,
                       benchmark_suites={model + "_observed": observed},
-                      tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
                       make_inputs=_inputs)

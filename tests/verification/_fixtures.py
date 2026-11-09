@@ -36,8 +36,7 @@ SCALE_SHIFT = declare_op(
     args=(Active("x", "[R, C]"), Active("w", "[C]"), Active("b", "[C]")),
     output=Active("y", "[R, C]"), forward_semantics="y = x * w + b",
     backward_semantics="return dx, dw, db",
-    correctness=(Workload({"R": 4, "C": 8}, "float32"), Workload({"R": 3, "C": 5}, "float32")),
-    tolerances={"float32": (1e-5, 1e-5), "bfloat16": (1e-2, 1e-2)},
+    benchmark=(Workload({"R": 4, "C": 8}, "float32"), Workload({"R": 3, "C": 5}, "float32")),
     parameter_args=("w", "b"),
 )
 
@@ -47,21 +46,12 @@ def split_ref(x, w, alpha=2.0):
     return scaled * alpha, scaled.sum(-1)
 
 
-def _split_hook(workload, result_name, atol, rtol):
-    # Grows atol with the reduction length, for `lo` only: a shape hook.
-    if result_name == "lo":
-        return atol * workload.dims["C"], rtol
-    return atol, rtol
-
-
 SPLIT = declare_op(
     name="vt_split", forward=f"{HERE}:split_ref", dims=("R", "C"),
     args=(Active("x", "[R, C]"), Active("w", "[C]"), Inactive("alpha", None, default=2.0)),
     output=(Active("hi", "[R, C]"), Active("lo", "[R]")),
     forward_semantics="hi = x*w*alpha; lo = sum(x*w, -1)", backward_semantics="dx, dw",
-    correctness=(Workload({"R": 4, "C": 8}, "float32"),),
-    tolerances={"float32": (1e-5, 1e-5)},
-    tolerance_multipliers={"dw": (3.0, 1.0)}, tolerance_hook=_split_hook,
+    benchmark=(Workload({"R": 4, "C": 8}, "float32"),),
     parameter_args=("w",),
 )
 
@@ -75,8 +65,8 @@ def _sumsq(reference_dtype):
         name="vt_sumsq", forward=f"{HERE}:sumsq_ref", dims=("R", "C"),
         args=(Active("x", "[R, C]"),), output=Active("y", "[R]"),
         forward_semantics="y = sum(x^2, -1)", backward_semantics="dx = 2 x dy",
-        correctness=(Workload({"R": 4, "C": 2048}, "bfloat16"),),
-        tolerances={"bfloat16": (1e-6, 1e-6)}, reference_dtype=reference_dtype,
+        benchmark=(Workload({"R": 4, "C": 2048}, "bfloat16"),),
+        reference_dtype=reference_dtype,
         parameter_args=(),
     )
 
@@ -94,8 +84,8 @@ def _cancel(reference_dtype):
         name="vt_cancel", forward=f"{HERE}:cancel_ref", dims=("R", "C"),
         args=(Active("x", "[R, C]"),), output=Active("y", "[R, C]"),
         forward_semantics="y = (x + 1000) - 1000", backward_semantics="dx = dy",
-        correctness=(Workload({"R": 4, "C": 16}, "bfloat16"),),
-        tolerances={"bfloat16": (1e-6, 1e-6)}, reference_dtype=reference_dtype,
+        benchmark=(Workload({"R": 4, "C": 16}, "bfloat16"),),
+        reference_dtype=reference_dtype,
         parameter_args=(),
     )
 
@@ -125,8 +115,8 @@ MUL = declare_op(
     name="vt_mul", forward=f"{HERE}:mul_ref", dims=("R", "C"),
     args=(Active("a", "[R, C]"), Active("b", "[R, C]")), output=Active("y", "[R, C]"),
     forward_semantics="y = a * b", backward_semantics="da = dy*b, db = dy*a",
-    correctness=(Workload({"R": 4, "C": 6}, "float32"),),
-    tolerances={"float32": (1e-5, 1e-5)}, parameter_args=("b",),
+    benchmark=(Workload({"R": 4, "C": 6}, "float32"),),
+    parameter_args=("b",),
 )
 
 
@@ -145,7 +135,7 @@ def supplied_cases(op, workloads=None, *, device: str = "cpu"):
     from evograd.opdecl.inputs import make_case_inputs
     from evograd.verification.gate1 import Gate1Case
 
-    selected = op.correctness if workloads is None else tuple(workloads)
+    selected = op.benchmark if workloads is None else tuple(workloads)
     return [Gate1Case(f"{op.name}/case{i}", w, make_case_inputs(op, w, device=device))
             for i, w in enumerate(selected)]
 
@@ -167,8 +157,8 @@ SCALE_SHIFT_OVERWRITE = declare_op(
     args=(Active("x", "[R, C]"), Active("w", "[C]"), Active("b", "[C]")),
     output=Active("y", "[R, C]"), forward_semantics="y = x * w + b",
     backward_semantics="return dx, dw, db; may overwrite x with dx",
-    correctness=(Workload({"R": 4, "C": 8}, "float32"),),
-    tolerances={"float32": (1e-5, 1e-5)}, parameter_args=("w", "b"),
+    benchmark=(Workload({"R": 4, "C": 8}, "float32"),),
+    parameter_args=("w", "b"),
     backward_may_overwrite=("x",),
 )
 

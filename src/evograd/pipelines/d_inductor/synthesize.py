@@ -92,7 +92,7 @@ def select_capture_workloads(
     it traces anyway, so it takes the declared case exactly: perturbing it would
     break relations between dims (attention's QO = HQ * D).
     """
-    cases = op.correctness or op.benchmark
+    cases = op.benchmark
     if not cases:
         raise ValueError(f"{op.name}: declaration has no workloads to capture on")
 

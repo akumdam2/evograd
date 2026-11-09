@@ -5,6 +5,7 @@ wrapper codegen (grad_reorder / "d"+name matching), example-input derivation
 (hand-typed README strings), prompt rendering, and config templating."""
 
 import unittest
+from dataclasses import replace
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -33,8 +34,8 @@ def _declaration(name, args, output, **fields):
     return declare_op(
         name=name, forward="m:f", dims=tuple(dims), args=args, output=output,
         forward_semantics="test declaration", backward_semantics="test declaration",
-        correctness=(Workload(dims={dim: 2 for dim in dims}, dtype="float32"),),
-        tolerances={"float32": (1e-5, 1e-5)}, **fields,
+        benchmark=(Workload(dims={dim: 2 for dim in dims}, dtype="float32"),),
+         **fields,
     )
 
 
@@ -244,28 +245,42 @@ class TestDispatchProgramCodegen(unittest.TestCase):
 class TestExampleInputSpec(unittest.TestCase):
     def test_layernorm_matches_legacy_readme_string(self):
         self.assertEqual(
-            example_input_spec(get_task("layernorm")),
+            example_input_spec(get_task("layernorm"),
+                               Workload(dims=dict(rows=8, hidden=64), dtype="float32")),
             "[(8,64) f32, (64) f32, (64) f32]",
         )
 
     def test_rmsnorm_matches_legacy_readme_string(self):
         self.assertEqual(
-            example_input_spec(get_task("rmsnorm")),
+            example_input_spec(get_task("rmsnorm"),
+                               Workload(dims=dict(rows=8, hidden=64), dtype="float32")),
             "[(8,64) f32, (64) f32]",
         )
 
     def test_megafold_evoattention_includes_bool_mask_with_fixed_dtype(self):
+        workload = Workload(dims=dict(B=1, S=1, H=4, N=23, D=8), dtype="float32")
         self.assertEqual(
-            example_input_spec(get_task("megafold_evoattention")),
+            example_input_spec(get_task("megafold_evoattention"), workload),
             "[(1,1,23,4,8) f32, (1,1,23,4,8) f32, (1,1,23,4,8) f32, "
             "(1,1,23) bool, (1,1,4,23,23) f32]",
         )
 
     def test_cross_entropy_includes_integer_labels_and_scalar_output(self):
         self.assertEqual(
-            example_input_spec(get_task("cross_entropy")),
+            example_input_spec(get_task("cross_entropy"),
+                               Workload(dims=dict(rows=8, cols=512), dtype="float32")),
             "[(8,512) f32, (8) i64]",
         )
+
+    def test_without_a_workload_the_first_benchmark_case_without_a_unit_dim_is_used(self):
+        # Symbolic tracing specializes size-1 dims, so a unit-dim case is skipped.
+        op = get_task("rmsnorm")
+        cases = (Workload(dims=dict(rows=1, hidden=64), dtype="float32"),
+                 Workload(dims=dict(rows=8, hidden=64), dtype="bfloat16"))
+        self.assertEqual(example_input_spec(replace(op, benchmark=cases)),
+                         "[(8,64) bf16, (64) bf16]")
+        with self.assertRaisesRegex(ValueError, "no benchmark workload"):
+            example_input_spec(replace(op, benchmark=()))
 
 
 class TestPromptRendering(unittest.TestCase):

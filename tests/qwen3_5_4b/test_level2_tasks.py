@@ -2,9 +2,8 @@
 
 Three claims per task:
 
-* the declaration is coherent: its oracle and its production spelling agree on
-  every correctness case, the eager pair passes the gate, and the tolerances are
-  the provisional ones, said so;
+* the declaration is coherent: its production spelling traces whole under
+  compile on a CPU-sized case;
 * its canonical case is the configuration's (``hf_config`` provenance that
   re-derives) at B1 x T2048;
 * ``capture.py`` takes a real invocation out of a tiny block -- config-derived,
@@ -31,6 +30,9 @@ from evograd.opdecl.models import QWEN3_5_4B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
 from tests.qwen3_5_4b._tiny import BATCH, FULL_LAYER, GDN_LAYER, SEQ, TINY_ARCH
+from tests._small_cases import SMALL
+
+
 
 _SOURCES: dict = {}
 
@@ -72,22 +74,6 @@ class TestDeclarations(unittest.TestCase):
                                                               seq=2048))
                 self.assertEqual(op.coverage, op.benchmark)
                 self.assertIn("qwen3_5_4b_observed", op.benchmark_suites)
-
-    def test_every_task_is_calibrated(self):
-        """Run 20261011_calib: each declaration carries its generated block and
-        points at it; nothing provisional is left."""
-        for site in manifest.SITES:
-            module = importlib.import_module(
-                f"evograd.benchmark.topdown.qwen3_5_4b.levels.level2.{site}.task")
-            with self.subTest(site=site):
-                self.assertIs(module.PROVISIONAL_TOLERANCES, False)
-                self.assertIs(module.CALIBRATED, True)
-                self.assertEqual(module.op.tolerances, module.CALIBRATED_TOLERANCES)
-                self.assertIs(module.op.tolerance_hook, module.CALIBRATED_HOOK)
-                source = Path(module.__file__).read_text(encoding="utf-8")
-                self.assertIn("#: Calibrated: see the calibrated-tolerances block", source)
-                self.assertNotIn("Not calibrated", source)
-                self.assertIn("#: Calibrated for Qwen3.5-4B (run ", source)
 
     def test_library_baselines_are_declared(self):
         self.assertIn("fla", TASKS["qwen3_5_gated_delta_rule"].performance_baselines)
@@ -200,7 +186,7 @@ class TestProductionCompiles(unittest.TestCase):
         for task in manifest.TASKS:
             with self.subTest(task=task):
                 op = TASKS[task]
-                workload = next(c for c in op.correctness if c.dtype == "float32")
+                workload = SMALL[task][0]
                 values = make_case_inputs(op, workload, device="cpu")
                 args = [values.get(a.name, getattr(a, "default", None)) for a in op.args]
                 production = resolve_runtime_forward(op)

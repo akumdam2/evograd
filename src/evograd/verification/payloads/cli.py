@@ -34,9 +34,9 @@ def gate1_report(declaration: str, program: str, corpus_path: str, case_id: str,
     op = load_task(declaration)
     try:
         corpus = Corpus.open(corpus_path)
-        if len(op.correctness) != 1:
+        if len(op.benchmark) != 1:
             raise CorpusError(f"{op.name}: real payloads judge one configuration")
-        cases = payload_cases(op, op.correctness[0], corpus, case_id=case_id, split=split, device=device)
+        cases = payload_cases(op, op.benchmark[0], corpus, case_id=case_id, split=split, device=device)
     except (CorpusError, OSError, ValueError, KeyError) as exc:
         return {"status": "incomplete", "setup_error": f"{type(exc).__name__}: {exc}",
                 "inputs": "real_training_payload"}

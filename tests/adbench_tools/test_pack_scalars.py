@@ -56,7 +56,7 @@ def test_pack_scalars_are_what_the_recorded_calls_pass(tmp_path, model):
         path.parent.mkdir()
         _write_model_declaration(path, model, case.task, case.workload)
         op = load_task(f"{path}:op")
-        workload = op.correctness[0]
+        workload = op.benchmark[0]
         generated = make_case_inputs(op, workload, device="meta")
         abi = {e["name"]: e["default"] for e in describe_abi(op, workload)["arguments"]
                if e["kind"] == "scalar"}

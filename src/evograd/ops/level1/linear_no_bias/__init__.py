@@ -14,7 +14,7 @@ mathematics; mapping the observed projections onto it would benchmark a
 transpose the model does not perform.
 """
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 
 
 #: The six deduplicated GEMMs one Qwen3-0.6B step runs -- q_proj, k/v_proj,
@@ -85,37 +85,5 @@ op = declare_op(
         "- These shapes are compute-bound; prefer tensor-core tiled matmul with "
         "fp32 accumulation and boundary masking for non-tile-aligned M/N/K."
     ),
-    correctness=(
-        Workload(dims=dict(M=64, K=64, N=64), dtype="float32"),
-        Workload(dims=dict(M=129, K=127, N=257), dtype="float32"),
-        Workload(dims=dict(M=128, K=128, N=256), dtype="float16"),
-        Workload(dims=dict(M=512, K=256, N=512), dtype="float16"),
-        # bfloat16 is the training dtype of both models this task is derived
-        # from, and the only one the observed grid uses.
-        Workload(dims=dict(M=128, K=128, N=256), dtype="bfloat16"),
-        Workload(dims=dict(M=257, K=129, N=127), dtype="bfloat16"),
-    ),
-    # Measured, not inherited. The (since removed) Level-1 calibration compared
-    # the float32-accumulated oracle against
-    # `runtime_forward` -- the call a model makes, and therefore the smallest
-    # disagreement any correct implementation can have with the oracle -- on
-    # every correctness workload and on all six observed Qwen configurations.
-    #
-    #   float32   0.0 exactly: at float32 the oracle's upcast is a no-op and the
-    #             two spellings are the same computation. Kept at the
-    #             repository's ordinary float32 pair rather than at zero.
-    #   float16   worst 9.2e-04  -> 1.4e-03 (1.5x margin)
-    #   bfloat16  worst 7.7e-03  -> 1.2e-02 (1.5x margin); the observed
-    #             configurations are the binding ones, all within 7.6-7.7e-03,
-    #             including the 151936-wide lm_head.
-    #
-    # These are far tighter than the (1.5e-1, 3e-2) the bias-carrying `linear`
-    # task declares. That pair was never calibrated; this one is, and nothing
-    # else consumes it.
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "float16": (1.4e-3, 1.4e-3),
-        "bfloat16": (1.2e-2, 1.2e-2),
-    },
     make_inputs=make_linear_no_bias_inputs,
 )

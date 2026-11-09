@@ -19,6 +19,8 @@ except ImportError:  # pragma: no cover
     torch = None
 
 from evograd.benchmark.topdown import UnharvestedWorkload, has_snapshot
+from evograd.opdecl import Workload
+from tests._small_cases import SMALL
 
 
 class TestQkvRopeDeclaration(unittest.TestCase):
@@ -77,151 +79,23 @@ class TestQkvRopeDeclaration(unittest.TestCase):
             "llama_3_2_1b_observed" in self.op.benchmark_suites, decl.HARVESTED
         )
 
-    def test_both_tolerance_questions_are_answered_by_measurement(self):
-        """The grid and the observed shape are two questions, and both are shut.
-
-        The grid is declared in this file and both spellings are in
-        ``forward_ref``, so comparing them needs no GPU -- the multipliers are
-        that measurement. The observed shape reduces over 4096 tokens where the
-        grid's longest is 64, and what that costs in bfloat16 is what the hook
-        encodes; its sufficiency was measured on a GH200 at the model's widths,
-        which is what ``CALIBRATED`` now records."""
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope import task as decl
-
-        self.assertTrue(decl.GRID_CALIBRATED)
-        self.assertEqual(
-            set(self.op.tolerance_multipliers), {"dx", "dq_weight", "dk_weight"}
-        )
-        self.assertTrue(decl.CALIBRATED)
-        self.assertIsNotNone(self.op.tolerance_hook)
-
-    def test_the_gate_admits_the_measured_requirement_at_the_observed_shape(self):
-        """The numbers `CALIBRATED` cites, pinned so a retune cannot drop below
-        them silently. `required_t` is the smallest base tolerance that accepts
-        the declaration's own reference at the model's width; the declared atol
-        has to stay above it with margin, on every result that has one."""
-        observed = self.op.benchmark[0]
-        # GH200, Llama-3.2-1B width, 2026-09-15: results/experiments/
-        # llama3_2_1b_l2_l3/20260915/calibration/llama3_qkv_rope-tolerance.json
-        required_t = {
-            "q": 1.001e-02,
-            "k": 7.916e-03,
-            "dx": 2.358e-02,
-            "dq_weight": 1.684e-01,
-            "dk_weight": 1.626e-01,
-        }
-        # `dx` sits exactly on the 1.5x policy (1.500x): the element-count term
-        # supplies 1.83x and the declared 1.2 multiplier covers the rest. It has
-        # the least slack of anything here, so a change to `gain` or to that
-        # multiplier will surface as this assertion before it surfaces as a
-        # rejected kernel.
-        for name, required in required_t.items():
-            with self.subTest(result=name):
-                ma = self.op.tolerance_multipliers.get(name, (1.0, 1.0))[0]
-                atol = self.op.tolerance_for(observed, name)[0]
-                self.assertGreaterEqual(atol / ma, required * 1.5, name)
-        # `v` and `dv_weight` measured exactly 0.0: the value path has no
-        # rotation, so the two spellings are the same computation there. They
-        # keep the hook's term anyway -- that is a fact about the oracle pair,
-        # not about a candidate accumulating over 4096 tokens in bfloat16.
-        for name in ("v", "dv_weight"):
-            self.assertNotIn(name, self.op.tolerance_multipliers)
-            self.assertGreater(self.op.tolerance_for(observed, name)[0], 2e-2)
-
-    def test_the_hook_is_exactly_the_identity_on_the_correctness_grid(self):
-        """The property that makes it safe to add to a calibrated declaration.
-
-        The anchor is the grid's largest case on every term, so nothing that
-        passes today becomes easier to pass. Checked at both dtypes and on every
-        result, because a hook that widened one float32 case would be loosening
-        a gate that measured exactly 0.0 disagreement.
-        """
-        for workload in self.op.correctness:
-            base = self.op.tolerances[workload.dtype]
-            for name in (*self.op.output_names, *self.op.grad_names()):
-                with self.subTest(dims=workload.dims, result=name):
-                    ma, mr = self.op.tolerance_multipliers.get(name, (1.0, 1.0))
-                    self.assertEqual(
-                        self.op.tolerance_for(workload, name),
-                        (base[0] * ma, base[1] * mr),
-                    )
-
-    def test_the_observed_shape_gets_the_reduction_term_the_grid_cannot_see(self):
-        """And the gate has to separate the results that reduce from those that
-        do not, or a constant is doing the work of a law.
-
-        The three projection gradients accumulate one term per token: 4096 at
-        the model's shape against the anchor's 64, an 8x random walk before the
-        element-count term. ``q``, ``k``, ``v`` and ``dx`` keep the token axis
-        and pick up the element count alone.
-        """
-        observed = self.op.benchmark[0]
-        base_atol = self.op.tolerances["bfloat16"][0]
-        widening = {
-            name: self.op.tolerance_for(observed, name)[0]
-            / (base_atol * self.op.tolerance_multipliers.get(name, (1.0, 1.0))[0])
-            for name in (*self.op.output_names, *self.op.grad_names())
-        }
-        for name in ("q", "k", "v", "dx"):
-            self.assertLess(widening[name], 2.5, name)
-        for name in ("dq_weight", "dk_weight", "dv_weight"):
-            self.assertGreater(widening[name], 15.0, name)
-        # rtol is untouched everywhere: relative error is what stays constant,
-        # and it is what catches a systematically scaled result.
-        for name in (*self.op.output_names, *self.op.grad_names()):
-            self.assertEqual(self.op.tolerance_for(observed, name)[1], 2e-2)
-
-    def test_only_the_reductions_carry_multipliers(self):
-        """The base is set by the forward outputs, so a candidate's primary
-        numbers are gated by the base alone. A multiplier on ``q`` would hide
-        the very result it is judged on."""
-        for name in self.op.output_names:
-            self.assertNotIn(name, self.op.tolerance_multipliers)
-
     @unittest.skipIf(torch is None, "torch is required")
-    def test_the_declared_pair_passes_its_own_correctness_gate(self):
-        """The tolerance has to admit the declaration's own reference. This is
-        what caught the inherited tolerances: at multiplier 1.0 the two weight
-        gradients failed, which is the placeholder's stated failure mode --
-        visible, and a correct kernel rejected rather than a wrong one taken."""
+    def test_the_eager_pair_passes_gate1_against_the_declared_reference(self):
+        """The production spelling, as the eager pair, against the declared
+        forward under a model-reference contract, by Gate 1's rule."""
         from evograd.evaluation.tier3.patch import eager_pair_for
-        from evograd.opdecl.oracle import resolve_forward
+        from tests.verification import _fixtures as F
 
-        pair = eager_pair_for(self.op)
-        oracle = resolve_forward(self.op)
-        for workload in self.op.correctness:
-            with self.subTest(dims=workload.dims, dtype=workload.dtype):
-                values = self.op.make_inputs(torch, self.op, workload, device="cpu")
-                args = tuple(values[a.name] for a in self.op.args)
-                outputs, saved = pair.forward_with_saved(*args)
-                grads = pair.backward_from_saved(
-                    tuple(values[f"d{n}"] for n in self.op.output_names), saved
-                )
-                reference = oracle(*args)
-                for name, got, want in zip(self.op.output_names, outputs, reference):
-                    atol, rtol = self.op.tolerance_for(workload, name)
-                    self.assertTrue(
-                        torch.allclose(got.float(), want.float(), atol=atol, rtol=rtol),
-                        f"{name} at {workload.dims}",
-                    )
-                self.assertEqual(len(grads), len(self.op.grad_names()))
-
-    def test_a_2_to_1_grouping_case_is_in_the_correctness_grid(self):
-        """Llama-3-8B is 4:1 and has ``QO == H``. A grid of only those two
-        coincidences would pass a kernel that folded the query fan-out into the
-        hidden size, or hard-coded the ratio."""
-        ratios = {w.dims["HQ"] // w.dims["HK"] for w in self.op.correctness}
-        self.assertIn(2, ratios)
-        self.assertTrue(
-            any(w.dims["QO"] != w.dims["H"] for w in self.op.correctness)
-        )
+        report = F.gate1_report(self.op, eager_pair_for(self.op),
+                                workloads=SMALL["llama3_qkv_rope"])
+        self.assertEqual(report.status, "passed", report.to_dict())
 
     @unittest.skipIf(torch is None, "torch is required")
-    def test_the_pair_runs_forward_and_backward_on_every_correctness_case(self):
+    def test_the_pair_runs_forward_and_backward_on_small_cases(self):
         from evograd.evaluation.tier3.patch import eager_pair_for
 
         pair = eager_pair_for(self.op)
-        for workload in self.op.correctness:
+        for workload in SMALL["llama3_qkv_rope"]:
             with self.subTest(dims=workload.dims, dtype=workload.dtype):
                 values = self.op.make_inputs(torch, self.op, workload, device="cpu")
                 args = tuple(values[a.name] for a in self.op.args)
@@ -254,7 +128,7 @@ COMPOSES_INTO_EXPECTED = {
 
 
 class TestResidualRmsnormEpsilon(unittest.TestCase):
-    """The model case runs the model's epsilon; the grid keeps the generic one."""
+    """The model case runs the model's epsilon; any other case the generic one."""
 
     def setUp(self):
         from evograd.benchmark import get_task
@@ -280,14 +154,15 @@ class TestResidualRmsnormEpsilon(unittest.TestCase):
         for workload in observed:
             self.assertEqual(decl.eps_for(workload), decl.MODEL_EPS)
 
-    def test_the_correctness_grid_keeps_the_generic_epsilon(self):
+    def test_a_case_without_model_provenance_keeps_the_generic_epsilon(self):
         from evograd.benchmark.topdown.llama3_2_1b.levels.level2.residual_rmsnorm import task as decl
         from evograd.opdecl.inputs import make_case_inputs
 
-        for workload in self.op.correctness:
+        for workload in (Workload(dims={"rows": 8, "cols": 64}, dtype="float32"),
+                         Workload(dims={"rows": 32, "cols": 256}, dtype="bfloat16")):
             self.assertFalse(decl.is_model_case(workload))
             self.assertEqual(make_case_inputs(self.op, workload, device="cpu")["eps"], decl.GRID_EPS)
-        # The declared default is the grid's, so a candidate that ignores the
+        # The declared default is the generic one, so a candidate that ignores the
         # argument it is handed is caught by the model case, not hidden by it.
         eps_arg = next(arg for arg in self.op.args if arg.name == "eps")
         self.assertEqual(eps_arg.default, decl.GRID_EPS)

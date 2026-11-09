@@ -41,8 +41,7 @@ def fixture_op():
         forward="tests.test_seed_acceptance:affine_reference",
         forward_semantics="Elementwise affine transform.",
         backward_semantics="Return dx, dweight, dbias.",
-        correctness=(CASE,), benchmark=(CASE,),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(CASE,),
     )
 
 
@@ -60,8 +59,7 @@ def multi_output_op():
         forward="tests.test_seed_acceptance:split_reference",
         forward_semantics="Scale, and also reduce over the last axis.",
         backward_semantics="Return dx and dweight.",
-        correctness=(CASE,), benchmark=(CASE,),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(CASE,),
     )
 
 

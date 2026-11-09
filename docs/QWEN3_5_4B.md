@@ -22,7 +22,6 @@ host memory.
 | hardware | the timed workload is one GH200: no offload, no multi-GPU |
 | shape | canonical **B1 x T2048** (B2 does not fit eagerly; B1 is the per-GPU workload of 2-GPU DDP at global batch 2) |
 | baselines | recorded, no bar is chosen (eager, site and whole-model compile, FLA) |
-| tolerances | every L2 task and every primitive this model adds is calibrated on Qwen3.5 populations (below) |
 | L3 gate | none in Tier 3: correctness comes from the verification package's Gates 1/2/3 |
 
 ## Sites, tasks and reference lines
@@ -101,33 +100,13 @@ Evidence: `results/experiments/qwen3_5_4b_cases/20261011_sdpa/`. Probes:
 `scripts/qwen3_5_4b/probes/{cudnn_sdpa_plan_cache,cudnn_sdpa_scope,sdpa_policy,
 sdpa_guard,sdpa_policy_validate}.py`.
 
-## Tolerances
+## Correctness
 
-Level 2 (run `20261011_calib`): every task is `CALIBRATED`
-(`PROVISIONAL_TOLERANCES = False`), each declaration carrying a generated block.
-Level 1 (run `20261013_l1calib`): the six primitives this model adds
-(`causal_conv1d`, `gated_rmsnorm`, `gdn_gating`, `gemma_rmsnorm`, `l2norm`,
-`partial_rope`) are calibrated the same way on their grid (GPU and CPU) and the
-Qwen3.5 observed suite; the four shared ones (`linear_no_bias`,
-`causal_gqa_attention`, `swiglu`, `cross_entropy`) keep their own calibration and
-pass it at the Qwen3.5 shapes. The same driver does both:
-
-```bash
-python scripts/qwen3_5_4b/calibration.py derived-stats --run-dir <run>   # magnitudes, captured vs generated
-python scripts/qwen3_5_4b/calibration.py inventory --run-dir <run>       # GPU: grid, observed, captured layer
-python scripts/qwen3_5_4b/calibration.py inventory --run-dir <run> --cpu-grid
-python scripts/qwen3_5_4b/calibration.py fit --run-dir <run>
-python scripts/qwen3_5_4b/calibration.py apply --run-dir <run>           # [--task T ...]
-```
-
-Oracle against production only. The fit (`scripts/qwen3_5_4b/tolerance_fit.py`):
-a bfloat16 base atol set by the outputs, per-dtype multipliers at 1.5x the grid
-need, and `ReductionScaledAtol` gains that carry them to the model's size.
-Nothing flagged, no noise-floor violations; worst real-size over-grant 9.3x at
-L2 and 3.0x at L1. With these tolerances every T2 provider -- eager,
-torch.compile, FLA (and Liger, since retired) -- passes at the observed case
-(`results/experiments/qwen3_5_4b_cases/20261011_step2/t2/`), where the
-provisional ones refused eager on five tasks.
+Tasks declare no tolerances. A candidate is judged by Gates 1/2/3 on the
+model's recorded training payloads under the model reference
+(`evograd.verification`). The declared tolerances calibrated here earlier (runs
+`20261011_calib`, `20261013_l1calib`) and the scripts that fitted them were
+removed.
 
 Input magnitudes: the captured call's upstream gradients are ~1e-6..1e-5 (the
 LM loss over a 248k vocabulary); gradients are linear in them and bfloat16 has

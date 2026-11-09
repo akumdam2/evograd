@@ -10,7 +10,7 @@ from evograd.opdecl.activity import OpDecl
 def validate_external_execution(
     op: OpDecl, module, contract: dict, *, device: str = "cuda"
 ) -> None:
-    """Exercise each correctness case with counted, restored library wrappers.
+    """Exercise each benchmark case with counted, restored library wrappers.
 
     Source validation pins the providers and their call sites. This check also
     rejects a candidate that retains those calls in unused old helpers while
@@ -29,8 +29,8 @@ def validate_external_execution(
     )
     from evograd.opdecl.inputs import make_case_inputs, upstream_grad_values
 
-    if not op.correctness:
-        raise ValueError("cannot verify preserved library execution without correctness cases")
+    if not op.benchmark:
+        raise ValueError("cannot verify preserved library execution without a benchmark case")
     expected: dict[str, str] = {}
     originals = {}
     for region in regions:
@@ -71,7 +71,7 @@ def validate_external_execution(
     try:
         for name, original in originals.items():
             setattr(module, name, counted(name, original))
-        for workload in op.correctness:
+        for workload in op.benchmark:
             inputs = make_case_inputs(op, workload, device=device)
             positional = [inputs.get(arg.name, getattr(arg, "default", None)) for arg in op.args]
             with torch.no_grad():

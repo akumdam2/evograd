@@ -7,13 +7,10 @@ rotary tables (64 wide for a 256-wide head, interleaved MRoPE on text positions)
 and receive no gradient.
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
-from ..task_tools import (CONFIG, OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk,
-                          token_major)
+from ..task_tools import CONFIG, OBSERVED_SUITE, observed, seed_of, token_major
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "T", "H", "HQ", "HK", "D", "R", "QG", "KVO", "QO")
 
@@ -26,27 +23,6 @@ def model_strides(dims):
 
 
 _BENCHMARK = observed("qkv_norm_partial_rope", strides=model_strides)
-
-
-def _dims(b, t, h, hq, hk, d, r):
-    return {"B": b, "T": t, "H": h, "HQ": hq, "HK": hk, "D": d, "R": r,
-            "QG": 2 * hq * d, "KVO": hk * d, "QO": hq * d}
-
-
-_CORRECTNESS = tuple(
-    Workload(dims=_dims(*shape), dtype=dtype, provenance=shrunk("qkv_norm_partial_rope"))
-    for shape, dtype in (
-        ((1, 12, 32, 4, 2, 16, 4), "float32"),
-        ((2, 20, 64, 4, 2, 32, 8), "float32"),
-        # 4:1 grouping, as Qwen3.5-4B's 16/4, and a rotary width of half the head.
-        ((1, 16, 64, 8, 2, 16, 8), "float32"),
-        ((2, 24, 64, 4, 1, 32, 8), "bfloat16"),
-    )
-) + (
-    Workload(dims=_dims(2, 20, 64, 4, 2, 32, 8), dtype="float32",
-             provenance=shrunk("qkv_norm_partial_rope",
-                               model_strides(_dims(2, 20, 64, 4, 2, 32, 8)))),
-)
 
 
 def make_qkv_norm_partial_rope_inputs(torch, op, workload, device="cuda"):
@@ -81,46 +57,6 @@ def make_qkv_norm_partial_rope_inputs(torch, op, workload, device="cuda"):
         "dv": torch.randn((b, dims["HK"], t, head_dim), device=device, dtype=dtype),
         "dgate": torch.randn((b, t, dims["QO"]), device=device, dtype=dtype),
     }
-
-
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261011_calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on captured, correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   dk_norm_weight          0    0.778      18.5     1   1.2   1.5     1.58
-#:   dk_weight               0     2.32      25.8     1   3.5   1.5     1.78
-#:   dq_norm_weight          0     1.49      37.1     1   2.3   1.5     1.51
-#:   dq_weight               0     2.34      28.4     1   3.6   1.5     1.57
-#:   dv_weight               0        0    0.0075     1     1     0      133
-#:   dx                      0    0.593      1.25     1     1     3     1.74
-#:   gate                    0        0  0.000199     1     1     0 5.03e+03
-#:   k                       0    0.143     0.666     1     1     0      1.5
-#:   q                       0    0.265     0.904     1     1   1.5     1.69
-#:   v                       0        0  0.000187     1     1     0 5.35e+03
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 2, "D": 32, "H": 64, "HK": 1, "HQ": 4, "KVO": 32, "QG": 256, "QO": 128, "R": 8, "T": 24},
-    reduction_dims={"dk_norm_weight": ('B', 'HK', 'T'), "dk_weight": ('B', 'T'), "dq_norm_weight": ('B', 'HQ', 'T'), "dq_weight": ('B', 'T'), "dv_weight": ('B', 'T')},
-    result_dims={"dk_norm_weight": ('D',), "dk_weight": ('KVO', 'H'), "dq_norm_weight": ('D',), "dq_weight": ('QG', 'H'), "dv_weight": ('KVO', 'H'), "dx": ('B', 'T', 'H'), "gate": ('B', 'T', 'QO'), "k": ('B', 'HK', 'T', 'D'), "q": ('B', 'HQ', 'T', 'D'), "v": ('B', 'HK', 'T', 'D')},
-    gain=0.0,
-    result_gain={"dk_norm_weight": 1.5, "dk_weight": 1.5, "dq_norm_weight": 1.5, "dq_weight": 1.5, "dx": 3, "q": 1.5},
-    dtype_multipliers={"bfloat16": {"dk_norm_weight": 1.2, "dk_weight": 3.5, "dq_norm_weight": 2.3, "dq_weight": 3.6}},
-)
-# --- end calibrated tolerances ---
 
 
 op = declare_op(
@@ -181,13 +117,9 @@ op = declare_op(
         "HQ divisible by HK; R even and at most D. The per-head [query | gate] "
         "interleave in q_weight is the model's and must be honoured exactly."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     memory_inputs=("x", "q_weight", "k_weight", "v_weight", "cos", "sin"),
     make_inputs=make_qkv_norm_partial_rope_inputs,
 )

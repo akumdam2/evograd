@@ -69,9 +69,9 @@ calibration payloads, never less than gamma ulps of the reference's largest
 magnitude. Comparisons use float64. Candidate input mutation fails unless the declaration
 explicitly allows it; allowed content overwrites must preserve layout.
 
-Gate 1 judges only model-reference tasks; any other declaration is refused, so
-a declaration's own tolerances judge nothing. The tolerance is a fixed,
-versioned table based on the reference result's dtype:
+Gate 1 judges only model-reference tasks; any other declaration is refused.
+Declarations carry no tolerances. The tolerance is a fixed, versioned table
+based on the reference result's dtype:
 
 | Result dtype | atol | rtol |
 | --- | ---: | ---: |
@@ -82,8 +82,7 @@ versioned table based on the reference result's dtype:
 
 The table in `gate1/tolerances.py` is frozen from PyTorch 2.11's
 `torch.testing.assert_close` defaults, or the compile envelope where that is
-larger. Model tasks bypass declaration overrides, result multipliers, and shape
-scaling. The policy identity is recorded in the report. This is the selected numerical policy, not a proof that all meaningful
+larger. The policy identity is recorded in the report. This is the selected numerical policy, not a proof that all meaningful
 errors are detected; tiny gradients can still fall below the absolute floor.
 
 Callers supply the cases: lazy recorded payloads (`payload_cases`) or values

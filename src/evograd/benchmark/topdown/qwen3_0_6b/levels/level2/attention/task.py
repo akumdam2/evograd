@@ -33,7 +33,6 @@ import math
 from evograd.benchmark.topdown import load_snapshot as _load_snapshot
 from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
-from evograd.opdecl.tolerance import ReductionScaledAtol
 
 #: The harvested workload these dims came from; also the ``Provenance``
 #: model key, so the declaration and the snapshot cannot disagree about
@@ -92,20 +91,6 @@ _OBSERVED = Provenance(
     source="hf_config",
 )
 
-_SHRUNK = Provenance(
-    model="qwen3_0_6b",
-    component="causal_gqa_attention",
-    free={},
-    source="handpicked",
-    scaled=True,
-    note=(
-        "head count, head dimension, sequence length and hidden size reduced "
-        "from Qwen3-0.6B's 16/8 heads, 128-wide heads and 2048 tokens so the "
-        "correctness cases run on CPU; the 2:1 grouped-query ratio, the causal "
-        "mask, the absence of a bias and the head-major input layout are all "
-        "preserved"
-    ),
-)
 
 _BENCHMARK = (
     Workload(
@@ -121,46 +106,6 @@ _BENCHMARK = (
         dtype="bfloat16",
         provenance=_OBSERVED,
     ),
-)
-
-_CORRECTNESS = tuple(
-    Workload(
-        dims={
-            "B": batch,
-            "T": tokens,
-            "HQ": heads,
-            "HK": kv_heads,
-            "D": head_dim,
-            "QO": heads * head_dim,
-            "H": hidden,
-        },
-        dtype=dtype,
-        provenance=_SHRUNK,
-    )
-    for batch, tokens, heads, kv_heads, head_dim, hidden, dtype in (
-        (1, 16, 4, 2, 8, 24, "float32"),
-        (2, 32, 4, 2, 16, 48, "float32"),
-        (2, 32, 4, 2, 16, 48, "bfloat16"),
-        # A 4:1 group ratio, so a kernel that assumed 2:1 fails here.
-        (1, 24, 8, 2, 16, 32, "bfloat16"),
-    )
-)
-
-
-#: The bf16 correctness case the declared multipliers were measured on.
-_ANCHOR = {"B": 2, "T": 32, "HQ": 4, "HK": 2, "D": 16, "QO": 64, "H": 48}
-
-_REDUCTION_SCALED = ReductionScaledAtol(
-    anchor_dims=_ANCHOR,
-    reduction_dims={},
-    result_dims={
-        "out": ("B", "T", "H"),
-        "dq": ("B", "HQ", "T", "D"),
-        "dk": ("B", "HK", "T", "D"),
-        "dv": ("B", "HK", "T", "D"),
-        "do_weight": ("H", "QO"),
-    },
-    gain=2.5,
 )
 
 
@@ -257,43 +202,9 @@ op = declare_op(
         "bias. All floating tensors are CUDA tensors."
     ),
     grad_order=("dq", "dk", "dv", "do_weight"),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
     memory_inputs=("q", "k", "v", "o_weight"),
-    # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate`
-    # compares the declared dense float32-softmax forward against
-    # `runtime_forward` -- the SDPA branch the model runs -- on every
-    # correctness workload and on the canonical [2, 16, 2048, 128] invocation,
-    # and reports the smallest base `t` for which `allclose(atol=ma*t, rtol=t)`
-    # accepts each result.
-    #
-    # float32: worst 4.0e-07 across every case, so the repository's ordinary
-    # float32 pair clears it by ~50x.
-    #
-    # bfloat16, worst over all cases: out 5.8e-03, dq 4.6e-03, dk 5.8e-03,
-    # dv 1.5e-08 (SDPA and the dense spelling compute dv identically),
-    # do_weight 2.9e-02. Base 1e-02 therefore leaves ~1.7x on the binding
-    # non-multiplied result.
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (1e-2, 1e-2)},
-    # Only `do_weight` needs one. It reduces over all B*T tokens and cancels,
-    # which is exactly what an atol multiplier is for; every other result
-    # measured a minimum multiplier of 1.00 at base 1e-2 and so has none.
-    #
-    #   result       measured min ma at t=1e-2   declared
-    #   do_weight                3.54              5.4
-    # do_weight was 5.4 and needed 1.58x more at the observed shape than the
-    # element-count term alone supplies. Raised to 6.5, which costs the
-    # correctness grid a 1.2x looser gate for this one gradient (its measured
-    # margin there goes 1.47x -> 1.77x) and buys 1.29x at the observed shape.
-    tolerance_multipliers={"do_weight": (6.5, 1.0)},
-    # Deliberately *no* reduction term. do_weight does contract over 4096
-    # tokens, but the measured exponent of its required atol against reduction
-    # length is 0.032 -- flat -- because attention's output is a softmax-weighted
-    # average whose scale does not grow with the sum. Declaring a sqrt(N) term
-    # here would loosen the gate about tenfold for no measured reason. Only the
-    # element-count term applies.
-    tolerance_hook=_REDUCTION_SCALED,
     make_inputs=make_qwen3_attention_inputs,
 )

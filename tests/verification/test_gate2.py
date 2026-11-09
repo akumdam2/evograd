@@ -101,10 +101,10 @@ def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthet
 class TestOperatorScope(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
+        cls.scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
         cls.calibration = calibrate(cls.scope, patch_set=("operator",),
                                     samples=cls.scope.samples([1, 2]), compile_backend=FAST)
-        cls.mul_scope = OperatorScope(F.MUL, F.MUL.correctness[0], device=CPU)
+        cls.mul_scope = OperatorScope(F.MUL, F.MUL.benchmark[0], device=CPU)
         cls.mul_calibration = calibrate(cls.mul_scope, patch_set=("operator",),
                                         samples=cls.mul_scope.samples([1, 2]), compile_backend=FAST)
 
@@ -320,7 +320,7 @@ class TestPolicyBinding(unittest.TestCase):
         self.assertEqual(self.run_with(self.policy).status, PASSED)
 
     def test_operator_policy_judges_only_its_calibrated_samples(self):
-        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
+        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
         policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
         self.assertEqual(policy.sample_protocol, gate2.MATCHED)
         good = scope.candidate(F.scale_shift_pair())
@@ -682,7 +682,7 @@ class TestInductorControl(unittest.TestCase):
     """The default control: torch.compile with inductor, executed for real."""
 
     def test_operator_and_model_scope_with_inductor(self):
-        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device=CPU)
+        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
         result = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]))
         if result.policy is None:
             reasons = "; ".join(f.message[:200] for f in result.findings)

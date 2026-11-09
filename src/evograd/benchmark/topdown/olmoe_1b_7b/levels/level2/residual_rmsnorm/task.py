@@ -9,26 +9,14 @@ later step's). OLMoE's norm weight is a plain scale initialized at one, not the
 zero-centred ``(1 + w)`` of Qwen3.5.
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
-from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
+from ..task_tools import OBSERVED_SUITE, observed, seed_of
 
-#: Not calibrated: see ``task_tools.PROVISIONAL``.
-PROVISIONAL_TOLERANCES = True
 
 _DIMS = ("B", "T", "H")
 
 _BENCHMARK = observed("residual_rmsnorm")
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, T=t, H=h), dtype=dtype, provenance=shrunk("residual_rmsnorm"))
-    for b, t, h, dtype in (
-        (1, 8, 64, "float32"),
-        (2, 17, 128, "float32"),
-        (2, 32, 256, "bfloat16"),
-        (1, 64, 640, "bfloat16"),
-    )
-)
 
 
 def make_residual_rmsnorm_inputs(torch, op, workload, device="cuda"):
@@ -83,10 +71,8 @@ op = declare_op(
         "dbranch = dresidual = ds; dweight = sum over B and T of dnormed * xhat. "
         "Accumulate the reductions in float32."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=PROVISIONAL,
     make_inputs=make_residual_rmsnorm_inputs,
 )

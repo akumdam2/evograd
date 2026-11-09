@@ -56,20 +56,13 @@ OPERATORS: tuple[str, ...] = tuple(COMPOSES_INTO)
 #: suite name. Qwen3-0.6B binds several of the same primitives under
 #: ``qwen3_0_6b_observed``; two models on one contract is the ordinary case and
 #: the suite name is what keeps the two sets of widths apart.
-#:
-#: Deliberately *not* mirrored into ``coverage``: Llama-3-8B's observed widths
-#: are several times Qwen3-0.6B's, and making every candidate run them would
-#: charge a Qwen3-targeted kernel for shapes it does not claim. They are
-#: benchmark suites, selectable by name.
 OBSERVED_BINDINGS: tuple[ObservedBinding, ...] = (
     ObservedBinding(WORKLOAD, "causal_gqa_attention", "llama_3_2_1b_observed"),
-    ObservedBinding(WORKLOAD, "cross_entropy", "llama_3_2_1b_observed",
-                    declared_tolerances=True),
+    ObservedBinding(WORKLOAD, "cross_entropy", "llama_3_2_1b_observed"),
     ObservedBinding(WORKLOAD, "linear_no_bias", "llama_3_2_1b_observed"),
     ObservedBinding(WORKLOAD, "rmsnorm", "llama_3_2_1b_observed"),
     ObservedBinding(WORKLOAD, "rope", "llama_3_2_1b_observed"),
-    ObservedBinding(WORKLOAD, "swiglu", "llama_3_2_1b_observed",
-                    declared_tolerances=True),
+    ObservedBinding(WORKLOAD, "swiglu", "llama_3_2_1b_observed"),
 )
 
 

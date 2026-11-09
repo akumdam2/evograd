@@ -3,10 +3,8 @@
 The table is frozen from torch.testing.assert_close in PyTorch 2.11, rather
 than imported from a private PyTorch helper whose defaults could change.
 Values are (atol, rtol), unlike PyTorch's internal (rtol, atol) helper.
-Model tasks ignore declaration overrides, result multipliers and shape hooks.
 Gate 1 judges only model-reference tasks (``op.reference_contract``): for any
-other declaration every function here raises, so a declaration's own
-tolerances never judge a candidate.
+other declaration every function here raises.
 
 Under the model policy an element's allowance is the larger of that rule and
 the *envelope*: :data:`ENVELOPE_GAMMA` times the largest elementwise deviation

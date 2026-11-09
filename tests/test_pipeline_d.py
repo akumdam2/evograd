@@ -523,7 +523,11 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
         self.assertEqual(list(out.dims.values()), [8, 9, 10])
 
     def test_prefers_a_declared_workload_with_distinct_dims(self):
-        op = get_task("linear")
+        cases = (Workload(dims=dict(M=8, K=8, N=16), dtype="float32"),
+                 Workload(dims=dict(M=4, K=8, N=16), dtype="float32"),
+                 Workload(dims=dict(M=32, K=32, N=64), dtype="float16"),
+                 Workload(dims=dict(M=16, K=32, N=64), dtype="float16"))
+        op = replace(get_task("linear"), benchmark=cases)
         selected = select_capture_workloads(op, ("float32", "float16"))
         for dtype, workload in selected.items():
             values = list(workload.dims.values())
@@ -532,7 +536,7 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
     def test_static_capture_takes_the_declared_case_exactly(self):
         # Equal dims are part of a static case (attention's QO = HQ * D).
         case = Workload(dims=dict(M=128, K=128, N=256), dtype="float16")
-        op = replace(get_task("linear"), correctness=(case,))
+        op = replace(get_task("linear"), benchmark=(case,))
         static = select_capture_workloads(op, ("float16",), dynamic=False)["float16"]
         self.assertEqual(static, case)
         dynamic = select_capture_workloads(op, ("float16",))["float16"]
@@ -540,7 +544,10 @@ class TestCaptureWorkloadSelection(unittest.TestCase):
 
     def test_rejects_undeclared_dtype(self):
         with self.assertRaisesRegex(ValueError, "no declared workload"):
-            select_capture_workloads(get_task("rmsnorm"), ("float64",))
+            select_capture_workloads(
+                replace(get_task("rmsnorm"),
+                        benchmark=(Workload(dims=dict(rows=8, hidden=64), dtype="float32"),)),
+                ("float64",))
 
 
 class TestDtypeTag(unittest.TestCase):

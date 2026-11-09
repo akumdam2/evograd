@@ -441,7 +441,7 @@ class TestCalibrationAndPolicy(MatchedCase):
 
 class TestOperatorScopeIsMatched(MatchedCase):
     def test_operator_policy_judges_its_calibrated_samples(self):
-        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device="cpu")
+        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
         samples = scope.samples([1, 2])
         cal = calibrate(scope, patch_set=("operator",), samples=samples, compile_backend=FAST)
         self.assertEqual(cal.policy.sample_protocol, gate2.MATCHED)
@@ -481,7 +481,7 @@ class TestModelAdapters(MatchedCase):
         policy = calibrate(lm, patch_set=("norm",), samples=samples, compile_backend=FAST).policy
         model = gate2.verify_integration(lm, candidate("c", {"norm": F.norm_site}), policy=policy,
                                          samples=samples)
-        op_scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.correctness[0], device="cpu")
+        op_scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
         op_cal = calibrate(op_scope, patch_set=("operator",), samples=op_scope.samples([1, 2]),
                            compile_backend=FAST)
         operator = gate2.verify_integration(op_scope, op_scope.candidate(F.scale_shift_pair()),

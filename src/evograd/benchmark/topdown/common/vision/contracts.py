@@ -1,7 +1,6 @@
 """Model boundaries as pair contracts, with execution-derived coverage.
 
 Until a canonical harvest is recorded, benchmark/coverage suites are empty.
-The small correctness grid is deliberately labelled handpicked.
 """
 
 from evograd.opdecl import Active, Workload, Provenance, declare_op
@@ -79,17 +78,6 @@ def make_inputs(torch, op, workload, device="cuda"):
 
 def declaration(model, site):
     name = f"{model}_{site}"
-    provenance = Provenance(
-        model=model,
-        component=site,
-        source="handpicked",
-        scaled=True,
-        note="Reduced correctness fixture; not an observed model configuration",
-    )
-    cases = tuple(
-        Workload(dims=DIMS[site], dtype=dtype, provenance=provenance)
-        for dtype in ("float32", "bfloat16")
-    )
     bench = observed(model, name)
     return declare_op(
         name=name,
@@ -106,10 +94,8 @@ def declaration(model, site):
             "vision_mlp": "Biased linear, QuickGELU x*sigmoid(1.702*x), biased linear.",
         }[site],
         backward_semantics="Return gradients for every active argument in declared order, including all parameters. Accumulate reductions in float32.",
-        correctness=cases,
         coverage=bench,
         benchmark=bench,
         benchmark_suites={model + "_observed": bench},
-        tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
         make_inputs=make_inputs,
     )

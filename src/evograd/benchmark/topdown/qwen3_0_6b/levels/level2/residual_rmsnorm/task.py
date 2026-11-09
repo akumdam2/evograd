@@ -17,11 +17,9 @@ from evograd.opdecl.models import (
 from evograd.ops._common import (
     fixed_shape_suites,
     model_workloads,
-    STANDARD_TOLERANCES,
     dtype_for,
     log_distance_weight,
     regime_suites,
-    standard_correctness,
     workloads_2d,
 )
 
@@ -33,7 +31,7 @@ _SHAPES = (
 )
 _SPLIT = LLAMA_REGIME_SPLIT
 _LEGACY_BENCHMARK = workloads_2d(
-    _SHAPES, ("bfloat16",), tolerances=STANDARD_TOLERANCES
+    _SHAPES, ("bfloat16",), 
 )
 # Timed grid derived from Llama-3-8B, so every case names the layer it
 # came from. The pre-v1 hand-picked grid above is kept as an ablation
@@ -43,7 +41,6 @@ _BENCHMARK = model_workloads(
     'elementwise',
     tuple({'tokens': t} for t in LLAMA_TOKEN_SWEEP),
     ("bfloat16",),
-    tolerances=STANDARD_TOLERANCES,
 )
 #: The Qwen3-0.6B configuration this fusion site actually runs at, observed in
 #: the Level-3 harvest: one row per token of the canonical batch-2 x
@@ -53,7 +50,6 @@ _QWEN3_OBSERVED = model_workloads(
     "residual_rmsnorm",
     ({"tokens": 4096},),
     ("bfloat16",),
-    tolerances=STANDARD_TOLERANCES,
 )
 
 #: How often that configuration occurs in one Qwen3-0.6B step, derived from the
@@ -66,27 +62,9 @@ _QWEN3_OBSERVED = model_workloads(
 QWEN3_FUSION_SITES = QWEN3_0_6B.residual_rmsnorm_fusion_sites()
 assert QWEN3_FUSION_SITES["total"] == 56, QWEN3_FUSION_SITES
 
-_REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
-
 
 def _feature(workload: Workload) -> float:
     return float(workload.dims["rows"])
-
-
-def _tolerance(workload, result_name, atol, rtol):
-    """Row-count-aware slack for the one result that reduces over rows.
-
-    ``dweight`` sums ``dnormalized * summed * rstd`` over every row, so its
-    error grows with the number of terms while every other result's does not.
-    Kept from the single-output declaration and re-measured for the two-output
-    contract by ``benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate``: at the canonical
-    4096x1024 BF16 case the measured requirement is 4.6e-02 against the 2.5e-01
-    this yields, and no other result needs a hook at all.
-    """
-    if result_name == "dweight":
-        base = _REDUCED_ATOL.get(workload.dtype, atol)
-        atol = base * max(1.0, (workload.dims["rows"] / 64.0) ** 0.5)
-    return atol, rtol
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -152,7 +130,6 @@ op = declare_op(
         "the norm, and leaves dweight untouched, so a dweight-only check will "
         "not catch it. Accumulate the row reductions in float32."
     ),
-    correctness=standard_correctness(),
     benchmark=_BENCHMARK,
     benchmark_suites={
         **regime_suites(_BENCHMARK, _feature, _SPLIT),
@@ -162,15 +139,6 @@ op = declare_op(
         # generic Llama-derived grid stays the default timed set.
         "qwen3_0_6b_observed": _QWEN3_OBSERVED,
     },
-    tolerances=STANDARD_TOLERANCES,
-    # `summed` is a plain elementwise add, and every spelling measured requires
-    # *exactly* 0 for it -- at float32, float16 and bfloat16 alike, on both the
-    # correctness cases and the canonical 4096x1024 invocation. Holding it to
-    # the same tolerance as the normalized output would let a candidate return
-    # a sum that was 8e-2 wrong and call it fused. 100x tighter still leaves
-    # room for a legitimately different rounding order; it is not exactness.
-    tolerance_multipliers={"summed": (0.01, 0.01)},
-    tolerance_hook=_tolerance,
     regime_feature=_feature,
     regime_split=_SPLIT,
     case_weight=log_distance_weight(_feature, _SPLIT),

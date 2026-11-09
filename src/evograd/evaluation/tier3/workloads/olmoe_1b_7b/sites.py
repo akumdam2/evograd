@@ -163,9 +163,8 @@ _REGISTRY: SiteRegistry | None = None
 
 
 def olmoe_sites() -> SiteRegistry:
-    """The four sites. Preflight checks each task's declared correctness grid;
-    the observed shapes are checked at real size by Tier 2 and the calibration
-    inventory, not here."""
+    """The four sites. The observed shapes are checked at real size by the
+    gates, not here."""
     global _REGISTRY
     if _REGISTRY is None:
         _REGISTRY = SiteRegistry(

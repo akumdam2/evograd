@@ -6,25 +6,12 @@ with ``partial_rotary_factor < 1`` run. A kernel that rotated all ``D``
 channels would be wrong on three quarters of every head at a factor of 0.25.
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 from evograd.ops._common import dtype_for, is_head_major_view
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "H", "T", "D", "R")
 
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, H=h, T=t, D=d, R=r), dtype=dtype)
-    for b, h, t, d, r, dtype in (
-        (1, 2, 8, 16, 4, "float32"),
-        (2, 4, 16, 32, 8, "float32"),
-        # R == D: the partial operator must reduce to full RoPE.
-        (1, 2, 12, 16, 16, "float32"),
-        (2, 4, 32, 64, 16, "bfloat16"),
-        (1, 3, 24, 32, 8, "bfloat16"),
-    )
-)
 
 #: A rotation base for the generated tables of a case with no model behind it.
 #: The operator does not depend on it -- cos/sin are inputs -- but a random pair
@@ -73,38 +60,6 @@ def make_partial_rope_inputs(torch, op, workload, device="cuda"):
     }
 
 
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261013_l1calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   dx                      0    0.308     0.358     1     1     0     2.79
-#:   y                       0    0.263     0.355     1     1     0     2.82
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.02, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 2, "D": 64, "H": 4, "R": 16, "T": 32},
-    reduction_dims={},
-    result_dims={"dx": ('B', 'H', 'T', 'D'), "y": ('B', 'H', 'T', 'D')},
-    gain=0.0,
-    result_gain={},
-    dtype_multipliers={},
-)
-# --- end calibrated tolerances ---
-
-
 op = declare_op(
     name="partial_rope",
     level=1,
@@ -140,10 +95,6 @@ op = declare_op(
         "transposing [B, T, H, D]); the output is contiguous either way. R is "
         "even and at most D."
     ),
-    correctness=_CORRECTNESS,
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     memory_inputs=("x",),
     make_inputs=make_partial_rope_inputs,
 )

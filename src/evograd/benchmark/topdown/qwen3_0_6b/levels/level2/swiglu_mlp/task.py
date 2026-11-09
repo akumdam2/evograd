@@ -26,7 +26,6 @@ that most machines will not have.
 from evograd.benchmark.topdown import load_snapshot as _load_snapshot
 from evograd.benchmark.topdown import load_snapshot_task as _snapshot_task
 from evograd.opdecl import Active, Provenance, Workload, declare_op
-from evograd.opdecl.tolerance import ReductionScaledAtol
 
 #: The harvested workload these dims came from; also the ``Provenance``
 #: model key, so the declaration and the snapshot cannot disagree about
@@ -73,20 +72,6 @@ _OBSERVED = Provenance(
     source="hf_config",
 )
 
-#: The correctness cases are the same block at a size a CPU test can run. They
-#: are not the model's shape and say so.
-_SHRUNK = Provenance(
-    model="qwen3_0_6b",
-    component="swiglu_mlp",
-    free={},
-    source="handpicked",
-    scaled=True,
-    note=(
-        "hidden and intermediate reduced from Qwen3-0.6B's 1024/3072 so the "
-        "correctness cases run on CPU in a normal test; the gate/up/down "
-        "structure and the 3x hidden-to-intermediate ratio are preserved"
-    ),
-)
 
 _BENCHMARK = (
     Workload(
@@ -94,46 +79,6 @@ _BENCHMARK = (
         dtype="bfloat16",
         provenance=_OBSERVED,
     ),
-)
-
-_CORRECTNESS = tuple(
-    Workload(
-        dims={"B": batch, "T": seq, "H": hidden, "I": 3 * hidden},
-        dtype=dtype,
-        provenance=_SHRUNK,
-    )
-    for batch, seq, hidden, dtype in (
-        (1, 8, 16, "float32"),
-        (2, 16, 32, "float32"),
-        (2, 16, 32, "bfloat16"),
-    )
-)
-
-
-#: The correctness case the declared multipliers were measured on. The hook is
-#: the identity here and below it, so adding it cannot loosen this grid.
-_ANCHOR = {"B": 2, "T": 16, "H": 32, "I": 96}
-
-#: Only the three weight gradients contract over tokens; `out` and `dx` keep the
-#: token axis and so carry no reduction term. Measured exponent of the required
-#: atol against reduction length, holding widths fixed: 0.35-0.39 (see the
-#: scaling study), against the 0.5 the random-walk term assumes -- the law is
-#: conservative for this operator, which the reported margin reflects.
-_REDUCTION_SCALED = ReductionScaledAtol(
-    anchor_dims=_ANCHOR,
-    reduction_dims={
-        "dgate_weight": ("B", "T"),
-        "dup_weight": ("B", "T"),
-        "ddown_weight": ("B", "T"),
-    },
-    result_dims={
-        "out": ("B", "T", "H"),
-        "dx": ("B", "T", "H"),
-        "dgate_weight": ("I", "H"),
-        "dup_weight": ("I", "H"),
-        "ddown_weight": ("H", "I"),
-    },
-    gain=2.0,
 )
 
 
@@ -223,58 +168,9 @@ op = declare_op(
         "floating tensors are contiguous CUDA tensors."
     ),
     grad_order=("dx", "dgate_weight", "dup_weight", "ddown_weight"),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
     memory_inputs=("x", "gate_weight", "up_weight", "down_weight"),
-    # Measured, not chosen. `evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp calibrate`
-    # compares the declared float32-accumulated forward against
-    # `runtime_forward` -- the spelling the model runs, and therefore the
-    # smallest disagreement any correct implementation can have with the oracle
-    # -- on every correctness workload and on the canonical [2, 2048, 1024]
-    # invocation, and reports the smallest base `t` for which
-    # `allclose(atol=ma*t, rtol=t)` accepts each result.
-    #
-    # float32: exactly 0.0 everywhere. The upcast is a no-op when the inputs are
-    # already float32, so the two spellings are bit-identical and the tolerance
-    # is the repository's ordinary float32 value rather than a measured bound.
-    #
-    # bfloat16: the disagreement is one rounding of the SwiGLU intermediate,
-    # propagated. Relative to each tensor's scale it is remarkably uniform --
-    # 2.8e-3 to 7.6e-3, i.e. 0.7 to 2 BF16 epsilons -- across both the synthetic
-    # correctness cases and the real Layer-14 tensors. What varies is how much
-    # cancellation each reduction has, which is what the atol multipliers exist
-    # to absorb.
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "bfloat16": (1e-2, 1e-2),
-    },
-    # Each multiplier is the measured minimum at base 1e-2, times a 1.5 safety
-    # margin, rounded up to one decimal. `out` needs none (measured 1.00), so it
-    # has none. The three weight gradients need the largest because they reduce
-    # over all B*T tokens and cancel; `dx` needs a small one for the same
-    # reason at a shorter contraction.
-    #
-    #   result         measured min ma at t=1e-2   declared
-    #   dx                         1.48              2.3
-    #   dgate_weight               2.42              3.7
-    #   dup_weight                 3.22              4.9
-    #   ddown_weight               4.33              6.5
-    tolerance_multipliers={
-        "dx": (2.3, 1.0),
-        "dgate_weight": (3.7, 1.0),
-        "dup_weight": (4.9, 1.0),
-        "ddown_weight": (6.5, 1.0),
-    },
-    # Those multipliers were measured on the correctness grid, whose longest
-    # token reduction is 32 terms. The observed workload's is 4096, and a
-    # constant cannot describe a quantity that grows with the sum. Measured on a
-    # GH200 with `calibrate inventory`: the three weight gradients needed 8.0x
-    # to 9.1x more absolute tolerance at the observed shape than the constants
-    # allow, while `out` and `dx` -- which have no token reduction -- needed
-    # none. The hook supplies exactly that growth and is the identity at and
-    # below the anchor, so every correctness case keeps the tolerance it has.
-    tolerance_hook=_REDUCTION_SCALED,
     make_inputs=make_qwen3_swiglu_mlp_inputs,
 )

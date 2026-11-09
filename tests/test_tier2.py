@@ -32,8 +32,6 @@ def _decl(**overrides):
         output=Active("y", "[rows, hidden]"),
         forward_semantics="s",
         backward_semantics="s",
-        tolerances={"bfloat16": (1e-2, 1e-2)},
-        correctness=(Workload(dims={"rows": 4, "hidden": 8}, dtype="bfloat16"),),
         benchmark=(Workload(dims={"rows": 4, "hidden": 8}, dtype="bfloat16"),),
     )
     base.update(overrides)

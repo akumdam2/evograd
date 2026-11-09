@@ -9,6 +9,7 @@ from unittest import mock
 import torch
 
 from evograd.evaluation.tier2.runner import tensor_checksum
+from tests._small_cases import SMALL
 
 
 class TestTimingDriver(unittest.TestCase):
@@ -110,7 +111,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
         from evograd.benchmark import get_task
 
         op = get_task(op_name)
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        values = make_case_inputs(op, SMALL[op_name][0], device="cpu")
         seen: dict[str, tuple] = {}
 
         def spy(*args):
@@ -147,7 +148,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
         from evograd.benchmark import get_task
 
         op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
         seen: dict[str, tuple] = {}
 
         def spy(*args):

@@ -1,7 +1,7 @@
 """Operator declaration: SwiGLU."""
 
 from evograd.opdecl import Active, declare_op
-from evograd.ops._common import STANDARD_TOLERANCES, dtype_for, make_pair_baseline, standard_correctness
+from evograd.ops._common import dtype_for, make_pair_baseline
 
 
 def _inputs(torch, op, workload, device="cuda"):
@@ -42,8 +42,6 @@ op = declare_op(
         "Return da and db. With s=sigmoid(a), db=dc*(a*s), and "
         "da=dc*b*((a*s)*(1-s)+s). Preserve input dtypes."
     ),
-    correctness=standard_correctness(),
-    tolerances=STANDARD_TOLERANCES,
     performance_baselines={
         "megafold": make_pair_baseline(_megafold_factory, ("a", "b"))
     },

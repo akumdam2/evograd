@@ -27,8 +27,9 @@ Two ways to reach a kernel, deliberately kept apart:
   to the unmodified model. That is `structural identity`.
 * **bound** -- the declared operator through ``opdecl.bind``, i.e. a
   ``torch.autograd.Function`` built from the declaration, which is the path a
-  future evolved kernel takes. That is `bound-pair identity`, and it is gated by
-  the declared tolerances rather than by bitwise equality.
+  future evolved kernel takes. That is `bound-pair identity`; it is not bitwise
+  identical, because the declared reference and the production spelling are
+  different computations.
 
 An unpatched site always uses `production`, so patching one site never silently
 changes another.
@@ -309,8 +310,8 @@ def bound_pair_identity_kernels(ops, sites: tuple[str, ...] | None = None,
 
     The deployment path an evolved kernel will take: ``opdecl.bind`` wraps the
     pair in a ``torch.autograd.Function`` and the rank adapter reshapes around
-    it. Gated by the declared tolerances, not by bitwise equality, because the
-    declared reference and the production spelling are different computations.
+    it. Not bitwise identical, because the declared reference and the production
+    spelling are different computations.
 
     The pair is ``eager_pair_for``, whose backward recomputes the forward, so
     what this measures is a *ceiling* on the plumbing rather than its cost.

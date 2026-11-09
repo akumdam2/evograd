@@ -8,6 +8,7 @@ import torch
 from evograd.benchmark import get_task
 from evograd.pipelines.d_inductor.capture import _backward_arg_spec, capture_inductor_pair
 from evograd.pipelines.unified.capture import _capture_device, _encode_arg
+from tests._small_cases import SMALL
 
 
 class TestUnifiedCaptureContract(unittest.TestCase):
@@ -41,7 +42,7 @@ class TestUnifiedCaptureContract(unittest.TestCase):
     def test_legacy_pipeline_d_still_refuses_multi_output_without_opt_in(self):
         op = get_task("fused_add_rms_norm")
         with self.assertRaisesRegex(NotImplementedError, "Pipeline D"):
-            capture_inductor_pair(op, op.correctness[0], device="cpu")
+            capture_inductor_pair(op, SMALL["fused_add_rms_norm"][0], device="cpu")
 
 
 if __name__ == "__main__":

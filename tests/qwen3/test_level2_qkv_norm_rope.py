@@ -30,9 +30,12 @@ from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference 
     qwen3_qkv_norm_rope_forward_production,
     qwen3_qkv_norm_rope_forward_ref,
 )
+from tests._small_cases import SMALL as SMALL_CASES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
 OP = get_task("qwen3_qkv_norm_rope")
+SMALL = SMALL_CASES["qwen3_qkv_norm_rope"]
 
 
 class TestDeclaration(unittest.TestCase):
@@ -138,31 +141,19 @@ class TestDeclaration(unittest.TestCase):
 
 
 class TestInputGeneration(unittest.TestCase):
-    def test_every_correctness_case_covers_the_contract(self):
-        dtypes = {w.dtype for w in OP.correctness}
-        ratios = {w.dims["HQ"] // w.dims["HK"] for w in OP.correctness}
-        self.assertEqual(dtypes, {"float32", "bfloat16"})
-        self.assertEqual(ratios, {2, 4})
-        for workload in OP.correctness:
-            dims = workload.dims
-            with self.subTest(dims=dims):
-                self.assertEqual(dims["HQ"] % dims["HK"], 0)
-                self.assertEqual(dims["QO"], dims["HQ"] * dims["D"])
-                self.assertEqual(dims["KVO"], dims["HK"] * dims["D"])
-
     def test_one_upstream_gradient_is_generated_per_output(self):
-        values = make_case_inputs(OP, OP.correctness[0], device="cpu")
+        values = make_case_inputs(OP, SMALL[0], device="cpu")
         grads = upstream_grad_values(OP, values)
         self.assertIsInstance(grads, tuple)
         self.assertEqual(len(grads), 3)
-        dims = OP.correctness[0].dims
+        dims = SMALL[0].dims
         self.assertEqual(list(grads[0].shape), [dims["B"], dims["HQ"], dims["T"], dims["D"]])
         self.assertEqual(list(grads[1].shape), [dims["B"], dims["HK"], dims["T"], dims["D"]])
 
     def test_the_rotary_tables_are_real_rotations(self):
-        """A random cos/sin pair is not a rotation, and a tolerance calibrated
-        against one would describe a computation the model never performs."""
-        values = make_case_inputs(OP, OP.correctness[1], device="cpu")
+        """A random cos/sin pair is not a rotation, and a case built on one
+        would describe a computation the model never performs."""
+        values = make_case_inputs(OP, SMALL[1], device="cpu")
         cos, sin = values["cos"].float(), values["sin"].float()
         self.assertTrue(torch.allclose(cos**2 + sin**2, torch.ones_like(cos), atol=1e-5))
         self.assertTrue(torch.allclose(cos[0, 0], torch.ones_like(cos[0, 0]), atol=1e-5))
@@ -248,7 +239,7 @@ class TestForwardReference(unittest.TestCase):
             qwen3_qkv_norm_rope_forward_ref(*bad)
 
     def test_backward_returns_six_gradients_and_uses_all_three(self):
-        values = make_case_inputs(OP, OP.correctness[1], device="cpu")
+        values = make_case_inputs(OP, SMALL[1], device="cpu")
         outputs, grads = oracle(OP, values)
         self.assertEqual(len(outputs), 3)
         self.assertEqual(sorted(grads), sorted(OP.grad_names()))
@@ -271,59 +262,6 @@ class TestTimedBaselineAndGate(unittest.TestCase):
             resolve_runtime_forward(OP), forward_ref.qwen3_qkv_norm_rope_forward_production
         )
         self.assertIs(resolve_forward(OP), forward_ref.qwen3_qkv_norm_rope_forward_ref)
-
-    def test_the_declared_tolerances_are_the_calibrated_ones(self):
-        self.assertEqual(OP.tolerances["bfloat16"], (2e-2, 2e-2))
-        self.assertEqual(OP.tolerances["float32"], (2e-5, 2e-5))
-        self.assertEqual(
-            OP.tolerance_multipliers,
-            {
-                "dx": (1.6, 1.0),
-                "dq_weight": (7.1, 1.0),
-                "dk_weight": (5.4, 1.0),
-                "dq_norm_weight": (7.4, 1.0),
-                "dk_norm_weight": (4.2, 1.0),
-            },
-        )
-
-    def test_the_outputs_carry_no_multiplier(self):
-        # q, k and v have no reduction and no measured need for one, so no
-        # multiplier. At the observed shape they still pick up the hook's
-        # element-count term, which is a property of the workload rather than
-        # of the result.
-        for name in OP.output_names:
-            self.assertNotIn(name, OP.tolerance_multipliers)
-
-    def test_the_hook_is_the_identity_on_the_correctness_grid(self):
-        for workload in OP.correctness:
-            for name in (*OP.output_names, *OP.grad_names()):
-                with self.subTest(dims=workload.dims, result=name):
-                    base = OP.tolerances[workload.dtype]
-                    ma, mr = OP.tolerance_multipliers.get(name, (1.0, 1.0))
-                    self.assertEqual(
-                        OP.tolerance_for(workload, name),
-                        (base[0] * ma, base[1] * mr),
-                    )
-
-    def test_the_observed_shape_widens_the_reduction_gradients_most(self):
-        # The four weight gradients contract over 4096 tokens where the grid's
-        # longest is 64; q/k/v contract over nothing. The gate has to separate
-        # them, or a constant is doing the work of a law.
-        observed = OP.benchmark_workloads(suite="qwen3_0_6b_observed")[0]
-        base_atol = OP.tolerances["bfloat16"][0]
-        widening = {
-            name: OP.tolerance_for(observed, name)[0]
-            / (base_atol * OP.tolerance_multipliers.get(name, (1.0, 1.0))[0])
-            for name in (*OP.output_names, *OP.grad_names())
-        }
-        for name in ("q", "k", "v", "dx"):
-            self.assertLess(widening[name], 2.5, name)
-        for name in ("dq_weight", "dk_weight", "dq_norm_weight", "dk_norm_weight"):
-            self.assertGreater(widening[name], 10.0, name)
-        # rtol is untouched everywhere: relative error is what stays constant.
-        for name in (*OP.output_names, *OP.grad_names()):
-            self.assertEqual(OP.tolerance_for(observed, name)[1], 2e-2)
-
 
 class TestSnapshotEntry(unittest.TestCase):
     def test_the_entry_is_derived_from_five_harvested_records(self):

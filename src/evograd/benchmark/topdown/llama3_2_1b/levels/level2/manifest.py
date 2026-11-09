@@ -16,8 +16,7 @@ which model's widths produced it.
 from __future__ import annotations
 
 # The workload pins Llama-3.2-1B. `opdecl.models` also carries LLAMA_3_8B,
-# the 8B config the operator suite's vocabulary-regime cases are declared
-# against; that one did not move and is a different model.
+# a different model.
 from evograd.opdecl.models import LLAMA_3_2_1B
 
 #: The workload that owns these sites.

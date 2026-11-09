@@ -1,4 +1,4 @@
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
 
 def make_inputs(torch, op, workload, device="cuda"):
@@ -35,26 +35,5 @@ op = declare_op(
     parameter_args=("weight", "bias"),
     forward_semantics="Biased NCHW square Conv2D, declared stride/padding/groups, dilation 1. C=CG*G. O and C divisible by G.",
     backward_semantics="Return dx, dweight, dbias in that order; respect groups and boundary padding. Accumulate reductions in float32.",
-    correctness=tuple(
-        Workload(
-            dims=dict(
-                B=1,
-                C=4,
-                Y=8,
-                X=8,
-                O=4,
-                CG=4 // g,
-                K=k,
-                OY=(8 + 2 * p - k) // s + 1,
-                OX=(8 + 2 * p - k) // s + 1,
-                S=s,
-                P=p,
-                G=g,
-            ),
-            dtype="float32",
-        )
-        for g, k, s, p in ((1, 2, 2, 0), (4, 7, 1, 3))
-    ),
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
     make_inputs=make_inputs,
 )

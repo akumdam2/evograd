@@ -19,7 +19,6 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 | experts kernel | `grouped_mm` (torch's grouped GEMM, what an unmodified model runs) is canonical; `eager` (the per-expert loop) is the alternative. A hashed spec field, read back off the built model |
 | hardware | one GH200: no offload, no multi-GPU |
 | shape | canonical **B2 x T2048**, confirmed on a GH200 (run `20261016_gpu1`): 28.2 GiB for the L3 step, 64.5 GiB with AdamW at Tier 3 |
-| tolerances | **provisional** on every L2 site, and **too tight at the observed size**: in run `20261016_gpu1` every site's weight-gradient reductions over 4,096 tokens fail the 8e-2 bfloat16 gate by one bf16 unit at the reference magnitude while every forward output and activation gradient passes with headroom under 0.4. The calibration inventory and fit are the next step |
 | L3 gate | none in Tier 3: correctness comes from the verification package's Gates 1/2/3 |
 | library lines | none |
 
@@ -74,14 +73,12 @@ Run `20261016_gpu1` (one GH200, 10 minutes): canonical smoke, harvest, the
 tracked snapshot (`harvest/snapshot.json`), the layer-8 capture (1.6 GiB) and
 its replay (output and input gradient bitwise, parameter gradients within
 4e-5), tier-3 eager and structural-identity rows (241 ms/step, 0.998x), and
-the four tier-2 observed cases (correctness gate only; see the tolerance row).
+the four tier-2 observed cases.
 The write-up is `docs/experiments/olmoe_session_20261016.md`.
 
 ## Deferred
 
-1. The calibration inventory and tolerance fit for the four sites; then the
-   tier-3 per-site and whole-model compile rows and the tier-2 timings the
-   provisional gate currently refuses.
+1. The tier-3 per-site and whole-model compile rows and the tier-2 timings.
 2. The L3 whole-model gate; negative controls and faults.
 3. Pretrained `allenai/OLMoE-1B-7B-0924` weights and real text.
 4. Seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.

@@ -39,25 +39,18 @@ WORKLOAD = "qwen3_0_6b"
 #:
 #: This is Qwen's decision, not the binder's. The suite name is part of the
 #: report contract; ``coverage`` records whether the observed cases precede or
-#: follow the primitive's own untimed coverage, because a report lists cases in
-#: declaration order and the two are not interchangeable; ``mirrors_coverage``
-#: names the suite that serves that coverage under a name and therefore has to
-#: follow it. ``declared_tolerances`` says the cases carry the primitive's own
-#: declared tolerances -- the value is the primitive's, recorded here because
-#: choosing to apply it is this model's.
+#: follow the coverage the primitive already has, because a report lists cases
+#: in declaration order and the two are not interchangeable.
 #:
 #: :mod:`evograd.benchmark.cases` knows how to apply all of that and nothing
 #: about which model it belongs to; the registry hands this table to it.
 OBSERVED_BINDINGS: tuple[ObservedBinding, ...] = (
     ObservedBinding(WORKLOAD, "causal_gqa_attention", "qwen3_0_6b_observed"),
-    ObservedBinding(WORKLOAD, "cross_entropy", "qwen3_0_6b_observed",
-                    declared_tolerances=True),
+    ObservedBinding(WORKLOAD, "cross_entropy", "qwen3_0_6b_observed"),
     ObservedBinding(WORKLOAD, "linear_no_bias", "qwen3_0_6b_observed"),
-    ObservedBinding(WORKLOAD, "rmsnorm", "qwen3_0_6b_observed",
-                    coverage="prepend", mirrors_coverage="coverage"),
+    ObservedBinding(WORKLOAD, "rmsnorm", "qwen3_0_6b_observed", coverage="prepend"),
     ObservedBinding(WORKLOAD, "rope", "qwen3_0_6b_observed"),
-    ObservedBinding(WORKLOAD, "swiglu", "qwen3_0_6b_observed",
-                    declared_tolerances=True),
+    ObservedBinding(WORKLOAD, "swiglu", "qwen3_0_6b_observed"),
 )
 
 

@@ -28,8 +28,7 @@ computes it, in both regions:
     the rows).
 
 Cases come from the tracked harvest snapshot (one per observed configuration,
-layouts included); a machine without it sees only the small correctness
-fixtures.
+layouts included); a machine without it sees none.
 """
 
 from __future__ import annotations
@@ -119,13 +118,6 @@ def _evoattention_inputs(torch_, op, workload, device="cuda"):
             "key_mask": keep.to(device), "pair_bias": rand(b, 1, h, n, n), "do": rand(b, s, n, h, d)}
 
 
-def _fixtures(dims_list):
-    return tuple(Workload(dims=dims, dtype=dtype,
-                          provenance=Provenance(model=WORKLOAD, component="fixture", source="handpicked",
-                                                scaled=True, note="Reduced correctness fixture"))
-                 for dims in dims_list for dtype in ("float32", "bfloat16"))
-
-
 LAYERNORM_LINEAR = "megafold_layernorm_linear"
 EVOATTENTION = "megafold_evoattention"
 
@@ -153,9 +145,7 @@ def layernorm_linear_op():
             "Return (dx, dweight, dbias, dlinear_weight), each in its input's dtype, as autograd "
             "differentiates the forward above: the GEMM backward in the case dtype (dout and "
             "dlinear_weight are in it), the LayerNorm backward in float32."),
-        correctness=_fixtures((dict(M=64, K=64, N=128), dict(M=129, K=128, N=16))),
         coverage=observed, benchmark=observed, benchmark_suites={f"{WORKLOAD}_observed": observed},
-        tolerances={"float32": (1e-4, 1e-4), "bfloat16": (2e-2, 2e-2)},
         make_inputs=_layernorm_linear_inputs)
 
 
@@ -182,8 +172,5 @@ def evoattention_op():
         backward_semantics=(
             "Return (dq, dk, dv, d_pair_bias): dq/dk/dv [B, S, N, H, D] in the case dtype, "
             "d_pair_bias [B, 1, H, N, N] summed over S, as autograd differentiates the forward above."),
-        correctness=_fixtures((dict(B=1, S=1, H=4, N=23, D=8), dict(B=1, S=3, H=4, N=64, D=16))),
         coverage=observed, benchmark=observed, benchmark_suites={f"{WORKLOAD}_observed": observed},
-        tolerances={"float32": (1e-4, 1e-4), "bfloat16": (4e-2, 4e-2)},
-        tolerance_multipliers={"d_pair_bias": (2.0, 1.0)},
         make_inputs=_evoattention_inputs)

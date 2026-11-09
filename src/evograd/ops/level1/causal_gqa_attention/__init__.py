@@ -12,7 +12,7 @@ separate GEMM and belongs to the Level-2 ``qwen3_attention`` task; the two meet
 exactly where this one's output becomes that one's input.
 """
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 from evograd.ops._common import is_head_major_view
 
 _DIMS = ("B", "HQ", "HK", "T", "D")
@@ -20,18 +20,6 @@ _DIMS = ("B", "HQ", "HK", "T", "D")
 
 #: The observed Qwen3-0.6B configuration: 16 query heads over 8 KV heads, batch
 #: 2 x sequence 2048, 28 invocations per step.
-
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, HQ=hq, HK=hk, T=t, D=d), dtype=dtype)
-    for b, hq, hk, t, d in (
-        (1, 4, 2, 16, 16),
-        (2, 4, 2, 32, 32),
-        # 4:1 grouping, so a kernel that assumed 2:1 fails here.
-        (1, 8, 2, 24, 32),
-    )
-    for dtype in ("float32", "bfloat16")
-)
 
 
 def make_causal_gqa_attention_inputs(torch, op, workload, device="cuda"):
@@ -119,32 +107,6 @@ op = declare_op(
         "the output projection is a separate GEMM."
     ),
     grad_order=("dq", "dk", "dv"),
-    correctness=_CORRECTNESS,
-    # Measured, not chosen. The (since removed) Level-1 calibration compared the
-    # declared dense forward against `runtime_forward` -- the fused SDPA the
-    # model runs, and therefore the smallest disagreement any correct
-    # implementation can have with the oracle -- on every correctness workload
-    # and on the observed Qwen configuration.
-    #
-    # float32: worst 1.0e-06 across every case, which the repository's ordinary
-    # float32 pair clears by ~20x. `dv` measures exactly 0.0 at both dtypes on
-    # the small cases: SDPA and the dense spelling compute it identically there.
-    #
-    # bfloat16 worst: o 5.2e-03, dq 1.4e-02, dk 1.4e-02, dv 3.9e-03. The base is
-    # set by the binding *forward* requirement so the output is gated by the base
-    # alone and only the gradients carry multipliers; 1e-02 leaves 1.9x on `o`.
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "bfloat16": (1e-2, 1e-2),
-    },
-    # The measured minimum atol multiplier at base 1e-2, times a 1.5 safety
-    # margin, rounded up to one decimal. `o` and `dv` measured 1.00 and have
-    # none.
-    #
-    #   result   measured min ma at t=1e-2   declared
-    #   dq                 1.46                2.2
-    #   dk                 1.48                2.3
-    tolerance_multipliers={"dq": (2.2, 1.0), "dk": (2.3, 1.0)},
     memory_inputs=("q", "k", "v"),
     make_inputs=make_causal_gqa_attention_inputs,
 )

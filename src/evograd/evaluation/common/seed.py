@@ -10,7 +10,7 @@ One rule for every seed pipeline. A seed is accepted when
    output and gradient present, of the declared shape and dtype, and finite.
 
 The deployment's values are judged by operator Gate 2 at evaluation, not here.
-No input is generated and no declared tolerance applies. Runs in the pipeline's
+No input is generated. Runs in the pipeline's
 killable verification subprocess so a broken CUDA candidate cannot stop repair.
 """
 

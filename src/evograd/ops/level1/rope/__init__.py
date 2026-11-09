@@ -6,7 +6,7 @@ for it before v1, so the position-encoding path of every LLM benchmark went
 unmeasured.
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 from evograd.opdecl.models import LLAMA_3_8B, MODELS
 from evograd.ops._common import is_head_major_view
 
@@ -72,18 +72,6 @@ def make_rope_inputs(torch, op, workload, device="cuda"):
 #: one harvested `apply_rotary_pos_emb` record, which rotates q and k together.
 
 
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, n_heads=h, T=t, head_dim=d), dtype=dtype)
-    for b, h, t, d in (
-        (1, 4, 16, 64),
-        (2, 8, 128, 128),
-        # Non-power-of-two token count: the kernel launches one program per
-        # token, so a ragged count exercises the tail path.
-        (1, 32, 129, 128),
-    )
-    for dtype in ("float32", "float16", "bfloat16")
-)
-
 op = declare_op(
     name="rope",
     forward="evograd.ops.level1.rope.forward_ref:rope_forward_ref",
@@ -131,19 +119,6 @@ op = declare_op(
         "shared row of cos/sin per token. Fusing the two halves into one pass is "
         "the point."
     ),
-    correctness=_CORRECTNESS,
-    # Verified against the new `runtime_forward` rather than re-derived.
-    # `level1 calibrate --op rope` measures the oracle-vs-Transformers
-    # disagreement at worst 6.0e-03 (bfloat16, the observed 16-head case),
-    # 6.5e-04 (float16) and exactly 0.0 (float32) -- 13x, 77x and unbounded
-    # margins against the pair below. They are left alone because the same pair
-    # gates the historical Llama grid;
-    # tightening them is a separate change with its own blast radius.
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "float16": (5e-2, 5e-2),
-        "bfloat16": (8e-2, 8e-2),
-    },
     # cos/sin are recomputed per step by the model, not stored activations, so
     # they do not belong in the saved-memory budget.
     memory_inputs=("x",),

@@ -52,8 +52,7 @@ def _single_output_op():
         output=Active("y", "[M, N]"),
         forward_semantics="identity",
         backward_semantics="identity",
-        correctness=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
     )
 
 
@@ -71,8 +70,7 @@ def _structured_output_op():
         ),
         forward_semantics="identity",
         backward_semantics="identity",
-        correctness=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
     )
 
 

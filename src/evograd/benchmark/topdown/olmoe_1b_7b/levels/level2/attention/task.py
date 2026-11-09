@@ -6,12 +6,10 @@ OLMoE-1B-7B -- multi-head attention, which the grouped-query contract covers as
 a group of one.
 """
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 
-from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk, token_major
+from ..task_tools import OBSERVED_SUITE, observed, seed_of, token_major
 
-#: Not calibrated: see ``task_tools.PROVISIONAL``.
-PROVISIONAL_TOLERANCES = True
 
 _DIMS = ("B", "T", "HQ", "HK", "D", "QO", "H")
 
@@ -22,16 +20,6 @@ def model_strides(dims):
 
 
 _BENCHMARK = observed("attention", strides=model_strides)
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, T=t, HQ=hq, HK=hk, D=d, QO=hq * d, H=h), dtype=dtype,
-             provenance=shrunk("attention", model_strides(dict(B=b, T=t, HK=hk, D=d))))
-    for b, t, hq, hk, d, h, dtype in (
-        (1, 12, 4, 4, 16, 64, "float32"),
-        (2, 20, 8, 2, 16, 64, "float32"),
-        (2, 24, 4, 4, 32, 128, "bfloat16"),
-    )
-)
 
 
 def make_attention_inputs(torch, op, workload, device="cuda"):
@@ -86,10 +74,8 @@ op = declare_op(
     extra_constraints=(
         "HQ divisible by HK; v may be a non-contiguous transposed view."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=PROVISIONAL,
     make_inputs=make_attention_inputs,
 )

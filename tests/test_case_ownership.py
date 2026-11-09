@@ -1,18 +1,13 @@
 """Who owns a benchmark case, and what must not change when it moves.
 
-A Level-1 primitive declares mathematics and the generic cases that prove an
-implementation correct. It does not decide which shapes are worth timing, where
-the shape regime splits, how cases are weighted, or what a named suite selects
--- those are benchmark decisions, and they live in
-:mod:`evograd.benchmark.operator_suite.cases` (grids computed from a published
-model configuration) or in a model's own manifest (cases observed in a captured
-run).
+A Level-1 primitive declares mathematics. It does not decide which shapes are
+worth timing, where the shape regime splits, how cases are weighted, or what a
+named suite selects -- those are benchmark decisions, and a primitive's cases
+are the ones a model's own manifest observed in a captured run.
 
-Moving them was allowed to change exactly one thing: where the code lives. The
-tests here pin the rest -- the case lists, their order and multiplicity, their
-dtypes, tolerances, layouts and provenance, the weighting applied to them, and
-the fact that binding produces a *new* declaration rather than editing the
-shared one.
+The tests here pin how those cases are bound -- their order and multiplicity,
+the suites they are served under, and the fact that binding produces a *new*
+declaration rather than editing the shared one.
 """
 
 from __future__ import annotations
@@ -25,22 +20,18 @@ from pathlib import Path
 from evograd.benchmark import TASKS, get_task
 from evograd.benchmark.cases import (
     ObservedBinding,
-    bind_benchmark_cases,
     bind_observed_cases,
-    bind_suite_cases,
     index_bindings,
 )
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level1.manifest import (
     OBSERVED_BINDINGS as QWEN3_0_6B_OBSERVED,
 )
-from evograd.benchmark.operator_suite.cases import SuiteCases, all_cases, cases_for
 from evograd.ops import PRIMITIVES
 
 REPO = Path(__file__).resolve().parents[1]
 
-#: Every primitive whose timed grid the operator suite defines. ``embedding_bag``
-#: has none: its only cases are the ones the DLRM manifest observed.
-SUITE_CASE_OWNERS = frozenset(PRIMITIVES) - {"embedding_bag"}
+#: The primitives Qwen3-0.6B binds its observed cases to.
+QWEN3_BOUND = tuple(binding.task for binding in QWEN3_0_6B_OBSERVED)
 
 
 class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
@@ -60,12 +51,6 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
                 self.assertIsNone(primitive.regime_feature)
                 self.assertIsNone(primitive.regime_split)
                 self.assertIsNone(primitive.case_weight)
-
-    def test_every_primitive_keeps_its_generic_correctness_cases(self):
-        """Correctness is the primitive's own: it proves the mathematics."""
-        for name, primitive in sorted(PRIMITIVES.items()):
-            with self.subTest(op=name):
-                self.assertTrue(primitive.correctness, f"{name} lost its correctness cases")
 
     def test_no_primitive_names_a_model_configuration(self):
         """Two documented exceptions, both a numerical rule rather than a case
@@ -98,48 +83,12 @@ class TestPrimitivesOwnNoPerformanceCases(unittest.TestCase):
         self.assertEqual(loaded, "[]", f"importing primitives loaded {loaded}")
 
 
-class TestSuiteOwnsThePerformanceCases(unittest.TestCase):
-    def test_every_primitive_has_suite_cases(self):
-        defined = all_cases()
-        self.assertEqual(set(defined), SUITE_CASE_OWNERS)
-        for name, suite in sorted(defined.items()):
-            with self.subTest(op=name):
-                self.assertIsInstance(suite, SuiteCases)
-
-    def test_a_primitive_the_suite_does_not_define_is_returned_unchanged(self):
-        self.assertIsNone(cases_for("not_a_primitive"))
-
-    def test_the_suite_cases_are_what_the_task_serves(self):
-        mirrored = {
-            b.task: b.mirrors_coverage for b in QWEN3_0_6B_OBSERVED if b.mirrors_coverage
-        }
-        for name, suite in sorted(all_cases().items()):
-            with self.subTest(op=name):
-                task = TASKS[name]
-                self.assertEqual(task.benchmark, tuple(suite.benchmark))
-                for suite_name, cases in suite.suites.items():
-                    if mirrored.get(name) == suite_name:
-                        # Declared to follow the coverage, which a model's
-                        # observed cases join. Pinned by its own test.
-                        continue
-                    self.assertEqual(task.benchmark_suites[suite_name], tuple(cases))
-
-    def test_suite_names_keep_their_declaration_order(self):
-        for name, suite in sorted(all_cases().items()):
-            if not suite.suites:
-                continue
-            with self.subTest(op=name):
-                declared = list(suite.suites)
-                served = [k for k in TASKS[name].benchmark_suites if k in set(declared)]
-                self.assertEqual(served, declared)
-
-
 class TestBindingDoesNotMutateThePrimitive(unittest.TestCase):
     def test_binding_returns_a_new_declaration(self):
-        for name in sorted(SUITE_CASE_OWNERS):
+        for name in sorted(QWEN3_BOUND):
             primitive = PRIMITIVES[name]
             with self.subTest(op=name):
-                bound = bind_benchmark_cases(primitive, QWEN3_0_6B_OBSERVED)
+                bound = bind_observed_cases(primitive, QWEN3_0_6B_OBSERVED)
                 self.assertIsNot(bound, primitive)
                 self.assertEqual(primitive.benchmark, ())
                 self.assertEqual(primitive.benchmark_suites, {})
@@ -149,22 +98,13 @@ class TestBindingDoesNotMutateThePrimitive(unittest.TestCase):
         """Binding reads the primitive; it must not accumulate into it."""
         for name, primitive in sorted(PRIMITIVES.items()):
             with self.subTest(op=name):
-                first = bind_benchmark_cases(primitive, QWEN3_0_6B_OBSERVED)
-                second = bind_benchmark_cases(primitive, QWEN3_0_6B_OBSERVED)
+                first = bind_observed_cases(primitive, QWEN3_0_6B_OBSERVED)
+                second = bind_observed_cases(primitive, QWEN3_0_6B_OBSERVED)
                 self.assertEqual(first.benchmark, second.benchmark)
                 self.assertEqual(first.coverage, second.coverage)
                 self.assertEqual(
                     sorted(first.benchmark_suites), sorted(second.benchmark_suites)
                 )
-
-    def test_a_primitive_declaring_its_own_grid_is_refused(self):
-        """One owner per case collection, and the collision is loud."""
-        import dataclasses
-
-        primitive = PRIMITIVES["rmsnorm"]
-        conflicting = dataclasses.replace(primitive, benchmark=(primitive.correctness[0],))
-        with self.assertRaisesRegex(ValueError, "has one owner"):
-            bind_suite_cases(conflicting)
 
     def test_the_registry_serves_the_bound_declaration(self):
         for name in sorted(PRIMITIVES):
@@ -175,40 +115,15 @@ class TestBindingDoesNotMutateThePrimitive(unittest.TestCase):
                 self.assertEqual(TASKS[name].forward, PRIMITIVES[name].forward)
 
 
-class TestObservedCasesStillJoinLast(unittest.TestCase):
-    OBSERVED = tuple(binding.task for binding in QWEN3_0_6B_OBSERVED)
-
-    def test_observed_cases_are_bound_after_the_suite_cases(self):
-        """Order is the contract: the suite establishes the coverage a model's
-        observed cases then join."""
-        for name in self.OBSERVED:
+class TestObservedCasesJoinTheCoverage(unittest.TestCase):
+    def test_observed_cases_are_served_as_a_suite_and_in_the_coverage(self):
+        for name in QWEN3_BOUND:
             with self.subTest(op=name):
-                suite_only = bind_suite_cases(PRIMITIVES[name])
-                both = bind_observed_cases(suite_only, QWEN3_0_6B_OBSERVED)
-                observed = both.benchmark_suites["qwen3_0_6b_observed"]
+                bound = bind_observed_cases(PRIMITIVES[name], QWEN3_0_6B_OBSERVED)
+                observed = bound.benchmark_suites["qwen3_0_6b_observed"]
                 self.assertTrue(observed)
                 for case in observed:
-                    self.assertIn(case, both.coverage)
-                    self.assertNotIn(case, suite_only.coverage)
-
-    def test_the_coverage_mirroring_suite_follows_the_bound_coverage(self):
-        """``rmsnorm`` serves its untimed coverage under a name as well as a
-        field. The two must not drift when the observed cases join."""
-        binding = next(b for b in QWEN3_0_6B_OBSERVED if b.mirrors_coverage)
-        self.assertEqual(binding.task, "rmsnorm")
-        task = TASKS["rmsnorm"]
-        self.assertEqual(task.benchmark_suites[binding.mirrors_coverage], task.coverage)
-
-    def test_only_the_declared_mirror_is_extended(self):
-        """A suite that merely happens to equal the coverage is left alone."""
-        suite_only = bind_suite_cases(PRIMITIVES["rmsnorm"])
-        bound = bind_observed_cases(suite_only, QWEN3_0_6B_OBSERVED)
-        for name, cases in bound.benchmark_suites.items():
-            if name in ("coverage", "qwen3_0_6b_observed"):
-                continue
-            with self.subTest(suite=name):
-                self.assertEqual(cases, suite_only.benchmark_suites[name])
-
+                    self.assertIn(case, bound.coverage)
 
 class TestWeightingAndRegimesSurvivedTheMove(unittest.TestCase):
     """The moved functions are exercised, not merely counted."""
@@ -313,7 +228,6 @@ class TestObservedBindingOwnership(unittest.TestCase):
         shared = [
             REPO / "src/evograd/benchmark/cases.py",
             REPO / "src/evograd/benchmark/core/tasks.py",
-            REPO / "src/evograd/benchmark/operator_suite/cases/__init__.py",
         ]
         for path in shared:
             with self.subTest(module=path.name):
@@ -325,8 +239,8 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
 
     The point is that :func:`bind_observed_cases` applies whatever it is given.
     The stand-in overrides only where the cases come from; every rule the
-    binder implements -- suite naming, append/prepend, the coverage mirror, the
-    refusal to overwrite an existing suite -- is exercised unchanged.
+    binder implements -- suite naming, append/prepend, the refusal to overwrite
+    an existing suite -- is exercised unchanged.
     """
 
     class _Supplied(ObservedBinding):
@@ -341,7 +255,7 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
             )
 
     def _primitive(self):
-        return bind_suite_cases(PRIMITIVES["rmsnorm"])
+        return PRIMITIVES["rmsnorm"]
 
     def test_supplied_cases_reach_the_named_suite(self):
         task = bind_observed_cases(
@@ -365,14 +279,6 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
         self.assertEqual(prepended.coverage[:len(supplied)], supplied)
         self.assertEqual(len(appended.coverage), len(prepended.coverage))
 
-    def test_the_coverage_mirror_follows_the_result(self):
-        task = bind_observed_cases(
-            self._primitive(),
-            [self._Supplied("w", "rmsnorm", "s", coverage="prepend",
-                            mirrors_coverage="coverage")],
-        )
-        self.assertEqual(task.benchmark_suites["coverage"], task.coverage)
-
     def test_a_primitive_no_binding_names_is_untouched(self):
         base = self._primitive()
         self.assertIs(
@@ -380,11 +286,9 @@ class TestTheBinderTakesSuppliedConfiguration(unittest.TestCase):
         )
 
     def test_binding_over_an_existing_suite_is_refused(self):
+        bound = bind_observed_cases(self._primitive(), [self._Supplied("w", "rmsnorm", "s")])
         with self.assertRaisesRegex(ValueError, "exactly one place"):
-            bind_observed_cases(
-                self._primitive(),
-                [self._Supplied("w", "rmsnorm", "legacy")],
-            )
+            bind_observed_cases(bound, [self._Supplied("v", "rmsnorm", "s")])
 
     def test_two_workloads_may_bind_one_primitive_under_distinct_suites(self):
         """The supported case: one contract, two architectures, two suites."""
@@ -413,8 +317,8 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
     """Qwen3 and Llama-3 both run RMSNorm; each contributes its own suite.
 
     Synthetic bindings supply their own cases, so this exercises the binder's
-    rules -- distinct suites coexisting, ordering, coverage mirroring, refusal
-    of a real collision, and no mutation -- without needing either model's
+    rules -- distinct suites coexisting, ordering, refusal of a real
+    collision, and no mutation -- without needing either model's
     harvest to have been run.
     """
 
@@ -431,7 +335,7 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
             )
 
     def _base(self):
-        return bind_suite_cases(PRIMITIVES["rmsnorm"])
+        return PRIMITIVES["rmsnorm"]
 
     def _both(self, **kwargs):
         return (
@@ -470,15 +374,6 @@ class TestTwoModelsBindTheSamePrimitive(unittest.TestCase):
             backward.benchmark_suites["two_observed"]
             + backward.benchmark_suites["one_observed"],
         )
-
-    def test_the_coverage_mirror_follows_both_contributions(self):
-        task = bind_observed_cases(
-            self._base(), self._both(mirrors_coverage="coverage")
-        )
-        self.assertEqual(task.benchmark_suites["coverage"], task.coverage)
-        for suite in ("one_observed", "two_observed"):
-            for case in task.benchmark_suites[suite]:
-                self.assertIn(case, task.coverage)
 
     def test_neither_binding_mutates_the_primitive(self):
         primitive = PRIMITIVES["rmsnorm"]

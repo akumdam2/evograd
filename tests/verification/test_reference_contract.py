@@ -28,8 +28,7 @@ def model_op(**changes):
         args=(Active("x", "[N]"),), output=Active("y", "[N]"),
         forward_semantics="two operations at the operand dtype",
         backward_semantics="dx = dy",
-        correctness=(Workload({"N": 4}, "bfloat16"),), parameter_args=(),
-        tolerances={"bfloat16": (1e-5, 1.6e-2)},
+        benchmark=(Workload({"N": 4}, "bfloat16"),), parameter_args=(),
     )
     args.update(changes)
     return declare_op(**args)

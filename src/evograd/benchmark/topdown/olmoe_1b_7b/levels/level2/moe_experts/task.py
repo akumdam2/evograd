@@ -8,33 +8,14 @@ routing, under this model's own key, cases and provenance -- with
 ``top_k_weights`` the raw softmax probabilities (``norm_topk_prob`` is false).
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
-from ..task_tools import OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
+from ..task_tools import OBSERVED_SUITE, observed, seed_of
 
-#: Not calibrated: see ``task_tools.PROVISIONAL``. The weight gradients sum over
-#: every token routed to an expert (~512 at the observed size) and are the
-#: likeliest to need a reduction-scaled gate once measured.
-PROVISIONAL_TOLERANCES = True
 
 _DIMS = ("T", "H", "E", "G", "I", "K")
 
 _BENCHMARK = observed("moe_experts")
-
-
-def _dims(t, h, e, i, k):
-    return {"T": t, "H": h, "E": e, "G": 2 * i, "I": i, "K": k}
-
-
-_CORRECTNESS = tuple(
-    Workload(dims=_dims(*shape), dtype=dtype, provenance=shrunk("moe_experts"))
-    for shape, dtype in (
-        ((16, 64, 4, 32, 2), "float32"),
-        # 8 experts, 1 of 8 active: every expert sees a different token count.
-        ((40, 32, 8, 16, 1), "float32"),
-        ((48, 64, 8, 32, 4), "bfloat16"),
-    )
-)
 
 
 def make_moe_experts_inputs(torch, op, workload, device="cuda"):
@@ -103,11 +84,9 @@ op = declare_op(
         "assume T * K / E tokens per expert. All floating tensors are contiguous "
         "CUDA tensors in one dtype."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=PROVISIONAL,
     memory_inputs=("x", "gate_up_proj", "down_proj", "top_k_weights"),
     make_inputs=make_moe_experts_inputs,
 )

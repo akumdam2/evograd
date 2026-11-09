@@ -62,7 +62,7 @@ def declared_scalars(op: OpDecl) -> dict[str, Any]:
         return {}
     from evograd.opdecl.inputs import make_case_inputs
 
-    values = make_case_inputs(op, op.correctness[0], device="cpu")
+    values = make_case_inputs(op, op.benchmark[0], device="cpu")
     return {a.name: values.get(a.name, a.default) for a in scalars}
 
 

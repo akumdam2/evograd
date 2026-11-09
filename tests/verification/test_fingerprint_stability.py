@@ -49,7 +49,7 @@ PROBE = textwrap.dedent("""
     out["model_reference"] = fingerprint(rounded_forward)["digest"]
     out["declared_values"] = fingerprint(declared_values)["digest"]
     for name, op in (("generic", F.SCALE_SHIFT), ("model", model_op())):
-        identity = OperatorScope(op, op.correctness[0], device="cpu").reference_identity()
+        identity = OperatorScope(op, op.benchmark[0], device="cpu").reference_identity()
         out[name + "_operator_scope"] = json.dumps(identity, sort_keys=True)
     print(json.dumps(out, sort_keys=True))
 """)

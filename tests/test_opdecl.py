@@ -15,24 +15,6 @@ class TestNativeContractRendering(unittest.TestCase):
         self.assertEqual(op.backward_parameters(), "dy, saved_tensors, eps=1e-5")
         self.assertEqual(op.backward_returns(), "dx, dweight, dbias")
 
-    def test_per_output_tolerance_multipliers(self):
-        evo = get_task("megafold_evoattention")
-        case = evo.correctness[0]
-        self.assertEqual(evo.tolerance_for(case), (1e-4, 1e-4))
-        self.assertEqual(evo.tolerance_for(case, "d_pair_bias"), (2e-4, 1e-4))
-
-        attention = get_task("causal_gqa_attention")
-        case = attention.correctness[0]
-        atol, rtol = attention.tolerance_for(case, "dq")
-        self.assertAlmostEqual(atol, 4.4e-5)
-        self.assertEqual(rtol, 2e-5)
-
-    def test_layernorm_declares_all_legacy_shape_suites(self):
-        op = get_task("layernorm")
-        for suite in ("mixed", "small", "large", "tb_sweep", "tb_i27"):
-            self.assertTrue(op.benchmark_workloads(suite))
-
-
 class TestDerivedNaming(unittest.TestCase):
     def test_grad_name_override(self):
         op = get_task("megafold_evoattention")
@@ -245,38 +227,20 @@ class TestValidation(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "memory_inputs"):
             _minimal(memory_inputs=("eps",))
 
-    def test_unknown_tolerance_result_rejected(self):
-        with self.assertRaisesRegex(ValueError, "unknown results"):
-            _minimal(tolerance_multipliers={"dmissing": (2.0, 1.0)})
-
-    def test_a_tolerance_multiplier_may_name_an_output(self):
-        """Two results of one operator can need genuinely different tolerances
-        -- ``fused_add_rms_norm``'s plain sum against its normalized output."""
-        op = get_task("fused_add_rms_norm")
-        case = op.benchmark_workloads("qwen3_0_6b_observed")[0]
-        self.assertIn("summed", op.output_names)
-        self.assertLess(
-            op.tolerance_for(case, "summed")[0], op.tolerance_for(case, "out")[0]
-        )
-
-
 class TestLigerSuiteMigration(unittest.TestCase):
-    # (correctness cases, fork-era benchmark cases). The timed suites moved onto
-    # model-derived grids in v1, so the fork counts now live in each
-    # declaration's ``legacy`` ablation suite. Asserting them there is a
-    # stronger check than the original: it proves the migration *preserved* the
-    # historical grids rather than silently discarding them.
+    # Fork-era benchmark cases. The timed suites moved onto model-derived grids
+    # in v1, so the fork counts now live in each declaration's ``legacy``
+    # ablation suite. Asserting them there is a stronger check than the
+    # original: it proves the migration *preserved* the historical grids rather
+    # than silently discarding them.
     _FORK_COUNTS = {
-        "cross_entropy": (6, 42),
-        "fused_add_rms_norm": (6, 16),
-        "swiglu": (6, 42),
+        "fused_add_rms_norm": 16,
     }
 
     def test_final_fork_workload_counts_are_preserved_as_ablation_suites(self):
-        for name, (correctness, benchmark) in self._FORK_COUNTS.items():
+        for name, benchmark in self._FORK_COUNTS.items():
             with self.subTest(op=name):
                 op = get_task(name)
-                self.assertEqual(len(op.correctness), correctness)
                 self.assertEqual(
                     len(op.benchmark_workloads("legacy")),
                     benchmark,
@@ -291,11 +255,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
                 self.assertEqual(sources, {"hf_config"}, name)
 
     def test_shape_regime_suites_partition_full_suite(self):
-        for name in (
-            "cross_entropy",
-            "fused_add_rms_norm",
-            "swiglu",
-        ):
+        for name in ("fused_add_rms_norm",):
             with self.subTest(op=name):
                 op = get_task(name)
                 full = op.benchmark_workloads("full")

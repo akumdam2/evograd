@@ -41,8 +41,8 @@ PyTorch forward reference + operator declaration
 Evograd provides one workflow for the parts of backward-kernel research that
 otherwise tend to be duplicated per operator:
 
-- A typed declaration of inputs, outputs, shapes, differentiation activity,
-  workloads, and tolerances.
+- A typed declaration of inputs, outputs, shapes, differentiation activity and
+  workloads.
 - A compiler-aware unified seed pipeline and four research baselines.
 - A PyTorch-autograd oracle derived from the declared forward reference; for a
   model case, the model's own computation.
@@ -298,17 +298,9 @@ op = declare_op(
         Inactive("eps", default=1e-5),
     ),
     output=Active("y", "[rows, hidden]"),
-    correctness=(
-        Workload(dims={"rows": 8, "hidden": 64}, dtype="float32"),
-        Workload(dims={"rows": 32, "hidden": 256}, dtype="float16"),
-    ),
     benchmark=(
         Workload(dims={"rows": 1024, "hidden": 1024}, dtype="float16"),
     ),
-    tolerances={
-        "float32": (2e-5, 2e-5),
-        "float16": (5e-2, 5e-2),
-    },
     forward_semantics="Row-wise LayerNorm over the final dimension.",
     backward_semantics="Return dx, dweight, and dbias.",
 )
@@ -322,9 +314,9 @@ In plain language:
 - `Inactive` marks an input that does not receive a gradient.
 - `output` describes the **forward output**, not the backward kernel. Marking it
   `Active` means backward receives its upstream gradient, `dy` here.
-- `correctness` contains cases used to reject broken candidates.
 - `benchmark` contains realistic cases used to compare correct candidates.
-- `tolerances` provides `(absolute_tolerance, relative_tolerance)` per dtype.
+  Correctness is not declared: Gates 1/2/3 judge a candidate on a model case's
+  recorded training calls under the model reference.
 
 ### Why `Active` and `Inactive`? What is Enzyme?
 
@@ -434,8 +426,8 @@ claims:
 | package | owns |
 | --- | --- |
 | `evograd.opdecl` | declaration infrastructure and shared types |
-| `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
-| `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L1/L2/L3 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
+| `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference and the input generator |
+| `evograd.benchmark` | what is measured: observed cases, model provenance, L1/L2/L3 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
 | `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
 | `evograd.cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
 
@@ -445,19 +437,13 @@ enforced by AST tests with no exemptions, and by a runtime test that imports
 `evograd.ops` in a fresh interpreter and asserts nothing from the other two
 packages was loaded.
 
-A primitive therefore declares no timed grid, no benchmark coverage, no named
-suite, no shape-regime split and no case weighting. Those are attached when the
-task registry is built, from two places that mean different things:
-
-- `evograd.benchmark.operator_suite.cases` — the suite's performance grids. A
-  grid computed from a published Llama-3 or AlphaFold3 configuration is one of
-  these: the numbers came from a model, but the case is the suite's.
-- a model's own manifest under `evograd.benchmark.topdown` — cases *observed*
-  in a real captured run, which is a different kind of evidence and is never
-  relabelled as the first kind. The manifest owns the choice; the shared binder
-  in `evograd.benchmark.cases` owns only the mechanics and names no model, with
-  `evograd.benchmark.core.registry` as the single assembly point that connects
-  the two.
+A primitive therefore declares no timed grid, no benchmark coverage and no
+named suite. Its cases are attached when the task registry is built, from each
+model's own manifest under `evograd.benchmark.topdown` — cases *observed* in a
+real captured run. The manifest owns the choice; the shared binder in
+`evograd.benchmark.cases` owns only the mechanics and names no model, with
+`evograd.benchmark.core.registry` as the single assembly point that connects
+the two.
 
 Executable tasks resolve through `evograd.benchmark.get_task`;
 `evograd.ops.get_primitive` resolves the mathematics alone. Reviewed pair
@@ -670,11 +656,10 @@ or structured tensor outputs. Integer/bool tensor inputs are supported as `Inact
 ```text
 src/evograd/
 ├── opdecl/                    # declaration types, oracle, binding
-├── ops/                       # operator contracts, references, tolerances, shapes
+├── ops/                       # operator contracts, references, input generators
 │   └── level1/                # reusable primitive declarations
 ├── benchmark/                 # what is benchmarked
 │   ├── core/                  # task registry and result aggregation
-│   ├── operator_suite/        # operator performance grids
 │   └── topdown/               # common + Qwen3-0.6B/Llama3/Qwen3.5/MegaFold workloads
 ├── evaluation/                # how a candidate is evaluated
 │   ├── common/                # providers and canonical reports

@@ -1,12 +1,12 @@
-"""Qwen3.5-4B GPU baseline sessions: L3 feasibility, harvest, capture, smokes, baselines.
+"""Qwen3.5-4B GPU baseline sessions: L3 feasibility, harvest, capture, smokes.
 
     python scripts/qwen3_5_4b/driver.py --run-dir results/experiments/qwen3_5_4b_cases/<run_id>
 
 Every step runs in its own child process (fresh CUDA context, fresh imports --
 the tracked snapshot a step writes is read by the next one's task registry) and
 ends in ``<step>.DONE`` in the run directory; a step whose marker exists is
-skipped, so the same command resumes on a fresh allocation. Nothing here sets a
-tolerance or chooses a bar: numbers are recorded for the hand-off.
+skipped, so the same command resumes on a fresh allocation. Nothing here
+chooses a bar: numbers are recorded for the hand-off.
 
 Session 1 (feasibility)
   l3_b1        canonical B1 x T2048: build, 3 full training steps (fwd + bwd +
@@ -22,14 +22,7 @@ Session 1 (feasibility)
                Liger cross entropy on the 248,320-wide rows.
 Session 2 (capture)
   capture      layers 14 and 15 from one canonical step -> layer14.pt, layer15.pt
-  replay       standalone replay of each (bitwise against the full model), and
-               every L2 site's invocation taken from the artifacts.
-Session 3 (baselines, recorded only)
-  t2           each L2 task: eager, torch.compile and its library line (Liger;
-               FLA in its own sidecar child) on the observed case.
-  l3_baselines the tier-3 model scope: eager, structural identity,
-               --compile-site gated_delta_rule (20-step loss trajectory), then
-               whole-model compile alone under a 20-minute limit.
+Session 3 (recorded only)
   table        BASELINES.md from everything above.
 """
 
@@ -54,15 +47,14 @@ RC_B1_OOM = 3
 
 SESSION1 = ("l3_b1", "l3_b2", "l3_smoke", "harvest", "ops_smoke", "ops_smoke_l2",
             "l3_identity")
-SESSION2 = ("capture", "replay")
-SESSION3 = ("t2", "l3_baselines", "table")
+SESSION2 = ("capture",)
+SESSION3 = ("table",)
 STEPS = SESSION1 + SESSION2 + SESSION3
 
 #: Seconds a step's child may run before it is killed and recorded as such.
 TIMEOUTS = {"l3_b1": 1200, "l3_b2": 900, "l3_smoke": 900, "harvest": 1200,
             "ops_smoke": 1800, "ops_smoke_l2": 1800,
-            "l3_identity": 1500, "capture": 1200, "replay": 1500,
-            "t2": 5400, "l3_baselines": 7200, "table": 300}
+            "l3_identity": 1500, "capture": 1200, "table": 300}
 
 
 def log(message: str) -> None:
@@ -454,9 +446,6 @@ def step_ops_smoke(run_dir: Path, level2: bool = False) -> dict:
                      "traceback": traceback.format_exc()[-3000:]}
     free_cuda()
     return {"cases": results, "failed": [r["task"] for r in results if not r["ok"]],
-            "not_within_provisional": sorted({
-                f"{r['task']}:{k}" for r in results if r["ok"]
-                for k, v in r["results"].items() if not v.get("within_provisional", True)}),
             "liger_cross_entropy_248k": liger}
 
 
@@ -479,148 +468,7 @@ def step_capture(run_dir: Path) -> dict:
             "wall_time_s": time.perf_counter() - tick, **peak()}
 
 
-def step_replay(run_dir: Path) -> dict:
-    torch = _torch()
-    from evograd.benchmark import TASKS
-    from evograd.benchmark.topdown.qwen3_5_4b.architecture import REPRESENTATIVE_LAYERS
-    from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import capture_tools, manifest
-    from evograd.benchmark.topdown.qwen3_5_4b.layer.artifact import load_canonical
-    from evograd.evaluation.workloads.qwen3_5_4b.layer.replay import run_replay
-    from evograd.opdecl import bind_shape
-    from evograd.opdecl.models import QWEN3_5_4B
-    from evograd.opdecl.oracle import resolve_runtime_forward
-
-    out = {"replay": {}, "sites": {}}
-    for kind, index in sorted(REPRESENTATIVE_LAYERS.items(), key=lambda kv: kv[1]):
-        path = run_dir / f"layer{index}.pt"
-        artifact = load_canonical(path, layer_index=index)
-        report = run_replay(artifact, device="cuda", noise_repeats=2)
-        write_json(run_dir / f"replay_layer{index}.json", report)
-        comparisons = report["comparisons"]
-        out["replay"][str(index)] = {
-            "status": report["status"],
-            "output_bitwise": comparisons["output"].get("bitwise_identical"),
-            "grad_input_bitwise": comparisons["grad_input"].get("bitwise_identical"),
-            "param_grads_bitwise": all(v.get("bitwise_identical")
-                                       for v in comparisons["param_grads"].values()),
-            "param_grads_not_bitwise": sorted(k for k, v in comparisons["param_grads"].items()
-                                              if not v.get("bitwise_identical")),
-            "max_param_grad_rel_err": max((v.get("max_rel_err_vs_scale") or 0.0)
-                                          for v in comparisons["param_grads"].values()),
-        }
-        del artifact, report
-        free_cuda()
-        source = capture_tools.captured_source(path, device="cuda")
-        for site in manifest.SITES_BY_BLOCK[kind]:
-            op = TASKS[manifest.task_key(site)]
-            entry = {"layer": index}
-            try:
-                call = manifest.captures()[site](source)
-                dims = manifest.dims_for(site, QWEN3_5_4B, batch=1, seq=2048)
-                entry["shapes_ok"] = all(
-                    tuple(call.inputs[a.name].shape) == bind_shape(a.shape, dims)
-                    for a in op.args if getattr(a, "shape", None) is not None)
-                produced = resolve_runtime_forward(op)(
-                    *[call.inputs.get(a.name, getattr(a, "default", None)) for a in op.args])
-                produced = produced if isinstance(produced, tuple) else (produced,)
-                entry["production_bitwise"] = {
-                    name: bool(torch.equal(value, call.outputs[name]))
-                    for name, value in zip(op.output_names, produced)}
-                entry["ok"] = True
-                del call, produced
-            except Exception as exc:
-                entry.update(ok=False, error=f"{type(exc).__name__}: {exc}",
-                             traceback=traceback.format_exc()[-2000:])
-            out["sites"][f"{site}@{index}"] = entry
-            free_cuda()
-        del source
-        free_cuda()
-    return out
-
-
 # ── session 3 ────────────────────────────────────────────────────────────────
-
-
-def _run(cmd: list[str], log_path: Path, timeout: int, env=None) -> dict:
-    tick = time.perf_counter()
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
-        log_path.write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr)
-        rc = proc.returncode
-    except subprocess.TimeoutExpired as exc:
-        log_path.write_text(f"killed after {timeout}s\n{exc.stdout or ''}\n{exc.stderr or ''}")
-        rc = "timeout"
-    wall = time.perf_counter() - tick
-    log(f"  rc={rc} in {wall:.0f}s ({log_path.name})")
-    return {"rc": rc, "wall_s": wall, "log": str(log_path)}
-
-
-def step_t2(run_dir: Path) -> dict:
-    from evograd.benchmark import TASKS
-    from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
-
-    out_dir = run_dir / "t2"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    results = {}
-    for task in manifest.TASKS:
-        op = TASKS[task]
-        baseline = next(iter(sorted(op.performance_baselines)), "none")
-        report = out_dir / f"{task}.json"
-        if (out_dir / f"{task}.DONE").exists():
-            results[task] = json.loads((out_dir / f"{task}.DONE").read_text() or "{}")
-            continue
-        log(f"t2 {task} (eager, torch.compile, baseline {baseline})")
-        cmd = [sys.executable, "-m", "evograd.evaluation.tier2.cli", "--op", task, "--suite",
-               OBSERVED, "--baseline", baseline, "--out", str(report)]
-        entry = _run(cmd, out_dir / f"{task}.log", timeout=2400)
-        entry["baseline"] = baseline
-        entry["report"] = str(report) if report.exists() else None
-        # A provider the gate refused at this shape
-        # is not timed; a second run with the gate off gives it a number, filed
-        # apart and labelled diagnostic -- never a pass.
-        refused = []
-        if report.exists():
-            for case in json.loads(report.read_text()).get("cases", []):
-                refused += [name for name, row in case["providers"].items()
-                            if not row.get("ok") and "correctness" in str(row.get("error"))]
-        if refused:
-            diagnostic = out_dir / f"{task}.nocheck.json"
-            log(f"t2 {task}: gate refused {refused}; diagnostic run with --no-check")
-            entry["gate_refused"] = refused
-            entry["diagnostic"] = _run([*cmd[:-2], "--no-check", "--out", str(diagnostic)],
-                                       out_dir / f"{task}.nocheck.log", timeout=2400)
-            entry["diagnostic_report"] = str(diagnostic) if diagnostic.exists() else None
-        results[task] = entry
-        (out_dir / f"{task}.DONE").write_text(json.dumps(entry))
-    return results
-
-
-
-def step_l3_baselines(run_dir: Path) -> dict:
-    out_dir = run_dir / "l3"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    cli = [sys.executable, "-m", "evograd.evaluation.tier3.cli", "--model", WORKLOAD,
-           "--baseline", "none", "--loss-steps", "20"]
-    runs = {
-        "main": ["--structural-identity", "--compile-site", "gated_delta_rule",
-                 "--timeout", "2400"],
-        # Alone, so a compile that exceeds 20 minutes or fails costs only itself.
-        "whole_model_compile": ["--whole-model-compile", "--timeout", "1200"],
-    }
-    results = {}
-    for name, extra in runs.items():
-        report = out_dir / f"{name}.json"
-        marker = out_dir / f"{name}.DONE"
-        if marker.exists():
-            results[name] = json.loads(marker.read_text() or "{}")
-            continue
-        log(f"l3 baselines: {name}")
-        entry = _run([*cli, *extra, "--out", str(report)], out_dir / f"{name}.log",
-                     timeout=7200 if name == "main" else 3000)
-        entry["report"] = str(report) if report.exists() else None
-        results[name] = entry
-        marker.write_text(json.dumps(entry))
-    return results
 
 
 def step_table(run_dir: Path) -> dict:
@@ -635,9 +483,7 @@ def step_table(run_dir: Path) -> dict:
 FUNCTIONS = {"l3_b1": step_l3_b1, "l3_b2": step_l3_b2, "l3_smoke": step_l3_smoke,
              "harvest": step_harvest, "ops_smoke": step_ops_smoke,
              "ops_smoke_l2": lambda run_dir: step_ops_smoke(run_dir, level2=True),
-             "l3_identity": step_l3_identity, "capture": step_capture, "replay": step_replay,
-             "t2": step_t2, "l3_baselines": step_l3_baselines,
-             "table": step_table}
+             "l3_identity": step_l3_identity, "capture": step_capture, "table": step_table}
 
 
 def run_child(run_dir: Path, name: str) -> int:

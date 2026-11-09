@@ -30,6 +30,7 @@ from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference impo
     qwen3_attention_forward_production,
     qwen3_attention_forward_ref,
 )
+from tests._small_cases import SMALL
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -132,11 +133,11 @@ class TestInputGeneration(unittest.TestCase):
 
     def _inputs(self, index: int):
         op = get_task("qwen3_attention")
-        workload = op.correctness[index]
+        workload = SMALL["qwen3_attention"][index]
         return workload, make_case_inputs(op, workload, device="cpu")
 
     def test_q_k_v_are_non_contiguous_head_major(self):
-        for index in range(len(get_task("qwen3_attention").correctness)):
+        for index in range(len(SMALL["qwen3_attention"])):
             workload, values = self._inputs(index)
             dims = workload.dims
             with self.subTest(dims=dims):
@@ -167,25 +168,6 @@ class TestInputGeneration(unittest.TestCase):
         self.assertEqual(values["q"].stride()[3], 1)
         self.assertEqual(observed_q[1], 128)
         self.assertEqual(observed_q[3], 1)
-
-    def test_every_correctness_case_preserves_grouped_query_attention(self):
-        for workload in get_task("qwen3_attention").correctness:
-            dims = workload.dims
-            with self.subTest(dims=dims):
-                self.assertGreater(dims["HQ"], dims["HK"])
-                self.assertEqual(dims["HQ"] % dims["HK"], 0)
-                self.assertEqual(dims["QO"], dims["HQ"] * dims["D"])
-
-    def test_both_group_ratios_are_covered(self):
-        ratios = {
-            w.dims["HQ"] // w.dims["HK"] for w in get_task("qwen3_attention").correctness
-        }
-        self.assertEqual(ratios, {2, 4})
-
-    def test_both_dtypes_are_covered(self):
-        dtypes = {w.dtype for w in get_task("qwen3_attention").correctness}
-        self.assertEqual(dtypes, {"float32", "bfloat16"})
-
 
 class TestForwardReference(unittest.TestCase):
     def _case(self, dtype=torch.float32):
@@ -285,46 +267,6 @@ class TestTimedBaselineAndGate(unittest.TestCase):
         self.assertNotIn("masked_fill", timed)
         self.assertNotIn("softmax", timed)
         self.assertIn("scaled_dot_product_attention", timed)
-
-    def test_the_declared_tolerances_are_the_calibrated_ones(self):
-        op = get_task("qwen3_attention")
-        self.assertEqual(op.tolerances["bfloat16"], (1e-2, 1e-2))
-        self.assertEqual(op.tolerances["float32"], (2e-5, 2e-5))
-        # do_weight went 5.4 -> 6.5 when the observed shape was measured; see
-        # the calibration artifact for the 1.58x it was short by.
-        self.assertEqual(op.tolerance_multipliers, {"do_weight": (6.5, 1.0)})
-
-    def test_the_hook_barely_moves_the_correctness_grid(self):
-        # The dimension-aware term widens workloads *above* the anchor. One
-        # correctness case has a do_weight of 4096 elements against the anchor's
-        # 3072, so it picks up 1.04x of the element-count term -- measured, and
-        # bounded here so a future anchor change cannot quietly loosen the grid.
-        # Its measured margin at that case is 1.74x, so 1.04x costs nothing.
-        op = get_task("qwen3_attention")
-        for workload in op.correctness:
-            for name in (*op.output_names, *op.grad_names()):
-                with self.subTest(dims=workload.dims, result=name):
-                    base = op.tolerances[workload.dtype]
-                    ma, mr = op.tolerance_multipliers.get(name, (1.0, 1.0))
-                    atol, rtol = op.tolerance_for(workload, name)
-                    self.assertGreaterEqual(atol, base[0] * ma)
-                    self.assertLessEqual(atol, base[0] * ma * 1.05)
-                    self.assertEqual(rtol, base[1] * mr)
-
-    def test_the_observed_shape_gets_the_element_count_term_only(self):
-        # Attention declares no reduction term: the measured exponent of its
-        # required atol against reduction length is 0.032, because a softmax
-        # -weighted average does not grow with the number of terms.
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.task import _REDUCTION_SCALED
-
-        op = get_task("qwen3_attention")
-        self.assertEqual(_REDUCTION_SCALED.reduction_dims, {})
-        observed = op.benchmark_workloads(suite="qwen3_0_6b_observed")[0]
-        atol, rtol = op.tolerance_for(observed, "do_weight")
-        self.assertGreater(atol, 1e-2 * 6.5)          # widened
-        self.assertLess(atol, 1e-2 * 6.5 * 3.0)       # and only modestly
-        self.assertEqual(rtol, 1e-2)                  # rtol never moves
-
 
 class TestSnapshotEntry(unittest.TestCase):
     def test_the_attention_entry_is_derived_not_hand_written(self):

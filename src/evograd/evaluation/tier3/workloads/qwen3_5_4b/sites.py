@@ -224,8 +224,7 @@ _REGISTRIES: dict[str | None, SiteRegistry] = {}
 def qwen3_5_sites(kind: str | None = None) -> SiteRegistry:
     """The seven sites (``kind=None``), or one layer kind's subset.
 
-    Preflight checks each task's declared correctness grid. The observed shapes
-    are checked at real size by Tier 2 and the calibration inventory, not here.
+    The observed shapes are checked at real size by the gates, not here.
     """
     if kind is not None and kind not in SITES_BY_BLOCK:
         raise ValueError(f"unknown block kind {kind!r}; known: {sorted(SITES_BY_BLOCK)}")

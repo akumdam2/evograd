@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import ast
 from contextlib import nullcontext
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,8 @@ from evograd.opdecl.importing import resolve_callable
 from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
 from evograd.pipelines.unified.contract import build_contract, validate_source
 from evograd.pipelines.shared.artifact import deployment_entry, validate_artifact
+
+from tests._small_cases import SMALL
 
 
 _CONTRACT_SOURCE = '''
@@ -264,9 +267,9 @@ class TestFixedConfiguration(unittest.TestCase):
     def test_selection_uses_the_requested_dtype_and_rejects_partial_dimensions(self):
         from evograd.pipelines.unified.synthesize import select_workload
 
-        op = get_task('layernorm')
+        op = replace(get_task('layernorm'), benchmark=SMALL['layernorm'])
         self.assertEqual(select_workload(op, dtype='float16'),
-                         next(case for case in op.correctness if case.dtype == 'float16'))
+                         next(case for case in op.benchmark if case.dtype == 'float16'))
         for dims in ({'rows': 7}, {'rows': 0, 'hidden': 31}, {'rows': True, 'hidden': 31}):
             with self.subTest(dims=dims), self.assertRaises(ValueError):
                 select_workload(op, dtype='float32', dims=dims)
@@ -275,8 +278,8 @@ class TestFixedConfiguration(unittest.TestCase):
         # Padding is a dim: every patchify stem (ConvNeXt V2's, DiT's) is P=0.
         from evograd.pipelines.unified.synthesize import scoped_op, select_workload
 
-        op = get_task('spatial_conv2d')
-        declared = next(case for case in op.correctness if case.dims['P'] == 0)
+        op = replace(get_task('spatial_conv2d'), benchmark=SMALL['spatial_conv2d'])
+        declared = next(case for case in op.benchmark if case.dims['P'] == 0)
         self.assertEqual(select_workload(op, dtype='float32', dims=dict(declared.dims)), declared)
         for suite in ('convnextv2_tiny_observed', 'dit_s_2_observed'):
             stem = next(case for case in op.benchmark_suites[suite] if case.dims['P'] == 0)
@@ -285,7 +288,7 @@ class TestFixedConfiguration(unittest.TestCase):
                 self.assertEqual(select_workload(scoped, dtype=stem.dtype, dims=dict(stem.dims)),
                                  stem)
         # An undeclared configuration is still held to positive dims.
-        padded = next(case for case in op.correctness if case.dims['P'] > 0)
+        padded = next(case for case in op.benchmark if case.dims['P'] > 0)
         with self.assertRaises(ValueError):
             select_workload(op, dtype='float32', dims={**padded.dims, 'B': 0})
         undeclared = {**padded.dims, 'B': 3}
@@ -316,7 +319,7 @@ class TestFixedConfiguration(unittest.TestCase):
         plain = Workload(dims=dict(observed.dims), dtype=observed.dtype)
         self.assertEqual(case_scalars(norm, plain), {'eps': 1e-5})
 
-    def test_verification_scope_keeps_oracle_and_tolerances_at_the_selected_configuration(self):
+    def test_verification_scope_keeps_the_oracle_at_the_selected_configuration(self):
         from evograd.pipelines.unified.synthesize import scoped_op, select_workload
 
         op = get_task('layernorm')
@@ -324,8 +327,7 @@ class TestFixedConfiguration(unittest.TestCase):
         scoped = scoped_op(op, workload)
         self.assertEqual(scoped.forward, op.forward)
         self.assertEqual(scoped.make_inputs, op.make_inputs)
-        self.assertEqual(scoped.tolerances, op.tolerances)
-        for name in ('correctness', 'coverage', 'benchmark'):
+        for name in ('coverage', 'benchmark'):
             self.assertEqual(getattr(scoped, name), (workload,))
 
     def test_generated_declaration_roundtrips_the_exact_validation_configuration(self):
@@ -338,10 +340,9 @@ class TestFixedConfiguration(unittest.TestCase):
             path = Path(directory) / 'declaration.py'
             _write_declaration(path, op, workload)
             loaded = load_task(f'{path}:op')
-            self.assertEqual(loaded.correctness, (workload,))
             self.assertEqual(loaded.benchmark, (workload,))
-            self.assertEqual(loaded.tolerances, op.tolerances)
-            self.assertEqual(loaded.tolerance_hook, op.tolerance_hook)
+            self.assertEqual(loaded.coverage, (workload,))
+            self.assertEqual(loaded.make_inputs, op.make_inputs)
             self.assertEqual(loaded.forward, op.forward)
             self.assertEqual(loaded.declaration, f'{path}:op')
 
@@ -359,9 +360,9 @@ class TestFixedConfiguration(unittest.TestCase):
             path = Path(directory) / 'declaration.py'
             _write_declaration(path, op, observed)
             loaded = load_task(f'{path}:op')
-        self.assertEqual(loaded.correctness, (observed,))
+        self.assertEqual(loaded.benchmark, (observed,))
         expected = make_case_inputs(scoped_op(op, observed), observed, device='meta')
-        generated = make_case_inputs(loaded, loaded.correctness[0], device='meta')
+        generated = make_case_inputs(loaded, loaded.benchmark[0], device='meta')
         self.assertEqual(generated['x'].stride(), expected['x'].stride())
         self.assertNotEqual(generated['x'].stride(), torch.empty(generated['x'].shape,
                                                                 device='meta').stride())
@@ -391,10 +392,10 @@ class TestFixedConfiguration(unittest.TestCase):
                     patch.object(evaluator, 'build_evaluate', return_value=lambda _: None) as build:
                 spec.loader.exec_module(entry)
             selected = build.call_args.args[0]
-            self.assertEqual(selected.correctness, (workload,))
             self.assertEqual(selected.benchmark, (workload,))
+            self.assertEqual(selected.coverage, (workload,))
             self.assertNotIn('benchmark_workloads', build.call_args.kwargs)
-            self.assertEqual(selected.tolerances, op.tolerances)
+            self.assertEqual(selected.make_inputs, op.make_inputs)
 
 
 def matrix_square_ref(a, offset, b):
@@ -412,8 +413,7 @@ def _matrix_op():
         grad_order=('db', 'da'),
         forward_semantics='Square a dense matrix product and multiply by a fixed tensor.',
         backward_semantics='Return gradients in the declared db, da order.',
-        correctness=(Workload(dims={'M': 7, 'K': 9, 'N': 5}, dtype='float32'),),
-        tolerances={'float32': (2e-5, 2e-5)},
+        benchmark=(Workload(dims={'M': 7, 'K': 9, 'N': 5}, dtype='float32'),),
     )
 
 
@@ -491,7 +491,7 @@ class TestExecutedRegions(unittest.TestCase):
         # code and static call counts alone cannot distinguish this candidate.
         validate_source(bypass, contract)
         module = self._module(bypass)
-        inputs = make_case_inputs(op, op.correctness[0], device='cpu')
+        inputs = make_case_inputs(op, op.benchmark[0], device='cpu')
         inputs['offset'] = torch.rand_like(inputs['offset']) + 0.5
         expected_output, expected_gradients = _oracle(op, inputs)
         with torch.no_grad():
@@ -567,11 +567,9 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         configs = [(layernorm, Workload(dims={'rows': 7, 'hidden': 31}, dtype=dtype))
                    for dtype in ('float32', 'bfloat16')]
         matrix = _matrix_op()
-        configs.append((matrix, matrix.correctness[0]))
-        fused = get_task('fused_add_rms_norm')
-        configs.append((fused, fused.correctness[0]))
-        convolution = get_task('spatial_conv2d')
-        configs.append((convolution, convolution.correctness[0]))
+        configs.append((matrix, matrix.benchmark[0]))
+        configs.append((get_task('fused_add_rms_norm'), SMALL['fused_add_rms_norm'][0]))
+        configs.append((get_task('spatial_conv2d'), SMALL['spatial_conv2d'][0]))
         configs.append((get_task('cross_entropy'),
                         Workload(dims={'rows': 7, 'cols': 31}, dtype='float32')))
         for op, workload in configs:
@@ -600,15 +598,14 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
             gradients = getattr(module, op.backward_fn_name)(
                 upstream_grad_values(op, inputs), saved, **scalar_kwargs,
             )
-        for name, got, expected in zip(op.output_names, as_output_tuple(op, output), as_output_tuple(op, expected_output)):
-            atol, rtol = op.tolerance_for(workload, name)
-            torch.testing.assert_close(got, expected, atol=atol, rtol=rtol)
+        # assert_close at its dtype defaults: the rule Gate 1's model policy adopts.
+        for got, expected in zip(as_output_tuple(op, output), as_output_tuple(op, expected_output)):
+            torch.testing.assert_close(got, expected)
         self.assertEqual(len(gradients), len(expected_gradients))
         self.assertTrue(all(torch.is_tensor(value) for value in saved))
         for name, got, expected in zip(op.grad_names(), gradients, expected_gradients):
             with self.subTest(gradient=name):
-                atol, rtol = op.tolerance_for(workload, name)
-                torch.testing.assert_close(got, expected, atol=atol, rtol=rtol)
+                torch.testing.assert_close(got, expected)
 
         # The real deployment entry must wire the same gradients to the original
         # argument order, including an inactive tensor between active ones.
@@ -617,14 +614,12 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         deployed_output = deployment_entry(module)(*deployed_args)
         torch.autograd.backward(as_output_tuple(op, deployed_output),
                                 tuple(inputs[name] for name in op.upstream_grad_names))
-        for name, got, expected in zip(op.output_names, as_output_tuple(op, deployed_output), as_output_tuple(op, expected_output)):
-            atol, rtol = op.tolerance_for(workload, name)
-            torch.testing.assert_close(got, expected, atol=atol, rtol=rtol)
+        for got, expected in zip(as_output_tuple(op, deployed_output), as_output_tuple(op, expected_output)):
+            torch.testing.assert_close(got, expected)
         by_name = dict(zip(op.grad_names(), expected_gradients))
         for declaration, arg in zip(op.args, deployed_args):
             if isinstance(declaration, Active):
-                atol, rtol = op.tolerance_for(workload, declaration.grad_name)
-                torch.testing.assert_close(arg.grad, by_name[declaration.grad_name], atol=atol, rtol=rtol)
+                torch.testing.assert_close(arg.grad, by_name[declaration.grad_name])
             elif torch.is_tensor(arg):
                 self.assertIsNone(arg.grad)
 
@@ -703,11 +698,10 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
         args = [inputs[arg.name].detach().clone().requires_grad_(True) for arg in op.args]
         output, saved = getattr(module, op.forward_fn_name)(*args)
         gradients = getattr(module, op.backward_fn_name)(inputs[op.upstream_grad_name], saved)
-        atol, rtol = op.tolerances[workload.dtype]
-        torch.testing.assert_close(output, expected_output, atol=atol, rtol=rtol)
+        torch.testing.assert_close(output, expected_output)
         self.assertFalse(output.requires_grad)
         for got, expected in zip(gradients, expected_gradients):
-            torch.testing.assert_close(got, expected, atol=atol, rtol=rtol)
+            torch.testing.assert_close(got, expected)
             self.assertFalse(got.requires_grad)
 
     def test_layernorm_rejects_a_different_shape_dtype_or_static_scalar(self):

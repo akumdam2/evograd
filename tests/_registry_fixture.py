@@ -123,6 +123,5 @@ def synthetic_block_op():
         output=Active("y", "[rows, hidden]"),
         forward_semantics="synthetic",
         backward_semantics="synthetic",
-        correctness=(Workload(dims={"rows": 4, "hidden": 8}, dtype="float32"),),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(Workload(dims={"rows": 4, "hidden": 8}, dtype="float32"),),
     )

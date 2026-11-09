@@ -25,8 +25,7 @@ elementwise deviation the trusted ``torch.compile`` control showed on that
 result over the calibration payloads (passed in by the caller from the
 operator Gate 2 policy; absent, 0), but never less than that factor times one
 ulp of the reference result's largest magnitude
-(:func:`.tolerances.rounding_floor`). Declaration overrides,
-multipliers and shape hooks do not apply. Computed in float64.
+(:func:`.tolerances.rounding_floor`). Computed in float64.
 
 **What this core adds to the earlier verifiers** (all listed in the package
 README): explicit finiteness (a non-finite candidate fails, a non-finite

@@ -10,6 +10,7 @@ from unittest import mock
 from evograd.ncu.profile import _parse_csv, _script
 from evograd.ncu.roofline import analyze
 from evograd.benchmark import get_task
+from tests._small_cases import SMALL
 
 
 class TestEvaluateProgram(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestNCUHelpers(unittest.TestCase):
             source = _script(
                 op,
                 Path("/tmp/candidate.py"),
-                op.correctness[0],
+                SMALL["rmsnorm"][0],
                 Path("/tmp/inputs.pt"),
                 warmup=warmup,
             )

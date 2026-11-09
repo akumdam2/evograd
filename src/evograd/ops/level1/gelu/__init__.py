@@ -1,4 +1,4 @@
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 
 op = declare_op(
     name="gelu",
@@ -11,6 +11,4 @@ op = declare_op(
     parameter_args=(),
     forward_semantics="Exact GELU x*Phi(x), no tanh approximation.",
     backward_semantics="Return dx by the analytic derivative, multiplied by dout.",
-    correctness=(Workload(dims=dict(rows=7, hidden=13), dtype="float32"),),
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (0.02, 0.02)},
 )

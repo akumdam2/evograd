@@ -45,10 +45,11 @@ def oracle_smoke(device: str, declaration: str | None = None) -> int:
     else:
         selected = TASKS
     for name, op in sorted(selected.items()):
-        if not op.correctness:
-            print(f"[skip] {name}: no correctness workloads declared yet")
+        cases = op.benchmark or op.coverage
+        if not cases:
+            print(f"[skip] {name}: no workload declared")
             continue
-        workload = op.correctness[0]
+        workload = cases[0]
         try:
             inputs = make_case_inputs(op, workload, device=device)
             y, grads = oracle(op, inputs)

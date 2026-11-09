@@ -17,12 +17,10 @@ from evograd.benchmark.topdown.common.level2_references import (
     attention_projection_forward_production as _production,
     attention_projection_forward_ref as _definition,
 )
-from evograd.opdecl import Active, Provenance, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 # The workload pins Llama-3.2-1B. `opdecl.models` also carries LLAMA_3_8B,
-# the 8B config the operator suite's vocabulary-regime cases are declared
-# against; that one did not move and is a different model.
+# a different model.
 from evograd.opdecl.models import LLAMA_3_2_1B
-from evograd.opdecl.tolerance import ReductionScaledAtol
 from evograd.ops._common import model_workloads as _model_workloads
 
 #: The workload these cases belong to; also the ``Provenance`` model key.
@@ -41,58 +39,6 @@ _BENCHMARK = _model_workloads(
     ("bfloat16",),
 )
 
-_SHRUNK = Provenance(
-    model="llama_3_2_1b",
-    component="causal_gqa_attention",
-    free={},
-    source="handpicked",
-    scaled=True,
-    note=(
-        "head count, head dimension, sequence length and hidden size reduced "
-        "from Llama-3-8B's 32/8 heads, 128-wide heads and 2048 tokens so the "
-        "correctness cases run on CPU; the 2:1 grouped-query ratio, the causal "
-        "mask, the absence of a bias and the head-major input layout are all "
-        "preserved"
-    ),
-)
-
-_CORRECTNESS = tuple(
-    Workload(
-        dims={
-            "B": batch,
-            "T": tokens,
-            "HQ": heads,
-            "HK": kv_heads,
-            "D": head_dim,
-            "QO": heads * head_dim,
-            "H": hidden,
-        },
-        dtype=dtype,
-        provenance=_SHRUNK,
-    )
-    for batch, tokens, heads, kv_heads, head_dim, hidden, dtype in (
-        (1, 16, 4, 2, 8, 24, "float32"),
-        (2, 32, 4, 2, 16, 48, "float32"),
-        (2, 32, 4, 2, 16, 48, "bfloat16"),
-        # A 4:1 group ratio, so a kernel that assumed 2:1 fails here.
-        (1, 24, 8, 2, 16, 32, "bfloat16"),
-    )
-)
-
-_ANCHOR = {"B": 2, "T": 32, "HQ": 4, "HK": 2, "D": 16, "QO": 64, "H": 48}
-
-_REDUCTION_SCALED = ReductionScaledAtol(
-    anchor_dims=_ANCHOR,
-    reduction_dims={},
-    result_dims={
-        "out": ("B", "T", "H"),
-        "dq": ("B", "HQ", "T", "D"),
-        "dk": ("B", "HK", "T", "D"),
-        "dv": ("B", "HK", "T", "D"),
-        "do_weight": ("H", "QO"),
-    },
-    gain=2.5,
-)
 
 def make_llama3_attention_inputs(torch, op, workload, device="cuda"):
     """Head-major q/k/v with the non-contiguous strides the model presents.
@@ -180,18 +126,9 @@ op = declare_op(
         "HK. o_weight has no bias. All floating tensors are CUDA tensors."
     ),
     grad_order=("dq", "dk", "dv", "do_weight"),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"llama_3_2_1b_observed": _BENCHMARK},
     memory_inputs=("q", "k", "v", "o_weight"),
-    # The tolerances and the multiplier are Qwen3's measured values for the
-    # same computation, carried over because the boundary's numerics are the
-    # boundary's. They have not been recalibrated at Llama-3-8B's widths: doing
-    # so needs the GPU calibration this workload has not yet run, and inventing
-    # a number here would be worse than carrying a measured one.
-    tolerances={"float32": (2e-5, 2e-5), "bfloat16": (1e-2, 1e-2)},
-    tolerance_multipliers={"do_weight": (6.5, 1.0)},
-    tolerance_hook=_REDUCTION_SCALED,
     make_inputs=make_llama3_attention_inputs,
 )

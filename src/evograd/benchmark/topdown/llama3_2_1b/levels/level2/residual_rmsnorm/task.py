@@ -9,30 +9,24 @@ from a harvest snapshot: the shape is a property of the architecture, and
 ``tests/test_provenance`` re-derives it. Batch 2 x sequence 2048 gives 4096
 tokens, as it does for Qwen3; the width differs, and so does ``eps``.
 
-**Two input recipes, two epsilons.** The generic correctness grid (shared with
-every RMSNorm-family task) runs at the declaration's default ``eps=1e-6``. The
-*model* case does not: Llama-3.2-1B's ``rms_norm_eps`` is ``1e-5``, which is
-what ``LlamaRMSNorm.variance_epsilon`` carries and what the tier-3 site hands a
-kernel. ``_inputs`` reads the value off the published configuration for any
-workload whose provenance names this model, so the timed and purity cases use
-the epsilon the model runs while the grid keeps the repository default.
+**Two input recipes, two epsilons.** A generic case runs at the declaration's
+default ``eps=1e-6``. The *model* case does not: Llama-3.2-1B's
+``rms_norm_eps`` is ``1e-5``, which is what ``LlamaRMSNorm.variance_epsilon``
+carries and what the tier-3 site hands a kernel. ``_inputs`` reads the value off
+the published configuration for any workload whose provenance names this model,
+so the timed cases use the epsilon the model runs while any other case keeps the
+repository default.
 """
 
 from evograd.benchmark.topdown.common.level2_references import (
     residual_rms_norm_forward_ref as _definition,
     residual_rms_norm_runtime_ref as _runtime,
 )
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 # The workload pins Llama-3.2-1B. `opdecl.models` also carries LLAMA_3_8B,
-# the 8B config the operator suite's vocabulary-regime cases are declared
-# against; that one did not move and is a different model.
+# a different model.
 from evograd.opdecl.models import LLAMA_3_2_1B
-from evograd.ops._common import (
-    STANDARD_TOLERANCES,
-    dtype_for,
-    model_workloads,
-    standard_correctness,
-)
+from evograd.ops._common import dtype_for, model_workloads
 from ...level3.spec import LLAMA_3_2_1B as _SPEC
 
 #: The workload these cases belong to; also the ``Provenance`` model key.
@@ -43,7 +37,7 @@ WORKLOAD = "llama_3_2_1b"
 #: from so the two cannot disagree. Qwen3-0.6B's is ``1e-6`` and matched the
 #: declaration default by coincidence; Llama-3.2-1B's does not.
 MODEL_EPS = float(_SPEC["rms_norm_eps"])
-#: The declaration's generic default, used by the shared correctness grid.
+#: The declaration's generic default, for any case that is not the model's.
 GRID_EPS = 1e-6
 
 #: The observed configuration, computed from the published model config.
@@ -52,7 +46,6 @@ _BENCHMARK = model_workloads(
     "residual_rmsnorm",
     ({"tokens": 4096},),
     ("bfloat16",),
-    tolerances=STANDARD_TOLERANCES,
 )
 
 #: How often the fusion occurs in one step, derived from the architecture rather
@@ -67,31 +60,15 @@ LLAMA_FUSION_SITES = LLAMA_3_2_1B.residual_rmsnorm_fusion_sites()
 #: layers and made the whole task registry unimportable at 16.
 assert LLAMA_FUSION_SITES["total"] == 2 * LLAMA_3_2_1B.layers, LLAMA_FUSION_SITES
 
-_REDUCED_ATOL = {"float32": 2e-3, "float16": 2e-1, "bfloat16": 2e-1}
-
-def _tolerance(workload, result_name, atol, rtol):
-    """Row-count-aware slack for the one result that reduces over rows.
-
-    ``dweight`` sums ``dnormalized * summed * rstd`` over every row, so its
-    error grows with the number of terms while every other result's does not.
-    Kept from the single-output declaration and re-measured for the two-output
-    contract by ``benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate``: at the canonical
-    4096x1024 BF16 case the measured requirement is 4.6e-02 against the 2.5e-01
-    this yields, and no other result needs a hook at all.
-    """
-    if result_name == "dweight":
-        base = _REDUCED_ATOL.get(workload.dtype, atol)
-        atol = base * max(1.0, (workload.dims["rows"] / 64.0) ** 0.5)
-    return atol, rtol
 
 def is_model_case(workload) -> bool:
-    """Does this workload describe the model, rather than the generic grid?"""
+    """Does this workload describe the model, rather than a generic case?"""
     provenance = getattr(workload, "provenance", None)
     return provenance is not None and provenance.model == WORKLOAD
 
 
 def eps_for(workload) -> float:
-    """The model's own epsilon for a model case; the grid default otherwise."""
+    """The model's own epsilon for a model case; the generic default otherwise."""
     return MODEL_EPS if is_model_case(workload) else GRID_EPS
 
 
@@ -152,13 +129,9 @@ op = declare_op(
         "the gradient that reaches the residual stream without passing through "
         "the norm, and leaves dweight untouched, so a dweight-only check will "
         "not catch it. Accumulate the row reductions in float32.",
-    correctness=standard_correctness(),
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"llama_3_2_1b_observed": _BENCHMARK},
-    tolerances=STANDARD_TOLERANCES,
-    tolerance_multipliers={"summed": (0.01, 0.01)},
-    tolerance_hook=_tolerance,
     make_inputs=_inputs,
     backward_may_overwrite=(),
 )

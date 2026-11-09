@@ -7,14 +7,12 @@ and no final state -- a training step from the start of the sequence. The
 reference defines it token by token; production computes it in chunks of 64.
 """
 
-from evograd.opdecl import Active, Workload, declare_op
+from evograd.opdecl import Active, declare_op
 from evograd.ops._common import make_pair_baseline
 
 from .. import library
-from ..task_tools import CONFIG, OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
+from ..task_tools import CONFIG, OBSERVED_SUITE, observed, seed_of
 
-#: Calibrated: see the calibrated-tolerances block below.
-PROVISIONAL_TOLERANCES = False
 
 _DIMS = ("B", "T", "HV", "D")
 
@@ -29,23 +27,6 @@ def model_strides(dims, channels: int):
 
 _BENCHMARK = observed("gated_delta_rule",
                       strides=lambda dims: model_strides(dims, CONFIG.conv_dim))
-
-_CORRECTNESS = tuple(
-    Workload(dims=dict(B=b, T=t, HV=hv, D=d), dtype=dtype,
-             provenance=shrunk("gated_delta_rule"))
-    for b, t, hv, d, dtype in (
-        (1, 16, 2, 8, "float32"),
-        # Two chunks, the second padded: the chunk boundary and the padding.
-        (2, 70, 4, 16, "float32"),
-        (1, 70, 4, 16, "bfloat16"),
-        (2, 33, 2, 16, "bfloat16"),
-    )
-) + (
-    # v as the model lays it out (conv channels = 2 * HV * D here).
-    Workload(dims=dict(B=2, T=70, HV=4, D=16), dtype="float32",
-             provenance=shrunk("gated_delta_rule",
-                               model_strides(dict(B=2, T=70, HV=4, D=16), 2 * 4 * 16))),
-)
 
 
 def make_gated_delta_rule_inputs(torch, op, workload, device="cuda"):
@@ -71,42 +52,6 @@ def make_gated_delta_rule_inputs(torch, op, workload, device="cuda"):
         "beta": torch.sigmoid(torch.randn(gates, device=device)).to(dtype),
         "do": torch.randn(shape, device=device).to(dtype),
     }
-
-
-# --- calibrated tolerances (scripts/qwen3_5_4b/calibration.py apply) ---
-from evograd.opdecl.tolerance import ReductionScaledAtol  # noqa: E402
-
-#: Calibrated for Qwen3.5-4B (run ``20261011_calib``; GH200, grid also on CPU):
-#: ``op.forward`` against ``op.runtime_forward`` only -- never a library or
-#: a candidate -- on captured, correctness, correctness[cpu], observed;
-#: four repeats each (production was deterministic). The bfloat16 base
-#: atol is the smallest 1-2-5 step at or above both 1.5x the forward
-#: outputs' grid need and one bfloat16 ulp of their magnitude; rtol 2e-2.
-#: Multipliers are per dtype (in the hook): 1.5x that dtype's grid need,
-#: rounded up (none below 1). Each gain is the smallest that carries the
-#: bfloat16 multiplier over the real-size cases with the same 1.5x.
-#: ``need`` is the atol required at the base rtol, in units of the base atol.
-#:
-#:   result           fp32 grid bf16 grid real need fp32x bf16x  gain margin@real
-#:   dbeta              0.0148     1.18      0.73     1   1.8     0     2.47
-#:   dg                  0.022   0.0533     0.382     1     1     0     2.62
-#:   dk                 0.0374    0.411    0.0484     1     1     0     20.7
-#:   dq                 0.0405      0.9    0.0512     1   1.4     0     27.3
-#:   dv                 0.0148    0.177    0.0773     1     1     0     12.9
-#:   o                  0.0487    0.259     0.107     1     1     0     9.33
-CALIBRATED = True
-CALIBRATED_TOLERANCES = {"float32": (2e-05, 2e-05), "bfloat16": (0.002, 0.02)}
-#: Per-dtype multipliers live in the hook; none apply to every dtype.
-CALIBRATED_MULTIPLIERS = {}
-CALIBRATED_HOOK = ReductionScaledAtol(
-    anchor_dims={"B": 1, "D": 16, "HV": 4, "T": 70},
-    reduction_dims={},
-    result_dims={"dbeta": ('B', 'T', 'HV'), "dg": ('B', 'T', 'HV'), "dk": ('B', 'T', 'HV', 'D'), "dq": ('B', 'T', 'HV', 'D'), "dv": ('B', 'T', 'HV', 'D'), "o": ('B', 'T', 'HV', 'D')},
-    gain=0.0,
-    result_gain={},
-    dtype_multipliers={"bfloat16": {"dbeta": 1.8, "dq": 1.4}},
-)
-# --- end calibrated tolerances ---
 
 
 op = declare_op(
@@ -147,13 +92,9 @@ op = declare_op(
         "underflow to zero. T need not be a multiple of the chunk size. v may be a "
         "strided view (a channel slice of the convolution output)."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=CALIBRATED_TOLERANCES,
-    tolerance_multipliers=CALIBRATED_MULTIPLIERS,
-    tolerance_hook=CALIBRATED_HOOK,
     performance_baselines={"fla": make_pair_baseline(
         library.fla_gated_delta_rule, ("q", "k", "v", "g", "beta"), sidecar="fla")},
     make_inputs=make_gated_delta_rule_inputs,

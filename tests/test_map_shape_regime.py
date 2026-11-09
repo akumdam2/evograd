@@ -10,13 +10,10 @@ from pathlib import Path
 from evograd.evolve.map_harvest import harvest_regime_elites
 from evograd.evolve.scoring import regime_speedup_metrics
 from evograd.opdecl.activity import Workload
-from evograd.benchmark import get_task
 
 
 class TestRegimeSpeedupMetrics(unittest.TestCase):
     def test_partitions_cases_by_regime_feature(self):
-        op = get_task("layernorm")
-
         def feature(workload: Workload) -> float:
             return float(workload.dims["rows"])
 
@@ -42,7 +39,6 @@ class TestRegimeSpeedupMetrics(unittest.TestCase):
         )
         self.assertAlmostEqual(metrics["small_regime_speedup"], 4.0)
         self.assertAlmostEqual(metrics["large_regime_speedup"], 3.0)
-        self.assertEqual(op.regime_split, 4096.0)
 
     def test_missing_cases_emit_zeros(self):
         metrics = regime_speedup_metrics(

@@ -33,6 +33,7 @@ from evograd.adbench_tools.evaluate import fixed_code_intact, prepare_program  #
 from evograd.adbench_tools.score import compare  # noqa: E402
 from evograd.adbench_tools.statement import system_message  # noqa: E402
 from evograd.adbench_tools.task import build_task, load, reference_closure  # noqa: E402
+from tests._small_cases import SMALL
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -108,7 +109,7 @@ def test_the_reference_an_agent_reads_is_the_declared_forward(name):
     source, _ = reference_closure(op.forward)
     namespace: dict = {}
     exec(compile(source, "reference", "exec"), namespace)
-    workload = next(w for w in op.correctness if w.dtype == "float32")
+    workload = next(w for w in SMALL[name] if w.dtype == "float32")
     values = make_case_inputs(op, workload, device="cpu")
     args = [values.get(arg.name, getattr(arg, "default", None)) for arg in op.args]
     ours, declared = namespace["reference_forward"](*args), resolve_callable(op.forward)(*args)
@@ -281,9 +282,9 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert task.workload == {"dims": dict(case.workload.dims), "dtype": case.workload.dtype}
     assert op.forward == reference.forward != get_task_forward("rmsnorm")
     assert op.reference_contract == reference.reference_contract
-    assert op.correctness == op.benchmark == op.coverage
+    assert op.benchmark == op.coverage
     # The observed case itself, provenance included (its layout, its eps).
-    assert op.correctness[0] == case.workload
+    assert op.benchmark[0] == case.workload
     assert task.spec["base_declaration"] == f"{task.root / 'declaration.py'}:op"
     assert f"Source: {reference.forward}" in task.reference_source
     # The pack states the tolerance Gate 1 judges by, not the declaration's.
@@ -423,7 +424,7 @@ def test_a_model_task_states_and_generates_the_models_scalars(tmp_path, model, c
     declared = {a.name: a.default for a in get_task(op.name).scalar_inactive_args()}
     assert declared != scalars  # the case this pins
     assert {a.name: a.default for a in op.scalar_inactive_args()} == scalars
-    generated = make_case_inputs(op, op.correctness[0], device="meta")
+    generated = make_case_inputs(op, op.benchmark[0], device="meta")
     assert {name: generated[name] for name in scalars} == scalars
     abi = {e["name"]: e["default"] for e in task.spec["abi"]["arguments"] if e["kind"] == "scalar"}
     assert abi == scalars

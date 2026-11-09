@@ -317,8 +317,7 @@ class TestOlmoeOwnershipSplit(unittest.TestCase):
         """A workload package depends on no other task package."""
         for path in _python_files(self.BENCH):
             offenders = [name for name in _resolved_imports(path)
-                         if name.startswith("evograd.benchmark.operator_suite")
-                         or any(m in name.split(".") for m in WORKLOAD_MARKERS
+                         if any(m in name.split(".") for m in WORKLOAD_MARKERS
                                 if m != "olmoe_1b_7b")]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
 

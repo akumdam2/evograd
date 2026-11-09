@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from tests._small_cases import SMALL
 
 try:
     import torch
@@ -162,7 +163,7 @@ class TestRankAdaptation(unittest.TestCase):
         # x is declared [B, T, H]; handing it a fourth leading dimension is what
         # exercises the adapter on an operator that is already batched.
         op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = values["x"].detach().unsqueeze(0).repeat(2, 1, 1, 1).requires_grad_(True)
         weights = [
@@ -171,7 +172,7 @@ class TestRankAdaptation(unittest.TestCase):
                       "q_norm_weight", "k_norm_weight")
         ]
         q, k, v = kernel(x, *weights, values["cos"], values["sin"], values["eps"])
-        dims = op.correctness[0].dims
+        dims = SMALL["qwen3_qkv_norm_rope"][0].dims
         self.assertEqual(tuple(q.shape), (2, dims["B"], dims["HQ"], dims["T"], dims["D"]))
         self.assertEqual(tuple(k.shape), (2, dims["B"], dims["HK"], dims["T"], dims["D"]))
         self.assertEqual(tuple(v.shape), tuple(k.shape))
@@ -233,7 +234,7 @@ class TestGradientRouting(unittest.TestCase):
 
     def test_three_outputs_all_route_back(self):
         op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, op.correctness[0], device="cpu")
+        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = values["x"].detach().requires_grad_(True)
         names = ("q_weight", "k_weight", "v_weight", "q_norm_weight", "k_norm_weight")

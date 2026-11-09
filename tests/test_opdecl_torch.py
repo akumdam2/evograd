@@ -16,6 +16,7 @@ except ImportError:
     HAVE_TORCH = False
 
 from evograd.opdecl import Active, Inactive, Workload, declare_op
+from tests._small_cases import SMALL
 
 
 def toy_op():
@@ -33,8 +34,7 @@ def toy_op():
         output=Active("y", "[M, N]"),
         forward_semantics="toy",
         backward_semantics="toy",
-        correctness=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
-        tolerances={"float32": (1e-5, 1e-5)},
+        benchmark=(Workload(dims={"M": 4, "N": 8}, dtype="float32"),),
     )
 
 
@@ -120,7 +120,7 @@ class TestOracle(unittest.TestCase):
         from evograd.opdecl import make_case_inputs, oracle
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         y, grads = oracle(op, inputs)
 
         x, w, mask, dy = inputs["x"], inputs["w"], inputs["mask"], inputs["dy"]
@@ -133,7 +133,7 @@ class TestOracle(unittest.TestCase):
         from evograd.opdecl import make_case_inputs, oracle
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         _, grads = oracle(op, inputs)
         self.assertNotIn("dmask", grads)
 
@@ -144,7 +144,7 @@ class TestBind(unittest.TestCase):
         from evograd.opdecl import bind, make_case_inputs
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         fn = bind(op, _toy_seed_module())
 
         x = inputs["x"].detach().clone().requires_grad_(True)
@@ -163,7 +163,7 @@ class TestBind(unittest.TestCase):
         from evograd.opdecl import bind, make_case_inputs
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         fn = bind(op, _toy_seed_module())
 
         mask = inputs["mask"].detach().clone().requires_grad_(True)
@@ -187,7 +187,7 @@ class TestBind(unittest.TestCase):
         from evograd.opdecl import bind, make_case_inputs
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         fn = bind(op, _toy_seed_module())
 
         x = inputs["x"].detach().clone().requires_grad_(True)
@@ -212,7 +212,7 @@ class TestBind(unittest.TestCase):
         from evograd.opdecl import bind, make_case_inputs
 
         op = toy_op()
-        inputs = make_case_inputs(op, op.correctness[0], device="cpu")
+        inputs = make_case_inputs(op, op.benchmark[0], device="cpu")
         fn = bind(op, _toy_seed_module(save_scalar=True))
         x = inputs["x"].detach().clone().requires_grad_(True)
         w = inputs["w"].detach().clone().requires_grad_(True)
@@ -290,7 +290,7 @@ class TestFairBenchmarkPrimitives(unittest.TestCase):
         from evograd.benchmark import get_task
 
         op = get_task("linear")
-        workload = op.correctness[0]
+        workload = SMALL["linear"][0]
         values = make_case_inputs(op, workload, device="cpu")
         expected_output, expected_grads = oracle(
             op,

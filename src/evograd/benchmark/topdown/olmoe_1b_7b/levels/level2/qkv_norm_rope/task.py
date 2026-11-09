@@ -8,33 +8,14 @@ Three outputs: ``q``, ``k`` and ``v`` ready for SDPA, in head-major layout.
 boundary OLMoE's own rather than Qwen3's per-head one.
 """
 
-from evograd.opdecl import Active, Inactive, Workload, declare_op
+from evograd.opdecl import Active, Inactive, declare_op
 
-from ..task_tools import CONFIG, OBSERVED_SUITE, PROVISIONAL, observed, seed_of, shrunk
+from ..task_tools import CONFIG, OBSERVED_SUITE, observed, seed_of
 
-#: Not calibrated: the repository's standard float32/bfloat16 defaults until the
-#: first GPU session's inventory (``task_tools.PROVISIONAL``).
-PROVISIONAL_TOLERANCES = True
 
 _DIMS = ("B", "T", "H", "HQ", "HK", "D", "QO", "KVO")
 
 _BENCHMARK = observed("qkv_norm_rope")
-
-
-def _dims(b, t, h, hq, hk, d):
-    return {"B": b, "T": t, "H": h, "HQ": hq, "HK": hk, "D": d, "QO": hq * d, "KVO": hk * d}
-
-
-_CORRECTNESS = tuple(
-    Workload(dims=_dims(*shape), dtype=dtype, provenance=shrunk("qkv_norm_rope"))
-    for shape, dtype in (
-        # Multi-head, as OLMoE-1B-7B's 16/16.
-        ((1, 12, 32, 4, 4, 8), "float32"),
-        # Grouped, so a kernel that assumed HQ == HK is caught.
-        ((2, 20, 64, 4, 2, 16), "float32"),
-        ((2, 24, 64, 8, 8, 8), "bfloat16"),
-    )
-)
 
 
 def make_qkv_norm_rope_inputs(torch, op, workload, device="cuda"):
@@ -128,11 +109,9 @@ op = declare_op(
         "over the whole head. The norm is over QO (or KVO) channels, not over D: a "
         "per-head normalization is a different operator and must not pass."
     ),
-    correctness=_CORRECTNESS,
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={OBSERVED_SUITE: _BENCHMARK},
-    tolerances=PROVISIONAL,
     memory_inputs=("x", "q_weight", "k_weight", "v_weight", "cos", "sin"),
     make_inputs=make_qkv_norm_rope_inputs,
 )
