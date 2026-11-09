@@ -236,6 +236,12 @@ class OlmoeWorkload:
         return textdata.TextBatches(self._text()["train"], batch_size=self.batch_size,
                                     seed=seed, device=self.device)
 
+    def eager_evaluator(self):
+        """A fresh unpatched model, in eval mode (Gate 3 builds its adapter with this)."""
+        model = build_model(self.spec)
+        model.eval()
+        return model
+
     def data_identity(self) -> dict[str, Any]:
         return dict(self._text()["identity"])
 

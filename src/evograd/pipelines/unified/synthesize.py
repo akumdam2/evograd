@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import json
 import sys
 import traceback
@@ -167,6 +168,11 @@ def synthesize_unified_seed(config: UnifiedSeedConfig) -> int:
         candidate.write_text(source, encoding="utf-8")
         declaration = root / "declaration.py"
         _write_declaration(declaration, config.op, config.workload)
+        # Verification runs in a child process. The capture's tensors would share the
+        # GPU with it, and at a real size the child runs out of memory first.
+        del captured
+        gc.collect()
+        torch.cuda.empty_cache()
         phase = "verification"
         print("[unified] Verify forward, every gradient and the deployment interface at the captured configuration")
         report = verify_candidate(

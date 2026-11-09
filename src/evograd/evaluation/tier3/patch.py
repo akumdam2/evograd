@@ -64,6 +64,10 @@ class Site:
     preflight: tuple = ()
 
 
+class OverlappingSites(ValueError):
+    """Two requested sites overlap: one's boundary holds the other's calls."""
+
+
 @dataclass(frozen=True)
 class SiteRegistry:
     """Which sites a model family has. Owned by a workload, never global.
@@ -79,11 +83,35 @@ class SiteRegistry:
 
     name: str
     sites: tuple[Site, ...]
+    #: Pairs of sites that must never be installed together, because one site's
+    #: boundary holds the other's calls. Replacing the outer one would drop the
+    #: inner kernel without a word: it would be installed and never called.
+    overlaps: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         names = [site.name for site in self.sites]
         if len(names) != len(set(names)):
             raise ValueError(f"{self.name}: duplicate site names in {names}")
+        unknown = sorted({s for pair in self.overlaps for s in pair} - set(names))
+        if unknown:
+            raise ValueError(f"{self.name}: overlaps name unknown sites {unknown}")
+
+    def conflicts(self, sites) -> tuple[tuple[str, str], ...]:
+        """The declared overlapping pairs among ``sites``."""
+        chosen = set(sites)
+        return tuple(pair for pair in self.overlaps if chosen.issuperset(pair))
+
+    def groups(self) -> tuple[tuple[str, ...], ...]:
+        """Every site, in sets that can be installed together (first fit, in site order)."""
+        groups: list[list[str]] = []
+        for name in self.names:
+            for group in groups:
+                if not self.conflicts((*group, name)):
+                    group.append(name)
+                    break
+            else:
+                groups.append([name])
+        return tuple(tuple(group) for group in groups)
 
     def __contains__(self, site: str) -> bool:
         return any(s.name == site for s in self.sites)
@@ -480,6 +508,13 @@ def patch_modules(
         for site in spec.covered
         if site in kernels.patched
     )
+    conflicts = kernels.registry.conflicts(requested)
+    if conflicts:
+        raise OverlappingSites(
+            f"{kernels.registry.name}: these sites nest and cannot be installed "
+            f"together, because the outer one would drop the inner kernel: "
+            f"{[list(pair) for pair in conflicts]}"
+        )
     paths: dict[str, tuple[str, ...]] = {}
     for patch_spec in patches:
         if not any(site in kernels.patched for site in patch_spec.covered):
@@ -608,7 +643,9 @@ def identity_control_kernels(
     that machinery.
     """
     kernels = KernelSet(registry=registry)
-    for site in sites or registry.names:
+    # With no sites named, every site that can be installed at once: all of them,
+    # unless some nest, when an outer site would hide the inner one's control.
+    for site in sites or next(iter(registry.groups()), ()):
         op_name = registry.require(site).op
         op = ops[op_name]
         module = eager_pair_for(op)

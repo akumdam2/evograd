@@ -16,6 +16,7 @@ native side is spelled with the casts CUDA autocast makes.
 
 from __future__ import annotations
 
+import contextlib
 import unittest
 import warnings
 from types import SimpleNamespace
@@ -27,10 +28,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from evograd.benchmark.topdown.megafold import MEGAFOLD_SITE_OPS
 from evograd.benchmark.topdown.megafold.contracts import (
     megafold_evoattention_forward,
     megafold_layernorm_linear_forward,
 )
+from evograd.benchmark.topdown.megafold.levels.level1.manifest import OPERATORS
+from evograd.evaluation.tier3.workloads.megafold import sites as S
 from evograd.evaluation.tier3.workloads.megafold import workload as W
 
 DTYPES = (torch.float32, torch.bfloat16)
@@ -104,9 +108,12 @@ class TheContractsAreMegaFoldsComputation(unittest.TestCase):
                 self.assertTrue(torch.equal(out, live.reshape(-1, 24)))
 
 
+@contextlib.contextmanager
 def autocast_as(dtype):
     """The adapters' view of an enclosing autocast."""
-    return mock.patch.object(W, "_autocast_dtype", lambda _t: dtype)
+    with mock.patch.object(W, "_autocast_dtype", lambda _t: dtype), \
+            mock.patch.object(S, "_autocast_dtype", lambda _t: dtype):
+        yield
 
 
 class TheAdaptersAreDropIns(unittest.TestCase):
@@ -263,7 +270,7 @@ class TheRecordedSubset(unittest.TestCase):
         self.assertTrue(coverage([subset], payloads)["complete"])
         self.assertFalse(coverage([replace(subset, recorded=None)], payloads)["complete"])
 
-    def test_the_integration_records_a_subset_and_has_model_gate2_without_gate3(self):
+    def test_the_integration_records_a_subset_and_has_both_model_gates(self):
         from evograd.verification.integrations import load
         from evograd.verification.integrations.megafold.capture import recorded_calls
 
@@ -280,7 +287,7 @@ class TheRecordedSubset(unittest.TestCase):
 
         model = load("megafold")
         with mock.patch.dict("sys.modules", {"megafold": None}):
-            for task in ("swiglu", "layernorm", "megafold_layernorm_linear", "megafold_evoattention"):
+            for task in {*MEGAFOLD_SITE_OPS.values(), *OPERATORS}:
                 with self.subTest(task=task):
                     identity = reference_identity(model.reference_op(task))
                     self.assertEqual(identity["reference_contract"], model.contract)
@@ -292,8 +299,8 @@ class EachCaseHasItsSite(unittest.TestCase):
     def setUp(self):
         from evograd.benchmark.topdown import load_snapshot
 
-        snapshot = load_snapshot("megafold")
-        self.configurations = [c for level in ("level1", "tasks") for entry in snapshot[level].values()
+        self.snapshot = load_snapshot("megafold")
+        self.configurations = [c for level in ("level1", "tasks") for entry in self.snapshot[level].values()
                                for c in entry["configurations"]]
 
     def test_every_observed_level2_case_is_placed_where_it_was_observed(self):
@@ -301,14 +308,18 @@ class EachCaseHasItsSite(unittest.TestCase):
         from evograd.verification.integrations.base import case_component, observed_cases
         from evograd.verification.integrations.gates import site_for_case
 
-        observed_at = {c["provenance"]["component"]: c["provenance"]["note"] for c in self.configurations}
+        # By task too: several sites of one MSA block share a component, which drops the module's index.
+        observed_at = {(task, c["provenance"]["component"]): c["provenance"]["note"]
+                       for task, entry in self.snapshot["tasks"].items() for c in entry["configurations"]}
         cases = [c for c in observed_cases(load("megafold")) if c.level == 2]
         self.assertTrue(cases)
         for case in cases:
             with self.subTest(case=case.case_id):
-                self.assertEqual(site_for_case(W.MEGAFOLD_SITES, case), observed_at[case_component(case)])
+                self.assertEqual(site_for_case(W.MEGAFOLD_SITES, case),
+                                 observed_at[case.task, case_component(case)])
+        at_sites = [c for c in self.configurations if c["provenance"]["note"] != "primitive"]
         self.assertEqual(sum(len(W.MEGAFOLD_SITES.require(s).preflight) for s in W.MEGAFOLD_SITES),
-                         len(self.configurations))
+                         len(at_sites))
 
     def test_no_case_lies_where_no_gradient_reaches(self):
         for c in self.configurations:
@@ -437,6 +448,45 @@ class AcceptanceWithoutGate3(unittest.TestCase):
         self.assertFalse(accepted(without, self.entry(gate2_model="failed", gate3=NOT_APPLICABLE)))
         self.assertFalse(accepted(full, self.entry(gate2_model="passed", gate3=NOT_APPLICABLE)))
         self.assertTrue(accepted(full, self.entry(gate2_model="passed", gate3="passed")))
+
+
+class SiteCheck(unittest.TestCase):
+    """The old capture check, by non-overlapping group."""
+
+    def test_the_groups_cover_every_site_and_nest_nothing(self):
+        groups = W.MEGAFOLD_SITES.groups()
+        self.assertEqual(sorted(s for g in groups for s in g), sorted(W.MEGAFOLD_SITES.names))
+        self.assertFalse(any(W.MEGAFOLD_SITES.conflicts(g) for g in groups))
+
+    def test_every_nested_pair_is_declared(self):
+        from evograd.benchmark.topdown.megafold import MEGAFOLD_SITE_OVERLAPS
+
+        self.assertEqual(W.MEGAFOLD_SITES.overlaps, MEGAFOLD_SITE_OVERLAPS)
+        self.assertEqual(W.MEGAFOLD_SITES.conflicts(("transition_block", "layernorm_linear")),
+                         (("transition_block", "layernorm_linear"),))
+        self.assertEqual(W.MEGAFOLD_SITES.conflicts(("outer_product_mean",
+                                                     "triangle_multiplication_outgoing")), ())
+
+    def test_a_difference_anywhere_fails(self):
+        from evograd.verification.integrations.megafold.site_check import compare
+
+        plain = {"loss": 1.0, "loss_digest": "a", "logits_digest": "b", "grads": {"w": "c", "v": "d"}}
+        self.assertTrue(compare(plain, plain, "logits")["identical"])
+        for change in ({"loss_digest": "x"}, {"logits_digest": "x"}, {"grads": {"w": "x", "v": "d"}},
+                       {"grads": {"w": "c", "v": "d", "new": "e"}}):
+            with self.subTest(change=change):
+                self.assertFalse(compare(plain, {**plain, **change}, "logits")["identical"])
+
+    def test_each_kernel_is_the_sites_model_reference(self):
+        from evograd.evaluation.tier3.patch import KernelSet
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.megafold.reference import reference_op
+        from evograd.verification.integrations.megafold.site_check import reference_kernels
+
+        (group, *_rest) = W.MEGAFOLD_SITES.groups()
+        kernels = reference_kernels(W.MEGAFOLD_SITES, group, reference_op, resolve_runtime_forward)
+        self.assertIsInstance(kernels, KernelSet)
+        self.assertEqual(sorted(kernels.patched), sorted(group))
 
 
 class TheWarmStartIsItsModelsOnly(unittest.TestCase):
