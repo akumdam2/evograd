@@ -55,7 +55,7 @@ class TestSharedLayers(unittest.TestCase):
 
     def test_generic_tier3_modules_import_no_specific_workload(self):
         root = EVOGRAD / "evaluation" / "tier3"
-        for name in ("cli.py", "model.py", "patch.py", "runner.py"):
+        for name in ("model.py", "patch.py", "runner.py"):
             path = root / name
             for imported in _resolved_imports(path):
                 self.assertFalse(
@@ -77,10 +77,7 @@ class TestDependencyDirection(unittest.TestCase):
     def test_benchmark_imports_no_evaluation_anywhere(self):
         """The whole benchmark package stays below the evaluation runners.
 
-        There is no exemption. ``operator_suite/cli.py`` used to be one: it was
-        the composition root that asked evaluation to run what the benchmark
-        selected. That coordination now lives at the root, in
-        :mod:`evograd.suite_cli`, so the rule holds for every file here.
+        There is no exemption: the rule holds for every file here.
         """
         for path in _python_files(EVOGRAD / "benchmark"):
             offenders = [
@@ -88,11 +85,6 @@ class TestDependencyDirection(unittest.TestCase):
                 if name.startswith("evograd.evaluation")
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
-
-    def test_no_suite_cli_is_left_inside_benchmark(self):
-        """No forwarding module: one canonical entry point, at the root."""
-        self.assertFalse((EVOGRAD / "benchmark" / "operator_suite" / "cli.py").exists())
-        self.assertTrue((EVOGRAD / "suite_cli.py").is_file())
 
     def test_ops_imports_no_benchmark_at_all(self):
         """The primitive layer sits below the benchmark, with no bridge back.
@@ -159,7 +151,6 @@ class TestQwenOwnershipSplit(unittest.TestCase):
     """Capture describes the case; evaluation decides the verdict."""
 
     QWEN_BENCH = EVOGRAD / "benchmark" / "topdown" / "qwen3_0_6b"
-    QWEN_EVAL = EVOGRAD / "evaluation" / "workloads" / "qwen3_0_6b"
 
     def test_qwen_benchmark_side_imports_no_evaluation(self):
         for path in _python_files(self.QWEN_BENCH):
@@ -168,15 +159,6 @@ class TestQwenOwnershipSplit(unittest.TestCase):
                 if name.startswith("evograd.evaluation")
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
-
-    def test_the_evaluation_side_exists_and_owns_the_verdicts(self):
-        for relative in ("level1/verify.py", "level1/calibrate.py", "level1/cli.py",
-                         "level2/qkv_norm_rope.py", "level2/attention.py",
-                         "level2/swiglu_mlp.py", "level2/residual_rmsnorm.py",
-                         "level2/calibrate.py", "level2/negative_controls.py",
-                         "layer/replay.py"):
-            with self.subTest(module=relative):
-                self.assertTrue((self.QWEN_EVAL / relative).is_file())
 
     def test_the_benchmark_side_keeps_capture_and_artifact(self):
         for relative in ("levels/level1/manifest.py",
@@ -210,7 +192,6 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
     """
 
     LLAMA_BENCH = EVOGRAD / "benchmark" / "topdown" / "llama3_2_1b"
-    LLAMA_EVAL = EVOGRAD / "evaluation" / "workloads" / "llama3_2_1b"
 
     def test_llama_benchmark_side_imports_no_evaluation(self):
         for path in _python_files(self.LLAMA_BENCH):
@@ -219,15 +200,6 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
                 if name.startswith("evograd.evaluation")
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
-
-    def test_the_evaluation_side_exists_and_owns_the_verdicts(self):
-        for relative in ("level1/verify.py", "level1/calibrate.py", "level1/cli.py",
-                         "level2/qkv_rope.py", "level2/attention.py",
-                         "level2/swiglu_mlp.py", "level2/residual_rmsnorm.py",
-                         "level2/calibrate.py", "level2/negative_controls.py",
-                         "layer/replay.py"):
-            with self.subTest(module=relative):
-                self.assertTrue((self.LLAMA_EVAL / relative).is_file())
 
     def test_the_benchmark_side_keeps_capture_and_artifact(self):
         for relative in ("levels/level1/manifest.py",
@@ -268,7 +240,6 @@ class TestQwen3_5OwnershipSplit(unittest.TestCase):
     contract, reference and capture."""
 
     BENCH = EVOGRAD / "benchmark" / "topdown" / "qwen3_5_4b"
-    EVAL = EVOGRAD / "evaluation" / "workloads" / "qwen3_5_4b"
 
     def test_benchmark_side_imports_no_evaluation(self):
         for path in _python_files(self.BENCH):
@@ -295,13 +266,6 @@ class TestQwen3_5OwnershipSplit(unittest.TestCase):
                 with self.subTest(site=site, part=part):
                     self.assertTrue((self.BENCH / "levels" / "level2" / site / part).is_file())
 
-    def test_the_evaluation_side_exists(self):
-        for relative in ("descriptor.py", "level1/verify.py", "level1/calibrate.py",
-                         "level1/cli.py", "level2/calibrate.py", "level2/harvested.py",
-                         "level2/negative_controls.py", "layer/replay.py"):
-            with self.subTest(module=relative):
-                self.assertTrue((self.EVAL / relative).is_file())
-
     def test_no_verdict_function_is_left_on_the_benchmark_side(self):
         for path in _python_files(self.BENCH):
             source = path.read_text(encoding="utf-8")
@@ -316,7 +280,6 @@ class TestOlmoeOwnershipSplit(unittest.TestCase):
     contract, reference and capture."""
 
     BENCH = EVOGRAD / "benchmark" / "topdown" / "olmoe_1b_7b"
-    EVAL = EVOGRAD / "evaluation" / "workloads" / "olmoe_1b_7b"
 
     def test_benchmark_side_imports_no_evaluation(self):
         for path in _python_files(self.BENCH):
@@ -342,13 +305,6 @@ class TestOlmoeOwnershipSplit(unittest.TestCase):
             for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
                 with self.subTest(site=site, part=part):
                     self.assertTrue((self.BENCH / "levels" / "level2" / site / part).is_file())
-
-    def test_the_evaluation_side_exists(self):
-        for relative in ("descriptor.py", "level1/verify.py", "level1/calibrate.py",
-                         "level1/cli.py", "level2/calibrate.py", "level2/harvested.py",
-                         "level2/negative_controls.py", "layer/replay.py"):
-            with self.subTest(module=relative):
-                self.assertTrue((self.EVAL / relative).is_file())
 
     def test_no_verdict_function_is_left_on_the_benchmark_side(self):
         for path in _python_files(self.BENCH):

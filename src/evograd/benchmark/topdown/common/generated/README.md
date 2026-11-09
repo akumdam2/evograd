@@ -11,9 +11,6 @@ ImageNet distribution. The implementation imports nothing from `references/`.
 The generated latents and diffusion noise are independent N(0,1) tensors.
 Timesteps and class labels are sampled uniformly from their declared ranges;
 class-drop masks are sampled with probability 0.1. A seed fixes each batch.
-The model gate calibrates on five batches and evaluates on five disjoint
-batches, checking outputs, the latent input gradient, every parameter
-gradient, and the updated loss trajectory.
 
 The canonical configuration has 12 blocks, hidden width 384, six attention
 heads, 4×32×32 latents, batch 256, float32, and 32,865,056 trainable
@@ -27,30 +24,17 @@ Measured Level-1/2 cases are derived from a canonical whole-model harvest;
 they remain empty until its snapshot is saved. A reduced configuration can
 verify execution but cannot publish a canonical timing snapshot.
 
-## Canonical generated-input identity check
+## Canonical generated-input harvest
 
 ```bash
 python -m evograd.benchmark.topdown.dit_s_2.harvest.harvest \
   --out results/dit_s_2/harvest.json --write-snapshot
-
-python -m evograd.evaluation.tier3.workloads.common.generated.gate \
-  --model dit_s_2 \
-  --config src/evograd/benchmark/topdown/dit_s_2/benchmark.json \
-  --sites dit_modulation,dit_mlp --steps 5 \
-  --out results/dit_s_2/calibration.json
-
-python -m evograd.evaluation.tier3.cli --model dit_s_2 \
-  --calibration results/dit_s_2/calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --baseline none --out results/dit_s_2/identity.json
 ```
 
 For a reduced run, pass a JSON file with changed `batch_size`, `device`, and
-`arch_overrides` to harvest and gate as `--config`, and to Tier 3 as
-`--model-config`. Its calibration is tied to that exact configuration. Omit
-`--write-snapshot` for a reduced run.
+`arch_overrides` to harvest as `--config`, and omit `--write-snapshot`.
 
-## Pinned real-image identity check
+## Pinned real-image input
 
 Install the data/VAE dependencies and cache the exact source files:
 
@@ -63,21 +47,8 @@ Preparation uses a 256-pixel center crop, random horizontal flip, `[-1, 1]`
 normalization, and VAE latent scale 0.18215. A fixed seed controls flips,
 latent sampling, diffusion noise, timesteps, and class dropout. Prepared
 batches are cached at `data/dit_s_2/batches/` (override with
-`EVOGRAD_DIT_DATA_CACHE`). The default gate needs ten batches: five for
-calibration and five disjoint batches for evaluation. Imagenette labels are
-mapped to their ImageNet-1k IDs.
-
-```bash
-python -m evograd.evaluation.tier3.workloads.common.generated.gate \
-  --model dit_s_2 --config src/evograd/benchmark/topdown/dit_s_2/benchmark.json \
-  --real-input --sites dit_modulation,dit_mlp --steps 5 \
-  --out results/dit_s_2/real_calibration.json
-
-python -m evograd.evaluation.tier3.cli --model dit_s_2 --real-input \
-  --calibration results/dit_s_2/real_calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --baseline none --out results/dit_s_2/real_identity.json
-```
+`EVOGRAD_DIT_DATA_CACHE`). Imagenette labels are mapped to their ImageNet-1k
+IDs.
 
 Add `--real-input` to the harvest command to observe Level-1/2 shapes from
 the first prepared image batch. The tracked canonical snapshot remains the

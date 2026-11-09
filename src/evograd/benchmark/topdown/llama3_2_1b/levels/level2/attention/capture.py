@@ -3,25 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the
 live model, which tensors cross it, in which layout, and whether what
 was captured still matches. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.llama3_2_1b.level2.attention`.
-
-Derive and verify ``llama3_attention`` from the canonical Layer-16 artifact.
-
-    # describe the derived invocation (metadata only -- no tensors are written)
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.attention derive \
-        --source results/llama3-level3/layer8.pt \
-        --metadata-out results/llama3-level3/layer8-attention.json
-
-    # check both spellings against what Transformers computed
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.attention verify \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/layer8-attention-verify.json
-
-    # measure what tolerance a correct implementation actually needs
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.attention calibrate \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/llama3_attention-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 Like the MLP task, nothing here writes a second tensor file. ``layer8.pt``
 already holds every number this boundary needs; the invocation is re-derived by

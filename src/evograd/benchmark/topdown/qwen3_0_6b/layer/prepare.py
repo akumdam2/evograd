@@ -6,9 +6,7 @@ against what was captured. All of that describes *the artifact* -- it is the
 same preparation whether the replay that follows is comparing a reference, a
 candidate, or nothing at all -- so it stays on the benchmark side.
 
-What the replay then concludes is not here. Tolerances, gates, noise
-measurement and the verdict live in
-:mod:`evograd.evaluation.workloads.qwen3_0_6b.layer.replay`.
+Nothing here judges an implementation; that is :mod:`evograd.verification`.
 """
 
 from __future__ import annotations

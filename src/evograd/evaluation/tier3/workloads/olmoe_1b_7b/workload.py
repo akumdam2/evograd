@@ -1,7 +1,5 @@
 """The canonical OLMoE-1B-7B training step, as a tier-3 workload.
 
-    python -m evograd.evaluation.tier3.cli --model olmoe_1b_7b --structural-identity
-
 A top-level dataclass of JSON-serializable fields, for the same reason as the
 other workloads': tier 3 runs each provider in a killable child process, and
 :meth:`OlmoeWorkload.to_config` / :func:`from_config` rebuild an identical
@@ -14,11 +12,9 @@ checkpointing, ``model.train()``, random weights through the model's own
 (``tier3.runner.OPTIMIZER_DEFAULTS``) around ``loss.backward()``. Sites are
 patched on all 16 layers; the counts are held to the depth.
 
-**No whole-model gate yet.** :meth:`model_correctness` exists -- the runner
-calls it, and a whole-model gate will be bridged in later -- but it reports
-the gate as not implemented: ``evaluation_complete: false`` with the reason,
-``ok`` so the provider is still timed. Site preflight (declared correctness
-grid) still runs before anything is timed.
+**No whole-model gate here.** Correctness is judged by the verification
+package's Gates 1/2/3; :meth:`describe` still records ``model_gate`` as not
+implemented, because Gate 2 policy identities include it.
 """
 
 from __future__ import annotations
@@ -49,7 +45,7 @@ WHOLE_MODEL_COMPILE_SETTINGS: dict[str, Any] = {
     "backend": "inductor", "mode": None, "dynamic": False, "fullgraph": False,
 }
 
-#: Why the whole-model gate does not run, stated in every provider row.
+#: Recorded by :meth:`describe` and therefore in Gate 2 policy identities; frozen text.
 MODEL_GATE_NOT_IMPLEMENTED = (
     "the OLMoE-1B-7B whole-model gate is not implemented yet; only site preflight ran")
 
@@ -79,20 +75,6 @@ def _spec_from_config(config: dict[str, Any]) -> WorkloadSpec:
     if arch:
         overrides["arch"] = dict(arch)
     return CANONICAL.replace(**overrides) if overrides else CANONICAL
-
-
-def model_gate_not_implemented(reason: str = MODEL_GATE_NOT_IMPLEMENTED) -> dict[str, Any]:
-    """The verdict row of a provider no whole-model gate judged.
-
-    The field names are :func:`evograd.evaluation.tier3.gate.enforcement.summarize`'s
-    (and the runner's own ``_not_checked``), so one reader works for every row:
-    ``ok`` -- nothing forbids timing -- with the numerical answer unavailable and
-    ``evaluation_complete`` false.
-    """
-    return {"gate": "olmoe_model_gate", "implemented": False, "ok": True, "skipped": True,
-            "execution_ok": True, "numerical_ok": None, "numerical_status": "unavailable",
-            "numerical_unavailable_at": ["model_gate"], "evaluation_complete": False,
-            "evaluation_incomplete_because": [reason], "reason": reason, "findings": []}
 
 
 @dataclass
@@ -292,43 +274,6 @@ class OlmoeWorkload:
             report["whole_model_torch_compile"] = dict(WHOLE_MODEL_COMPILE_SETTINGS)
         return report
 
-    def site_preflight(self, kernels, *, device: str = "cuda") -> dict[str, Any]:
-        """Does each patched site hold on its declared correctness grid?
-
-        No observed shapes are attached (provisional tolerances; see
-        ``sites.olmoe_sites``), so this is the grid only.
-        """
-        from evograd.benchmark import TASKS
-        from evograd.evaluation.tier3.runner import preflight as run_preflight
-
-        try:
-            run_preflight(kernels, TASKS, device=device)
-        except Exception as exc:
-            return {"ok": False, "sites": list(kernels.patched),
-                    "reason": f"{type(exc).__name__}: {exc}",
-                    "detail": getattr(exc, "detail", None)}
-        return {"ok": True, "sites": list(kernels.patched),
-                "checked": "declared correctness grid (no observed shapes: provisional "
-                           "tolerances)"}
-
-    def model_correctness(self, kernels, *, device: str = "cuda") -> dict[str, Any]:
-        """Not implemented yet: reported, never passed."""
-        return model_gate_not_implemented()
-
-    def local_boundary_check(self, kernels, *, layers=None, device: str = "cuda",
-                             seed: int = 0) -> dict[str, Any]:
-        """Untimed: every live site invocation (in ``layers``, default all) against
-        its declaration, on one patched forward + backward. Not a gate."""
-        from .boundary import validate_invocations
-        from .sites import live_sites
-
-        model, _ = self.build_patched(kernels)
-        chosen = range(self.num_layers) if layers is None else list(layers)
-        expected = {site: len(chosen) for site in live_sites(kernels.patched)}
-        return validate_invocations(model, kernels, self.batch_for(seed=seed), self.loss,
-                                    registry=self.site_registry, dtype=self.spec.dtype,
-                                    layers=layers, expected=expected)
-
     @property
     def last_build(self) -> PatchedModel | None:
         return self._last
@@ -340,5 +285,4 @@ def from_config(config: dict[str, Any]) -> OlmoeWorkload:
 
 
 __all__ = ["MODEL_GATE_NOT_IMPLEMENTED", "MODEL_KEY", "OlmoeWorkload",
-           "WHOLE_MODEL_COMPILE_SETTINGS", "from_config", "model_gate_not_implemented",
-           "whole_model_compile_kernels"]
+           "WHOLE_MODEL_COMPILE_SETTINGS", "from_config", "whole_model_compile_kernels"]

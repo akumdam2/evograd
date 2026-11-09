@@ -1,21 +1,16 @@
 """Reduced execution checks; these cases are never published as timing suites."""
 
-import json
-
 from evograd.benchmark import TASKS
 from evograd.benchmark.topdown.common.generated.harvest import collect, snapshot
 from evograd.benchmark.topdown.common.generated.spec import GeneratedSpec, canonical
-from evograd.evaluation.tier3.workloads.common.generated.workload import (
-    GeneratedWorkload, structural_identity_kernels,
-)
-from evograd.evaluation.tier3.workloads.common.vision.gate import calibrate, evaluate
+from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
 
 
 SMALL = dict(input_size=8, hidden_size=24, depth=2, num_heads=4,
              num_classes=10, diffusion_steps=100)
 
 
-def test_generated_harvest_and_model_gate(tmp_path):
+def test_generated_harvest():
     spec = GeneratedSpec(model="dit_s_2", batch_size=2, device="cpu", arch_overrides=SMALL)
     manifest = collect(spec)
     snap = snapshot(manifest)
@@ -24,15 +19,6 @@ def test_generated_harvest_and_model_gate(tmp_path):
     assert snap["tasks"]["dit_s_2_dit_modulation"]["frequency"] == spec.arch["depth"]
     assert not spec.is_canonical
     assert not TASKS["dit_s_2_dit_mlp"].benchmark
-
-    path = tmp_path / "calibration.json"
-    workload = GeneratedWorkload(spec, str(path))
-    sites = ["dit_modulation", "dit_mlp"]
-    path.write_text(json.dumps(calibrate(workload, sites, steps=2, backend="aot_eager")))
-    result = evaluate(workload, structural_identity_kernels(workload.site_registry))
-    assert result["ok"], result
-    assert result["evaluation_complete"]
-    assert result["trajectory"] == {"rms": 0.0, "max_abs": 0.0}
 
 
 def test_canonical_architecture_size():
@@ -44,7 +30,7 @@ def test_canonical_architecture_size():
     assert sum(p.numel() for p in dlrm.parameters()) > 160_000_000
 
 
-def test_dlrm_generated_harvest_and_identity_gate(tmp_path):
+def test_dlrm_generated_harvest():
     from evograd.ops.level1.embedding_bag.reference import forward as embedding_bag
     import pytest
     import torch
@@ -63,15 +49,6 @@ def test_dlrm_generated_harvest_and_identity_gate(tmp_path):
     assert snap["level1"]["embedding_bag"]["frequency"] == 3
     assert not TASKS["torchrec_dlrm_dlrm_interaction"].benchmark
 
-    path = tmp_path / "dlrm_calibration.json"
-    workload = GeneratedWorkload(spec, str(path))
-    sites = ["embedding_bag", "dlrm_interaction"]
-    path.write_text(json.dumps(calibrate(workload, sites, steps=2, backend="aot_eager")))
-    result = evaluate(workload, structural_identity_kernels(workload.site_registry))
-    assert result["ok"], result
-    assert result["evaluation_complete"]
-    assert result["trajectory"] == {"rms": 0.0, "max_abs": 0.0}
-
     weight = torch.arange(15, dtype=torch.float32).reshape(5, 3).requires_grad_()
     output = embedding_bag(weight, torch.tensor([2, 2, 4, 1, 2, 1]),
                            torch.tensor([0, 3]))
@@ -79,8 +56,8 @@ def test_dlrm_generated_harvest_and_identity_gate(tmp_path):
     assert torch.equal(weight.grad[:, 0], torch.tensor([0., 2., 3., 0., 1.]))
 
 
-def test_dlrm_criteo_real_input_artifact_and_gate(tmp_path, monkeypatch):
-    """A small TorchRec-format fixture exercises mapping, replay, and the gate."""
+def test_dlrm_criteo_real_input_artifact(tmp_path, monkeypatch):
+    """A small TorchRec-format fixture exercises mapping and replay."""
     import numpy as np
     import pytest
     import torch
@@ -119,13 +96,7 @@ def test_dlrm_criteo_real_input_artifact_and_gate(tmp_path, monkeypatch):
     assert ensure_pinned_data(spec, path, source_dir=source, batch_count=4) == str(path)
     assert collect(spec, {k: v.to(spec.device) for k, v in first.items()})["backward_verified"]
 
-    calibration = tmp_path / "real_calibration.json"
-    workload = GeneratedWorkload(spec, str(calibration), str(path))
-    sites = ["embedding_bag", "dlrm_interaction"]
-    calibration.write_text(json.dumps(calibrate(workload, sites, steps=2, backend="aot_eager")))
-    result = evaluate(workload, structural_identity_kernels(workload.site_registry))
-    assert result["ok"], result
-    assert result["evaluation_complete"]
+    workload = GeneratedWorkload(spec, data_path=str(path))
     assert workload.describe()["data"] == "pinned_real_data"
 
     changed_source = np.load(source / "train_sparse.npy", mmap_mode="r+")

@@ -1,9 +1,8 @@
-"""Capturing one decoder layer from the canonical run, and replaying it alone.
+"""Capturing one decoder layer from the canonical run.
 
 The tiny CPU Qwen3 stands in for the 0.6B model: what these tests check is that
-the captured call is the observed one, that the artifact is complete and
-self-describing, that a replay builds exactly one layer, and that it reproduces
-the full model's numbers. None of that depends on the model being large.
+the captured call is the observed one and that the artifact is complete and
+self-describing. None of that depends on the model being large.
 """
 
 from __future__ import annotations
@@ -36,15 +35,6 @@ if HAVE_TRANSFORMERS:
     from evograd.benchmark.topdown.qwen3_0_6b.harvest.manifest import write_manifest
     from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.model import build_model, make_inputs, training_step
     from evograd.benchmark.topdown.qwen3_0_6b.layer.artifact import artifact_hash, load_canonical
-    from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import (
-        BF16_EPS,
-        BF16_UNIT_ROUNDOFF,
-        FORWARD_TOL,
-        GRADIENT_TOL,
-        REPORT_SCHEMA,
-        compare_tensors,
-        run_replay,
-    )
     from evograd.benchmark.topdown.qwen3_0_6b.layer.prepare import validate_noise_repeats
 
 #: The tiny model has two layers; 1 is the deeper one, the analogue of 14.
@@ -313,182 +303,6 @@ class TestCaptureHooks(unittest.TestCase):
         self.assertEqual(self._hook_counts(model, path), (0, 0))
 
 
-class TestReplay(CaptureFixture):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.report = run_replay(
-            LayerArtifact.load(cls.artifact_path), device="cpu", noise_repeats=4
-        )
-
-    def test_the_replay_passes(self):
-        self.assertEqual(self.report["status"], "pass", self.report["failures"])
-        self.assertEqual(self.report["failures"], [])
-
-    def test_only_one_decoder_layer_was_constructed(self):
-        instances = self.report["construction"]["live_instances"]
-        self.assertEqual(instances["Qwen3DecoderLayer"], 1, instances)
-        self.assertEqual(instances["Qwen3Attention"], 1, instances)
-        self.assertEqual(instances["Qwen3ForCausalLM"], 0, instances)
-        self.assertEqual(instances["Qwen3Model"], 0, instances)
-        self.assertEqual(self.report["construction"]["module_class"], "Qwen3DecoderLayer")
-
-    def test_one_layer_is_a_small_fraction_of_the_model(self):
-        """A replay that had quietly built the whole model would show the whole
-        model's parameter count."""
-        one_layer = self.report["construction"]["parameter_elements"]
-        whole = self.metadata["full_model_validation"]["trainable_elements"]
-        self.assertLess(one_layer, whole)
-        self.assertEqual(one_layer, self.metadata["parameters"]["elements"])
-
-    def test_forward_output_agrees(self):
-        record = self.report["comparisons"]["output"]
-        self.assertTrue(record["within_tolerance"], record)
-        self.assertTrue(record["shape_match"] and record["dtype_match"])
-        self.assertTrue(record["stride_match"])
-        self.assertLessEqual(record["max_rel_err_vs_scale"], FORWARD_TOL)
-
-    def test_input_gradient_agrees(self):
-        record = self.report["comparisons"]["grad_input"]
-        self.assertTrue(record["within_tolerance"], record)
-        self.assertLessEqual(record["max_rel_err_vs_scale"], GRADIENT_TOL)
-
-    def test_every_parameter_gradient_agrees(self):
-        per_param = self.report["comparisons"]["param_grads"]
-        self.assertEqual(sorted(per_param), sorted(self.artifact.payload["param_grads"]))
-        for name, record in per_param.items():
-            with self.subTest(param=name):
-                self.assertTrue(record["within_tolerance"], record)
-                self.assertTrue(record["actual_all_finite"])
-                self.assertLessEqual(record["max_rel_err_vs_scale"], GRADIENT_TOL)
-        self.assertEqual(self.report["summary"]["missing_param_grads"], [])
-        self.assertEqual(self.report["summary"]["non_finite_param_grads"], [])
-
-    def test_the_noise_floor_is_measured_and_reported(self):
-        noise = self.report["noise_floor"]
-        self.assertEqual(noise["repeats"], 4)
-        self.assertTrue(noise["measured"])
-        for key in ("output", "grad_input", "param_grads_max"):
-            self.assertIn(key, noise)
-            self.assertGreaterEqual(noise[key], 0.0)
-
-    def test_tolerances_are_stated_in_the_report(self):
-        """BF16 keeps a 7-bit explicit mantissa: the spacing near 1.0 is 2^-7 and
-        the unit roundoff is half that. The report must name them correctly."""
-        tolerances = self.report["tolerances"]
-        self.assertEqual(tolerances["bf16_eps"], 2.0**-7)
-        self.assertEqual(tolerances["bf16_unit_roundoff"], 2.0**-8)
-        self.assertEqual(BF16_EPS, 2.0**-7)
-        self.assertEqual(BF16_UNIT_ROUNDOFF, 2.0**-8)
-        self.assertEqual(tolerances["forward"], FORWARD_TOL)
-        self.assertEqual(tolerances["gradient"], GRADIENT_TOL)
-        self.assertIn("unit roundoff", tolerances["forward_meaning"])
-        self.assertIn("spacing", tolerances["gradient_meaning"])
-        self.assertIn("max|a-b|", tolerances["metric"])
-
-    def test_the_report_serializes_and_carries_provenance(self):
-        payload = json.loads(json.dumps(self.report, default=str))
-        self.assertEqual(payload["schema_version"], REPORT_SCHEMA)
-        self.assertEqual(payload["identity"]["manifest_hash"], self.manifest["manifest_hash"])
-        self.assertEqual(payload["identity"]["layer_index"], TINY_LAYER)
-        self.assertEqual(
-            payload["artifact"]["content_hash"], self.artifact.payload["content_hash"]
-        )
-        self.assertIn("forward_backward_wall_time_s", payload["diagnostics"])
-
-    def test_a_corrupted_artifact_fails_the_replay(self):
-        loaded = LayerArtifact.load(self.artifact_path)
-        loaded.payload["state_dict"]["mlp.down_proj.weight"] += 1.0
-        with self.assertRaises(ArtifactError):
-            run_replay(loaded, device="cpu", noise_repeats=0)
-
-    def test_a_perturbed_weight_is_detected_numerically(self):
-        """The negative control. Everything above reports zero error, which is
-        only meaningful if a wrong replay would report a non-zero one -- so
-        perturb one weight, re-hash so the integrity check passes, and require
-        the comparison to catch it."""
-        loaded = LayerArtifact.load(self.artifact_path)
-        weight = loaded.payload["state_dict"]["mlp.down_proj.weight"]
-        loaded.payload["state_dict"]["mlp.down_proj.weight"] = weight * 1.05
-        loaded.payload["content_hash"] = content_hash(loaded.payload)
-        loaded.payload["artifact_hash"] = artifact_hash(loaded.payload)
-        report = run_replay(loaded, device="cpu", noise_repeats=0)
-        self.assertEqual(report["status"], "fail")
-        self.assertTrue(report["failures"])
-        self.assertGreater(report["summary"]["output_max_rel_err_vs_scale"], FORWARD_TOL)
-        self.assertFalse(report["comparisons"]["output"]["bitwise_identical"])
-
-
-@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
-class TestComparisonVerdict(unittest.TestCase):
-    """The verdict must fail for every way two tensors can disagree.
-
-    A comparison that only ever reports agreement is worse than none, because
-    everything downstream is then justified by a check that cannot fail.
-    """
-
-    def test_a_zero_reference_with_a_nonzero_replay_fails(self):
-        """The failure this class exists for: normalizing by a zero scale used
-        to yield a relative error of 0.0 -- a perfect score for the worst
-        possible result."""
-        expected = torch.zeros(4, 8)
-        actual = torch.full((4, 8), 0.5)
-        record = compare_tensors(actual, expected, GRADIENT_TOL)
-        self.assertFalse(record["within_tolerance"])
-        self.assertTrue(record["zero_reference_mismatch"])
-        self.assertIsNone(record["max_rel_err_vs_scale"])
-        self.assertEqual(record["max_abs_err"], 0.5)
-
-    def test_two_zero_tensors_agree_exactly(self):
-        record = compare_tensors(torch.zeros(4, 8), torch.zeros(4, 8), GRADIENT_TOL)
-        self.assertTrue(record["within_tolerance"])
-        self.assertFalse(record["zero_reference_mismatch"])
-        self.assertEqual(record["max_rel_err_vs_scale"], 0.0)
-
-    def test_a_stride_mismatch_fails_even_with_identical_values(self):
-        expected = torch.randn(4, 8)
-        actual = expected.t().contiguous().t()  # same values, transposed strides
-        self.assertTrue(torch.equal(actual, expected))
-        self.assertNotEqual(actual.stride(), expected.stride())
-        record = compare_tensors(actual, expected, GRADIENT_TOL)
-        self.assertFalse(record["stride_match"])
-        self.assertEqual(record["max_abs_err"], 0.0)
-        self.assertFalse(record["within_tolerance"])
-
-    def test_a_dtype_mismatch_fails(self):
-        expected = torch.zeros(4, dtype=torch.bfloat16)
-        record = compare_tensors(torch.zeros(4, dtype=torch.float32), expected, GRADIENT_TOL)
-        self.assertFalse(record["dtype_match"])
-        self.assertFalse(record["within_tolerance"])
-
-    def test_a_non_finite_reference_fails(self):
-        """A capture holding a NaN is unusable. A replay that faithfully
-        reproduced the NaN would otherwise be scored as agreement."""
-        expected = torch.tensor([1.0, float("nan"), 3.0])
-        record = compare_tensors(expected.clone(), expected, GRADIENT_TOL)
-        self.assertFalse(record["expected_all_finite"])
-        self.assertFalse(record["within_tolerance"])
-
-    def test_a_non_finite_replay_fails(self):
-        expected = torch.tensor([1.0, 2.0, 3.0])
-        actual = torch.tensor([1.0, float("inf"), 3.0])
-        record = compare_tensors(actual, expected, GRADIENT_TOL)
-        self.assertFalse(record["actual_all_finite"])
-        self.assertFalse(record["within_tolerance"])
-
-    def test_a_shape_mismatch_fails_before_anything_is_computed(self):
-        record = compare_tensors(torch.zeros(4), torch.zeros(5), GRADIENT_TOL)
-        self.assertFalse(record["shape_match"])
-        self.assertFalse(record["within_tolerance"])
-
-    def test_agreement_within_tolerance_still_passes(self):
-        expected = torch.randn(64, 64)
-        actual = expected + expected.abs().max() * (GRADIENT_TOL / 4)
-        record = compare_tensors(actual, expected, GRADIENT_TOL)
-        self.assertTrue(record["within_tolerance"], record)
-
-
-@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
 class TestNoiseRepeatValidation(unittest.TestCase):
     def test_valid_values(self):
         for value in (0, 2, 3, 16):
@@ -503,18 +317,6 @@ class TestNoiseRepeatValidation(unittest.TestCase):
         for value in (-1, -5, 2.5, "3", None, True):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 validate_noise_repeats(value)
-
-    def test_the_cli_refuses_an_invalid_count(self):
-        import contextlib
-        import io
-
-        from evograd.evaluation.workloads.qwen3_0_6b.layer.replay import main
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
-            main(["--artifact", "unused.pt", "--noise-repeats", "1"])
-        self.assertEqual(ctx.exception.code, 2)
-        self.assertIn("noise_repeats=1", stderr.getvalue())
-
 
 class TestIdentityBoundHash(CaptureFixture):
     """Content and identity are hashed separately, and both are checked."""

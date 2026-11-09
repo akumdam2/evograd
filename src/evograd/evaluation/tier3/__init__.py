@@ -8,11 +8,9 @@ Llama with RMSNorm, SwiGLU and the loss replaced. So ``cpu_bound_fraction`` is
 reported alongside throughput, because without it "the kernels did not help"
 and "the GPU was never the bottleneck" look identical in tokens/s.
 
-Nothing is timed until it is known to be correct. Every kernel a provider
-patches in goes through the same tier-1 pair gate tiers 1 and 2 use, and every
-loss must be a finite scalar; a provider that fails either is recorded as failed
-and never measured. A wrong kernel at this tier does not raise -- it returns a
-throughput -- which is why the gate is the first thing the runner does.
+Correctness is judged by the verification package's Gates 1/2/3 before a
+provider is timed here. The runner still requires every loss to be a finite
+scalar; a provider that fails that is recorded as failed and never measured.
 
 This module is a facade. The implementation is three parts, each of which can
 be read and changed on its own:
@@ -21,7 +19,7 @@ be read and changed on its own:
                       and ``ModuleWorkload`` for bringing your own ``nn.Module``
     patch.py          **how a kernel gets in** -- ``KernelSet``, the patch sites,
                       ``bind`` wrapping, module surgery, and the identity control
-    runner.py         **how it is measured** -- verify, build, step, time, memory,
+    runner.py         **how it is measured** -- build, step, time, memory,
                       loss agreement, report
 
 A workload -- the model, and which of its places are patchable -- lives in
@@ -77,9 +75,7 @@ from evograd.evaluation.tier3.runner import (  # noqa: F401  (re-export)
     OPTIMIZER,
     OPTIMIZER_DEFAULTS,
     TIER3_PROTOCOL_VERSION,
-    ModelCorrectnessFailure,
     NonFiniteLoss,
-    PreflightFailure,
     Tier3Error,
     assemble_report,
     check_loss,
@@ -87,10 +83,8 @@ from evograd.evaluation.tier3.runner import (  # noqa: F401  (re-export)
     loss_trajectory,
     make_training_step,
     measure_one,
-    model_correctness_check,
     measure_provider,
     measure_step,
-    preflight,
     provider_order,
     run_tier3,
     speedup_intervals,
@@ -115,10 +109,8 @@ __all__ = [
     "KernelSource",
     "ModulePatch",
     "ModuleWorkload",
-    "ModelCorrectnessFailure",
     "NonFiniteLoss",
     "PatchProvenance",
-    "PreflightFailure",
     "Site",
     "SiteRegistry",
     "Tier3Error",
@@ -136,11 +128,9 @@ __all__ = [
     "measure_one",
     "measure_provider",
     "measure_step",
-    "model_correctness_check",
     "patch",
     "patch_modules",
     "patched_kernels",
-    "preflight",
     "provider_order",
     "restrict",
     "run_tier3",

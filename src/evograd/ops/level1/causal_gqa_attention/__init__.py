@@ -120,7 +120,7 @@ op = declare_op(
     ),
     grad_order=("dq", "dk", "dv"),
     correctness=_CORRECTNESS,
-    # Measured, not chosen. `evaluation.workloads.qwen3_0_6b.level1.cli calibrate` compares the
+    # Measured, not chosen. The (since removed) Level-1 calibration compared the
     # declared dense forward against `runtime_forward` -- the fused SDPA the
     # model runs, and therefore the smallest disagreement any correct
     # implementation can have with the oracle -- on every correctness workload

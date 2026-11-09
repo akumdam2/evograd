@@ -3,22 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the
 live model, which tensors cross it, in which layout, and whether what
 was captured still matches. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.llama3_2_1b.level2.residual_rmsnorm`.
-
-Derive and verify ``llama3_residual_rmsnorm`` from the canonical Layer-16 artifact.
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.residual_rmsnorm derive \
-        --source results/llama3-level3/layer8.pt \
-        --metadata-out results/llama3-level3/layer8-residual.json
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.residual_rmsnorm verify \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/layer8-residual-verify.json
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.residual_rmsnorm calibrate \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/llama3_residual_rmsnorm-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 ``layer8.pt`` stays the only tensor artifact; the boundary is re-derived by
 replaying the layer and hooking it, and only JSON is written.

@@ -16,8 +16,7 @@ that exists but fails its hash check still raises rather than being treated as
 absent.
 
 Deciding whether an implementation of one of these primitives is good enough is
-not done here; that is
-:mod:`evograd.evaluation.workloads.llama3_2_1b.level1`.
+not done here; that is :mod:`evograd.verification`.
 """
 
 from __future__ import annotations

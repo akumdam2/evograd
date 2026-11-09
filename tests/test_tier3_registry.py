@@ -10,16 +10,10 @@ by side, and every tier-3 operation reading the one the workload owns.
 The registries here are *fixtures* (``tests/_registry_fixture.py``). A real one
 belongs to a workload package; the patcher ships none, which is the property
 these tests exist to keep.
-
-Also here: the hook by which a workload adds its own model-derived shapes to a
-site's preflight. That is what decides whether an operator's *observed*
-configuration can block tier-3 timing, rather than only its small declared grid.
 """
 
 from __future__ import annotations
 
-import contextlib
-import types
 import unittest
 
 try:
@@ -37,7 +31,6 @@ if HAVE_TORCH:
         KernelSource,
         ModulePatch,
         ModuleWorkload,
-        PreflightFailure,
         Site,
         SiteRegistry,
         eager_pair_for,
@@ -46,12 +39,10 @@ if HAVE_TORCH:
         measure_one,
         patch,
         patched_kernels,
-        preflight,
         restrict,
         run_tier3,
         site_registry_for,
     )
-    from evograd.opdecl.activity import Workload
     from evograd.benchmark import TASKS, get_task
 
     from tests._registry_fixture import (
@@ -75,45 +66,6 @@ def _qwen_like_registry() -> "SiteRegistry":
             Site("residual_rmsnorm", "fused_add_rms_norm", lambda *a, **k: None),
         ),
     )
-
-
-@contextlib.contextmanager
-def _stub_adapter(**overrides):
-    """Register a throwaway tier-3 workload for the duration of a test.
-
-    The CLI's behaviour toward a workload that declares no providers, or no
-    optional flags, should not depend on some real workload happening to be
-    shaped that way -- that is how a guarantee quietly lapses when the registry
-    changes. So the shape under test is built here.
-    """
-    from evograd.evaluation.tier3.workloads import Tier3Adapter, TIER3_ADAPTERS
-    import evograd.evaluation.tier3.workloads as registry
-    import evograd.evaluation.tier3.cli as cli
-
-    name = "stub_workload"
-    # `build` has to return something with a `site_registry`: the CLI asks the
-    # workload which sites it has before it builds any provider.
-    stub_workload = types.SimpleNamespace(
-        name=name, unit_name="tokens", site_registry=SAMPLE_SITES,
-    )
-    adapter = Tier3Adapter(
-        name=name,
-        build=lambda args: stub_workload,
-        providers=overrides.get("providers", None),
-        options=overrides.get("options", frozenset()),
-        summary="a stub, registered only for the duration of one test",
-    )
-    original_lookup = registry.tier3_adapter
-    TIER3_ADAPTERS[name] = "tests._registry_fixture:UNUSED"
-    registry.tier3_adapter = lambda n: adapter if n == name else original_lookup(n)
-    previous_models = cli.MODELS
-    cli.MODELS = (*previous_models, name)
-    try:
-        yield name
-    finally:
-        cli.MODELS = previous_models
-        registry.tier3_adapter = original_lookup
-        TIER3_ADAPTERS.pop(name, None)
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
@@ -197,27 +149,6 @@ class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
-def _with_toy_pair(task: str) -> dict:
-    """The task registry with one task given a plain-torch ``toy_pair`` baseline."""
-    from dataclasses import replace
-
-    from evograd.ops._common import make_pair_baseline
-
-    def factory():
-        def forward(a, b):
-            return a * b, (a, b)
-
-        def backward(dc, saved):
-            a, b = saved
-            return dc * b, dc * a
-
-        return forward, backward
-
-    op = TASKS[task]
-    baselines = {**op.performance_baselines, "toy_pair": make_pair_baseline(factory, ("a", "b"))}
-    return {**TASKS, task: replace(op, performance_baselines=baselines)}
-
-
 class TestBaselineAndCandidateSelection(unittest.TestCase):
     def test_candidates_are_bound_against_the_named_registry(self):
         qwen = _qwen_like_registry()
@@ -233,28 +164,6 @@ class TestBaselineAndCandidateSelection(unittest.TestCase):
             patched_kernels(
                 {"swiglu_mlp": object()}, TASKS, registry=SAMPLE_SITES
             )
-
-    def test_baseline_discovery_walks_the_workloads_registry(self):
-        from evograd.evaluation.tier3.cli import _baseline_kernels
-
-        registry = SiteRegistry(
-            name="toy",
-            sites=(Site("gate", "swiglu", print), Site("attn", "qwen3_attention", print)),
-        )
-        kernels, covered = _baseline_kernels("toy_pair", _with_toy_pair("swiglu"), registry)
-        self.assertIsNotNone(kernels)
-        self.assertEqual(covered, ["gate"])
-
-    def test_a_registry_whose_ops_have_no_such_baseline_finds_nothing(self):
-        from evograd.evaluation.tier3.cli import _baseline_kernels
-
-        registry = SiteRegistry(
-            name="toy", sites=(Site("only", "qwen3_attention", print),)
-        )
-        kernels, covered = _baseline_kernels("toy_pair", _with_toy_pair("swiglu"), registry)
-        self.assertIsNone(kernels)
-        self.assertEqual(covered, [])
-
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestWorkloadOwnsItsRegistry(unittest.TestCase):
@@ -313,97 +222,6 @@ class TestWorkloadOwnsItsRegistry(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
-class TestWorkloadSuppliedPreflightShapes(unittest.TestCase):
-    """A site can demand shapes the operator's own grid does not contain.
-
-    This is what decides whether an *observed* configuration blocks timing. The
-    declared grid for `rmsnorm` tops out at 128 rows; a model presents 4096, and
-    a kernel can be right at one and wrong at the other.
-    """
-
-    def _wrong_beyond(self, op, threshold: int):
-        """A pair that is exact below ``threshold`` rows and wrong at or above it."""
-        honest = eager_pair_for(op)
-
-        class _Sneaky:
-            @staticmethod
-            def rmsnorm_forward_with_saved(x, weight, eps=1e-5):
-                y, saved = honest.forward_with_saved(x, weight, eps)
-                if x.shape[0] >= threshold:
-                    y = y * 1.5
-                return y, saved
-
-            rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
-
-        return _Sneaky
-
-    def _registry(self, extra):
-        from tests._registry_fixture import fused_rms_norm as _rms_norm_fused
-
-        return SiteRegistry(
-            name="fixture",
-            sites=(Site("rms_norm", "rmsnorm", _rms_norm_fused, preflight=extra),),
-        )
-
-    def test_the_default_grid_alone_lets_the_sneaky_pair_through(self):
-        op = get_task("rmsnorm")
-        biggest = max(w.dims["rows"] for w in op.correctness)
-        kernels = patched_kernels(
-            {"rms_norm": self._wrong_beyond(op, biggest + 1)},
-            TASKS,
-            registry=self._registry(()),
-        )
-        report = preflight(kernels, TASKS, device="cpu")
-        self.assertTrue(all(c["ok"] for c in report["checked"]))
-        self.assertEqual(report["checked"][0]["workload_supplied_cases"], 0)
-
-    def test_a_workload_supplied_shape_catches_it(self):
-        op = get_task("rmsnorm")
-        biggest = max(w.dims["rows"] for w in op.correctness)
-        observed = Workload(
-            dims={"rows": biggest * 4, "hidden": 64}, dtype="float32"
-        )
-        kernels = patched_kernels(
-            {"rms_norm": self._wrong_beyond(op, biggest + 1)},
-            TASKS,
-            registry=self._registry((observed,)),
-        )
-        with self.assertRaises(PreflightFailure) as caught:
-            preflight(kernels, TASKS, device="cpu")
-        self.assertIn("rms_norm", str(caught.exception))
-        self.assertIn("fixture", str(caught.exception))
-
-    def test_the_supplied_shape_is_really_run_and_reported(self):
-        op = get_task("rmsnorm")
-        observed = Workload(dims={"rows": 512, "hidden": 64}, dtype="float32")
-        kernels = patched_kernels(
-            {"rms_norm": eager_pair_for(op)}, TASKS, registry=self._registry((observed,))
-        )
-        report = preflight(kernels, TASKS, device="cpu")
-        entry = report["checked"][0]
-        self.assertEqual(entry["declared_cases"], len(op.correctness))
-        self.assertEqual(entry["workload_supplied_cases"], 1)
-        self.assertEqual(entry["cases"], len(op.correctness) + 1)
-        supplied = [
-            c for c in entry["checked_configs"] if c["source"] == "workload_supplied"
-        ]
-        self.assertEqual(len(supplied), 1)
-        self.assertEqual(supplied[0]["dims"], {"rows": 512, "hidden": 64})
-        self.assertIn("rows=512", supplied[0]["id"])
-
-    def test_llama_supplies_none_so_its_behaviour_is_unchanged(self):
-        for site in SAMPLE_SITES.sites:
-            with self.subTest(site=site.name):
-                self.assertEqual(site.preflight, ())
-
-    def test_the_report_names_the_family_and_the_mapping(self):
-        kernels = identity_control_kernels(TASKS, ("rms_norm",), registry=SAMPLE_SITES)
-        report = preflight(kernels, TASKS, device="cpu")
-        self.assertEqual(report["workload_family"], SAMPLE_SITES.name)
-        self.assertEqual(report["site_ops"], SAMPLE_SITE_OPS)
-
-
-@unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestProvenanceAndReporting(unittest.TestCase):
     class _Toy:
         """A tiny by-construction workload with a registry of its own."""
@@ -453,7 +271,7 @@ class TestProvenanceAndReporting(unittest.TestCase):
             workload,
             {"eager": KernelSet(registry=registry)},
             warmup=1, steps=2, blocks=2, loss_steps=2, seed=0,
-            device="cpu", ops=TASKS,
+            device="cpu",
         )
         self.assertEqual(
             report["site_registry"],
@@ -477,15 +295,12 @@ class TestProvenanceAndReporting(unittest.TestCase):
             workload,
             {"eager": KernelSet(registry=registry), "control": control},
             warmup=1, steps=2, blocks=2, loss_steps=2, seed=0,
-            device="cpu", ops=TASKS,
+            device="cpu",
         )
         providers = report["providers"]
         self.assertEqual(providers["eager"]["patch_provenance"]["actual_sites"], [])
         self.assertEqual(
             providers["control"]["patch_provenance"]["actual_sites"], ["rms_norm"]
-        )
-        self.assertEqual(
-            providers["control"]["verification"]["workload_family"], "toy_family"
         )
 
     def test_a_kernel_source_from_another_registry_is_refused(self):
@@ -500,7 +315,7 @@ class TestProvenanceAndReporting(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
-    """The three sample sites, their defaults, and the CLI's validation."""
+    """The three sample sites and their defaults."""
 
     def test_the_defaults_are_still_the_declared_spellings(self):
         from tests import _registry_fixture
@@ -517,250 +332,6 @@ class TestSampleRegistryBehaviourUnchanged(unittest.TestCase):
     def test_an_unknown_attribute_is_still_an_attribute_error(self):
         with self.assertRaises(AttributeError):
             KernelSet(registry=SAMPLE_SITES).not_a_site
-
-    def test_the_cli_rejects_an_unknown_site_naming_the_workload(self):
-        from evograd.evaluation.tier3.cli import _parser, _sites
-
-        import contextlib, io
-
-        args = _parser().parse_args(["--sites", "swiglu_mlp"])
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
-            _sites(args, SAMPLE_SITES)
-        self.assertIn(SAMPLE_SITES.name, stderr.getvalue())
-
-    def test_the_providers_flag_only_narrows(self):
-        """``--providers`` selects among what was built and builds nothing.
-
-        It exists so a run can drop a provider it does not need -- a compile
-        baseline that costs minutes to build before it is measured -- without
-        the workload growing a flag per provider. Selection only: an unknown
-        name is an error that lists what was available, never a silent no-op.
-        """
-        import contextlib, io
-
-        from evograd.evaluation.tier3.cli import _parser, build_providers
-
-        with _stub_adapter() as name:
-            args = _parser().parse_args(
-                ["--model", name, "--identity-control",
-                 "--providers", "eager_through_bind,eager"]
-            )
-            providers = build_providers(args, quiet=True)
-            self.assertEqual(list(providers), ["eager_through_bind", "eager"])
-
-            args = _parser().parse_args(
-                ["--model", name, "--baseline", "none", "--providers", "compile"]
-            )
-            stderr = io.StringIO()
-            with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
-                build_providers(args, quiet=True)
-            self.assertIn("compile", stderr.getvalue())
-            self.assertIn("eager", stderr.getvalue())
-
-    def test_the_cli_default_providers_are_unchanged(self):
-        from evograd.evaluation.tier3.cli import _parser, build_providers
-
-        with _stub_adapter() as name:
-            args = _parser().parse_args(["--model", name, "--identity-control"])
-            providers = build_providers(args, quiet=True)
-            # No pair baseline unless one is named.
-            self.assertEqual(sorted(providers), ["eager", "eager_through_bind"])
-            for kernels in providers.values():
-                self.assertIs(kernels.registry, SAMPLE_SITES)
-
-
-class TestTier3WorkloadRegistry(unittest.TestCase):
-    """The CLI reaches a workload by name; it names no architecture itself.
-
-    ``tier3_cli`` used to hold three ``if args.model == "qwen3_0_6b"`` branches:
-    one to build the workload, one to add its structural-identity provider, and
-    one to reject that flag for anything else. A third workload was therefore an
-    edit in three places, and -- worse -- a flag that meant nothing for the
-    selected model was silently ignored rather than refused.
-    """
-
-    def test_the_cli_model_choices_come_from_the_registry(self):
-        from evograd.evaluation.tier3.cli import MODELS
-        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS
-
-        self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
-
-    def test_the_cli_source_names_no_architecture(self):
-        """The generic CLI must not import a workload implementation."""
-        import ast
-        import pathlib
-
-        import evograd.evaluation.tier3.cli as cli
-
-        source = pathlib.Path(cli.__file__).read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        imports = {
-            node.module for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module
-        } | {
-            alias.name for node in ast.walk(tree)
-            if isinstance(node, ast.Import) for alias in node.names
-        }
-        self.assertFalse(
-            [name for name in imports if ".workloads." in name], imports
-        )
-
-    def test_every_registered_adapter_resolves_and_is_well_formed(self):
-        from evograd.evaluation.tier3.workloads import (
-            Tier3Adapter, TIER3_ADAPTERS, tier3_adapter,
-        )
-
-        for name in TIER3_ADAPTERS:
-            with self.subTest(workload=name):
-                adapter = tier3_adapter(name)
-                self.assertIsInstance(adapter, Tier3Adapter)
-                self.assertEqual(adapter.name, name)
-                self.assertTrue(callable(adapter.build))
-                self.assertTrue(adapter.summary)
-                if adapter.providers is not None:
-                    self.assertTrue(callable(adapter.providers))
-
-    @staticmethod
-    def _megafold_case(*flags):
-        """The case the MegaFold adapter builds from ``flags``, captured before
-        the MegaFold checkout the workload itself needs is imported."""
-        from unittest import mock
-
-        from evograd.evaluation.tier3.cli import _parser, build_workload
-
-        args = _parser().parse_args(
-            ["--model", "megafold_2l", "--device", "cpu", "--baseline", "none", *flags]
-        )
-        with mock.patch(
-            "evograd.evaluation.tier3.workloads.megafold.workload.make_workload",
-            side_effect=lambda case, **_: case,
-        ):
-            return build_workload(args)
-
-    def test_each_workload_supplies_its_own_canonical_dtype(self):
-        """``--dtype`` has no parser default, so an unset flag must reach each
-        workload's own value -- not ``None``. This broke Qwen3 outright when the
-        default was removed for the protein workload's sake."""
-        from evograd.evaluation.tier3.cli import _parser, build_workload
-
-        expected = {"qwen3_0_6b": "bfloat16", "qwen3_5_4b": "bfloat16",
-                    "olmoe_1b_7b": "bfloat16"}
-        for name, dtype in expected.items():
-            with self.subTest(model=name):
-                args = _parser().parse_args(
-                    ["--model", name, "--device", "cpu", "--baseline", "none"]
-                )
-                self.assertIsNone(args.dtype)
-                self.assertEqual(build_workload(args).describe()["dtype"], dtype)
-        with self.subTest(model="megafold_2l"):
-            self.assertEqual(self._megafold_case().dtype, "float32")
-
-    def test_qwen3_5_is_registered_with_its_own_batch(self):
-        """Qwen3.5-4B's canonical batch is 1, not the CLI's or another
-        workload's 2; only an explicit flag changes it."""
-        from evograd.evaluation.tier3.cli import _parser, build_workload
-        from evograd.evaluation.tier3.workloads import tier3_adapter
-
-        self.assertEqual(tier3_adapter("qwen3_5_4b").name, "qwen3_5_4b")
-        # The default device (cuda) is part of the canonical identity; nothing is
-        # built here, so no GPU is needed.
-        described = build_workload(_parser().parse_args(
-            ["--model", "qwen3_5_4b", "--baseline", "none"])).describe()
-        self.assertEqual((described["batch"], described["tokens"]), (1, 2048))
-        self.assertTrue(described["canonical"])
-        self.assertIs(described["model_gate"]["implemented"], False)
-
-    def test_an_explicit_dtype_still_overrides_the_workloads_own(self):
-        self.assertEqual(self._megafold_case("--dtype", "bfloat16").dtype, "bfloat16")
-
-    def test_an_unknown_workload_names_the_ones_that_exist(self):
-        from evograd.evaluation.tier3.workloads import UnknownWorkload, tier3_adapter
-
-        with self.assertRaises(UnknownWorkload) as caught:
-            tier3_adapter("gpt_9")
-        self.assertIn("gpt_9", str(caught.exception))
-        self.assertIn("qwen3_0_6b", str(caught.exception))
-
-    def test_the_registry_imports_no_adapter_until_one_is_asked_for(self):
-        """``ops`` imports this module at declaration time; an eager import of
-        the adapters would drag torch and Transformers in behind it."""
-        import ast
-        import pathlib
-
-        import evograd.evaluation.tier3.workloads as registry
-
-        tree = ast.parse(pathlib.Path(registry.__file__).read_text(encoding="utf-8"))
-        toplevel = {
-            node.module.split(".")[0]
-            for node in tree.body
-            if isinstance(node, ast.ImportFrom) and node.module
-        } | {
-            alias.name.split(".")[0]
-            for node in tree.body
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        }
-        self.assertEqual(toplevel, {"__future__", "importlib", "dataclasses", "typing"})
-
-    def test_a_workload_gets_only_the_providers_it_declares(self):
-        """Qwen3 offers a structural-identity control; a workload that declares
-        none gets the providers every workload has and nothing more."""
-        from evograd.evaluation.tier3.cli import _parser, build_providers
-
-        qwen = _parser().parse_args([
-            "--model", "qwen3_0_6b", "--baseline", "none",
-            "--structural-identity", "--device", "cpu", "--layers", "1",
-        ])
-        self.assertEqual(
-            sorted(build_providers(qwen, quiet=True)),
-            ["eager", "structural_identity"],
-        )
-
-        with _stub_adapter(providers=None) as name:
-            plain = _parser().parse_args(["--model", name, "--baseline", "none"])
-            self.assertEqual(sorted(build_providers(plain, quiet=True)), ["eager"])
-
-    def test_a_flag_the_workload_does_not_declare_is_refused_by_name(self):
-        """``--layers 2`` on a workload with a frozen depth used to be accepted
-        and ignored -- the failure that reports a number for a run that did not
-        happen. Checked against a stub rather than whichever workloads exist, so
-        the guarantee does not lapse when the registry changes."""
-        import contextlib, io
-
-        from evograd.evaluation.tier3.cli import _parser, check_options
-
-        for flag, value in (("--structural-identity", None),
-                            ("--layers", "2"),
-                            ("--data-seed", "7")):
-            with self.subTest(flag=flag), _stub_adapter(options=frozenset()) as name:
-                argv = ["--model", name, flag]
-                if value is not None:
-                    argv.append(value)
-                args = _parser().parse_args(argv)
-                stderr = io.StringIO()
-                with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
-                    check_options(args)
-                message = stderr.getvalue()
-                self.assertIn(flag, message)
-                self.assertIn(name, message)
-
-    def test_the_declaring_workload_accepts_those_same_flags(self):
-        from evograd.evaluation.tier3.cli import _parser, check_options
-
-        args = _parser().parse_args([
-            "--model", "qwen3_0_6b", "--structural-identity",
-            "--layers", "2", "--data-seed", "7",
-        ])
-        check_options(args)  # must not raise
-
-    def test_unset_optional_flags_are_never_refused(self):
-        from evograd.evaluation.tier3.cli import _parser, check_options
-        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS
-
-        for model in TIER3_ADAPTERS:
-            with self.subTest(model=model):
-                check_options(_parser().parse_args(["--model", model]))
 
 
 if __name__ == "__main__":

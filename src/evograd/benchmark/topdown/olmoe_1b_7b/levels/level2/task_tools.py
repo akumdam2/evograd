@@ -10,11 +10,9 @@ declaration imports on a machine that has never run a harvest.
 
 Tolerances: **not calibrated yet.** Every site carries :data:`PROVISIONAL`, the
 repository's standard float32/bfloat16 pair, and says so with
-``PROVISIONAL_TOLERANCES = True``. The calibration inventory
-(``evograd.evaluation.workloads.olmoe_1b_7b.level2.calibrate``) is the first
-GPU session's job; the weight gradients of the experts site sum over hundreds
-of tokens per expert at the observed size and are the ones most likely to
-need a reduction-scaled gate.
+``PROVISIONAL_TOLERANCES = True``. The weight gradients of the experts site sum
+over hundreds of tokens per expert at the observed size and are the ones most
+likely to need a reduction-scaled gate.
 """
 
 from __future__ import annotations

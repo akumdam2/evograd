@@ -1,12 +1,10 @@
 """Semantic-faithfulness repairs to the Level-1 mapping.
 
-Three claims that were wrong or unproven, and the tests that keep them fixed:
+Two claims that were wrong, and the tests that keep them fixed:
 
 * a zero-valued bias is not a biasless projection;
 * the RoPE oracle upcasts to float32 and Transformers does not, so timing the
-  eager baseline through the oracle charges it for casts the model never runs;
-* a loss magnitude near ``ln(vocab)`` is a sanity check, not evidence that the
-  Level-1 cross entropy is the model's.
+  eager baseline through the oracle charges it for casts the model never runs.
 """
 
 from __future__ import annotations
@@ -202,60 +200,6 @@ class TestRopeRuntimeBaseline(unittest.TestCase):
 
         baselines._RUNTIME_FORWARD_VERIFIED.discard("rope")
         baselines.verify_runtime_forward(get_task("rope"), device="cpu")
-
-
-@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
-class TestCrossEntropyCanonicalCheck(unittest.TestCase):
-    """The equivalence proof runs the model and compares live tensors.
-
-    Driven here with the two-layer CPU model so the machinery is tested without
-    a GPU; the canonical numbers come from the same function on the real
-    workload.
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        from evograd.evaluation.workloads.qwen3_0_6b.level1.verify import run_cross_entropy_check
-
-        from tests.qwen3.test_level3_workload import tiny_spec
-
-        cls.report = run_cross_entropy_check(device="cpu", spec=tiny_spec())
-
-    def test_it_intercepted_the_model_s_own_call(self):
-        self.assertEqual(self.report["status"], "pass", self.report["failures"])
-        self.assertFalse(self.report["canonical"])
-        signature = self.report["signature"]
-        self.assertEqual(signature["logits"]["dtype"], "torch.float32")
-        self.assertEqual(signature["target"]["dtype"], "torch.int64")
-        self.assertEqual(len(signature["logits"]["shape"]), 2)
-
-    def test_the_contract_scalars_are_the_model_s(self):
-        self.assertEqual(self.report["attrs"]["ignore_index"], -100)
-        self.assertEqual(self.report["attrs"]["reduction"], "mean")
-        self.assertEqual(self.report["loss"]["upstream_scalar"], 1.0)
-
-    def test_loss_and_dlogits_are_compared_not_just_the_magnitude(self):
-        loss = self.report["loss"]
-        self.assertEqual(loss["model"], loss["reference"])
-        self.assertEqual(loss["abs_error"], 0.0)
-        self.assertEqual(loss["model"], loss["step_loss"])
-        dlogits = self.report["dlogits"]
-        for field in ("shape_match", "dtype_match", "stride_match", "bitwise_identical"):
-            self.assertTrue(dlogits[field], field)
-        self.assertEqual(dlogits["max_abs_err"], 0.0)
-        self.assertTrue(dlogits["actual_all_finite"] and dlogits["expected_all_finite"])
-
-    def test_nothing_is_persisted(self):
-        self.assertFalse(self.report["tensors_written"])
-
-    def test_the_ln_vocab_check_is_a_sanity_test_not_the_proof(self):
-        """It would pass for an implementation with the right scale and the
-        wrong gradient, which is exactly what the comparison above rules out."""
-        from evograd.evaluation.workloads.qwen3_0_6b.level1 import verify as level1
-
-        proof = level1.run_cross_entropy_check.__doc__
-        self.assertIn("not the equivalence proof", proof)
-        self.assertIn("sanity check", level1.run_loss_check.__doc__)
 
 
 class TestComposition(unittest.TestCase):

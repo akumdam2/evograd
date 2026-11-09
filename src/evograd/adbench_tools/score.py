@@ -96,14 +96,6 @@ def score(task_dir: str | Path, program: str | Path, *, run_dir: str | Path,
     benchmark = record.artifacts.get("benchmark") if isinstance(record.artifacts, dict) else None
     if isinstance(benchmark, dict):
         result["primitives"] = benchmark.get("primitives")
-    result["follow_up"] = {
-        # Tier 2 runs the operator's own declared benchmark cases, not the
-        # task's one configuration: the same deeper check for every agent.
-        "tier2": (f"evograd tier2-bench --op {task.op_name} --candidate {final_program} "
-                  f"--baseline none --dtype {task.workload['dtype']}"),
-        "tier3": (f"evograd tier3-bench --model <model> --patch-set {agent}:<site>={final_program}"
-                  "  # for operators bound to a Tier-3 site"),
-    }
     return _write(run_dir, result, ledger)
 
 

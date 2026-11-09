@@ -41,8 +41,7 @@ dlrm_preprocess = ["numpy>=1.26"]
 # it on PYTHONPATH instead:
 #
 #     git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold
-#     PYTHONPATH=/path/to/MegaFold:src python -m evograd.evaluation.tier3.cli \
-#         --model megafold_2l --residues 128
+#     export PYTHONPATH=/path/to/MegaFold:src
 #
 # Without it the megafold workload reports as uncovered, which is the same
 # thing every unmet `requires` does.

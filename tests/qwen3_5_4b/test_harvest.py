@@ -1,10 +1,10 @@
 """The Qwen3.5 Level-3 smoke, the whole-model harvest, its snapshot, the layer
-capture and replay, and the Level-1 bindings -- on a tiny model (CPU).
+capture, and the Level-1 bindings -- on a tiny model (CPU).
 
 The canonical run of each is a GPU session's; these hold the machinery: every
 layer is held to its block kind's mandatory boundaries, the snapshot's site
 dims agree with the declared ones, the whole-model counts are observed, a
-captured layer replays the full model bitwise, and the observed Level-1 cases
+captured layer is self-describing, and the observed Level-1 cases
 carry the model's own RoPE theta.
 """
 
@@ -211,12 +211,11 @@ class TestHarvest(unittest.TestCase):
             self.assertIn("qwen3_5_4b_observed", TASKS["partial_rope"].benchmark_suites)
 
 
-class TestCaptureAndReplay(unittest.TestCase):
-    def test_capture_then_standalone_replay_is_bitwise(self):
+class TestCapture(unittest.TestCase):
+    def test_capture_writes_a_self_describing_artifact(self):
         from evograd.benchmark.topdown.qwen3_5_4b.layer.artifact import LayerArtifact
         from evograd.benchmark.topdown.qwen3_5_4b.layer.capture import (
             run_capture, write_captures)
-        from evograd.evaluation.workloads.qwen3_5_4b.layer.replay import run_replay
 
         spec = tiny_spec(dtype="float32")
         with tempfile.TemporaryDirectory() as tmp:
@@ -230,9 +229,6 @@ class TestCaptureAndReplay(unittest.TestCase):
                 with self.subTest(layer=index):
                     self.assertEqual(artifact.identity["layer_kind"], kind)
                     self.assertIn("position_embeddings", artifact.payload["kwargs"])
-                    report = run_replay(artifact, device="cpu", noise_repeats=0)
-                    self.assertEqual(report["status"], "pass", report.get("failures"))
-                    self.assertTrue(report["comparisons"]["output"]["bitwise_identical"])
 
     def test_a_relabelled_artifact_is_refused(self):
         from evograd.benchmark.topdown.qwen3_5_4b.layer.artifact import (
@@ -298,22 +294,6 @@ class TestLevel1Bindings(unittest.TestCase):
         prod = as_output_tuple(op, resolve_runtime_forward(op)(*args))
         for a, b in zip(ref, prod):
             self.assertTrue(torch.allclose(a, b, atol=1e-5, rtol=1e-5))
-
-
-class TestHarvestedInvocation(unittest.TestCase):
-    def test_the_descriptor_hook_on_a_tiny_block(self):
-        from evograd.benchmark import TASKS
-        from evograd.evaluation.workloads.qwen3_5_4b.descriptor import WORKLOAD
-        from evograd.evaluation.workloads.qwen3_5_4b.level2.harvested import captured_invocation
-
-        self.assertEqual(WORKLOAD.layer_for("full_attention"), 15)
-        for task in ("qwen3_5_gdn_in_proj", "qwen3_5_gated_attention", "qwen3_5_swiglu_mlp"):
-            with self.subTest(task=task):
-                values, workload, label = captured_invocation(
-                    TASKS[task], "cpu", arch=TINY_ARCH, layers=LAYERS, batch=1, seq=SEQ)
-                self.assertIn("config-derived", label)
-                self.assertEqual(workload.dims["T"], SEQ)
-        self.assertIsNone(captured_invocation(TASKS["partial_rope"], "cpu"))
 
 
 if __name__ == "__main__":

@@ -17,13 +17,10 @@ shared one.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import subprocess
 import sys
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from evograd.benchmark import TASKS, get_task
 from evograd.benchmark.cases import (
@@ -255,68 +252,6 @@ class TestWeightingAndRegimesSurvivedTheMove(unittest.TestCase):
                 continue
             with self.subTest(op=name):
                 self.assertEqual(op.case_weight is None, op.regime_split is None)
-
-
-class TestSuiteCommandOwnership(unittest.TestCase):
-    def test_the_root_cli_dispatches_suite_to_the_root_module(self):
-        import ast
-
-        source = (REPO / "src/evograd/cli.py").read_text()
-        tree = ast.parse(source)
-        handler = next(
-            node for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_suite"
-        )
-        imported = [
-            node.module for node in ast.walk(handler)
-            if isinstance(node, ast.ImportFrom)
-        ]
-        self.assertEqual(imported, ["evograd.suite_cli"])
-
-    def test_the_suite_command_is_still_registered(self):
-        from evograd.cli import _COMMANDS
-
-        self.assertIn("suite", _COMMANDS)
-
-    def test_the_canonical_module_exposes_main(self):
-        from evograd import suite_cli
-
-        self.assertTrue(callable(suite_cli.main))
-
-    def test_a_missing_required_argument_still_exits_two(self):
-        """argparse's usage error, unchanged by the move."""
-        from evograd import suite_cli
-
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit) as raised:
-                suite_cli.main([])
-        self.assertEqual(raised.exception.code, 2)
-
-    def test_a_run_without_a_device_is_refused_before_any_work(self):
-        """The suite times with CUDA events, so it refuses early rather than
-        failing per operator. Same message, same exit code, new owner.
-
-        The absent device is stated rather than inherited from the host: this
-        asserts what the command does when there is no CUDA device, and on a
-        GPU machine the real answer is that there is one. Reading the host
-        would make the test assert something different depending on where it
-        ran, which is the opposite of pinning a behaviour.
-        """
-        import torch
-
-        from evograd import suite_cli
-
-        stderr = io.StringIO()
-        with mock.patch.object(torch.cuda, "is_available", return_value=False):
-            with contextlib.redirect_stderr(stderr):
-                with self.assertRaises(SystemExit) as raised:
-                    suite_cli.main(
-                        ["--candidate-baseline", "cublas_pair", "--out", "/tmp",
-                         "--op", "not_an_operator"]
-                    )
-        self.assertEqual(raised.exception.code, 2)
-        self.assertIn("needs a CUDA device", stderr.getvalue())
-
 
 
 class TestObservedBindingOwnership(unittest.TestCase):

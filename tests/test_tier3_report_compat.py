@@ -119,7 +119,7 @@ class TestCurrentRunner(unittest.TestCase):
 
         report = assemble_report(
             Workload(), {}, [], warmup=1, steps=1, blocks=1, loss_steps=1,
-            learning_rate=1e-4, seed=0, verify=True, isolation="test",
+            learning_rate=1e-4, seed=0, isolation="test",
         )
         self.assertEqual(report["protocol"], TIER3_MODEL_PROTOCOL_VERSION)
         self.assertEqual(report["execution_scope"], SCOPE_MODEL)

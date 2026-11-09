@@ -4,8 +4,7 @@ The ported tier-3 wiring measured whatever it was handed, in a fixed order,
 with the patch record written back onto the workload. These pin the four things
 that changed:
 
-* nothing is timed until it has passed the tier-1 pair gate and produced finite
-  scalar losses;
+* nothing is timed unless it produces finite scalar losses;
 * every declared output is rank-adapted and differentiated, not just the first;
 * provider order is seeded, randomized and recorded, and ratios carry an
   interval;
@@ -38,7 +37,6 @@ if HAVE_TORCH:
         ModulePatch,
         ModuleWorkload,
         NonFiniteLoss,
-        PreflightFailure,
         build_with_provenance,
         by_construction_provenance,
         check_loss,
@@ -49,8 +47,6 @@ if HAVE_TORCH:
         loss_trajectory,
         measure_one,
         patch,
-        patched_kernels,
-        preflight,
         provider_order,
         run_tier3,
         speedup_intervals,
@@ -123,7 +119,7 @@ class _ToyWorkload:
 def _toy_options(**overrides):
     options = {
         "warmup": 1, "steps": 2, "blocks": 2, "loss_steps": 3,
-        "seed": 0, "device": "cpu", "ops": TASKS,
+        "seed": 0, "device": "cpu",
     }
     options.update(overrides)
     return options
@@ -262,61 +258,11 @@ class TestGradientRouting(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
-class TestCorrectnessBeforeTiming(unittest.TestCase):
-    """A wrong kernel at this tier does not raise. It returns a throughput."""
-
-    def test_the_control_passes_the_tier_one_gate(self):
-        kernels = identity_control_kernels(TASKS, ("rms_norm", "swiglu"), registry=SAMPLE_SITES)
-        report = preflight(kernels, TASKS, device="cpu")
-        self.assertEqual([c["site"] for c in report["checked"]], ["rms_norm", "swiglu"])
-        self.assertTrue(all(c["ok"] for c in report["checked"]))
-
-    def test_a_wrong_kernel_is_rejected_before_any_timing(self):
-        op = get_task("rmsnorm")
-        honest = eager_pair_for(op)
-
-        class _Wrong:
-            @staticmethod
-            def rmsnorm_forward_with_saved(x, weight, eps=1e-5):
-                y, saved = honest.forward_with_saved(x, weight, eps)
-                return y * 2.0, saved       # plausible, and wrong
-
-            rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
-
-        kernels = patched_kernels({"rms_norm": _Wrong}, TASKS, registry=SAMPLE_SITES)
-        with self.assertRaises(PreflightFailure) as caught:
-            preflight(kernels, TASKS, device="cpu")
-        self.assertIn("rms_norm", str(caught.exception))
-
-    def test_a_provider_that_fails_preflight_is_not_timed(self):
-        op = get_task("rmsnorm")
-        honest = eager_pair_for(op)
-
-        class _Wrong:
-            @staticmethod
-            def rmsnorm_forward_with_saved(x, weight, eps=1e-5):
-                y, saved = honest.forward_with_saved(x, weight, eps)
-                return y + 1.0, saved
-
-            rmsnorm_backward_from_saved = staticmethod(honest.backward_from_saved)
-
-        entry = measure_one(
-            _ToyWorkload(), "candidate", patched_kernels({"rms_norm": _Wrong}, TASKS, registry=SAMPLE_SITES),
-            **_toy_options(),
-        )
-        self.assertFalse(entry["ok"])
-        self.assertEqual(entry["failed_at"], "preflight")
-        self.assertNotIn("step_ms", entry)
-
-    def test_a_raw_callable_is_reported_as_unverifiable_not_verified(self):
-        kernels = patch(KernelSet(registry=SAMPLE_SITES), "rms_norm", lambda x, w, eps: x)
-        report = preflight(kernels, TASKS, device="cpu")
-        self.assertEqual(report["checked"], [])
-        self.assertEqual([u["site"] for u in report["unverifiable"]], ["rms_norm"])
+class TestVerificationPolicy(unittest.TestCase):
+    """What the report says was gated, and what was only observed."""
 
     def test_the_policy_is_recorded(self):
         policy = verification_policy(_ToyWorkload())
-        self.assertIn("verify_pair_provider", policy["preflight"])
         self.assertIn("finite scalar", policy["loss_scalar_and_finite"])
         self.assertIsNone(policy["loss_delta_threshold"])
         self.assertIn("diagnostic only", policy["loss_trajectory"])
@@ -325,9 +271,6 @@ class TestCorrectnessBeforeTiming(unittest.TestCase):
         policy = verification_policy(_ToyWorkload(threshold=0.25))
         self.assertEqual(policy["loss_delta_threshold"], 0.25)
         self.assertIn("gated", policy["loss_trajectory"])
-
-    def test_skipping_verification_says_so(self):
-        self.assertIn("skipped", verification_policy(_ToyWorkload(), verify=False)["preflight"])
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
@@ -606,32 +549,6 @@ class TestPatchProvenance(unittest.TestCase):
 class TestIsolation(unittest.TestCase):
     """A provider that hangs or dies must cost its own row and nothing else."""
 
-    def test_a_timeout_kills_the_child_and_records_it(self):
-        import subprocess
-        from unittest import mock
-
-        from evograd.evaluation.tier3.cli import _run_isolated
-
-        with mock.patch(
-            "subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="tier3", timeout=5),
-        ):
-            entry = _run_isolated([], "candidate", timeout=5)
-        self.assertFalse(entry["ok"])
-        self.assertEqual(entry["provider"], "candidate")
-        self.assertEqual(entry["failed_at"], "timeout")
-        self.assertIn("5s", entry["error"])
-
-    def test_a_child_that_dies_is_recorded_with_its_stderr(self):
-        from evograd.evaluation.tier3.cli import _run_isolated
-
-        # An unparsable flag makes argparse exit(2) before writing a result.
-        entry = _run_isolated(["--not-a-flag"], "eager", timeout=120)
-        self.assertFalse(entry["ok"])
-        self.assertEqual(entry["failed_at"], "subprocess")
-        self.assertIn("without a result", entry["error"])
-        self.assertIn("stderr_tail", entry)
-
     def test_a_failing_provider_does_not_remove_the_others(self):
         report = run_tier3(
             _ToyWorkload(),
@@ -645,13 +562,6 @@ class TestIsolation(unittest.TestCase):
     def test_the_report_states_how_providers_were_executed(self):
         report = run_tier3(_ToyWorkload(), {"eager": KernelSet(registry=SAMPLE_SITES)}, **_toy_options())
         self.assertIn("in-process", report["isolation"])
-
-    def test_the_cli_defaults_to_isolation_with_a_budget(self):
-        from evograd.evaluation.tier3.cli import _parser
-
-        args = _parser().parse_args([])
-        self.assertFalse(args.no_isolate)
-        self.assertGreater(args.timeout, 0)
 
     def test_the_module_workload_documents_that_it_cannot_be_isolated(self):
         self.assertIn("not picklable", ModuleWorkload.__doc__)
@@ -669,12 +579,6 @@ class TestIdentityControlIsAnUpperBound(unittest.TestCase):
         text = tier3_patch.eager_pair_for.__doc__
         self.assertIn("upper bound", text)
         self.assertNotIn("Whatever that costs is the harness tax", text)
-
-    def test_the_cli_help_says_upper_bound(self):
-        from evograd.evaluation.tier3.cli import _parser
-
-        help_text = _parser().format_help()
-        self.assertIn("UPPER BOUND", help_text)
 
     def test_the_control_recomputes_the_forward_in_its_backward(self):
         # This is the whole reason the control is a ceiling rather than a

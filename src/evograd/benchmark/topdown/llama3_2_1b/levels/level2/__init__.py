@@ -5,7 +5,7 @@ its case. :mod:`manifest` is the one place the site names, task keys and
 frequencies are written down.
 
 Judging an implementation of one of these contracts is not done here -- that
-belongs to :mod:`evograd.evaluation.workloads.llama3_2_1b.level2`.
+belongs to :mod:`evograd.verification`.
 """
 
 from .manifest import SITES, SITE_TASKS, TASKS, task_key

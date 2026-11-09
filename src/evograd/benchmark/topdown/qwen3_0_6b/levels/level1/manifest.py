@@ -18,9 +18,7 @@ untimed coverage. The mechanics of applying a binding are generic and live in
 :mod:`evograd.benchmark.core.registry` is where the two are put together.
 
 Deciding whether an implementation of one of these primitives is *good enough*
-is not done here. Calibration, SDPA and cross-entropy verification, the loss
-sanity check and their reports are
-:mod:`evograd.evaluation.workloads.qwen3_0_6b.level1`.
+is not done here; that is :mod:`evograd.verification`.
 """
 
 from __future__ import annotations

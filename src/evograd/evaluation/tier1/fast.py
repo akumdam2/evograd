@@ -11,8 +11,7 @@ Latency/memory benchmark harness, generic over operator declarations.
 Ported from the per-bench ``_benchmark_case`` / ``_run_benchmarks`` in the old
 ``evaluator_autograd_pair.py`` files, with the operator-specific parts
 (argument lists, oracle, input construction) supplied by the :class:`OpDecl`.
-Used by both the OpenEvolve evaluator and the standalone ``evograd bench``
-command.
+Used by the OpenEvolve evaluator.
 """
 
 from __future__ import annotations

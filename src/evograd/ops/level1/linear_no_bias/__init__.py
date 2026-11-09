@@ -95,8 +95,8 @@ op = declare_op(
         Workload(dims=dict(M=128, K=128, N=256), dtype="bfloat16"),
         Workload(dims=dict(M=257, K=129, N=127), dtype="bfloat16"),
     ),
-    # Measured, not inherited. `evaluation.workloads.qwen3_0_6b.level1.cli calibrate --op
-    # linear_no_bias` compares the float32-accumulated oracle against
+    # Measured, not inherited. The (since removed) Level-1 calibration compared
+    # the float32-accumulated oracle against
     # `runtime_forward` -- the call a model makes, and therefore the smallest
     # disagreement any correct implementation can have with the oracle -- on
     # every correctness workload and on all six observed Qwen configurations.

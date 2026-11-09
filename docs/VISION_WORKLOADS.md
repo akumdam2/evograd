@@ -109,37 +109,12 @@ parameter gradients or missing declared primitive boundaries.
 smoke harvests. Such runs are marked noncanonical and cannot write a tracked
 snapshot. Tests contain small configurations for both models.
 
-## Generated-input verification
-
-By default, both workloads use seeded Gaussian pixels/patches, random tokens
-and random initial weights. The whole-model gate now calibrates and evaluates
-on disjoint generated batches when `--data` is omitted. This verifies the
-declared execution contract on those batches, including loss, logits, input
-and parameter gradients, and a short training trajectory. It does not establish
-real-data training validity.
-
-```bash
-python -m evograd.evaluation.tier3.workloads.common.vision.gate \
-  --config src/evograd/benchmark/topdown/convnextv2_tiny/benchmark.json \
-  --sites convnext_mlp_stage0,convnext_mlp_stage1,convnext_mlp_stage2,convnext_mlp_stage3 \
-  --steps 5 --out results/convnextv2_tiny/synthetic_calibration.json
-python -m evograd.evaluation.tier3.cli --model convnextv2_tiny \
-  --calibration results/convnextv2_tiny/synthetic_calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --out results/convnextv2_tiny/synthetic_identity.json
-```
-
-For Qwen2-VL, use its benchmark JSON, `--sites text_mlp,vision_mlp`, and
-`--model qwen2_vl_2b`. The calibration and evaluation require substantial GPU
-memory and temporary disk space at the canonical Qwen2-VL size.
-
 ## Pinned real input
 
 `--real-input` changes **both** the weights and inputs. ConvNeXt uses the
 published 1,000-class checkpoint, official image processor, and the first 320
-rows of the revision-pinned Imagenette 320px training shard for the default
-five calibration plus five holdout steps (B32). Its ten dataset labels are
-mapped to the checkpoint's ImageNet-1K indices and checked against its label
+rows of the revision-pinned Imagenette 320px training shard, ten B32 batches.
+Its ten dataset labels are mapped to the checkpoint's ImageNet-1K indices and checked against its label
 names. Qwen2-VL uses the published checkpoint and processor, with the first
 ten rows of the pinned TextVQA training shard (B1). Each image is resized to
 224×224; the chat template includes the real question, and only tokens of a
@@ -148,9 +123,8 @@ loss. Both run the existing differentiable full-model training step.
 
 The model and dataset commits, selected row indices, processor revision and
 prepared tensor artifact are recorded. The artifact is validated for the fixed
-specialist shapes before calibration or evaluation. Calibration and evaluation
-use disjoint batches from that one artifact. This checks the declared inputs;
-it does not prove correctness for other resolutions, questions or shapes.
+specialist shapes before use. This checks the declared inputs; it does not
+prove correctness for other resolutions, questions or shapes.
 
 Prepare the pinned assets once from the repository root. Each benchmark keeps
 its Hugging Face cache in `data/<model>/hf_cache`, which the CLI reads by
@@ -161,30 +135,10 @@ python scripts/prepare_benchmark_inputs.py --benchmark convnextv2_tiny
 python scripts/prepare_benchmark_inputs.py --benchmark qwen2_vl_2b
 ```
 
-Then calibrate and run ConvNeXt:
-
-```bash
-python -m evograd.evaluation.tier3.workloads.common.vision.gate \
-  --config src/evograd/benchmark/topdown/convnextv2_tiny/benchmark.json \
-  --real-input --sites convnext_mlp_stage0,convnext_mlp_stage1,convnext_mlp_stage2,convnext_mlp_stage3 \
-  --steps 5 --out results/convnextv2_tiny/real_calibration.json
-python -m evograd.evaluation.tier3.cli --model convnextv2_tiny --real-input \
-  --calibration results/convnextv2_tiny/real_calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --out results/convnextv2_tiny/real_identity.json
-```
-
-For Qwen2-VL, substitute its benchmark JSON, `--sites text_mlp,vision_mlp`,
-`--model qwen2_vl_2b`, and its own output paths. The flag alone prepares and
-caches the pinned batches at `data/<model>/batches/`. Use
-`--data-path` for the Tier-3 CLI or `--data` for the calibration CLI to select
-an already prepared pinned artifact explicitly. Keep the same artifact for
-calibration and evaluation.
-
 ## Optional prepared-data path
 
-The existing `--data-path` path without `--real-input` accepts caller-supplied
-image examples while keeping random weights. It is separate from the pinned
+A workload's `data_path`, without real input, accepts caller-supplied image
+examples while keeping random weights. It is separate from the pinned
 real-input mode.
 Prepare local examples as JSON:
 
@@ -194,8 +148,7 @@ Prepare local examples as JSON:
 
 For Qwen2-VL use `{"image": "images/cat.jpg", "text": "A cat sitting on a chair."}`.
 Image paths are relative to the JSON. Classification labels must use the
-checkpoint's ImageNet class ordering. Use at least **10 complete batches** for
-the default calibration (5 calibration updates + 5 disjoint holdout updates).
+checkpoint's ImageNet class ordering.
 The legacy preparation command may download the official processor/tokenizer.
 It does not download a dataset or model weights. These caller-supplied batches
 are not accepted under `--real-input`.
@@ -207,46 +160,16 @@ python -m evograd.benchmark.topdown.common.vision.data \
   --model convnextv2_tiny --examples data/imagenet_examples.json \
   --source 'ImageNet-1K train; record revision and sample selection here' \
   --out results/convnextv2_tiny/batches.pt
-python -m evograd.evaluation.tier3.workloads.common.vision.gate \
-  --config src/evograd/benchmark/topdown/convnextv2_tiny/benchmark.json \
-  --data results/convnextv2_tiny/batches.pt --sites convnext_mlp_stage0,convnext_mlp_stage1,convnext_mlp_stage2,convnext_mlp_stage3 --steps 5 \
-  --out results/convnextv2_tiny/calibration.json
-python -m evograd.evaluation.tier3.cli --model convnextv2_tiny \
-  --data-path results/convnextv2_tiny/batches.pt \
-  --calibration results/convnextv2_tiny/calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --out results/convnextv2_tiny/identity.json
 ```
 
 ConvNeXt has four independent stage sites so a specialist can target one
 spatial/channel configuration; repeated layers within that stage share it.
-For Qwen2 calibrate `--sites text_mlp,vision_mlp` for a provider replacing both.
-A single-site provider needs calibration for that exact site set. Candidates
-use the existing `--candidate SITE=PATH` / `--patch-set` mechanisms; pair
-contracts are bound through the existing autograd deployment wrapper.
-
-Calibration independently rebuilds native and same-site `torch.compile`
-controls twice and requires bitwise repeatability of each. Budgets are frozen
-per loss/logit/input-gradient/parameter-gradient tensor from native–compiled
-relative L2 and max-absolute/reference-RMS discrepancies. The fixed policy is
-`2 * max(control discrepancy, 1e-5)`. Every held-out tensor must meet both
-limits. Independent AdamW trajectories use all prescribed steps; loss-difference
-RMS and maximum absolute difference must both meet separately frozen budgets.
-Calibration is tied to configuration, hardware/software, data hash and sites.
-A missing calibration, resource error, nonfinite tensor or missing gradient
-fails the gate; no candidate is used to choose budgets.
-
-The calibration process uses disk-backed tensor references and can require
-substantial temporary storage for Qwen2. Use a suitable `TMPDIR`. Dataset
-provenance is supplied by the caller and must be reviewed before publication;
-checking an artifact's hash cannot establish that its examples are real.
 
 ## Validation status
 
 Reduced CPU tests cover both full models, visual/merger gradients, tied weights,
-structural identity, pair binding, stride replay, harvest coverage, calibration
-with the diagnostic `aot_eager` backend, and rejection of a corrupted candidate.
-Canonical CUDA/BF16 harvests, Inductor calibration, real-data runs and timing
+structural identity, pair binding, stride replay and harvest coverage.
+Canonical CUDA/BF16 harvests, real-data runs and timing
 measurements have not been performed on the development Mac. The default
 operator tolerances are provisional until GPU qualification. Do not present
 CPU fixtures or uncalibrated timing as paper results.

@@ -3,25 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the live
 model, which tensors cross it, in which layout, and whether what was captured
 still matches the frozen harvest. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.qwen3_0_6b.level2.attention`.
-
-Derive and verify ``qwen3_attention`` from the canonical Layer-14 artifact.
-
-    # describe the derived invocation (metadata only -- no tensors are written)
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention derive \
-        --source results/qwen3-level3/layer14.pt \
-        --metadata-out results/qwen3-level3/layer14-attention.json
-
-    # check both spellings against what Transformers computed
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention verify \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/layer14-attention-verify.json
-
-    # measure what tolerance a correct implementation actually needs
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention calibrate \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/qwen3_attention-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 Like the MLP task, nothing here writes a second tensor file. ``layer14.pt``
 already holds every number this boundary needs; the invocation is re-derived by

@@ -2,7 +2,7 @@
 
 ``task`` is the contract, ``reference`` defines it, and ``capture`` derives
 this site's case from a captured layer. Judging an implementation of it belongs
-to :mod:`evograd.evaluation.workloads.llama3_2_1b.level2`.
+to :mod:`evograd.verification`.
 """
 
 from .task import op

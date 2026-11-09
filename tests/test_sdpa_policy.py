@@ -110,16 +110,5 @@ class GuardTest(unittest.TestCase):
         self.assertIs(F.scaled_dot_product_attention, before)
 
 
-class FingerprintTest(unittest.TestCase):
-    def test_tier3_fingerprint_binds_policy_and_cudnn(self):
-        from evograd.evaluation.tier3.gate import numerics
-
-        backends = numerics._sdpa_backends()
-        self.assertIn("cudnn", backends)
-        self.assertEqual(backends["policy"], "cudnn_guarded")
-        self.assertTrue(backends["guard"])
-        self.assertIn("sdpa_backends", numerics.BINDING_FIELDS)
-
-
 if __name__ == "__main__":
     unittest.main()

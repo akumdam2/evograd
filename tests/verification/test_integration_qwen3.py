@@ -137,10 +137,14 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(cases["linear_no_bias/lm_head"].frequency, 1)
 
     def test_pins_match_the_tier3_real_text_workload(self):
-        from evograd.evaluation.tier3.workloads.qwen3_0_6b import protocol4_cli
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.spec import CANONICAL
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b import textdata
         from evograd.verification.integrations.qwen3_0_6b import capture as Q
 
-        self.assertEqual((Q.PRETRAINED, Q.REAL_TEXT), (protocol4_cli.PRETRAINED, protocol4_cli.REAL_TEXT))
+        spec = CANONICAL.replace(weights=Q.PRETRAINED, data=Q.REAL_TEXT)
+        self.assertTrue(spec.pretrained and spec.real_text)
+        self.assertEqual(spec.pretrained_repo[0], "Qwen/Qwen3-0.6B")
+        self.assertEqual(Q.REAL_TEXT, f"wikitext-2-raw:{textdata.DATASET_REVISION}")
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")

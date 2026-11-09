@@ -5,8 +5,8 @@ Two halves, and the split is deliberate.
 The **declaration half** always runs. It pins what the suite claims about this
 task with no model in sight: that the modules import without MegaFold, that a
 missing MegaFold is reported as a sentence someone can act on, that the
-declaration is registered and validates, that both adapters resolve, and that
-the exclusions actually state every restriction the task operates under. That
+declaration is registered and validates, and that the exclusions actually
+state every restriction the task operates under. That
 last one is the point of having exclusions at all: a level-3 number read
 without them overstates what was measured.
 
@@ -125,11 +125,6 @@ class TestModulesImportWithoutMegaFold(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.megafold import workload
 
         self.assertTrue(callable(workload.make_workload))
-
-    def test_the_adapter_module_imports(self):
-        from evograd.evaluation.tier3.workloads.megafold import adapter
-
-        self.assertEqual(adapter.ADAPTER.name, "megafold")
 
     @unittest.skipIf(
         HAVE_MEGAFOLD_PACKAGE, "MegaFold is on PYTHONPATH in this environment"
@@ -342,84 +337,13 @@ class TestTheRunnerPassesTheProviderName(unittest.TestCase):
         self.assertEqual(provenance.method, "module_surgery")
 
 
-class TestTheProviderKernelSetsCarryNothing(unittest.TestCase):
-    """Three providers, three identical empty kernel sets, three trees."""
-
-    def _providers(self):
-        import argparse
-
-        from evograd.evaluation.tier3.workloads.megafold.adapter import providers
-        from evograd.evaluation.tier3.workloads.megafold.workload import MEGAFOLD_SITES
-
-        return providers(argparse.Namespace(), MEGAFOLD_SITES)
-
-    def test_the_four_providers_are_named(self):
-        self.assertEqual(
-            sorted(self._providers()),
-            ["compile", "compile_clean", "eager", "megafold"],
-        )
-
+class TestTheScaffolding(unittest.TestCase):
     def test_the_scaffolding_module_imports_without_megafold(self):
         """Its patches reach MegaFold only inside install()."""
         from evograd.evaluation.tier3.workloads.megafold import scaffolding
 
         self.assertFalse(scaffolding.installed())
         self.assertEqual(scaffolding.APPLIED, [])
-
-    def test_none_of_them_carries_an_override(self):
-        for name, kernels in self._providers().items():
-            with self.subTest(provider=name):
-                self.assertEqual(kernels.overrides, {})
-                self.assertEqual(kernels.patched, ())
-
-
-class TestTheAdapters(unittest.TestCase):
-    def test_both_names_resolve(self):
-        from evograd.evaluation.tier3.workloads import Tier3Adapter, tier3_adapter
-
-        for name in ("megafold", "megafold_2l"):
-            with self.subTest(model=name):
-                adapter = tier3_adapter(name)
-                self.assertIsInstance(adapter, Tier3Adapter)
-                self.assertEqual(adapter.name, name)
-                self.assertTrue(adapter.summary)
-
-    def test_the_cli_offers_both(self):
-        from evograd.evaluation.tier3.cli import MODELS
-
-        self.assertIn("megafold", MODELS)
-        self.assertIn("megafold_2l", MODELS)
-
-    def test_the_workload_specific_flags_are_accepted_here(self):
-        from evograd.evaluation.tier3.cli import _parser, check_options
-
-        args = _parser().parse_args(
-            ["--model", "megafold_2l", "--device", "cpu", "--residues", "32",
-             "--evo", "none", "--checkpointing", "off", "--recycling", "2",
-             "--confidence-head", "--baseline", "none"]
-        )
-        check_options(args)  # must not raise
-
-    def test_those_flags_are_refused_for_a_workload_without_them(self):
-        """A flag the selected workload does not understand is an error, not a
-        silently ignored request."""
-        import contextlib
-        import io
-
-        from evograd.evaluation.tier3.cli import _parser, check_options
-
-        args = _parser().parse_args(
-            ["--model", "qwen3_0_6b", "--device", "cpu", "--evo", "triton"]
-        )
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
-            check_options(args)
-        self.assertIn("--evo", stderr.getvalue())
-
-    def test_the_canonical_dtype_is_float32(self):
-        from evograd.evaluation.tier3.workloads.megafold.adapter import DEFAULT_DTYPE
-
-        self.assertEqual(DEFAULT_DTYPE, "float32")
 
 
 # -- the model half, which needs a GPU node ----------------------------------
@@ -595,16 +519,15 @@ class TestTheProvidersAgree(unittest.TestCase):
     """
 
     def _providers(self):
-        from evograd.evaluation.tier3.workloads.megafold.adapter import providers
-        from evograd.evaluation.tier3.workloads.megafold.workload import MEGAFOLD_SITES
+        from evograd.evaluation.tier3.workloads.megafold.workload import (
+            BUILD_MODES,
+            MEGAFOLD_SITES,
+        )
 
-        import argparse
-
-        args = argparse.Namespace()
         # compile_clean rebinds MegaFold's module globals for the life of the
         # process, after which no other provider may be built in it; it is
         # built in a child of its own below.
-        return {name: kernels for name, kernels in providers(args, MEGAFOLD_SITES).items()
+        return {name: KernelSet(registry=MEGAFOLD_SITES) for name in BUILD_MODES
                 if name != "compile_clean"}
 
     def _loss_per_provider(self) -> dict[str, float]:
@@ -638,7 +561,7 @@ class TestTheProvidersAgree(unittest.TestCase):
                 self.assertEqual(provenance.method, f"module_surgery:{name}")
 
     def test_compile_clean_builds_in_its_own_process(self):
-        """As the tier-3 CLI builds every provider: one process each."""
+        """As ``evograd evaluate`` builds every provider: one process each."""
         import subprocess
         import sys
 
@@ -655,8 +578,8 @@ class TestTheProvidersAgree(unittest.TestCase):
             "print(provenance.method)\n"
         )
         # The tests before this one gave this process a process group and its
-        # MASTER_PORT; the tier-3 CLI's parent builds no model, so each child
-        # picks its own port, and this child must too.
+        # MASTER_PORT; a parent that builds no model leaves each child to pick
+        # its own port, and this child must too.
         env = {key: value for key, value in os.environ.items() if key != "MASTER_PORT"}
         child = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                                env=env)

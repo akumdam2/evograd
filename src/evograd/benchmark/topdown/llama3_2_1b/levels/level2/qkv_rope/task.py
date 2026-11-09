@@ -106,11 +106,6 @@ HARVESTED = _has_snapshot(_WORKLOAD)
 #: see :data:`GRID_CALIBRATED`. The grid is declared in this file and both
 #: spellings are in ``forward_ref``, so nothing about a GPU or a harvest is
 #: needed to compare them.
-#:
-#: Reproduced by::
-#:
-#:     python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope \
-#:         calibrate --source <run>/capture/layer8.pt --device cuda
 CALIBRATED = True
 
 #: Have the correctness-grid tolerances been measured rather than inherited?

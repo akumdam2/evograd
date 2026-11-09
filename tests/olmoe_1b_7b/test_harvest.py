@@ -1,12 +1,12 @@
 """The OLMoE Level-3 smoke, the whole-model harvest, its snapshot, the layer
-capture and replay, and the Level-1 bindings -- on a tiny model (CPU).
+capture, and the Level-1 bindings -- on a tiny model (CPU).
 
 The canonical run of each is a GPU session's; these hold the machinery: every
 layer is held to the decoder block's mandatory boundaries (attention, RoPE,
 SDPA, the MoE block, its router, its experts, their SiLU), the snapshot's site
 dims agree with the declared ones, the whole-model counts are observed, a
-captured layer replays the full model bitwise, and the experts kernel is read
-back and held to the spec.
+captured layer is self-describing, and the experts kernel is read back and
+held to the spec.
 """
 
 from __future__ import annotations
@@ -229,12 +229,11 @@ class TestHarvest(unittest.TestCase):
             self.assertIn("olmoe_1b_7b_observed", TASKS["swiglu"].benchmark_suites)
 
 
-class TestCaptureAndReplay(unittest.TestCase):
-    def test_capture_then_standalone_replay_is_bitwise(self):
+class TestCapture(unittest.TestCase):
+    def test_capture_writes_a_self_describing_artifact(self):
         from evograd.benchmark.topdown.olmoe_1b_7b.layer.artifact import LayerArtifact
         from evograd.benchmark.topdown.olmoe_1b_7b.layer.capture import (
             run_capture, write_captures)
-        from evograd.evaluation.workloads.olmoe_1b_7b.layer.replay import run_replay
 
         spec = tiny_spec(dtype="float32")
         with tempfile.TemporaryDirectory() as tmp:
@@ -248,9 +247,6 @@ class TestCaptureAndReplay(unittest.TestCase):
             self.assertEqual(artifact.identity["experts_implementation"], "grouped_mm")
             self.assertIn("position_embeddings", artifact.payload["kwargs"])
             self.assertIn("mlp.experts.gate_up_proj", artifact.payload["state_dict"])
-            report = run_replay(artifact, device="cpu", noise_repeats=0)
-            self.assertEqual(report["status"], "pass", report.get("failures"))
-            self.assertTrue(report["comparisons"]["output"]["bitwise_identical"])
 
     def test_a_relabelled_artifact_is_refused(self):
         from evograd.benchmark.topdown.olmoe_1b_7b.layer.artifact import (
@@ -282,24 +278,6 @@ class TestLevel1Bindings(unittest.TestCase):
         self.assertEqual(everything[start:start + 6], OBSERVED_BINDINGS)
         self.assertNotIn("linear", [b.task for b in OBSERVED_BINDINGS],
                          "the expert GEMMs are not nn.Linear modules")
-
-
-class TestHarvestedInvocation(unittest.TestCase):
-    def test_the_descriptor_hook_on_a_tiny_layer(self):
-        from evograd.benchmark import TASKS
-        from evograd.evaluation.workloads.olmoe_1b_7b.descriptor import WORKLOAD
-        from evograd.evaluation.workloads.olmoe_1b_7b.level2.harvested import captured_invocation
-
-        self.assertEqual(WORKLOAD.layer_for(), 8)
-        self.assertEqual(WORKLOAD.artifact_path.name, "layer8.pt")
-        for task in ("olmoe_qkv_norm_rope", "olmoe_moe_experts"):
-            with self.subTest(task=task):
-                values, workload, label = captured_invocation(
-                    TASKS[task], "cpu", arch=TINY_ARCH, layers=LAYERS, batch=1, seq=SEQ)
-                self.assertIn("config-derived", label)
-                self.assertIn("grouped_mm", label)
-                self.assertEqual(workload.dims["T"], SEQ)
-        self.assertIsNone(captured_invocation(TASKS["rope"], "cpu"))
 
 
 if __name__ == "__main__":

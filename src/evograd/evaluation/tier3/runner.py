@@ -11,18 +11,12 @@ into one. It receives a workload and a set of providers, and its whole job is
 to make sure the only difference between them is the kernels: same weights,
 same batches, same optimizer, same step, same order of operations.
 
-Two rules the earlier version of this file did not have, both about not
-reporting a number that is not a number:
-
-* **Correctness first.** Every kernel a provider patches in is put through the
-  tier-1 pair gate -- the same ``verify_pair_provider`` tiers 1 and 2 use --
-  before anything is timed. A provider that fails is marked failed and never
-  measured, because a wrong kernel does not produce an error at this tier, it
-  produces a throughput.
-* **Every loss must be a finite scalar.** A step whose loss is NaN still runs,
-  still has a wall time, and still divides into tokens per second. Checking is
-  one ``isfinite`` per step and it is the difference between a measurement and
-  a number.
+Correctness is judged before this runs, by the verification package's Gates
+1/2/3 on real payloads. What this file still refuses is a number that is not a
+number: **every loss must be a finite scalar.** A step whose loss is NaN still
+runs, still has a wall time, and still divides into tokens per second. Checking
+is one ``isfinite`` per step and it is the difference between a measurement and
+a number.
 """
 
 from __future__ import annotations
@@ -67,15 +61,7 @@ class NonFiniteLoss(Tier3Error):
     """A loss was NaN, infinite, or not a scalar."""
 
 
-class PreflightFailure(Tier3Error):
-    """A patched kernel did not pass the tier-1 correctness gate."""
-
-
-class ModelCorrectnessFailure(Tier3Error):
-    """The assembled model failed its whole-model gate. Never timed."""
-
-
-# ── correctness, before anything is timed ────────────────────────────────────
+# ── loss finiteness ──────────────────────────────────────────────────────────
 
 
 def check_loss(value: Any, *, where: str) -> float:
@@ -102,116 +88,6 @@ def check_loss(value: Any, *, where: str) -> float:
     return scalar
 
 
-def preflight(
-    kernels: KernelSet, ops: dict[str, Any] | None, *, device: str = "cuda"
-) -> dict[str, Any]:
-    """Put every patched kernel through the tier-1 correctness gate.
-
-    Reuses ``evaluation.common.provider.verify_pair_provider`` -- the same path tier 1's CLI
-    and tier 2's ``check_module`` gate on -- against the declaration's own
-    correctness workloads. Tier 3 cannot verify the model-shaped call directly:
-    at these sites the model's activations are not a declared workload, and the
-    only oracle that exists is the declaration's. So the kernel is verified
-    where it *is* specified, and the rank adapter is what carries that verdict
-    to the model's shapes.
-
-    Raises :class:`PreflightFailure`, so a provider that fails is recorded as
-    failed and never reaches the timing loops.
-    """
-    from evograd.evaluation.common.provider import candidate_provider, verify_pair_provider
-
-    registry = kernels.registry
-    checked: list[dict[str, Any]] = []
-    unverifiable: list[dict[str, Any]] = []
-    for site in kernels.patched:
-        source = kernels.source_for(site)
-        if source is None or not source.verifiable or ops is None:
-            unverifiable.append(
-                {
-                    "site": site,
-                    "workload_family": registry.name,
-                    "reason": (
-                        "no declaration-governed pair behind this site; a raw "
-                        "callable has no oracle to check it against"
-                    ),
-                }
-            )
-            continue
-        op = ops[source.op_name]
-        # The declaration's own grid, plus whatever model-derived shapes this
-        # workload's registry adds for the site. The second half is the point:
-        # a kernel correct at 32 rows and wrong at 4096 passes the first and
-        # fails the second, and only the model knows which 4096 it presents.
-        extra = tuple(registry.require(site).preflight)
-        workloads = tuple(op.correctness) + extra
-        report = verify_pair_provider(
-            op, candidate_provider(op, source.module), workloads, device=device
-        )
-        entry = {
-            "site": site,
-            "op": source.op_name,
-            "origin": source.origin,
-            "workload_family": registry.name,
-            "ok": report.ok,
-            "cases": len(report.cases),
-            "declared_cases": len(op.correctness),
-            "workload_supplied_cases": len(extra),
-            "checked_configs": [
-                {
-                    "dims": dict(workload.dims),
-                    "dtype": workload.dtype,
-                    "source": "declared" if index < len(op.correctness)
-                              else "workload_supplied",
-                    "id": _workload_id(workload),
-                }
-                for index, workload in enumerate(workloads)
-            ],
-        }
-        if not report.ok:
-            failing = [
-                {
-                    "dims": case.dims,
-                    "dtype": case.dtype,
-                    "error": case.error,
-                    "failed": [c.name for c in case.checks if not c.ok],
-                }
-                for case in report.cases
-                if not case.ok
-            ]
-            entry["failures"] = failing
-            checked.append(entry)
-            failure = PreflightFailure(
-                f"{site} ({source.op_name}, workload {registry.name}) failed the "
-                f"tier-1 correctness gate: {failing[0]}"
-            )
-            # Structured, so a caller can tell a tolerance disagreement (every
-            # case has `error: None` and named failing results) from a kernel
-            # that raised. A string cannot carry that distinction safely.
-            failure.detail = {"site": site, "op": source.op_name,
-                              "origin": source.origin, "failures": failing}
-            raise failure
-        checked.append(entry)
-    return {
-        "gate": (
-            "bench.provider.verify_pair_provider on op.correctness plus the "
-            "workload registry's model-derived shapes"
-        ),
-        "device": device,
-        "site_ops": registry.site_ops,
-        "workload_family": registry.name,
-        "checked": checked,
-        "unverifiable": unverifiable,
-    }
-
-
-def _workload_id(workload) -> str:
-    """A short, stable name for one checked configuration."""
-    provenance = getattr(workload, "provenance", None)
-    label = getattr(provenance, "component", None) if provenance else None
-    dims = ",".join(f"{k}={v}" for k, v in sorted(workload.dims.items()))
-    return f"{label or 'workload'}[{dims}]:{workload.dtype}"
-
-
 # ── the timed step ───────────────────────────────────────────────────────────
 
 
@@ -233,7 +109,7 @@ def _sync() -> None:
 
     The tier measures training on an accelerator, and every published number
     comes from one. Tolerating its absence is what lets the whole runner --
-    ordering, the finiteness gate, the preflight, provenance -- be exercised on
+    ordering, the finiteness gate, provenance -- be exercised on
     CPU in the test suite instead of only where a GPU happens to be free.
     """
     if torch.cuda.is_available():
@@ -243,69 +119,6 @@ def _sync() -> None:
 def _peak_memory() -> int | None:
     """Peak allocation, or ``None`` where the allocator does not exist."""
     return int(torch.cuda.max_memory_allocated()) if torch.cuda.is_available() else None
-
-
-def _not_checked(gate: str, reason: str, *, skipped: bool) -> dict:
-    """A verdict for a provider the whole-model gate did not judge.
-
-    ``ok`` stays True -- nothing here forbids timing -- but the numerical answer
-    is reported as unavailable and ``evaluation_complete`` is False, so a report
-    cannot mistake "not checked" for "checked and fine". The field names match
-    :func:`evograd.evaluation.tier3.gate.enforcement.summarize` so one reader
-    works for every row.
-    """
-    return {"gate": gate, "ok": True, "skipped": skipped,
-            "execution_ok": True, "numerical_ok": None,
-            "numerical_status": "unavailable", "numerical_unavailable_at": ["model_gate"],
-            "evaluation_complete": False, "evaluation_incomplete_because": [reason],
-            "reason": reason, "findings": []}
-
-
-def model_correctness_check(workload, kernels, *, verify: bool, device: str):
-    """Ask the workload for its whole-model gate, and refuse to time a failure.
-
-    Optional by design: a workload that has not calibrated one returns
-    ``not_applicable`` and tier 3 proceeds on site preflight alone, which is
-    where every workload started.
-
-    The verdict answers two questions, and only the second one decides anything
-    here: whether the numerical comparisons met their limits
-    (``numerical_ok`` / ``numerical_status``, recorded whatever it says), and
-    whether the provider may be timed (``ok``). Under the ``strict`` enforcement
-    mode those coincide, as they always did. Under ``report_first`` a finite
-    numerical mismatch is recorded and the provider still reaches training and
-    timing, while a missing gradient, a non-finite value, a purity, coverage or
-    permission failure and any runtime error still stop it here.
-    """
-    check = getattr(workload, "model_correctness", None)
-    if not verify or not callable(check):
-        return _not_checked(
-            "not_applicable" if callable(check) else "none",
-            "the tier-1 and whole-model gates were skipped (--no-verify)" if not verify
-            else "this workload declares no whole-model gate",
-            skipped=not verify)
-    if not kernels.patched:
-        # A provider that patches no site never reaches the whole-model gate.
-        # That is right for native eager and WRONG to read as a pass for a
-        # provider that transforms the model another way -- whole-model
-        # torch.compile patches no site and does change the arithmetic. Timing
-        # it is still admissible; calling it checked is not, so the verdict says
-        # so in the same field every other row is read from.
-        return _not_checked(
-            "unpatched provider",
-            "this provider patches no site, so the whole-model gate did not run; "
-            "any numerical comparison for it comes from a separate measurement",
-            skipped=True)
-    verdict = check(kernels, device=device)
-    if not verdict.get("ok"):
-        stage = verdict.get("failed_at", "unknown")
-        kinds = ", ".join(f"{f['kind']}:{f['stage']}" for f in verdict.get("findings", []))
-        raise ModelCorrectnessFailure(
-            f"the assembled model failed its whole-model gate at {stage}: "
-            f"{verdict.get('reason', 'unknown')}"
-            + (f" [findings: {kinds}]" if kinds else "")
-        )
-    return verdict
 
 
 def _percentile(samples: list[float], q: float) -> float:
@@ -467,30 +280,15 @@ def measure_provider(
     loss_steps: int = 5,
     learning_rate: float = 1e-4,
     seed: int = 0,
-    ops: dict[str, Any] | None = None,
-    verify: bool = True,
     device: str = "cuda",
 ) -> dict[str, Any]:
-    """One kernel set on one workload: verify, then loss trajectory, then timing.
+    """One kernel set on one workload: loss trajectory, then timing.
 
     ``provider`` is the name this measurement will be filed under. It reaches
     the build because a workload whose providers are different *trees* rather
     than different kernels cannot tell them apart from the kernel set alone;
     workloads that do not declare it never see it.
     """
-    verification = (
-        preflight(kernels, ops, device=device)
-        if verify
-        else {"gate": "skipped", "checked": [], "unverifiable": []}
-    )
-    # Whole-model correctness, if the workload has one. Site preflight proves a
-    # kernel right at its declared shapes; it cannot prove that a hundred of
-    # them assembled into a model still train, and that failure is the one that
-    # produces a throughput rather than an error. Outside every timed region.
-    model_correctness = model_correctness_check(
-        workload, kernels, verify=verify, device=device
-    )
-
     model, provenance = build_with_provenance(workload, kernels, provider=provider)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, **OPTIMIZER_DEFAULTS
@@ -542,15 +340,6 @@ def measure_provider(
         "patch_provenance": provenance.to_dict(),
         "dynamo": _dynamo_counters(),
         "kernel_sources": [s.to_dict() for s in kernels.sources],
-        "verification": verification,
-        "model_correctness": model_correctness,
-        # Lifted to the row: whether the
-        # provider's numerical evaluation is complete, and if not why -- so a
-        # timed row can never be read as "checked and fine" by a reader that
-        # does not open ``model_correctness``.
-        "evaluation_complete": model_correctness.get("evaluation_complete"),
-        "evaluation_incomplete_because": model_correctness.get(
-            "evaluation_incomplete_because"),
         "optimizer": {
             "name": OPTIMIZER,
             "learning_rate": learning_rate,
@@ -649,8 +438,6 @@ def run_tier3(
     loss_steps: int = 5,
     learning_rate: float = 1e-4,
     seed: int = 0,
-    ops: dict[str, Any] | None = None,
-    verify: bool = True,
     device: str = "cuda",
 ) -> dict[str, Any]:
     """Every provider on one workload.
@@ -662,26 +449,23 @@ def run_tier3(
     Providers run **in this process**. That is what makes it usable for a
     ``ModuleWorkload`` built from closures, which cannot be pickled into a
     child -- and it means a kernel that hangs or wedges the CUDA context takes
-    the run with it. ``tier3_cli`` runs each provider in a killable child for
-    exactly that reason; use it when the workload can be named on a command
-    line.
+    the run with it. ``evograd evaluate`` runs each provider in a spawned child
+    for exactly that reason.
     """
-    from evograd.evaluation.tier1.fair import environment_fingerprint
-
     order = provider_order(providers, seed=seed)
     results: dict[str, Any] = {}
     for name in order:
         results[name] = measure_one(
             workload, name, providers[name], warmup=warmup, steps=steps,
             blocks=blocks, loss_steps=loss_steps, learning_rate=learning_rate,
-            seed=seed, ops=ops, verify=verify, device=device,
+            seed=seed, device=device,
         )
 
     return assemble_report(
         workload, results, order,
         warmup=warmup, steps=steps, blocks=blocks, loss_steps=loss_steps,
-        learning_rate=learning_rate, seed=seed, verify=verify,
-        isolation="in-process (see tier3_cli for one child process per provider)",
+        learning_rate=learning_rate, seed=seed,
+        isolation="in-process",
     )
 
 
@@ -693,10 +477,10 @@ def measure_one(
 ) -> dict[str, Any]:
     """One provider, with its failure captured rather than raised.
 
-    A kernel that fails preflight, diverges to NaN, or runs out of memory must
-    cost its own row and nothing else. The CLI wraps this in a child process so
-    that a hang or a wedged CUDA context is also survivable; in-process, those
-    two are not.
+    A kernel that diverges to NaN or runs out of memory must cost its own row
+    and nothing else. ``evograd evaluate`` wraps this in a child process so that
+    a hang or a wedged CUDA context is also survivable; in-process, those two
+    are not.
     """
     try:
         return {"ok": True, "provider": name, **measure_provider(
@@ -715,10 +499,6 @@ def measure_one(
 
 
 def _failure_stage(exc: Exception) -> str:
-    if isinstance(exc, ModelCorrectnessFailure):
-        return "model_correctness"
-    if isinstance(exc, PreflightFailure):
-        return "preflight"
     if isinstance(exc, NonFiniteLoss):
         return "loss_finiteness"
     out_of_memory = getattr(torch, "OutOfMemoryError", None) or getattr(
@@ -740,13 +520,12 @@ def assemble_report(
     loss_steps: int,
     learning_rate: float,
     seed: int,
-    verify: bool,
     isolation: str,
 ) -> dict[str, Any]:
     """The report shell, filled with whatever the providers produced.
 
-    Shared by the in-process runner and the CLI's isolated one, so a report
-    means the same thing however the providers were executed.
+    Shared by the in-process runner and ``evograd evaluate``'s isolated one, so
+    a report means the same thing however the providers were executed.
     """
     description = workload.describe()
     pinned_weights = description.get("weights") == "pretrained"
@@ -802,7 +581,7 @@ def assemble_report(
                 "allocator pressure. Not a dispatch-only measurement"
             ),
         },
-        "verification_policy": verification_policy(workload, verify=verify),
+        "verification_policy": verification_policy(workload),
         "site_registry": site_registry_for(workload).to_dict(),
         "environment": _environment(),
         "providers": results,
@@ -826,9 +605,7 @@ def _environment() -> dict[str, Any]:
     return environment_fingerprint()
 
 
-def verification_policy(
-    workload: TrainingWorkload, *, verify: bool = True
-) -> dict[str, Any]:
+def verification_policy(workload: TrainingWorkload) -> dict[str, Any]:
     """Exactly what was gated, and what was only observed. Recorded in the report."""
     from evograd.evaluation.tier3.gate import enforcement as enf
 
@@ -841,18 +618,6 @@ def verification_policy(
                      "decides only whether a numerical mismatch stops the provider before "
                      "training and timing"),
         },
-        "preflight": (
-            "declaration-backed patched kernels go through "
-            "bench.provider.verify_pair_provider on their correctness workloads; "
-            "raw callables are reported as unverifiable here; a failed pair is not timed"
-            if verify
-            else "skipped by request (--no-verify): timings are ungated"
-        ),
-        "model_correctness": (
-            "a workload may declare an untimed whole-model gate with its own "
-            "input sequence, tensor checks, and training trajectory; a failure "
-            "is recorded failed_at='model_correctness' and is never timed"
-        ),
         "loss_scalar_and_finite": (
             "every loss in the trajectory, and the settled steps on either side "
             "of the timed blocks, must be a finite scalar; NaN or Inf marks the "
@@ -881,7 +646,7 @@ def loss_agreement(
     invented here would be arbitrary in exactly the way that makes a gate worse
     than no gate. What matters is that it is visible -- a kernel that is fast
     and quietly changes the loss curve is not a faster kernel -- and that the
-    real gates (tier-1 correctness, finite scalar losses) already ran.
+    real gates (Gates 1/2/3, finite scalar losses) already ran.
     """
     providers = report.get("providers") or {}
     base = providers.get(reference)

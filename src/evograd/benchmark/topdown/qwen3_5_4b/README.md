@@ -23,8 +23,8 @@ checkpointing, train mode, at **B1 x T2048**. Batch 1, unlike every other
 workload here, because the eager step at B2 does not fit one 96 GB GH200
 (the reasoning is in `levels/level3/spec.py`). Single card, no offload, no
 multi-GPU. The Tier-3 workload adds AdamW
-(`tier3.runner.OPTIMIZER_DEFAULTS`). No whole-model correctness gate yet:
-every L3 provider row carries `evaluation_complete: false` and the reason.
+(`tier3.runner.OPTIMIZER_DEFAULTS`). Correctness is judged by the
+verification package's Gates 1/2/3, not by Tier 3.
 
 ### Decoder layers 14 and 15 -- where L2 takes its real invocations
 
@@ -96,8 +96,7 @@ PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture \
     --harvest harvest.json --out-dir <run_dir>
 ```
 
-The Tier-3 side is `evograd/evaluation/tier3/workloads/qwen3_5_4b/`; the
-evaluation bindings are `evograd/evaluation/workloads/qwen3_5_4b/`. How to run
+The Tier-3 side is `evograd/evaluation/tier3/workloads/qwen3_5_4b/`. How to run
 everything: `docs/QWEN3_5_4B.md`.
 
 ## Not yet done

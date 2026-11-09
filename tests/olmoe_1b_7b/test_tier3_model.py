@@ -1,27 +1,21 @@
 """The OLMoE Level-3 Tier-3 workload, on a 4-layer tiny model (CPU).
 
 Covers: the per-site patch counts, structural identity against the unpatched
-model (loss and every gradient, bitwise), the absent whole-model gate reported
-as ``evaluation_complete: false`` on every provider row the runner produces,
-the per-invocation boundary check, the providers the adapter offers, the
-experts kernel in the identity and the read-back, and a wrong backward refused
-before anything is timed.
+model (loss and every gradient, bitwise), the runner on the workload, the bound
+pair at the experts site, and the experts kernel in the identity and the
+read-back.
 """
 
 from __future__ import annotations
 
-import types
 import unittest
 
 import torch
 
 from evograd.benchmark import TASKS
-from evograd.evaluation.tier3.patch import KernelSet, KernelSource, kernel_from_pair, patch
+from evograd.evaluation.tier3.patch import KernelSet, patch
 from evograd.evaluation.tier3.workloads.olmoe_1b_7b import sites
-from evograd.evaluation.tier3.workloads.olmoe_1b_7b.workload import (
-    MODEL_GATE_NOT_IMPLEMENTED,
-    OlmoeWorkload,
-)
+from evograd.evaluation.tier3.workloads.olmoe_1b_7b.workload import OlmoeWorkload
 
 from tests.olmoe_1b_7b._tiny import SEQ, TINY_ARCH
 
@@ -37,21 +31,6 @@ def _step(workload, kernels):
     loss.backward()
     grads = {name: p.grad.detach().clone() for name, p in model.named_parameters()}
     return loss.detach(), grads, workload.last_build
-
-
-class _WrongResidualBackward:
-    """Forward right, backward ignoring ``dsummed`` -- the characteristic error."""
-
-    def __init__(self):
-        from evograd.evaluation.tier3.patch import eager_pair_for
-
-        self.good = eager_pair_for(TASKS["olmoe_residual_rmsnorm"])
-        self.forward_with_saved = self.good.forward_with_saved
-
-    def backward_from_saved(self, output_grads, saved, **kwargs):
-        dnormed, dsummed = output_grads
-        return self.good.backward_from_saved((dnormed, torch.zeros_like(dsummed)), saved,
-                                             **kwargs)
 
 
 class TestCounts(unittest.TestCase):
@@ -97,28 +76,8 @@ class TestStructuralIdentity(unittest.TestCase):
                     for name in grads0:
                         self.assertTrue(torch.equal(grads0[name], grads1[name]), name)
 
-    def test_the_boundary_check_passes_for_structural_identity(self):
-        workload = tiny_workload()
-        kernels = sites.structural_identity_kernels(workload.site_registry)
-        report = workload.local_boundary_check(kernels, layers=[1, 2], device="cpu")
-        self.assertTrue(report["ok"], report.get("reason"))
-        self.assertEqual(report["invocations"]["moe_experts"], 2)
-        self.assertEqual(report["invocations"]["residual_rmsnorm"], 2)
-        self.assertGreater(sum(report["skipped_by_layer_filter"].values()), 0)
-
-
-class TestModelGate(unittest.TestCase):
-    def test_not_implemented_is_stated(self):
-        workload = tiny_workload()
-        verdict = workload.model_correctness(
-            sites.structural_identity_kernels(workload.site_registry), device="cpu")
-        self.assertTrue(verdict["ok"])
-        self.assertFalse(verdict["evaluation_complete"])
-        self.assertEqual(verdict["evaluation_incomplete_because"], [MODEL_GATE_NOT_IMPLEMENTED])
-        self.assertIs(verdict["implemented"], False)
-        self.assertIsNone(verdict["numerical_ok"])
-
-    def test_every_runner_row_carries_evaluation_complete_false(self):
+class TestRunnerAndBoundPair(unittest.TestCase):
+    def test_the_runner_measures_every_provider(self):
         from evograd.evaluation.tier3.runner import measure_provider
 
         workload = tiny_workload()
@@ -127,28 +86,9 @@ class TestModelGate(unittest.TestCase):
                                sites.structural_identity_kernels(workload.site_registry))):
             with self.subTest(provider=name):
                 row = measure_provider(workload, kernels, provider=name, warmup=0, steps=1,
-                                       blocks=1, loss_steps=2, device="cpu", ops=TASKS)
-                self.assertFalse(row["model_correctness"]["evaluation_complete"])
-                self.assertTrue(row["model_correctness"]["evaluation_incomplete_because"])
-                self.assertIs(row["evaluation_complete"], False)
-                self.assertTrue(row["evaluation_incomplete_because"])
+                                       blocks=1, loss_steps=2, device="cpu")
                 self.assertEqual(row["optimizer"]["name"], "AdamW")
                 self.assertTrue(all(l == l for l in row["losses"]))
-
-    def test_a_wrong_backward_is_refused_before_timing(self):
-        from evograd.evaluation.tier3.runner import PreflightFailure, measure_provider
-
-        workload = tiny_workload()
-        op = TASKS["olmoe_residual_rmsnorm"]
-        module = _WrongResidualBackward()
-        kernels = patch(KernelSet(registry=workload.site_registry), "residual_rmsnorm",
-                        kernel_from_pair(op, module),
-                        source=KernelSource(site="residual_rmsnorm", op_name=op.name,
-                                            module=module, origin="candidate"))
-        self.assertFalse(workload.site_preflight(kernels, device="cpu")["ok"])
-        with self.assertRaises(PreflightFailure):
-            measure_provider(workload, kernels, provider="wrong", warmup=0, steps=1, blocks=1,
-                             loss_steps=1, device="cpu", ops=TASKS)
 
     def test_the_bound_pair_runs_the_experts_site(self):
         """The declared pair through ``bind`` at the experts site: the oracle's
@@ -195,16 +135,6 @@ class TestWorkloadProtocol(unittest.TestCase):
         model, _ = eager.build_patched(KernelSet(registry=eager.site_registry))
         self.assertEqual(eager.runtime_report(model)["experts_implementation"], "eager")
 
-    def test_layers_flag(self):
-        from evograd.evaluation.tier3.workloads.olmoe_1b_7b.adapter import build
-
-        args = types.SimpleNamespace(device="cpu", seed=0, data_seed=0, dtype=None, batch=None,
-                                     tokens=None, layers=4)
-        workload = build(args)
-        self.assertEqual(workload.num_layers, 4)
-        self.assertEqual(workload.spec.arch["num_experts"], 64)
-        self.assertFalse(workload.spec.is_canonical)
-
     def test_whole_model_compile_is_a_baseline_of_the_unpatched_model(self):
         from evograd.evaluation.tier3.workloads.olmoe_1b_7b.workload import (
             whole_model_compile_kernels)
@@ -218,23 +148,6 @@ class TestWorkloadProtocol(unittest.TestCase):
                       sites.PRODUCTION["moe_experts"])
         with self.assertRaises(ValueError):
             workload.build_patched(mixed)
-
-    def test_providers(self):
-        from evograd.evaluation.tier3.workloads.olmoe_1b_7b.adapter import providers
-
-        registry = sites.olmoe_sites()
-        args = types.SimpleNamespace(structural_identity=True, whole_model_compile=True,
-                                     compile_site=["moe_experts"], patch_set=[])
-        built = providers(args, registry)
-        self.assertEqual(set(built), {"structural_identity", "torch_compile_model",
-                                      "torch_compile_moe_experts"})
-
-    def test_purity_calls_follow_the_depth(self):
-        from evograd.evaluation.tier3.workloads.olmoe_1b_7b import purity
-
-        self.assertEqual(purity.MIN_CALLS, {s: 32 for s in sites.olmoe_sites().names})
-        self.assertEqual(purity.min_calls(tiny_workload().num_layers)["moe_experts"], 8)
-
 
 if __name__ == "__main__":
     unittest.main()

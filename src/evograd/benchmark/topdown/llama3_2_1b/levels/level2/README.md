@@ -40,7 +40,7 @@ directory names. Every key is this model's own.
 The mathematics of the last three is shared with Qwen3-0.6B and lives once in
 `benchmark/topdown/common/level2_references.py`; each model re-exports it from
 its own `reference.py`. Judging an implementation is not done here — that is
-`evograd.evaluation.workloads.llama3_2_1b.level2`.
+the verification package (`evograd.verification`).
 
 ### `llama3_qkv_rope` — Llama's own boundary
 
@@ -117,125 +117,13 @@ records which workload first harvested them, not which model runs them — a
 rename this repository owes. The declarations are dimension-parameterized and
 shared.
 
-## What this package owns, and what it does not
+## What this package owns
 
 The site packages here own the contracts and, through
 `benchmark/topdown/common/level2_references.py`, the reference implementations.
-Everything about them is **Llama-specific**:
-
-- the shapes the canonical workload actually calls them at, and how often;
-- the tolerance those shapes justify;
-- the negative controls that show the tolerance still rejects a wrong kernel.
-
-Every module derives its invocation by **replaying `layer16.pt`** and hooking
-the two points that bracket its boundary. `layer16.pt` stays the only tensor
-artifact: these boundaries' inputs and outputs already live inside it, so
-nothing but JSON is written here.
-
-| file | what it does |
-| --- | --- |
-| `qkv_rope.py`, `attention.py`, `swiglu_mlp.py`, `residual_rmsnorm.py` | one boundary each: `derive`, `verify`, `calibrate` |
-| `calibrate.py` | `inventory` / `scaling` across all the declarations at once |
-| `negative_controls.py` | does the calibrated gate still reject a wrong kernel? |
-
-### The three verbs
-
-**`derive`** replays the layer, brackets the boundary with hooks, and prints a
-provenance chain plus a content hash and a derivation hash. Writes no tensors.
-
-**`verify`** runs the declaration's reference against the captured tensors and
-the captured upstream gradient. If the declared operator disagrees with what
-the model computed, the *declaration* is wrong — the tensors came from a real
-step, so there is nothing to argue with.
-
-**`calibrate`** asks a different question: what must a *correct* implementation
-be allowed at this shape? It compares the declared float32-accumulated
-`forward` against `runtime_forward`, the exact spelling Transformers executes.
-Neither is a candidate, so the answer is the **floor** — anything tighter would
-reject PyTorch itself.
-
-`calibrate.py inventory` asks that of all the declarations at once, over three
-populations, because they answer different halves of the question: the declared
-correctness workloads (small, CPU-runnable, what every test run gates on); the
-`llama_3_2_1b_observed` workloads (the exact shapes the benchmark times, and the
-only ones at production width); and the harvested layer-16 invocation, whose
-tensors are the model's own — which is how a scale problem is told apart from a
-spelling problem.
-
-### And why `negative_controls.py` exists
-
-A tolerance that accepts everything is not a tolerance. Widening one to admit
-BF16's real behaviour at 4096-token reductions is only defensible if the
-widened gate still catches the errors implementations actually make. Two fault
-kinds, because they fail differently:
-
-- **scaled** — every element of one result multiplied by `1 + eps`. The shape
-  of a systematic error: a missing float32 accumulation, a wrong scale factor,
-  a cast in the wrong place. `rtol` is what catches it, and `rtol` was
-  deliberately left untouched by the calibration.
-- **dropped-term** — one slice removed from a reduction, which is what an
-  off-by-one bound or a mis-sized tile does. Its size is set by the reduction
-  rather than by the value, so it is exactly the error a reduction-scaled
-  `atol` is most at risk of hiding.
-
-Controls run against the *production* results, so a fault is measured against a
-spelling the gate currently accepts. The question asked is "would this defect
-have been caught", not "is BF16 different from float32".
-
-## Running it
-
-Per boundary — `qkv_rope` shown, the other three are identical in shape:
-
-```bash
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope derive \
-    --source results/llama3-level3/layer16.pt \
-    --metadata-out results/llama3-level3/layer16-qkv.json
-
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope verify \
-    --source results/llama3-level3/layer16.pt \
-    --report results/llama3-level3/layer16-qkv-verify.json
-
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope calibrate \
-    --source results/llama3-level3/layer16.pt \
-    --report results/llama3-level3/llama3_qkv_rope-tolerance.json
-```
-
-Then the two cross-cutting ones:
-
-```bash
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.calibrate inventory \
-    --artifact results/llama3-level3/layer16.pt \
-    --report results/llama3-level3/l2-inventory.json
-
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.negative_controls \
-    --report results/llama3-level3/l2-negative-controls.json
-```
-
-`--source` already defaults to `results/llama3-level3/layer16.pt` in all four
-boundary modules. `attention verify` takes `--skip-dense-reference`: the
-materialized-score reference needs several GiB at the canonical shape.
-
-**`calibrate --skip-canonical` needs neither the capture nor the snapshot.** It
-builds its cases from the declaration's own correctness grid, so it runs on CPU
-on any machine:
-
-```bash
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope calibrate \
-    --skip-canonical --device cpu \
-    --report results/llama3-level3/llama3_qkv_rope-grid-tolerance.json
-```
-
-That is the run that found the tolerances inherited from Qwen3 were wrong for
-this boundary: at multiplier 1.0 two weight gradients needed 2.6x and 3.2x the
-base, and the bound-pair preflight failed on them. The declared multipliers are
-those measurements plus a 1.5x margin.
-
-## What each entry point needs
-
-Everything except `calibrate --skip-canonical` consumes
-`results/llama3-level3/layer16.pt` — produced by the layer capture — and
-`harvest/snapshot.json`. A stage with no artifact **refuses by name** rather
-than substituting synthetic tensors.
+Each `capture.py` derives its invocation by **replaying `layer16.pt`** and
+hooking the two points that bracket its boundary. `layer16.pt` stays the only
+tensor artifact: nothing but JSON is written here.
 
 ## Task identities after the integration
 

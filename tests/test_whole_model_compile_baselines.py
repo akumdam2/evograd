@@ -157,7 +157,7 @@ def test_legacy_evaluator_runs_and_resumes_baselines_without_candidates(tmp_path
     raw = {name: {"ok": True, "step_ms": ms, "per_block_ms": [ms] * 3,
                    "peak_memory_bytes": 100, "correctness": {"status": "passed"}}
            for name, ms in (("eager", 2), ("torch_compile", 1))}
-    report = assemble_report(workload, raw, list(raw), verify=False, isolation="test",
+    report = assemble_report(workload, raw, list(raw), isolation="test",
                              **protocol.TIER3_OPTIONS)
     with T.toy_environment(), \
          patch("evograd.verification.integrations.base.observed_cases", return_value=[]), \

@@ -6,10 +6,49 @@ import json
 import shutil
 from pathlib import Path
 
-from evograd.dispatch import _evaluate_program
 from evograd.ncu.optimizer import optimize_from_profile
 from evograd.ncu.profile import run_ncu_profile
 from evograd.opdecl.activity import OpDecl
+
+
+def _evaluate_program(
+    op: OpDecl,
+    path: Path,
+    *,
+    baseline: str,
+    warmup: int,
+    reps: int,
+    timeout: int,
+    cache_path: Path,
+) -> dict:
+    """The evolve evaluator's metrics for one program, in a killable child process."""
+    from evograd.evolve.evaluator import evaluate_isolated
+    from evograd.evolve.run import _EVALUATOR_ENTRY, _temporary_environ
+    from evograd.opdecl.baselines import resolve_performance_baseline
+
+    # evaluator_entry resolves EVOGRAD_OP at module import time. Point the child
+    # process at the file without importing it in this (unconfigured) process.
+    baseline = resolve_performance_baseline(op, baseline)
+    env = {
+        "EVOGRAD_OP": op.name,
+        "EVOGRAD_FORWARD_OVERRIDE": op.forward,
+        "EVOGRAD_SCORING": "speed_memory_min",
+        "EVOGRAD_BENCHMARK_SUITE": "full",
+        "EVOGRAD_BENCHMARK_WARMUP": str(warmup),
+        "EVOGRAD_BENCHMARK_REPS": str(reps),
+        "EVOGRAD_PERFORMANCE_BASELINE": baseline,
+        "EVOGRAD_BASELINE_TIMING_CACHE_PATH": str(cache_path),
+    }
+    if op.declaration:
+        env["EVOGRAD_DECLARATION"] = op.declaration
+    with _temporary_environ(env):
+        result = evaluate_isolated(str(_EVALUATOR_ENTRY), str(path), timeout=timeout)
+    payload = {"metrics": result.metrics, "artifacts": result.artifacts}
+    if float(result.metrics.get("correct", 0.0)) != 1.0:
+        return payload
+    raw = result.artifacts.get("benchmark")
+    payload["benchmark"] = json.loads(raw) if isinstance(raw, str) else raw
+    return payload
 
 
 def _write_record(output_dir: Path, record: dict) -> None:

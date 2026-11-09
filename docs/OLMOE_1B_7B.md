@@ -20,7 +20,7 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 | hardware | one GH200: no offload, no multi-GPU |
 | shape | canonical **B2 x T2048**, confirmed on a GH200 (run `20261016_gpu1`): 28.2 GiB for the L3 step, 64.5 GiB with AdamW at Tier 3 |
 | tolerances | **provisional** on every L2 site, and **too tight at the observed size**: in run `20261016_gpu1` every site's weight-gradient reductions over 4,096 tokens fail the 8e-2 bfloat16 gate by one bf16 unit at the reference magnitude while every forward output and activation gradient passes with headroom under 0.4. The calibration inventory and fit are the next step |
-| L3 gate | none yet: provider rows say `evaluation_complete: false` and why |
+| L3 gate | none in Tier 3: correctness comes from the verification package's Gates 1/2/3 |
 | library lines | none |
 
 ## Sites and tasks
@@ -41,34 +41,15 @@ python -m evograd.benchmark.topdown.olmoe_1b_7b --out smoke.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest harvest.json --write
 python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture --harvest harvest.json --out-dir <dir>
-python -m evograd.evaluation.workloads.olmoe_1b_7b.layer.replay --artifact <dir>/layer8.pt
 ```
 
 If the B2 step does not fit, `--batch-size 1` on the smoke and harvest commands
 runs the B1 variant (non-canonical: the report says so).
 
-**Tier 3** (L3, the whole training step; AdamW; every row `evaluation_complete: false`):
+**Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 
 ```bash
-python -m evograd.evaluation.tier3.cli --model olmoe_1b_7b --baseline none \
-    --structural-identity --compile-site moe_experts --loss-steps 20 --out l3.json
-python -m evograd.evaluation.tier3.cli --model olmoe_1b_7b --baseline none \
-    --whole-model-compile --timeout 1200 --out l3_compile.json
-```
-
-**Tier 2** (L2, observed case, once the snapshot is tracked):
-
-```bash
-python -m evograd.evaluation.tier2.cli --op olmoe_moe_experts --suite olmoe_1b_7b_observed
-```
-
-**L2 inventory** (oracle against production only; the site's real invocation
-comes from `EVOGRAD_OLMOE_LAYER_DIR/layer8.pt` when set, else a config-derived
-layer):
-
-```bash
-python -m evograd.evaluation.workloads.olmoe_1b_7b.level2.calibrate inventory \
-    --task olmoe_moe_experts --report inventory/olmoe_moe_experts.json
+evograd evaluate olmoe_1b_7b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
 ```
 
 ## Caveats, stated up front

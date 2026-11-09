@@ -25,8 +25,8 @@ The experts kernel is a hashed spec field (`experts_implementation`,
 back off the built model; an unmodified `OlmoeForCausalLM` on this torch
 dispatches to the grouped GEMM, so that is the reference execution and the
 per-expert loop is the alternative. Single card, no offload, no multi-GPU. The
-Tier-3 workload adds AdamW. No whole-model correctness gate yet: every L3
-provider row carries `evaluation_complete: false` and the reason.
+Tier-3 workload adds AdamW. Correctness is judged by the verification
+package's Gates 1/2/3, not by Tier 3.
 
 Batch 2 is the repository's usual and is an estimate until the first GPU
 session: about 55 GiB of weights, gradients and bf16 moments plus 15-20 GiB of
@@ -95,8 +95,7 @@ PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture \
     --harvest harvest.json --out-dir <run_dir>
 ```
 
-The Tier-3 side is `evograd/evaluation/tier3/workloads/olmoe_1b_7b/`; the
-evaluation bindings are `evograd/evaluation/workloads/olmoe_1b_7b/`. How to run
+The Tier-3 side is `evograd/evaluation/tier3/workloads/olmoe_1b_7b/`. How to run
 everything: `docs/OLMOE_1B_7B.md`.
 
 ## Not yet done

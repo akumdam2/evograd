@@ -17,7 +17,7 @@ The benchmark uses dense embedding gradients and AdamW. It does not implement
 TorchRec distributed sharding or its fused sparse optimizer, so results should
 be described as a single-device architecture workload.
 
-## Real-input identity check
+## Real input
 
 Install the benchmark runtime with `pip install -e ".[dlrm]"`. From the
 repository root, run:
@@ -42,52 +42,25 @@ categorical ID modulo its table size, as TorchRec's in-memory loader does.
 
 The source is the labeled first half of `train`, excluding the half TorchRec
 uses for its test stage. `data_seed` selects distinct rows deterministically.
-Calibration and evaluation use disjoint fixed batches. The prepared artifact
-records selected row IDs, the source-row digest, file metadata, and the mapping
-policy; its file hash is bound into calibration. No pretrained checkpoint is
-needed for structural identity because both providers start from the same
-seeded weights. The 100,000-row tables make this a capped-cardinality Criteo
+The prepared artifact records selected row IDs, the source-row digest, file
+metadata, and the mapping policy. The 100,000-row tables make this a capped-cardinality Criteo
 workload, not TorchRec's full-cardinality distributed benchmark.
 
 ```bash
 ls data/torchrec_dlrm/processed/train_{dense,sparse,labels}.npy
-mkdir -p results/torchrec_dlrm
-python -m evograd.evaluation.tier3.workloads.common.generated.gate \
-  --model torchrec_dlrm \
-  --config src/evograd/benchmark/topdown/torchrec_dlrm/benchmark.json \
-  --real-input \
-  --sites embedding_bag,dlrm_interaction --steps 5 \
-  --out results/torchrec_dlrm/real_calibration.json
-
-python -m evograd.evaluation.tier3.cli \
-  --model torchrec_dlrm --real-input \
-  --calibration results/torchrec_dlrm/real_calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --baseline none --out results/torchrec_dlrm/real_identity.json
 ```
 
 Harvest can use `--real-input`; prepared batches live under
 `data/torchrec_dlrm/batches/` by default.
 Real-input harvests do not publish the generated-input canonical snapshot.
 
-## Canonical generated-input identity check
+## Canonical generated-input harvest
 
 ```bash
 python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.harvest \
   --out results/torchrec_dlrm/harvest.json --write-snapshot
-
-python -m evograd.evaluation.tier3.workloads.common.generated.gate \
-  --model torchrec_dlrm \
-  --config src/evograd/benchmark/topdown/torchrec_dlrm/benchmark.json \
-  --sites embedding_bag,dlrm_interaction --steps 5 \
-  --out results/torchrec_dlrm/calibration.json
-
-python -m evograd.evaluation.tier3.cli --model torchrec_dlrm \
-  --calibration results/torchrec_dlrm/calibration.json \
-  --structural-identity --providers eager,structural_identity \
-  --baseline none --out results/torchrec_dlrm/identity.json
 ```
 
 For a reduced check, supply a JSON configuration that lowers the number and
-size of embedding tables. Pass it to harvest and gate with `--config`, and to
-Tier 3 with `--model-config`. Omit `--write-snapshot` for a reduced run.
+size of embedding tables. Pass it to harvest with `--config` and omit
+`--write-snapshot`.

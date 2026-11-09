@@ -100,89 +100,21 @@ group plan are not changed. A compatible successful baseline-only report is
 reused; `--force` remeasures it. The report is separate evidence and does not
 retroactively create paired confidence intervals against old candidate runs.
 
-Tier 1 is used during search and for standalone pair diagnostics; it is not a
+Tier 1 is used during search; it is not a
 final benchmark metric. Formal Tier 2 results use the `tier2` settings, cache
 and JSON fields. `summarize` requires v3 results: v1 timed Tier 1 and v2 timed
 generated inputs; both must be reevaluated, not relabeled.
-
-The standalone commands below (`tier1-bench`, `tier2-bench`, `tier3-bench`,
-`suite`) remain diagnostics. Their admission rules and timing defaults are
-separate from `evograd evaluate` above.
-
-## Standalone tier diagnostics
-
-**Tier 2 checks an operator before timing it. Tier 3 measures the operator
-inside the whole model's training step, recording numerical differences
-alongside performance.**
-
-For end-to-end research runs, use `--numerical-enforcement report-first`:
-finite numerical mismatches do not stop training. Structural errors, missing
-gradients, nonfinite values and runtime failures still do.
-
-See the [Qwen/Llama results](../../../docs/experiments/benchmark_run_20260917.md)
-for the latest measurements and their limits.
 
 ## What each tier measures
 
 | Tier | Measured work |
 | --- | --- |
-| T1 | Call the forward/backward pair directly; search and standalone diagnostics |
+| T1 | Call the forward/backward pair directly; search feedback |
 | T2 | Run one operator's deployed forward and autograd backward, without an optimizer; the formal L1/L2 metric |
 | T3 | Run the full model: forward/loss, backward, AdamW update and gradient reset |
 
 Levels describe tasks: L1 primitive, L2 composite operator, L3 whole model.
 An L2 candidate can be evaluated at T2 and installed in the T3 model.
-
-## Standalone Tier 2: keep the declared correctness rules
-
-Each provider receives identical generated inputs and copied weights. The
-reference, or **oracle**, is the declared PyTorch forward differentiated with
-`torch.autograd.grad`. The candidate runs through its deployment module;
-PyTorch autograd produces the activation and parameter gradients.
-
-Every declared output and requested gradient is compared elementwise:
-
-```text
-abs(candidate - oracle) <= atol(workload, result) + rtol(workload, result) * abs(oracle)
-```
-
-The declaration supplies the tolerances, result multipliers and optional
-shape-dependent hook. They are not selected from the candidate's error.
-Some tasks use [ReductionScaledAtol](../opdecl/tolerance.py):
-
-```text
-raw = sqrt(N / N_anchor) * sqrt(log(M) / log(M_anchor))
-atol = base_atol * result_multiplier * (1 + gain * max(0, raw - 1))
-```
-
-`N` is the declared reduction extent and `M` the result element count; `rtol`
-is unchanged. This is an empirical per-task rule, not a universal error bound.
-For Qwen attention output, the element-count scaling raises `atol` from `0.01`
-to about `0.019451` at the target shape, while `rtol` stays `0.01`.
-
-Failed checks prevent T2 timing. `verify` and `tier2-bench` default explicitly
-to `declared`, independently of Tier-3 settings. The offline alternative-budget experiments are not part of this workflow.
-
-**`evograd verify` is a direct-pair grid check, not a target-shape Tier-2 run.**
-Use `tier2-bench` to check and time the deployment module:
-
-```bash
-evograd tier2-bench --op qwen3_attention --candidate candidate.py \
-  --suite qwen3_0_6b_observed --baseline none --dtype bfloat16 \
-  --out results/qwen_attention_t2.json
-```
-
-Llama's suite is `llama_3_2_1b_observed`. Select the suite explicitly when a task
-also has a generic grid. Eager uses the task's runtime implementation, compile
-compiles that provider, and both are timed baselines—not extra acceptance gates.
-The oracle can differ from the efficient runtime implementation, notably SDPA.
-
-The standalone `tier2-bench` timing uses `measure_module` and
-`triton.testing.do_bench`: forward and forward+backward, 25 ms warmup and 500 ms measurement budgets by default,
-with median and 20/80 percentiles. Providers normally run in separate processes.
-Activation gradients are reset between training samples; parameter gradients
-accumulate. Older report headers may contain obsolete fixed-repetition fields;
-the current report identifies the actual `do_bench` driver.
 
 ## Unified seed admission and evolution
 
@@ -194,48 +126,13 @@ checks, native autograd deployment checks, and the numerical variants in
 Variants include reproducible input-factory reseeds, independent upstream
 gradients, and eligible activation stress inputs. Invalid stress references are
 reported separately and do not count as passes. Tolerances still come from the
-declaration. `evograd verify` remains the direct-pair grid check described above.
+declaration.
 
 Evolution loads that scoped declaration and pins `unified_contract.json`
 outside generated candidates through `EVOGRAD_UNIFIED_CONTRACT_PATH`. It checks
 fixed provider/deployment code and preserved call sites, then counts actual
 external-library calls in forward and backward. Unified numerical variants
 must pass before timing. NCU refinement inherits the same declaration and gates.
-
-## Standalone Tier 3: record differences and continue evaluation
-
-Select `report-first` explicitly; the CLI default remains `strict`.
-
-| Finding | Strict | Report-first |
-| --- | --- | --- |
-| Finite numerical mismatch | Stop | Record and continue |
-| Missing comparison or unbound policy | Stop | Continue, marked incomplete |
-| Contract, permission, coverage or purity failure | Stop | Stop |
-| Nonfinite value or runtime failure | Stop | Stop |
-
-All executable checks still run. This is not `--no-verify`, and a mismatch is
-never converted to a numerical pass. Read these results separately:
-
-- **Execution:** did checking, training and timing finish?
-- **Numerical agreement:** which outputs or gradients exceeded their limits?
-- **Completeness:** were all required comparisons available?
-- **Training and performance:** loss behavior, step time, throughput and memory.
-
-In JSON, `ok` means admission under the selected mode. `numerical_status`
-describes agreement; `evaluation_complete` identifies missing comparisons.
-A row can have both recorded mismatches and incomplete evaluation.
-
-T3 checks the replacement sites, actual call counts, purity, local outputs and
-gradients, then whole-model results. Native execution is the reference.
-Local comparisons use the same live inputs and incoming gradients. Frozen
-policies supply any additional numerical limits and must match the case,
-environment and patch set. Compile-relative Tier-2 gates and extra diagnostic
-backends are not added to normal evaluation.
-
-Keep every failed tensor/invocation in the detailed report: layer, tensor,
-reference, rule, limits, max error, relative L2, violation count and representative
-elements with actual/reference values. A maximum absolute error is not always
-the element that violates its tolerance most strongly.
 
 ## Where shapes, inputs and gradients come from
 
@@ -245,7 +142,7 @@ Read the case's provenance, not just its suite name.
 
 | Scope | Inputs | Outputs and reference gradients |
 | --- | --- | --- |
-| T1, standalone T2 operator | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
+| T1 | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
 | Formal T2 (`evograd evaluate`) | The verification corpus's recorded calls of the case in one training step: arguments, weights and output gradients | Candidate and every baseline on copies of the same calls; correctness is the gates' |
 | L2 real invocation (captured layer) | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
 | L2 real invocation (config-derived layer) | Seeded layer, inputs and external gradients | Native layer on that case |
@@ -292,32 +189,15 @@ attention), BF16, `B=1`, `T=2048`. Its seven L2 sites, their contracts and
 calibrated tolerances are described in [docs/QWEN3_5_4B.md](../../../docs/QWEN3_5_4B.md)
 and [the package README](../benchmark/topdown/qwen3_5_4b/README.md).
 
-## Running Tier 3 and reading its timings
+## Reading Tier 3 timings
 
-Example:
-
-```bash
-evograd tier3-bench --model qwen3_0_6b --real-text \
-  --whole-model-compile --baseline none --patch-set ours:attention=candidate.py \
-  --numerical-enforcement report-first \
-  --protocol4-calibration policy.json --protocol4-verdict holdout.json \
-  --warmup 5 --blocks 5 --steps 20 --out results/qwen_model.json
-```
-
-Policy and holdout files must match the workload/candidate. Whole-model timing
-includes forward/loss, backward, AdamW and gradient reset. It reports the median
-per-step wall time across synchronized timing blocks. Loading, compilation and
-checks are excluded; L2 is not flushed within a training step.
-
-The command above is **not** a 200-step training study. The latest experiment
-ran that separately through the shared [training loop](tier3/gate/training.py),
-resetting state and evaluating trained weights with the native model at steps
-0/50/100/200. Short loss agreement does not establish long-term equivalence.
+Whole-model timing includes forward/loss, backward, AdamW and gradient reset.
+It reports the median per-step wall time across synchronized timing blocks.
+Loading, compilation and checks are excluded; L2 is not flushed within a
+training step. Short loss agreement does not establish long-term equivalence.
 
 Report speedup as baseline time / candidate time. Separate execution memory
-from allocations retained by numerical checking. Unpatched eager/whole-model
-compile currently bypass the standard model gate; separate numerical measurements
-do not automatically make their policy-based evaluation complete.
+from allocations retained by numerical checking.
 
 Further details: [Qwen usage](../../../docs/QWEN3_LEVEL3.md),
 [result storage](../../../docs/RESULTS_LAYOUT.md).

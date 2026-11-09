@@ -309,7 +309,7 @@ class TestLigerSuiteMigration(unittest.TestCase):
         self.assertEqual(get_task("cross_entropy").memory_input_names(), ("logits",))
 
     def test_no_task_declares_a_liger_baseline(self):
-        """Liger was retired to ``evograd.legacy.liger``; nothing registers it."""
+        """Liger was retired; nothing registers it."""
         self.assertFalse(
             [name for name, op in TASKS.items() if "liger" in op.performance_baselines]
         )

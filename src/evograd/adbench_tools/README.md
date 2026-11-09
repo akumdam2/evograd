@@ -499,9 +499,7 @@ driver calls it at the end unless told `--no-score`):
    - accepted, correct, `combined_score`;
    - speedups, forward/backward/full-step times, saved and input bytes;
    - primitives used;
-   - the run summary;
-   - `follow_up` commands for Tier 2 (`evograd tier2-bench`, the operator's
-     declared benchmark cases) and Tier 3 (`--patch-set agent:<site>=…`).
+   - the run summary.
 
 `python -m evograd.adbench_tools compare R/*/final.json` writes one Markdown
 table, sorted by `combined_score`, with columns:
@@ -588,8 +586,7 @@ existing fair timer (warmup 10, repetitions 50, 3 blocks) on the same inputs:
 every recorded call of the case in the acceptance order-303 training step of
 the verification corpus, each provider on its own layout-exact copy, with the
 speedup the ratio of per-call medians summed over the step. Real-payload gates
-determine correctness separately; the standalone `tier2-bench` declared-input
-gate and timer are not substituted into this protocol. T1 is search feedback
+determine correctness separately. T1 is search feedback
 or an independent pair diagnostic, not the formal eager/compile result.
 
 Gate 3 controls and Gate 2 calibrations live in `$ADBENCH_ROOT/<model>/state`,

@@ -16,7 +16,13 @@ from evograd.benchmark.core.report import (
     SuiteReport,
     TaskResult,
 )
-from evograd.evaluation.common.benchmark import task_from_benchmark_report
+from evograd.benchmark.core.report import task_from_report
+from evograd.evaluation.common.report import from_harness_report
+
+
+def task_from_benchmark_report(op_name, level, family, report):
+    """A harness report as one aggregation row."""
+    return task_from_report(from_harness_report(op_name, report), level=level, family=family)
 
 
 def _case(speedup, ok=True, dims=None):

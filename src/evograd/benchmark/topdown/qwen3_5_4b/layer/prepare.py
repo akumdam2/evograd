@@ -330,7 +330,7 @@ def recipe(arch: Mapping[str, Any], layer_index: int, *, seed: int) -> dict[str,
     }
 
 
-# ── the replay half (read by evaluation.workloads.common.replay) ─────────────
+# ── the replay half ──────────────────────────────────────────────────────────
 
 
 def validate_noise_repeats(value: Any) -> int:

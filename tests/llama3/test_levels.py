@@ -344,23 +344,6 @@ class TestLevel1Mapping(unittest.TestCase):
             set(OPERATORS), {binding.task for binding in OBSERVED_BINDINGS}
         )
 
-    def test_the_level_one_evaluation_side_imports(self):
-        """Every module the Level-1 command is built from, actually imported.
-
-        ``compileall`` cannot see this: each of these names is resolved at
-        import time from a *different* package, and the split that moved the
-        verdict functions to :mod:`evograd.evaluation` is exactly the kind of
-        move that leaves one of them behind. Importing them is the only check
-        that the two halves still fit together.
-        """
-        import importlib
-
-        for module in ("verify", "calibrate", "cli"):
-            with self.subTest(module=module):
-                importlib.import_module(
-                    f"evograd.evaluation.workloads.llama3_2_1b.level1.{module}"
-                )
-
     def test_the_mapping_refuses_by_name_until_the_harvest_is_run(self):
         """No snapshot means no report -- not an empty one.
 
@@ -433,18 +416,9 @@ class TestLevel3Package(unittest.TestCase):
         from evograd.benchmark.topdown.qwen3_0_6b.layer import (
             artifact as qwen_artifact,
         )
-        from evograd.evaluation.workloads.llama3_2_1b.layer import replay
 
         self.assertIn("llama3", artifact.SCHEMA_VERSION)
-        self.assertIn("llama3", replay.REPORT_SCHEMA)
         self.assertNotEqual(artifact.SCHEMA_VERSION, qwen_artifact.SCHEMA_VERSION)
-
-    def test_replay_builds_one_decoder_layer_and_nothing_above_it(self):
-        from evograd.evaluation.workloads.llama3_2_1b.layer import replay
-
-        live = replay.live_model_instances()
-        self.assertIn("LlamaForCausalLM", live)
-        self.assertIn("LlamaDecoderLayer", live)
 
 
 class TestUnharvestedStagesRefuseByName(unittest.TestCase):
@@ -464,13 +438,6 @@ class TestUnharvestedStagesRefuseByName(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("harvest.harvest", message)
         self.assertIn("harvest.snapshot", message)
-
-    def test_the_tier3_gate_names_the_calibration_command(self):
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import gate
-
-        with self.assertRaises(gate.CalibrationUnavailable) as caught:
-            gate.load_policy()
-        self.assertIn("calibrate", str(caught.exception))
 
 
 if __name__ == "__main__":

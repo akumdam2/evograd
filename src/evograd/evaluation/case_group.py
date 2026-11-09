@@ -113,7 +113,7 @@ def evaluate_group(plan, *, deadline, tier3_options=None, model=None, log=print,
         return row
 
     def report(raw, order, path):
-        assembled = assemble_report(baseline_run.workload, raw, order, verify=False,
+        assembled = assemble_report(baseline_run.workload, raw, order,
                                     isolation="one spawned process per provider; shared model baselines", **t3)
         assembled["group_execution"] = GROUP
         _write(path, assembled)

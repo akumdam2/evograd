@@ -25,7 +25,7 @@ orthogonal.
 ```text
 benchmark/
 ├── core/                 task registry and cross-task aggregation
-├── operator_suite/       implementation-neutral selection and suite CLI
+├── operator_suite/       the primitives' performance grids
 └── topdown/
     ├── common/           harvest, snapshot, smoke, and workload facilities
     ├── qwen3_0_6b/       the Qwen3-0.6B L3-to-L1 path
@@ -76,10 +76,8 @@ case collection has exactly one owner. That is why `evograd.ops` reaches
 neither a snapshot nor a model configuration table, and why importing it in a
 fresh interpreter loads no benchmark module at all.
 
-The suite *command* is not here either. `evograd suite` asks the benchmark what
-to run and evaluation to run it, which is composition rather than definition,
-so it lives at the root in `evograd.suite_cli`. Nothing under `benchmark`
-imports `evaluation`, and the dependency-direction test carries no exemption.
+Nothing under `benchmark` imports `evaluation`, and the dependency-direction
+test carries no exemption.
 
 Reviewed pair baselines (`megafold_pair.py`) stay beside the primitive whose
 contract they implement. That is deliberate:
@@ -99,9 +97,8 @@ change the inputs generated for the provenance-free correctness cases. It is
 declaration infrastructure rather than a benchmark manifest, so importing the
 primitives still loads no benchmark package and no frozen snapshot.
 
-L3 workloads are evaluated through Tier-3 workload adapters
-(`evograd tier3-bench --model <name>`): the whole training step, with candidate
-kernels patched into their sites. They are `WorkloadDecl`s, never `OpDecl`s.
+L3 workloads are evaluated by `evograd evaluate <model>` at Tier 3: the whole
+training step, with candidate kernels patched into their sites. They are `WorkloadDecl`s, never `OpDecl`s.
 
 ## Two benchmark families
 

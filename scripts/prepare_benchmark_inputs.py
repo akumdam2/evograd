@@ -80,7 +80,7 @@ def _hf_sources(benchmark: str, cache_dir: str | None) -> None:
         _dataset_file()
         _vae_path()
     elif benchmark == "qwen3_0_6b":
-        from evograd.evaluation.tier3.workloads.qwen3_0_6b.protocol4_cli import PRETRAINED
+        from evograd.verification.integrations.qwen3_0_6b.capture import PRETRAINED
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.textdata import (
             DATASET_CONFIG, DATASET_REPO, DATASET_REVISION, dataset_file,
         )

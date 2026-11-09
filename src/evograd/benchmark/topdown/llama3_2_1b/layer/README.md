@@ -4,7 +4,7 @@ The benchmark has three levels: L1 primitive, L2 composite, L3 the whole
 training step. This package is none of them: it captures one decoder layer
 (weights, call arguments, outputs, upstream gradient, reference gradients) so
 the Level-2 boundaries can be derived and checked against the tensors the real
-model produced, and replays it to prove the capture is faithful.
+model produced.
 
 ## The whole-layer declaration was removed
 
@@ -86,7 +86,6 @@ replayed alone.
 | `artifact.py` | the replay format, and its two hashes |
 | `capture.py` | hooks one `LlamaDecoderLayer` during the canonical run and writes it |
 | `prepare.py` | rebuilds the layer from the artifact, ready to be run |
-| `replay.py` | reruns that layer alone, in a fresh process, and checks it against the full model — **now `evograd.evaluation.workloads.llama3_2_1b.layer.replay`**, because deciding whether the replay agrees is a verdict |
 
 ### `capture.py`
 
@@ -131,40 +130,12 @@ tracked snapshot — and **takes no argument that turns any of that off**. A
 consumer cannot accidentally build a Level-2 task on a debug capture, or on the
 right numbers with the wrong label.
 
-### `replay.py`
-
-Constructs exactly one `LlamaDecoderLayer`. It never builds `LlamaModel` or
-`LlamaForCausalLM`, and the report proves it by scanning the live heap with
-`gc` for instances of those classes rather than asserting it in prose — "no
-such object is alive" is stronger evidence than "we did not call the
-constructor".
-
-The layer is given the captured weights and arguments, run forward, then
-backward with the *real* upstream gradient the full-model backward delivered.
-Output, input gradient and every parameter gradient are compared against what
-the full model produced.
-
-**Tolerances are stated, not tuned.** BF16 carries a 7-bit explicit mantissa,
-so machine epsilon near 1.0 is `2^-7` and the unit roundoff is `2^-8`. The
-forward path is deterministic and is held to one unit roundoff. Backward is
-not: SDPA's backward accumulates with atomics, so a rerun of the same layer
-differs from itself. That noise is **measured** — `--noise-repeats` replays
-several times and compares the replays to each other — and reported next to the
-replay-versus-capture error, so the reader can see which is larger.
-
-Errors are relative to the scale of the reference tensor (`max|a-b| / max|b|`)
-rather than elementwise.
-
 ## Running it
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.layer.capture \
     --harvest results/llama3-level3/harvest.json \
     --out results/llama3-level3/layer16.pt
-
-PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.layer.replay \
-    --artifact results/llama3-level3/layer16.pt \
-    --report results/llama3-level3/layer16-replay.json
 ```
 
 `--layer` defaults to 16; the JSON sidecar defaults to `--out` with a `.json`

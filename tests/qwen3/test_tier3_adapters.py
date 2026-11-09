@@ -48,7 +48,7 @@ if HAVE_TRANSFORMERS:
         qwen3_sites,
         structural_identity_kernels,
     )
-    from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import MODEL_KEY, Qwen3Workload
+    from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
 
 #: Two layers, narrow, tiny vocabulary. Everything a CPU test needs and nothing
 #: it does not: the architecture's *shape* is what the adapters wire into.
@@ -154,23 +154,6 @@ class TestWorkloadIdentityAndSerialization(unittest.TestCase):
         with self.assertRaises(WorkloadSpecError):
             _workload().spec.replace(use_cache=True)
 
-    def test_the_cli_knows_the_model_and_rebuilds_it_from_argv(self):
-        from evograd.evaluation.tier3.cli import MODELS, _parser, build_workload
-
-        self.assertIn(MODEL_KEY, MODELS)
-        args = _parser().parse_args(
-            ["--model", MODEL_KEY, "--device", "cpu", "--dtype", "float32",
-             "--layers", "2", "--data-seed", "5"]
-        )
-        workload = build_workload(args)
-        self.assertIsInstance(workload, Qwen3Workload)
-        self.assertEqual(workload.data_seed, 5)
-        self.assertEqual(workload.spec.arch["num_hidden_layers"], 2)
-        # The canonical batch and sequence survive: a CLI default would have
-        # replaced them and changed the workload's identity.
-        self.assertEqual(workload.spec.batch_size, 2)
-        self.assertEqual(workload.spec.seq_len, 2048)
-
 
 @_skip
 class TestRegistryOwnership(unittest.TestCase):
@@ -218,43 +201,65 @@ class TestStructuralIdentity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from evograd.evaluation.tier3.workloads.qwen3_0_6b.validate import compare_full_model
-
         workload = _workload()
-        cls.report = compare_full_model(
-            workload,
-            structural_identity_kernels(workload.site_registry),
-            label="structural_identity",
-        )
-
-    def test_the_whole_model_is_bitwise_identical(self):
-        self.assertEqual(self.report["gate"], "bitwise")
-        self.assertTrue(self.report["ok"], self.report["checks"])
+        batch = workload.batch_for(seed=0)
+        cls.reference = _full_step(workload, _eager(workload), batch)
+        cls.candidate = _full_step(
+            workload, structural_identity_kernels(workload.site_registry), batch)
 
     def test_logits_and_loss_are_bitwise(self):
-        for check in self.report["checks"]:
-            with self.subTest(result=check["name"]):
-                self.assertTrue(check["bitwise"])
-                self.assertTrue(check["metadata_match"])
-                self.assertTrue(check["finite"])
+        for name in ("logits", "loss"):
+            got, expected = self.candidate[name], self.reference[name]
+            with self.subTest(result=name):
+                self.assertEqual((got.dtype, got.shape, got.stride()),
+                                 (expected.dtype, expected.shape, expected.stride()))
+                self.assertTrue(bool(torch.isfinite(got).all()))
+                self.assertTrue(torch.equal(got, expected))
 
     def test_every_parameter_gradient_matches_with_full_coverage(self):
-        coverage = self.report["gradient_coverage"]
-        self.assertEqual(coverage["mismatched"], [])
-        self.assertEqual(coverage["candidate_missing"], [])
-        self.assertEqual(coverage["reference_missing"], [])
-        self.assertGreater(coverage["compared"], 0)
+        self.assertEqual(self.reference["missing_grads"], [])
+        self.assertEqual(self.candidate["missing_grads"], [])
+        self.assertEqual(sorted(self.candidate["grads"]), sorted(self.reference["grads"]))
+        self.assertGreater(len(self.reference["grads"]), 0)
+        mismatched = [name for name, expected in self.reference["grads"].items()
+                      if not torch.equal(self.candidate["grads"][name], expected)]
+        self.assertEqual(mismatched, [])
 
     def test_one_optimizer_step_lands_on_the_same_parameters(self):
-        self.assertEqual(self.report["optimizer_step"]["mismatched"], [])
-        self.assertEqual(self.report["optimizer_step"]["optimizer"], "AdamW")
+        mismatched = [name for name, expected in self.reference["stepped"].items()
+                      if not torch.equal(self.candidate["stepped"][name], expected)]
+        self.assertEqual(mismatched, [])
 
     def test_the_inputs_were_not_mutated(self):
-        self.assertTrue(self.report["inputs_unmutated"])
+        self.assertTrue(self.candidate["inputs_unmutated"])
 
     def test_the_state_dict_is_the_same_dict(self):
-        self.assertTrue(self.report["state_dict_keys_identical"])
-        self.assertTrue(self.report["parameter_count"]["identical"])
+        self.assertEqual(self.candidate["state_dict_keys"], self.reference["state_dict_keys"])
+        self.assertEqual(self.candidate["param_count"], self.reference["param_count"])
+
+
+def _full_step(workload, kernels, batch, learning_rate=1e-4):
+    """One forward, one backward, one AdamW step; what a structural comparison reads."""
+    model, _ = workload.build_patched(kernels)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    input_ids, labels = batch
+    before = input_ids.detach().clone()
+    outputs = model(input_ids=input_ids, labels=labels, use_cache=False)
+    outputs.loss.backward()
+    grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()
+             if p.grad is not None}
+    missing = [n for n, p in model.named_parameters() if p.grad is None]
+    optimizer.step()
+    return {
+        "logits": outputs.logits.detach().clone(),
+        "loss": outputs.loss.detach().clone(),
+        "grads": grads,
+        "missing_grads": missing,
+        "stepped": {n: p.detach().clone() for n, p in model.named_parameters()},
+        "state_dict_keys": list(model.state_dict()),
+        "param_count": sum(p.numel() for p in model.parameters()),
+        "inputs_unmutated": bool(torch.equal(input_ids, before)),
+    }
 
 
 @_skip

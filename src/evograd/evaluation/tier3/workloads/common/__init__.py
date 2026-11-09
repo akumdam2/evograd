@@ -1,1 +1,1 @@
-"""Shared whole-model evaluation adapters."""
+"""Shared whole-model workloads."""

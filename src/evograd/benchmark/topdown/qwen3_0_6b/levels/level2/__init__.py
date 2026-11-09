@@ -6,7 +6,7 @@ place the site names, task keys, frequencies and module paths are written down;
 everything else reads them from there or from the frozen harvest snapshot.
 
 Judging an implementation of one of these contracts is not done here -- that
-belongs to :mod:`evograd.evaluation.workloads.qwen3_0_6b.level2`.
+belongs to :mod:`evograd.verification`.
 """
 
 from .manifest import SITES, SITE_TASKS, TASKS, task_key

@@ -142,12 +142,10 @@ NO_SITES = SiteRegistry(name="unspecified", sites=())
 class KernelSource:
     """Where one patched site's kernel came from.
 
-    Carried so the runner can do two things the callable alone cannot support:
-    **preflight** it through the tier-1 correctness gate before any of it is
-    timed, and **report** what was actually patched in. ``module`` is the
-    forward/backward pair as ``lookup_pair`` accepts it -- ``None`` for a plain
-    callable that no declaration governs, which is then unverifiable and says
-    so rather than being quietly waved through.
+    Carried so the runner can **report** what was actually patched in, which
+    the callable alone cannot support. ``module`` is the forward/backward pair
+    as ``lookup_pair`` accepts it -- ``None`` for a plain callable that no
+    declaration governs.
     """
 
     site: str

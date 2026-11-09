@@ -3,22 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the live
 model, which tensors cross it, in which layout, and whether what was captured
 still matches the frozen harvest. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.qwen3_0_6b.level2.residual_rmsnorm`.
-
-Derive and verify ``fused_add_rms_norm`` from the canonical Layer-14 artifact.
-
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm derive \
-        --source results/qwen3-level3/layer14.pt \
-        --metadata-out results/qwen3-level3/layer14-residual.json
-
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm verify \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/layer14-residual-verify.json
-
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm calibrate \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/fused_add_rms_norm-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 ``layer14.pt`` stays the only tensor artifact; the boundary is re-derived by
 replaying the layer and hooking it, and only JSON is written.

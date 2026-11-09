@@ -4,8 +4,7 @@ Two halves. The first needs nothing but the tracked snapshot -- no GPU, no
 Transformers, no ``results/`` directory -- because that is the whole point of
 freezing a snapshot: a declaration whose shapes came from a real training step
 must still import and be checkable on a machine that has never run one. The
-second extracts a real ``Qwen3MLP`` invocation from a tiny replay and checks the
-declaration's reference against it.
+second extracts a real ``Qwen3MLP`` invocation from a tiny captured layer.
 """
 
 from __future__ import annotations
@@ -43,7 +42,6 @@ if HAVE_TRANSFORMERS:
         declaration_problems,
         derive_mlp_invocation,
     )
-    from evograd.evaluation.workloads.qwen3_0_6b.level2.swiglu_mlp import run_verify
 
 
 class TestSnapshot(unittest.TestCase):
@@ -104,10 +102,9 @@ class TestSnapshot(unittest.TestCase):
         A declaration reaches the first at import time, so a heavy import in
         *either* would break every operator on a machine without a GPU.
 
-        Checked by AST rather than by blocking the modules in a subprocess, since
-        ``evograd/__init__.py`` imports ``evograd.api`` and therefore torch for
-        any ``evograd.*`` import at all -- a repository-wide property that has
-        nothing to do with this file.
+        Checked by AST rather than by blocking the modules in a subprocess, so
+        the check is about these modules' own imports and not about whatever an
+        ``evograd.*`` import happens to pull in.
         """
         import ast
 
@@ -421,7 +418,7 @@ class TestTimedBaselineAndGate(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
 class TestExtractionAndVerification(unittest.TestCase):
-    """A real MLP invocation, taken from a real (tiny) layer replay."""
+    """A real MLP invocation, taken from a real (tiny) captured layer."""
 
     @classmethod
     def setUpClass(cls):
@@ -523,85 +520,6 @@ class TestExtractionAndVerification(unittest.TestCase):
         derived from."""
         with self.assertRaises(ArtifactError):
             derive_mlp_invocation(self.layer_path, device="cpu")  # canonical snapshot
-
-    def test_the_reference_reproduces_the_captured_invocation(self):
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=2, snapshot_path=self.snapshot_path
-        )
-        self.assertEqual(report["status"], "pass", report["failures"])
-        self.assertTrue(report["provenance_validated"])
-        comparisons = report["comparisons"]
-        for name in ("output", "grad_input"):
-            with self.subTest(quantity=name):
-                record = comparisons[name]
-                self.assertTrue(record["within_tolerance"], record)
-                self.assertTrue(record["shape_match"])
-                self.assertTrue(record["dtype_match"])
-                self.assertTrue(record["stride_match"])
-                self.assertTrue(record["actual_all_finite"])
-                self.assertTrue(record["expected_all_finite"])
-        for name, record in comparisons["weight_grads"].items():
-            with self.subTest(gradient=name):
-                self.assertTrue(record["within_tolerance"], record)
-        self.assertEqual(sorted(comparisons["weight_grads"]), ["down_weight", "gate_weight", "up_weight"])
-
-    def test_the_bf16_spelling_reproduces_the_capture_exactly(self):
-        """The wiring check. The declared reference upcasts to float32 and the
-        model does not, so only this comparison can be held to a rounding-level
-        tolerance -- and a wrong weight mapping or a missing transpose would
-        break it."""
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=0, snapshot_path=self.snapshot_path
-        )
-        hf = report["hf_spelling_comparisons"]
-        self.assertTrue(hf["output"]["within_tolerance"], hf["output"])
-        self.assertTrue(hf["grad_input"]["within_tolerance"], hf["grad_input"])
-        for name, record in hf["weight_grads"].items():
-            with self.subTest(gradient=name):
-                self.assertTrue(record["within_tolerance"], record)
-
-    def test_the_two_comparisons_use_separately_justified_tolerances(self):
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=0, snapshot_path=self.snapshot_path
-        )
-        tolerances = report["tolerances"]
-        self.assertIn("declared_reference", tolerances)
-        self.assertIn("hf_spelling", tolerances)
-        # The declaration's gate is an (atol, rtol) pair, not a single number,
-        # and it is looser than the replay's, and says why.
-        atol, rtol = tolerances["declared_reference"]["values"]["output"]
-        self.assertGreater(atol, tolerances["hf_spelling"]["forward"])
-        self.assertGreater(rtol, 0.0)
-        self.assertIn("float32", tolerances["declared_reference"]["why"])
-        self.assertIn("same computation", tolerances["hf_spelling"]["why"])
-
-    def test_the_declared_gate_is_the_harness_gate(self):
-        """The verdict is ``allclose`` at the declared tolerance, not a
-        scale-normalized proxy that could accept what the harness rejects."""
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=0, snapshot_path=self.snapshot_path
-        )
-        record = report["comparisons"]["output"]
-        self.assertIn("allclose", record)
-        self.assertIn("required_t", record)
-        self.assertLessEqual(record["required_t"], record["declared_base"])
-        self.assertTrue(record["allclose"])
-
-    def test_the_verification_measures_noise(self):
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=3, snapshot_path=self.snapshot_path
-        )
-        noise = report["noise_floor"]
-        self.assertTrue(noise["measured"])
-        self.assertEqual(noise["repeats"], 3)
-        self.assertIn("weight_grads", noise)
-
-    def test_the_verification_also_reports_the_hf_spelling(self):
-        report = run_verify(
-            self.payload, device="cpu", noise_repeats=0, snapshot_path=self.snapshot_path
-        )
-        self.assertIn("hf_spelling_comparisons", report)
-        self.assertIn("output", report["hf_spelling_comparisons"])
 
     def test_a_second_mlp_call_inside_one_extraction_is_refused(self):
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp.capture import capture_mlp

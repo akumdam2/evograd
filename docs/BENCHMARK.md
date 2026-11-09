@@ -9,8 +9,8 @@ describe how an implementation is executed.
 | L2 | Composite operator | QKV + normalization + RoPE, SwiGLU MLP |
 | L3 | Whole model | Model forward, loss, backward and optimizer step |
 
-L3 is measured by Tier 3 (`evograd tier3-bench --model <name>`): loss,
-backward, AdamW and gradient reset. The decoder layer a model's
+L3 is measured by Tier 3 (`evograd evaluate <model> ...`): loss, backward,
+AdamW and gradient reset. The decoder layer a model's
 L2 sites take their real invocations from is a data source
 (`topdown/<model>/layer`), not a level.
 
@@ -37,14 +37,13 @@ projection, SwiGLU MLP and residual RMSNorm share reference computations but
 have different model dimensions. Qwen's QKV task additionally includes Q/K
 normalization.
 
-The L3 adapters build the whole model and install providers at their declared
-sites on every layer. They are registered through `TIER3_ADAPTERS`; they are not
+The L3 workloads (`evaluation/tier3/workloads`) build the whole model and
+install providers at their declared sites on every layer; they are not
 monolithic `OpDecl` kernels. L1/L2 tasks remain in `benchmark.TASKS`.
 
 - `benchmark/operator_suite/` is the implementation-neutral operator suite. It
   owns the primitives' performance grids and aggregates by family and Level.
-  Every Level-2 task belongs to a model. Liger is not a baseline; its former
-  adapters are under `src/evograd/legacy/liger/`.
+  Every Level-2 task belongs to a model. Liger is not a baseline.
 - `benchmark/topdown/` starts from whole-model execution, harvest, and frozen
   snapshots. It contains one package per model (`qwen3_0_6b`, `llama3_2_1b`,
   `qwen3_5_4b`, `olmoe_1b_7b`, `convnextv2_tiny`, `qwen2_vl_2b`, `dit_s_2`,
@@ -185,17 +184,7 @@ the root:
 
 ```bash
 git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold
-PYTHONPATH=/path/to/MegaFold:src python -m evograd.evaluation.tier3.cli \
-    --model megafold_2l --residues 128 --baseline none
-```
-
-Before a first tier-3 run, `scripts/smoke_megafold.py` builds each provider,
-runs one forward and backward, and prints the loss, peak memory and step time.
-It runs no part of the tier-3 protocol, so nothing it prints is a measurement
-to quote; it answers whether the thing runs at all.
-
-```bash
-PYTHONPATH=/path/to/MegaFold:src python scripts/smoke_megafold.py
+export PYTHONPATH=/path/to/MegaFold:src
 ```
 
 Without MegaFold the task reports as uncovered, which is what every unmet
@@ -212,11 +201,9 @@ enough to iterate on. Iterate on it; report from `megafold`.
 
 ## Registries
 
-Correctness comparisons run before timing. Tier 2 and Tier-3 `strict` reject
-failed checks before timing. Tier-3 `report-first` records finite numerical
-mismatches and continues to end-to-end measurement; unavailable comparisons
-remain explicitly incomplete. Structural and execution failures still stop
-providers. A timing result is not a numerical correctness verdict.
+Correctness is judged by the verification package's Gates 1/2/3 on real
+payloads, separately from timing. A timing result is not a numerical
+correctness verdict.
 
 Speedup is reference latency divided by candidate latency for the same case and
 execution boundary. Memory and short training trajectories are reported
@@ -233,7 +220,7 @@ and [result paths](RESULTS_LAYOUT.md).
 ConvNeXt V2 Tiny and Qwen2-VL-2B now have whole-model training adapters,
 observed L1 bindings and selected L2 replacement sites. See
 [VISION_WORKLOADS.md](../VISION_WORKLOADS.md) for fixed configurations, source
-training recipes, harvest/calibration commands and validation status.
+training recipes, harvest commands and validation status.
 
 ## Diffusion and recommendation workloads
 
@@ -242,7 +229,7 @@ training adapters and execution-derived operator cases. DiT supports generated
 and pinned image-derived inputs. DLRM supports generated inputs and fixed
 Criteo Kaggle batches prepared from TorchRec-format NumPy files. See the [DiT benchmark](../src/evograd/benchmark/topdown/common/generated/README.md)
 and [DLRM benchmark](../src/evograd/benchmark/topdown/torchrec_dlrm/README.md)
-for their contracts and identity-check commands.
+for their contracts and harvest commands.
 
 For real-input source setup, run
 `python scripts/prepare_benchmark_inputs.py --benchmark NAME` from the

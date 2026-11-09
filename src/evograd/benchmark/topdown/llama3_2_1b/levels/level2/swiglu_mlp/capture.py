@@ -3,25 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the
 live model, which tensors cross it, in which layout, and whether what
 was captured still matches. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp`.
-
-Extract and verify ``llama3_swiglu_mlp`` from the verified Layer-16 replay.
-
-    # describe the derived invocation (metadata only -- no tensors are written)
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp derive \
-        --source results/llama3-level3/layer8.pt \
-        --metadata-out results/llama3-level3/layer8-mlp.json
-
-    # check the Level-2 declaration's reference against what the model computed
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp verify \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/layer8-mlp-verify.json
-
-    # measure what tolerance a correct BF16 implementation actually needs
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.swiglu_mlp calibrate \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/llama3_swiglu_mlp-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 The source is deliberately the *replay*, not the full model. The Layer-16
 artifact has already been shown to reproduce the full model bitwise, so a

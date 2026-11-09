@@ -282,16 +282,6 @@ python -m evograd.adbench_tools evaluate --task $TASK --correctness-only some_mo
 python -m evograd.adbench_tools score --task $TASK --run-dir $R/manual some_module.py
 ```
 
-`final.json` → `follow_up` contains optional standalone tier diagnostics.
-Their declared-case checks and timers are separate from the formal v3 protocol
-run by `bench.py evaluate`:
-
-```bash
-evograd tier2-bench --op llama3_swiglu_mlp --candidate $R/gepa/final_program.py \
-    --baseline none --dtype bfloat16
-evograd tier3-bench --model llama_3_2_1b --patch-set gepa:swiglu_mlp=$R/gepa/final_program.py ...
-```
-
 ## Run directory
 
 ```

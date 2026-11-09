@@ -5,12 +5,6 @@ B2 x T2048 (benchmark Level 3, the whole-model step).
 
     sites.py      the four sites, their production spellings, the adapters
     workload.py   the canonical step: build, batch, loss, describe, report
-    boundary.py   per-invocation checks on chosen layers
-    purity.py     calls per site and provider reconstruction
-    adapter.py    what the tier-3 CLI needs to know
-
-No whole-model gate exists yet: every provider row says
-``evaluation_complete: false`` and why.
 """
 
 from .workload import OlmoeWorkload

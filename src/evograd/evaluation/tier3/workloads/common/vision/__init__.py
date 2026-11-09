@@ -1,1 +1,1 @@
-"""Evaluation adapters and calibrated gates for image/image-text workloads."""
+"""Whole-model workloads for the image/image-text models."""

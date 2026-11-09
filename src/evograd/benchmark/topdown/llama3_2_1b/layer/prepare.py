@@ -5,9 +5,7 @@ its weights loaded, its tensors moved to a device, and its layout checked
 against what was captured. All of that describes *the artifact*, so it stays on
 the benchmark side.
 
-What the replay concludes is not here. Tolerances, gates, noise measurement and
-the verdict live in
-:mod:`evograd.evaluation.workloads.llama3_2_1b.layer.replay`.
+Nothing here judges an implementation; that is :mod:`evograd.verification`.
 """
 
 from __future__ import annotations

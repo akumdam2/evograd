@@ -223,8 +223,3 @@ class VisionWorkload:
             "device": str(next(model.parameters()).device),
             "transformers": __import__("transformers").__version__,
         }
-
-    def model_correctness(self, kernels, *, device="cuda"):
-        from .gate import evaluate
-
-        return evaluate(self, kernels)

@@ -67,16 +67,6 @@ class TestDeclaredNumerics(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertEqual((result["atol"], result["rtol"]), (1e-2, 1e-3))
 
-    def test_legacy_declared_flag_cannot_select_the_retired_strategy(self):
-        import contextlib
-        import io
-        from evograd.evaluation.tier2.cli import _parser
-
-        args = _parser().parse_args(["--op", "rmsnorm", "--numerical-profile", "declared"])
-        self.assertEqual(args.numerical_profile, "declared")
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            _parser().parse_args(["--op", "rmsnorm", "--numerical-profile", "dtype_default"])
-
 
 class TestInputIdentity(unittest.TestCase):
     def test_the_same_tensor_hashes_the_same_and_a_changed_one_does_not(self):

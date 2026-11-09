@@ -1,13 +1,12 @@
 """Llama's real-text identity and batch routing, without network or GPU access.
 
 The checkpoint and WikiText are replaced by small packed splits, so these check
-the wiring -- identity, flags, which stream each consumer reads -- and not the
+the wiring -- identity and which stream each consumer reads -- and not the
 download or the tokenizer.
 """
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import torch
@@ -81,48 +80,6 @@ def test_the_config_round_trips_through_a_child_process_boundary():
     rebuilt = Llama3Workload.from_config(json.loads(json.dumps(workload.to_config())))
     assert rebuilt.spec == workload.spec
     assert rebuilt.spec.workload_id == workload.spec.workload_id
-
-
-# ── flags ────────────────────────────────────────────────────────────────────
-
-
-def _cli_args(**overrides):
-    args = dict(device="cpu", seed=0, data_seed=0, dtype=None, batch=None, tokens=None,
-                layers=None, calibration=None, real_text=False)
-    args.update(overrides)
-    return SimpleNamespace(**args)
-
-
-def test_the_tier3_adapter_selects_real_text_only_when_asked():
-    from evograd.evaluation.tier3.workloads.llama3_2_1b.adapter import ADAPTER, build
-
-    assert "real_text" in ADAPTER.options
-    assert build(_cli_args()).spec == CANONICAL.replace(device="cpu")
-    assert build(_cli_args(real_text=True)).spec.real_text
-
-
-def test_calibrate_passes_real_text_to_its_workload():
-    from evograd.evaluation.tier3.workloads.llama3_2_1b import calibrate
-
-    args = calibrate.build_parser().parse_args(["run", "--device", "cpu", "--real-text"])
-    assert calibrate._workload(args).spec.real_text
-    args = calibrate.build_parser().parse_args(["run", "--device", "cpu"])
-    assert not calibrate._workload(args).spec.real_text
-
-
-def test_controls_refuse_a_calibration_from_the_other_identity(monkeypatch):
-    from evograd.evaluation.tier3.workloads.llama3_2_1b import controls
-
-    args = controls.build_parser().parse_args(["--device", "cpu", "--real-text"])
-    config = controls._workload_config(args)
-    real_id = Llama3Workload.from_config(config).spec.workload_id
-    monkeypatch.setattr(controls, "load_policy",
-                        lambda path: SimpleNamespace(workload_id=CANONICAL.workload_id))
-    with pytest.raises(SystemExit, match="--real-text"):
-        controls._bound_policy(args, config)
-    monkeypatch.setattr(controls, "load_policy",
-                        lambda path: SimpleNamespace(workload_id=real_id))
-    assert controls._bound_policy(args, config).workload_id == real_id
 
 
 # ── which stream each consumer reads ─────────────────────────────────────────

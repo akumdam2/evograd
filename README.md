@@ -49,8 +49,6 @@ otherwise tend to be duplicated per operator:
   gradient, including shape and dtype checks.
 - A generic OpenEvolve evaluator with speed and memory-aware scoring policies.
 - A benchmark harness for backward latency, full-step latency, and saved state.
-- A one-call file/callable interface that trains a generalist and optional
-  shape-regime specialists, then emits a measured deployment dispatcher.
 - Optional Nsight Compute-guided refinement with a strict keep-only-if-faster gate.
 - Automatic operator discovery: adding an operator does not require editing a
   central registry, evaluator, wrapper, or pipeline.
@@ -79,35 +77,13 @@ List the available operators:
 evograd ops
 ```
 
-Run the complete path for a declared op:
-
-```bash
-evograd run \
-    --op rmsnorm \
-    --iterations 10 \
-    --gpus 1 \
-    --output-dir /tmp/evograd_rmsnorm
-```
-
-This generates and verifies a seed, evolves full/small/large programs when the
-declaration defines shape regimes, measures them on the full grid, and writes a
-deployed pair plus JSON and Markdown reports. `--gpus 3` runs the three
-evolution groups concurrently on three visible GPUs.
-
-Generate an LLM-free LayerNorm seed with Pipeline B:
+Generate an LLM-free seed with Pipeline B for one model case's task pack; the
+seed is accepted by Gate 1 on the pack's search payloads:
 
 ```bash
 evograd seed b \
-    --op layernorm \
+    --pack /path/to/task_pack \
     --output-dir /tmp/B_layernorm
-```
-
-Verify the emitted autograd pair:
-
-```bash
-evograd verify \
-    --op layernorm \
-    /tmp/B_layernorm/initial_program_autograd_pair.py
 ```
 
 Optimize it with OpenEvolve:
@@ -128,48 +104,11 @@ evograd evolve \
 it, OpenEvolve returns only the best program and the rest of the population is
 unrecoverable.
 
-Measure it — one operator, then the whole suite:
-
-```bash
-evograd tier1-bench --op layernorm --candidate /tmp/evolve_layernorm/evolved_best_program.py
-evograd suite --candidates programs/ --out results/
-```
-
+Judge and time a model's candidates with [`evograd evaluate`](#evaluation).
+ADBench task packs (`python -m evograd.adbench_tools task ...`) and the agent
+baselines that run on them are in [`candidates/`](candidates/README.md).
 Three evaluation tiers, the `fast`/`fair` measurement modes, correctness gates,
 and report semantics: [the evaluation guide](src/evograd/evaluation/README.md).
-
-## One-call Python API
-
-Known operators need only their name; the reviewed declaration supplies the
-default forward and contract:
-
-```python
-from evograd import evograd
-
-result = evograd(op="rmsnorm", output_dir="/tmp/rmsnorm", iterations=10)
-print(result.program)
-print(result.report)
-```
-
-A forward may instead be `path.py:function` or a named, self-contained Python
-callable. For a known op it replaces only the forward reference and keeps the
-reviewed argument/activity/workload contract. For an unknown name, evograd
-first synthesizes a declaration-native contract, imports and validates it, and
-records it under `<output_dir>/scaffold/` before seed generation:
-
-```python
-import torch
-from evograd import evograd
-
-def squared_relu(x):
-    return torch.relu(x).square()
-
-result = evograd(squared_relu, op="my_squared_relu", output_dir="/tmp/my_op")
-```
-
-Callable snapshots reject lambdas, closures, and globals other than
-`math`, `torch`, and `torch.nn.functional as F`; the durable file boundary
-makes every later subprocess reproducible.
 
 ## Seed-generation pipelines
 
@@ -184,9 +123,6 @@ Triton is retained as diagnostic evidence, not copied into the seed.
 evograd seed unified --op layernorm --dtype float32 \
     --dims rows=8 hidden=64 --output-dir /tmp/unified_layernorm
 
-evograd verify --op layernorm --declaration /tmp/unified_layernorm/declaration.py:op \
-    /tmp/unified_layernorm/initial_program_autograd_pair.py
-
 evograd evolve --op layernorm --declaration /tmp/unified_layernorm/declaration.py:op \
     --seed /tmp/unified_layernorm/initial_program_autograd_pair.py \
     --scoring speed_memory_min --output-dir /tmp/unified_layernorm_evolved
@@ -195,8 +131,6 @@ evograd evolve --op layernorm --declaration /tmp/unified_layernorm/declaration.p
 Unified specializes to one exact shape, dtype, CUDA device and set of scalar parameters; without
 `--dims`, it uses the first declared workload of the selected dtype. The emitted
 `declaration.py` keeps verification and evolution on that same configuration.
-Use the `seed unified` entry point; the existing one-call `run` API continues to
-serve the A–D baselines.
 
 Only a seed that passes forward/all-gradient oracle checks and native autograd
 deployment checks is published as `initial_program_autograd_pair.py`. Unified also
@@ -481,14 +415,12 @@ reset (benchmark Level 3). `fast` and `fair` select measurement protocols,
 independently of tier.
 
 ```bash
-evograd tier1-bench --op layernorm --candidate best.py
-evograd tier2-bench --op layernorm --candidate best.py
-evograd tier3-bench --model qwen3_0_6b \
-  --baseline none --patch-set best:swiglu_mlp=best.py
+evograd evaluate qwen3_0_6b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
+evograd summarize RUN/evaluation.json
 ```
 
-By default, correctness checks precede timing: provider preflight, patch
-counts, and the workload-specific model gates and loss checks.
+Correctness is judged by the verification package's Gates 1/2/3 on real
+payloads; timing never decides it.
 
 See [benchmark levels](docs/BENCHMARK.md),
 [Qwen usage](docs/QWEN3_LEVEL3.md) and
@@ -509,7 +441,7 @@ claims:
 | `evograd.ops` | reusable Level-1 primitives: the mathematics, the reference, and the generic correctness cases that prove an implementation right |
 | `evograd.benchmark` | what is measured: performance grids, model provenance, case selection and weighting, L1/L2/L3 ownership. Each harvested architecture owns its own Level-2 task identities — Qwen3-0.6B and Llama-3.2-1B have four each, and neither borrows the other's key |
 | `evograd.evaluation` | how it is judged: execution, calibration, controls, timing, verdicts |
-| `evograd.cli` / `evograd.suite_cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
+| `evograd.cli` | the composition layer: parse a command, ask the benchmark what to run, ask evaluation to run it |
 
 The dependency runs in that order and never back. `ops` imports neither
 benchmark nor evaluation, and `benchmark` imports no evaluation — both are
@@ -566,17 +498,17 @@ A declaration may also expose a reviewed library pair baseline (`megafold`,
 changing the comparison:
 
 ```bash
-evograd bench --op swiglu --candidate best.py --baseline megafold
+evograd evolve --op swiglu --seed seed.py --output-dir /tmp/evolve_swiglu --baseline megafold
 ```
 
-Liger-Kernel is no longer a baseline; its former adapters are kept, unregistered,
-under `src/evograd/legacy/liger/`.
+Liger-Kernel is no longer a baseline.
 
 Two built-in `torch.compile` baselines are available for every operator without
 any declaration support — `torch_compile` and `torch_compile_max_autotune`:
 
 ```bash
-evograd bench --op layernorm --candidate best.py --baseline torch_compile
+evograd evolve --op layernorm --seed seed.py --output-dir /tmp/evolve_layernorm \
+    --baseline torch_compile
 ```
 
 They matter for Pipeline D. `pytorch_autograd` measures *eager* PyTorch, while a
@@ -685,12 +617,8 @@ to install. Clone it and put its root on `PYTHONPATH`:
 
 ```bash
 git clone https://github.com/Supercomputing-System-AI-Lab/MegaFold
-PYTHONPATH=/path/to/MegaFold:src python -m evograd.evaluation.tier3.cli \
-    --model megafold_2l --residues 128 --baseline none
+export PYTHONPATH=/path/to/MegaFold:src
 ```
-
-`scripts/smoke_megafold.py` builds every provider and runs one step each, as a
-check before a first real run.
 
 It needs a visible GPU: MegaFold builds its fused Triton modules at import
 time, so on a CPU-only node the import fails even with every dependency
@@ -715,11 +643,8 @@ fusion as an explicit evolution target.
 LayerNorm also includes the legacy and TritonBench shape suites:
 
 ```bash
-evograd bench \
-    --op layernorm \
-    --candidate best.py \
-    --suite tb_mixed \
-    --dtype float16
+evograd evolve --op layernorm --seed seed.py --output-dir /tmp/evolve_layernorm \
+    --benchmark-suite tb_mixed --benchmark-dtype float16
 ```
 
 ## Adding an operator
@@ -737,20 +662,6 @@ matches the package name. Evograd discovers it automatically. Once declared,
 the operator is available to `evograd ops`, all three seed pipelines,
 verification, evolution, and benchmarking without additional evaluator or
 wrapper files.
-
-To bootstrap a draft from a forward:
-
-```bash
-evograd scaffold \
-    --op my_op \
-    --forward /path/to/forward.py:my_forward \
-    --output-dir /tmp/my_op_contract
-```
-
-This is the declaration-native replacement for the fork’s generated
-`task_spec.py`: the LLM supplies input semantics, activity, shapes, and regimes;
-code builds the declaration and PyTorch-autograd oracle mechanically. Review
-the generated contract before publishing it as a built-in package.
 
 For operators with semantic masks, scaled weights, integer-like inputs, or
 special initialization, define a declaration-local `make_inputs` hook. If
@@ -770,13 +681,13 @@ src/evograd/
 │   └── level1/                # reusable primitive declarations
 ├── benchmark/                 # what is benchmarked
 │   ├── core/                  # task registry and result aggregation
-│   ├── operator_suite/        # operator task/config selection and suite CLI
+│   ├── operator_suite/        # operator performance grids
 │   └── topdown/               # common + Qwen3-0.6B/Llama3/Qwen3.5/MegaFold workloads
 ├── evaluation/                # how a candidate is evaluated
 │   ├── common/                # providers and canonical reports
 │   ├── tier1/                 # direct pair: fast/fair modes
 │   ├── tier2/                 # operator/autograd runner
-│   └── tier3/                 # whole-model runner, patching and gates
+│   └── tier3/                 # whole-model runner and patching
 ├── atenir/
 │   ├── extract.py             # PyTorch/autograd graph extraction
 │   ├── compose.py             # serialized graph execution
@@ -790,9 +701,6 @@ src/evograd/
 │   └── shared/
 ├── evolve/                    # OpenEvolve evaluator, scoring, and run wrapper
 ├── ncu/                       # NCU profiling, roofline triage, accepted refinement
-├── scaffold.py                # forward -> external declare_op contract
-├── dispatch.py                # measured generalist/specialist deployment
-├── api.py                     # one-call Python workflow
 └── cli.py                     # evograd command-line interface
 ```
 

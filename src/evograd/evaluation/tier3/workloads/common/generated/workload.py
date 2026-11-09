@@ -306,7 +306,3 @@ class GeneratedWorkload:
                 "trainable_parameters": sum(p.numel() for p in model.parameters() if p.requires_grad),
                 "dtype": str(next(model.parameters()).dtype),
                 "device": str(next(model.parameters()).device), "torch": torch.__version__}
-
-    def model_correctness(self, kernels, *, device="cuda"):
-        from evograd.evaluation.tier3.workloads.common.vision.gate import evaluate
-        return evaluate(self, kernels)

@@ -1,7 +1,5 @@
 """The canonical Llama-3.2-1B training step, as a tier-3 workload.
 
-    evograd tier3-bench --model llama_3_2_1b --structural-identity
-
 A top-level class, not a ``ModuleWorkload`` built from closures, for one
 reason: tier 3 runs each provider in a killable child process, and a closure
 cannot cross that boundary. Everything this workload needs is a handful of
@@ -122,7 +120,9 @@ class Llama3Workload:
     #: published Llama-3.2-1B (16 layers, hidden 2048, 32 heads over 8 KV
     #: heads, tied embeddings: 1.24B parameters).
     arch_overrides: dict[str, Any] = field(default_factory=dict)
-    #: Where the numerics calibration lives. ``None`` uses the default path.
+    #: Input of the removed Tier-3 whole-model gate. Read by nothing; kept
+    #: because ``describe()`` -- and through it every Gate 2 policy identity --
+    #: records the config, including this field.
     calibration_path: str | None = None
     #: ``"random"``/``"synthetic"`` is the canonical workload; ``PRETRAINED`` and
     #: ``REAL_TEXT`` together are the real-text one. See ``spec.WorkloadSpec``.
@@ -362,84 +362,6 @@ class Llama3Workload:
     def runtime_report(self, model) -> dict[str, Any]:
         """What the built model actually reports, as distinct from the request."""
         return effective_settings(model, self.spec)
-
-    # ── the whole-model gate ─────────────────────────────────────────────
-
-    def site_preflight(self, kernels, *, device: str = "cuda") -> dict[str, Any]:
-        """Does each patched site hold at the shapes this model will supply?
-
-        Tier 3's runner already asks this before it reaches the gate. Asking
-        again here costs one small run per site and makes the gate complete on
-        its own, so a standalone verdict names the same first stage the runner
-        would have failed at.
-        """
-        from evograd.evaluation.tier3.runner import preflight as run_preflight
-        from evograd.benchmark import TASKS
-
-        try:
-            run_preflight(kernels, TASKS, device=device)
-        except Exception as exc:
-            return {"ok": False, "sites": list(kernels.patched),
-                    "reason": f"{type(exc).__name__}: {exc}"}
-        return {"ok": True, "sites": list(kernels.patched),
-                "checked": "declared correctness grid plus any observed shapes"}
-
-    def model_correctness(self, kernels, *, device: str = "cuda") -> dict[str, Any]:
-        """Tier 3 calls this before it times a patched provider.
-
-        The thresholds are a measurement of this machine, stored in a
-        calibration artifact and bound to the environment they were taken in. If
-        none exists, or one exists from elsewhere, this refuses rather than
-        quoting somebody else's noise floor -- an ungated timing is not cheaper
-        than no timing, it is worse. **No Llama calibration has been run yet, so
-        this refuses today**, and that refusal names the command that fixes it.
-        """
-        from evograd.evaluation.tier3.gate import enforcement as enf
-
-        from .gate import CalibrationUnavailable, check_model_correctness, load_policy
-
-        def unavailable(reason: str, **detail) -> dict[str, Any]:
-            """No bound calibration: the comparison cannot be made, so it is
-            reported unavailable -- never a pass, and never confused with a
-            provider that failed. Under report-first execution may continue;
-            the verdict carries ``evaluation_complete=False`` so no report can
-            call such a run fully checked."""
-            return enf.summarize(
-                [enf.finding("policy_binding", enf.UNAVAILABLE, reason)],
-                gate="llama3_model_correctness", **detail)
-
-        policy = None
-        unbound_reason = unbound_detail = None
-        try:
-            policy = load_policy(self.calibration_path)
-            if policy.workload_id != self.spec.workload_id:
-                unbound_reason = (f"the calibration is for {policy.workload_id}, this is "
-                                  f"{self.spec.workload_id}")
-                unbound_detail = unbound_reason
-                policy = None
-        except CalibrationUnavailable as exc:
-            # The one-line reason is what a table shows; the full text is what
-            # names the command that fixes it, so both are kept.
-            unbound_reason, unbound_detail = str(exc).splitlines()[0], str(exc)
-            policy = None
-        if policy is None and enf.active_mode() == enf.STRICT:
-            # Historical behaviour: an uncalibrated gate refuses outright.
-            return unavailable(unbound_reason, detail=unbound_detail,
-                               calibration_path=str(self.calibration_path))
-        preflight = self.site_preflight(kernels, device=device)
-        from .gate import summarize
-
-        verdict = summarize(check_model_correctness(
-            self, kernels, policy=policy, data_seed=self.data_seed,
-            preflight=preflight,
-        ))
-        if policy is None:
-            # Recorded on the verdict, so a reader never has to infer from a
-            # missing threshold that none was applied.
-            verdict["policy_binding"] = {"ok": False, "reason": unbound_reason,
-                                         "detail": unbound_detail,
-                                         "calibration_path": str(self.calibration_path)}
-        return verdict
 
     @property
     def last_build(self) -> PatchedModel | None:

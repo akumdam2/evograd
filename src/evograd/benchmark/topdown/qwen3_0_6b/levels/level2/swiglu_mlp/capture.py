@@ -3,25 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the live
 model, which tensors cross it, in which layout, and whether what was captured
 still matches the frozen harvest. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.qwen3_0_6b.level2.swiglu_mlp`.
-
-Extract and verify ``qwen3_swiglu_mlp`` from the verified Layer-14 replay.
-
-    # describe the derived invocation (metadata only -- no tensors are written)
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp derive \
-        --source results/qwen3-level3/layer14.pt \
-        --metadata-out results/qwen3-level3/layer14-mlp.json
-
-    # check the Level-2 declaration's reference against what the model computed
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp verify \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/layer14-mlp-verify.json
-
-    # measure what tolerance a correct BF16 implementation actually needs
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.levels.level2.swiglu_mlp calibrate \
-        --source results/qwen3-level3/layer14.pt \
-        --report results/qwen3-level3/qwen3_swiglu_mlp-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 The source is deliberately the *replay*, not the full model. The Layer-14
 artifact has already been shown to reproduce the full model bitwise, so a

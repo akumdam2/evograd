@@ -65,7 +65,7 @@ Level describes task granularity, Gate describes correctness evidence, and Tier 
 
 A model whose Gate 3 does not apply (`Model.gate3_applies`; MegaFold, where a 1000-update run of its training step takes about 2.3 hours) accepts its L2 candidates and their combination on model Gate 2; its Gate 3 status is `not_applicable`. At a site observed at several configurations (MegaFold's LayerNorm+Linear and attention), a candidate replaces its own configuration's calls only, and the model-scope controls replace exactly the same calls.
 
-T1 serves search feedback and standalone kernel/pair diagnostics. Final deployment performance uses T2/T3; search-time `combined_score` and the best search-time measurement are not final scores. `score/compare`, standalone `tier2-bench`, and `tier3-bench` do not replace formal `bench.py evaluate`.
+T1 serves search feedback and standalone kernel/pair diagnostics. Final deployment performance uses T2/T3; search-time `combined_score` and the best search-time measurement are not final scores. `score/compare` does not replace formal `bench.py evaluate`.
 
 Distinguish `passed`, `failed`, `incomplete`, and `skipped`. A candidate cannot be accepted unless every required Gate passes. An invalid or unavailable control/policy leaves verification incomplete; do not relax thresholds. A static-rule violation prevents verification and timing. Other executable candidates that are not accepted may still receive diagnostic timings, with their verdicts shown alongside the numbers. They do not enter accepted performance aggregates or L3.
 

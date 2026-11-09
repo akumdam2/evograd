@@ -246,8 +246,7 @@ class ModuleWorkload:
         if self.registry is not None:
             return self.registry
         # A model with patches but no declared operators still needs a namespace
-        # of its own; it just has nothing preflight can verify, which
-        # `preflight` reports as unverifiable rather than passing.
+        # of its own.
         return SiteRegistry(
             name=self.name,
             sites=tuple(

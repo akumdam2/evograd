@@ -4,9 +4,7 @@ Everything here runs on a two-layer CPU model with reduced widths. That is not a
 compromise -- the properties being checked are structural (does the adapter call
 the same submodules in the same order, does the residual carrier hand the right
 tensor to the right norm, does every site fire the declared number of times) and
-none of them depends on the model being 8B or on the device being a GPU. The
-numbers that *do* depend on those are the calibrated ones, and they are exactly
-what this workload does not have yet.
+none of them depends on the model being 8B or on the device being a GPU.
 
 The load-bearing assertion is ``structural identity``: patching every site with
 the production spelling changes the module structure and no arithmetic, so the
@@ -23,8 +21,6 @@ try:
     import transformers  # noqa: F401
 except ImportError:  # pragma: no cover - exercised on machines without them
     torch = None
-
-from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS, tier3_adapter, tier3_model_names
 
 
 #: A two-layer Llama with 4:1 grouped-query attention and Llama's own
@@ -60,39 +56,6 @@ def _step(workload, kernels):
     loss.backward()
     grads = {n: p.grad.detach().clone() for n, p in model.named_parameters()}
     return float(loss.detach()), grads, provenance, workload.last_build
-
-
-class TestRegistration(unittest.TestCase):
-    """The CLI reaches Llama by name, and only through the registry."""
-
-    def test_llama_is_a_selectable_tier3_model(self):
-        self.assertIn("llama_3_2_1b", tier3_model_names())
-
-    def test_the_adapter_declares_its_own_optional_flags(self):
-        adapter = tier3_adapter("llama_3_2_1b")
-        self.assertEqual(adapter.name, "llama_3_2_1b")
-        # A flag not named here is refused by name for this workload, rather
-        # than accepted and ignored.
-        self.assertEqual(
-            adapter.options,
-            frozenset({"structural_identity", "layers", "data_seed", "calibration",
-                       # the pinned checkpoint on WikiText-2: its own workload identity
-                       "real_text",
-                       # generic providers built by tier3.providers; declaring
-                       # them is how a workload says it offers them
-                       "compile_site", "patch_set",
-                       # the unpatched whole-model torch.compile baseline, the
-                       # same provider Qwen offers, so the two models' compile
-                       # rows mean the same thing
-                       "whole_model_compile"}),
-        )
-
-    def test_the_registry_entry_is_a_dotted_path_not_an_import(self):
-        """Resolved lazily: every operator declaration imports this module."""
-        self.assertEqual(
-            TIER3_ADAPTERS["llama_3_2_1b"],
-            "evograd.evaluation.tier3.workloads.llama3_2_1b.adapter:ADAPTER",
-        )
 
 
 class TestSiteRegistry(unittest.TestCase):
@@ -228,146 +191,6 @@ class TestIdentityControls(unittest.TestCase):
                     for n in self.eager_grads
                 )
                 self.assertLess(worst, 1e-5)
-
-
-@unittest.skipIf(torch is None, "torch and transformers are required")
-class TestLiveBoundary(unittest.TestCase):
-    """The shadow validator: every invocation against its own contract."""
-
-    def test_every_invocation_is_checked_and_passes(self):
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
-            bound_pair_identity_kernels,
-        )
-        from evograd.benchmark import TASKS
-
-        workload = _workload()
-        report = boundary.validate_all_invocations(
-            workload,
-            bound_pair_identity_kernels(TASKS, None, workload.site_registry),
-            data_seed=0,
-        )
-        self.assertTrue(report["ok"], report.get("errors") or report.get("failures"))
-        # 2 + 2 + 2 + 4 for a two-layer model.
-        self.assertEqual(report["checked_invocations"], 10)
-        self.assertEqual(report["failure_count"], 0)
-        self.assertEqual(report["errors"], [])
-
-    def test_the_three_residual_fusions_are_structurally_different(self):
-        """A validator that checked only the in-layer one would miss exactly the
-        wiring the other two exercise, so the category travels with the
-        invocation."""
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
-            bound_pair_identity_kernels,
-        )
-        from evograd.benchmark import TASKS
-
-        workload = _workload()
-        report = boundary.validate_all_invocations(
-            workload,
-            bound_pair_identity_kernels(TASKS, None, workload.site_registry),
-        )
-        self.assertEqual(
-            report["residual_categories"],
-            {"post_attention": 2, "mlp_to_next_input": 1, "final_model_norm": 1},
-        )
-        # `summed` must be the tensor the model carries forward, not a
-        # recomputation, or the fusion is decorative.
-        self.assertTrue(report["summed_is_the_residual_stream"])
-
-    def test_an_unharvested_workload_says_which_tolerances_it_used(self):
-        """No snapshot means no observed shapes, so the gate falls back to the
-        declaration's own grid. That is weaker, and the report says so rather
-        than reading as though the harvested population had been used."""
-        from evograd.benchmark.topdown import has_snapshot
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import boundary
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
-            bound_pair_identity_kernels,
-        )
-        from evograd.benchmark import TASKS
-
-        workload = _workload()
-        report = boundary.validate_all_invocations(
-            workload,
-            bound_pair_identity_kernels(TASKS, None, workload.site_registry),
-        )
-        expected = (
-            "llama_3_2_1b_observed" if has_snapshot("llama_3_2_1b")
-            else "declared_correctness_grid"
-        )
-        self.assertEqual(report["tolerance_source"], expected)
-
-
-@unittest.skipIf(torch is None, "torch and transformers are required")
-class TestGateRefusesWithoutCalibration(unittest.TestCase):
-    """An ungated timing is not cheaper than no timing; it is worse."""
-
-    def test_model_correctness_refuses_and_names_the_command(self):
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
-            structural_identity_kernels,
-        )
-
-        workload = _workload()
-        verdict = workload.model_correctness(
-            structural_identity_kernels(workload.site_registry), device="cpu"
-        )
-        self.assertFalse(verdict["ok"])
-        self.assertEqual(verdict["gate"], "llama3_model_correctness")
-        self.assertIn("calibrate", verdict["detail"])
-
-    def test_the_calibration_path_is_llamas_own(self):
-        """Qwen3's artifact describes Qwen3's noise floor on Qwen3's shapes and
-        cannot stand in for this one."""
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import gate
-        from evograd.evaluation.tier3.workloads.qwen3_0_6b import gate as qwen_gate
-
-        self.assertNotEqual(gate.DEFAULT_ARTIFACT, qwen_gate.DEFAULT_ARTIFACT)
-        self.assertIn("llama3", str(gate.DEFAULT_ARTIFACT))
-
-
-@unittest.skipIf(torch is None, "torch and transformers are required")
-class TestFaultCatalogue(unittest.TestCase):
-    def test_every_fault_builds_and_applies(self):
-        """A control that cannot be constructed proves nothing about the gate."""
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import faults
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import (
-            bound_pair_identity_kernels,
-        )
-        from evograd.benchmark import TASKS
-
-        workload = _workload()
-        base = bound_pair_identity_kernels(TASKS, None, workload.site_registry)
-        catalogue = faults.catalogue(magnitudes=(0.02,))
-        self.assertTrue(catalogue)
-        for fault in catalogue:
-            with self.subTest(fault=fault.name, site=fault.site):
-                faulty = fault.apply(workload, base)
-                model, _p = workload.build_patched(faulty)
-                workload.loss(model, workload.batch_for(seed=0))
-
-    def test_faults_only_name_sites_this_registry_has(self):
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import faults
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.sites import llama3_sites
-
-        known = {site.name for site in llama3_sites().sites}
-        for fault in faults.catalogue():
-            with self.subTest(fault=fault.name):
-                self.assertIn(fault.site, known)
-
-
-class TestPurityCallCounts(unittest.TestCase):
-    def test_min_calls_is_twice_the_canonical_invocation_count(self):
-        """A provider that only misbehaves after "more calls than preflight
-        makes" has nowhere to hide."""
-        from evograd.evaluation.tier3.workloads.llama3_2_1b import purity, sites
-
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
-
-        canonical = sites.expected_counts(LLAMA_3_2_1B["num_hidden_layers"])
-        self.assertEqual(
-            purity.MIN_CALLS, {site: 2 * n for site, n in canonical.items()}
-        )
 
 
 if __name__ == "__main__":

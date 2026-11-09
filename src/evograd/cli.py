@@ -1,16 +1,9 @@
 """evograd — evolved backward kernels.
 
     evograd ops                                  # list declared operators
-    evograd scaffold --op new_op --forward op.py --output-dir ...
-    evograd seed a --op rmsnorm --output-dir ... # generate a seed (pipeline a|b|c|d)
-    evograd verify --op rmsnorm seed.py          # check a candidate vs the oracle
+    evograd seed unified --pack PACK --output-dir ...  # generate a seed (pipeline unified|a|b|c|d)
     evograd evolve --op rmsnorm --seed seed.py --output-dir ...
-    evograd run --op rmsnorm --output-dir ...     # seed -> evolve -> dispatch -> report
-    evograd bench --op rmsnorm --candidate best.py
-    evograd tier1-bench --op layernorm --candidate best.py
-    evograd tier2-bench --op layernorm --candidate best.py
-    evograd tier3-bench --model qwen3_0_6b
-    evograd suite --candidates programs/ --out results/  # cross-operator report
+    evograd ncu --op rmsnorm --candidate best.py --output-dir ...
     evograd evaluate qwen3_0_6b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
     evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json  # the benchmark protocol
 """
@@ -39,12 +32,6 @@ def _seed(argv: list[str]) -> int:
 
     module = importlib.import_module(_PIPELINES[argv[0]][0])
     return module.main(argv[1:])
-
-
-def _verify(argv: list[str]) -> int:
-    from evograd.opdecl.verify_cli import main
-
-    return main(argv)
 
 
 def _evolve(argv: list[str]) -> int:
@@ -160,30 +147,6 @@ def _evolve(argv: list[str]) -> int:
     )
 
 
-def _bench(argv: list[str]) -> int:
-    from evograd.evaluation.tier1.legacy_cli import main
-
-    return main(argv)
-
-
-def _tier1_bench(argv: list[str]) -> int:
-    from evograd.evaluation.tier1.cli import main
-
-    return main(argv)
-
-
-def _tier2_bench(argv: list[str]) -> int:
-    from evograd.evaluation.tier2.cli import main
-
-    return main(argv)
-
-
-def _tier3_bench(argv: list[str]) -> int:
-    from evograd.evaluation.tier3.cli import main
-
-    return main(argv)
-
-
 def _evaluate(argv: list[str]) -> int:
     """``evograd evaluate MODEL ...``: the benchmark protocol for one model's candidates."""
     from evograd.evaluation.protocol import main
@@ -197,95 +160,8 @@ def _summarize(argv: list[str]) -> int:
     return summarize_main(argv)
 
 
-def _run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="evograd run")
-    parser.add_argument("--op", required=True)
-    parser.add_argument(
-        "--forward",
-        default=None,
-        help="optional path.py[:function] or importable module:function override",
-    )
-    parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--pipeline", choices=("a", "b", "c", "d"), default="a")
-    parser.add_argument("--iterations", type=int, default=10)
-    parser.add_argument("--gpus", type=int, choices=(1, 3), default=1)
-    parser.add_argument("--baseline", default="auto")
-    parser.add_argument("--model", default="gpt-5.5")
-    parser.add_argument("--api-base", default="https://api.openai.com/v1")
-    parser.add_argument("--api-key", default=None)
-    parser.add_argument("--max-attempts", type=int, default=5)
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument(
-        "--ncu",
-        action="store_true",
-        help="attempt an accepted-only NCU refinement after each evolve group",
-    )
-    parser.add_argument(
-        "--groups",
-        default=None,
-        help=(
-            "comma-separated evolution groups (e.g. 'full'). Default: 'full' "
-            "plus small/large specialists when the declaration defines shape "
-            "regimes, which costs three evolutions instead of one."
-        ),
-    )
-    parser.add_argument(
-        "--save-programs",
-        action="store_true",
-        help="keep every evaluated candidate under each group's programs/ directory",
-    )
-    args = parser.parse_args(argv)
-
-    from evograd.api import evograd
-
-    result = evograd(
-        args.forward,
-        op=args.op,
-        output_dir=args.output_dir,
-        pipeline=args.pipeline,
-        iterations=args.iterations,
-        gpus=args.gpus,
-        baseline=args.baseline,
-        model=args.model,
-        api_base=args.api_base,
-        api_key=args.api_key,
-        max_attempts=args.max_attempts,
-        force=args.force,
-        ncu=args.ncu,
-        save_programs=args.save_programs,
-        groups=(
-            tuple(g.strip() for g in args.groups.split(",") if g.strip())
-            if args.groups
-            else None
-        ),
-    )
-    print(f"program : {result.program}")
-    print(f"report  : {result.report}")
-    print(f"metrics : {result.metrics}")
-    print(f"baseline: {result.baseline}")
-    return 0
-
-
-def _suite(argv: list[str]) -> int:
-    from evograd.suite_cli import main
-
-    return main(argv)
-
-
-def _dispatch(argv: list[str]) -> int:
-    from evograd.dispatch import main
-
-    return main(argv)
-
-
 def _ncu(argv: list[str]) -> int:
     from evograd.ncu.refine import main
-
-    return main(argv)
-
-
-def _scaffold(argv: list[str]) -> int:
-    from evograd.scaffold import main
 
     return main(argv)
 
@@ -309,22 +185,10 @@ def _ops(argv: list[str]) -> int:
 
 _COMMANDS = {
     "ops": _ops,
-    "scaffold": _scaffold,
     "seed": _seed,
-    "verify": _verify,
     "evolve": _evolve,
-    "run": _run,
-    "bench": _bench,
-    "tier1-bench": _tier1_bench,
-    "tier2-bench": _tier2_bench,
-    "tier3-bench": _tier3_bench,
-    # The tier vocabulary postdates this command; the old name still works
-    # because it is in published docs and in people's shell history.
-    "fair-bench": _tier1_bench,
-    "suite": _suite,
     "evaluate": _evaluate,
     "summarize": _summarize,
-    "dispatch": _dispatch,
     "ncu": _ncu,
 }
 

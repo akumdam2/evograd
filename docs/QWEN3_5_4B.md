@@ -23,7 +23,7 @@ host memory.
 | shape | canonical **B1 x T2048** (B2 does not fit eagerly; B1 is the per-GPU workload of 2-GPU DDP at global batch 2) |
 | baselines | recorded, no bar is chosen (eager, site and whole-model compile, FLA) |
 | tolerances | every L2 task and every primitive this model adds is calibrated on Qwen3.5 populations (below) |
-| L3 gate | no whole-model gate yet: provider rows say `evaluation_complete: false` and why |
+| L3 gate | none in Tier 3: correctness comes from the verification package's Gates 1/2/3 |
 
 ## Sites, tasks and reference lines
 
@@ -50,32 +50,12 @@ python -m evograd.benchmark.topdown.qwen3_5_4b --out smoke.json
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest harvest.json --write
 python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture --harvest harvest.json --out-dir <dir>
-python -m evograd.evaluation.workloads.qwen3_5_4b.layer.replay --artifact <dir>/layer14.pt
 ```
 
-**Tier 3** (L3, the whole training step; AdamW; every row `evaluation_complete: false`):
+**Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 
 ```bash
-python -m evograd.evaluation.tier3.cli --model qwen3_5_4b --baseline none \
-    --structural-identity --compile-site gated_delta_rule --loss-steps 20 --out l3.json
-python -m evograd.evaluation.tier3.cli --model qwen3_5_4b --baseline none \
-    --whole-model-compile --timeout 1200 --out l3_compile.json
-```
-
-**Tier 2** (L2, observed case):
-
-```bash
-python -m evograd.evaluation.tier2.cli --op qwen3_5_gated_delta_rule \
-    --suite qwen3_5_4b_observed --baseline fla
-```
-
-**L2 inventory** (oracle against production only; the site's real invocation
-comes from `EVOGRAD_QWEN3_5_LAYER_DIR/layer{14,15}.pt` when set, else a
-config-derived layer):
-
-```bash
-python -m evograd.evaluation.workloads.qwen3_5_4b.level2.calibrate inventory \
-    --task qwen3_5_gdn_in_proj --report inventory/qwen3_5_gdn_in_proj.json
+evograd evaluate qwen3_5_4b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
 ```
 
 **Baseline sessions**: `bash scripts/qwen3_5_4b/session.sh <run_id>` inside a GPU

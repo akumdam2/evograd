@@ -26,8 +26,6 @@ from evograd.evaluation.tier3 import (
 from evograd.opdecl.models import LLAMA_3_8B, LLAMA_3_8B_4L
 from evograd.benchmark import TASKS, get_task
 
-from evograd.evaluation.tier3.cli import MODELS
-
 from tests._registry_fixture import SAMPLE_SITE_OPS, SAMPLE_SITES
 from tests import _registry_fixture
 from torch import nn
@@ -326,9 +324,9 @@ class TestModuleSurgery(unittest.TestCase):
 class TestKernelProvenanceTravels(unittest.TestCase):
     """A patched site records where its kernel came from, not just that it moved.
 
-    Without it the runner has nothing to preflight -- a bound callable has no
-    way back to the declaration it implements -- and the report cannot say
-    whether a site holds a candidate, a reviewed baseline, or the control.
+    Without it a bound callable has no way back to the declaration it
+    implements, and the report cannot say whether a site holds a candidate, a
+    reviewed baseline, or the control.
     """
 
     def test_a_patched_site_carries_its_source(self):
@@ -443,9 +441,8 @@ class TestTheThreeParts(unittest.TestCase):
         )
 
     def test_the_runner_depends_on_both_and_nothing_else(self):
-        # `gate` is the shared, workload-neutral half (see tests/test_layering.py):
-        # the runner reads the Tier-3 enforcement mode from it to decide whether a
-        # numerical mismatch stops a provider. Nothing workload-specific is added.
+        # `gate` holds only the enforcement mode, which the runner records in
+        # every report. Nothing workload-specific is added.
         self.assertLessEqual(
             self._tier3_imports("runner"),
             {"evograd.evaluation.tier3.patch", "evograd.evaluation.tier3.model",
@@ -488,109 +485,6 @@ class TestTheThreeParts(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(name, facade.__all__)
                 self.assertTrue(hasattr(facade, name))
-
-
-class TestCli(unittest.TestCase):
-    def test_site_equals_path_is_parsed(self):
-        from evograd.evaluation.tier3.cli import _parser
-
-        args = _parser().parse_args(
-            ["--candidate", "rms_norm=a.py", "--candidate", "swiglu=b.py"]
-        )
-        self.assertEqual(args.candidate, ["rms_norm=a.py", "swiglu=b.py"])
-
-    def test_the_iteration_config_is_the_default(self):
-        from evograd.evaluation.tier3.cli import _parser
-
-        self.assertEqual(_parser().parse_args([]).model, MODELS[0])
-
-    def test_every_registered_workload_has_a_model_choice(self):
-        """The CLI reaches a workload only through ``--model``, so everything in
-        the registry must be offered -- and nothing else, or a name is listed
-        that cannot be built.
-
-        Read from the registry rather than a hardcoded list: a workload added or
-        removed should not need this test edited, which is exactly how the
-        protein workload's entries came to be absent from ``--model`` while the
-        flags that serve them survived.
-        """
-        from evograd.evaluation.tier3.cli import MODELS
-        from evograd.evaluation.tier3.workloads import TIER3_ADAPTERS, tier3_adapter
-
-        self.assertEqual(set(MODELS), set(TIER3_ADAPTERS))
-        self.assertTrue(MODELS)
-        for name in MODELS:
-            with self.subTest(model=name):
-                self.assertEqual(tier3_adapter(name).name, name)
-
-    def test_dtype_follows_the_model_unless_stated(self):
-        """MegaFold trains fp32 while the language models train bf16; the
-        parser leaves dtype unset so the workload decides."""
-        from evograd.evaluation.tier3.cli import _parser
-
-        self.assertIsNone(_parser().parse_args([]).dtype)
-
-
-class TestAProviderTheGateNeverJudged(unittest.TestCase):
-    """"Not checked" must never be readable as "checked and fine".
-
-    ``model_correctness_check`` returns early for three providers: one whose
-    workload has no whole-model gate, one under ``--no-verify``, and one that
-    patches no site. All three used to return a bare ``ok: True``, and a report
-    reading that field alone would count them as having passed a comparison that
-    never ran. Whole-model ``torch.compile`` is the case that makes this matter:
-    it patches no site and it does change the arithmetic.
-    """
-
-    class _Workload:
-        def model_correctness(self, kernels, *, device):  # pragma: no cover - never reached
-            raise AssertionError("the gate should not have been called")
-
-    class _Kernels:
-        patched = ()
-
-    def _verdicts(self):
-        from evograd.evaluation.tier3.runner import model_correctness_check
-
-        return {
-            "unpatched": model_correctness_check(
-                self._Workload(), self._Kernels(), verify=True, device="cpu"),
-            "no_verify": model_correctness_check(
-                self._Workload(), self._Kernels(), verify=False, device="cpu"),
-            "no_gate": model_correctness_check(
-                object(), self._Kernels(), verify=True, device="cpu"),
-        }
-
-    def test_timing_is_still_allowed(self):
-        """The change is to the claim, not to what runs: these are all timeable."""
-        for name, verdict in self._verdicts().items():
-            with self.subTest(provider=name):
-                self.assertTrue(verdict["ok"])
-
-    def test_the_numerical_answer_is_unavailable_not_a_pass(self):
-        for name, verdict in self._verdicts().items():
-            with self.subTest(provider=name):
-                self.assertIsNone(verdict["numerical_ok"])
-                self.assertEqual(verdict["numerical_status"], "unavailable")
-
-    def test_the_evaluation_is_not_complete(self):
-        """The one field a report must read before calling a row fully checked."""
-        for name, verdict in self._verdicts().items():
-            with self.subTest(provider=name):
-                self.assertFalse(verdict["evaluation_complete"])
-                self.assertTrue(verdict["evaluation_incomplete_because"])
-
-    def test_the_fields_match_the_enforcement_summary(self):
-        """One reader for every row: the early return uses the same names the
-        gate's own summary does, so a table does not need to special-case it."""
-        from evograd.evaluation.tier3.gate import enforcement as enf
-
-        summary = enf.summarize([], gate="x", active=enf.REPORT_FIRST)
-        for verdict in self._verdicts().values():
-            self.assertLessEqual(
-                {"ok", "execution_ok", "numerical_ok", "numerical_status",
-                 "evaluation_complete", "evaluation_incomplete_because"},
-                set(summary) & set(verdict))
 
 
 if __name__ == "__main__":

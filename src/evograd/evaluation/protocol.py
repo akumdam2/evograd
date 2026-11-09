@@ -423,7 +423,7 @@ def _measure_tier3_provider(run, name, spec, options):
             torch._dynamo.reset()
             counters.clear()
         timing_mode()
-        row = measure_one(run.workload, name, provider_kernels(run, spec), verify=False,
+        row = measure_one(run.workload, name, provider_kernels(run, spec),
                           device=run.device, **options)
     except Exception as exc:
         row = {"ok": False, "provider": name, "failed_at": "baseline" if spec == "torch_compile" else "build",
@@ -468,7 +468,7 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
         except Exception as exc:  # the child died: its row fails, the run goes on
             results[name] = {"ok": False, "provider": name, "failed_at": "process",
                              "error": f"{type(exc).__name__}: {exc}"}
-    return assemble_report(run.workload, results, order, verify=False,
+    return assemble_report(run.workload, results, order,
                            isolation=("one spawned process per provider" if isolate
                                       else "in-process"),
                            **{k: options[k] for k in ("warmup", "steps", "blocks", "loss_steps",
@@ -478,7 +478,7 @@ def run_tier3(run: Run, providers: Mapping[str, Any], *,
 def merge_baselines(run, baselines, measured, options):
     from evograd.evaluation.tier3.runner import assemble_report
     raw = {**baselines["providers"], **measured["providers"]}
-    return assemble_report(run.workload, raw, list(raw), verify=False,
+    return assemble_report(run.workload, raw, list(raw),
                            isolation=measured.get("isolation", "shared model baselines"), **dict(options))
 
 

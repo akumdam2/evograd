@@ -3,22 +3,7 @@
 Everything here describes *the task*: where its boundary sits in the
 live model, which tensors cross it, in which layout, and whether what
 was captured still matches. Nothing here decides whether an
-implementation is good enough -- that is
-:mod:`evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope`.
-
-Derive and verify ``llama3_qkv_rope`` from the canonical Layer-16 artifact.
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope derive \
-        --source results/llama3-level3/layer8.pt \
-        --metadata-out results/llama3-level3/layer8-qkv.json
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope verify \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/layer8-qkv-verify.json
-
-    PYTHONPATH=src python -m evograd.evaluation.workloads.llama3_2_1b.level2.qkv_rope calibrate \
-        --source results/llama3-level3/layer8.pt \
-        --report results/llama3-level3/llama3_qkv_rope-tolerance.json
+implementation is good enough -- that is :mod:`evograd.verification`.
 
 ``layer8.pt`` stays the only tensor artifact. This boundary's inputs and
 outputs already live inside it, so they are re-derived by replaying the layer

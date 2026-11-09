@@ -1,8 +1,7 @@
-"""Llama's wiring into the shared training loop: where its batches come from.
+"""Llama's training and validation batch streams.
 
-The loop itself is :mod:`evograd.evaluation.tier3.gate.training` -- the same one
-Qwen3 uses. Only two things are Llama's own here, and both are consequences of
-this workload's identity rather than choices made for convenience:
+Two properties, both consequences of this workload's identity rather than
+choices made for convenience:
 
 **On the canonical workload the tokens are synthetic.** It is randomly
 initialized and its data is a deterministic pseudo-random token stream

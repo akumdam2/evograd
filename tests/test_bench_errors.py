@@ -1,6 +1,6 @@
 """Failure reporting in the benchmark harness.
 
-``evograd bench`` used to let every exception escape as a bare traceback, so a
+The harness used to let every exception escape as a bare traceback, so a
 run wrapped in ``> /dev/null 2>&1`` left no evidence of what went wrong and no
 report file. ``on_error="record"`` captures failures into the report instead;
 the default ``"raise"`` keeps the OpenEvolve evaluator's control flow, which

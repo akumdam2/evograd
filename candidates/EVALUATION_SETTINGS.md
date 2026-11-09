@@ -203,7 +203,7 @@ execution settings.
 | Provider isolation | One spawned process per provider |
 | Timer | Synchronized wall clock |
 | Cache flushing | `False` |
-| Standalone numerical preflight | `verify=False` |
+| Standalone numerical preflight | none |
 | Step latency | Median of block mean step times |
 | Speedup | `eager_step_ms / candidate_step_ms` |
 | Bootstrap draws | `2000` |
@@ -601,8 +601,8 @@ stage cases target their own stage/site, not every stage configuration.
 Timing disables deterministic algorithms; the parent timing configuration
 also disables cuDNN deterministic mode. Loading, compilation, gate checks,
 loss checks and the preparation steps are outside timed blocks. In the formal
-path, T3 providers run with `verify=False`: correctness acceptance comes from
-the formal gates, rather than repeating standalone T3 numerical preflight.
+path, T3 runs no standalone numerical preflight: correctness acceptance comes
+from the formal gates.
 Loss finiteness checks around the timed blocks remain part of execution.
 
 For each provider:

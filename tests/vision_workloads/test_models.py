@@ -130,34 +130,6 @@ def test_preflight_tracks_specialist_configuration():
     assert case.provenance.source == "specification"
 
 
-@pytest.mark.parametrize("model", ["convnextv2_tiny", "qwen2_vl_2b"])
-def test_tier3_cli_adapter(tmp_path, model):
-    from evograd.evaluation.tier3.cli import _parser, build_workload, build_providers, check_options
-
-    config = tmp_path / "config.json"
-    config.write_text(json.dumps(small_spec(model).to_config()))
-    args = _parser().parse_args(
-        [
-            "--model",
-            model,
-            "--device",
-            "cpu",
-            "--dtype",
-            "float32",
-            "--vision-config",
-            str(config),
-            "--structural-identity",
-            "--providers",
-            "eager,structural_identity",
-        ]
-    )
-    check_options(args)
-    workload = build_workload(args)
-    assert workload.spec == small_spec(model)
-    providers = build_providers(args, quiet=True, registry=workload.site_registry)
-    assert set(providers) == {"eager", "structural_identity"}
-
-
 def test_convnext_specialist_patch_touches_only_selected_stage():
     from evograd.evaluation.tier3.patch import patch
 
