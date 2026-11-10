@@ -1,4 +1,8 @@
-"""MegaFold's two mixed-precision Level-2 contracts.
+"""MegaFold's mixed-precision Level-2 contracts: the two whole ones and what the rest share.
+
+Every other Level-2 contract lives in its own module under ``levels/level2``
+(``docs/AF3.md`` section 4). They reuse the reference pieces below, because each
+is one boundary of the same eager computation, and :func:`contract` declares them.
 
 MegaFold trains with float32 parameters and a bfloat16 autocast around the
 trunk (input embedding, templates, MSA module, pairformer); the diffusion
@@ -74,6 +78,57 @@ def megafold_swiglu_forward(a, b):
     return F.silu(a) * b
 
 
+def layernorm_linear(x, weight, bias, linear_weight, linear_bias=None, eps=LAYER_NORM_EPS):
+    """``LayernormLinear``'s torch path, at ``x``'s rank: a biased GEMM's path follows its rank."""
+    y_hat = F.layer_norm(x, (x.shape[-1],), weight, bias, eps)
+    return F.linear(y_hat.to(linear_weight.dtype), linear_weight.T, linear_bias)
+
+
+def projection(t, weight, bias=None):
+    """``F.linear`` as a training step runs it, under grad or not (``docs/AF3.md`` section 3).
+
+    A contiguous input is ``F.linear`` itself. A non-contiguous one takes ``matmul``
+    then ``add``, and under grad ``matmul`` copies it to rows first; a no-grad replay
+    would batch the product instead, so the copy is spelled out here.
+    """
+    if t.is_contiguous():
+        return F.linear(t, weight, bias)
+    out = F.linear(t.contiguous(), weight)
+    return out if bias is None else out + bias
+
+
+def split_heads(t, heads):
+    """``Rearrange("b n (h d) -> b h n d")``: a view."""
+    b, n, width = t.shape
+    return t.reshape(b, n, heads, width // heads).permute(0, 2, 1, 3)
+
+
+def attend(q, k, v, key_mask, attn_bias):
+    """``Attend.forward``'s default path on ``[b, h, n, d]``, ``attn_bias`` broadcast to the scores."""
+    sim = torch.einsum("b h i d, b h j d -> b h i j", q * q.shape[-1] ** -0.5, k)
+    sim = sim + attn_bias
+    sim = sim.masked_fill(~key_mask[:, None, None, :], -torch.finfo(sim.dtype).max)
+    attn = sim.float().softmax(dim=-1).to(q.dtype)
+    return torch.einsum("b h i j, b h j d -> b h i d", attn, v)
+
+
+def attention(seq, key_mask, attn_bias, heads, q_weight, q_bias, kv_weight, gate_weight, gate_bias,
+              out_weight):
+    """``Attention.forward``: projections, ``Attend``, gating, output.
+
+    Autocast casts ``seq`` once per GEMM, and that is kept: its gradients then meet
+    in ``seq``'s dtype, which is the float32 of the LayerNorm before it. Casting
+    once would sum them in the GEMM's dtype and round them differently.
+    """
+    dtype = q_weight.dtype
+    q = projection(seq.to(dtype), q_weight, q_bias)
+    k, v = projection(seq.to(dtype), kv_weight).chunk(2, dim=-1)
+    out = attend(*(split_heads(t, heads) for t in (q, k, v)), key_mask, attn_bias)
+    b, h, n, d = out.shape
+    out = out.permute(0, 2, 1, 3).reshape(b, n, h * d)
+    return F.linear(out * projection(seq.to(dtype), gate_weight, gate_bias).sigmoid(), out_weight)
+
+
 def _observed(name: str, args: tuple[str, ...]) -> tuple[Workload, ...]:
     """One case per observed configuration of ``name``, with its recorded layout."""
     if not has_snapshot(WORKLOAD):
@@ -116,6 +171,63 @@ def _evoattention_inputs(torch_, op, workload, device="cuda"):
     keep[..., 0] = True  # a query row with every key dropped is not a case MegaFold presents
     return {"q": rand(b, s, n, h, d), "k": rand(b, s, n, h, d), "v": rand(b, s, n, h, d),
             "key_mask": keep.to(device), "pair_bias": rand(b, 1, h, n, n), "do": rand(b, s, n, h, d)}
+
+
+def _generated(name: str, shape: tuple[int, ...], generator) -> torch.Tensor:
+    """One generated argument, by the role its name states."""
+    if name == "keep":  # row or column dropout at 0.25: 0 or 1 / 0.75
+        return (torch.rand(shape, generator=generator) > 0.25).float() / 0.75
+    if name.endswith("mask"):  # a row with every key dropped is not a case MegaFold presents
+        kept = torch.rand(shape, generator=generator) > 0.1
+        kept[..., 0] = True
+        return kept
+    value = torch.randn(shape, generator=generator)
+    if len(shape) == 1 and name.endswith("weight"):  # a LayerNorm's gamma
+        return 1.0 + 0.1 * value
+    if len(shape) == 1 and name.endswith("bias"):
+        return 0.1 * value
+    if len(shape) == 2 and name.endswith("weight"):
+        return value * max(shape) ** -0.5
+    return value
+
+
+def contract_inputs(torch_, op, workload, device="cuda"):
+    """Seeded inputs for a contract, every argument in its declared dtype."""
+    from evograd.opdecl.activity import bind_shape
+    from evograd.opdecl.inputs import arg_dtype_name, case_seed, resolve_dtype
+
+    generator = torch.Generator(device="cpu").manual_seed(case_seed(workload) % (1 << 63))
+    values = {}
+    for arg in (*op.args, *((a.grad_name, a) for a in op.outputs)):
+        name, arg = arg if isinstance(arg, tuple) else (arg.name, arg)
+        if getattr(arg, "shape", None) is None:
+            values[name] = arg.default
+            continue
+        shape, dtype = bind_shape(arg.shape, workload.dims), resolve_dtype(arg_dtype_name(arg, workload))
+        if str(device) == "meta":
+            values[name] = torch.empty(shape, dtype=dtype, device="meta")
+        elif name == "msa_count":  # MSAModule.forward's own sum over the MSA mask
+            values[name] = values["msa_mask"].float().sum(-1).to(device=device, dtype=dtype)
+        else:
+            values[name] = _generated(name, shape, generator).to(device=device, dtype=dtype)
+    return values
+
+
+def contract(name, *, family, forward, dims, args, output, forward_semantics, backward_semantics,
+             parameter_args, runtime_forward=None):
+    """A Level-2 task over one reference, on its observed cases.
+
+    ``runtime_forward`` is what the model calls, where ``forward`` has to spell it in
+    primitives for a seed to lower. Fidelity and the site check run it.
+    """
+    observed = _observed(name, tuple(a.name for a in args if getattr(a, "shape", None) is not None))
+    return declare_op(
+        name=name, level=2, family=family, forward=forward, runtime_forward=runtime_forward,
+        dims=dims, args=args, output=output,
+        parameter_args=parameter_args, forward_semantics=forward_semantics,
+        backward_semantics=backward_semantics, coverage=observed,
+        benchmark=observed, benchmark_suites={f"{WORKLOAD}_observed": observed},
+        make_inputs=contract_inputs)
 
 
 LAYERNORM_LINEAR = "megafold_layernorm_linear"

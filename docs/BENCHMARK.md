@@ -83,17 +83,12 @@ alone. The Level-1/2 cases are harvested from one such step
 registered AlphaFold3 configuration, and the workload refuses a case that does
 not match.
 
-**Two of the five sites are MegaFold's own contracts.** MegaFold trains with
-float32 parameters under a bfloat16 autocast over the trunk; the diffusion
-module, heads and loss run with autocast off. The LayerNorm and the SwiGLU
-compute the same thing in either region and keep the generic `layernorm` and
-`swiglu` contracts. The LayerNorm+Linear (LayerNorm in float32, GEMM in
-bfloat16 under autocast) and the attention (score plus bias rounded to the
-case dtype, `masked_fill` of dropped keys, float32 softmax) are declared as
-`megafold_layernorm_linear` and `megafold_evoattention`, exactly as MegaFold's
-PyTorch code computes them. Each site adapter makes autocast's casts itself,
-runs its kernel with autocast off and returns the dtype the replaced module
-returns.
+**Tasks come from the training step** (`docs/AF3.md`), not from which kernels
+MegaFold ships. MegaFold trains with float32 parameters under a bfloat16 autocast
+over the trunk; the diffusion module, heads and loss run with autocast off. Each
+Level-2 contract is declared exactly as MegaFold's eager PyTorch computes it in that
+precision. Each site adapter makes autocast's casts itself, runs its kernel with
+autocast off and returns the dtype the replaced module returns.
 
 **Three providers, one architecture.** MegaFold builds its own fused Triton
 kernels directly into the module tree rather than behind a flag, so the choice
@@ -128,22 +123,20 @@ compile provider's step time is conservative.
 These four are different module *trees*, not four kernel sets, so the runner
 passes the provider's name to the workload. `build_with_provenance` forwards it
 only to a workload that declares a `provider` parameter, which is why every
-other workload in the tree is unaffected. Five sites are patchable -- `layer_norm`, `layernorm_linear`,
-`transition`, `pair_bias_attention`, `triangle_attention` -- and they are
-exactly the boundaries MegaFold fuses, which is what makes its own kernels the
-line an evolved one has to clear.
+other workload in the tree is unaffected. The patchable sites are listed in
+`docs/AF3.md` section 9. Sites that nest are declared, and are never installed
+together.
 
 **What the workload excludes**, stated in the declaration rather than left to
 be discovered:
 
-- Triangle multiplication, outer product mean, MSA pair-weighted averaging, the
-  diffusion module internals and the confidence head internals run stock inside
-  the timed step and dilute the measured speedup. That dilution is the Level-3
-  result, not a flaw.
-- Attention-weight dropout is disabled for every provider alike. No
-  fused-attention contract models it, MegaFold's own EvoAttention included, and
-  a dropout firing in one provider but not another would desynchronize their
-  RNG streams.
+- Windowed atom attention, the embedding and pooling layers, the output heads,
+  the losses and the alignment hold no site. Whatever is outside the installed
+  sites runs stock inside the timed step and dilutes the measured speedup. That
+  dilution is the Level-3 result, not a flaw.
+- Attention-weight dropout is disabled for every provider alike. The warm start
+  was trained without it, and a dropout firing in one provider but not another
+  would desynchronize their RNG streams.
 - The data is one real structure featurized once and frozen. Nothing here
   measures data loading, and no result speaks to prediction quality. Its
   templates are masked (MegaFold's training never passes a kalign binary) and
@@ -162,8 +155,6 @@ be discovered:
   recycling projections (multiplied by zero in the one pass) get no gradient
   in this step and hold no sites (`workload.NOT_SITES`); they run their eager
   spelling in every provider.
-- The triangle multiplication's combined projection carries a linear bias,
-  which the LayerNorm+Linear contract does not, and runs MegaFold's own code.
 - Weights are randomly initialized from a fixed seed. Verification and the
   ADBench evaluation load a frozen warm start instead
   (`integrations.warm_start`: 200 updates of MegaFold's own trainer recipe on

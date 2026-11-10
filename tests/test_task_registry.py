@@ -60,7 +60,17 @@ VISION_LEVEL2 = (
     "qwen2_vl_2b_text_mlp",
     "qwen2_vl_2b_vision_mlp",
 )
-MEGAFOLD_LEVEL2 = ("megafold_evoattention", "megafold_layernorm_linear")
+MEGAFOLD_LEVEL2 = (
+    "megafold_evoattention",
+    "megafold_layernorm_linear",
+    "megafold_msa_pair_weighted_averaging",
+    "megafold_outer_product_mean",
+    "megafold_transition",
+    "megafold_triangle_attention_ending",
+    "megafold_triangle_attention_starting",
+    "megafold_triangle_multiplication_incoming",
+    "megafold_triangle_multiplication_outgoing",
+)
 DLRM_LEVEL2 = ("torchrec_dlrm_dlrm_interaction",)
 MODEL_LEVEL2 = (
     QWEN_LEVEL2 + LLAMA_LEVEL2 + QWEN3_5_LEVEL2 + OLMOE_LEVEL2 + VISION_LEVEL2
@@ -80,9 +90,10 @@ class TestPrimitiveRegistry(unittest.TestCase):
             sorted(PRIMITIVES),
             [
                 "causal_conv1d", "causal_gqa_attention", "cross_entropy", "embedding_bag",
-                "gated_rmsnorm", "gdn_gating", "gelu", "gemma_rmsnorm", "grn", "l2norm",
-                "layernorm", "linear", "linear_no_bias", "partial_rope", "quick_gelu",
-                "rmsnorm", "rope", "spatial_conv2d", "swiglu",
+                "gated_rmsnorm", "gdn_gating", "gelu", "gemma_rmsnorm", "glu", "grn", "l2norm",
+                "layernorm", "layernorm_no_affine", "layernorm_no_bias", "linear",
+                "linear_no_bias", "partial_rope", "quick_gelu", "relu", "rmsnorm", "rope",
+                "sigmoid", "softmax", "spatial_conv2d", "swiglu",
             ],
         )
 
@@ -116,7 +127,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
         self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
-        self.assertEqual(len(TASKS), 46)
+        self.assertEqual(len(TASKS), 59)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:

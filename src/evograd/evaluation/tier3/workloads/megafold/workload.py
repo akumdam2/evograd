@@ -12,7 +12,7 @@ is deferred into the function that needs it, so this module imports on a
 machine that has never seen MegaFold.
 
 **Three providers, one architecture.** MegaFold ships its own fused Triton
-kernels for four of the five sites, built directly into the module tree rather
+kernels for its sites that match them, built directly into the module tree rather
 than toggled by a flag, so this workload can put three implementations side by
 side on identical weights and batches:
 
@@ -68,6 +68,7 @@ import os
 import random
 import socket
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 
 import torch
@@ -86,7 +87,10 @@ from evograd.evaluation.tier3.patch import (
 )
 from evograd.opdecl.activity import Workload
 from evograd.opdecl.models import ALPHAFOLD3, ALPHAFOLD3_2L, AlphaFoldConfig
-from evograd.benchmark.topdown.megafold import MEGAFOLD_SITE_OPS
+from evograd.benchmark.topdown.megafold import MEGAFOLD_SITE_OPS, MEGAFOLD_SITE_OVERLAPS
+
+from . import sites as site_table
+from .sites import LAYER_NORM_EPS, _autocast_dtype, _no_autocast
 
 #: MegaFold's own default, and not a value ``configs/megafold_1x1.yaml`` sets.
 #: Reported by :meth:`MegaFoldWorkload.describe` regardless, because it sizes
@@ -106,10 +110,6 @@ NUM_RECYCLING_STEPS = 1
 #: head is called. :meth:`MegaFoldWorkload.loss` hands the model its own copies,
 #: so a batch is the same input at every use.
 WRITTEN_INPUTS = ("resolved_labels",)
-
-#: LayerNorm epsilon. MegaFold's fused kernel hardcodes it and its own torch
-#: fallback takes ``F.layer_norm``'s default, so both spellings agree on 1e-5.
-LAYER_NORM_EPS = 1e-5
 
 #: The provider names that select a tree. Everything else -- ``candidate``, the
 #: identity control, a pair baseline -- gets the eager tree and then its own
@@ -187,6 +187,7 @@ MEGAFOLD_SITES = SiteRegistry(
         Site(site, op_name, _surgery_only(site), preflight=_observed(site))
         for site, op_name in MEGAFOLD_SITE_OPS.items()
     ),
+    overlaps=MEGAFOLD_SITE_OVERLAPS,
 )
 
 
@@ -337,17 +338,6 @@ def _trainer_autocast_dtype() -> torch.dtype:
 # -- replacement modules: the evolved sites ----------------------------------
 
 
-def _autocast_dtype(t) -> torch.dtype | None:
-    """The dtype an enclosing autocast runs reduced-precision ops in, or None."""
-    kind = t.device.type
-    return torch.get_autocast_dtype(kind) if torch.is_autocast_enabled(kind) else None
-
-
-def _no_autocast(t):
-    """A kernel sees exactly the dtypes its contract declares, never autocast's rewrites."""
-    return torch.autocast(device_type=t.device.type, enabled=False)
-
-
 def _like(tensor, activation):
     """A parameter in the activation's dtype, which autocast will not do here.
 
@@ -412,11 +402,10 @@ class _KernelSwiGLU(nn.Module):
         self.kernel = kernel
 
     def forward(self, x):
-        first, gates = x.chunk(2, dim=-1)
-        cols = gates.shape[-1]
-        with _no_autocast(gates):
-            out = self.kernel(gates.reshape(-1, cols), first.reshape(-1, cols))
-        return out.reshape(gates.shape)
+        values = site_table.swiglu_arguments(self, (x,), {})
+        with _no_autocast(x):
+            out = self.kernel(*values.values())
+        return out.reshape(*x.shape[:-1], x.shape[-1] // 2)
 
 
 class _PatchedLayerNorm(nn.Module):
@@ -483,15 +472,10 @@ class _PatchedLayernormLinear(nn.Module):
         self.kernel = kernel
 
     def forward(self, x):
-        lead, k = x.shape[:-1], x.shape[-1]
-        rows = x.reshape(-1, k)
-        gemm_dtype = _autocast_dtype(x)
-        weight = self.linear_weight
-        if gemm_dtype is not None:
-            rows, weight = rows.float(), weight.to(gemm_dtype)
+        values = site_table.layernorm_linear_arguments(self, (x,), {})
         with _no_autocast(x):
-            out = self.kernel(rows, self.WEIGHT, self.BIAS, weight, LAYER_NORM_EPS)
-        return out.reshape(*lead, out.shape[-1])
+            out = self.kernel(*values.values())
+        return out.reshape(*x.shape[:-1], out.shape[-1])
 
 
 class _PatchedAttend(nn.Module):
@@ -538,47 +522,11 @@ class _PatchedAttend(nn.Module):
         use_optimized_evo=None,
         **_kwargs,
     ):
-        if windowed_mask is not None or memory_kv is not None:
-            raise ValueError(
-                "megafold_evoattention site received windowed/memory-kv attention inputs"
-            )
-        batch, heads, n, d = q.shape
-        # Layout. MegaFold folds the leading axes into one batch before
-        # ``Attend`` -- ``[b, h, n, d]`` with ``b = batch_size * n1`` -- and its
-        # own Triton path unfolds them again right before the kernel:
-        # ``(b n1) h n2 d -> b n1 n2 h d``. The declaration's ``S`` is that
-        # ``n1`` axis (one row of the pair representation per sequence), so
-        # the site maps ``B = batch_size`` and ``S = b // batch_size``; for
-        # pair-bias attention over the single representation ``S == 1``, for
-        # triangle attention ``S == n1``. Folding ``n1`` into ``B`` instead
-        # would run the kernel at a shape no tier measured and hand it ``S``
-        # copies of the bias.
-        B = batch_size if batch_size and batch % batch_size == 0 else batch
-        S = batch // B
-        dtype = q.dtype
-        if attn_bias is not None and attn_bias.dtype != dtype:
-            raise ValueError(f"attention bias in {attn_bias.dtype} with q in {dtype}: "
-                             "MegaFold adds them in one dtype")
-
-        def declared(t):  # [(B S), h, n, d] view -> [B, S, N, H, D] view of the same memory
-            return t.permute(0, 2, 1, 3).unflatten(0, (B, S))
-
-        if attn_bias is None:
-            pair_bias = q.new_zeros((B, 1, heads, n, n))
-        else:
-            # The bias is one ``[b, h, n, n]`` tensor per batch element; the
-            # declaration broadcasts it over ``S`` and the kernel reduces
-            # ``d_pair_bias`` over ``S`` itself. Triangle attention arrives with
-            # that one bias ``repeat``-ed over its rows, so the site passes the
-            # first row (a view): autograd's gradient into that row is the
-            # kernel's S-sum, which is what the repeat's backward would form.
-            pair_bias = attn_bias.expand(batch, heads, n, n).reshape(B, S, heads, n, n)[:, :1]
-        # MegaFold broadcasts one key mask over the rows (stride 0); the kernel
-        # gets it materialized, a few hundred KB, so no argument overlaps itself.
-        key_mask = (q.new_ones((B, S, n), dtype=torch.bool) if mask is None
-                    else mask.view(B, S, n).contiguous())
+        values = site_table.attend_arguments(
+            self, (q, k, v), dict(mask=mask, windowed_mask=windowed_mask, attn_bias=attn_bias,
+                                  memory_kv=memory_kv, batch_size=batch_size))
         with _no_autocast(q):
-            out = self.kernel(declared(q), declared(k), declared(v), key_mask, pair_bias)
+            out = self.kernel(*values.values())
         # [B, S, N, H, D] -> [(B S), h, n, d], the layout the caller folded.
         return out.flatten(0, 1).permute(0, 2, 1, 3)
 
@@ -756,6 +704,7 @@ def _module_patches(model: nn.Module) -> tuple[ModulePatch, ...]:
     def inside(match: Callable[[nn.Module], bool]) -> Callable[[nn.Module], bool]:
         return lambda m: id(m) not in outside and match(m)
 
+    transitions = (FusedTransition, _EagerTransition)
     return (
         ModulePatch("layer_norm", inside(pre_layer_norm), swap_inner_norm),
         ModulePatch(
@@ -774,6 +723,7 @@ def _module_patches(model: nn.Module) -> tuple[ModulePatch, ...]:
             inside(lambda m: type(m) is TriangleAttention),
             swap_inner_attend,
         ),
+        *site_table.composite_patches(model_module, inside, transitions),
     )
 
 
@@ -866,6 +816,8 @@ class MegaFoldWorkload:
         self.batch = batch
         self.residues = residues
         self.device = device
+        #: What the verification adapters read a workload's device and dtype from.
+        self.spec = SimpleNamespace(device=device, dtype="float32")
         self.dtype = dtype
         self.seed = seed
         self.use_optimized_evo = use_optimized_evo
@@ -1078,30 +1030,28 @@ class MegaFoldWorkload:
         the training calls, their activation-checkpoint recomputes and the
         confidence head's no-grad mini-rollout. The step's control flow is pinned
         (one structure, one recycling pass, a fixed rollout), so the calls are
-        counted once, on the eager tree with every site patched by a counting
-        kernel, and kept; the caller's random state is left as it was."""
+        counted once and kept, by hooks on each site's module of the eager tree:
+        nested sites cannot be patched together, and a kernel is called once per
+        call of its module. The caller's random state is left as it was."""
         if self._site_calls is None:
-            from evograd.benchmark import get_task
-            from evograd.opdecl.oracle import resolve_runtime_forward
-
             registry = self.site_registry
             counts = dict.fromkeys(registry.names, 0)
 
-            def counting(site):
-                forward = resolve_runtime_forward(get_task(registry.require(site).op))
-
-                def kernel(*args, **kwargs):
+            def count(site):
+                def hook(_module, _args, _output):
                     counts[site] += 1
-                    return forward(*args, **kwargs)
 
-                return kernel
+                return hook
 
-            kernels = KernelSet(registry=registry, patched=tuple(registry.names),
-                                overrides={site: counting(site) for site in registry.names})
             state = random.getstate()
             with torch.random.fork_rng():
                 try:
-                    model = self.build(kernels).train()
+                    model = self.build(KernelSet(registry=registry)).train()
+                    for spec in _module_patches(model):
+                        boundary = site_table.BOUNDARIES[spec.site]
+                        for _path, module in list(model.named_modules()):
+                            if spec.match(module):
+                                boundary.module(module).register_forward_hook(count(spec.site))
                     self.loss(model, self.batch_for(seed=0)).backward()
                 finally:
                     random.setstate(state)

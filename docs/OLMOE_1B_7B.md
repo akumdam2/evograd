@@ -51,6 +51,25 @@ runs the B1 variant (non-canonical: the report says so).
 evograd evaluate olmoe_1b_7b --corpus C/manifest.json --out RUN --candidate CASE=prog.py
 ```
 
+## Verification
+
+Every gate applies: Gate 1 and operator Gate 2 on the recorded calls, then model
+Gate 2 and Gate 3 for a Level-2 candidate. The two model gates treat routing
+differently, because routers make top-k choices that tiny numerical differences flip.
+
+- **Model Gate 2** compares every output and parameter gradient, so one flipped
+  token would look like a large error. It runs on the native run's routing
+  (`verification/integrations/olmoe_1b_7b/routing.py`): the router's probabilities
+  and gradient stay live, and only its top-k choice is fixed.
+- **Gate 3** keeps free routing. It judges the loss curve against native and compile
+  runs, and compile flips routing too, so its thresholds already hold that spread.
+  Its objective is the next-token loss, without the router's 0.01 load-balancing term.
+
+Gate 3's optimizer is copied from Qwen3.5-4B and model Gate 2's margin is the
+protocol default. Neither has been measured on this model. On a tiny random model a
+10% fault at the experts fails model Gate 2 and a 1% fault passes it; how small a
+fault it catches on the real model is not known yet.
+
 ## Caveats, stated up front
 
 - **Memory.** 6.92B parameters: 13.8 GiB of bf16 weights, as much again of

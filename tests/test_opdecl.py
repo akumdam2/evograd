@@ -57,18 +57,25 @@ class TestDerivedNaming(unittest.TestCase):
                     "gelu",
                     # The zero-centred (1 + w) RMSNorm.
                     "gemma_rmsnorm",
+                    "glu",
                     "grn",
                     # The delta rule's q/k normalization.
                     "l2norm",
                     "layernorm",
+                    "layernorm_no_affine",
+                    "layernorm_no_bias",
                     "linear",
                     # Biasless projections -- what a modern decoder runs.
                     "linear_no_bias",
                     # Gated attention's 64-of-256-channel rotary embedding.
                     "partial_rope",
                     "quick_gelu",
+                    "relu",
                     "rmsnorm",
                     "rope",
+                    "sigmoid",
+                    # MegaFold's attention probabilities.
+                    "softmax",
                     "spatial_conv2d",
                     "swiglu",
                 ],
@@ -93,6 +100,13 @@ class TestDerivedNaming(unittest.TestCase):
                     # attention: what its autocast trunk computes there.
                     "megafold_evoattention",
                     "megafold_layernorm_linear",
+                    "megafold_msa_pair_weighted_averaging",
+                    "megafold_outer_product_mean",
+                    "megafold_transition",
+                    "megafold_triangle_attention_ending",
+                    "megafold_triangle_attention_starting",
+                    "megafold_triangle_multiplication_incoming",
+                    "megafold_triangle_multiplication_outgoing",
                     # OLMoE-1B-7B's four sites: the attention prefix with
                     # full-width q/k norms, the attention core, the routed
                     # experts (the router stays native) and the residual fusion.
