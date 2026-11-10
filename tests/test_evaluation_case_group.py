@@ -71,9 +71,11 @@ class CaseGroupTests(unittest.TestCase):
     def provider(self, run, name, spec, options):
         self.events.append(("tier3", name))
         ms = 100 if name == "eager" else 70 if name == "torch_compile" else 60 if name.endswith("combination") else 80
+        graph = ms * 0.8        # T3-G keeps the same order; it decides the combination
         return {"ok": True, "step_ms": ms, "per_block_ms": [ms] * 3,
                 "peak_memory_bytes": 100, "cpu_bound_fraction": .1,
-                **({"correctness": {"status": "passed"}} if name == "torch_compile" else {})}
+                "cuda_graph": {"ok": True, "step_ms": graph, "per_block_ms": [graph] * 3,
+                               "capture_s": 0.1, "check": {"agrees": True}}}
 
     def combination(self, run, chosen):
         self.events.append(("combination", run.out.name, tuple(chosen)))
@@ -110,6 +112,8 @@ class CaseGroupTests(unittest.TestCase):
             result = json.loads((Path(job["out"]) / "evaluation.json").read_text())
             self.assertEqual(result["tier3"]["combination"]["cases"], ["swiglu/a"])
             self.assertAlmostEqual(result["tier3"]["combination"]["speedup_vs_torch_compile"], 70 / 60)
+            self.assertAlmostEqual(
+                result["tier3"]["combination"]["cuda_graph_speedup_vs_torch_compile"], 70 / 60)
             self.assertEqual(result["settings"]["group_execution"], case_group.GROUP)
         self.events.clear()
         self.assertEqual(self.execute(), 0)

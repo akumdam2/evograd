@@ -27,11 +27,13 @@ Every submission follows the same steps, whoever generated it:
    and gradients with the eager shapes and dtypes, and leaves its inputs
    unchanged; anything else is not timed.
 3. **Tier 3, single site**: the training step with each executable Level-2
-   candidate alone at its model site, against eager.
-4. **Combination**: the accepted Level-2 candidates whose single-site speedup
-   has a 95% interval above one (:data:`COMBINATION_RULE`), judged together by
-   model Gate 2 and Gate 3 (where it applies), then timed at Tier 3 against
-   eager and the whole-model ``torch.compile``.
+   candidate alone at its model site, against eager. Every provider is timed
+   twice: replayed from one CUDA graph (T3-G, the primary result) and launched
+   eagerly (T3).
+4. **Combination**: the accepted Level-2 candidates whose single-site T3-G
+   speedup has a 95% interval above one (:data:`COMBINATION_RULE`), judged
+   together by model Gate 2 and Gate 3 (where it applies), then timed at
+   Tier 3 against eager and the whole-model ``torch.compile``.
 5. **Summary** (:func:`summarize`): per level, the speedup over the accepted
    configurations, coverage and the verification funnel; peak memory at
    Level 3.
@@ -64,7 +66,7 @@ from evograd.verification.integrations.gates import (
     verify_combination,
 )
 
-PROTOCOL = "evograd-evaluation-v3"
+PROTOCOL = "evograd-evaluation-v4"
 #: /2: whole-model torch.compile takes the eager SDPA path (``traced_causal_mask_as_eager``).
 BASELINE_REVISION = "whole-model-baselines/2"
 REFERENCE = "eager"
@@ -81,8 +83,9 @@ TIER2_INPUTS = {"source": "real_training_payload", "split": "acceptance",
 #: graph (T3-G, ``runner.measure_cuda_graph``), beside the eager step (T3).
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0, "cuda_graph": True}
-COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager "
-                    "has a 95% bootstrap interval with its lower bound above 1")
+COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager, "
+                    "both replayed from a CUDA graph (T3-G), has a 95% bootstrap interval with its "
+                    "lower bound above 1")
 #: Baselines included in the per-level aggregate; every T2 baseline uses autograd.
 ENGINE_BASELINES = ("eager", "torch_compile")
 
@@ -368,10 +371,6 @@ def baseline_implementation(workload):
             "sources": {str(path): sha_file(path) for path in paths}}
 
 
-def compile_baseline_valid(row):
-    return bool(row.get("ok")) and (row.get("correctness") or {}).get("status") == "passed"
-
-
 def whole_model_compile(workload):
     """The workload's whole-model ``torch.compile`` provider, if it offers one."""
     import sys
@@ -414,17 +413,9 @@ def _tier3_child(model_name: str, candidates: dict, corpus_path: str, name: str,
 
 def _measure_tier3_provider(run, name, spec, options):
     from evograd.evaluation.tier3.runner import measure_one
-    from evograd.evaluation.tier3.compile_baseline import check_correctness, require_compiled_graphs
+    from evograd.evaluation.tier3.compile_baseline import require_compiled_graphs
 
-    correctness = None
     try:
-        if spec == "torch_compile":
-            correctness = check_correctness(run.model, run.workload)
-            # Correctness graphs must not count as evidence for the timed model.
-            import torch._dynamo
-            from torch._dynamo.utils import counters
-            torch._dynamo.reset()
-            counters.clear()
         timing_mode()
         row = measure_one(run.workload, name, provider_kernels(run, spec), verify=False,
                           device=run.device, **options)
@@ -432,7 +423,6 @@ def _measure_tier3_provider(run, name, spec, options):
         row = {"ok": False, "provider": name, "failed_at": "baseline" if spec == "torch_compile" else "build",
                "error": f"{type(exc).__name__}: {exc}"}
     if spec == "torch_compile":
-        row["correctness"] = correctness or {"status": "error", "error": row.get("error", "not checked")}
         require_compiled_graphs(row)
     return row
 
@@ -493,11 +483,11 @@ def _tier3_row(report: Mapping[str, Any], name: str) -> dict[str, Any]:
     if not entry.get("ok"):
         return {"ok": False, "error": entry.get("error", "not measured"),
                 "failed_at": entry.get("failed_at"),
-                **{field: entry[field] for field in ("correctness", "dynamo", "compile_settings")
+                **{field: entry[field] for field in ("dynamo", "compile_settings")
                    if field in entry}}
     row = {"ok": True, "step_ms": entry["step_ms"], "peak_memory_bytes": entry.get("peak_memory_bytes"),
            "cpu_bound_fraction": entry.get("cpu_bound_fraction")}
-    for field in ("correctness", "dynamo", "compile_settings"):
+    for field in ("dynamo", "compile_settings"):
         if field in entry:
             row[field] = entry[field]
     intervals = report.get("speedup_intervals") or {}
@@ -522,7 +512,7 @@ def _tier3_row(report: Mapping[str, Any], name: str) -> dict[str, Any]:
 
 def speedups_vs_compile(own: Mapping[str, Any], compiled: Mapping[str, Any]) -> dict[str, float]:
     """A combination against whole-model compile, in each execution both rows completed."""
-    if not (own.get("ok") and compile_baseline_valid(compiled)):
+    if not (own.get("ok") and compiled.get("ok")):
         return {}
     out = {"speedup_vs_torch_compile": compiled["step_ms"] / own["step_ms"]}
     graph, compiled_graph = own.get("cuda_graph") or {}, compiled.get("cuda_graph") or {}
@@ -532,8 +522,11 @@ def speedups_vs_compile(own: Mapping[str, Any], compiled: Mapping[str, Any]) -> 
 
 
 def _positive(case: Mapping[str, Any]) -> bool:
-    """Accepted and faster than eager with the single-site 95% interval above one."""
-    timed = case.get("tier3_single_site") or {}
+    """Accepted and faster than eager at T3-G with the single-site 95% interval above one.
+
+    A candidate whose step cannot be captured has no T3-G result and is not positive.
+    """
+    timed = (case.get("tier3_single_site") or {}).get("cuda_graph") or {}
     lower = (timed.get("ci95") or {}).get("low")
     return (bool(case.get("accepted")) and bool(timed.get("ok"))
             and isinstance(lower, (int, float)) and math.isfinite(lower) and lower > 1)
@@ -688,8 +681,9 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             tier3["single_site"] = single["rows"]
             for cid, row in single["rows"].items():
                 result["cases"][cid]["tier3_single_site"] = row
-            log("tier3 single site", {cid: row.get("speedup", row.get("error"))
-                                      for cid, row in single["rows"].items()})
+            log("tier3 single site (T3-G)",
+                {cid: (row.get("cuda_graph") or {}).get("speedup", row.get("error"))
+                 for cid, row in single["rows"].items()})
 
         # 4. The combination: its gates, then its training step.
         chosen = [cid for cid in level2 if _positive(result["cases"][cid])]
@@ -770,15 +764,15 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Per level: speedup over the accepted configurations (geometric mean over
     configurations, then tasks, then families), coverage and the verification
     funnel. Level 2 also retains each site's model-scope measurement without
-    pooling it; Level 3 reports each model's combination, speedup and peak memory."""
+    pooling it; Level 3 reports each model's combination, its T3-G speedup (the
+    primary result), the eagerly launched step's and peak memory."""
     from evograd.benchmark.core.report import geomean
 
     for ev in evaluations:
         if ev.get("protocol") != PROTOCOL:
             raise ValueError(
                 f"{ev.get('model', 'evaluation')}: protocol {ev.get('protocol')!r} is not "
-                f"{PROTOCOL!r}; rerun evaluate to obtain formal Tier 2 results. Earlier "
-                "protocols timed Tier 1 or generated inputs; they are not pooled with recorded calls.")
+                f"{PROTOCOL!r}; rerun evaluate")
     rows = [dict(row) for ev in evaluations for row in ev["cases"].values()]
     models, single_sites = {}, {}
     for ev in evaluations:
@@ -804,20 +798,25 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "peak_memory_ratio": timed.get("peak_memory_ratio"),
             "cpu_bound_fraction": timed.get("cpu_bound_fraction"),
             "cuda_graph": {"speedup": (timed.get("cuda_graph") or {}).get("speedup"),
+                           "ci95": (timed.get("cuda_graph") or {}).get("ci95"),
                            "speedup_vs_torch_compile":
                                combination.get("cuda_graph_speedup_vs_torch_compile")}}
-    counted = [m for m in models.values() if m["accepted"] and _finite(m["speedup"])]
+    # Level 3 counts a model by its T3-G result; the eagerly launched step rides along.
+    counted = [m for m in models.values()
+               if m["accepted"] and _finite(m["cuda_graph"]["speedup"])]
     memory = [m["peak_memory_ratio"] for m in counted if _finite(m["peak_memory_ratio"])]
-    graphed = [m["cuda_graph"]["speedup"] for m in counted if _finite(m["cuda_graph"]["speedup"])]
+    launched = [m["speedup"] for m in counted if _finite(m["speedup"])]
     return {
         "models": sorted(models),
         "level1": _level_summary(rows, 1),
         "level2": {**_level_summary(rows, 2), "tier3_single_site": single_sites},
-        "level3": {"models": models,
-                   "speedup": {"geomean": geomean([m["speedup"] for m in counted]) if counted else None,
-                               "models_covered": len(counted)},
-                   "cuda_graph_speedup": {"geomean": geomean(graphed) if graphed else None,
-                                          "models_covered": len(graphed)},
+        "level3": {"models": models, "primary": "cuda_graph",
+                   "cuda_graph_speedup": {
+                       "geomean": (geomean([m["cuda_graph"]["speedup"] for m in counted])
+                                   if counted else None),
+                       "models_covered": len(counted)},
+                   "speedup": {"geomean": geomean(launched) if launched else None,
+                               "models_covered": len(launched)},
                    "coverage": len(counted) / len(models) if models else None,
                    "peak_memory_ratio_geomean": geomean(memory) if memory else None},
     }

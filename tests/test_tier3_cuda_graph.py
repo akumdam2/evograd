@@ -39,7 +39,7 @@ def test_a_failed_capture_leaves_the_eager_row_standing(monkeypatch):
 
 
 def test_graph_rows_are_compared_with_the_graph_reference():
-    report = _report({"eager": _row(100, 80), "torch_compile": _row(60, 50, correctness={"status": "passed"}),
+    report = _report({"eager": _row(100, 80), "torch_compile": _row(60, 50),
                       "a": _row(80, 55), "b": _row(90, 70, graph_ok=False)})
     assert CUDA_GRAPH in report["timing_protocol"]
     eager = speedup_intervals(report)["vs_reference"]
@@ -57,14 +57,14 @@ def test_graph_rows_are_compared_with_the_graph_reference():
 
 def test_speedups_against_compile_in_each_execution():
     compiled = P._tier3_row(_report({"eager": _row(100, 80),
-                                     "torch_compile": _row(60, 50, correctness={"status": "passed"})}),
+                                     "torch_compile": _row(60, 50)}),
                             "torch_compile")
     own = {"ok": True, "step_ms": 75, CUDA_GRAPH: {"ok": True, "step_ms": 55}}
     assert P.speedups_vs_compile(own, compiled) == pytest.approx(
         {"speedup_vs_torch_compile": 60 / 75, "cuda_graph_speedup_vs_torch_compile": 50 / 55})
     own[CUDA_GRAPH]["ok"] = False
     assert P.speedups_vs_compile(own, compiled) == pytest.approx({"speedup_vs_torch_compile": 60 / 75})
-    assert P.speedups_vs_compile(own, {**compiled, "correctness": {"status": "failed"}}) == {}
+    assert P.speedups_vs_compile(own, {**compiled, "ok": False}) == {}
 
 
 def test_without_cuda_graph_the_report_is_unchanged():

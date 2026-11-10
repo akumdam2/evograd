@@ -31,7 +31,7 @@ neither of them:
 The [Qwen3-0.6B evaluation plan](EVALUATION_PLAN.md)
 fixes the first comparison's six cases, 10-request budget, gates, timing and reporting.
 
-The comparison that counts is `evograd evaluate` (`evograd-evaluation-v3`:
+The comparison that counts is `evograd evaluate` (`evograd-evaluation-v4`:
 real-payload gates, Tier 2, single-site Tier 3 and the Level-3 combination), run
 on every agent's submissions by `bench.py`; `score`/`compare` below are
 single-configuration diagnostics. See
@@ -59,7 +59,8 @@ every baseline using the same autograd scope; it has no optimizer or `.grad`
 accumulation. Its fair timer retains warmup 10, repetitions 50 and 3 blocks.
 T1 remains search feedback or a separate pair diagnostic. Each agent's L3
 combination contains its accepted L2 candidates whose successful single-site
-T3 speedup over eager has a 95% interval with lower bound greater than 1.
+T3-G speedup over eager (both replayed from a CUDA graph) has a 95% interval
+with lower bound greater than 1.
 The summary retains these individual T3 results, gates and selection decisions;
 it does not average them into an end-to-end speedup. L3 is measured separately
 against eager and whole-model compile; its reported interval is against eager.

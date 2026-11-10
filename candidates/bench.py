@@ -280,25 +280,28 @@ def summary_table(rows: dict[str, dict]) -> str:
                 f"| {spent['evaluations']} | {calls} "
                 f"| {spent['wall_seconds'] / 3600:.2f} |")
         for model, m in summary["level3"]["models"].items():
-            lines.append(
-                f"| {agent} | L3 / T3 ({model}) | {len(m['cases'])} combined | - | - | - "
-                f"| {'yes' if m['accepted'] else 'no'} | - | {_cell(m['speedup'])} "
-                f"| {_cell(m['speedup_vs_torch_compile'])} | - | - | - |")
+            for tier, timed in (("T3-G", m["cuda_graph"]), ("T3", m)):
+                lines.append(
+                    f"| {agent} | L3 / {tier} ({model}) | {len(m['cases'])} combined | - | - | - "
+                    f"| {'yes' if m['accepted'] else 'no'} | - | {_cell(timed['speedup'])} "
+                    f"| {_cell(timed['speedup_vs_torch_compile'])} | - | - | - |")
     singles = []
     for agent, entry in rows.items():
         for model, cases in entry["summary"]["level2"].get("tier3_single_site", {}).items():
             for cid, case in cases.items():
-                timed = case.get("tier3") or {}
+                launched = case.get("tier3") or {}
+                timed = launched.get("cuda_graph") or {}
                 interval = timed.get("ci95") or {}
                 ci = f"[{_cell(interval.get('low'))}, {_cell(interval.get('high'))}]"
                 singles.append(
                     f"| {agent} | {model}: {cid} | {'yes' if case.get('accepted') else 'no'} "
                     f"| {_cell(timed.get('step_ms'))} | {_cell(timed.get('speedup'))} | {ci} "
-                    f"| {'yes' if case.get('positive') else 'no'} |")
+                    f"| {'yes' if case.get('positive') else 'no'} | {_cell(launched.get('speedup'))} |")
     if singles:
-        lines += ["", "L2 single-site Tier 3 (against eager)", "",
-                  "| agent | case | accepted | step ms | speedup | 95% interval | positive |",
-                  "|---|---|---|---|---|---|---|", *singles]
+        lines += ["", "L2 single-site Tier 3 (against eager; T3-G decides `positive`)", "",
+                  "| agent | case | accepted | T3-G step ms | T3-G speedup | 95% interval | positive "
+                  "| T3 speedup |",
+                  "|---|---|---|---|---|---|---|---|", *singles]
     return "\n".join(lines) + "\n"
 
 
