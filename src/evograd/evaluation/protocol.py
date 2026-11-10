@@ -525,8 +525,9 @@ def speedups_vs_compile(own: Mapping[str, Any], compiled: Mapping[str, Any]) -> 
 
 def primary_execution(baselines: Mapping[str, Any]) -> str:
     """The model's primary Tier 3 execution: ``cuda_graph`` (T3-G) when its eager step
-    can be captured, else ``eager`` (T3; MegaFold and OLMoE read tensor data back to the
-    host inside the step)."""
+    was captured in this run, else ``eager`` (T3). On GH200 (2026-11-10) MegaFold's
+    step reads tensor data back to the host and OLMoE's copies a pageable host tensor
+    to the device, so neither can be captured."""
     captured = ((baselines.get(REFERENCE) or {}).get("cuda_graph") or {}).get("ok")
     return "cuda_graph" if captured else "eager"
 

@@ -55,7 +55,8 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    *accepted* and single-site T3-G speedup over eager with a 95% bootstrap
    interval whose lower bound is strictly above one. A candidate without a
    T3-G result is not positive. A model whose eager step cannot be captured
-   (MegaFold and OLMoE read tensor data back to the host inside the step) is
+   (MegaFold reads tensor data back to the host inside the step; OLMoE copies
+   a pageable host tensor to the device) is
    judged by its T3 interval instead, and the summary lists it under
    `primary_speedup.eager_only`. These candidates are
    deployed together at their distinct model sites; Level-1 artifacts are not

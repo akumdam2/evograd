@@ -4,8 +4,8 @@ Random weights and synthetic inputs are deterministic benchmark fixtures, not
 real-data training validation. Nothing reads the reference checkouts.
 """
 
+import functools
 import json
-import types
 import weakref
 
 import torch
@@ -117,7 +117,9 @@ def build_model(spec):
     if hasattr(model, "gradient_checkpointing_disable"):
         model.gradient_checkpointing_disable()
     if spec.model == "qwen2_vl_2b":
-        _scatter_images_by_index(model.model)
+        # A partial of a module-level function: the model still pickles (the
+        # evaluation's model cache saves it) and copies with its own module.
+        model.model.forward = functools.partial(_images_by_index_forward, model.model)
     return model
 
 
@@ -232,41 +234,37 @@ def _host_inputs(model, batch):
     return values
 
 
-def _scatter_images_by_index(inner):
+def _images_by_index_forward(self, input_ids=None, attention_mask=None, position_ids=None,
+                             past_key_values=None, inputs_embeds=None, use_cache=None,
+                             pixel_values=None, pixel_values_videos=None, image_grid_thw=None,
+                             video_grid_thw=None, mm_token_type_ids=None, image_rows=None,
+                             **kwargs):
     """Qwen2VLModel.forward with the image embeddings placed by ``index_copy``.
 
-    Used when ``image_rows`` is given (:func:`forward`); any other call is the original.
+    Taken when ``image_rows`` is given (:func:`forward`); any other call is the original.
     """
+    if image_rows is None:
+        return type(self).forward(
+            self, input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids,
+            past_key_values=past_key_values, inputs_embeds=inputs_embeds, use_cache=use_cache,
+            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids, **kwargs)
     from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLModelOutputWithPast
 
-    original = inner.forward
-
-    def scatter_forward(self, input_ids=None, attention_mask=None, position_ids=None,
-                        past_key_values=None, inputs_embeds=None, use_cache=None,
-                        pixel_values=None, pixel_values_videos=None, image_grid_thw=None,
-                        video_grid_thw=None, mm_token_type_ids=None, image_rows=None, **kwargs):
-        if image_rows is None:
-            return original(input_ids=input_ids, attention_mask=attention_mask,
-                            position_ids=position_ids, past_key_values=past_key_values,
-                            inputs_embeds=inputs_embeds, use_cache=use_cache,
-                            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-                            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-                            mm_token_type_ids=mm_token_type_ids, **kwargs)
-        if inputs_embeds is not None or pixel_values_videos is not None or position_ids is None:
-            raise ValueError("the image-row path takes input ids, images and positions only")
-        vision = {key: kwargs.pop(key) for key in list(kwargs) if key.startswith("image_")}
-        inputs_embeds = self.get_input_embeddings()(input_ids)
-        images = self.get_image_features(pixel_values, image_grid_thw, **vision).pooler_output
-        images = torch.cat(images, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-        width = inputs_embeds.shape[-1]
-        inputs_embeds = inputs_embeds.reshape(-1, width).index_copy(0, image_rows, images)
-        outputs = self.language_model(
-            input_ids=None, position_ids=position_ids, attention_mask=attention_mask,
-            past_key_values=past_key_values, inputs_embeds=inputs_embeds.view(*input_ids.shape, width),
-            use_cache=use_cache, **kwargs)
-        return Qwen2VLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state, past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states, attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas)
-
-    inner.forward = types.MethodType(scatter_forward, inner)
+    if inputs_embeds is not None or pixel_values_videos is not None or position_ids is None:
+        raise ValueError("the image-row path takes input ids, images and positions only")
+    vision = {key: kwargs.pop(key) for key in list(kwargs) if key.startswith("image_")}
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+    images = self.get_image_features(pixel_values, image_grid_thw, **vision).pooler_output
+    images = torch.cat(images, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+    width = inputs_embeds.shape[-1]
+    inputs_embeds = inputs_embeds.reshape(-1, width).index_copy(0, image_rows, images)
+    outputs = self.language_model(
+        input_ids=None, position_ids=position_ids, attention_mask=attention_mask,
+        past_key_values=past_key_values, inputs_embeds=inputs_embeds.view(*input_ids.shape, width),
+        use_cache=use_cache, **kwargs)
+    return Qwen2VLModelOutputWithPast(
+        last_hidden_state=outputs.last_hidden_state, past_key_values=outputs.past_key_values,
+        hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        rope_deltas=self.rope_deltas)

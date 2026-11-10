@@ -537,6 +537,28 @@ class Summary(unittest.TestCase):
                 self.assertEqual(row[gate], "passed")
         self.assertNotIn("geomean", single)
 
+    def test_a_model_that_cannot_be_captured_is_judged_and_shown_at_t3(self):
+        from candidates.bench import summary_table
+        from evograd.evaluation.protocol import summarize
+
+        good = self.evaluation()
+        other = self.evaluation()
+        other["model"] = "other"
+        other["tier3"]["baselines"]["eager"]["cuda_graph"] = {"ok": False, "failed_at": "capture"}
+        other["cases"]["swiglu/site"]["tier3_single_site"]["cuda_graph"] = {
+            "ok": False, "failed_at": "capture"}
+        summary = summarize([good, other])
+        self.assertEqual(summary["level3"]["models"]["other"]["execution"], "eager")
+        self.assertEqual(summary["level3"]["primary_speedup"]["eager_only"], ["other"])
+        self.assertTrue(summary["level2"]["tier3_single_site"]["other"]["swiglu/site"]["positive"])
+        table = summary_table({"agent": {"summary": summary, "cost": {
+            "evaluations": 0, "llm_calls_recorded": 0, "wall_seconds": 0.0}}})
+        self.assertIn("L3 / T3-G (toy, primary)", table)
+        self.assertIn("L3 / T3 (other, primary)", table)
+        rows = {line.split(" | ")[1]: line for line in table.splitlines() if "swiglu/site" in line}
+        self.assertTrue(rows["toy: swiglu/site"].endswith("| T3-G | yes |"))
+        self.assertTrue(rows["other: swiglu/site"].endswith("| T3 | yes |"))
+
     def test_rejected_or_unproven_single_sites_are_not_positive(self):
         from evograd.evaluation.protocol import summarize
 

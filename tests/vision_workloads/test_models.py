@@ -206,3 +206,14 @@ def test_qwen2_vl_host_inputs_are_the_hf_step_bitwise(padded):
     assert first["image_grid_thw"].device.type == "cpu"
     batch["input_ids"] = batch["input_ids"].clone()
     assert vision._host_inputs(model, batch) is not first
+
+    # The evaluation's model cache saves the model and hands out deep copies.
+    import io
+
+    saved = io.BytesIO()
+    torch.save(model, saved)
+    saved.seek(0)
+    for clone in (copy.deepcopy(model), torch.load(saved, weights_only=False)):
+        assert clone.model.forward.args[0] is clone.model
+        assert torch.equal(vision.forward(clone, batch, spec.model).loss, hf_loss)
+        assert torch.equal(clone(**batch, use_cache=False).loss, hf_loss)
