@@ -41,8 +41,11 @@ class CaseGroupProtocolTests(unittest.TestCase):
             def provider(run, name, spec, options):
                 timed.append(name)
                 ms = 100 if name == "eager" else 80
+                graph = ms * 0.8  # T3-G, which selects the combination
                 return {"ok": True, "step_ms": ms, "per_block_ms": [ms] * 3,
-                        "peak_memory_bytes": 100, "cpu_bound_fraction": .1}
+                        "peak_memory_bytes": 100, "cpu_bound_fraction": .1,
+                        "cuda_graph": {"ok": True, "step_ms": graph, "per_block_ms": [graph] * 3,
+                                       "capture_s": 0.1, "check": {"agrees": True}}}
 
             arguments = dict(model=model, deadline=time.time() + 60, time_tier2=tier2,
                              time_provider=provider, rules=False, check_imports=False,
