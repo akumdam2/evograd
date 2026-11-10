@@ -713,5 +713,50 @@ class TestUnifiedCudaAcceptance(unittest.TestCase):
                 getattr(module, op.forward_fn_name)(*args)
 
 
+class SeedVerificationHasTheDevice(unittest.TestCase):
+    def test_the_capture_is_released_before_the_child_verifies(self):
+        import gc
+        import weakref
+        from unittest import mock
+
+        from evograd.pipelines.unified import synthesize as S
+
+        class Captured:
+            joint_graph = forward_graph = backward_graph = {"nodes": []}
+            external_regions = ()
+            pair = SimpleNamespace(forward_source="", backward_source="", device="cuda:0", baked_scalars={},
+                                   saved=(), backward_arg_spec=(), grad_indices=())
+
+        captured = Captured()
+        alive = weakref.ref(captured)
+        seen = []
+
+        def capture(*args, **kwargs):
+            nonlocal captured
+            held, captured = captured, None
+            return held
+
+        def verify(**kwargs):
+            gc.collect()
+            seen.append(alive() is None)
+            return {}
+
+        op = SimpleNamespace(name="op", declaration=None, forward="m:f", validate=lambda: None)
+        config = S.UnifiedSeedConfig(op=op, workload=SimpleNamespace(dims={}, dtype="float32"),
+                                     output_dir=Path(tempfile.mkdtemp()))
+        with mock.patch("evograd.pipelines.unified.capture.capture_unified_pair", capture), \
+                mock.patch("evograd.pipelines.unified.codegen.generate_unified_seed", lambda *args: ""), \
+                mock.patch("evograd.pipelines.shared.primitives.check_source"), \
+                mock.patch.object(S, "select_workload"), mock.patch.object(S, "scoped_op"), \
+                mock.patch.object(S, "build_contract", return_value={}), \
+                mock.patch.object(S, "validate_source"), mock.patch.object(S, "verify_candidate", verify), \
+                mock.patch.object(S, "report_passed", return_value=False), \
+                mock.patch.object(S, "_write_declaration"), \
+                mock.patch("torch.cuda.is_available", return_value=True), \
+                mock.patch("torch.cuda.get_device_name", return_value="gpu"), \
+                mock.patch("torch.cuda.empty_cache"):
+            S.synthesize_unified_seed(config)
+        self.assertEqual(seen, [True])
+
 if __name__ == '__main__':
     unittest.main()

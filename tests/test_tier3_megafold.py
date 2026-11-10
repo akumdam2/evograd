@@ -181,16 +181,17 @@ class TestTheDeclaration(unittest.TestCase):
             with self.subTest(site=site):
                 self.assertIn(op_name, TASKS)
 
-    def test_the_five_sites_are_the_ones_megafold_fuses(self):
-        self.assertEqual(
-            get_workload("megafold").sites,
+    def test_the_sites_megafold_fuses_keep_their_tasks(self):
+        sites = get_workload("megafold").sites
+        self.assertLessEqual(
             {
                 "layer_norm": "layernorm",
                 "layernorm_linear": "megafold_layernorm_linear",
                 "transition": "swiglu",
                 "pair_bias_attention": "megafold_evoattention",
                 "triangle_attention": "megafold_evoattention",
-            },
+            }.items(),
+            sites.items(),
         )
 
     def test_the_registry_agrees_with_the_declaration(self):
@@ -232,14 +233,17 @@ class TestTheExclusionsStateEveryRestriction(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.exclusions)
 
-    def test_the_unpatched_internals_are_named(self):
+    def test_what_holds_no_site_is_named(self):
         self._assert_states(
-            "triangle multiplication",
-            "outer product mean",
-            "MSA pair-weighted averaging",
-            "diffusion module internals",
-            "confidence head internals",
+            "Windowed atom attention",
+            "embedding and pooling layers",
+            "output heads",
+            "losses",
+            "alignment",
         )
+
+    def test_nested_sites_are_declared_never_installed_together(self):
+        self._assert_states("Nested sites are never installed together")
 
     def test_attention_dropout_is_declared_off_for_every_provider(self):
         self._assert_states("Attention-weight dropout is disabled for every provider")
@@ -586,6 +590,33 @@ class TestEverySiteMatchesSomething(unittest.TestCase):
 
 
 @needs_megafold
+class TestTheSiteGroups(unittest.TestCase):
+    """The Level-2 sites on MegaFold's real tree; each group is what ``site_check`` runs."""
+
+    def setUp(self):
+        from evograd.evaluation.tier3.workloads.megafold.workload import MEGAFOLD_SITES, make_workload
+
+        self.sites = MEGAFOLD_SITES
+        self.workload = make_workload(_tiny_case(), device="cuda", seed=0, include_confidence_head=True)
+
+    def test_each_group_installs_on_the_eager_tree(self):
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.megafold.reference import reference_op
+        from evograd.verification.integrations.megafold.site_check import reference_kernels
+
+        for sites in self.sites.groups():
+            with self.subTest(sites=sites):
+                kernels = reference_kernels(self.sites, sites, reference_op, resolve_runtime_forward)
+                _model, provenance = self.workload.build_patched(kernels)
+                self.assertEqual(sorted(provenance.actual_sites), sorted(sites))
+
+    def test_each_site_is_counted(self):
+        calls = self.workload.expected_site_calls()
+        self.assertEqual(sorted(calls), sorted(self.sites.names))
+        self.assertTrue(all(count > 0 for count in calls.values()), calls)
+
+
+@needs_megafold
 class TestTheProvidersAgree(unittest.TestCase):
     """The claim every level-3 number rests on.
 
@@ -739,7 +770,8 @@ class TestIdentityControl(unittest.TestCase):
         patched = make_workload(_tiny_case(), device="cuda", seed=0)
         control = identity_control_kernels(TASKS, registry=MEGAFOLD_SITES)
         patched_model, provenance = patched.build_patched(control)
-        self.assertEqual(set(provenance.actual_sites), set(MEGAFOLD_SITES.names))
+        # With no sites named, the control takes those that can be installed together.
+        self.assertEqual(set(provenance.actual_sites), set(MEGAFOLD_SITES.groups()[0]))
         self.assertTrue(any(provenance.paths.values()))
         loss_patched = patched.loss(patched_model, patched.batch_for(seed=1))
 

@@ -5,7 +5,8 @@ load-balancing term), every call maps to exactly one case -- the q and k rope
 calls have identical shapes here, as in the real model, and are told apart by
 role -- payloads round-trip in each task's ABI (the experts' routing indices
 and weights included), the model reference reproduces every live output bit
-for bit, and the integration runs Gate 1 and operator Gate 2 only.
+for bit, and model Gate 2 holds the routing to the native run's while Gate 3 leaves
+it free.
 """
 
 from __future__ import annotations
@@ -70,7 +71,185 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(sum(c.level == 1 for c in cases.values()), 8)
         self.assertEqual(sum(c.level == 2 for c in cases.values()), 4)
         self.assertEqual(cases["rmsnorm/residual_norm"].frequency, 65)
-        self.assertFalse(MODEL.model_gates)
+        self.assertTrue(MODEL.model_gates)
+        self.assertTrue(MODEL.gate3_applies)
+
+
+def tiny_workload():
+    from evograd.benchmark.topdown.olmoe_1b_7b.architecture import OLMOE_1B_7B, with_layers
+    from evograd.evaluation.tier3.workloads.olmoe_1b_7b.workload import OlmoeWorkload
+
+    arch = {**with_layers(OLMOE_1B_7B, LAYERS), "hidden_size": H, "intermediate_size": I,
+            "num_attention_heads": HEADS, "num_key_value_heads": HEADS, "num_experts": E,
+            "num_experts_per_tok": K, "vocab_size": V, "eos_token_id": None, "pad_token_id": 1,
+            "max_position_embeddings": 512}
+    return OlmoeWorkload(device="cpu", dtype="bfloat16", batch_size=B, seq_len=T, arch_overrides=arch)
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class ForcedRouting(unittest.TestCase):
+    """Model Gate 2 runs on the native run's routing, and changes nothing else."""
+
+    def setUp(self):
+        from evograd.evaluation.tier3.patch import KernelSet
+        from evograd.verification.common.execution import Deployment, Sample
+        from evograd.verification.common.tensors import isolated_rng
+        from evograd.verification.gate2.runner import SiteHooks
+        from evograd.verification.integrations.olmoe_1b_7b import routing as R
+
+        self.R, self.KernelSet, self.isolated_rng = R, KernelSet, isolated_rng
+        self.native, self.hooks = Deployment.native(), SiteHooks()
+        self.workload = tiny_workload()
+        self.scope = R.ForcedRoutingScope(self.workload)
+        self.sample = Sample("tiny/seed3", 3, {})
+
+    def build(self):
+        with self.isolated_rng(self.sample.seed, "cpu"):
+            return self.scope.build(self.native, self.sample, self.hooks)
+
+    def plain(self):
+        with self.isolated_rng(self.sample.seed, "cpu"):
+            model, _ = self.workload.build_patched(self.KernelSet(registry=self.workload.site_registry))
+        return model.train()
+
+    def step(self, model):
+        ids, labels = self.workload.batch_for(seed=self.sample.seed)
+        out = model(input_ids=ids, labels=labels, use_cache=False)
+        out.loss.backward()
+        return out.logits.detach(), {n: p.grad for n, p in model.named_parameters() if p.grad is not None}
+
+    def test_the_native_run_is_unchanged_bit_for_bit(self):
+        logits, grads = self.step(self.build())
+        plain_logits, plain_grads = self.step(self.plain())
+        self.assertTrue(torch.equal(logits, plain_logits))
+        self.assertEqual(sorted(grads), sorted(plain_grads))
+        for name, grad in grads.items():
+            self.assertTrue(torch.equal(grad, plain_grads[name]), name)
+
+    def experts_used(self, model):
+        used = {}
+        for path, router in self.R.routers(model):
+            experts = model.get_submodule(path.rsplit(".", 1)[0]).experts
+            experts.register_forward_pre_hook(
+                lambda _m, a, path=path: used.__setitem__(path, a[1].clone()))
+        return used
+
+    def perturb(self, model):
+        generator = torch.Generator().manual_seed(1)
+        with torch.no_grad():
+            for _path, router in self.R.routers(model):
+                router.weight.add_(torch.randn(router.weight.shape, generator=generator).to(router.weight))
+
+    def test_a_flip_cannot_happen_on_forced_routing(self):
+        route = self.scope.route(self.sample)
+        free, forced = self.plain(), self.build()
+        self.perturb(free), self.perturb(forced)
+        free_used, forced_used = self.experts_used(free), self.experts_used(forced)
+        self.step(free), self.step(forced)
+        self.assertTrue(any(not torch.equal(free_used[p], route[p]) for p in route), "nothing flipped")
+        for path, indices in route.items():
+            self.assertTrue(torch.equal(forced_used[path], indices), path)
+
+    def test_the_router_is_still_trained(self):
+        model = self.build()
+        self.step(model)
+        for path, router in self.R.routers(model):
+            self.assertTrue(router.weight.grad.abs().sum() > 0, path)
+
+    def test_a_patched_site_is_held_to_it_too(self):
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.common.execution import candidate
+        from evograd.verification.integrations.olmoe_1b_7b import MODEL
+
+        site = "moe_experts"
+        task = self.workload.site_registry.require(site).op
+        deployment = candidate("c", {site: resolve_runtime_forward(MODEL.reference_op(task))}, programs={})
+        route = self.scope.route(self.sample)
+        with self.isolated_rng(self.sample.seed, "cpu"):
+            model = self.scope.build(deployment, self.sample, self.hooks)
+        self.perturb(model)
+        seen = {}
+        for path, router in self.R.routers(model):
+            router.register_forward_hook(lambda _m, _a, out, path=path: seen.__setitem__(path, out[2].clone()))
+        self.step(model)
+        self.assertEqual(self.scope.expected_invocations(deployment), {site: LAYERS})
+        self.assertEqual(sorted(seen), sorted(route))
+        for path, indices in route.items():
+            self.assertTrue(torch.equal(seen[path], indices), path)
+
+    def test_recording_a_route_leaves_a_seeded_build_alone(self):
+        with self.isolated_rng(self.sample.seed, "cpu"):
+            before = torch.get_rng_state()
+            self.scope.route(self.sample)
+            self.assertTrue(torch.equal(torch.get_rng_state(), before))
+
+    def test_each_sample_is_recorded_once(self):
+        first = self.scope.route(self.sample)
+        self.assertIs(self.scope.route(self.sample), first)
+
+    def test_the_rule_is_bound_into_the_policy(self):
+        self.assertEqual(self.scope.identity()["routing"], self.R.RULE)
+        self.assertIn("forced_outputs", self.scope.reference_parts())
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class TheGatesReachOLMoE(unittest.TestCase):
+    def test_model_scope_is_the_forced_one(self):
+        from evograd.verification.integrations.olmoe_1b_7b import MODEL, routing as R
+        from evograd.verification.integrations.gates import model_scope
+
+        self.assertIsInstance(model_scope(MODEL, tiny_workload()), R.ForcedRoutingScope)
+
+    def test_gate3_trains_on_free_routing(self):
+        from evograd.verification import gate3
+        from evograd.verification.common.execution import Deployment
+        from evograd.verification.gate2.runner import SiteHooks
+        from evograd.verification.gate3.adapters import SeedBatches
+        from evograd.verification.integrations.olmoe_1b_7b import MODEL, routing as R
+
+        workload = tiny_workload()
+        adapter = MODEL.objective.training(workload, train_data=SeedBatches(workload, 0, "train"),
+                                           optimizer=gate3.adamw(**{"lr": 1e-4, **MODEL.gate3_optimizer}))
+        model = adapter.build_model(Deployment.native(), SiteHooks())
+        self.assertTrue(R.routers(model))
+        self.assertFalse(any(router._forward_hooks for _p, router in R.routers(model)))
+        loss, weight = adapter.train_loss(model, adapter.train_batch(0))
+        self.assertTrue(torch.isfinite(loss))
+        self.assertGreater(weight, 0)
+        self.assertFalse(adapter.build_evaluator().training)
+
+    def test_a_candidate_passes_model_gate2_end_to_end(self):
+        """The reference as a candidate, through calibration and the verdict, on a tiny model."""
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.common.execution import candidate
+        from evograd.verification.integrations.gates import judge_model
+        from evograd.verification.integrations.olmoe_1b_7b import MODEL
+
+        workload = tiny_workload()
+        site = "moe_experts"
+        task = workload.site_registry.require(site).op
+        deployment = candidate("c", {site: resolve_runtime_forward(MODEL.reference_op(task))}, programs={})
+        reports = judge_model(MODEL, deployment, workload, compile_backend="eager")
+        self.assertEqual(reports["gate2_model"].status, "passed", reports["gate2_model"].to_dict())
+
+    def test_a_faulty_candidate_fails_model_gate2(self):
+        """A 10% error at the experts fails. On this tiny bf16 model 1% sits inside the noise the
+        thresholds are calibrated from; the real model's sensitivity is not measured here."""
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.common.execution import candidate
+        from evograd.verification.integrations.gates import judge_model
+        from evograd.verification.integrations.olmoe_1b_7b import MODEL
+
+        workload = tiny_workload()
+        site = "moe_experts"
+        forward = resolve_runtime_forward(MODEL.reference_op(workload.site_registry.require(site).op))
+
+        def faulty(*args):
+            return forward(*args) * 1.1
+
+        reports = judge_model(MODEL, candidate("c", {site: faulty}, programs={}), workload,
+                              compile_backend="eager")
+        self.assertEqual(reports["gate2_model"].status, "failed", reports["gate2_model"].to_dict())
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")

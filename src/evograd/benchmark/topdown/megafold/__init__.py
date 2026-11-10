@@ -12,12 +12,10 @@ model's configuration, and this task runs that same configuration, so
 ``evoattention``'s benchmark grid and the attention this model executes are the
 same widths by construction rather than by coincidence.
 
-MegaFold also supplies the comparison this level exists to make. It ships its
-own fused kernels for four of the five sites below, so a run puts three
-implementations of one architecture side by side: plain eager PyTorch,
-MegaFold's hand-written Triton, and the evolved candidates. The level-3
-question is whether an evolved kernel's local speedup survives a real training
-step, and MegaFold's own kernels are the line it has to clear.
+Its tasks come from what AF3's training step computes (``docs/AF3.md``), not from
+which kernels MegaFold ships, and MegaFold's own fused kernels are an expert
+baseline beside eager PyTorch and ``torch.compile``. The level-3 question is whether
+an evolved kernel's local speedup survives a real training step.
 
 Nothing in this task is evolved. The sites accept the winners of the level-1/2
 searches, and measurement is the tier-3 protocol
@@ -35,19 +33,41 @@ from evograd.opdecl import declare_workload
 from evograd.opdecl.models import ALPHAFOLD3
 from evograd.ops._common import model_workloads
 
-#: Patch sites, and the task each one accepts. Both attention flavours funnel to
-#: ``megafold_evoattention``: pair-bias and triangle attention share ``Attend``,
-#: at different head widths. The LayerNorm and the SwiGLU are the generic
-#: tasks, because MegaFold computes exactly those there in either precision
-#: region; the LayerNorm+Linear and the attention are MegaFold's own
-#: mixed-precision contracts (:mod:`.contracts`).
+#: Patch sites, and the task each one accepts. Both flavours of ``Attend`` funnel to
+#: ``megafold_evoattention``: pair-bias and triangle attention share it, at different
+#: head widths. The LayerNorm and the SwiGLU are the generic tasks, because MegaFold
+#: computes exactly those there in either precision region. The rest are its own
+#: mixed-precision contracts (:mod:`.contracts`, ``levels/level2``), one task key per
+#: role no shaped argument separates (``docs/AF3.md`` section 3).
 MEGAFOLD_SITE_OPS = {
     "layer_norm": "layernorm",
     "layernorm_linear": "megafold_layernorm_linear",
     "transition": "swiglu",
     "pair_bias_attention": "megafold_evoattention",
     "triangle_attention": "megafold_evoattention",
+    "triangle_multiplication_outgoing": "megafold_triangle_multiplication_outgoing",
+    "triangle_multiplication_incoming": "megafold_triangle_multiplication_incoming",
+    "triangle_attention_starting": "megafold_triangle_attention_starting",
+    "triangle_attention_ending": "megafold_triangle_attention_ending",
+    "transition_block": "megafold_transition",
+    "outer_product_mean": "megafold_outer_product_mean",
+    "msa_pair_weighted_averaging": "megafold_msa_pair_weighted_averaging",
 }
+
+#: Pairs of sites that nest: the first site's boundary holds the second's calls,
+#: so they are never installed together (``SiteRegistry.overlaps``).
+MEGAFOLD_SITE_OVERLAPS: tuple[tuple[str, str], ...] = (
+    ("triangle_multiplication_outgoing", "layernorm_linear"),
+    ("triangle_multiplication_incoming", "layernorm_linear"),
+    ("triangle_attention_starting", "layer_norm"),
+    ("triangle_attention_starting", "triangle_attention"),
+    ("triangle_attention_ending", "layer_norm"),
+    ("triangle_attention_ending", "triangle_attention"),
+    ("transition_block", "layernorm_linear"),
+    ("transition_block", "transition"),
+    ("outer_product_mean", "layernorm_linear"),
+    ("msa_pair_weighted_averaging", "layernorm_linear"),
+)
 
 workload = declare_workload(
     name="megafold",
@@ -66,18 +86,15 @@ workload = declare_workload(
         ),
     ),
     exclusions=(
-        "Sites cover what MegaFold's own fused kernels cover: normalization, "
-        "the fused LayerNorm+Linear, the SwiGLU transition, and the two "
-        "softmax-attention flavours. Everything else inside the timed step "
-        "runs stock and dilutes the measured speedup accordingly, and that "
-        "dilution is the level-3 result rather than a flaw: triangle "
-        "multiplication (its combined projection carries a linear bias, which "
-        "the LayerNorm+Linear contract does not), outer product mean, MSA "
-        "pair-weighted averaging, the diffusion module internals and the "
-        "confidence head internals are all unpatched. Attention-weight dropout is disabled for every provider "
-        "alike, because no fused-attention contract models it (MegaFold's own "
-        "EvoAttention and DS4Sci included) and a dropout firing in one "
-        "provider but not another would also desynchronize their RNG streams. "
+        "Sites are the boundaries docs/AF3.md lists. Nested sites are never "
+        "installed together, and everything outside the installed sites runs "
+        "stock and dilutes the measured speedup accordingly, which is the "
+        "level-3 result rather than a flaw. Windowed atom attention, attention "
+        "with pair bias as a whole, the transition without its LayerNorm, AdaLN "
+        "and its output gate, the embedding and pooling layers, the output heads, "
+        "the losses and the alignment hold no site. Attention-weight dropout is disabled for every provider "
+        "alike: the warm start was trained without it, and a dropout firing in "
+        "one provider but not another would also desynchronize their RNG streams. "
         "The data is one real structure featurized once and frozen, so nothing "
         "here measures data loading and no result speaks to prediction "
         "quality. Its templates are masked (MegaFold's training never passes a "

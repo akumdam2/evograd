@@ -90,8 +90,8 @@ class Model:
     #: (:mod:`.objectives`); ``None`` is the HF causal-LM objective.
     objective: Any = None
     #: Whether Level-2 candidates also get model-scope Gate 2 and Gate 3. A
-    #: model without a well-posed whole-model comparison yet (OLMoE: routed
-    #: experts) is verified by Gate 1 and operator Gate 2 only.
+    #: model without a well-posed whole-model comparison yet is verified by
+    #: Gate 1 and operator Gate 2 only.
     model_gates: bool = True
     #: Whether Gate 3 belongs to the model gates. MegaFold: no (its continued
     #: training is ~2.3 h per 1000 updates; user decision 2026-10-27), so its

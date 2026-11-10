@@ -40,6 +40,51 @@ def _output_expr(value: Any) -> str:
     return repr(value)
 
 
+def _graph_reads(node: dict) -> set[str]:
+    """Every graph value ``node`` reads."""
+    names = {item["name"] for item in node.get("input_nodes", ())}
+
+    def walk(value):
+        if isinstance(value, dict):
+            if value.get("kind") in {"node", "sym_node"}:
+                names.add(value["name"])
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    for key in ("args_ordered", "kwargs_ordered", "positional_args"):
+        walk(node.get(key))
+    return names
+
+
+def _releases(graph: dict) -> dict[str, list[str]]:
+    """What can be dropped after each node: intermediates it is the last to read.
+
+    A graph function would otherwise hold every intermediate until it returns, which at
+    a model's real size is tens of GiB of copies nothing reads again. Inputs and outputs
+    stay, since a caller holds them anyway.
+    """
+    def flat(value):
+        if isinstance(value, (tuple, list)):
+            return {name for item in value for name in flat(item)}
+        return {value} if isinstance(value, str) else set()
+
+    calls = [node for node in graph["nodes"] if node["op"] == "call_function"]
+    produced = {node["name"] for node in calls}
+    last = {name: None for name in produced}
+    for node in calls:
+        for name in _graph_reads(node) & produced:
+            last[name] = node["name"]
+    drops: dict[str, list[str]] = {}
+    outputs = flat(_outputs(graph))
+    for name, reader in last.items():
+        if name not in outputs:
+            drops.setdefault(reader or name, []).append(name)
+    return drops
+
+
 def _tuple_expr(values: list[str]) -> str:
     return "(" + ", ".join(values) + ("," if len(values) == 1 else "") + ")"
 
@@ -398,6 +443,7 @@ def generate_unified_seed(op: OpDecl, workload: Workload, captured: Any) -> str:
     for side, graph in (("forward", captured.forward_graph), ("backward", captured.backward_graph)):
         placeholders = [node["name"] for node in graph["nodes"] if node["op"] == "placeholder"]
         lines = [f"def _unified_{side}_graph({', '.join(map(_pyname, placeholders))}):"]
+        releases = _releases(graph)
         for node in graph["nodes"]:
             if node["op"] != "call_function":
                 if node["op"] not in {"placeholder", "output"}:
@@ -410,6 +456,8 @@ def generate_unified_seed(op: OpDecl, workload: Workload, captured: Any) -> str:
             else:
                 expr = _semantic_expr(builder, node)
             lines.append(f"    {_pyname(node['name'])} = {expr}  # {node['target']}")
+            if node["name"] in releases:
+                lines.append("    del " + ", ".join(sorted(map(_pyname, releases[node["name"]]))))
         lines.append(f"    return {_tuple_expr([_output_expr(value) for value in _outputs(graph)])}")
         drivers.append("\n".join(lines))
     expected_regions = {(region.side, region.node_name, region.kernel) for region in captured.external_regions}

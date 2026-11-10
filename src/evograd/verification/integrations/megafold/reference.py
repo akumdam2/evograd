@@ -28,7 +28,8 @@ _FORWARDS = {"swiglu": "evograd.benchmark.topdown.megafold.contracts:megafold_sw
 MODELING_MODULES = ("megafold.model.megafold", "megafold.model.attention",
                     "megafold.model.FusedLayernormLinear.fused_layernorm_linear",
                     "megafold.model.FusedTransition.fused_transition", "megafold.utils.model_utils",
-                    "megafold.inputs", "evograd.evaluation.tier3.workloads.megafold.workload")
+                    "megafold.inputs", "evograd.evaluation.tier3.workloads.megafold.workload",
+                    "evograd.evaluation.tier3.workloads.megafold.sites")
 
 
 def source_identity() -> dict:
