@@ -173,3 +173,36 @@ def test_convnext_specialist_patch_touches_only_selected_stage():
     assert all(".stages.2." in path for path in provenance.paths[site])
     assert len(workload.site_registry.require(site).preflight) == 1
     assert workload.site_registry.require(site).preflight[0].dims["H"] == 24
+
+
+@pytest.mark.parametrize("padded", [False, True])
+def test_qwen2_vl_host_inputs_are_the_hf_step_bitwise(padded):
+    """The host-computed inputs (positions, masks, vision segments, image rows) give HF's
+    own loss and gradients exactly, and are computed once per unchanged batch."""
+    from evograd.benchmark.topdown.common.vision import model as vision
+
+    spec = small_spec("qwen2_vl_2b")
+    model = VisionWorkload(spec).build(KernelSet(registry=VisionWorkload(spec).site_registry))
+    batch = VisionWorkload(spec).batch_for(seed=3)
+    if padded:
+        batch["attention_mask"][:, -2:] = 0
+
+    def step(call):
+        model.zero_grad(set_to_none=True)
+        loss = call()
+        loss.backward()
+        return loss.detach(), {n: p.grad.clone() for n, p in model.named_parameters()}
+
+    hf_loss, hf_grads = step(lambda: model(**batch, use_cache=False).loss)
+    loss, grads = step(lambda: vision.forward(model, batch, spec.model).loss)
+    assert torch.equal(loss, hf_loss)
+    assert grads.keys() == hf_grads.keys()
+    for name, grad in grads.items():
+        assert torch.equal(grad, hf_grads[name]), name
+
+    first = vision._host_inputs(model, batch)
+    assert vision._host_inputs(model, batch) is first
+    assert first["image_cu_seqlens"].device.type == "cpu"
+    assert first["image_grid_thw"].device.type == "cpu"
+    batch["input_ids"] = batch["input_ids"].clone()
+    assert vision._host_inputs(model, batch) is not first

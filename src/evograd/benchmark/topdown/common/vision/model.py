@@ -5,6 +5,9 @@ real-data training validation. Nothing reads the reference checkouts.
 """
 
 import json
+import types
+import weakref
+
 import torch
 
 
@@ -113,6 +116,8 @@ def build_model(spec):
     model.to(spec.device).train()
     if hasattr(model, "gradient_checkpointing_disable"):
         model.gradient_checkpointing_disable()
+    if spec.model == "qwen2_vl_2b":
+        _scatter_images_by_index(model.model)
     return model
 
 
@@ -164,5 +169,104 @@ def make_inputs(spec, seed=0):
 
 
 def forward(model, batch, model_key):
-    kwargs = {"use_cache": False} if model_key == "qwen2_vl_2b" else {}
-    return model(**batch, **kwargs)
+    if model_key != "qwen2_vl_2b":
+        return model(**batch)
+    return model(**{**batch, **_host_inputs(model, batch)}, use_cache=False)
+
+
+# ── Qwen2-VL without host reads ──────────────────────────────────────────────
+#
+# Qwen2-VL's forward reads tensor values back to the host: M-RoPE positions
+# (``get_rope_index``: ``.tolist()``, ``.item()``), the vision encoder's patch
+# positions and attention segments (``repeat_interleave``, ``.tolist()``), the
+# image split sizes, the SDPA mask shortcut (``padding_mask.all()``), the
+# placeholder count check, and ``masked_scatter``'s backward (``masked_select``).
+# A CUDA graph cannot capture a step that does (T3-G), and an eager step stalls
+# on each. All of them depend on the batch only, so they are computed once per
+# batch, outside the step, with Transformers' own functions, and passed in the
+# way Transformers accepts them precomputed: ``position_ids``, a prepared mask
+# mapping, ``image_position_ids``/``image_cu_seqlens``, and ``image_grid_thw``
+# on the host. ``masked_scatter`` becomes ``index_copy`` at the image rows: the
+# same copy forward and backward, bitwise. Every execution takes this path.
+
+_HOST_INPUTS = weakref.WeakKeyDictionary()
+_BATCH_KEYS = ("input_ids", "attention_mask", "image_grid_thw", "mm_token_type_ids")
+
+
+def _host_inputs(model, batch):
+    """The batch's host-computed inputs, cached while the batch tensors are unchanged."""
+    tensors = {key: batch[key] for key in _BATCH_KEYS if batch.get(key) is not None}
+    cached = _HOST_INPUTS.get(model)
+    if cached is not None and cached[0].keys() == tensors.keys() and all(
+            ref() is tensors[key] and version == tensors[key]._version
+            for key, (ref, version) in cached[0].items()):
+        return cached[1]
+    from transformers.masking_utils import create_causal_mask, create_sliding_window_causal_mask
+    from transformers.vision_utils import get_vision_cu_seqlens, get_vision_position_ids
+
+    inner = model.model
+    text = inner.language_model
+    input_ids, grid = batch["input_ids"], batch["image_grid_thw"]
+    attention_mask = batch.get("attention_mask")
+    with torch.no_grad():
+        position_ids, _ = inner.get_rope_index(
+            input_ids, batch["mm_token_type_ids"], image_grid_thw=grid,
+            attention_mask=attention_mask)
+        # What Qwen2VLTextModel prepares for 3D positions (no packed text positions).
+        mask_kwargs = {"config": text.config, "inputs_embeds": text.embed_tokens(input_ids),
+                       "attention_mask": attention_mask, "past_key_values": None,
+                       "position_ids": None}
+        masks = {"full_attention": create_causal_mask(**mask_kwargs)}
+        if text.has_sliding_layers:
+            masks["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+    values = {
+        "position_ids": position_ids,
+        "attention_mask": masks,
+        "image_grid_thw": grid.cpu(),
+        "image_position_ids": get_vision_position_ids(grid, inner.visual.spatial_merge_size),
+        # On the host: the SDPA vision path splits by its lengths (``.tolist()``).
+        "image_cu_seqlens": get_vision_cu_seqlens(grid).cpu(),
+        "image_rows": (input_ids.reshape(-1) == inner.config.image_token_id).nonzero().squeeze(1),
+    }
+    _HOST_INPUTS[model] = ({key: (weakref.ref(t), t._version) for key, t in tensors.items()}, values)
+    return values
+
+
+def _scatter_images_by_index(inner):
+    """Qwen2VLModel.forward with the image embeddings placed by ``index_copy``.
+
+    Used when ``image_rows`` is given (:func:`forward`); any other call is the original.
+    """
+    from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLModelOutputWithPast
+
+    original = inner.forward
+
+    def scatter_forward(self, input_ids=None, attention_mask=None, position_ids=None,
+                        past_key_values=None, inputs_embeds=None, use_cache=None,
+                        pixel_values=None, pixel_values_videos=None, image_grid_thw=None,
+                        video_grid_thw=None, mm_token_type_ids=None, image_rows=None, **kwargs):
+        if image_rows is None:
+            return original(input_ids=input_ids, attention_mask=attention_mask,
+                            position_ids=position_ids, past_key_values=past_key_values,
+                            inputs_embeds=inputs_embeds, use_cache=use_cache,
+                            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+                            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+                            mm_token_type_ids=mm_token_type_ids, **kwargs)
+        if inputs_embeds is not None or pixel_values_videos is not None or position_ids is None:
+            raise ValueError("the image-row path takes input ids, images and positions only")
+        vision = {key: kwargs.pop(key) for key in list(kwargs) if key.startswith("image_")}
+        inputs_embeds = self.get_input_embeddings()(input_ids)
+        images = self.get_image_features(pixel_values, image_grid_thw, **vision).pooler_output
+        images = torch.cat(images, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        width = inputs_embeds.shape[-1]
+        inputs_embeds = inputs_embeds.reshape(-1, width).index_copy(0, image_rows, images)
+        outputs = self.language_model(
+            input_ids=None, position_ids=position_ids, attention_mask=attention_mask,
+            past_key_values=past_key_values, inputs_embeds=inputs_embeds.view(*input_ids.shape, width),
+            use_cache=use_cache, **kwargs)
+        return Qwen2VLModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state, past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas)
+
+    inner.forward = types.MethodType(scatter_forward, inner)
