@@ -182,13 +182,15 @@ def evaluate_group(plan, *, deadline, tier3_options=None, model=None, log=print,
         # Phase C: each agent selects and verifies its own combination.
         combinations, combination_jobs = {}, {}
         for agent, run in runs.items():
+            baselines = {name: P._tier3_row(single_report, name) for name in P.ENGINE_BASELINES}
+            execution = P.primary_execution(baselines)
             chosen = [cid for cid in sorted(run.modules)
-                      if run.cases[cid].level == 2 and P._positive(results[agent]["cases"][cid])]
+                      if run.cases[cid].level == 2
+                      and P._positive(results[agent]["cases"][cid], execution)]
             configure()
             combination = verify_combination(run, chosen)
             combinations[agent] = combination
-            results[agent]["tier3"] = {"baselines": {
-                name: P._tier3_row(single_report, name) for name in P.ENGINE_BASELINES}, "single_site": {
+            results[agent]["tier3"] = {"baselines": baselines, "single_site": {
                 cid: row["tier3_single_site"] for cid, row in results[agent]["cases"].items()
                 if "tier3_single_site" in row}, "combination": combination}
             if chosen:

@@ -31,7 +31,8 @@ Every submission follows the same steps, whoever generated it:
    twice: replayed from one CUDA graph (T3-G, the primary result) and launched
    eagerly (T3).
 4. **Combination**: the accepted Level-2 candidates whose single-site T3-G
-   speedup has a 95% interval above one (:data:`COMBINATION_RULE`), judged
+   speedup has a 95% interval above one (:data:`COMBINATION_RULE`; T3 for a
+   model whose eager step cannot be captured, :func:`primary_execution`), judged
    together by model Gate 2 and Gate 3 (where it applies), then timed at
    Tier 3 against eager and the whole-model ``torch.compile``.
 5. **Summary** (:func:`summarize`): per level, the speedup over the accepted
@@ -85,7 +86,8 @@ TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0, "cuda_graph": True}
 COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager, "
                     "both replayed from a CUDA graph (T3-G), has a 95% bootstrap interval with its "
-                    "lower bound above 1")
+                    "lower bound above 1; for a model whose eager step cannot be captured, the "
+                    "eagerly launched step's speedup (T3)")
 #: Baselines included in the per-level aggregate; every T2 baseline uses autograd.
 ENGINE_BASELINES = ("eager", "torch_compile")
 
@@ -521,12 +523,26 @@ def speedups_vs_compile(own: Mapping[str, Any], compiled: Mapping[str, Any]) -> 
     return out
 
 
-def _positive(case: Mapping[str, Any]) -> bool:
-    """Accepted and faster than eager at T3-G with the single-site 95% interval above one.
+def primary_execution(baselines: Mapping[str, Any]) -> str:
+    """The model's primary Tier 3 execution: ``cuda_graph`` (T3-G) when its eager step
+    can be captured, else ``eager`` (T3; MegaFold and OLMoE read tensor data back to the
+    host inside the step)."""
+    captured = ((baselines.get(REFERENCE) or {}).get("cuda_graph") or {}).get("ok")
+    return "cuda_graph" if captured else "eager"
 
-    A candidate whose step cannot be captured has no T3-G result and is not positive.
+
+def _primary(row: Mapping[str, Any], execution: str) -> Mapping[str, Any]:
+    """A Tier 3 row's result in the model's primary execution."""
+    return row if execution == "eager" else (row.get("cuda_graph") or {})
+
+
+def _positive(case: Mapping[str, Any], execution: str) -> bool:
+    """Accepted and faster than eager in the model's primary execution, with the
+    single-site 95% interval above one.
+
+    Under T3-G, a candidate whose step cannot be captured is not positive.
     """
-    timed = (case.get("tier3_single_site") or {}).get("cuda_graph") or {}
+    timed = _primary(case.get("tier3_single_site") or {}, execution)
     lower = (timed.get("ci95") or {}).get("low")
     return (bool(case.get("accepted")) and bool(timed.get("ok"))
             and isinstance(lower, (int, float)) and math.isfinite(lower) and lower > 1)
@@ -665,6 +681,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                              options=tier3_options, isolate=isolate_tier3), run.deadline)
         tier3: dict[str, Any] = {"baselines": {
             name: _tier3_row(baseline_report, name) for name in ENGINE_BASELINES}}
+        execution = primary_execution(tier3["baselines"])
+        log("tier3 primary execution", execution)
         result["tier3"] = tier3
         if level2:
             key = {"baseline": baseline_key, "programs": {cid: run.programs[cid] for cid in level2},
@@ -681,12 +699,12 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             tier3["single_site"] = single["rows"]
             for cid, row in single["rows"].items():
                 result["cases"][cid]["tier3_single_site"] = row
-            log("tier3 single site (T3-G)",
-                {cid: (row.get("cuda_graph") or {}).get("speedup", row.get("error"))
+            log(f"tier3 single site ({execution})",
+                {cid: _primary(row, execution).get("speedup", row.get("error"))
                  for cid, row in single["rows"].items()})
 
         # 4. The combination: its gates, then its training step.
-        chosen = [cid for cid in level2 if _positive(result["cases"][cid])]
+        chosen = [cid for cid in level2 if _positive(result["cases"][cid], execution)]
         configure()
         combination = verify_combination(run, chosen)
         result["settings"]["timing"] = timing_mode()
@@ -764,8 +782,9 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Per level: speedup over the accepted configurations (geometric mean over
     configurations, then tasks, then families), coverage and the verification
     funnel. Level 2 also retains each site's model-scope measurement without
-    pooling it; Level 3 reports each model's combination, its T3-G speedup (the
-    primary result), the eagerly launched step's and peak memory."""
+    pooling it; Level 3 reports each model's combination, its speedup in the
+    model's primary execution (T3-G where the step can be captured), both
+    executions' speedups and peak memory."""
     from evograd.benchmark.core.report import geomean
 
     for ev in evaluations:
@@ -776,6 +795,8 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     rows = [dict(row) for ev in evaluations for row in ev["cases"].values()]
     models, single_sites = {}, {}
     for ev in evaluations:
+        baselines = (ev.get("tier3") or {}).get("baselines", {})
+        execution = primary_execution(baselines)
         combination = (ev.get("tier3") or {}).get("combination") or {}
         timed = combination.get("tier3") or {}
         selected = set(combination.get("cases", ()))
@@ -785,11 +806,13 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                   "accepted": bool(row.get("accepted")),
                   **{gate: row.get(gate) for gate in
                      ("gate1_payloads", "gate2_operator", "gate2_model", "gate3")},
-                  "positive": _positive(row), "selected_for_combination": cid in selected,
+                  "positive": _positive(row, execution),
+                  "selected_for_combination": cid in selected,
                   "tier3": dict(row.get("tier3_single_site") or {})}
             for cid, row in sorted(ev["cases"].items()) if row["level"] == 2}
         models[ev["model"]] = {
-            "baselines": (ev.get("tier3") or {}).get("baselines", {}),
+            "baselines": baselines, "execution": execution,
+            "primary_speedup": _primary(timed, execution).get("speedup"),
             "cases": combination.get("cases", []),
             "accepted": bool(combination.get("accepted")),
             "gate2_model": combination.get("gate2_model"), "gate3": combination.get("gate3"),
@@ -801,20 +824,25 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                            "ci95": (timed.get("cuda_graph") or {}).get("ci95"),
                            "speedup_vs_torch_compile":
                                combination.get("cuda_graph_speedup_vs_torch_compile")}}
-    # Level 3 counts a model by its T3-G result; the eagerly launched step rides along.
+    # Level 3 counts a model by its primary execution; both executions are also reported.
     counted = [m for m in models.values()
-               if m["accepted"] and _finite(m["cuda_graph"]["speedup"])]
+               if m["accepted"] and _finite(m["primary_speedup"])]
     memory = [m["peak_memory_ratio"] for m in counted if _finite(m["peak_memory_ratio"])]
     launched = [m["speedup"] for m in counted if _finite(m["speedup"])]
+    graphed = [m["cuda_graph"]["speedup"] for m in counted if _finite(m["cuda_graph"]["speedup"])]
     return {
         "models": sorted(models),
         "level1": _level_summary(rows, 1),
         "level2": {**_level_summary(rows, 2), "tier3_single_site": single_sites},
-        "level3": {"models": models, "primary": "cuda_graph",
-                   "cuda_graph_speedup": {
-                       "geomean": (geomean([m["cuda_graph"]["speedup"] for m in counted])
+        "level3": {"models": models,
+                   "primary_speedup": {
+                       "geomean": (geomean([m["primary_speedup"] for m in counted])
                                    if counted else None),
-                       "models_covered": len(counted)},
+                       "models_covered": len(counted),
+                       "eager_only": sorted(name for name, m in models.items()
+                                            if m["execution"] == "eager")},
+                   "cuda_graph_speedup": {"geomean": geomean(graphed) if graphed else None,
+                                          "models_covered": len(graphed)},
                    "speedup": {"geomean": geomean(launched) if launched else None,
                                "models_covered": len(launched)},
                    "coverage": len(counted) / len(models) if models else None,
@@ -883,6 +911,7 @@ def summarize_main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = ["evaluate", "summarize", "check_executable", "check_baseline", "time_case",
            "tier2_payloads", "tier2_binding", "NotExecutable", "COMBINATION_RULE", "PROTOCOL",
+           "primary_execution",
            "TIER2_INPUTS", "main", "summarize_main"]
 
 

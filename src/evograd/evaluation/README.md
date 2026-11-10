@@ -54,7 +54,10 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
 4. The **combination** contains that agent's positive Level-2 candidates:
    *accepted* and single-site T3-G speedup over eager with a 95% bootstrap
    interval whose lower bound is strictly above one. A candidate without a
-   T3-G result is not positive. These candidates are
+   T3-G result is not positive. A model whose eager step cannot be captured
+   (MegaFold and OLMoE read tensor data back to the host inside the step) is
+   judged by its T3 interval instead, and the summary lists it under
+   `primary_speedup.eager_only`. These candidates are
    deployed together at their distinct model sites; Level-1 artifacts are not
    independently installed by this path. The combination gets model Gate 2
    and Gate 3 (where it applies) again, then Tier 3 timing against eager and whole-model

@@ -19,6 +19,7 @@ runs for real on the toy model.
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 import warnings
@@ -91,6 +92,13 @@ def replayed(workload, model, optimizer, batch, *, warmup, steps, blocks):
 
 def not_capturable(workload, model, optimizer, batch, *, warmup, steps, blocks):
     return {"ok": False, "failed_at": "capture", "error": "the step synchronizes with the host"}
+
+
+def candidate_not_capturable(workload, model, optimizer, batch, *, warmup, steps, blocks):
+    """The baselines' steps capture; a candidate's does not."""
+    provider = sys._getframe(1).f_locals["provider"]
+    graph = replayed if provider in ("eager", "torch_compile") else not_capturable
+    return graph(workload, model, optimizer, batch, warmup=warmup, steps=steps, blocks=blocks)
 
 
 class Evaluate(unittest.TestCase):
@@ -174,7 +182,11 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(single["gate3"], "passed")
         self.assertEqual(single["tier3"], case["tier3_single_site"])
         self.assertEqual(summary["level3"]["coverage"], 1.0)
-        self.assertEqual(summary["level3"]["primary"], "cuda_graph")
+        toy = summary["level3"]["models"]["toy"]
+        self.assertEqual(toy["execution"], "cuda_graph")
+        self.assertEqual(toy["primary_speedup"], toy["cuda_graph"]["speedup"])
+        self.assertEqual(summary["level3"]["primary_speedup"]["models_covered"], 1)
+        self.assertEqual(summary["level3"]["primary_speedup"]["eager_only"], [])
         self.assertEqual(summary["level3"]["cuda_graph_speedup"]["models_covered"], 1)
         self.assertIsNotNone(summary["level3"]["models"]["toy"]["cuda_graph"]["speedup"])
         self.assertIsNotNone(summary["level3"]["models"]["toy"]["speedup"])
@@ -364,12 +376,27 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(result["summary"]["level2"]["coverage"], 1.0)
         self.assertEqual(result["summary"]["level3"]["coverage"], 0.0)
 
-    def test_a_step_that_cannot_be_captured_is_not_combined(self):
-        result = self.evaluate("good", Path(self.tmp.name) / "uncaptured", graph=not_capturable)
+    def test_a_candidate_whose_step_cannot_be_captured_is_not_combined(self):
+        result = self.evaluate("good", Path(self.tmp.name) / "uncaptured",
+                               graph=candidate_not_capturable)
         single = result["cases"][self.T.CASE_ID]["tier3_single_site"]
         self.assertTrue(single["ok"] and result["cases"][self.T.CASE_ID]["accepted"])
         self.assertEqual(single["cuda_graph"]["failed_at"], "capture")
+        self.assertTrue(result["tier3"]["baselines"]["eager"]["cuda_graph"]["ok"])
         self.assertEqual(result["tier3"]["combination"]["cases"], [])
+
+    def test_a_model_whose_eager_step_cannot_be_captured_is_judged_at_t3(self):
+        """MegaFold's case: no provider has a T3-G row, so the eager step decides."""
+        result = self.evaluate("good", Path(self.tmp.name) / "eager_only", graph=not_capturable)
+        self.assertFalse(result["tier3"]["baselines"]["eager"]["cuda_graph"]["ok"])
+        self.assertEqual(result["tier3"]["combination"]["cases"], [self.T.CASE_ID])
+        level3 = result["summary"]["level3"]
+        toy = level3["models"]["toy"]
+        self.assertEqual(toy["execution"], "eager")
+        self.assertEqual(toy["primary_speedup"], toy["speedup"])
+        self.assertEqual(level3["primary_speedup"]["eager_only"], ["toy"])
+        self.assertEqual(level3["coverage"], 1.0)
+        self.assertEqual(level3["cuda_graph_speedup"]["models_covered"], 0)
 
     def test_summaries_pool_models_by_level(self):
         from evograd.evaluation.protocol import summarize
@@ -480,7 +507,8 @@ class Summary(unittest.TestCase):
                                 "ci95": {"low": 1.1, "high": 1.3},
                                 "cuda_graph": {"ok": True, "speedup": 1.15, "step_ms": 8,
                                                "ci95": {"low": 1.05, "high": 1.25}}}}},
-                "tier3": {"combination": {"cases": ["swiglu/site"] if selected else []}}}
+                "tier3": {"baselines": {"eager": {"ok": True, "cuda_graph": {"ok": True}}},
+                          "combination": {"cases": ["swiglu/site"] if selected else []}}}
 
     def test_correctness_coverage_does_not_require_successful_tier2_timing(self):
         from evograd.evaluation.protocol import summarize

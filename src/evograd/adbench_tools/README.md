@@ -568,7 +568,8 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
    gets single-site T3 against eager, replayed from a CUDA graph (T3-G, primary)
    and launched eagerly (T3). Each agent's positive L2 candidates are
    combined: positive means accepted and a successful single-site T3-G speedup
-   whose 95% interval lower bound is greater than 1. That combination gets
+   whose 95% interval lower bound is greater than 1 (T3 for a model whose
+   eager step cannot be captured: MegaFold, OLMoE). That combination gets
    model Gate 2 and Gate 3 (L3), then T3 against eager and whole-model compile.
    Rejected candidates' timings remain diagnostic and do not enter aggregates.
 4. **`summarize`** reports, per agent and level, the funnel (submitted,

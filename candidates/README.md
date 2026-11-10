@@ -60,7 +60,8 @@ accumulation. Its fair timer retains warmup 10, repetitions 50 and 3 blocks.
 T1 remains search feedback or a separate pair diagnostic. Each agent's L3
 combination contains its accepted L2 candidates whose successful single-site
 T3-G speedup over eager (both replayed from a CUDA graph) has a 95% interval
-with lower bound greater than 1.
+with lower bound greater than 1; a model whose eager step cannot be captured
+(MegaFold, OLMoE) uses the T3 interval.
 The summary retains these individual T3 results, gates and selection decisions;
 it does not average them into an end-to-end speedup. L3 is measured separately
 against eager and whole-model compile; its reported interval is against eager.

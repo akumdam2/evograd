@@ -230,6 +230,7 @@ execution settings.
 | Individual acceptance | `True` |
 | Single-site T3-G execution | `ok=True` |
 | Selection reference | Eager, replayed from a CUDA graph like the candidate |
+| Model whose eager step cannot be captured | Judged by the T3 interval instead (MegaFold, OLMoE); listed in `level3.primary_speedup.eager_only` |
 | Lower confidence bound | Finite and strictly `> 1.0` |
 | Selected candidates | All qualifying L2 cases |
 | Top-k limit | None |
@@ -657,10 +658,11 @@ Changing from the earlier agent-major scheduler requires a new output root.
 For each Level-2 case:
 
 ```text
-positive = accepted
-           AND single_site_T3.ok
-           AND finite(single_site_T3.ci95.low)
-           AND single_site_T3.ci95.low > 1
+execution = T3-G if the eager baseline's step was captured, else T3
+positive  = accepted
+            AND single_site[execution].ok
+            AND finite(single_site[execution].ci95.low)
+            AND single_site[execution].ci95.low > 1
 ```
 
 All eligible cases are selected; no manual top-k or subset search is done.
