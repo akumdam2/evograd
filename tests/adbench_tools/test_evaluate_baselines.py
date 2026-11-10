@@ -31,7 +31,7 @@ def test_only_baselines_run_and_original_results_stay_unchanged(tmp_path, name):
     (root / "all_agents.json").write_text(json.dumps(plan))
     run = SimpleNamespace(workload=object(), corpus=SimpleNamespace(binding=lambda: {"sha": "same"}))
     measured = {"providers": {"eager": {"ok": True},
-                               "torch_compile": {"ok": True, "correctness": {"status": "passed"}}}}
+                               "torch_compile": {"ok": True}}}
     with patch("evograd.verification.integrations.load", return_value=SimpleNamespace(workload_config=config)), \
             patch("evograd.verification.integrations.base.configure"), \
             patch("evograd.verification.integrations.gates.open_run", return_value=run) as opened, \

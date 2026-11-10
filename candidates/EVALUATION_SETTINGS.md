@@ -1,7 +1,7 @@
 # Verification, timing, and combination settings
 
 This document describes the current local implementation of formal
-`evograd-evaluation-v3`, called by `candidates/evaluate_model.py`. It is a
+`evograd-evaluation-v4`, called by `candidates/evaluate_model.py`. It is a
 reference for agreeing on an experiment, not evidence that GPU evaluation has
 completed or that all provisional settings have been validated.
 
@@ -16,7 +16,7 @@ execution settings.
 
 | Variable | Value |
 | --- | --- |
-| Protocol | `evograd-evaluation-v3` |
+| Protocol | `evograd-evaluation-v4` |
 | Reference | Native eager model |
 | Compile backend | `inductor` |
 | cuBLAS workspace | `:4096:8` |
@@ -178,6 +178,11 @@ execution settings.
 | Timed batch seed | `0` |
 | Timed batch | `workload.batch_for(seed=0)` |
 | Measured work | Forward/loss + backward + AdamW + gradient reset |
+| Executions per provider | T3-G (primary): forward/loss + backward replayed from one CUDA graph, AdamW eager, no gradient reset; T3: the step launched eagerly |
+| T3-G capture | `.grad` set to `None`, 3 warmup passes on a side stream, one capture |
+| T3-G replay check | Replayed loss within `2 ×` the largest loss difference of 2 further eager steps; gradient distance recorded, not judged |
+| T3-G failure | Recorded in the provider's `cuda_graph` row; the T3 row stands |
+| Whole-model compile baseline check | Finite preliminary losses and at least one captured graph; no numerical verdict against eager |
 | Optimizer | `AdamW` |
 | Learning rate | `1e-4` |
 | Betas | `(0.9, 0.999)` |
@@ -223,8 +228,9 @@ execution settings.
 | Models per combination | `1` |
 | Eligible level | `L2` |
 | Individual acceptance | `True` |
-| Single-site T3 execution | `ok=True` |
-| Selection reference | Eager |
+| Single-site T3-G execution | `ok=True` |
+| Selection reference | Eager, replayed from a CUDA graph like the candidate |
+| Model whose eager step cannot be captured | Judged by the T3 interval instead (MegaFold, OLMoE); listed in `level3.primary_speedup.eager_only` |
 | Lower confidence bound | Finite and strictly `> 1.0` |
 | Selected candidates | All qualifying L2 cases |
 | Top-k limit | None |
@@ -652,10 +658,11 @@ Changing from the earlier agent-major scheduler requires a new output root.
 For each Level-2 case:
 
 ```text
-positive = accepted
-           AND single_site_T3.ok
-           AND finite(single_site_T3.ci95.low)
-           AND single_site_T3.ci95.low > 1
+execution = T3-G if the eager baseline's step was captured, else T3
+positive  = accepted
+            AND single_site[execution].ok
+            AND finite(single_site[execution].ci95.low)
+            AND single_site[execution].ci95.low > 1
 ```
 
 All eligible cases are selected; no manual top-k or subset search is done.

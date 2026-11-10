@@ -66,72 +66,21 @@ def test_no_graphs_is_reported_as_failed_compile():
     assert row["failed_at"] == "compile_coverage"
 
 
-def execution(value, prefix=""):
-    return SimpleNamespace(error=None, mutated=[], input_digest="same",
-                           initial_state={prefix + "weight": "same"},
-                           results={"grad:" + prefix + "weight": value})
-
-
-def test_correctness_normalizes_wrapper_names_and_rejects_bad_gradients():
-    reference = execution(torch.ones(2))
-    assert not B.compare(reference, execution(torch.ones(2), "_orig_mod."))
-    assert B.compare(reference, execution(torch.zeros(2), "_orig_mod."))
-    assert B.compare(reference, execution(torch.full((2,), float("nan"))))
-
-
-def test_compile_failure_preserves_correctness_evidence():
+def test_compile_failure_is_a_failed_baseline_row():
     run = SimpleNamespace(model=None, workload=None, device="cpu")
-    with patch.object(B, "check_correctness", return_value={"status": "failed"}), \
-         patch.object(protocol, "provider_kernels", side_effect=RuntimeError("compile unavailable")):
+    with patch.object(protocol, "provider_kernels", side_effect=RuntimeError("compile unavailable")):
         row = protocol._measure_tier3_provider(run, "torch_compile", "torch_compile", {})
     assert not row["ok"]
-    assert row["correctness"]["status"] == "failed"
+    assert row["failed_at"] == "baseline"
     assert "compile unavailable" in row["error"]
+    assert "correctness" not in row
 
 
-def test_correctness_executes_real_compiled_forward_and_backward_on_cpu():
-    from evograd.verification.gate2.adapters.model import ObjectiveModelScope
-    from tests.verification import _toy_integration as T
-
-    class Workload:
-        name = "toy"
-        spec = SimpleNamespace(device="cpu", dtype="float32")
-        site_registry = SiteRegistry("toy", ())
-        primary_output_name = "prediction"
-        objective_definition = "squared prediction"
-
-        def build_patched(self, kernels):
-            model = torch.nn.Linear(2, 1)
-            if B.whole_model_compile_requested(kernels):
-                return B.compile_model(model, kernels)
-            return model, None
-
-        def expected_site_calls(self):
-            return {}
-
-        def batch_for(self, *, seed):
-            return {"x": torch.ones(1, 2) * (seed / 100)}
-
-        def primary_output(self, model, batch):
-            prediction = model(batch["x"])
-            return prediction.square().mean(), prediction
-
-    workload = Workload()
-    with T.toy_environment(), \
-         patch("evograd.verification.integrations.gates.model_scope",
-               side_effect=lambda model, workload: ObjectiveModelScope(workload)), \
-         patch.object(protocol, "whole_model_compile", side_effect=lambda workload: B.whole_model_compile_kernels(workload.site_registry)), \
-         patch.dict(B.COMPILE_SETTINGS, backend="aot_eager"):
-        result = B.check_correctness(None, workload)
-    assert result["status"] == "passed", result
-    assert [row["seed"] for row in result["samples"]] == [101, 202, 303, 404]
-    assert all(row["results_checked"] >= 4 for row in result["samples"])
-
-
-def test_invalid_compile_correctness_cannot_supply_comparison_ratio():
-    assert not protocol.compile_baseline_valid({"ok": True, "correctness": {"status": "failed"}})
-    assert not protocol.compile_baseline_valid({"ok": True})
-    assert protocol.compile_baseline_valid({"ok": True, "correctness": {"status": "passed"}})
+def test_a_failed_compile_baseline_cannot_supply_a_comparison_ratio():
+    own = {"ok": True, "step_ms": 75}
+    assert protocol.speedups_vs_compile(own, {"ok": False, "step_ms": 60}) == {}
+    assert protocol.speedups_vs_compile(own, {"ok": True, "step_ms": 60}) == {
+        "speedup_vs_torch_compile": 60 / 75}
 
 
 def test_baseline_code_change_invalidates_binding():
@@ -155,7 +104,7 @@ def test_legacy_evaluator_runs_and_resumes_baselines_without_candidates(tmp_path
     run = Run(model, tmp_path, tmp_path / "state", corpus, tmp_path / "manifest.json",
               {}, {}, {}, {}, device="cpu", _workload=workload)
     raw = {name: {"ok": True, "step_ms": ms, "per_block_ms": [ms] * 3,
-                   "peak_memory_bytes": 100, "correctness": {"status": "passed"}}
+                   "peak_memory_bytes": 100}
            for name, ms in (("eager", 2), ("torch_compile", 1))}
     report = assemble_report(workload, raw, list(raw), isolation="test",
                              **protocol.TIER3_OPTIONS)

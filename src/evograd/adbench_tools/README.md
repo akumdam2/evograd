@@ -78,7 +78,7 @@ two is what the frontend contributes.
    decides anything.
 5. **Same final measurement.** The agent's best program is rebuilt from the
    code inside its block, so edits outside it are discarded. Every submission
-   goes through `evograd-evaluation-v3` (§7): the applicable real-payload gates,
+   goes through `evograd-evaluation-v4` (§7): the applicable real-payload gates,
    formal T2 and model-scope T3. `score`/`compare` are separate diagnostics (§5.6).
 6. **Same model and API-request cap for the OpenAI agents.**
    - One `--model` / `--api-base` (an OpenAI-compatible endpoint) is used for
@@ -557,14 +557,16 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
 2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
    Its best program is rebuilt from its evolve block into `submission.py`
    (`fixed_code_intact` is recorded).
-3. **Every submission goes through `evograd-evaluation-v3`**: the static rules
+3. **Every submission goes through `evograd-evaluation-v4`**: the static rules
    (`check_source`; a violation is neither verified nor timed), then the gates
    on the model's real training payloads -- Level 1: Gate 1 and operator
    Gate 2; Level 2: also model Gate 2 and Gate 3 alone at its site. Every
    executable L1/L2 candidate gets formal T2; each executable L2 candidate also
-   gets single-site T3 against eager. Each agent's positive L2 candidates are
-   combined: positive means accepted and a successful single-site T3 speedup
-   whose 95% interval lower bound is greater than 1. That combination gets
+   gets single-site T3 against eager, replayed from a CUDA graph (T3-G, primary)
+   and launched eagerly (T3). Each agent's positive L2 candidates are
+   combined: positive means accepted and a successful single-site T3-G speedup
+   whose 95% interval lower bound is greater than 1 (T3 for a model whose
+   eager step cannot be captured: MegaFold, OLMoE). That combination gets
    model Gate 2 and Gate 3 (L3), then T3 against eager and whole-model compile.
    Rejected candidates' timings remain diagnostic and do not enter aggregates.
 4. **`summarize`** reports, per agent and level, the funnel (submitted,
@@ -629,14 +631,10 @@ default mode. Graph counts and graph breaks are recorded; a timing that captures
 no graphs fails compile coverage. Compilation includes the model forward and
 autograd backward, while the AdamW optimizer remains outside compilation.
 
-Before timing, separate fresh model executions compare eager and whole-model
-compile outputs, loss, and all input/parameter gradients on model seeds
-101/202/303/404. The independent baseline check uses PyTorch's dtype-specific
-`torch.testing.assert_close` defaults with `equal_nan=False`; its recorded
-policy is separate from calibrated candidate acceptance. A correctness failure
-does not hide timing diagnostics, but cannot supply `speedup_vs_torch_compile`.
-These checks cover one forward/backward per seed, not a training trajectory.
-Timing retains the existing Tier-3 training recipe; model-specific Gate-3
+The compile baseline has no numerical verdict against eager: it is the trusted
+control the gates' thresholds are calibrated from, and its fused arithmetic
+does not meet eager's dtype-default tolerances. Like every provider it must
+run the preliminary loss steps with finite losses. Timing retains the existing Tier-3 training recipe; model-specific Gate-3
 optimizer/accumulation recipes remain separate.
 
 Baseline implementation hashes invalidate old timing caches after evaluator,

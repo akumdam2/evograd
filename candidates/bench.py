@@ -280,25 +280,38 @@ def summary_table(rows: dict[str, dict]) -> str:
                 f"| {spent['evaluations']} | {calls} "
                 f"| {spent['wall_seconds'] / 3600:.2f} |")
         for model, m in summary["level3"]["models"].items():
-            lines.append(
-                f"| {agent} | L3 / T3 ({model}) | {len(m['cases'])} combined | - | - | - "
-                f"| {'yes' if m['accepted'] else 'no'} | - | {_cell(m['speedup'])} "
-                f"| {_cell(m['speedup_vs_torch_compile'])} | - | - | - |")
+            for tier, execution, timed in (("T3-G", "cuda_graph", m["cuda_graph"]),
+                                           ("T3", "eager", m)):
+                primary = ", primary" if m.get("execution") == execution else ""
+                lines.append(
+                    f"| {agent} | L3 / {tier} ({model}{primary}) | {len(m['cases'])} combined "
+                    f"| - | - | - "
+                    f"| {'yes' if m['accepted'] else 'no'} | - | {_cell(timed['speedup'])} "
+                    f"| {_cell(timed['speedup_vs_torch_compile'])} | - | - | - |")
     singles = []
+    def interval(row):
+        ci = row.get("ci95") or {}
+        return f"[{_cell(ci.get('low'))}, {_cell(ci.get('high'))}]"
+
     for agent, entry in rows.items():
+        executions = {model: m.get("execution")
+                      for model, m in entry["summary"]["level3"]["models"].items()}
         for model, cases in entry["summary"]["level2"].get("tier3_single_site", {}).items():
+            decides = "T3" if executions.get(model) == "eager" else "T3-G"
             for cid, case in cases.items():
-                timed = case.get("tier3") or {}
-                interval = timed.get("ci95") or {}
-                ci = f"[{_cell(interval.get('low'))}, {_cell(interval.get('high'))}]"
+                launched = case.get("tier3") or {}
+                timed = launched.get("cuda_graph") or {}
                 singles.append(
                     f"| {agent} | {model}: {cid} | {'yes' if case.get('accepted') else 'no'} "
-                    f"| {_cell(timed.get('step_ms'))} | {_cell(timed.get('speedup'))} | {ci} "
-                    f"| {'yes' if case.get('positive') else 'no'} |")
+                    f"| {_cell(timed.get('step_ms'))} | {_cell(timed.get('speedup'))} "
+                    f"| {interval(timed)} | {_cell(launched.get('speedup'))} | {interval(launched)} "
+                    f"| {decides} | {'yes' if case.get('positive') else 'no'} |")
     if singles:
-        lines += ["", "L2 single-site Tier 3 (against eager)", "",
-                  "| agent | case | accepted | step ms | speedup | 95% interval | positive |",
-                  "|---|---|---|---|---|---|---|", *singles]
+        lines += ["", "L2 single-site Tier 3 (against eager; the model's primary execution decides "
+                  "`positive`: T3-G, or T3 where the eager step cannot be captured)", "",
+                  "| agent | case | accepted | T3-G step ms | T3-G speedup | T3-G 95% interval "
+                  "| T3 speedup | T3 95% interval | decides | positive |",
+                  "|---|---|---|---|---|---|---|---|---|---|", *singles]
     return "\n".join(lines) + "\n"
 
 

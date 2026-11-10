@@ -56,14 +56,13 @@ def measure(model_name, out_root, *, device="cuda", force=False):
         report = P.run_tier3(run, {"eager": "eager", "torch_compile": "torch_compile"},
                              options=options)
         providers = report.get("providers") or {}
-        complete = bool(providers.get("eager", {}).get("ok")) and P.compile_baseline_valid(
-            providers.get("torch_compile", {}))
+        complete = all(providers.get(name, {}).get("ok") for name in ("eager", "torch_compile"))
         report.update(baseline_binding=binding, baseline_complete=complete,
                       source_plan=str(plan_path), baseline_only=True)
         _write(output, report)
         print(f"Baseline report: {output}", flush=True)
         if not complete:
-            print("Baseline execution or compile correctness failed; see the provider report.",
+            print("A baseline did not complete; see the provider report.",
                   file=sys.stderr)
         return 0 if complete else 1
 

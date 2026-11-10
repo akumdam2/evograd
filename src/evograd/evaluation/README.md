@@ -3,7 +3,7 @@
 ## The benchmark protocol
 
 Every submission is evaluated the same way, whoever generated it
-(`protocol.py`, `evograd-evaluation-v3`). Evaluate each agent's submissions as
+(`protocol.py`, `evograd-evaluation-v4`). Evaluate each agent's submissions as
 one run; its Level-3 combination is selected only from that agent's candidates:
 
 ```bash
@@ -45,10 +45,20 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    place. Results bind the corpus, the rule and the payload ids
    (`tier2_inputs`). Correctness is judged separately by the gates.
 3. **Tier 3** times the training step with each executable Level-2 candidate
-   alone at its site, against eager.
+   alone at its site, against eager. Every provider is timed in two
+   executions on the same model, batch and AdamW: **T3-G**, the primary
+   result, replays forward, loss and backward from one CUDA graph and steps
+   the optimizer eagerly; **T3** launches the same step eagerly. T3-G is timed
+   only when the replayed loss reproduces the eager loss; a step that cannot
+   be captured has a T3 row and a recorded capture failure.
 4. The **combination** contains that agent's positive Level-2 candidates:
-   *accepted* and single-site Tier 3 speedup over eager with a 95% bootstrap
-   interval whose lower bound is strictly above one. These candidates are
+   *accepted* and single-site T3-G speedup over eager with a 95% bootstrap
+   interval whose lower bound is strictly above one. A candidate without a
+   T3-G result is not positive. A model whose eager step cannot be captured
+   (MegaFold reads tensor data back to the host inside the step; OLMoE copies
+   a pageable host tensor to the device) is
+   judged by its T3 interval instead, and the summary lists it under
+   `primary_speedup.eager_only`. These candidates are
    deployed together at their distinct model sites; Level-1 artifacts are not
    independently installed by this path. The combination gets model Gate 2
    and Gate 3 (where it applies) again, then Tier 3 timing against eager and whole-model
@@ -57,7 +67,7 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    speedup over accepted configurations (configuration, then task, then family), coverage
    (accepted configurations over all observed ones) and the funnel
    (submitted, violation, executable, Gate 1, accepted); Level 3 reports each model's
-   combination with its speedup and peak-memory ratio. There is no single
+   combination with its T3-G speedup, its T3 speedup and peak-memory ratio. There is no single
    overall score. Gate verdicts sit beside every runtime, so a rejected
    candidate's numbers are visible but counted nowhere.
 

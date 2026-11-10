@@ -121,6 +121,10 @@ def configure() -> dict[str, Any]:
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.set_float32_matmul_precision("highest")
     torch.set_num_threads(DETERMINISM["torch_num_threads"])
+    # Here as well as at model construction: a job-local model snapshot is
+    # loaded without constructing, and compile or capture must still see it.
+    from evograd.benchmark.topdown.common.model import traced_causal_mask_as_eager
+    traced_causal_mask_as_eager()
     return determinism_record()
 
 
