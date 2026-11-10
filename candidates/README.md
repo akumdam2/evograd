@@ -28,9 +28,6 @@ neither of them:
 
 ## The benchmark run
 
-The [Qwen3-0.6B evaluation plan](EVALUATION_PLAN.md)
-fixes the first comparison's six cases, 10-request budget, gates, timing and reporting.
-
 The comparison that counts is `evograd evaluate` (`evograd-evaluation-v3`:
 real-payload gates, Tier 2, single-site Tier 3 and the Level-3 combination), run
 on every agent's submissions by `bench.py`; `score`/`compare` below are

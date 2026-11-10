@@ -1,6 +1,6 @@
 # OpenEvolve / GEPA / GEAK: DeltaAI batch runbook
 
-This follows `EVALUATION_PLAN_SIX_AGENTS.md`. The launcher runs on the login
+The launcher runs on the login
 node, reads shared records, and submits a two-hour `ghx4` job only when pending
 searches exist. Each job uses one GPU, 8 CPUs and 32G. OpenEvolve and GEPA have
 10 admitted requests per case; GEAK has two optimization directions with
