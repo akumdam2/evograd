@@ -1,7 +1,7 @@
 {
-  "schema_version": "evograd-torchrec_dlrm-snapshot/1",
-  "manifest_hash": "810613fd359861d04cd27d891364eb849c50979a34bd20b64dfe0fc53671f652",
-  "workload_id": "torchrec_dlrm-78ed17ef9e635402",
+  "schema_version": "evograd-torchrec_dlrm-snapshot/2",
+  "manifest_hash": "883792041a0a7f9f6f1a60b12bfd4f640e40b1b2588ab1fe763ddc10f44ac996",
+  "workload_id": "torchrec_dlrm-1394f3cc47559de8",
   "config": {
     "model": "torchrec_dlrm",
     "batch_size": 32,
@@ -9,10 +9,103 @@
     "device": "cuda",
     "seed": 0,
     "data_seed": 0,
-    "input_mode": "generated",
+    "input_mode": "real",
     "arch_overrides": {}
   },
-  "canonical": true,
+  "run": {
+    "model": "torchrec_dlrm",
+    "workload": {
+      "model": "torchrec_dlrm",
+      "device": "cuda",
+      "input_mode": "real",
+      "stream": true
+    },
+    "data": {
+      "data": {
+        "dataset": [
+          "criteo_kaggle",
+          "torchrec_preprocessed_numpy",
+          "train_first_half"
+        ],
+        "mapping": "per_feature_modulo_table_size",
+        "table_sizes": [
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000,
+          100000
+        ],
+        "train_rows": 22920309,
+        "rule": "batch i of data order o: random.Random(f'criteo-train-first-half/order{o}/batch{i}').sample(range(train_rows), batch_size) rows of the labeled first half; sparse ids per_feature_modulo_table_size",
+        "files": {
+          "train_dense.npy": {
+            "bytes": 2383712212
+          },
+          "train_sparse.npy": {
+            "bytes": 9534848464
+          },
+          "train_labels.npy": {
+            "bytes": 183362596
+          }
+        },
+        "files_sha256": {
+          "train_dense.npy": "494f84e53576a7b769f71eef04692a6195c907616cf8ed387d7a94a5f848d123",
+          "train_sparse.npy": "d3900356eba45dcd5bb17f04d4042e583c081338091a4c16ce19280f5b658857",
+          "train_labels.npy": "11b8c5544d1350dfdb6bace507e2f84a57b3f7295f5b234fd9bec93ca3dcccae"
+        }
+      },
+      "rule": "workload.train_batches(order).batch(0)"
+    },
+    "order": 101,
+    "batch": {
+      "batch_sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5",
+      "order": {
+        "source": "criteo_kaggle train first half",
+        "order": 101,
+        "batch_size": 32,
+        "rule": "batch i of data order o: random.Random(f'criteo-train-first-half/order{o}/batch{i}').sample(range(train_rows), batch_size) rows of the labeled first half; sparse ids per_feature_modulo_table_size"
+      }
+    },
+    "parameter_state": {
+      "parameters": 40,
+      "tied": [],
+      "state_sha256": "edaf42e367a5df6a77ad08bff2ed49364224e56f8d0bc0c040dd3c5956c43ddf"
+    },
+    "execution": {
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+      "deterministic_algorithms": true,
+      "cudnn_deterministic": true,
+      "cudnn_benchmark": false,
+      "matmul_allow_tf32": false,
+      "float32_matmul_precision": "highest",
+      "sdp_flash": true,
+      "sdp_mem_efficient": true,
+      "sdp_cudnn": true,
+      "sdp_math": true,
+      "torch_num_threads": 8
+    }
+  },
   "not_bound": [
     "ReLU",
     "binary cross entropy",
@@ -605,5 +698,5 @@
       "frequency": 1
     }
   },
-  "snapshot_hash": "d5c575c9f4f736d66e1213e48e2c768654a2b88d7da3075474a2231d3876b1a7"
+  "snapshot_hash": "b30603c16fa4adc01ca0bf9c840d15c30a2c8a4c284961f8cfb752ea95c06ee8"
 }

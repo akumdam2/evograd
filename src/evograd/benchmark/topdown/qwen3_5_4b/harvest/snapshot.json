@@ -1,9 +1,9 @@
 {
-  "schema_version": "evograd-qwen3_5-snapshot/1",
-  "workload_id": "qwen3.5-4b.train.bs1.seq2048.bf16.cuda.sdpa.bac6935e",
-  "workload_hash": "bac6935e628656df",
+  "schema_version": "evograd-qwen3_5-snapshot/2",
+  "workload_id": "qwen3.5-4b.train.bs1.seq2048.bf16.cuda.sdpa.pretrained.realtext.c8929abd",
+  "workload_hash": "c8929abdfece9212",
   "config_hash": "561fdfee60acc755",
-  "manifest_hash": "d9552ce6af77ad5320cac52d829d04fe499b22f44acebd30dfb17351c7df5715",
+  "manifest_hash": "06f863e71171c6692aa1e696f14c5227517095f4a73ea4fe89b18ca0aecfa34a",
   "manifest_schema": "evograd-qwen3_5-harvest/1",
   "provenance": "observed",
   "model": {
@@ -3204,10 +3204,13 @@
           29,
           30
         ],
-        "anchor": {
-          "task": "gated_delta_rule",
-          "role": "chunk_gated_delta_rule"
-        },
+        "anchors": [
+          {
+            "task": "gated_delta_rule",
+            "role": "chunk_gated_delta_rule",
+            "shift": 0
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     },
@@ -3505,10 +3508,13 @@
           29,
           30
         ],
-        "anchor": {
-          "task": "gated_delta_rule",
-          "role": "chunk_gated_delta_rule"
-        },
+        "anchors": [
+          {
+            "task": "gated_delta_rule",
+            "role": "chunk_gated_delta_rule",
+            "shift": 0
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     },
@@ -3762,14 +3768,17 @@
           29,
           30
         ],
-        "anchor": {
-          "task": "rms_norm_gated",
-          "role": "norm"
-        },
+        "anchors": [
+          {
+            "task": "rms_norm_gated",
+            "role": "norm",
+            "shift": 0
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     },
-    "qwen3_5_qkv_norm_partial_rope": {
+    "qwen3_5_attention_block": {
       "config_id": "bd13cde349230024",
       "harvested_task": "rope_apply",
       "roles": [
@@ -4120,7 +4129,7 @@
             "eps": 1e-06
           }
         },
-        "consumer": {
+        "attention": {
           "config_id": "5a92e9eb04f366b5",
           "task": "sdpa",
           "roles": [
@@ -4204,172 +4213,6 @@
             "attn_mask_provided": false
           }
         },
-        "enclosing": {
-          "config_id": "2e865396967523a8",
-          "task": "attention",
-          "roles": [
-            "self_attn"
-          ],
-          "frequency": 8,
-          "input_shapes": [],
-          "output_shapes": [
-            {
-              "shape": [
-                1,
-                2048,
-                2560
-              ],
-              "dtype": "torch.bfloat16",
-              "stride": [
-                5242880,
-                2560,
-                1
-              ],
-              "contiguous": true
-            }
-          ],
-          "params": {},
-          "attrs": {
-            "num_attention_heads": 16,
-            "num_key_value_heads": 4,
-            "num_key_value_groups": 4,
-            "head_dim": 256,
-            "scaling": 0.0625,
-            "attention_dropout": 0.0,
-            "is_causal": true,
-            "sliding_window": null,
-            "attn_implementation": "sdpa"
-          }
-        }
-      },
-      "observed": {
-        "kind": "observed",
-        "whole_model_invocations": 8,
-        "by_layer_type": {
-          "full_attention": 8
-        },
-        "layer_indices": [
-          3,
-          7,
-          11,
-          15,
-          19,
-          23,
-          27,
-          31
-        ],
-        "anchor": {
-          "task": "rope_apply",
-          "role": "apply_rotary_pos_emb"
-        },
-        "note": "counted from the harvest's events: one canonical training step's forward"
-      }
-    },
-    "qwen3_5_gated_attention": {
-      "config_id": "5a92e9eb04f366b5",
-      "harvested_task": "sdpa",
-      "roles": [
-        "scaled_dot_product_attention"
-      ],
-      "frequency": 8,
-      "module_paths": [
-        "model.layers.3.self_attn",
-        "model.layers.7.self_attn",
-        "model.layers.11.self_attn",
-        "model.layers.15.self_attn",
-        "model.layers.19.self_attn",
-        "model.layers.23.self_attn",
-        "model.layers.27.self_attn",
-        "model.layers.31.self_attn"
-      ],
-      "layer_indices": [
-        3,
-        7,
-        11,
-        15,
-        19,
-        23,
-        27,
-        31
-      ],
-      "input_shapes": [
-        {
-          "shape": [
-            1,
-            16,
-            2048,
-            256
-          ],
-          "dtype": "torch.bfloat16",
-          "stride": [
-            8388608,
-            524288,
-            256,
-            1
-          ],
-          "contiguous": true
-        },
-        {
-          "shape": [
-            1,
-            4,
-            2048,
-            256
-          ],
-          "dtype": "torch.bfloat16",
-          "stride": [
-            2097152,
-            524288,
-            256,
-            1
-          ],
-          "contiguous": true
-        },
-        {
-          "shape": [
-            1,
-            4,
-            2048,
-            256
-          ],
-          "dtype": "torch.bfloat16",
-          "stride": [
-            2097152,
-            256,
-            1024,
-            1
-          ],
-          "contiguous": false
-        }
-      ],
-      "output_shapes": [
-        {
-          "shape": [
-            1,
-            16,
-            2048,
-            256
-          ],
-          "dtype": "torch.bfloat16",
-          "stride": [
-            8388608,
-            524288,
-            256,
-            1
-          ],
-          "contiguous": true
-        }
-      ],
-      "dtype": "torch.bfloat16",
-      "params": {},
-      "attrs": {
-        "dropout_p": 0.0,
-        "is_causal": true,
-        "scale": 0.0625,
-        "enable_gqa": true,
-        "attn_mask_provided": false
-      },
-      "supporting": {
         "output_projection": {
           "config_id": "e416e246dedc899d",
           "task": "linear",
@@ -4479,10 +4322,13 @@
           27,
           31
         ],
-        "anchor": {
-          "task": "sdpa",
-          "role": "scaled_dot_product_attention"
-        },
+        "anchors": [
+          {
+            "task": "attention",
+            "role": "self_attn",
+            "shift": 0
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     },
@@ -4642,99 +4488,97 @@
         "normalized_size": 2560,
         "eps": 1e-06
       },
-      "supporting": {
-        "consumer": {
-          "config_id": "6232742b126bc8d0",
-          "task": "mlp",
-          "roles": [
-            "mlp"
-          ],
-          "frequency": 32,
-          "input_shapes": [
-            {
-              "shape": [
-                1,
-                2048,
-                2560
-              ],
-              "dtype": "torch.bfloat16",
-              "stride": [
-                5242880,
-                2560,
-                1
-              ],
-              "contiguous": true
-            }
-          ],
-          "output_shapes": [
-            {
-              "shape": [
-                1,
-                2048,
-                2560
-              ],
-              "dtype": "torch.bfloat16",
-              "stride": [
-                5242880,
-                2560,
-                1
-              ],
-              "contiguous": true
-            }
-          ],
-          "params": {},
-          "attrs": {
-            "hidden_size": 2560,
-            "intermediate_size": 9216,
-            "hidden_act": "silu"
-          }
-        }
-      },
+      "supporting": {},
       "observed": {
         "kind": "observed",
-        "whole_model_invocations": 32,
+        "whole_model_invocations": 64,
         "by_layer_type": {
-          "full_attention": 8,
-          "linear_attention": 24
+          "full_attention": 16,
+          "linear_attention": 48
         },
         "layer_indices": [
           0,
+          0,
+          1,
           1,
           2,
+          2,
+          3,
           3,
           4,
+          4,
+          5,
           5,
           6,
+          6,
+          7,
           7,
           8,
+          8,
+          9,
           9,
           10,
+          10,
+          11,
           11,
           12,
+          12,
+          13,
           13,
           14,
+          14,
+          15,
           15,
           16,
+          16,
+          17,
           17,
           18,
+          18,
+          19,
           19,
           20,
+          20,
+          21,
           21,
           22,
+          22,
+          23,
           23,
           24,
+          24,
+          25,
           25,
           26,
+          26,
+          27,
           27,
           28,
+          28,
+          29,
           29,
           30,
+          30,
+          31,
           31
         ],
-        "anchor": {
-          "task": "rms_norm",
-          "role": "post_attention_layernorm"
-        },
+        "anchors": [
+          {
+            "task": "rms_norm",
+            "role": "post_attention_layernorm",
+            "shift": 0
+          },
+          {
+            "task": "rms_norm",
+            "role": "input_layernorm",
+            "shift": -1
+          },
+          {
+            "task": "rms_norm",
+            "role": "norm",
+            "shift": null
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     },
@@ -5046,13 +4890,89 @@
           30,
           31
         ],
-        "anchor": {
-          "task": "mlp",
-          "role": "mlp"
-        },
+        "anchors": [
+          {
+            "task": "mlp",
+            "role": "mlp",
+            "shift": 0
+          }
+        ],
         "note": "counted from the harvest's events: one canonical training step's forward"
       }
     }
   },
-  "snapshot_hash": "ef15afd698eadca5519ff726484d12a7755554c4ae7b4a0919bfc29c4570f075"
+  "run": {
+    "model": "qwen3_5_4b",
+    "workload": {
+      "model": "qwen3_5_4b",
+      "device": "cuda",
+      "dtype": "bfloat16",
+      "batch_size": 1,
+      "seq_len": 2048,
+      "seed": 0,
+      "data_seed": 0,
+      "attn_implementation": "sdpa",
+      "weights": "pretrained:Qwen/Qwen3.5-4B@851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+    },
+    "data": {
+      "dataset": "Salesforce/wikitext",
+      "config": "wikitext-2-raw-v1",
+      "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+      "join": "documents joined with EOS; trailing partial block dropped",
+      "block_len": 2048,
+      "ignore_index": -100,
+      "tokenizer_sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+      "train": {
+        "split": "train",
+        "blocks": 1234,
+        "block_len": 2048,
+        "tokens_total": 2528403,
+        "dropped_tail": 1171,
+        "documents": 23767,
+        "parquet_sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7"
+      },
+      "validation": {
+        "split": "validation",
+        "blocks": 128,
+        "block_len": 2048,
+        "tokens_total": 263745,
+        "dropped_tail": 1601,
+        "documents": 2461,
+        "parquet_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c"
+      },
+      "disjoint": "train and validation are separate parquet files of the published split"
+    },
+    "order": 101,
+    "batch": {
+      "order": 101,
+      "input_ids_sha256": "4da9fa8967c14f13447dc5ee7b6e0d9edf878cbe2af269b2508024c4f95bb009",
+      "labels_sha256": "4da9fa8967c14f13447dc5ee7b6e0d9edf878cbe2af269b2508024c4f95bb009",
+      "shape": [
+        1,
+        2048
+      ],
+      "rule": "workload.train_batches(order).batch(0)",
+      "order_sha256": "58078a17d5071bc7"
+    },
+    "parameter_state": {
+      "parameters": 426,
+      "tied_lm_head": true,
+      "state_sha256": "a490e94a824f4db375ac007608219f61a6380ee1238656d5db3399dcb11417cd"
+    },
+    "execution": {
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+      "deterministic_algorithms": true,
+      "cudnn_deterministic": true,
+      "cudnn_benchmark": false,
+      "matmul_allow_tf32": false,
+      "float32_matmul_precision": "highest",
+      "sdp_flash": true,
+      "sdp_mem_efficient": true,
+      "sdp_cudnn": true,
+      "sdp_math": true,
+      "torch_num_threads": 8
+    }
+  },
+  "snapshot_hash": "af2703351621fc7013183aa7286e42d97e4e32e62d74822937b2b8d81225812f"
 }

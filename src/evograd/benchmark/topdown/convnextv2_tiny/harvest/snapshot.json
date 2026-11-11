@@ -1,7 +1,7 @@
 {
-  "schema_version": "evograd-convnextv2_tiny-snapshot/1",
-  "manifest_hash": "47ef8b14e46afbe2c33bc616c885d5eaa1cfc9c9c241114cba462013ab57713b",
-  "workload_id": "convnextv2_tiny-63fd48342f1f35fd",
+  "schema_version": "evograd-convnextv2_tiny-snapshot/2",
+  "manifest_hash": "a679d4f07c69e7a0c7b254a3d6d2dcb16611b0cb02f594c0ded6e21a35b10b72",
+  "workload_id": "convnextv2_tiny-023afe318b1f76e4",
   "config": {
     "model": "convnextv2_tiny",
     "batch_size": 32,
@@ -13,9 +13,61 @@
     "data_seed": 0,
     "attn_implementation": "sdpa",
     "arch_overrides": {},
-    "weights": "random"
+    "weights": "pretrained"
   },
-  "canonical": true,
+  "run": {
+    "model": "convnextv2_tiny",
+    "workload": {
+      "model": "convnextv2_tiny",
+      "device": "cuda",
+      "weights": "pretrained",
+      "stream": true
+    },
+    "data": {
+      "data": {
+        "dataset": [
+          "ShaomuTan/imagenette",
+          "061f0ab5ca70523e13982a7ba463c076af657386",
+          "320px/train-00000-of-00001.parquet"
+        ],
+        "checkpoint_revision": "f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+        "pool_sha256": "1b10c9d4da1170e7621449970d09a48d5991f9f5d62273183a30e5a484ff4520",
+        "rows": 9469,
+        "skipped": 0,
+        "pool_rule": "every Imagenette 320px train row: RGB, ConvNextImageProcessorPil of the pinned checkpoint, pixel_values cast to the model dtype; label -> ImageNet id",
+        "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+      },
+      "rule": "workload.train_batches(order).batch(0)"
+    },
+    "order": 101,
+    "batch": {
+      "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+      "order": {
+        "source": "convnextv2_tiny pool",
+        "order": 101,
+        "batch_size": 32,
+        "rule": "data order o, batch i: epoch e = i // (n // B) is torch.randperm(n) under the seed of '<model>/order<o>/epoch<e>'; the batch is its rows [(i mod (n // B)) * B, +B)"
+      }
+    },
+    "parameter_state": {
+      "parameters": 200,
+      "tied": [],
+      "state_sha256": "cbce484a1ee4b9fa099a2a18c4f275f4a62f7ad52bd0be11520022f0f7ee76bd"
+    },
+    "execution": {
+      "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+      "deterministic_algorithms": true,
+      "cudnn_deterministic": true,
+      "cudnn_benchmark": false,
+      "matmul_allow_tf32": false,
+      "float32_matmul_precision": "highest",
+      "sdp_flash": true,
+      "sdp_mem_efficient": true,
+      "sdp_cudnn": true,
+      "sdp_math": true,
+      "torch_num_threads": 8
+    }
+  },
   "not_bound": [
     "cross entropy",
     "spatial pooling",
@@ -2368,6 +2420,465 @@
     }
   },
   "tasks": {
+    "convnextv2_tiny_dwconv_layernorm": {
+      "configurations": [
+        {
+          "dims": {
+            "B": 32,
+            "C": 96,
+            "Y": 56,
+            "X": 56,
+            "K": 7
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                96,
+                56,
+                56
+              ],
+              "stride": [
+                301056,
+                1,
+                5376,
+                96
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                96,
+                1,
+                7,
+                7
+              ],
+              "stride": [
+                49,
+                49,
+                7,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                96
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                96
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                96
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              301056,
+              1,
+              5376,
+              96
+            ],
+            "dw_weight": [
+              49,
+              49,
+              7,
+              1
+            ],
+            "dw_bias": [
+              1
+            ],
+            "ln_weight": [
+              1
+            ],
+            "ln_bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "convnextv2.encoder.stages.0.layers",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "e697403e1a723af51acafb001e337888116ff3b4354408aeff35a5a52ed5aff2",
+          "frequency": 3,
+          "module_paths": [
+            "convnextv2.encoder.stages.0.layers.0",
+            "convnextv2.encoder.stages.0.layers.1",
+            "convnextv2.encoder.stages.0.layers.2"
+          ]
+        },
+        {
+          "dims": {
+            "B": 32,
+            "C": 192,
+            "Y": 28,
+            "X": 28,
+            "K": 7
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                192,
+                28,
+                28
+              ],
+              "stride": [
+                150528,
+                1,
+                5376,
+                192
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                192,
+                1,
+                7,
+                7
+              ],
+              "stride": [
+                49,
+                49,
+                7,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                192
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                192
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                192
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              150528,
+              1,
+              5376,
+              192
+            ],
+            "dw_weight": [
+              49,
+              49,
+              7,
+              1
+            ],
+            "dw_bias": [
+              1
+            ],
+            "ln_weight": [
+              1
+            ],
+            "ln_bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "convnextv2.encoder.stages.1.layers",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "920db526bcc9612e5a9d81099dd14396ac3f2da1ccf68ca3626d4f5a19b58d79",
+          "frequency": 3,
+          "module_paths": [
+            "convnextv2.encoder.stages.1.layers.0",
+            "convnextv2.encoder.stages.1.layers.1",
+            "convnextv2.encoder.stages.1.layers.2"
+          ]
+        },
+        {
+          "dims": {
+            "B": 32,
+            "C": 384,
+            "Y": 14,
+            "X": 14,
+            "K": 7
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                384,
+                14,
+                14
+              ],
+              "stride": [
+                75264,
+                1,
+                5376,
+                384
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384,
+                1,
+                7,
+                7
+              ],
+              "stride": [
+                49,
+                49,
+                7,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                384
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              75264,
+              1,
+              5376,
+              384
+            ],
+            "dw_weight": [
+              49,
+              49,
+              7,
+              1
+            ],
+            "dw_bias": [
+              1
+            ],
+            "ln_weight": [
+              1
+            ],
+            "ln_bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "convnextv2.encoder.stages.2.layers",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "34617447c6b2ae62ec4117330e5db97d22eb5cf52ce3c53b7ebddb9d45a4ae94",
+          "frequency": 9,
+          "module_paths": [
+            "convnextv2.encoder.stages.2.layers.0",
+            "convnextv2.encoder.stages.2.layers.1",
+            "convnextv2.encoder.stages.2.layers.2",
+            "convnextv2.encoder.stages.2.layers.3",
+            "convnextv2.encoder.stages.2.layers.4",
+            "convnextv2.encoder.stages.2.layers.5",
+            "convnextv2.encoder.stages.2.layers.6",
+            "convnextv2.encoder.stages.2.layers.7",
+            "convnextv2.encoder.stages.2.layers.8"
+          ]
+        },
+        {
+          "dims": {
+            "B": 32,
+            "C": 768,
+            "Y": 7,
+            "X": 7,
+            "K": 7
+          },
+          "dtype": "bfloat16",
+          "inputs": [
+            {
+              "shape": [
+                32,
+                768,
+                7,
+                7
+              ],
+              "stride": [
+                37632,
+                1,
+                5376,
+                768
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768,
+                1,
+                7,
+                7
+              ],
+              "stride": [
+                49,
+                49,
+                7,
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            },
+            {
+              "shape": [
+                768
+              ],
+              "stride": [
+                1
+              ],
+              "dtype": "torch.bfloat16",
+              "requires_grad": true
+            }
+          ],
+          "strides": {
+            "x": [
+              37632,
+              1,
+              5376,
+              768
+            ],
+            "dw_weight": [
+              49,
+              49,
+              7,
+              1
+            ],
+            "dw_bias": [
+              1
+            ],
+            "ln_weight": [
+              1
+            ],
+            "ln_bias": [
+              1
+            ]
+          },
+          "input_adapter": "identity",
+          "provenance": {
+            "component": "convnextv2.encoder.stages.3.layers",
+            "free": {
+              "eps": 1e-06
+            },
+            "source": "execution"
+          },
+          "config_id": "6055289fea5e33d924395365c82fb719e523811b7aec910565cafacc2c623f7d",
+          "frequency": 3,
+          "module_paths": [
+            "convnextv2.encoder.stages.3.layers.0",
+            "convnextv2.encoder.stages.3.layers.1",
+            "convnextv2.encoder.stages.3.layers.2"
+          ]
+        }
+      ],
+      "frequency": 18
+    },
     "convnextv2_tiny_convnext_mlp": {
       "configurations": [
         {
@@ -2984,5 +3495,5 @@
       "frequency": 18
     }
   },
-  "snapshot_hash": "34fa58022dfae2250bc3e5ada75f3b789ae5e9ae0e2a2dca007fe24b1717a4cd"
+  "snapshot_hash": "8401f6a20cba26b427bd66f314417dcfafadbf3248e8458fc070864f56bc87fc"
 }
