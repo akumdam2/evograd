@@ -511,6 +511,37 @@ class TestSeedLowerings(unittest.TestCase):
         self.assertIn('return _unified_extern_kernels._grouped_mm(arg0, arg1, arg2)',
                       _external_wrapper('forward', grouped)[0])
 
+    def test_float32_attention_is_preserved_with_its_state_unpinned(self):
+        # DiT's float32 attention: memory-efficient attention, as vendor_sdpa runs it.
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+        from evograd.pipelines.unified.codegen import _external_wrapper, _sdpa_state_outputs
+
+        forward = 'torch.ops.aten._scaled_dot_product_efficient_attention.default'
+        backward = 'torch.ops.aten._scaled_dot_product_efficient_attention_backward.default'
+        self.assertEqual(_SUPPORTED_EXTERNALS[backward],
+                         'aten._scaled_dot_product_efficient_attention_backward.default')
+        source, _, _ = _external_wrapper('forward', _EFFICIENT_NODE)
+        self.assertIn('return torch.ops.aten._scaled_dot_product_efficient_attention.default('
+                      'arg0, arg1, arg2, None, True)', source)
+        getitem = '<built-in function getitem>'
+        graph = {'nodes': [
+            {'op': 'call_function', 'name': 'attn', 'external_kernel': forward},
+            *({'op': 'call_function', 'name': f'g{i}', 'target': getitem,
+               'positional_args': [{'kind': 'node', 'name': 'attn'}, {'kind': 'scalar', 'value': i}]}
+              for i in range(4)),
+            {'op': 'output', 'name': 'output', 'args': [['g0', 'g1', 'g2', 'g3']]},
+        ]}
+        # logsumexp and the rng state, which this backend keeps on the host.
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1', 'g2', 'g3'})
+
+
+_EFFICIENT_NODE = {
+    'name': 'attn', 'external_kernel': 'torch.ops.aten._scaled_dot_product_efficient_attention.default',
+    'target': 'aten._scaled_dot_product_efficient_attention.default',
+    'positional_args': [{'kind': 'node', 'name': n} for n in 'qkv']
+    + [{'kind': 'scalar', 'value': None}, {'kind': 'scalar', 'value': True}],
+}
+
 
 #: Runs in a child process with TRITON_INTERPRET=1: the handwritten kernels on
 #: CPU, against ATen's CPU kernels and the CUDA backward's summation order.
@@ -611,6 +642,23 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
 
         ids = torch.randint(0, 66, (32768,), device='cuda', dtype=torch.int32)
         self.assertTrue(torch.equal(scatter_gather.histc(ids, 64, 0, 63), torch.histc(ids, 64, 0, 63)))
+
+    def test_preserved_float32_attention_is_what_eager_runs(self):
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        source, _, metadata = _external_wrapper('forward', _EFFICIENT_NODE)
+        namespace = {'torch': torch}
+        exec(source, namespace)
+        q, k, v = (torch.randn(2, 6, 256, 64, device='cuda') for _ in range(3))
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                out = namespace[metadata['wrapper']](q, k, v)[0]
+                eager = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+            finally:
+                torch.use_deterministic_algorithms(False)
+            with self.subTest(deterministic=deterministic):
+                self.assertTrue(torch.equal(out, eager))
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""
