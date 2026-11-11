@@ -36,13 +36,9 @@ def run_harvest(spec: WorkloadSpec | None = None) -> dict[str, Any]:
 
 def harvest_real_run(device: str = "cuda") -> dict[str, Any]:
     """The capture's first step (pinned checkpoint, order-101 batch) under observation."""
-    from evograd.verification.integrations.base import real_run
-    from evograd.verification.integrations.olmoe_1b_7b import MODEL
-
     from ..declaration import WORKLOAD
 
-    workload, net, batch, identity = real_run(MODEL, device=device)
-    return _common.run_harvest(WORKLOAD, workload.spec, model=net, batch=batch, identity=identity)
+    return _common.run_real_harvest(WORKLOAD, "olmoe_1b_7b", device=device)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -91,11 +91,15 @@ The harvest runs the step the verification capture records first: the
 verification workload (`evograd.verification.integrations.<model>`: the pinned
 checkpoint and the frozen real-data pool), a fresh native model, the first
 training batch of data order 101, under the verification's deterministic
-settings (`integrations.harvest_run.first_step`). Its snapshot (schema `/2`)
-names that run under `run`: `weights` (checkpoint and revision), `data` (the
-data identity the capture records, without its per-order batches), `order`,
-`batch_digest` (the batch, as the capture names it) and
-`parameter_state_sha256` (the initial parameters). Qwen2-VL's pool rows
+settings (`integrations.base.real_run`, the step every harvest but MegaFold's
+runs). Its snapshot (schema `/2`) records that run's identity under `run`, in
+the format every model shares (`base.run_identity`: `model`, `workload` (the
+weights and data pins), `data` (the data identity the capture records,
+without its per-order batches), `order`, `batch` (the batch with its digest)
+and `parameter_state` (the initial parameters with their digest), plus the
+settings as `execution`); a capture refuses a snapshot whose `run` is not its
+own. The checkpoint revision is pinned by the workload id and the parameter
+digest. Qwen2-VL's pool rows
 are right-padded, so its text attention gets an explicit mask rather than
 SDPA's `is_causal`; `text_attention_masks` records the mask each text
 attention call received.
@@ -112,7 +116,9 @@ python -m evograd.benchmark.topdown.qwen2_vl_2b.harvest.harvest \
 
 `python -m evograd.benchmark.topdown.<model>.harvest.snapshot --harvest
 HARVEST.json [--write]` derives the snapshot from a saved harvest without a
-GPU. Only a harvest of the verification run publishes a tracked snapshot. A
+GPU. Only a harvest of the verification run publishes a tracked snapshot
+(`base.require_real_run`); the exact GPU commands and environment for every
+model are in "Regenerating the snapshots" in `src/evograd/verification/README.md`. A
 fresh process loads the new snapshots and binds those cases to each task under
 `<model>_observed`; a workload whose `workload_id` differs from the snapshot's
 uses explicitly labelled configuration-derived shapes for site verification,

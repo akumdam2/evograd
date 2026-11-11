@@ -142,7 +142,10 @@ PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.layer.capture \
 
 The capture replays the random-weight synthetic step, so it reads a
 `--synthetic` harvest; the harvest behind the tracked snapshot runs the
-pretrained real-text step instead (`../harvest/harvest.py`).
+pretrained real-text step instead (`../harvest/harvest.py`). The capture's
+identity checks compare with the tracked snapshot, so this works only until
+that snapshot is regenerated from the real run (open; see "Regenerating the
+snapshots" in `src/evograd/verification/README.md`).
 
 `--layer` defaults to 16; the JSON sidecar defaults to `--out` with a `.json`
 suffix. `--expect-workload-id` / `--expect-manifest-hash` / `--expect-layer`

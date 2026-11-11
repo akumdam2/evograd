@@ -1,10 +1,11 @@
 """Observe semantic module boundaries during a real whole-model backward.
 
 The tracked snapshot comes from :func:`real_run`: the verification capture's
-first step (pinned pretrained weights, the first batch of data order 101 from
-the frozen real-data pool, the verification settings), with that run's
-identity. :func:`collect` on a spec alone (random weights, synthetic inputs)
-serves reduced checks and never publishes.
+first step (``integrations.base.real_run``: pinned pretrained weights, the
+first batch of data order 101 from the frozen real-data pool, the
+verification settings), with that run's identity as ``run``. Only such a
+harvest writes it (``integrations.base.require_real_run``). :func:`collect` on
+a spec alone (random weights, synthetic inputs) serves reduced checks.
 
 Unsupported functional boundaries are listed, never inferred as observations.
 Hooks store metadata only; they retain no activation graphs.
@@ -15,7 +16,7 @@ import json
 import math
 from pathlib import Path
 import torch
-from .spec import REVISIONS, digest
+from .spec import digest
 from .model import build_model, make_inputs, forward
 from .operators import bindings
 from .contracts import SHAPES
@@ -269,28 +270,13 @@ def collect(spec, *, model=None, batch=None):
             handle.remove()
 
 
-def real_run(name):
-    """The harvest of ``name``'s verification run, with its run identity."""
+def real_run(name, *, device="cuda"):
+    """The harvest of ``name``'s verification run, with its run identity as ``run``."""
     from evograd.verification.integrations import load
-    from evograd.verification.integrations.harvest_run import first_step
+    from evograd.verification.integrations.base import real_run as verification_run
 
-    workload, model, batch, run, settings = first_step(load(name))
-    spec = workload.spec
-    return {**collect(spec, model=model, batch=batch),
-            "run": {"weights": f"pretrained:{spec.model_name}@{REVISIONS[spec.model]}", **run},
-            "determinism": settings}
-
-
-def require_real_run(manifest, name):
-    """Only a harvest of the verification run (:func:`real_run`) publishes the snapshot."""
-    from evograd.verification.integrations import load
-
-    spec = load(name).load_workload().spec
-    if manifest["config"] != spec.to_config() or not manifest.get("run") \
-            or not manifest.get("backward_verified"):
-        raise ValueError(f"a forward/backward harvest of the {name} verification run is required")
-    if manifest["workload_id"] != spec.workload_id or manifest["architecture"] != spec.arch:
-        raise ValueError("harvest configuration does not match current architecture")
+    workload, model, batch, run = verification_run(load(name), device=device)
+    return {**collect(workload.spec, model=model, batch=batch), "run": run}
 
 
 def snapshot(manifest):
@@ -339,14 +325,17 @@ def main(model):
     args.out.write_text(json.dumps(manifest, indent=2) + "\n")
     if args.write_snapshot:
         from evograd.benchmark.topdown import snapshot_path
+        from evograd.verification.integrations import load
+        from evograd.verification.integrations.base import require_real_run
 
+        require_real_run(load(model), manifest)
         snapshot_path(model).write_text(json.dumps(payload, indent=2) + "\n")
     print(
         json.dumps(
             {
                 "manifest": str(args.out),
                 "workload_id": manifest["workload_id"],
-                "weights": manifest["run"]["weights"],
+                "workload": manifest["run"]["workload"],
                 "L1_configurations": sum(
                     len(e["configurations"]) for e in payload["level1"].values()
                 ),
@@ -366,7 +355,10 @@ def snapshot_main(model):
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     manifest = json.loads(args.harvest.read_text())
-    require_real_run(manifest, model)
+    from evograd.verification.integrations import load
+    from evograd.verification.integrations.base import require_real_run
+
+    require_real_run(load(model), manifest)
     payload = snapshot(manifest)
     if args.write:
         from evograd.benchmark.topdown import snapshot_path

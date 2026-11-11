@@ -4,9 +4,11 @@ Each module here connects one benchmark model to the generic gates: it reads
 the model's task declarations and harvest snapshot, never edits them, and owns
 what only that model knows (how to record its real training calls). The
 model's harvest (``evograd.benchmark.topdown.<model>.harvest``) runs the
-capture's own first step through this package (``base.real_run``), and a
-capture refuses a snapshot harvested on any other run
-(``base.require_harvested_run``).
+capture's own first step through this package (``base.real_run``), writes the
+tracked snapshot only from that run (``base.require_real_run``), and a capture
+refuses a snapshot harvested on any other run (``base.require_harvested_run``).
+MegaFold keeps its own harvest and is exempt from the capture's check
+(``requires_harvested_run=False``).
 
     python -m evograd.verification.integrations <model> {capture,fidelity,verify} ...
 """

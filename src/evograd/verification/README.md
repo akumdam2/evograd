@@ -184,14 +184,10 @@ computation). The capture loop, replay and fidelity (`base.py`), the gates
 boundary of one training step per data order becomes a payload of the case
 its shapes bind. The cases and their calls per step come from the model's
 harvest snapshot, and that harvest observes the capture's own first step
-(`base.real_run`: this package's settings, workload and model builder on the
-first TRAIN batch of order 101). The snapshot records that run (`run`: pinned
-workload, data identity, the order-101 batch and its digest, the initial
-parameter state), and `capture` refuses, before writing anything, a snapshot
-whose `run` is missing or differs from its own (`base.require_harvested_run`;
-MegaFold, whose harvest records its run its own way, sets
-`requires_harvested_run=False`). Gate 1 runs on the acceptance payloads (real
-inputs only).
+(`base.real_run`; see [Regenerating the snapshots](#regenerating-the-snapshots)).
+`capture` refuses, before writing anything, a snapshot whose `run` is missing
+or differs from its own (`base.require_harvested_run`). Gate 1 runs on the
+acceptance payloads (real inputs only).
 Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
 four batches (native repeats, compile and the rounding perturbation) with
@@ -229,12 +225,123 @@ results at Tier 2 through deployment and autograd, and whole-model results at
 Tier 3; Tier 1 remains search feedback and standalone pair diagnostics.
 
 ```bash
-CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --out HARVEST.json
-python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --harvest HARVEST.json --write
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b verify \
   --corpus CORPUS/manifest.json --out DIR --candidate qwen3_swiglu_mlp/swiglu_mlp=candidate.py
 ```
+
+### Regenerating the snapshots
+
+Every model but MegaFold harvests the step its capture records first:
+`base.real_run` runs `base.prepare_run` (the setup `capture` uses too: a CUDA
+check before anything is read, `configure()`, the pinned workload and the
+first TRAIN batch of each order) for order 101, builds a fresh native model
+and returns the run's identity, which the harvest records as `run` in its
+manifest and snapshot. One format for all eight models (`base.run_identity`):
+
+| Key | Content |
+| --- | --- |
+| `model` | the integration's name |
+| `workload` | `Model.workload_config`, the weights and data pins (`base.workload_pins`); a file it names, DiT's `init_checkpoint`, appears as `init_checkpoint_sha256`, the digest of its content, never as its environment-dependent path |
+| `data` | the data identity `Model.train_batches` records, without its per-order batches |
+| `order` | `101` (`base.HARVEST_ORDER`) |
+| `batch` | that order's first batch, with its content digest |
+| `parameter_state` | the fresh model's parameters (`state_sha256`) |
+| `execution` | the settings it ran under; recorded, not compared |
+
+Every snapshot writer but MegaFold's (`harvest.snapshot --write` to the tracked
+file, `harvest.harvest --write-snapshot`) applies `base.require_real_run`: no `run`
+(a `--synthetic` or reduced harvest), a missing key, another order or model,
+workload pins that changed since the harvest (a regenerated warm start has
+another digest) or another workload id refuse the write. `capture` compares
+every key but `execution` with its own run. MegaFold is deliberately exempt
+(`requires_harvested_run=False`): its harvest is left as it is and records its
+run as `config` and `data`.
+
+On DeltaAI: one GH200 on `ghx4-interactive` (1 h, 8 CPUs; `--mem` per model
+below), the evograd Python environment active, from the repository root, with
+the environment `candidates/evaluate_model.py` (`environment()`) gives a model:
+
+```bash
+srun -A bcjw-dtai-gh --partition=ghx4-interactive --gpus=1 --cpus-per-task=8 --mem=32g \
+  --time=01:00:00 --pty bash
+export PYTHONPATH=$PWD/src CUBLAS_WORKSPACE_CONFIG=:4096:8 CXX=/usr/bin/g++
+export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1
+export V=/work/hdd/bcjw/wzhan/evograd_verification
+export HF_HOME=$V/hf_home EVOGRAD_BENCHMARK_DATA_ROOT=$V/data
+export EVOGRAD_LLAMA_HF_CACHE=/work/hdd/bcjw/kramesh/hub   # the gated Llama checkpoint
+export EVOGRAD_HF_CACHE=$V/hf_cache   # qwen3_0_6b, qwen3_5_4b: /work/hdd/bcjw/wzhan/hf_cache
+export TMPDIR=/tmp/$USER TRITON_CACHE_DIR=/tmp/$USER/triton TORCHINDUCTOR_CACHE_DIR=/tmp/$USER/inductor
+mkdir -p $TMPDIR
+```
+
+The four language models write a manifest, then derive the snapshot without
+a GPU: `--validate` may differ from the tracked snapshot in identity fields
+only (the schema, the workload id and the hashes that follow it, `run`), never
+in a case's dims, dtype or frequency; then `--write`.
+
+```bash
+# qwen3_0_6b, --mem=32g, EVOGRAD_HF_CACHE=/work/hdd/bcjw/wzhan/hf_cache
+H=results/benchmark/topdown/qwen3_0_6b/harvest.json
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --out $H
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --harvest $H --validate
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --harvest $H --write
+# llama_3_2_1b, --mem=32g, EVOGRAD_HF_CACHE=$V/hf_cache (WikiText) + EVOGRAD_LLAMA_HF_CACHE
+H=results/benchmark/topdown/llama3_2_1b/harvest.json
+python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest --out $H
+python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --validate
+python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --write
+# olmoe_1b_7b, --mem=64g (14 GB of BF16 weights are read on the host), EVOGRAD_HF_CACHE=$V/hf_cache
+H=results/benchmark/topdown/olmoe_1b_7b/harvest.json
+python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out $H
+python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest $H --validate
+python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest $H --write
+# qwen3_5_4b, --mem=64g (needed to load the checkpoint), EVOGRAD_HF_CACHE=/work/hdd/bcjw/wzhan/hf_cache
+H=results/benchmark/topdown/qwen3_5_4b/harvest.json
+python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out $H
+python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --validate
+python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --write
+```
+
+The vision and generated models write the snapshot in the harvest, all at
+`--mem=32g` (Qwen2-VL: 64g if it runs out) with `EVOGRAD_HF_CACHE=$V/hf_cache`. They read their real-data
+pools under `$EVOGRAD_BENCHMARK_DATA_ROOT/<model>/batches` (DiT also its warm
+start `warm_start.pt` there; overrides `EVOGRAD_VISION_POOL_<MODEL>`,
+`EVOGRAD_DIT_LATENT_POOL`, `EVOGRAD_DIT_S_2_WARM_START`) and DLRM its Criteo
+arrays under `$EVOGRAD_BENCHMARK_DATA_ROOT/torchrec_dlrm/processed`
+(`EVOGRAD_DLRM_CRITEO_DIR`):
+
+```bash
+for m in convnextv2_tiny qwen2_vl_2b dit_s_2 torchrec_dlrm; do
+  python -m evograd.benchmark.topdown.$m.harvest.harvest \
+    --out results/benchmark/topdown/$m/harvest.json --write-snapshot
+done
+```
+
+Their cases must not move either; per snapshot, against the committed one:
+
+```bash
+python -c 'import json, subprocess, sys
+cases = lambda s: {k: {t: [(c["config_id"], c["frequency"], c["dims"]) for c in e["configurations"]]
+                       for t, e in s[k].items()} for k in ("level1", "tasks")}
+p = sys.argv[1]
+print(cases(json.loads(subprocess.check_output(["git", "show", "HEAD:" + p])))
+      == cases(json.load(open(p))))' src/evograd/benchmark/topdown/convnextv2_tiny/harvest/snapshot.json
+```
+
+Then commit the eight `snapshot.json` files and update what pins the old
+identity: `tests/test_task_registry.py` (the Qwen3 manifest's workload id),
+`tests/qwen3/test_level2_swiglu_mlp.py` (`PROVENANCE_CHAIN`: workload id and
+manifest hash), `tests/llama3/test_real_text.py` (the canonical workload id
+equals the snapshot's), and the old revision in each language model's
+`READABLE_SCHEMAS`. After that, the representative-layer tools that compare a
+`--synthetic` layer artifact with the tracked snapshot's workload id and
+manifest hash (`<model>/layer/artifact.py` `load_canonical`,
+`levels/level2/*/capture.py`, `layer/capture.py`) refuse it, and the random
+canonical Tier-3 vision and generated workloads fall back to specification
+preflight cases (their workload id is no longer the snapshot's). Corpora
+captured before keep the old `snapshot_hash` and still verify; new captures
+refuse until the snapshots are regenerated.
 
 ## Gate 3: continuous training and global loss
 

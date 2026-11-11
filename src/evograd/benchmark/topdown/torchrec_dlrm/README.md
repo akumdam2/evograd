@@ -63,10 +63,11 @@ The harvest runs the step the verification capture records first: the
 verification workload (`evograd.verification.integrations.torchrec_dlrm`:
 the streamed Criteo rows), a fresh native model at the seed-0 initialization,
 the first training batch of data order 101, under the verification's
-deterministic settings (`integrations.harvest_run.first_step`). Its snapshot
-(schema `/2`) names that run under `run`: `weights` (`random:seed0`), `data`
-(the data identity the capture records, without its per-order batches),
-`order`, `batch_digest` and `parameter_state_sha256`.
+deterministic settings (`integrations.base.real_run`). Its snapshot (schema
+`/2`) records that run's identity under `run`, in the format every model
+shares (`base.run_identity`: `model`, `workload`, `data`, `order`, `batch`,
+`parameter_state`, plus the settings as `execution`), and a capture refuses a
+snapshot whose `run` is not its own.
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.harvest \
@@ -75,5 +76,6 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.torchrec_dlr
 
 `python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.snapshot --harvest
 HARVEST.json [--write]` derives the snapshot from a saved harvest without a
-GPU. For a reduced check, call `collect(spec)` from Python on a spec with
+GPU, from a harvest of the verification run only (`base.require_real_run`).
+For a reduced check, call `collect(spec)` from Python on a spec with
 fewer and smaller embedding tables; it never writes a tracked snapshot.

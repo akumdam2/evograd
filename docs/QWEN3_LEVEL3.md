@@ -31,7 +31,10 @@ python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot \
 ```
 
 The representative-layer capture replays the random-weight synthetic step, so it
-reads a `--synthetic` harvest:
+reads a `--synthetic` harvest. It checks that artifact against the tracked
+snapshot's workload id and manifest hash, so it works only until the snapshot is
+regenerated from the real run (open; see "Regenerating the snapshots" in
+`src/evograd/verification/README.md`).
 
 ```bash
 python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --synthetic \

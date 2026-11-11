@@ -24,8 +24,10 @@ it is kept apart -- nothing that imports ``evograd.ops`` pays for it.
 Every snapshot also carries the harvest's ``run``: the verification run it
 observed (pinned workload, data identity, the first TRAIN batch of order 101
 with its digest, the initial parameter state), or ``None`` for a harvest of
-random weights on synthetic tokens. A capture refuses a snapshot whose ``run``
-is not its own (``evograd.verification.integrations.base.require_harvested_run``).
+random weights on synthetic tokens. Only a harvest with a run may replace the
+tracked snapshot (:func:`tracked_write_refusal`), and a capture refuses a
+snapshot whose ``run`` is not its own
+(``evograd.verification.integrations.base.require_harvested_run``).
 
 An unmapped role is an error rather than a smaller snapshot. A configuration the
 model really ran, silently dropped, would leave a task with shapes that do not
@@ -557,3 +559,24 @@ def diff(frozen: dict[str, Any], derived: dict[str, Any]) -> list[str]:
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
+
+
+def tracked_write_refusal(name: str, manifest: Mapping[str, Any], out: Path,
+                          tracked: Path) -> str | None:
+    """Why ``manifest`` may not be written to ``out``, or ``None`` when it may.
+
+    Only the tracked snapshot (``out`` is ``tracked``) is guarded: it comes
+    from a harvest of model ``name``'s verification run alone
+    (``evograd.verification.integrations.base.require_real_run``), never from a
+    ``--synthetic`` or reduced one. Anywhere else is a local result.
+    """
+    if Path(out).resolve() != Path(tracked).resolve():
+        return None
+    from evograd.verification.integrations import load
+    from evograd.verification.integrations.base import require_real_run
+
+    try:
+        require_real_run(load(name), manifest)
+    except ValueError as exc:
+        return str(exc)
+    return None

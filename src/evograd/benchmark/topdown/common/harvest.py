@@ -1,22 +1,22 @@
 """Harvest a training step into a workload manifest.
 
-    PYTHONPATH=src python -m <workload package>.harvest.harvest \
-        --out results/harvest.json
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+        python -m <workload package>.harvest.harvest --out results/harvest.json
 
-This is the Level-3 smoke run with an observer attached. It reuses
-``training_step``, the effective-setting checks and the gradient validation
-unchanged -- the point of the milestone is that the harvest describes *the*
-execution the cases come from, and a second, subtly different implementation
-of it would defeat that.
+The step is observed with the shared observer, the effective-setting checks
+and the gradient validation of ``training_step`` -- the point of the milestone
+is that the harvest describes *the* execution the cases come from, and a
+second, subtly different implementation of it would defeat that.
 
 The harvest behind a tracked snapshot observes the verification capture's own
-first step: the model's integration builds the pinned pretrained model and the
-first TRAIN batch of data order 101 under the verification settings
-(``evograd.verification.integrations.base.real_run``), and passes them here
-with their run identity, which the manifest records as ``run``. Without a
-model and a batch, the spec's random weights and synthetic tokens are built
-here (``build_model``/``make_inputs``): the CPU tests' tiny runs and debug
-variants, whose manifest records no run and backs no capture.
+first step (:func:`run_real_harvest`): the model's integration builds the
+pinned pretrained model and the first TRAIN batch of data order 101 under the
+verification settings (``evograd.verification.integrations.base.real_run``),
+and passes them here with their run identity, which the manifest records as
+``run``. Without a model and a batch, the spec's random weights and synthetic
+tokens are built here (``build_model``/``make_inputs``): the ``--synthetic``
+debug harvest and the CPU tests' tiny runs, whose manifest records no run and
+backs no capture or tracked snapshot.
 
 Unlike the smoke run, a failure here does not produce a file. A smoke report
 that says "it failed" is useful; a manifest missing a boundary is worse than no
@@ -153,3 +153,17 @@ def run_harvest(workload: Level3Workload, spec: WorkloadSpec | None = None, *,
     # Outside the manifest hash, like the workload section; the snapshot copies it.
     manifest["run"] = None if identity is None else dict(identity)
     return manifest
+
+
+def run_real_harvest(workload: Level3Workload, name: str, *, device: str = "cuda") -> dict[str, Any]:
+    """The verification capture's first step of model ``name`` under observation.
+
+    ``name`` is the model's verification integration
+    (``evograd.verification.integrations.load``); its ``base.real_run`` builds
+    the step, and its identity becomes the manifest's ``run``.
+    """
+    from evograd.verification.integrations import load
+    from evograd.verification.integrations.base import real_run
+
+    built, model, batch, identity = real_run(load(name), device=device)
+    return run_harvest(workload, built.spec, model=model, batch=batch, identity=identity)

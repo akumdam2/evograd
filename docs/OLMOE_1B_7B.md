@@ -33,7 +33,9 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 
 ## Running
 
-**L3 smoke and harvest** (GPU):
+**L3 smoke and harvest** (GPU; the real-run harvest reads the checkpoint on the
+host and needs `--mem=64g` on DeltaAI; environment and every model's commands:
+"Regenerating the snapshots" in `src/evograd/verification/README.md`):
 
 ```bash
 python -m evograd.benchmark.topdown.olmoe_1b_7b --out smoke.json
@@ -45,10 +47,13 @@ python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture --harvest harvest_
 
 The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
-`evograd.verification.integrations.olmoe_1b_7b` under the verification settings); the
-snapshot records that run (`run`), and a capture refuses a snapshot that does
-not record its own run. The layer capture replays the random-weight synthetic
-step, so it reads a `--synthetic` harvest.
+`evograd.verification.integrations.olmoe_1b_7b` under the verification
+settings); the snapshot records that run (`run`), and a capture refuses a
+snapshot that does not record its own run. The layer capture replays the
+random-weight synthetic step, so it reads a `--synthetic` harvest. It checks
+that artifact against the tracked snapshot's workload id and manifest hash, so
+it works only until the snapshot is regenerated from the real run (open; see
+"Regenerating the snapshots" in `src/evograd/verification/README.md`).
 
 If the B2 step does not fit, `--batch-size 1` on the smoke and `--synthetic`
 harvest commands runs the B1 variant (non-canonical: the report says so). The

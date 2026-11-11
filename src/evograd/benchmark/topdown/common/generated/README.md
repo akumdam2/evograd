@@ -33,12 +33,14 @@ The harvest runs the step the verification capture records first: the
 verification workload (`evograd.verification.integrations.dit_s_2`: real
 input, the streamed latent pool, the warm start), a fresh native model, the
 first training batch of data order 101, under the verification's deterministic
-settings (`integrations.harvest_run.first_step`). Its snapshot (schema `/2`)
-names that run under `run`: `weights` (`warm_start:sha256:<file digest>`; the
-workload hash does not cover the warm start), `data` (the data identity the
-capture records, without its per-order batches), `order`, `batch_digest`
-(the batch, as the capture names it) and `parameter_state_sha256` (the
-warm-started parameters).
+settings (`integrations.base.real_run`, the step every harvest but MegaFold's
+runs). Its snapshot (schema `/2`) records that run's identity under `run`, in
+the one format every model shares (`base.run_identity`; see "Regenerating the
+snapshots" in `src/evograd/verification/README.md`). Its `workload` names the
+warm start by the SHA-256 of its file (`init_checkpoint_sha256`), not by its
+environment-dependent path; the workload hash does not cover the warm start,
+so a warm start regenerated after the harvest makes the snapshot command, and
+every capture, refuse that harvest.
 
 ```bash
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.dit_s_2.harvest.harvest \
@@ -47,7 +49,8 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.dit_s_2.harv
 
 `python -m evograd.benchmark.topdown.dit_s_2.harvest.snapshot --harvest
 HARVEST.json [--write]` derives the snapshot from a saved harvest without a
-GPU; it, too, accepts only a harvest of the verification run. Reduced
+GPU; it, too, accepts only a harvest of the verification run
+(`base.require_real_run`). Reduced
 configurations (changed `batch_size`, `device`, `arch_overrides`) run from
 Python with `collect(spec)` and never write a tracked snapshot.
 

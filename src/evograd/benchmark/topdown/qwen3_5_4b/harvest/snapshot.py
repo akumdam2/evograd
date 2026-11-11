@@ -41,7 +41,8 @@ from ..architecture import REPRESENTATIVE_LAYERS
 #: TRAIN batch of order 101 and the initial parameter state). A /1 snapshot has
 #: none; it still loads, and a capture refuses it.
 SCHEMA_VERSION = "evograd-qwen3_5-snapshot/2"
-#: Every revision this module reads.
+#: Every revision this module reads; drop the old one once the tracked snapshot is
+#: regenerated from the real run.
 READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-qwen3_5-snapshot/1")
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
@@ -408,6 +409,11 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError:
         print(f"{args.harvest} not found", file=sys.stderr)
         return 2
+    refused = args.write and _extract.tracked_write_refusal("qwen3_5_4b", manifest, args.out,
+                                                            SNAPSHOT_PATH)
+    if refused:
+        print(refused, file=sys.stderr)
+        return 1
     try:
         derived = extract(manifest)
     except SnapshotError as exc:

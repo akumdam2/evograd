@@ -64,50 +64,71 @@ DLRM_SMALL = dict(num_sparse_features=3, embedding_dim=8, num_embeddings_per_fea
                   multi_hot_sizes=[1, 2, 1])
 
 
-def test_real_run_records_its_weights_and_only_the_verification_run_publishes(tmp_path):
-    """DiT's weights pin is its warm start's SHA-256 (the workload hash omits it);
-    DLRM's is its seeded initialization."""
-    import hashlib
+def test_real_run_observes_the_verification_step_and_restores_the_model(tmp_path):
+    """The harvest observes ``base.real_run``'s step, records its identity as
+    ``run`` and leaves the model's site functions as it found them."""
     from unittest import mock
-    import pytest
-    import torch
     from evograd.benchmark.topdown.common.generated import harvest
     from evograd.benchmark.topdown.common.generated.model import build_model, dit_mlp, make_inputs
-    from evograd.evaluation.tier3.workloads.common.init_state import SCHEMA
     from evograd.verification.integrations import base, load
 
     for name, small, real_id in (("dit_s_2", SMALL, "dit_s_2-f06efa7f62b01cf5"),
                                  ("torchrec_dlrm", DLRM_SMALL, "torchrec_dlrm-1394f3cc47559de8")):
         spec = GeneratedSpec(model=name, batch_size=2, device="cpu", arch_overrides=small)
-        init = None
-        if name == "dit_s_2":
-            init = tmp_path / "warm_start.pt"
-            torch.save({"schema": SCHEMA, "model": name, "recipe": {"steps": 1},
-                        "state_dict": build_model(spec).state_dict()}, init)
-        workload = GeneratedWorkload(spec, init_checkpoint=init and str(init))
+        workload = GeneratedWorkload(spec)
         model = base.build_model(workload)
-        run = {"data": {"data": {"pool_sha256": "p"}}, "order": 101, "batch_digest": "b",
-               "parameter_state_sha256": "s"}
-        step = (workload, model, make_inputs(spec, 0), run, {})
-        with mock.patch("evograd.verification.integrations.harvest_run.first_step",
-                        return_value=step):
+        run = {"model": name, "workload": {"model": name}, "data": {}, "order": 101,
+               "batch": {"batch_sha256": "b"}, "parameter_state": {"state_sha256": "s"},
+               "execution": {}}
+        with mock.patch("evograd.verification.integrations.base.real_run",
+                        return_value=(workload, model, make_inputs(spec, 0), run)) as real_run:
             manifest = harvest.real_run(name)
-        weights = (f"warm_start:sha256:{hashlib.sha256(init.read_bytes()).hexdigest()}" if init
-                   else "random:seed0")
-        assert manifest["run"] == {"weights": weights, **run}
+        assert real_run.call_args.args == (load(name),)
+        assert manifest["run"] == run
         assert snapshot(manifest)["run"] == manifest["run"]
         assert snapshot(manifest)["schema_version"] == f"evograd-{name}-snapshot/2"
         if name == "dit_s_2":
             assert all(block.mlp_fn is dit_mlp for block in model.blocks)  # sites put back
-        with pytest.raises(ValueError, match="verification run"):
-            harvest.require_real_run(manifest, name)  # a reduced spec never publishes
         real = load(name).load_workload().spec
         assert real.input_mode == "real" and real.workload_id == real_id
-        published = {**manifest, "config": real.to_config(), "workload_id": real.workload_id,
-                     "architecture": real.arch}
-        harvest.require_real_run(published, name)
-        with pytest.raises(ValueError, match="verification run"):
-            harvest.require_real_run({**published, "run": None}, name)
+
+
+def test_dlrm_harvest_records_the_run_its_capture_repeats(tmp_path, monkeypatch):
+    """Unmocked on CPU over a small Criteo fixture: the harvest's ``run`` is the
+    identity a capture of the same model computes, and the publish rule takes it."""
+    import json
+    import numpy as np
+    import pytest
+    from unittest import mock
+    from evograd.benchmark.topdown.common.generated import harvest
+    from evograd.verification.integrations import base
+    from evograd.verification.integrations.generated_model import make_model
+    from tests.verification._toy_integration import configured
+
+    rows = 64
+    np.save(tmp_path / "train_dense.npy", np.arange(rows * 13, dtype=np.float32).reshape(rows, 13) / 10)
+    np.save(tmp_path / "train_sparse.npy", np.arange(rows * 26, dtype=np.int64).reshape(rows, 26) + 1000)
+    np.save(tmp_path / "train_labels.npy", (np.arange(rows, dtype=np.int64) % 2).reshape(rows, 1))
+    monkeypatch.setenv("EVOGRAD_DLRM_CRITEO_DIR", str(tmp_path))
+    model = make_model("torchrec_dlrm", {
+        "model": "torchrec_dlrm", "device": "cpu", "input_mode": "real", "stream": True,
+        "batch_size": 4, "arch_overrides": {**DLRM_SMALL, "num_sparse_features": 26,
+                                            "num_embeddings_per_feature": [50] * 26,
+                                            "multi_hot_sizes": [1] * 26}})
+    with configured(), mock.patch("evograd.verification.integrations.load", return_value=model):
+        manifest = json.loads(json.dumps(harvest.real_run("torchrec_dlrm", device="cpu")))
+        workload = model.load_workload()
+        _, batches = model.train_batches(workload, base.ORDERS)
+        state = base.objective_of(model).parameter_state(base.build_model(workload))
+    capture = base.run_identity(model, state, batches)
+    published = harvest.snapshot(manifest)
+    assert published["run"] == manifest["run"]
+    base.require_real_run(model, manifest)
+    with mock.patch("evograd.benchmark.topdown.load_snapshot", lambda name: published):
+        base.require_harvested_run(model, capture)
+        other = {**capture, "batch": batches["batches"]["202"]}
+        with pytest.raises(RuntimeError, match="another run"):
+            base.require_harvested_run(model, other)
 
 
 def test_dlrm_criteo_real_input_artifact(tmp_path, monkeypatch):

@@ -94,15 +94,31 @@ def load_snapshot(name: str) -> dict[str, Any]:
     if not path.is_file():
         raise UnharvestedWorkload(
             f"{name} has no tracked snapshot at {path}. A snapshot is derived "
-            f"from a harvest of the verification capture's first step, not authored, "
-            f"so run one on a machine with a GPU:\n"
-            f"    CUBLAS_WORKSPACE_CONFIG=:4096:8 "
-            f"python -m evograd.benchmark.topdown.{TOPDOWN_WORKLOADS[name]}.harvest.harvest "
-            f"--out results/benchmark/topdown/{TOPDOWN_WORKLOADS[name]}/harvest.json\n"
-            f"    python -m evograd.benchmark.topdown.{TOPDOWN_WORKLOADS[name]}.harvest.snapshot "
-            f"--harvest results/benchmark/topdown/{TOPDOWN_WORKLOADS[name]}/harvest.json --write"
+            f"from a harvest of the model's verification run, not authored, so run "
+            f"one on a machine with a GPU:\n{harvest_commands(name)}"
         )
     return load(path)
+
+
+def harvest_commands(name: str) -> str:
+    """The commands that regenerate one workload's tracked snapshot.
+
+    Run from the repository root on a GPU node, in the environment and with
+    the memory ``src/evograd/verification/README.md`` lists per model
+    ("Regenerating the snapshots"). The harvest writes its manifest; the
+    workload's ``harvest.snapshot`` derives the snapshot from it without a GPU
+    and with ``--write`` replaces the tracked one. MegaFold's harvest writes
+    its snapshot itself (``--write-snapshot``).
+    """
+    snapshot_path(name)  # an unknown name is refused here
+    package = TOPDOWN_WORKLOADS[name]
+    out = f"results/benchmark/topdown/{package}/harvest.json"
+    harvest = (f"    CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src "
+               f"python -m evograd.benchmark.topdown.{package}.harvest.harvest --out {out}")
+    if name == "megafold":
+        return f"{harvest} --write-snapshot"
+    return (f"{harvest}\n    PYTHONPATH=src python -m evograd.benchmark.topdown.{package}"
+            f".harvest.snapshot --harvest {out} --write")
 
 
 def load_snapshot_task(name: str, task: str) -> dict[str, Any]:
@@ -121,6 +137,7 @@ __all__ = [
     "TOPDOWN_WORKLOADS",
     "UnknownWorkload",
     "UnharvestedWorkload",
+    "harvest_commands",
     "has_snapshot",
     "load_snapshot",
     "load_snapshot_task",

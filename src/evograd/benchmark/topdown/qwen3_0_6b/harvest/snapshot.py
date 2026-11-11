@@ -1,8 +1,8 @@
 """The tracked slice of the Qwen3 harvest that repository tasks are allowed to read.
 
 A harvest manifest is a local result: it is a megabyte of transcript, it is not
-version controlled, and it exists only on a machine that has run the canonical
-workload. A declaration in ``evograd/ops/`` cannot depend on any of that -- it
+version controlled, and it exists only on a machine that has run the harvest.
+A declaration in ``evograd/ops/`` cannot depend on any of that -- it
 has to import on a laptop with no GPU, no Transformers and no ``results/``
 directory -- yet the whole point of these tasks is that their shapes come from a
 real training step rather than from someone's judgement.
@@ -74,7 +74,8 @@ __all__ = [
 #: TRAIN batch of order 101 and the initial parameter state). A /4 snapshot has
 #: none; it still loads, and a capture refuses it.
 SCHEMA_VERSION = "evograd-qwen3-snapshot/5"
-#: Every revision this module reads.
+#: Every revision this module reads; drop the old one once the tracked snapshot is
+#: regenerated from the real run.
 READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-qwen3-snapshot/4")
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
@@ -208,6 +209,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    refused = args.write and _extract.tracked_write_refusal("qwen3_0_6b", manifest, args.out,
+                                                            SNAPSHOT_PATH)
+    if refused:
+        print(refused, file=sys.stderr)
+        return 1
 
     try:
         derived = extract(manifest, layer_index=args.layer)

@@ -105,34 +105,41 @@ def test_qwen2_vl_harvest_sees_the_batch_padding_mask(padded):
     assert snapshot(manifest)["text_attention_masks"] == manifest["text_attention_masks"]
 
 
-def test_real_run_records_its_identity_and_only_the_verification_run_publishes():
+def test_real_run_records_its_identity_and_only_the_verification_run_publishes(tmp_path, monkeypatch):
+    """The harvest observes ``base.real_run``'s step and records its identity as
+    ``run``; a manifest of a reduced spec never becomes the tracked snapshot."""
+    import sys
     from unittest import mock
     from evograd.benchmark.topdown.common.vision import harvest
     from evograd.benchmark.topdown.common.vision.model import build_model, make_inputs
     from evograd.verification.integrations import load
 
     spec = small_spec("convnextv2_tiny")
-    run = {"data": {"data": {"pool_sha256": "p"}}, "order": 101, "batch_digest": "b",
-           "parameter_state_sha256": "s"}
-    step = (VisionWorkload(spec), build_model(spec), make_inputs(spec), run, {"threads": 8})
-    with mock.patch("evograd.verification.integrations.harvest_run.first_step",
-                    return_value=step) as first_step:
+    run = {"model": "convnextv2_tiny", "workload": {"weights": "pretrained"}, "data": {},
+           "order": 101, "batch": {"batch_sha256": "b"}, "parameter_state": {"state_sha256": "s"},
+           "execution": {"threads": 8}}
+    step = (VisionWorkload(spec), build_model(spec), make_inputs(spec), run)
+    with mock.patch("evograd.verification.integrations.base.real_run",
+                    return_value=step) as real_run:
         manifest = harvest.real_run("convnextv2_tiny")
-    assert first_step.call_args.args == (load("convnextv2_tiny"),)
-    assert manifest["run"] == {
-        "weights": "pretrained:facebook/convnextv2-tiny-1k-224@f4db009e63145e02b3c075aa64d90ce41bcca4b1",
-        **run}
-    assert manifest["determinism"] == {"threads": 8}
+    assert real_run.call_args.args == (load("convnextv2_tiny"),)
+    assert real_run.call_args.kwargs == {"device": "cuda"}
+    assert manifest["run"] == run
     assert snapshot(manifest)["run"] == manifest["run"]
+    for name, workload_id in (("convnextv2_tiny", "convnextv2_tiny-023afe318b1f76e4"),
+                              ("qwen2_vl_2b", "qwen2_vl_2b-3a15546eddc6dd18")):
+        real = load(name).load_workload().spec
+        assert real.weights == "pretrained" and real.workload_id == workload_id
+    # The snapshot command refuses this manifest (a reduced spec) before writing.
+    from evograd.benchmark.topdown import snapshot_path
+
+    path = tmp_path / "harvest.json"
+    path.write_text(json.dumps(manifest))
+    tracked = snapshot_path("convnextv2_tiny").read_bytes()
+    monkeypatch.setattr(sys, "argv", ["snapshot", "--harvest", str(path), "--write"])
     with pytest.raises(ValueError, match="verification run"):
-        harvest.require_real_run(manifest, "convnextv2_tiny")  # a reduced spec never publishes
-    real = load("convnextv2_tiny").load_workload().spec
-    assert real.weights == "pretrained" and real.workload_id == "convnextv2_tiny-023afe318b1f76e4"
-    published = json.loads(json.dumps({**manifest, "config": real.to_config(),
-                                       "workload_id": real.workload_id, "architecture": real.arch}))
-    harvest.require_real_run(published, "convnextv2_tiny")
-    with pytest.raises(ValueError, match="verification run"):
-        harvest.require_real_run({**published, "run": None}, "convnextv2_tiny")
+        harvest.snapshot_main("convnextv2_tiny")
+    assert snapshot_path("convnextv2_tiny").read_bytes() == tracked
 
 
 def test_configuration_and_inputs():

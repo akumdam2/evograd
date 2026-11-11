@@ -42,7 +42,9 @@ has chosen its torch kernels (`evograd/opdecl/sidecar.py`).
 
 ## Running
 
-**L3 smoke and harvest** (GPU):
+**L3 smoke and harvest** (GPU; the real-run harvest reads the checkpoint on the
+host and needs `--mem=64g` on DeltaAI; environment and every model's commands:
+"Regenerating the snapshots" in `src/evograd/verification/README.md`):
 
 ```bash
 python -m evograd.benchmark.topdown.qwen3_5_4b --out smoke.json
@@ -54,10 +56,13 @@ python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture --harvest harvest_s
 
 The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
-`evograd.verification.integrations.qwen3_5_4b` under the verification settings); the
-snapshot records that run (`run`), and a capture refuses a snapshot that does
-not record its own run. The layer capture replays the random-weight synthetic
-step, so it reads a `--synthetic` harvest.
+`evograd.verification.integrations.qwen3_5_4b` under the verification settings);
+the snapshot records that run (`run`), and a capture refuses a snapshot that
+does not record its own run. The layer capture replays the random-weight
+synthetic step, so it reads a `--synthetic` harvest. It checks that artifact
+against the tracked snapshot's workload id and manifest hash, so it works only
+until the snapshot is regenerated from the real run (open; see "Regenerating the
+snapshots" in `src/evograd/verification/README.md`).
 
 **Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 

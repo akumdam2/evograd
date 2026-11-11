@@ -29,8 +29,9 @@ def _dataset_file():
                                cache_dir=hf_cache_dir("dit_s_2"),
                                local_files_only=True)
     except Exception as exc:
-        raise RuntimeError(f"Dataset {repo}@{revision}/{filename} is not cached; "
-                           "download it before --real-input") from exc
+        raise RuntimeError(f"Dataset {repo}@{revision}/{filename} is not cached in "
+                           f"{hf_cache_dir('dit_s_2')} ($EVOGRAD_HF_CACHE); "
+                           "download it there first") from exc
 
 
 def _vae_path():
@@ -42,8 +43,9 @@ def _vae_path():
                                      cache_dir=hf_cache_dir("dit_s_2"),
                                      local_files_only=True))
     except Exception as exc:
-        raise RuntimeError(f"VAE {repo}@{revision} is not cached; download its config "
-                           "and safetensors weights before --real-input") from exc
+        raise RuntimeError(f"VAE {repo}@{revision} is not cached in {hf_cache_dir('dit_s_2')} "
+                           "($EVOGRAD_HF_CACHE); download its config and safetensors "
+                           "weights there first") from exc
     missing = [name for name in ("config.json", "diffusion_pytorch_model.safetensors")
                if not (path / name).is_file()]
     if missing:

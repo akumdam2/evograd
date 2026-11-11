@@ -35,8 +35,8 @@ def _local_dataset_file(spec):
         )
     except Exception as exc:
         raise RuntimeError(
-            f"Pinned dataset shard {repo}@{revision}/{filename} is not cached; "
-            "download it before --real-input"
+            f"Pinned dataset shard {repo}@{revision}/{filename} is not cached in "
+            f"{hf_cache_dir(spec.model)} ($EVOGRAD_HF_CACHE); download it there first"
         ) from exc
 
 

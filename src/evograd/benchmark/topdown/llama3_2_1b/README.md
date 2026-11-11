@@ -73,7 +73,8 @@ checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
 overrides apply to it); the layer capture replays that step and reads such a
-harvest.
+harvest, until the tracked snapshot is regenerated from the real run (see
+"Regenerating the snapshots" in `src/evograd/verification/README.md`).
 
 The smoke entry point takes no subcommand: `--out` and the override flags go
 directly to `python -m evograd.benchmark.topdown.llama3_2_1b`.

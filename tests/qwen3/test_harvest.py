@@ -376,6 +376,47 @@ class TestHarvestCommand(HarvestFixture):
         self.assertIn("--synthetic", err.getvalue())
         self.assertEqual(calls, [1])
 
+    def test_synthetic_harvests_the_overridden_spec_not_the_real_run(self):
+        import contextlib
+        import io
+        from unittest import mock
+
+        from evograd.benchmark.topdown.common.cli import harvest_main
+        from evograd.benchmark.topdown.qwen3_0_6b.declaration import WORKLOAD
+
+        def real_run():
+            raise AssertionError("--synthetic ran the real run")
+
+        with mock.patch("evograd.benchmark.topdown.common.harvest.run_harvest",
+                        return_value=self.manifest) as observe, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(harvest_main(WORKLOAD, ["--synthetic", "--device", "cpu"],
+                                          real_run=real_run), 0)
+        self.assertEqual(observe.call_args.args[1].device, "cpu")
+
+    def test_the_tracked_snapshot_is_not_written_from_a_synthetic_harvest(self):
+        import contextlib
+        import io
+        import tempfile
+        from pathlib import Path
+
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest import snapshot
+
+        tracked = snapshot.SNAPSHOT_PATH.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            harvest = Path(directory) / "harvest.json"
+            harvest.write_text(json.dumps(self.manifest))
+            argv = ["--harvest", str(harvest), "--layer", "1", "--write"]
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(snapshot.main(argv), 1)
+            self.assertIn("records no run", err.getvalue())
+            self.assertEqual(snapshot.SNAPSHOT_PATH.read_bytes(), tracked)
+            # Anywhere else it is a local result.
+            local = Path(directory) / "snapshot.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(snapshot.main([*argv, "--out", str(local)]), 0)
+            self.assertIsNone(json.loads(local.read_text())["run"])
+
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
 class TestDeterminism(unittest.TestCase):

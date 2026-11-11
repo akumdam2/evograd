@@ -26,8 +26,9 @@ def pretrained_snapshot(spec):
         )
     except Exception as exc:
         raise RuntimeError(
-            f"Pinned checkpoint {spec.model_name}@{REVISIONS[spec.model]} is not cached; "
-            "download it before --real-input"
+            f"Pinned checkpoint {spec.model_name}@{REVISIONS[spec.model]} is not cached in "
+            f"{hf_cache_dir(spec.model)} ($EVOGRAD_HF_CACHE); download it there before the "
+            "harvest or the verification run"
         ) from exc
     from pathlib import Path
 

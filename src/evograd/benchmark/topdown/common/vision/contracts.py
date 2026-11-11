@@ -1,6 +1,7 @@
 """Model boundaries as pair contracts, with execution-derived coverage.
 
-Until a canonical harvest is recorded, benchmark/coverage suites are empty.
+The observed benchmark/coverage suites come from the tracked snapshot (the
+harvest of the verification run); a model without one has none.
 """
 
 from evograd.opdecl import Active, Workload, Provenance, declare_op
