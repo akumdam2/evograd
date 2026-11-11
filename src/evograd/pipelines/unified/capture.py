@@ -118,6 +118,56 @@ def _serialize_graph(gm: Any) -> dict[str, Any]:
     return graph
 
 
+#: Calls whose result is their first argument's value.
+_IDENTITIES = frozenset({"aten.alias.default", "aten.clone.default", "aten.detach.default"})
+
+
+def _same_call(semantic: dict[str, Any], origin: Any, by_name: dict[str, Any]) -> bool:
+    """Whether the compiler's call ``origin`` passes what ``semantic`` passes.
+
+    Post-grad passes may drop a value-preserving node (``remove_noop_ops``
+    removes an alias or a clone) or re-create one the graph already has (the
+    same target on the same inputs, under a new name). Arguments are compared
+    by the value they name: identities resolved, a re-created node matched to
+    the semantic node it repeats.
+    """
+    compiler = {node.name: node for node in origin.graph.nodes}
+
+    def canonical(entry, from_compiler):
+        if isinstance(entry, list):
+            return [canonical(item, from_compiler) for item in entry]
+        if not isinstance(entry, dict):
+            return entry
+        if entry.get("kind") != "node":
+            return {key: canonical(item, from_compiler) for key, item in entry.items()}
+        name = entry["name"]
+        if from_compiler and name not in by_name:
+            name = repeated(compiler.get(name)) or name
+        node = by_name.get(name)
+        while node is not None and node.get("target") in _IDENTITIES:
+            name = node["positional_args"][0]["name"]
+            node = by_name.get(name)
+        return {**entry, "name": name}
+
+    def call(target, args, kwargs, from_compiler):
+        return target, canonical(args, from_compiler), canonical(kwargs or {}, from_compiler)
+
+    def repeated(node):
+        if node is None or node.op != "call_function":
+            return None
+        key = call(str(node.target), [_encode_arg(a) for a in node.args],
+                   {k: _encode_arg(v) for k, v in node.kwargs.items()}, True)
+        same = [n["name"] for n in by_name.values() if n.get("op") == "call_function"
+                and call(n.get("target"), n.get("positional_args"), n.get("kwargs_ordered"),
+                         False) == key]
+        return same[0] if len(same) == 1 else None
+
+    return (call(semantic["target"], semantic.get("positional_args"),
+                 semantic.get("kwargs_ordered"), False)
+            == call(semantic["target"], [_encode_arg(a) for a in origin.args],
+                    {k: _encode_arg(v) for k, v in origin.kwargs.items()}, True))
+
+
 def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[ExternalRegion]:
     from torch._inductor import ir
 
@@ -161,9 +211,7 @@ def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[E
             semantic is None
             or semantic.get("target") != target
             or str(getattr(origin, "target", "")) != target
-            or semantic.get("positional_args") != [_encode_arg(a) for a in origin.args]
-            or semantic.get("kwargs_ordered")
-            != {k: _encode_arg(v) for k, v in origin.kwargs.items()}
+            or not _same_call(semantic, origin, by_name)
         ):
             raise NotImplementedError(
                 f"Unified pipeline cannot map {side} {kernel} ({name!r}) back to an "
