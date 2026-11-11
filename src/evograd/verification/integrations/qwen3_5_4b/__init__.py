@@ -33,5 +33,7 @@ MODEL = Model(
     # residual_rmsnorm seed needs 6.31 (Emax tails of GDN and norm parameter grads on
     # the order-404 batch; 2026-11-02), and 7 is the next integer. 1% faults pass it
     # from 1.32 (gdn_in_proj), but operator Gate 2 stops all 17 (they need >= 2.54).
+    # Measured with the logits output, which model Gate 2 no longer compares;
+    # re-validate after the recapture.
     gate2_model_gamma=7.0,
 )

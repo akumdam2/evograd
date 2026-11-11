@@ -9,7 +9,7 @@ the native run chose. Only the choice is fixed, and only here. The loss includes
 the 0.01 load-balancing term, which counts each expert's tokens from its own top-k
 of the live router logits (HF ``load_balancing_loss_func``); that count is not
 fixed, so a flip there moves the term and the router gradients' share from it,
-never which experts run.
+never which experts run. This is a known limitation, left open.
 
 Gate 3 keeps free routing. It judges the loss curve against thresholds taken from
 native and compile runs, and compile's rounding flips routing as a candidate's does,

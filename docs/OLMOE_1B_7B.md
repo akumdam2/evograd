@@ -60,9 +60,10 @@ differently, because routers make top-k choices that tiny numerical differences 
 - **Model Gate 2** compares the loss and every parameter gradient, so one flipped
   token would look like a large error. It runs on the native run's routing
   (`verification/integrations/olmoe_1b_7b/routing.py`): the router's probabilities
-  and gradient stay live, and only its top-k choice is fixed. The load-balancing
-  term counts experts from its own top-k of the live router logits, which is not
-  fixed.
+  and gradient stay live, and only its top-k choice is fixed. A known limitation,
+  left open: the load-balancing term counts experts from its own top-k of the live
+  router logits, which is not fixed, so a candidate that flips that choice moves the
+  loss and the router gradients.
 - **Gate 3** keeps free routing. It judges the loss curve against native and compile
   runs, and compile flips routing too, so its thresholds already hold that spread.
 
@@ -71,8 +72,9 @@ the router's 0.01 load-balancing term.
 
 Gate 3's optimizer is copied from Qwen3.5-4B and model Gate 2's margin is the
 protocol default. Neither has been measured on this model. On a tiny random model a
-10% fault at the experts fails model Gate 2 and a 1% fault passes it; how small a
-fault it catches on the real model is not known yet.
+10% fault at the experts fails model Gate 2 and a 1% fault passes it (measured while
+model Gate 2 still compared the logits); how small a fault it catches on the real
+model is not known yet.
 
 ## Caveats, stated up front
 

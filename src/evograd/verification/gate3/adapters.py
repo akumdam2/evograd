@@ -7,8 +7,10 @@ here, as one explicit adapter for next-token language models:
 * :func:`adamw` -- the optimizer, with its full configuration written down;
 * :func:`next_token_nll` -- ``(sum of -log P(label_{t+1}), valid tokens)`` in
   float32, the weight being the token count;
-* :class:`LanguageModelTraining` -- model/evaluator builders, the step's loss
-  (``loss_of``: by default :func:`next_token_nll` of the model's logits), a
+* :class:`TrainingObjective` -- the step's loss and its description in the run
+  identity, one value; :func:`next_token_objective` is :func:`next_token_nll`
+  of a model's logits;
+* :class:`LanguageModelTraining` -- model/evaluator builders, the objective, a
   training batch sequence and fixed held-out batches. Batches are
   ``(input_ids, labels)``; any object with ``batch(index)`` (and optionally
   ``describe()``) or a plain sequence serves;
@@ -30,10 +32,12 @@ from typing import Any, Callable, Mapping, Sequence
 import torch
 
 from evograd.verification.common.contracts import stable_hash
-from evograd.verification.common.execution import Deployment, SiteHooks
+from evograd.verification.common.execution import WORKLOAD_LM_LOSS, Deployment, SiteHooks
 from evograd.verification.common.tensors import tensor_digest
 
 IGNORE_INDEX = -100
+#: The backward of an objective a workload returns as one scalar.
+WORKLOAD_BACKWARD = "the workload loss as returned (weight 1)"
 
 
 @dataclass(frozen=True)
@@ -122,22 +126,29 @@ def _describe(source: Any, count: int | None) -> dict[str, Any]:
     return {"content_hash": stable_hash(digests), "count": len(digests)}
 
 
-def next_token_nll_of_hf(model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, int]:
-    """:func:`next_token_nll` of ``model(input_ids=..., use_cache=False).logits``."""
-    input_ids, labels = batch
-    return next_token_nll(model(input_ids=input_ids, use_cache=False).logits, labels)
+@dataclass(frozen=True)
+class TrainingObjective:
+    """What a step differentiates, and what the run identity says it is.
+
+    ``loss(model, batch)`` returns ``(loss_sum, weight)``; a step differentiates
+    ``loss_sum / weight``. ``identity`` describes that loss. They are one value,
+    so a loss is never recorded under another loss's description.
+    """
+
+    loss: Callable[[torch.nn.Module, Any], tuple[torch.Tensor, float]]
+    identity: Mapping[str, str]
 
 
-#: What :func:`next_token_nll_of_hf` is, bound into the run identity.
-NEXT_TOKEN_OBJECTIVE = {
-    "objective": f"token-weighted next-token NLL (float32, shifted, ignore_index={IGNORE_INDEX})",
-    "backward": "mean over the batch's valid tokens"}
-#: What :func:`workload_training` differentiates.
-WORKLOAD_OBJECTIVE = {
-    "objective": ("workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss "
-                  "as the model returns it (the HF causal-LM loss plus any auxiliary term the "
-                  "model adds), the scalar the tier-3 step differentiates"),
-    "backward": "the workload loss as returned (weight 1)"}
+def next_token_objective(
+        logits_of: Callable[[torch.nn.Module, torch.Tensor], torch.Tensor]) -> TrainingObjective:
+    """:func:`next_token_nll` of ``logits_of(model, input_ids)``, weighted by valid tokens."""
+    def loss(model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, int]:
+        input_ids, labels = batch
+        return next_token_nll(logits_of(model, input_ids), labels)
+
+    return TrainingObjective(loss, {
+        "objective": f"token-weighted next-token NLL (float32, shifted, ignore_index={IGNORE_INDEX})",
+        "backward": "mean over the batch's valid tokens"})
 
 
 @dataclass
@@ -147,9 +158,8 @@ class LanguageModelTraining:
     ``build(deployment, hooks)`` returns the model with the deployment's sites
     installed through ``hooks.wrap``; ``build_native()`` returns the same model
     with nothing replaced (the trusted evaluator). Both must start from the
-    same deterministic initial weights. ``loss_of(model, batch)`` returns
-    ``(loss_sum, weight)``; a step differentiates ``loss_sum / weight``, and
-    ``objective`` says what that is.
+    same deterministic initial weights. ``objective`` is what each step
+    differentiates and each held-out batch is scored by.
     """
 
     build: Callable[[Deployment, SiteHooks], torch.nn.Module]
@@ -158,15 +168,14 @@ class LanguageModelTraining:
     #: ``None`` for a training-only measurement (``TrainingPlan(validation=False)``).
     validation_data: Any
     optimizer: OptimizerSpec
+    objective: TrainingObjective
     validation_count: int | None = None
     train_count: int | None = None
-    loss_of: Callable[[torch.nn.Module, Any], tuple[torch.Tensor, float]] = next_token_nll_of_hf
-    objective: Mapping[str, str] = field(default_factory=lambda: dict(NEXT_TOKEN_OBJECTIVE))
     device: str = "cpu"
     config: Mapping[str, Any] = field(default_factory=dict)
 
     def identity(self) -> dict[str, Any]:
-        return {**dict(self.objective), "config": dict(self.config)}
+        return {**dict(self.objective.identity), "config": dict(self.config)}
 
     def data_identity(self) -> dict[str, Any]:
         return {"train": _describe(self.train_data, self.train_count),
@@ -195,7 +204,7 @@ class LanguageModelTraining:
         return _batch(self.train_data, index)
 
     def train_loss(self, model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, float]:
-        return self.loss_of(model, batch)
+        return self.objective.loss(model, batch)
 
     def validation_batches(self) -> Sequence[Any]:
         if self.validation_data is None:
@@ -204,7 +213,7 @@ class LanguageModelTraining:
         return [_batch(self.validation_data, i) for i in range(count)]
 
     def validation_loss(self, evaluator: torch.nn.Module, batch: Any) -> tuple[float, float]:
-        total, count = self.loss_of(evaluator, batch)
+        total, count = self.objective.loss(evaluator, batch)
         return float(total), float(count)
 
 
@@ -244,8 +253,8 @@ def workload_training(workload: Any, *, train_data: Any, optimizer: OptimizerSpe
         build=_workload_build(workload), build_native=workload.eager_evaluator,
         train_data=train_data, validation_data=validation_data,
         validation_count=validation_count, train_count=train_count, optimizer=optimizer,
-        loss_of=lambda model, batch: (workload.loss(model, batch), 1.0),
-        objective=dict(WORKLOAD_OBJECTIVE),
+        objective=TrainingObjective(lambda model, batch: (workload.loss(model, batch), 1.0),
+                                    {"objective": WORKLOAD_LM_LOSS, "backward": WORKLOAD_BACKWARD}),
         device=str(getattr(getattr(workload, "spec", None), "device", "cpu")),
         config={"workload": workload.describe()})
 
@@ -289,7 +298,7 @@ class WorkloadObjectiveTraining:
 
     def identity(self) -> dict[str, Any]:
         return {"objective": str(self.workload.objective_definition),
-                "backward": "the workload loss as returned (weight 1)",
+                "backward": WORKLOAD_BACKWARD,
                 "config": {"workload": self.workload.describe()}}
 
     def data_identity(self) -> dict[str, Any]:

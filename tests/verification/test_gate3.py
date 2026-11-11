@@ -14,10 +14,8 @@ from tests.verification import _fixtures as F
 PLAN = gate3.TrainingPlan(steps=6, window=2, checkpoints=(0, 2, 6))
 
 
-def tiny_lm_loss(model, batch):
-    """The default objective over the toy LM, whose forward returns ``{"logits": ...}``."""
-    ids, labels = batch
-    return gate3.next_token_nll(model(ids)["logits"], labels)
+#: The toy LM's forward returns ``{"logits": ...}``.
+TINY_LM = gate3.next_token_objective(lambda model, ids: model(ids)["logits"])
 
 
 def adapter(**options):
@@ -26,7 +24,7 @@ def adapter(**options):
     return gate3.site_model_training(
         lambda sites: F.TinyLM(sites), F.NATIVE_SITES, train_data=train,
         validation_data=validation, optimizer=gate3.adamw(lr=1e-2),
-        loss_of=tiny_lm_loss, **options)
+        objective=TINY_LM, **options)
 
 
 def strip_time(payload):
@@ -102,7 +100,7 @@ class TestContinuousTraining(unittest.TestCase):
         fallback = gate3.site_model_training(
             lambda sites: F.TinyLM({**sites, "norm": F.norm_site}), F.NATIVE_SITES,
             train_data=[F.lm_batch(100 + i) for i in range(12)], validation_data=[F.lm_batch(900)],
-            optimizer=gate3.adamw(lr=1e-2), loss_of=tiny_lm_loss)
+            optimizer=gate3.adamw(lr=1e-2), objective=TINY_LM)
         run = gate3.measure_training(fallback, candidate("c", {"norm": F.norm_site}),
                                      gate3.TrainingPlan(steps=3, window=3, checkpoints=()))
         self.assertEqual([f.code for f in run.findings], ["site_not_called"])

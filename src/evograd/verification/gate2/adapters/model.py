@@ -31,15 +31,11 @@ from typing import Any, Callable, Mapping
 import torch
 
 from evograd.verification.common import contracts as C
-from evograd.verification.common.execution import Deployment, Invocation, Sample, SiteHooks
+from evograd.verification.common.execution import (WORKLOAD_LM_LOSS, Deployment, Invocation,
+                                                    Sample, SiteHooks)
 from evograd.verification.gate2.adapters.base import ScopeBase, seeded_samples
 from evograd.verification.gate2.adapters.module import ModuleScope
 from evograd.verification.gate2.runner import OutputStructureError
-
-#: What :class:`WorkloadModelScope` compares beside every parameter gradient.
-WORKLOAD_LOSS = ("workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss "
-                 "as the model returns it (the HF causal-LM loss plus any auxiliary term the "
-                 "model adds); backward of that scalar")
 
 
 def model_scope(*, name: str, factory: Callable[[Mapping[str, Callable]], torch.nn.Module],
@@ -98,7 +94,7 @@ class WorkloadModelScope(ScopeBase):
     def identity(self) -> dict[str, Any]:
         return {"scope": self.scope, "bridge": "tier3.TrainingWorkload.loss",
                 "workload": dict(self.workload.describe()),
-                "outputs": ["loss"], "loss": WORKLOAD_LOSS,
+                "outputs": ["loss"], "loss": WORKLOAD_LM_LOSS,
                 "site_references": self.site_references(), **self.replaced_identity()}
 
     def replaced_identity(self) -> dict[str, Any]:

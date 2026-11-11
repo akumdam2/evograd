@@ -31,6 +31,9 @@ DETERMINISM = {"CUBLAS_WORKSPACE_CONFIG": ":4096:8", "use_deterministic_algorith
                "cudnn.deterministic": True, "cudnn.benchmark": False,
                "cuda.matmul.allow_tf32": False, "float32_matmul_precision": "highest",
                "torch_num_threads": 8}
+#: The capture identity's loss text, so it stays as recorded: it omits the auxiliary
+#: term a model adds to ``workload.loss`` (OLMoE's router loss), which the gates'
+#: ``common.execution.WORKLOAD_LM_LOSS`` names.
 LOSS_DEFINITION = ("the HF causal-LM loss: model(input_ids, labels=labels).loss, float32 logits, "
                    "labels shifted once with -100 padding, mean over valid tokens; backward of "
                    "that scalar")

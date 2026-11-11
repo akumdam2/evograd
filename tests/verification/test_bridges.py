@@ -206,14 +206,14 @@ class TestWorkloadTrainingBridge(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         from evograd.verification.common.execution import SiteHooks
         from evograd.verification.common.tensors import isolated_rng
-        from evograd.verification.gate3.adapters import WORKLOAD_OBJECTIVE
+        from evograd.verification.common.execution import WORKLOAD_LM_LOSS
 
         workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
                                  arch_overrides={**ARCH, "num_key_value_heads": 2})
         adapter = gate3.workload_training(
             workload, train_data=gate3.SeedBatches(workload, 0, "train"), train_count=2,
             optimizer=gate3.adamw(lr=1e-3))
-        self.assertEqual(adapter.identity()["objective"], WORKLOAD_OBJECTIVE["objective"])
+        self.assertEqual(adapter.identity()["objective"], WORKLOAD_LM_LOSS)
         plan = gate3.TrainingPlan(steps=2, window=1, checkpoints=(), validation=False)
         run = gate3.measure_training(adapter, candidate("bound", {
             "swiglu_mlp": bound_eager("qwen3_swiglu_mlp")}), plan, seed=0)

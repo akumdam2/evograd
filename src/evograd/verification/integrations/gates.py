@@ -65,7 +65,10 @@ PAYLOAD_SPLITS = ("calibration", "acceptance")
 #: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
 #: residual_rmsnorm seed needs 3.3 (pooled budgets, one sample, two norm/proj
 #: weight gradients); the x1.01 fault exceeds four times the budget on 401
-#: comparisons in every data order.
+#: comparisons in every data order. Calibrated while model Gate 2 still compared
+#: the logits output; it now compares only ``workload.loss`` and the parameter
+#: gradients, so re-validate (seeds pass, x1.01 fails) on every LM after the
+#: recapture.
 GATE2_MODEL_GAMMA = 4.0
 #: Model-scope Gate 2 judges the whole model's outputs and parameter gradients, plus
 #: coverage and input/parameter side effects. Per-call boundary replay is off: its
