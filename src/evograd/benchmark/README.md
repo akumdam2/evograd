@@ -119,6 +119,35 @@ measurement of its task, dims and dtype, or (outside the call-count changes
 `RESCALED` lists) other calls per step: measure it (`l1_timing.py`,
 `l2_share/`), commit the result beside the script, then regenerate.
 
+### TODO: evidence for the vendor rule
+
+Status: not run (recorded 2026-11-11). The selection treats a task that is one
+vendor library call as inventory only (reason `vendor`): GEMM (`linear`,
+`linear_no_bias`), SDPA (`causal_gqa_attention`) and, since 2026-11-11, cuDNN
+convolution (`spatial_conv2d`). The same kernels are granted to candidates
+inside larger cases (`vendor_gemm`, `vendor_sdpa`, `vendor_conv`). The reason
+given is that an agent rarely writes a faster kernel than the vendor's. That
+claim needs a measurement before the paper relies on it:
+
+- Cases: each family's time-max configuration in each model where it occurs,
+  at least Qwen3-0.6B `linear_no_bias` (attention projections), DiT-S/2
+  `linear` (float32), Qwen3-0.6B `causal_gqa_attention`, ConvNeXt V2 depthwise
+  `spatial_conv2d` (stage 2) and DiT-S/2 patch `spatial_conv2d`.
+- Packs built with the library grant for that primitive withheld
+  (`--library none`), so a candidate must implement the operation itself.
+- The ADBench agents at the standard budget; Gate 1 judges correctness and T2
+  times the best accepted candidate against eager, which calls the vendor
+  kernel.
+- Report per case the best accepted candidate's T2 speedup with its 95%
+  interval, and the share of agents and cases above 1.0.
+- Decision rule, fixed before the run: a family stays `vendor` when no
+  accepted candidate beats the vendor kernel with the interval's lower bound
+  above 1 on its cases. A case where one does returns to the search set (amend
+  rule E-2 and regenerate `search_set.json`).
+
+GEMM and large-head SDPA are expected to sit near the hardware limit at these
+sizes; depthwise convolution with few channels is the likeliest exception.
+
 Registry counts must be queried from `evograd.ops.PRIMITIVES`,
 `evograd.benchmark.TASKS`, `evograd.benchmark.WORKLOADS`, and
 `evograd.benchmark.topdown.TOPDOWN_WORKLOADS`; documentation does not duplicate
