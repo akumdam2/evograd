@@ -421,6 +421,15 @@ def _rendered(fn, *inputs):
     return expressions, [values.get(_pyname(name)) for name in _outputs(graph)]
 
 
+def _node(fn, *inputs, target):
+    from torch.fx.experimental.proxy_tensor import make_fx
+
+    from evograd.pipelines.unified.capture import _serialize_graph
+
+    graph = _serialize_graph(make_fx(fn)(*inputs))
+    return next(n for n in graph['nodes'] if n.get('target') == target)
+
+
 class TestSeedLowerings(unittest.TestCase):
     """Semantic nodes the new benchmark cases reach, rendered without a GPU."""
 
@@ -434,6 +443,113 @@ class TestSeedLowerings(unittest.TestCase):
         for got, want in zip(outputs, [*x.unbind(1), *torch.split(x, [1, 4], 2)], strict=True):
             self.assertTrue(torch.equal(got, want))
 
+    def test_embedding_bag_sum_dispatches_to_handwritten_kernels(self):
+        # DLRM's embedding tables: Inductor falls back to ATen, the seed lowers it.
+        from evograd.atenir.primitive_triton import scatter_gather
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.capture import _SEED_LOWERED_FALLBACKS
+
+        self.assertLessEqual({'torch.ops.aten._embedding_bag.default',
+                              'torch.ops.aten._embedding_bag_backward.default'},
+                             _SEED_LOWERED_FALLBACKS)
+        weight, indices, offsets = torch.randn(9, 4), torch.tensor([1, 2, 1]), torch.tensor([0, 2])
+        bag = _node(torch.ops.aten._embedding_bag, weight, indices, offsets,
+                    target='aten._embedding_bag.default')
+        self.assertIs(make_kernel(bag), scatter_gather.embedding_bag_sum)
+        mean = _node(lambda w, i, o: torch.ops.aten._embedding_bag(w, i, o, False, 1),
+                     weight, indices, offsets, target='aten._embedding_bag.default')
+        self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(mean)))
+
+
+#: Runs in a child process with TRITON_INTERPRET=1: the handwritten kernels on
+#: CPU, against ATen's CPU kernels and the CUDA backward's summation order.
+_INTERPRETED_KERNELS = r"""
+import json
+import triton.runtime.interpreter as interpreter
+_patch = interpreter._patch_lang_tensor
+def _patched(tensor, scope):
+    # NumPy 2 refuses int() of the interpreter's one-element scalars, which a
+    # data-dependent loop bound needs.
+    _patch(tensor, scope)
+    scope.set_attr(tensor, '__index__', lambda self: int(self.handle.data.reshape(-1)[0]))
+interpreter._patch_lang_tensor = _patched
+import torch
+import torch.nn.functional as F
+from evograd.atenir.primitive_triton import scatter_gather as sg
+
+torch.manual_seed(0)
+result = {}
+weight, indices = torch.randn(50, 70), torch.randint(0, 50, (23,))
+offsets, grad = torch.tensor([0, 3, 3, 10, 15, 22]), torch.randn(6, 70)
+out, offset2bag, bag_size, max_indices = sg.embedding_bag_sum(weight, indices, offsets)
+result['forward'] = torch.equal(out, F.embedding_bag(indices, weight, offsets, mode='sum'))
+result['bags'] = (offset2bag.tolist() == [0] * 3 + [2] * 7 + [3] * 5 + [4] * 7 + [5]
+                  and bag_size.tolist() == [3, 0, 7, 5, 7, 1] and max_indices.numel() == 0)
+reference = weight.clone().requires_grad_(True)
+F.embedding_bag(indices, reference, offsets, mode='sum').backward(grad)
+result['backward'] = torch.equal(sg.embedding_bag_sum_backward(grad, indices, offset2bag, 50),
+                                 reference.grad)
+# 24 positions of row 7: the CUDA backward sums runs of ten, then the runs.
+indices = torch.full((25,), 7)
+indices[3] = 2
+offsets, grad = torch.arange(0, 25, 5), torch.randn(5, 70) * 1e3
+_, offset2bag, _, _ = sg.embedding_bag_sum(weight, indices, offsets)
+dweight = sg.embedding_bag_sum_backward(grad, indices, offset2bag, 50)
+rows = [grad[int(offset2bag[k])] for k in range(25) if int(indices[k]) == 7]
+runs, flat = torch.zeros(70), torch.zeros(70)
+for start in range(0, len(rows), 10):
+    run = torch.zeros(70)
+    for row in rows[start:start + 10]:
+        run = run + row
+    runs = runs + run
+for row in rows:
+    flat = flat + row
+result['cuda_order'] = (torch.equal(dweight[7], runs) and not torch.equal(runs, flat)
+                        and torch.equal(dweight[2], grad[0]) and int(dweight.abs().sum(1).gt(0).sum()) == 2)
+print(json.dumps(result))
+"""
+
+
+class TestHandwrittenKernelsInterpreted(unittest.TestCase):
+    def test_new_kernels_match_aten_bit_for_bit(self):
+        import subprocess
+
+        environment = {**os.environ, 'TRITON_INTERPRET': '1'}
+        run = subprocess.run([sys.executable, '-c', _INTERPRETED_KERNELS], env=environment,
+                             capture_output=True, text=True, timeout=900)
+        self.assertEqual(run.returncode, 0, run.stderr[-3000:])
+        result = json.loads(run.stdout.strip().splitlines()[-1])
+        self.assertTrue(result and all(result.values()), result)
+
+
+@unittest.skipUnless(torch.cuda.is_available(), 'CUDA required')
+class TestSeedLoweringsOnCuda(unittest.TestCase):
+    """The new handwritten kernels and preserved calls against CUDA ATen."""
+
+    def test_embedding_bag_matches_cuda_aten_bit_for_bit(self):
+        import torch.nn.functional as F
+
+        from evograd.atenir.primitive_triton import scatter_gather
+
+        torch.manual_seed(0)
+        weight = torch.randn(1000, 64, device='cuda')
+        indices = torch.cat([torch.full((37,), 5), torch.randint(0, 1000, (91,))]).cuda()
+        offsets = torch.arange(0, 128, 4, device='cuda')
+        grad = torch.randn(32, 64, device='cuda')
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                reference = weight.clone().requires_grad_(True)
+                out = F.embedding_bag(indices, reference, offsets, mode='sum')
+                out.backward(grad)
+                mine, offset2bag, _, _ = scatter_gather.embedding_bag_sum(weight, indices, offsets)
+                dweight = scatter_gather.embedding_bag_sum_backward(grad, indices, offset2bag, 1000)
+            finally:
+                torch.use_deterministic_algorithms(False)
+            with self.subTest(deterministic=deterministic):
+                self.assertTrue(torch.equal(mine, out.detach()))
+                self.assertTrue(torch.equal(dweight, reference.grad))
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""

@@ -108,6 +108,15 @@ def _keyword(node, name, default=None):
                  if entry.get("keyword") == name), default)
 
 
+def _option(node, index, name, default):
+    """An argument by position or keyword: a constant's value, a graph value's entry."""
+    positional = _positional_entries(node)
+    entry = positional[index] if index < len(positional) else node.get("kwargs_ordered", {}).get(name)
+    if entry is None:
+        return default
+    return entry if entry["kind"] in {"node", "sym_node", "shape_list"} else _decode_argument(entry, {})
+
+
 def _positional_entries(node):
     return node.get("positional_args", [entry for entry in node.get("args_ordered", ())
                                         if "keyword" not in entry])
@@ -1046,6 +1055,27 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return scatter_gather.gather(self_t, dim, index)
 
         return gather_kernel
+
+    if target == "aten._embedding_bag.default":
+        # Sum mode only: no per-sample weights, padding index or trailing offset.
+        if [_option(node, i, name, default) for i, (name, default) in enumerate(
+                (("scale_grad_by_freq", False), ("mode", 0), ("sparse", False),
+                 ("per_sample_weights", None), ("include_last_offset", False),
+                 ("padding_idx", -1)), start=3)] != [False, 0, False, None, False, -1]:
+            return _generic_fallback(target, node)
+        return scatter_gather.embedding_bag_sum
+
+    if target == "aten._embedding_bag_backward.default":
+        num_weights = _option(node, 6, "num_weights", None)
+        if [_option(node, i, name, default) for i, (name, default) in enumerate(
+                (("scale_grad_by_freq", False), ("mode", 0), ("sparse", False),
+                 ("per_sample_weights", None), ("padding_idx", -1)), start=7)] != [False, 0, False, None, -1]:
+            return _generic_fallback(target, node)
+
+        def _embedding_bag_backward(grad, indices, offsets, offset2bag, bag_size, max_indices):
+            return scatter_gather.embedding_bag_sum_backward(grad, indices, offset2bag, num_weights)
+
+        return _embedding_bag_backward
 
     # ── misc ──────────────────────────────────────────────────────────────────
 

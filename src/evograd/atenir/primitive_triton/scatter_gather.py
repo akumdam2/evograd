@@ -195,6 +195,61 @@ if HAS_TRITON:
             tl.store(target, value, mask=mask)
 
     @triton.jit
+    def _embedding_bag_sum_kernel(WEIGHT, INDICES, OFFSETS, OUT, OFFSET2BAG, BAG_SIZE,
+                                  L, B, D, stride_w, BLOCK_D: tl.constexpr):
+        """One bag's sum over one block of columns: its rows added in index
+        order to a float32 zero, as ATen's EmbeddingBag_updateOutputKernel_sum_mean."""
+        bag = tl.program_id(0)
+        cols = tl.program_id(1) * BLOCK_D + tl.arange(0, BLOCK_D)
+        mask = cols < D
+        # The first bag starts at 0 whatever offsets[0] holds; the last ends at L.
+        begin = tl.load(OFFSETS + bag, mask=bag > 0, other=0).to(tl.int64)
+        end = tl.load(OFFSETS + bag + 1, mask=bag + 1 < B, other=L).to(tl.int64)
+        acc = tl.zeros([BLOCK_D], dtype=tl.float32)
+        for k in range(begin, end):
+            row = tl.load(INDICES + k).to(tl.int64)
+            acc += tl.load(WEIGHT + row * stride_w + cols, mask=mask, other=0.0).to(tl.float32)
+            if tl.program_id(1) == 0:
+                tl.store(OFFSET2BAG + k, bag.to(tl.int64))
+        if tl.program_id(1) == 0:
+            tl.store(BAG_SIZE + bag, end - begin)
+        tl.store(OUT + bag * D + cols, acc.to(OUT.dtype.element_ty), mask=mask)
+
+    @triton.jit
+    def _embedding_bag_sum_backward_kernel(GRAD, INDICES, OFFSET2BAG, OUT, L, D, stride_g,
+                                           ROWS: tl.constexpr, BLOCK_L: tl.constexpr,
+                                           BLOCK_D: tl.constexpr):
+        """One weight row's gradient, written by the first position holding its
+        index, in the order of ATen's embedding_backward_cuda_kernel: the bag
+        gradients of the positions holding the index, in position order, summed
+        in runs of ROWS from a float32 zero, the runs then summed in order."""
+        k = tl.program_id(0)
+        cols = tl.program_id(1) * BLOCK_D + tl.arange(0, BLOCK_D)
+        mask = cols < D
+        row = tl.load(INDICES + k).to(tl.int64)
+        earlier = 0
+        for start in range(0, k, BLOCK_L):
+            positions = start + tl.arange(0, BLOCK_L)
+            seen = tl.load(INDICES + positions, mask=positions < k, other=0).to(tl.int64)
+            earlier += tl.sum(((positions < k) & (seen == row)).to(tl.int32))
+        if earlier == 0:
+            total = tl.zeros([BLOCK_D], dtype=tl.float32)
+            run = tl.zeros([BLOCK_D], dtype=tl.float32)
+            count = 0
+            for j in range(k, L):
+                if tl.load(INDICES + j).to(tl.int64) == row:
+                    bag = tl.load(OFFSET2BAG + j).to(tl.int64)
+                    run += tl.load(GRAD + bag * stride_g + cols, mask=mask, other=0.0).to(tl.float32)
+                    count += 1
+                    if count == ROWS:
+                        total += run
+                        run = tl.zeros([BLOCK_D], dtype=tl.float32)
+                        count -= ROWS
+            if count > 0:
+                total += run
+            tl.store(OUT + row * D + cols, total.to(OUT.dtype.element_ty), mask=mask)
+
+    @triton.jit
     def _fill_kernel(out_ptr, value, N, BLOCK: tl.constexpr):
         offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
@@ -449,4 +504,48 @@ def cat2(tensors, dim: int):
         output.numel(),
         BLOCK=block,
     )
+    return output
+
+
+#: Rows per partial sum in ATen's CUDA embedding backward (NROWS_PER_THREAD).
+_EMBEDDING_BACKWARD_ROWS = 10
+
+
+def embedding_bag_sum(weight: torch.Tensor, indices: torch.Tensor, offsets: torch.Tensor):
+    """``aten._embedding_bag`` in sum mode (no per-sample weights, no padding
+    index, ``offsets`` holding each bag's start): ``(output, offset2bag,
+    bag_size, max_indices)`` with the layouts ATen's CUDA kernel returns."""
+    if weight.ndim != 2 or indices.ndim != 1 or offsets.ndim != 1:
+        raise ValueError('embedding_bag takes a 2-D weight and 1-D indices and offsets')
+    weight, indices, offsets = weight.contiguous(), indices.contiguous(), offsets.contiguous()
+    bags, width = offsets.shape[0], weight.shape[1]
+    output = torch.empty((bags, width), device=weight.device, dtype=weight.dtype)
+    offset2bag = torch.empty(indices.shape, device=indices.device, dtype=indices.dtype)
+    bag_size = torch.empty(offsets.shape, device=indices.device, dtype=indices.dtype)
+    max_indices = torch.empty((0,), device=indices.device, dtype=indices.dtype)
+    if bags and width:
+        block = min(_next_pow2(width), 1024)
+        _embedding_bag_sum_kernel[(bags, triton.cdiv(width, block))](
+            weight, indices, offsets, output, offset2bag, bag_size,
+            indices.shape[0], bags, width, weight.stride(0), BLOCK_D=block,
+        )
+    return output, offset2bag, bag_size, max_indices
+
+
+def embedding_bag_sum_backward(grad: torch.Tensor, indices: torch.Tensor,
+                               offset2bag: torch.Tensor, num_weights: int):
+    """The dense weight gradient of :func:`embedding_bag_sum`: each bag's output
+    gradient added to the rows its indices name, deterministically and in the
+    order ATen's CUDA backward adds them."""
+    grad, indices, offset2bag = grad.contiguous(), indices.contiguous(), offset2bag.contiguous()
+    width = grad.shape[1]
+    output = torch.empty((int(num_weights), width), device=grad.device, dtype=grad.dtype)
+    if output.numel():
+        _fill_kernel[(triton.cdiv(output.numel(), 1024),)](output, 0.0, output.numel(), BLOCK=1024)
+    if indices.numel() and width:
+        block = min(_next_pow2(width), 1024)
+        _embedding_bag_sum_backward_kernel[(indices.numel(), triton.cdiv(width, block))](
+            grad, indices, offset2bag, output, indices.numel(), width, grad.stride(0),
+            ROWS=_EMBEDDING_BACKWARD_ROWS, BLOCK_L=256, BLOCK_D=block,
+        )
     return output

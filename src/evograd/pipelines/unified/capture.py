@@ -56,6 +56,14 @@ _SUPPORTED_EXTERNALS = {
         "aten._scaled_dot_product_flash_attention_backward.default",
 }
 
+# Compiler fallbacks to ATen's own CUDA kernels, not to a vendor library: the
+# seed implements their semantics itself, so they stay in the evolvable region
+# and the code generator must lower them (or refuse the seed).
+_SEED_LOWERED_FALLBACKS = frozenset({
+    "torch.ops.aten._embedding_bag.default",
+    "torch.ops.aten._embedding_bag_backward.default",
+})
+
 
 def _encode_arg(value: Any) -> dict[str, Any]:
     from evograd.atenir.extract import _serialize_arg
@@ -123,6 +131,8 @@ def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[E
             continue
         seen_buffers.add(id(buffer))
         kernel = getattr(buffer, "python_kernel_name", None)
+        if kernel in _SEED_LOWERED_FALLBACKS:
+            continue
         target = _SUPPORTED_EXTERNALS.get(kernel)
         if target is None:
             raise NotImplementedError(
