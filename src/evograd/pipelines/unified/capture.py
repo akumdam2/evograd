@@ -78,7 +78,9 @@ _FLOAT32_EXTERNALS = frozenset({
 _SEED_LOWERED_FALLBACKS = frozenset({
     "torch.ops.aten._embedding_bag.default",
     "torch.ops.aten._embedding_bag_backward.default",
-    "torch.ops.aten.cumsum.default",  # a scan Inductor's CPU backend cannot generate
+    # Inductor's GPU backend generates the scan itself; its CPU backend (the
+    # seed generator's CPU dry run) falls back to ATen.
+    "torch.ops.aten.cumsum.default",
     "torch.ops.aten.histc.default",
     "torch.ops.aten.sort.stable",
 })
