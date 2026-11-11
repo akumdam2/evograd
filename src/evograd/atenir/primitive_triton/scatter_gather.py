@@ -250,6 +250,27 @@ if HAS_TRITON:
             tl.store(OUT + row * D + cols, total.to(OUT.dtype.element_ty), mask=mask)
 
     @triton.jit
+    def _histc_kernel(INPUT, OUT, N, low, high, BINS: tl.constexpr, IS_FLOAT: tl.constexpr,
+                      BLOCK: tl.constexpr):
+        """Count each element into one of BINS equal bins over [low, high], the
+        last bin closed, as ATen's kernelHistogram1D/getBin: float input binned in
+        float32, integer input in int64."""
+        offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        mask = offsets < N
+        if IS_FLOAT:
+            value = tl.load(INPUT + offsets, mask=mask, other=0).to(tl.float32)
+            inside = mask & (value >= low) & (value <= high)
+            span = tl.zeros_like(value) + (high - low)
+            index = tl.math.div_rn((value - low) * BINS, span).to(tl.int64)
+        else:
+            value = tl.load(INPUT + offsets, mask=mask, other=0).to(tl.int64)
+            inside = mask & (value >= low) & (value <= high)
+            index = (value - low) * BINS // (high - low)
+        index = tl.where(index == BINS, BINS - 1, index)
+        one = tl.full((BLOCK,), 1, OUT.dtype.element_ty)
+        tl.atomic_add(OUT + index, one, mask=inside)
+
+    @triton.jit
     def _fill_kernel(out_ptr, value, N, BLOCK: tl.constexpr):
         offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
@@ -547,5 +568,22 @@ def embedding_bag_sum_backward(grad: torch.Tensor, indices: torch.Tensor,
         _embedding_bag_sum_backward_kernel[(indices.numel(), triton.cdiv(width, block))](
             grad, indices, offset2bag, output, indices.numel(), width, grad.stride(0),
             ROWS=_EMBEDDING_BACKWARD_ROWS, BLOCK_L=256, BLOCK_D=block,
+        )
+    return output
+
+
+def histc(input: torch.Tensor, bins: int, low, high) -> torch.Tensor:
+    """``aten.histc`` with a fixed range ``low < high``: counts in ``input``'s dtype."""
+    if not low < high:
+        raise ValueError('handwritten histc needs a fixed range with min < max')
+    floating = input.is_floating_point()
+    input = input.contiguous()
+    output = torch.empty((int(bins),), device=input.device, dtype=input.dtype)
+    _fill_kernel[(triton.cdiv(int(bins), 1024),)](output, 0, int(bins), BLOCK=1024)
+    if input.numel():
+        _histc_kernel[(triton.cdiv(input.numel(), 1024),)](
+            input, output, input.numel(),
+            float(low) if floating else int(low), float(high) if floating else int(high),
+            BINS=int(bins), IS_FLOAT=floating, BLOCK=1024,
         )
     return output

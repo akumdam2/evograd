@@ -236,6 +236,19 @@ def _semantic_expr(builder: _ProgramBuilder, node: dict) -> str:
         return f"{args[0]}.{operation}({', '.join(args[1:])})"
     if operation in {"split", "split_with_sizes"}:
         return f"{args[0]}.split({', '.join(args[1:])})"
+    # Fresh storage, which the graph then fills (an index_put of a permutation, a copy).
+    if operation == "empty":
+        device = node.get("kwargs_ordered", {}).get("device", {}).get("value", "cuda")
+        return f"torch.empty({args[0]}, dtype={node['output_dtype']}, device={device!r})"
+    if target in {"aten.sort.default", "aten.sort.stable"} and \
+            not node["input_nodes"][0]["dtype"].startswith(("torch.float", "torch.bfloat")):
+        # No handwritten integer sort: a plain stable PyTorch sort, which every
+        # tie order of the reference's sort permits.
+        from evograd.atenir.primitive_triton.dispatch import _option
+
+        # sort.default takes dim and descending by position, sort.stable by keyword.
+        dim, descending = _option(node, 1, "dim", -1), _option(node, 2, "descending", False)
+        return f"torch.sort({args[0]}, dim={dim!r}, descending={descending!r}, stable=True)"
     if operation == "select_scatter":
         from evograd.atenir.primitive_triton.scatter_gather import select_scatter
 

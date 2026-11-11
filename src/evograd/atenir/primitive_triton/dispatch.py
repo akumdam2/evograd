@@ -846,7 +846,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
     if "aten.cumsum" in target:
         dim_arg = int(dims[0]) if dims else (int(scalar_args[0]) if scalar_args else 0)
-        return reduction.make_cumsum_kernel(dim_arg)
+        return reduction.make_cumsum_kernel(dim_arg, dtype=_keyword(node, "dtype"))
 
     # ── allocation op with positional-only args ────────────────────────────────
 
@@ -1076,6 +1076,17 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return scatter_gather.embedding_bag_sum_backward(grad, indices, offset2bag, num_weights)
 
         return _embedding_bag_backward
+
+    if target == "aten.histc.default":
+        bins, low, high = (_option(node, i, name, default) for i, (name, default) in enumerate(
+            (("bins", 100), ("min", 0), ("max", 0)), start=1))
+        if not low < high:  # an empty range means the data's own min and max
+            return _generic_fallback(target, node)
+
+        def _histc(a):
+            return scatter_gather.histc(a, bins, low, high)
+
+        return _histc
 
     # ── misc ──────────────────────────────────────────────────────────────────
 

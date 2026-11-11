@@ -430,6 +430,12 @@ def _node(fn, *inputs, target):
     return next(n for n in graph['nodes'] if n.get('target') == target)
 
 
+def _nonlocals(kernel):
+    import inspect
+
+    return inspect.getclosurevars(kernel).nonlocals
+
+
 class TestSeedLowerings(unittest.TestCase):
     """Semantic nodes the new benchmark cases reach, rendered without a GPU."""
 
@@ -460,6 +466,50 @@ class TestSeedLowerings(unittest.TestCase):
         mean = _node(lambda w, i, o: torch.ops.aten._embedding_bag(w, i, o, False, 1),
                      weight, indices, offsets, target='aten._embedding_bag.default')
         self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(mean)))
+
+    def test_an_integer_sort_is_a_stable_torch_sort_and_a_float_sort_stays_handwritten(self):
+        # OLMoE sorts its 32768 int64 expert ids; there is no handwritten integer sort.
+        from evograd.pipelines.shared.primitives import check_source
+
+        keys = torch.randint(0, 5, (64,))
+        expressions, (values, order) = _rendered(lambda k: torch.sort(k), keys)
+        self.assertEqual(expressions['aten.sort.default'],
+                         'torch.sort(t_k_1, dim=-1, descending=False, stable=True)')
+        expected = torch.sort(keys, stable=True)
+        self.assertTrue(torch.equal(values, expected.values) and torch.equal(order, expected.indices))
+        check_source('# EVOLVE-BLOCK-START\ndef f(k):\n    return ' + expressions['aten.sort.default']
+                     + '\n# EVOLVE-BLOCK-END\n')
+        floats, _ = _rendered(lambda a: torch.sort(a, dim=0, descending=True), torch.randn(8))
+        self.assertNotIn('torch.sort', floats['aten.sort.default'])
+
+    def test_moe_routing_counts_offsets_and_inverse_permutation(self):
+        # OLMoE: histc of the sorted ids, an int32 cumsum of the counts (the
+        # grouped GEMM's offsets) and fresh storage for the inverse permutation.
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+
+        histc = make_kernel(_node(lambda x: torch.histc(x, 64, 0, 63), torch.rand(8),
+                                  target='aten.histc.default'))
+        self.assertEqual({k: _nonlocals(histc)[k] for k in ('bins', 'low', 'high')},
+                         {'bins': 64, 'low': 0, 'high': 63})
+        data_range = _node(lambda x: torch.histc(x, 8), torch.rand(8), target='aten.histc.default')
+        self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(data_range)))
+        cumsum = make_kernel(_node(lambda c: torch.cumsum(c, 0, dtype=torch.int32),
+                                   torch.zeros(4, dtype=torch.int32), target='aten.cumsum.default'))
+        self.assertEqual(_nonlocals(cumsum)['_dtype'], torch.int32)
+        _, (empty,) = _rendered(lambda x: [torch.empty([5], dtype=torch.int64)], torch.randn(2))
+        self.assertEqual((empty.shape, empty.dtype), ((5,), torch.int64))
+
+    def test_grouped_gemm_is_preserved(self):
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        self.assertEqual(_SUPPORTED_EXTERNALS['extern_kernels._grouped_mm'], 'aten._grouped_mm.default')
+        grouped = {'name': 'gmm', 'external_kernel': 'extern_kernels._grouped_mm',
+                   'target': 'aten._grouped_mm.default',
+                   'positional_args': [{'kind': 'node', 'name': n} for n in ('x', 'w', 'offs')]}
+        self.assertIn('return _unified_extern_kernels._grouped_mm(arg0, arg1, arg2)',
+                      _external_wrapper('forward', grouped)[0])
 
 
 #: Runs in a child process with TRITON_INTERPRET=1: the handwritten kernels on
@@ -507,6 +557,11 @@ for row in rows:
     flat = flat + row
 result['cuda_order'] = (torch.equal(dweight[7], runs) and not torch.equal(runs, flat)
                         and torch.equal(dweight[2], grad[0]) and int(dweight.abs().sum(1).gt(0).sum()) == 2)
+ids = torch.randint(0, 66, (1000,))
+result['histc_int'] = torch.equal(sg.histc(ids.to(torch.int32), 64, 0, 63),
+                                  torch.histc(ids.float(), 64, 0, 63).to(torch.int32))
+values = torch.randn(4000) * 3
+result['histc_float'] = torch.equal(sg.histc(values, 37, -2.5, 4.0), torch.histc(values, 37, -2.5, 4.0))
 print(json.dumps(result))
 """
 
@@ -550,6 +605,12 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
             with self.subTest(deterministic=deterministic):
                 self.assertTrue(torch.equal(mine, out.detach()))
                 self.assertTrue(torch.equal(dweight, reference.grad))
+
+    def test_histc_matches_cuda_aten_on_integer_ids(self):
+        from evograd.atenir.primitive_triton import scatter_gather
+
+        ids = torch.randint(0, 66, (32768,), device='cuda', dtype=torch.int32)
+        self.assertTrue(torch.equal(scatter_gather.histc(ids, 64, 0, 63), torch.histc(ids, 64, 0, 63)))
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""

@@ -54,6 +54,8 @@ _SUPPORTED_EXTERNALS = {
         "aten._scaled_dot_product_flash_attention.default",
     "torch.ops.aten._scaled_dot_product_flash_attention_backward.default":
         "aten._scaled_dot_product_flash_attention_backward.default",
+    # A mixture of experts' grouped GEMM (cuBLAS/CUTLASS), forward and backward.
+    "extern_kernels._grouped_mm": "aten._grouped_mm.default",
 }
 
 # Compiler fallbacks to ATen's own CUDA kernels, not to a vendor library: the
@@ -62,6 +64,9 @@ _SUPPORTED_EXTERNALS = {
 _SEED_LOWERED_FALLBACKS = frozenset({
     "torch.ops.aten._embedding_bag.default",
     "torch.ops.aten._embedding_bag_backward.default",
+    "torch.ops.aten.cumsum.default",  # a scan Inductor's CPU backend cannot generate
+    "torch.ops.aten.histc.default",
+    "torch.ops.aten.sort.stable",
 })
 
 
