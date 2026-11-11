@@ -200,6 +200,36 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(again["cases"], result["cases"])
         self.assertEqual(again["summary"], result["summary"])
 
+    def test_rows_carry_the_search_set_tag_and_only_benchmark_rows_count(self):
+        """An entry for the toy in a search set: every row carries its tag, the level
+        summary counts the row only as a benchmark row, and a case the entry does
+        not list means the search set predates the snapshot."""
+        from evograd.benchmark import search_set
+
+        out = Path(self.tmp.name) / "tagged"
+        for reason, of, counted in (("identical_config_of", f"other:{self.T.CASE_ID}", 1),
+                                    ("not_time_max_config", None, 0), ("missing", None, None)):
+            with self.subTest(reason=reason):
+                cases = {} if reason == "missing" else {self.T.CASE_ID: {
+                    "level": 2, "task": "swiglu", "searched": False, "reason": reason, "of": of}}
+                path = Path(self.tmp.name) / f"search_set_{reason}.json"
+                path.write_text(json.dumps({"schema": search_set.SCHEMA, "models": {
+                    "toy": {"snapshot_hash": "h", "cases": cases}}}))
+                with mock.patch.object(search_set, "PATH", path):
+                    if counted is None:
+                        with self.assertRaisesRegex(ValueError, "predates the snapshot"):
+                            self.evaluate("good", out)
+                        continue
+                    result = self.evaluate("good", out)
+                case = result["cases"][self.T.CASE_ID]
+                self.assertEqual({k: case[k] for k in ("searched", "reason", "of")},
+                                 {"searched": False, "reason": reason, "of": of})
+                level2 = result["summary"]["level2"]
+                self.assertEqual((level2["funnel"]["configurations"], level2["funnel"]["accepted"]),
+                                 (counted, counted))
+                single = level2["tier3_single_site"]["toy"][self.T.CASE_ID]
+                self.assertEqual(single["benchmark_row"], bool(counted))
+
     def corpus(self):
         from evograd.verification.payloads import Corpus
 
@@ -483,7 +513,7 @@ class Tier2Timing(unittest.TestCase):
     def test_summary_rejects_another_protocol_instead_of_relabeling_it(self):
         from evograd.evaluation.protocol import summarize
 
-        for protocol in ("evograd-evaluation-v3", None):
+        for protocol in ("evograd-evaluation-v3", "evograd-evaluation-v4", None):
             with self.subTest(protocol=protocol), \
                     self.assertRaisesRegex(ValueError, "rerun evaluate"):
                 summarize([{"protocol": protocol, "model": "legacy", "cases": {}}])
@@ -517,6 +547,34 @@ class Summary(unittest.TestCase):
         for baseline in ("eager", "torch_compile"):
             self.assertEqual(level2["speedup"][baseline]["configurations_covered"], 0)
             self.assertIsNone(level2["speedup"][baseline]["geomean"])
+
+    def test_only_benchmark_rows_are_counted(self):
+        from evograd.evaluation.protocol import summarize
+
+        evaluation = self.evaluation()
+        evaluation["cases"]["swiglu/site"].update(searched=True, reason=None, of=None)
+        unsubmitted = {"task": "swiglu", "level": 2, "family": "activation", "submitted": False}
+        evaluation["cases"]["swiglu/copy"] = {**unsubmitted, "searched": False,
+                                              "reason": "identical_config_of", "of": "other:swiglu/site"}
+        evaluation["cases"]["swiglu/small"] = {**unsubmitted, "searched": False,
+                                               "reason": "not_time_max_config", "of": None}
+        evaluation["cases"]["swiglu/other"] = {**evaluation["cases"]["swiglu/site"], "searched": False,
+                                               "reason": "not_time_max_config", "of": None}
+        summary = summarize([evaluation])
+        level2 = summary["level2"]
+        self.assertEqual((level2["funnel"]["configurations"], level2["funnel"]["submitted"]), (2, 1))
+        self.assertEqual(level2["coverage"], 0.5)
+        # Single sites: the benchmark rows, and a submitted other row marked.
+        single = level2["tier3_single_site"]["toy"]
+        self.assertEqual({cid: row["benchmark_row"] for cid, row in single.items()},
+                         {"swiglu/site": True, "swiglu/copy": True, "swiglu/other": False})
+        from candidates.bench import summary_table
+
+        table = summary_table({"agent": {"summary": summary, "cost": {
+            "evaluations": 0, "llm_calls_recorded": 0, "wall_seconds": 0.0}}})
+        self.assertIn("| toy: swiglu/other (not a benchmark row) |", table)
+        self.assertIn("| toy: swiglu/site | yes |", table)
+        self.assertNotIn("swiglu/small", table)
 
     def test_single_sites_keep_gates_intervals_and_selection_without_pooling(self):
         from evograd.evaluation.protocol import summarize

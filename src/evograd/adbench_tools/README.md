@@ -78,7 +78,7 @@ two is what the frontend contributes.
    decides anything.
 5. **Same final measurement.** The agent's best program is rebuilt from the
    code inside its block, so edits outside it are discarded. Every submission
-   goes through `evograd-evaluation-v4` (§7): the applicable real-payload gates,
+   goes through `evograd-evaluation-v5` (§7): the applicable real-payload gates,
    formal T2 and model-scope T3. `score`/`compare` are separate diagnostics (§5.6).
 6. **Same model and API-request cap for the OpenAI agents.**
    - One `--model` / `--api-base` (an OpenAI-compatible endpoint) is used for
@@ -550,16 +550,18 @@ run by `candidates/bench.py` on every agent in the same way:
 ```bash
 export ADBENCH_ROOT=...            # default results/adbench; results go to $ADBENCH_ROOT/<model>
 export ADBENCH_MODEL=gpt-5.5
-python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm ... \
+python candidates/bench.py tasks     --model qwen3_0_6b --searched \
                                      --corpus CORPUS/manifest.json       # GPU: Gate 1's envelope
 python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json --deadline-min 50
 python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd openevolve gepa kernelagent
 ```
 
-1. **Tasks are a model's observed cases.** A case is one configuration a
-   verified model trains at (`evograd.verification.integrations.base.observed_cases`),
-   and its task pack carries the model's own reference computation
+1. **Tasks are a model's searched cases.** A case is one configuration a
+   verified model trains at (`evograd.verification.integrations.base.observed_cases`);
+   which are searched, and why each other one is not, is
+   `src/evograd/benchmark/search_set.json` (`bench.py tasks --searched`, and
+   `run` by default). Its task pack carries the model's own reference computation
    (`Model.reference_op`) at that configuration: what the agent optimizes is
    what the gates judge. The agent still sees kernel-scope information only
    (the forward's source, shapes, dtypes, Gate 1's tolerance rule); nothing
@@ -567,7 +569,7 @@ python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd ope
 2. **The agent runs its own loop on each pack**, as in §2, with `--no-score`.
    Its best program is rebuilt from its evolve block into `submission.py`
    (`fixed_code_intact` is recorded).
-3. **Every submission goes through `evograd-evaluation-v4`**: the static rules
+3. **Every submission goes through `evograd-evaluation-v5`**: the static rules
    (`check_source`; a violation is neither verified nor timed), then the gates
    on the model's real training payloads -- Level 1: Gate 1 and operator
    Gate 2; Level 2: also model Gate 2 and Gate 3 alone at its site. Every

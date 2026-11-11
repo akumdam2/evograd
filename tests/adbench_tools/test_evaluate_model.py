@@ -32,26 +32,37 @@ class ModelEvaluationTests(unittest.TestCase):
         self.ids = ["mlp/stage0", "mlp/stage1"]
         self.corpus = self.root / "corpus" / "manifest.json"
         write(self.corpus, {})
-        write(self.shared / "cases.json", {"convnextv2_tiny": {
-            "corpus": str(self.corpus.parent), "cases": self.ids}})
+        write(self.shared / "cases.json", {"convnextv2_tiny": {"corpus": str(self.corpus.parent)}})
+        self.search_set({cid: {"searched": True, "reason": None, "of": None} for cid in self.ids})
         for cid in self.ids:
             directory = self.shared / "openevolve/convnextv2_tiny"
             write(directory / "tasks" / cid.replace("/", "__") / "task.json", {
                 "model": "convnextv2_tiny", "case_id": cid, "level": 2})
-            run = self.run_dir(cid)
-            write(run / "run.json", {"status": "completed"})
-            program = (b"# EVOLVE-BLOCK-START\nraise RuntimeError()\n# EVOLVE-BLOCK-END\n"
-                       b"# original deployment\n")
-            (run / "submission.py").write_bytes(program)
-            write(run / "submission.json", {
-                "case_id": cid, "agent": "openevolve", "submission": "old/path/submission.py",
-                "program_sha256": hashlib.sha256(program).hexdigest()})
+            self.searched_run(self.run_dir(cid), cid)
         self.argv = ["convnextv2_tiny", "--shared-root", str(self.shared),
                      "--submission-root", str(self.shared),
                      "--out-root", str(self.out)]
 
-    def run_dir(self, cid):
-        return self.shared / "openevolve/convnextv2_tiny/runs/openevolve" / cid.replace("/", "__")
+    def run_dir(self, cid, model="convnextv2_tiny"):
+        return self.shared / f"openevolve/{model}/runs/openevolve" / cid.replace("/", "__")
+
+    def searched_run(self, run, cid):
+        write(run / "run.json", {"status": "completed"})
+        program = (b"# EVOLVE-BLOCK-START\nraise RuntimeError()\n# EVOLVE-BLOCK-END\n"
+                   b"# original deployment\n")
+        (run / "submission.py").write_bytes(program)
+        write(run / "submission.json", {
+            "case_id": cid, "agent": "openevolve", "submission": "old/path/submission.py",
+            "program_sha256": hashlib.sha256(program).hexdigest()})
+
+    def search_set(self, cases, **models):
+        path = self.root / "search_set.json"
+        write(path, {"schema": runner.SEARCH_SET.SCHEMA, "models": {
+            name: {"snapshot_hash": "h", "cases": entries}
+            for name, entries in {"convnextv2_tiny": cases, **models}.items()}})
+        patcher = patch.object(runner.SEARCH_SET, "PATH", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def invoke(self, extra=()):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -63,6 +74,52 @@ class ModelEvaluationTests(unittest.TestCase):
             launch.assert_not_called()
         self.assertFalse(self.out.exists())
         (self.run_dir(self.ids[1]) / "submission.py").write_text("tampered")
+        self.assertEqual(self.invoke(["--dry-run"]), 1)
+
+    def test_packs_must_be_exactly_the_searched_cases(self):
+        self.search_set({**{cid: {"searched": True, "reason": None, "of": None} for cid in self.ids},
+                         "mlp/stage2": {"searched": True, "reason": None, "of": None}})
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(self.argv + ["--dry-run"]), 1)
+        self.assertIn("missing ['mlp/stage2'], extra []", err.getvalue())
+
+    def test_identical_configuration_is_evaluated_with_the_source_submission(self):
+        searched = {"searched": True, "reason": None, "of": None}
+        self.search_set({**{cid: searched for cid in self.ids},
+                         "mlp/copy": {"searched": False, "reason": "identical_config_of",
+                                      "of": "dit_s_2:mlp/source"},
+                         "linear/x": {"searched": False, "reason": "vendor", "of": None}},
+                        dit_s_2={"mlp/source": searched})
+        self.searched_run(self.run_dir("mlp/source", "dit_s_2"), "mlp/source")
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as launch:
+            self.assertEqual(self.invoke(), 0)
+            command = launch.call_args.args[0]
+        source = (self.run_dir("mlp/source", "dit_s_2") / "submission.py").resolve()
+        self.assertIn(f"mlp/copy={source}", command)
+        self.assertEqual(command.count("--candidate"), 3)
+        saved = json.loads((self.out / "convnextv2_tiny/evaluation/openevolve/selection.json").read_text())
+        self.assertEqual(saved["reused_from"], {"mlp/copy": "dit_s_2:mlp/source"})
+        self.assertEqual(saved["selected_cases"], ["mlp/copy", *self.ids])
+
+    def test_a_source_search_without_a_submission_is_the_identical_case_search_failure(self):
+        """As bench.py evaluate: recorded, not dropped; an unfinished source search stops."""
+        searched = {"searched": True, "reason": None, "of": None}
+        self.search_set({**{cid: searched for cid in self.ids},
+                         "mlp/copy": {"searched": False, "reason": "identical_config_of",
+                                      "of": "dit_s_2:mlp/source"}},
+                        dit_s_2={"mlp/source": searched})
+        source = self.run_dir("mlp/source", "dit_s_2")
+        write(source / "run.json", {"status": "completed"})
+        write(source / "submission.json", {"case_id": "mlp/source", "agent": "openevolve",
+                                           "submission": None})
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as launch:
+            self.assertEqual(self.invoke(), 0)
+            self.assertEqual(launch.call_args.args[0].count("--candidate"), 2)
+        saved = json.loads((self.out / "convnextv2_tiny/evaluation/openevolve/selection.json").read_text())
+        self.assertEqual(saved["reused_from"], {"mlp/copy": "dit_s_2:mlp/source"})
+        self.assertEqual(Path(saved["search_failures"]["mlp/copy"]["record"]).resolve(),
+                         (source / "submission.json").resolve())
+        write(source / "run.json", {"status": "running"})
         self.assertEqual(self.invoke(["--dry-run"]), 1)
 
     def test_missing_and_running_cases_stop_before_launch(self):

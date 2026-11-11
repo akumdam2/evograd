@@ -169,3 +169,33 @@ class CaseGroupTests(unittest.TestCase):
             result = json.loads((Path(job["out"]) / "evaluation.json").read_text())
             self.assertEqual(result["tier3"]["baselines"]["torch_compile"]["error"], "compiler failed")
             self.assertTrue(result["tier3"]["combination"]["tier3"]["ok"])
+
+    def test_rows_carry_the_committed_search_set_tag_and_only_benchmark_rows_count(self):
+        """The cases of a model the committed search set lists: its searched L2 case,
+        its identical_config_of L1 case and a vendor L1 case, all submitted."""
+        from dataclasses import replace
+
+        from evograd.benchmark import search_set
+
+        name = "llama_3_2_1b"
+        entry = search_set.entry(name)["cases"]
+        picked = [next(cid for cid, c in entry.items() if c["level"] == 2 and c["searched"]),
+                  next(cid for cid, c in entry.items() if c["reason"] == "identical_config_of"),
+                  next(cid for cid, c in entry.items() if c["reason"] == "vendor")]
+        self.model = replace(self.model, name=name)
+        self.plan["model"] = name
+        self.cases = [Case(cid, entry[cid]["task"], entry[cid]["level"],
+                           Workload({"rows": 8, "cols": 16}, "float32"), 1) for cid in picked]
+        for job in self.plan["jobs"]:
+            program = next(iter(job["selection"]["candidates"].values()))
+            job["selection"]["candidates"] = {cid: program for cid in picked}
+        self.assertEqual(self.execute(), 0)
+        for job in self.plan["jobs"]:
+            result = json.loads((Path(job["out"]) / "evaluation.json").read_text())
+            for cid in picked:
+                self.assertEqual({k: result["cases"][cid][k] for k in ("searched", "reason", "of")},
+                                 {k: entry[cid][k] for k in ("searched", "reason", "of")}, cid)
+            summary = result["summary"]
+            self.assertEqual(summary["level1"]["funnel"]["configurations"], 1)  # not the vendor case
+            self.assertEqual(summary["level2"]["funnel"]["configurations"], 1)
+            self.assertEqual(set(summary["level2"]["tier3_single_site"][name]), {picked[0]})

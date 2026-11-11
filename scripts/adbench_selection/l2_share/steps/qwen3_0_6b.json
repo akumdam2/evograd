@@ -1,0 +1,136 @@
+{
+ "model": "qwen3_0_6b",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 136.96647270116955,
+ "t3g_ok": true,
+ "t3g_step_ms": 102.50171259976923,
+ "t3g_error": null,
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 136.96647270116955,
+  "step_ms_min": 136.17521419655532,
+  "per_block_ms": [
+   136.87986379954964,
+   136.17521419655532,
+   137.07335928920656,
+   140.3799156891182,
+   136.96647270116955
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 136.96647270116955,
+   "min_ms": 136.17521419655532,
+   "q20_ms": 136.73893387895077,
+   "q80_ms": 137.7346705691889
+  },
+  "cpu_bound_fraction": 0.9962513316560372,
+  "cpu_bound_fraction_per_block": [
+   0.9962231033721365,
+   0.9962513316560372,
+   0.9962437026389636,
+   0.996367168386327,
+   0.9963122603056161
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": true,
+   "step_ms": 102.50171259976923,
+   "step_ms_min": 102.16748809907585,
+   "per_block_ms": [
+    102.16748809907585,
+    102.65144289005548,
+    102.68426439724863,
+    102.50171259976923,
+    102.2964637959376
+   ],
+   "latency": {
+    "count": 5,
+    "median_ms": 102.50171259976923,
+    "min_ms": 102.16748809907585,
+    "q20_ms": 102.27066865656525,
+    "q80_ms": 102.65800719149411
+   },
+   "cpu_bound_fraction": 0.8898215356632863,
+   "cpu_bound_fraction_per_block": [
+    0.8899206057177792,
+    0.8900547855641644,
+    0.8895302161461539,
+    0.8894309361473982,
+    0.8898215356632863
+   ],
+   "steps": 10,
+   "blocks": 5,
+   "capture_s": 0.6803821010980755,
+   "check": {
+    "eager_repeats": [
+     {
+      "loss": 0.0,
+      "grad": 0.01628340742052136
+     },
+     {
+      "loss": 0.0,
+      "grad": 0.01628340742052136
+     }
+    ],
+    "replay": {
+     "loss": 0.0,
+     "grad": 0.01628340742052136
+    },
+    "margin": 2.0,
+    "agrees": true
+   }
+  },
+  "units_per_second": 29905.128745898008,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 19386228736,
+  "losses": [
+   2.9593663215637207,
+   3.338395357131958,
+   3.249640703201294,
+   3.2996106147766113,
+   3.277630090713501
+  ],
+  "loss_trajectory_step_ms": [
+   1222.024492919445,
+   144.767542835325,
+   143.8000169582665,
+   143.4988419059664,
+   145.92226408421993
+  ],
+  "first_timed_batch_step_ms": 139.68921802006662,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

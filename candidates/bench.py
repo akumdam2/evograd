@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """The benchmark run of one agent on one model: tasks, runs, the protocol, the summary.
 
-    python candidates/bench.py tasks     --model M --case-id C [C ...] --corpus MANIFEST
+    python candidates/bench.py tasks     --model M (--searched | --case-id C [C ...]) --corpus MANIFEST
     python candidates/bench.py run       --model M --agent A [--budget N] [--case-id C ...] [-- agent flags]
     python candidates/bench.py evaluate  --model M --agent A --corpus MANIFEST [--deadline-min 50]
     python candidates/bench.py summarize --model M --agent A [A ...] [--out summary.md]
 
-Each case of the model (``evograd evaluate``'s unit: an observed configuration
-under the model's reference) gets a task pack; the agent runs its own loop on
-each pack (``candidates/<agent>/run.py --no-score``) and its best program is
-repackaged from the evolve block into ``submission.py``; every submission of the
-agent then goes through the one protocol, ``evograd evaluate``, and
+Each searched case of the model (``evograd evaluate``'s unit: an observed
+configuration under the model's reference; which are searched is
+``src/evograd/benchmark/search_set.json``) gets a task pack; the agent runs its
+own loop on each pack (``candidates/<agent>/run.py --no-score``) and its best
+program is repackaged from the evolve block into ``submission.py``; every
+submission of the agent, plus the source model's submission for each
+``identical_config_of`` case, then goes through the one protocol, ``evograd evaluate``, and
 ``summarize`` reports per level what the protocol counts. ``adbench_tools
 score``/``compare`` (one configuration, seed acceptance, Tier 1 only) stay as
 diagnostics and are not run here.
@@ -20,7 +22,8 @@ Layout under ``$ADBENCH_ROOT/<model>`` (default ``results/adbench/<model>``):
     tasks/<case>/                 task packs (case id with / as __)
     runs/<agent>/<case>/          the agent's run directory, + submission.py/.json
     runs/<agent>/<case>.log       the agent's output
-    evaluation/<agent>/           evograd evaluate's DIR (evaluation.json)
+    evaluation/<agent>/           evograd evaluate's DIR (evaluation.json), and
+                                  selection.json: the submissions, reuses, search failures
     state/                        Gate 3 controls and Gate 2 calibrations, shared by every agent
     summary.{json,md}             summarize's output
 
@@ -73,11 +76,15 @@ def task_dirs(root: Path, case_ids: list[str]) -> dict[str, Path]:
 
 
 def selected_cases(args) -> list[str]:
-    """``--case-id`` as given, else every case that has a task pack."""
+    """``--case-id`` as given, else the model's searched cases (``search_set.json``)."""
     if args.case_id:
         return list(args.case_id)
-    tasks = sorted((args.root / "tasks").glob("*/task.json"))
-    return [json.loads(p.read_text())["case_id"] for p in tasks]
+    from evograd.benchmark import search_set
+
+    try:
+        return search_set.searched(args.model)
+    except KeyError as exc:
+        raise SystemExit(f"{exc.args[0]}; name the cases with --case-id") from None
 
 
 # ── tasks ────────────────────────────────────────────────────────────────────
@@ -88,10 +95,11 @@ def cmd_tasks(args) -> int:
     from evograd.adbench_tools.task import build_task, load
 
     cases = model_cases(args.model)
-    unknown = sorted(set(args.case_id) - set(cases))
+    selected = selected_cases(args)
+    unknown = sorted(set(selected) - set(cases))
     if unknown:
         raise SystemExit(f"{args.model} has no cases {unknown}; known: {sorted(cases)}")
-    for cid, directory in task_dirs(args.root, args.case_id).items():
+    for cid, directory in task_dirs(args.root, selected).items():
         if (directory / "task.json").is_file():
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
@@ -205,22 +213,50 @@ def cmd_run(args) -> int:
 # ── evaluate ─────────────────────────────────────────────────────────────────
 
 
-def submissions(root: Path, agent: str) -> dict[str, Path]:
+def records(root: Path, agent: str) -> dict[str, tuple[Path, dict]]:
+    """``{case_id: (submission.json, record)}`` of the agent's finished runs under ``root``."""
     found = {}
     for record_path in sorted((root / "runs" / agent).glob(f"*/{SUBMISSION_RECORD}")):
         record = json.loads(record_path.read_text(encoding="utf-8"))
-        if record.get("submission"):
-            found[record["case_id"]] = Path(record["submission"])
+        found[record["case_id"]] = (record_path, record)
     return found
 
 
 def cmd_evaluate(args) -> int:
-    chosen = submissions(args.root, args.agent)
+    """Every submission of the agent, and for each ``identical_config_of`` case its
+    source model's; a finished search without one is recorded in
+    ``selection.json``'s ``search_failures``, as ``evaluate_model.py`` does."""
+    from evograd.benchmark import search_set
+
+    found = records(args.root, args.agent)
+    reused = {}
+    # An identical configuration is evaluated with its source model's submission.
+    for cid, source in (search_set.evaluated(args.model) if search_set.entry(args.model) else {}).items():
+        if source is None or (args.case_id and cid not in args.case_id):
+            continue
+        source_record = records(root_for(source[0], args.base), args.agent).get(source[1])
+        if source_record is None:
+            raise SystemExit(f"{cid} is evaluated with {':'.join(source)}'s submission, and "
+                             f"{args.agent} has no finished run of it: run `bench.py run --model "
+                             f"{source[0]} --agent {args.agent}` first")
+        found[cid], reused[cid] = source_record, ":".join(source)
+        print(f"{cid}: {reused[cid]}'s submission (identical configuration)", flush=True)
     if args.case_id:
-        chosen = {cid: path for cid, path in chosen.items() if cid in args.case_id}
+        found = {cid: entry for cid, entry in found.items() if cid in args.case_id}
+    chosen = {cid: Path(r["submission"]) for cid, (_, r) in found.items() if r.get("submission")}
+    failures = {cid: {"status": r.get("status"), "record": str(path),
+                      "packaging_error": r.get("packaging_error")}
+                for cid, (path, r) in found.items() if not r.get("submission")}
+    for cid, failure in sorted(failures.items()):
+        print(f"{cid}: the search produced no submission ({failure['status']})", flush=True)
     if not chosen:
         raise SystemExit(f"no submissions of {args.agent} under {args.root / 'runs' / args.agent}")
     out = args.root / "evaluation" / args.agent
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "selection.json").write_text(json.dumps({
+        "model": args.model, "agent": args.agent, "reused_from": reused,
+        "candidates": {cid: str(path) for cid, path in sorted(chosen.items())},
+        "search_failures": failures}, indent=2) + "\n", encoding="utf-8")
     command = [sys.executable, "-m", "evograd.evaluation.protocol", args.model,
                "--corpus", str(args.corpus), "--out", str(out), "--state", str(args.root / "state"),
                "--tier3-blocks", str(args.tier3_blocks)]
@@ -301,14 +337,16 @@ def summary_table(rows: dict[str, dict]) -> str:
             for cid, case in cases.items():
                 launched = case.get("tier3") or {}
                 timed = launched.get("cuda_graph") or {}
+                mark = "" if case["benchmark_row"] else " (not a benchmark row)"
                 singles.append(
-                    f"| {agent} | {model}: {cid} | {'yes' if case.get('accepted') else 'no'} "
+                    f"| {agent} | {model}: {cid}{mark} | {'yes' if case.get('accepted') else 'no'} "
                     f"| {_cell(timed.get('step_ms'))} | {_cell(timed.get('speedup'))} "
                     f"| {interval(timed)} | {_cell(launched.get('speedup'))} | {interval(launched)} "
                     f"| {decides} | {'yes' if case.get('positive') else 'no'} |")
     if singles:
         lines += ["", "L2 single-site Tier 3 (against eager; the model's primary execution decides "
-                  "`positive`: T3-G, or T3 where the eager step cannot be captured)", "",
+                  "`positive`: T3-G, or T3 where the eager step cannot be captured; the benchmark "
+                  "rows, and any other submitted case marked)", "",
                   "| agent | case | accepted | T3-G step ms | T3-G speedup | T3-G 95% interval "
                   "| T3 speedup | T3 95% interval | decides | positive |",
                   "|---|---|---|---|---|---|---|---|---|---|", *singles]
@@ -353,9 +391,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--model", required=True, help="a verified model (evograd evaluate's)")
         p.add_argument("--root", default=None, help="default $ADBENCH_ROOT/<model>")
 
-    p = sub.add_parser("tasks", help="task packs for the model's observed cases")
+    p = sub.add_parser("tasks", help="task packs for the model's searched (or named) cases")
     common(p)
-    p.add_argument("--case-id", nargs="+", required=True, metavar="TASK/COMPONENT")
+    which = p.add_mutually_exclusive_group(required=True)
+    which.add_argument("--searched", action="store_true",
+                       help="every case search_set.json searches for the model")
+    which.add_argument("--case-id", nargs="+", metavar="TASK/COMPONENT")
     p.add_argument("--library", default="auto")
     p.add_argument("--corpus", type=Path, default=None,
                    help="the model's payload corpus manifest (search feedback is Gate 1 on the "
@@ -364,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="reuse and keep operator Gate 2 calibrations here (as evaluate's state)")
     p.set_defaults(run=cmd_tasks)
 
-    p = sub.add_parser("run", help="one agent on every task pack (or --case-id), no scoring")
+    p = sub.add_parser("run", help="one agent on the searched cases' packs (or --case-id), no scoring")
     common(p)
     p.add_argument("--agent", required=True, help="a directory under candidates/")
     p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
@@ -393,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(run=cmd_summarize)
 
     args = parser.parse_args(argv)
-    args.root = root_for(args.model, args.root)
+    args.base, args.root = args.root, root_for(args.model, args.root)
     if getattr(args, "agent_args", None) and args.agent_args[0] == "--":
         args.agent_args = args.agent_args[1:]
     return args.run(args)

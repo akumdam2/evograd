@@ -1,0 +1,136 @@
+{
+ "model": "qwen2_vl_2b",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 210.8379774959758,
+ "t3g_ok": true,
+ "t3g_step_ms": 66.8842249084264,
+ "t3g_error": null,
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 210.8379774959758,
+  "step_ms_min": 209.14204609580338,
+  "per_block_ms": [
+   210.8379774959758,
+   209.81217368971556,
+   215.18942171242088,
+   211.37597451452166,
+   209.14204609580338
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 210.8379774959758,
+   "min_ms": 209.14204609580338,
+   "q20_ms": 209.67814817093313,
+   "q80_ms": 212.1386639541015
+  },
+  "cpu_bound_fraction": 0.9889727523860279,
+  "cpu_bound_fraction_per_block": [
+   0.9889437034520522,
+   0.9899618594298564,
+   0.9893101059710689,
+   0.9889727523860279,
+   0.9888530229251281
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": true,
+   "step_ms": 66.8842249084264,
+   "step_ms_min": 66.87493869103491,
+   "per_block_ms": [
+    66.88338329549879,
+    66.87493869103491,
+    66.88443289604038,
+    66.91545599605888,
+    66.8842249084264
+   ],
+   "latency": {
+    "count": 5,
+    "median_ms": 66.8842249084264,
+    "min_ms": 66.87493869103491,
+    "q20_ms": 66.88169437460601,
+    "q80_ms": 66.89063751604408
+   },
+   "cpu_bound_fraction": 0.931424897069421,
+   "cpu_bound_fraction_per_block": [
+    0.9314528843164317,
+    0.931424897069421,
+    0.9314131971565595,
+    0.9314024341844196,
+    0.9314380544051757
+   ],
+   "steps": 10,
+   "blocks": 5,
+   "capture_s": 0.8998133989516646,
+   "check": {
+    "eager_repeats": [
+     {
+      "loss": 0.0,
+      "grad": 0.0
+     },
+     {
+      "loss": 0.0,
+      "grad": 0.0
+     }
+    ],
+    "replay": {
+     "loss": 0.0,
+     "grad": 0.0
+    },
+    "margin": 2.0,
+    "agrees": true
+   }
+  },
+  "units_per_second": 2428.405005970864,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 22202695680,
+  "losses": [
+   6.115952968597412,
+   4.071259498596191,
+   0.6751785278320312,
+   1.5163756608963013,
+   5.368415355682373
+  ],
+  "loss_trajectory_step_ms": [
+   2671.444467967376,
+   248.0874820612371,
+   230.1709179300815,
+   235.1129821036011,
+   236.7222139146179
+  ],
+  "first_timed_batch_step_ms": 236.72880697995424,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

@@ -1,0 +1,133 @@
+{
+ "model": "qwen3_0_6b",
+ "kernel_ms_per_step": 121.50220233333356,
+ "lib_ms": 43.4435246666667,
+ "nonlib_ms": 78.05867766666685,
+ "top": [
+  [
+   "void pytorch_flash::flash_bwd_dq_dk_dv_loop_seqk_parallel_kernel<Flash_bwd_kernel_traits<128, 64, 128, 8, 2, 4, 2, false, false, cutlass::bf",
+   14.879,
+   true
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::",
+   9.272,
+   false
+  ],
+  [
+   "nvjet_tst_128x256_64x4_2x1_v_bz_coopA_NNN",
+   7.128,
+   true
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::bi",
+   5.504,
+   false
+  ],
+  [
+   "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const:",
+   5.436,
+   false
+  ],
+  [
+   "nvjet_tst_128x256_64x4_2x1_v_bz_coopA_TNN",
+   5.296,
+   true
+  ],
+  [
+   "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 12",
+   5.039,
+   true
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<floa",
+   4.999,
+   false
+  ],
+  [
+   "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor",
+   4.836,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunc",
+   4.605,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&):",
+   3.568,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::cunn_SoftMaxBackward<4, float, float, float, at::native::(anonymous namespace)::LogSoftMaxBackwardEp",
+   2.82,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::cunn_SoftMaxForward<4, float, float, float, at::native::(anonymous namespace)::LogSoftMaxForwardEpil",
+   2.724,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda(float)#1}, std::ar",
+   2.679,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16> >(at::TensorIterat",
+   2.572,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<flo",
+   2.515,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_",
+   2.073,
+   false
+  ],
+  [
+   "nvjet_tst_128x192_64x5_2x1_v_bz_coopB_NTN",
+   2.029,
+   true
+  ],
+  [
+   "void pytorch_flash::flash_bwd_convert_dq_kernel<Flash_bwd_kernel_traits<128, 64, 128, 8, 2, 4, 2, false, false, cutlass::bfloat16_t, Flash_k",
+   1.932,
+   true
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDA",
+   1.854,
+   false
+  ],
+  [
+   "nvjet_tst_320x128_64x3_1x2_h_bz_coopB_TNT",
+   1.853,
+   true
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<1>, at::native::(ano",
+   1.782,
+   false
+  ],
+  [
+   "nvjet_tst_128x256_64x4_2x1_v_bz_coopA_NTN",
+   1.76,
+   true
+  ],
+  [
+   "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, f",
+   1.589,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BUnaryFunctor<float, float, float, at::native::bi",
+   1.576,
+   false
+  ]
+ ]
+}

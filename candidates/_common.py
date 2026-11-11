@@ -38,6 +38,18 @@ METERED_AGENTS = frozenset({"evograd", "openevolve", "gepa", "kernelagent", "cod
 ANTHROPIC_AGENTS = frozenset({"claude_code", "geak"})
 
 
+def search_set():
+    """The committed search set's reader (``evograd.benchmark.search_set``), loaded by
+    path: a launcher reads which cases are searched without importing torch."""
+    import importlib.util
+
+    path = REPO / "src" / "evograd" / "benchmark" / "search_set.py"
+    spec = importlib.util.spec_from_file_location("adbench_search_set", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def parser(description: str) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=description,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)

@@ -20,11 +20,13 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import search_set  # noqa: E402
+
 SHARED = Path("/work/hdd/bcjw/wzhan/ADBench")
-CASE_COUNTS = {"qwen3_0_6b": 8, "qwen3_5_4b": 14, "llama_3_2_1b": 7,
-               "qwen2_vl_2b": 6, "convnextv2_tiny": 8, "dit_s_2": 3,
-               "torchrec_dlrm": 2, "olmoe_1b_7b": 7}
-MODELS = tuple(CASE_COUNTS)
+#: Which cases are searched: src/evograd/benchmark/search_set.json, every model in it.
+SEARCH_SET = search_set()
+MODELS = tuple(SEARCH_SET.load()["models"])
 AGENTS = ("openevolve", "gepa", "geak", "codex")
 SMOKE_CASES = ("rmsnorm/rmsnorm", "qwen3_swiglu_mlp/swiglu_mlp")
 LLM_MODEL = "gpt-5.5"
@@ -37,23 +39,17 @@ def read_json(path: Path):
 
 
 def cases(agent: str, only_model: str | None):
-    registered = read_json(SHARED / "cases.json")
+    """The searched cases of each model; its task packs must be exactly those."""
     for model in ((only_model,) if only_model else MODELS):
-        if model not in registered:
-            raise ValueError(f"{model} missing from cases.json")
         task_root = SHARED / agent / model / "tasks"
         tasks = [read_json(p) for p in sorted(task_root.glob("*/task.json"))]
         ids = [t["case_id"] for t in tasks]
-        if len(ids) != CASE_COUNTS[model] or len(set(ids)) != len(ids):
-            raise ValueError(f"Expected {CASE_COUNTS[model]} unique shared packs for {model}; "
-                             f"found {len(ids)} under {task_root}. Do not rebuild packs.")
-        # Use an explicit selection in the shared index when provided. Otherwise
-        # the prebuilt packs (validated against the plan's counts) define cases.
-        selection = registered[model].get("cases", registered[model].get("case_ids"))
-        if selection is not None:
-            expected = {x if isinstance(x, str) else x["case_id"] for x in selection}
-            if set(ids) != expected:
-                raise ValueError(f"Task packs do not match cases.json for {model}")
+        searched = SEARCH_SET.searched(model)
+        missing, extra = sorted(set(searched) - set(ids)), sorted(set(ids) - set(searched))
+        if missing or extra or len(set(ids)) != len(ids):
+            raise ValueError(f"Task packs under {task_root} are not the {len(searched)} searched "
+                             f"cases of {model} (search_set.json): missing {missing}, extra "
+                             f"{extra}, {len(ids) - len(set(ids))} duplicated. Do not rebuild packs.")
         for task in tasks:
             if task.get("model") != model or task.get("level") not in (1, 2):
                 raise ValueError(f"Invalid model/level in task pack: {model} {task['case_id']}")

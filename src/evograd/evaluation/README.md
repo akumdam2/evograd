@@ -3,7 +3,7 @@
 ## The benchmark protocol
 
 Every submission is evaluated the same way, whoever generated it
-(`protocol.py`, `evograd-evaluation-v4`). Evaluate each agent's submissions as
+(`protocol.py`, `evograd-evaluation-v5`). Evaluate each agent's submissions as
 one run; its Level-3 combination is selected only from that agent's candidates:
 
 ```bash
@@ -65,8 +65,14 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    `torch.compile`.
 5. The **summary** reports, for Level 1 and Level 2, the Tier 2 geometric-mean
    speedup over accepted configurations (configuration, then task, then family), coverage
-   (accepted configurations over all observed ones) and the funnel
-   (submitted, violation, executable, Gate 1, accepted); Level 3 reports each model's
+   (accepted configurations over the benchmark rows) and the funnel
+   (submitted, violation, executable, Gate 1, accepted). Benchmark rows are the
+   observed cases `src/evograd/benchmark/search_set.json` searches plus its
+   `identical_config_of` cases; every observed case stays a row of
+   `evaluation.json`, tagged `searched`/`reason`/`of`, and the rest count
+   nowhere (v5; a model the search set does not list counts every row). Level 2's
+   single-site list shows the benchmark rows, and any other submitted row marked
+   `benchmark_row: false`. Level 3 reports each model's
    combination with its T3-G speedup, its T3 speedup and peak-memory ratio. There is no single
    overall score. Gate verdicts sit beside every runtime, so a rejected
    candidate's numbers are visible but counted nowhere.
@@ -112,8 +118,9 @@ retroactively create paired confidence intervals against old candidate runs.
 
 Tier 1 is used during search; it is not a
 final benchmark metric. Formal Tier 2 results use the `tier2` settings, cache
-and JSON fields. `summarize` requires v3 results: v1 timed Tier 1 and v2 timed
-generated inputs; both must be reevaluated, not relabeled.
+and JSON fields. `summarize` requires v5 results: v4 and earlier counted every
+observed case in the level summaries, v1 timed Tier 1 and v2 timed generated
+inputs; older results must be reevaluated, not relabeled.
 
 ## What each tier measures
 

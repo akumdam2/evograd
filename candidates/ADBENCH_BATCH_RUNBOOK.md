@@ -276,23 +276,30 @@ agent's `NOTES.md`. It affects search throughput only; formal unified evaluation
 remains separate. Start with two workers and compare case wall time and lock
 waiting before increasing concurrency.
 
-Model names and planned case counts:
+The models and their cases come from the committed search set,
+`src/evograd/benchmark/search_set.json`: every model in it (MegaFold included),
+and for each model the cases it marks `searched`. It lists every observed case
+of every model, and each case that is not searched with its reason (`vendor`,
+`not_time_max_config`, `identical_config_of`, `nested_in`,
+`optimizable_share_below_1pct`, `removed`); its `rules` field states the rules.
+To list a model's searched cases:
 
-| Model | Cases |
-|---|---:|
-| qwen3_0_6b | 8 |
-| qwen3_5_4b | 14 |
-| llama_3_2_1b | 7 |
-| qwen2_vl_2b | 6 |
-| convnextv2_tiny | 8 |
-| dit_s_2 | 3 |
-| torchrec_dlrm | 2 |
-| olmoe_1b_7b | 7 |
+```bash
+python -c 'import json,sys; d=json.load(open("src/evograd/benchmark/search_set.json"))["models"][sys.argv[1]]["cases"]; print(*sorted(c for c,v in d.items() if v["searched"]), sep="\n")' qwen3_0_6b
+```
 
-The case roster comes from the shared task packs and is checked against the
-plan's counts (and `cases`/`case_ids` in the shared index when present). The
-shared index and Slurm cannot be inspected from the local development machine;
-preflight fails before submission if their runtime layout is inconsistent.
+The shared task packs (`ADBench/<agent>/<model>/tasks`) must be exactly the
+model's searched cases; preflight names the missing and extra ones and stops.
+Build packs for them with
+`python candidates/bench.py tasks --root /work/hdd/bcjw/wzhan/ADBench/tasks --model M --searched --corpus MANIFEST --state /work/hdd/bcjw/wzhan/ADBench/tasks/M/state`.
+An `identical_config_of` case is not searched: its source model's search covers
+it, and the evaluation reuses that submission; a finished source search without
+a submission is the case's search failure, and an unfinished one stops preflight
+(`evaluate_model.py` and `bench.py evaluate` alike). `ADBench/cases.json` no longer
+names cases; the evaluation launcher reads only its corpus path, until the
+recapture (or pass `--corpus`). Slurm cannot be inspected from the local
+development machine; preflight fails before submission if the runtime layout is
+inconsistent.
 
 ## 5. Inspect progress, then repeat the launcher
 

@@ -32,7 +32,13 @@ class BatchTests(unittest.TestCase):
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.ids = ["rmsnorm/rmsnorm", "qwen3_swiglu_mlp/swiglu_mlp"] + [f"task{i}/case" for i in range(6)]
-        write_json(self.root / "cases.json", {"qwen3_0_6b": {"corpus": "/shared/manifest.json", "cases": self.ids}})
+        cases = {cid: {"searched": True, "reason": None, "of": None} for cid in self.ids}
+        cases["linear/x"] = {"searched": False, "reason": "vendor", "of": None}
+        write_json(self.root / "search_set.json", {"schema": batch.SEARCH_SET.SCHEMA, "models": {
+            "qwen3_0_6b": {"snapshot_hash": "h", "cases": cases}}})
+        search_set = patch.object(batch.SEARCH_SET, "PATH", self.root / "search_set.json")
+        search_set.start()
+        self.addCleanup(search_set.stop)
         for cid in self.ids:
             write_json(self.root / "openevolve/qwen3_0_6b/tasks" / cid.replace("/", "__") / "task.json",
                        {"model": "qwen3_0_6b", "case_id": cid, "level": 1})
@@ -53,10 +59,16 @@ class BatchTests(unittest.TestCase):
                             "cases": {cid: {"submitted": True} for cid in batch.SMOKE_CASES}})
         return result
 
-    def test_model_filter_and_manifest_mismatch(self):
+    def test_packs_must_be_exactly_the_searched_cases(self):
+        self.assertIn("megafold", batch.MODELS)
         self.assertEqual(len(list(batch.cases("openevolve", "qwen3_0_6b"))), 8)
-        write_json(self.root / "cases.json", {"qwen3_0_6b": {"cases": self.ids[:-1]}})
-        with self.assertRaises(ValueError):
+        tasks = self.root / "openevolve/qwen3_0_6b/tasks"
+        write_json(tasks / "linear__x/task.json", {"model": "qwen3_0_6b", "case_id": "linear/x", "level": 1})
+        with self.assertRaisesRegex(ValueError, r"missing \[\], extra \['linear/x'\]"):
+            list(batch.cases("openevolve", "qwen3_0_6b"))
+        shutil.rmtree(tasks / "linear__x")
+        shutil.rmtree(tasks / "task5__case")
+        with self.assertRaisesRegex(ValueError, r"missing \['task5/case'\], extra \[\]"):
             list(batch.cases("openevolve", "qwen3_0_6b"))
 
     def test_running_and_unpackaged_are_not_done(self):
@@ -424,6 +436,11 @@ class LauncherTests(unittest.TestCase):
                 self.assertFalse(submitted.exists())
             # Exercise the Python entry point through the real shell launcher.
             shutil.copy(REPO/'candidates/adbench_search.py', candidates)
+            shutil.copy(REPO/'candidates/_common.py', candidates)  # the search-set loader
+            benchmark = root/'repo/src/evograd/benchmark'
+            benchmark.mkdir(parents=True)
+            for name in ('search_set.py', 'search_set.json'):
+                shutil.copy(REPO/'src/evograd/benchmark'/name, benchmark)
             python_command = [sys.executable, str(candidates/'adbench_search.py'),
                               'submit', '--agent', 'openevolve', '--model', 'qwen3_0_6b',
                               '--skip-smoke']

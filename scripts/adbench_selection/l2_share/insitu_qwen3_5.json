@@ -1,0 +1,133 @@
+{
+ "model": "qwen3_5_4b",
+ "kernel_ms_per_step": 787.6729803333831,
+ "lib_ms": 160.10744899999293,
+ "nonlib_ms": 627.5655313333901,
+ "top": [
+  [
+   "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<floa",
+   132.725,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_",
+   131.064,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&):",
+   61.566,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, float, at::native::bi",
+   57.272,
+   false
+  ],
+  [
+   "Memcpy DtoD (Device -> Device)",
+   30.057,
+   false
+  ],
+  [
+   "sm80_xmma_gemm_f32f32_f32f32_f32_tn_n_tilesize32x32x8_stage3_warpsize1x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas",
+   26.455,
+   true
+  ],
+  [
+   "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, f",
+   26.287,
+   false
+  ],
+  [
+   "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize32x32x8_stage3_warpsize1x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas",
+   23.833,
+   true
+  ],
+  [
+   "sm80_xmma_gemm_f32f32_f32f32_f32_nt_n_tilesize32x32x8_stage3_warpsize1x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas",
+   20.987,
+   true
+  ],
+  [
+   "nvjet_tst_320x128_64x3_1x2_h_bz_coopB_NNT",
+   16.969,
+   true
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<flo",
+   14.389,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&):",
+   13.779,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<1>, at::native::(ano",
+   12.508,
+   false
+  ],
+  [
+   "nvjet_tst_128x160_64x5_2x1_v_bz_NTT",
+   12.475,
+   true
+  ],
+  [
+   "nvjet_tst_320x128_64x3_1x2_h_bz_coopB_NTT",
+   10.681,
+   true
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarListMetadata<float, 3>,",
+   10.25,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunc",
+   9.423,
+   false
+  ],
+  [
+   "nvjet_tst_320x128_64x3_1x2_h_bz_coopB_TNT",
+   9.419,
+   true
+  ],
+  [
+   "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const:",
+   9.379,
+   false
+  ],
+  [
+   "nvjet_tst_192x192_64x4_2x1_v_bz_coopB_TNN",
+   8.846,
+   true
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<3>, at::native::(ano",
+   8.137,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(ano",
+   8.074,
+   false
+  ],
+  [
+   "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, f",
+   7.935,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::",
+   6.981,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(ano",
+   6.536,
+   false
+  ]
+ ]
+}

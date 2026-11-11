@@ -1,0 +1,133 @@
+{
+ "model": "convnextv2_tiny",
+ "kernel_ms_per_step": 21.946149666666592,
+ "lib_ms": 2.187875999999992,
+ "nonlib_ms": 19.7582736666666,
+ "top": [
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::",
+   3.721,
+   false
+  ],
+  [
+   "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor",
+   2.977,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDA",
+   1.475,
+   false
+  ],
+  [
+   "dgrad2d_c1_k1_nhwc_specialized",
+   1.167,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::",
+   1.067,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::CUDAFunctor_add<c10::BFloat16> >(at::TensorIterat",
+   0.963,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::BinaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloat16, at::native::binary_",
+   0.897,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, false>(int, float, c10::BFloat16 const*, c10::BFl",
+   0.835,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::masked_fill_kernel(at::Ten",
+   0.809,
+   false
+  ],
+  [
+   "conv2d_c1_k1_nhwc_specialized",
+   0.745,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::layer_norm_grad_input_kernel_vectorized<c10::BFloat16, float, false>(c10::BFloat16 const*, c10::BFlo",
+   0.623,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::GeluBackwardCUDAKernelImpl(at::TensorIteratorBase&, at::native::GeluType)::{la",
+   0.561,
+   false
+  ],
+  [
+   "wgrad2d_c1_k1_nhwc",
+   0.523,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunc",
+   0.428,
+   false
+  ],
+  [
+   "void at::native::vectorized_elementwise_kernel<8, at::native::GeluCUDAKernelImpl(at::TensorIteratorBase&, at::native::GeluType)::{lambda()#2",
+   0.389,
+   false
+  ],
+  [
+   "nvjet_tst_192x192_64x4_2x1_v_bz_coopB_bias_TNN",
+   0.331,
+   true
+  ],
+  [
+   "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::NormTwoOps<c10::BFloat16, float, c10::BFloat16, true>",
+   0.311,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::GammaBetaBackwardCUDAKernelTemplate<c10::BFloat16, float, 32u, 32u, 256u, false, true, false>(long, ",
+   0.289,
+   false
+  ],
+  [
+   "void at::native::(anonymous namespace)::GammaBetaBackwardCUDAKernelTemplate<c10::BFloat16, float, 32u, 32u, 256u, false, false, false>(long,",
+   0.229,
+   false
+  ],
+  [
+   "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&):",
+   0.218,
+   false
+  ],
+  [
+   "nvjet_tst_192x192_64x3_2x1_v_bz_coopB_NNN",
+   0.198,
+   true
+  ],
+  [
+   "nvjet_tst_96x64_64x8_4x2_h_bz_NTN",
+   0.176,
+   true
+  ],
+  [
+   "nvjet_tst_192x192_64x3_1x2_h_bz_coopB_NNN",
+   0.144,
+   true
+  ],
+  [
+   "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarListMetadata<float, 3>,",
+   0.141,
+   false
+  ],
+  [
+   "nvjet_tst_96x64_64x8_2x4_h_bz_NTN",
+   0.14,
+   true
+  ]
+ ]
+}
