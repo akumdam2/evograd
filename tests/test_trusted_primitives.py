@@ -1,4 +1,4 @@
-"""The controlled vendor-GEMM capability: granted by name, enforced on the AST.
+"""The controlled vendor capabilities (GEMM, convolution, attention): granted by name, enforced on the AST.
 
 Two things are being defended here. One is that an operator which did not ask
 for a primitive cannot reach it -- the grant is per run, not a global loosening.
@@ -15,10 +15,13 @@ import textwrap
 import unittest
 
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 from evograd.pipelines.shared.primitives import (
     REGISTRY,
+    VENDOR_CONV_SOURCE,
     VENDOR_GEMM_SOURCE,
+    VENDOR_SDPA_SOURCE,
     PrimitiveViolation,
     _denied_torch_path,
     catalogue,
@@ -121,10 +124,10 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
     """The grant is one function, not an amnesty."""
 
     def _rejects(self, body: str, needle: str):
-        # Rejected with the capability and without it: the grant is one extra
-        # function, never permission for the operation it happens to perform.
-        for allowed in ((), ("vendor_gemm",)):
-            trusted = VENDOR_GEMM_SOURCE if allowed else ""
+        # Rejected with each capability and without one: a grant is extra fixed
+        # functions, never permission for the operation they happen to perform.
+        for allowed in ((), ("vendor_gemm",), ("vendor_conv",), ("vendor_sdpa",)):
+            trusted = render_primitive_layer(allowed)
             with self.assertRaises(PrimitiveViolation, msg=f"{body} @ {allowed}") as c:
                 check_source(_with_body(body, trusted=trusted), allowed=allowed)
             self.assertIn(needle, str(c.exception))
@@ -312,12 +315,17 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
             "    dweight = torch.nn.grad.conv2d_weight(x, weight.shape, dout, stride=stride, padding=padding, groups=groups)\n"
             "    dbias = dout.sum((0, 2, 3))\n"
             "    return dx, dweight, dbias\n")
-        source = ("import torch\nimport triton\nimport triton.language as tl\n\n"
-                  "# EVOLVE-BLOCK-START\n" + block + "# EVOLVE-BLOCK-END\n" + VENDOR_GEMM_SOURCE)
-        with self.assertRaises(PrimitiveViolation) as caught:
-            check_source(source, allowed=("vendor_gemm",))
-        for name in ("torch.conv2d", "torch.nn.grad.conv2d_input", "torch.nn.grad.conv2d_weight"):
-            self.assertIn(name, str(caught.exception))
+        # Rejected under the grant its pack now carries too: vendor_conv is the
+        # route to cuDNN, not a licence for the direct calls.
+        for allowed in (("vendor_gemm",), ("vendor_conv",)):
+            source = ("import torch\nimport triton\nimport triton.language as tl\n\n"
+                      "# EVOLVE-BLOCK-START\n" + block + "# EVOLVE-BLOCK-END\n"
+                      + render_primitive_layer(allowed))
+            with self.assertRaises(PrimitiveViolation) as caught:
+                check_source(source, allowed=allowed)
+            for name in ("torch.conv2d", "torch.nn.grad.conv2d_input",
+                         "torch.nn.grad.conv2d_weight"):
+                self.assertIn(name, str(caught.exception))
 
 
 class TestTheRulesCoverThisTorch(unittest.TestCase):
@@ -360,25 +368,41 @@ class TestTheRulesCoverThisTorch(unittest.TestCase):
         self.assertFalse(usage["uses_trusted_primitives"])
 
 
+class _Recorded(TorchDispatchMode):
+    """The aten ops a call reaches (meta tensors carry no data)."""
+
+    def __init__(self):
+        super().__init__()
+        self.ops: list[str] = []
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        self.ops.append(str(func).split(".")[1])
+        return func(*args, **(kwargs or {}))
+
+
+def _exec_primitive(source: str) -> dict:
+    namespace: dict = {"torch": torch}
+    exec(compile(source, "<primitive>", "exec"), namespace)
+    return namespace
+
+
 class TestVendorSdpaCapability(unittest.TestCase):
     """The attention grant: the same opt-in discipline as the GEMM one."""
 
     PAIR = ("o, lse = vendor_sdpa_forward(x, w, w)\nreturn o, (x, w, o, lse)")
 
     def test_the_pair_is_accepted_with_the_grant_and_rejected_without(self):
-        from evograd.pipelines.shared.primitives import VENDOR_SDPA_SOURCE
-
         used = check_source(_with_body(self.PAIR, trusted=VENDOR_SDPA_SOURCE),
                             allowed=("vendor_sdpa",))
-        self.assertTrue(used["uses_trusted_primitives"])
+        # The pair's own call, not the primitives' calls to their helper.
+        self.assertEqual(used["primitive_call_sites"], {"vendor_sdpa_forward": 1})
         with self.assertRaises(PrimitiveViolation):
             check_source(_with_body(self.PAIR), allowed=())
 
     def test_the_grant_does_not_open_attention_spellings(self):
-        from evograd.pipelines.shared.primitives import VENDOR_SDPA_SOURCE
-
         for body in ("return torch.nn.functional.scaled_dot_product_attention(x, w, w), (x,)",
-                     "return torch.ops.aten._scaled_dot_product_cudnn_attention(x, w, w, None, True)[0], (x,)"):
+                     "return torch.ops.aten._scaled_dot_product_cudnn_attention(x, w, w, None, True)[0], (x,)",
+                     "return torch.ops.aten._scaled_dot_product_efficient_attention(x, w, w, None, True)[0], (x,)"):
             with self.assertRaises(PrimitiveViolation):
                 check_source(_with_body(body, trusted=VENDOR_SDPA_SOURCE), allowed=("vendor_sdpa",))
 
@@ -386,6 +410,113 @@ class TestVendorSdpaCapability(unittest.TestCase):
         layer = render_primitive_layer(("vendor_sdpa", "vendor_gemm"))
         self.assertLess(layer.index("def vendor_gemm"), layer.index("def vendor_sdpa_forward"))
         self.assertIn("def vendor_sdpa_backward", layer)
+
+    def _kernels(self, dtype, deterministic, heads=(4, 4)):
+        """The aten ops one forward and one backward reach, on the meta device."""
+        sdpa = _exec_primitive(VENDOR_SDPA_SOURCE)
+        before = torch.are_deterministic_algorithms_enabled()
+        self.addCleanup(torch.use_deterministic_algorithms, before)
+        torch.use_deterministic_algorithms(deterministic)
+        q = torch.empty(2, heads[0], 64, 32, device="meta", dtype=dtype)
+        kv = torch.empty(2, heads[1], 64, 32, device="meta", dtype=dtype)
+        with _Recorded() as recorded:
+            out, lse = sdpa["vendor_sdpa_forward"](q, kv, kv, is_causal=False)
+            grads = sdpa["vendor_sdpa_backward"](out, q, kv, kv, out, lse, is_causal=False)
+        self.assertEqual([g.shape for g in grads], [q.shape, kv.shape, kv.shape])
+        return recorded.ops
+
+    def test_it_runs_the_backend_eager_dispatches_to(self):
+        # Half precision: cuDNN in training, flash under deterministic algorithms.
+        # float32, which neither takes: memory-efficient attention in both modes.
+        flash, cudnn, efficient = (f"_scaled_dot_product_{name}_attention"
+                                   for name in ("flash", "cudnn", "efficient"))
+        for dtype in (torch.bfloat16, torch.float16):
+            self.assertEqual(self._kernels(dtype, False), [cudnn, f"{cudnn}_backward"])
+            self.assertEqual(self._kernels(dtype, True), [flash, f"{flash}_backward"])
+        for deterministic in (False, True):
+            self.assertEqual(self._kernels(torch.float32, deterministic),
+                             [efficient, f"{efficient}_backward"])
+
+    def test_float32_refuses_grouped_query_heads(self):
+        self.assertEqual(len(self._kernels(torch.bfloat16, True, heads=(4, 2))), 2)
+        with self.assertRaises(ValueError):
+            self._kernels(torch.float32, True, heads=(4, 2))
+
+
+class TestVendorConvCapability(unittest.TestCase):
+    """The convolution grant: the same opt-in discipline, and the kernels eager runs."""
+
+    PAIR = "y = vendor_conv_forward(x, w, padding=3, groups=4)\nreturn y, (x, w)"
+
+    def setUp(self):
+        conv = _exec_primitive(VENDOR_CONV_SOURCE)
+        self.forward, self.backward = conv["vendor_conv_forward"], conv["vendor_conv_backward"]
+
+    def test_the_pair_is_accepted_with_the_grant_and_rejected_without(self):
+        used = check_source(_with_body(self.PAIR, trusted=VENDOR_CONV_SOURCE),
+                            allowed=("vendor_conv",))
+        self.assertEqual(used["primitive_call_sites"], {"vendor_conv_forward": 1})
+        with self.assertRaises(PrimitiveViolation):
+            check_source(_with_body(self.PAIR), allowed=())
+        with self.assertRaises(PrimitiveViolation):
+            check_source(_with_body(self.PAIR, trusted=VENDOR_GEMM_SOURCE), allowed=("vendor_gemm",))
+
+    def test_the_grant_does_not_open_convolution_spellings(self):
+        for body in ("return torch.conv1d(x, w, padding=3, groups=4), (x,)",
+                     "return torch.nn.functional.conv2d(x, w), (x,)",
+                     "return torch.ops.aten.convolution(x, w, None, [1], [3], [1], False, [0], 4), (x,)",
+                     "return torch.ops.aten.convolution_backward(x, x, w, None, [1], [3], [1], False,"
+                     " [0], 4, [True, True, False])[0], (x,)",
+                     "return torch.nn.grad.conv1d_weight(x, w.shape, x), (x,)"):
+            with self.assertRaises(PrimitiveViolation, msg=body):
+                check_source(_with_body(body, trusted=VENDOR_CONV_SOURCE), allowed=("vendor_conv",))
+
+    def _against_autograd(self, x, w, conv, **kwargs):
+        """Forward and both gradients equal what autograd gives for ``conv`` (float64)."""
+        y = self.forward(x, w, **kwargs)
+        self.assertIsNone(y.grad_fn)
+        dout = torch.randn_like(y)
+        dx, dw = self.backward(dout, x, w, **kwargs)
+        xa, wa = x.clone().requires_grad_(True), w.clone().requires_grad_(True)
+        ya = conv(xa, wa, **kwargs)
+        (ya * dout).sum().backward()
+        torch.testing.assert_close(y, ya.detach(), rtol=0, atol=1e-12)
+        torch.testing.assert_close(dx, xa.grad, rtol=0, atol=1e-12)
+        torch.testing.assert_close(dw, wa.grad, rtol=0, atol=1e-12)
+        self.assertEqual((dx.shape, dw.shape), (x.shape, w.shape))
+
+    def test_the_model_convolutions_match_autograd(self):
+        f = torch.nn.functional
+        double = dict(dtype=torch.float64)
+        # Qwen3.5's causal depthwise conv1d (the slice after it is the caller's).
+        self._against_autograd(torch.randn(2, 8, 16, **double), torch.randn(8, 1, 4, **double),
+                               f.conv1d, padding=3, groups=8)
+        # ConvNeXt's 7x7 depthwise conv2d, channels-last as the model runs it.
+        x = torch.randn(2, 6, 9, 9, **double).to(memory_format=torch.channels_last)
+        self._against_autograd(x, torch.randn(6, 1, 7, 7, **double), f.conv2d, padding=3, groups=6)
+        # A patchify stem (DiT, ConvNeXt), and per-dimension stride and padding.
+        self._against_autograd(torch.randn(2, 4, 8, 8, **double), torch.randn(5, 4, 2, 2, **double),
+                               f.conv2d, stride=2)
+        self._against_autograd(torch.randn(1, 4, 8, 6, **double), torch.randn(4, 2, 3, 3, **double),
+                               f.conv2d, stride=(2, 1), padding=(1, 0), groups=2)
+
+    def test_a_gradient_not_asked_for_is_none(self):
+        x, w = torch.randn(1, 4, 8), torch.randn(4, 1, 3)
+        dout = self.forward(x, w, padding=1, groups=4)
+        dx, dw = self.backward(dout, x, w, padding=1, groups=4, input_grad=False)
+        self.assertIsNone(dx)
+        self.assertEqual(dw.shape, w.shape)
+        dx, dw = self.backward(dout, x, w, padding=1, groups=4, weight_grad=False)
+        self.assertEqual(dx.shape, x.shape)
+        self.assertIsNone(dw)
+
+    def test_it_refuses_what_it_does_not_cover(self):
+        with self.assertRaises(ValueError):  # conv3d
+            self.forward(torch.randn(1, 2, 4, 4, 4), torch.randn(2, 2, 1, 1, 1))
+        with self.assertRaises(ValueError):  # weight rank
+            self.forward(torch.randn(1, 2, 8), torch.randn(2, 2, 1, 1))
+        with self.assertRaises(ValueError):  # a stride per dimension of another rank
+            self.forward(torch.randn(1, 2, 8, 8), torch.randn(2, 2, 1, 1), stride=(1, 1, 1))
 
 
 class TestExistingArtifactsAreUnaffected(unittest.TestCase):

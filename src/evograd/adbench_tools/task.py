@@ -23,11 +23,13 @@ import hashlib
 import json
 import subprocess
 from dataclasses import dataclass, field
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 from evograd.adbench_tools import TASK_SCHEMA
 from evograd.opdecl.importing import reference_closure
+from evograd.pipelines.shared.primitives import REGISTRY
 
 TASK_FILE = "task.json"
 DECLARATION_FILE = "declaration.py"
@@ -37,21 +39,29 @@ SKELETON_FILE = "skeleton.py"
 
 #: Library policies: ``auto`` follows the unified frontend (what Inductor hands
 #: to a vendor library is granted), ``none`` grants nothing, or an explicit
-#: comma-separated list of ``evograd.pipelines.shared.primitives`` names.
-LIBRARY_POLICIES = ("auto", "none", "vendor_gemm", "vendor_sdpa", "vendor_gemm,vendor_sdpa")
+#: comma-separated list of ``evograd.pipelines.shared.primitives`` names, sorted.
+LIBRARY_POLICIES = ("auto", "none", *(",".join(names) for n in range(1, len(REGISTRY) + 1)
+                                      for names in combinations(sorted(REGISTRY), n)))
 
 #: Torch functions that the unified frontend leaves to a vendor library
-#: (Inductor's extern mm/bmm/addmm/convolution). ``auto`` grants the trusted GEMM
-#: primitive when one call of the reference reaches one of them, so an agent
-#: writing from scratch has the library access evograd's seed preserves.
+#: (Inductor's extern mm/bmm/addmm). ``auto`` grants the trusted GEMM primitive
+#: when one call of the reference reaches one of them, so an agent writing from
+#: scratch has the library access evograd's seed preserves.
 _CONTRACTIONS = frozenset({
     "linear", "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "_grouped_mm",
-    "grouped_mm", "conv1d", "conv2d", "conv3d", "conv_transpose1d", "conv_transpose2d",
-    "conv_transpose3d", "tensordot",
+    "grouped_mm", "tensordot",
 })
+#: Convolutions, which Inductor leaves to its extern convolution (cuDNN) and the
+#: frontend preserves; ``auto`` grants ``vendor_conv``. conv1d and conv2d, what
+#: it runs: no model reaches a 3-D or transposed convolution.
+_CONVOLUTIONS = frozenset({"conv1d", "conv2d"})
 #: Fused attention, which Inductor likewise leaves to a library (cuDNN) and the
 #: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference reaches it.
 _ATTENTION = frozenset({"scaled_dot_product_attention"})
+#: ``auto``: each primitive, the torch functions that grant it, and what they are.
+_AUTO_GRANTS = (("vendor_conv", _CONVOLUTIONS, "a convolution"),
+                ("vendor_gemm", _CONTRACTIONS, "a contraction"),
+                ("vendor_sdpa", _ATTENTION, "fused attention"))
 
 
 @dataclass(frozen=True)
@@ -158,17 +168,13 @@ def resolve_library(policy: str, calls) -> tuple[tuple[str, ...], str]:
         names = tuple(sorted(policy.split(",")))
         return names, f"requested: {', '.join(names)}"
     reached = set(calls)
-    granted, reasons = [], []
-    if reached & _CONTRACTIONS:
-        granted.append("vendor_gemm")
-        reasons.append("a contraction (vendor_gemm)")
-    if reached & _ATTENTION:
-        granted.append("vendor_sdpa")
-        reasons.append("fused attention (vendor_sdpa)")
-    if not granted:
-        return (), "auto: one call of the reference reaches no contraction or fused attention"
-    return tuple(granted), (
-        f"auto: one call of the reference reaches {' and '.join(reasons)}, which the unified "
+    hits = [(name, what) for name, names, what in _AUTO_GRANTS if reached & names]
+    if not hits:
+        return (), ("auto: one call of the reference reaches no contraction, convolution or "
+                    "fused attention")
+    return tuple(name for name, _ in hits), (
+        f"auto: one call of the reference reaches "
+        f"{' and '.join(f'{what} ({name})' for name, what in hits)}, which the unified "
         "frontend keeps in a vendor library call; the primitive gives agents the same access"
     )
 
@@ -366,7 +372,8 @@ def build_task(
     allowed, library_reason = resolve_library(library, calls)
     library_policy = {"requested": library, "decision": library_reason}
     if library == "auto":
-        library_policy["observed_calls"] = sorted(set(calls) & (_CONTRACTIONS | _ATTENTION))
+        library_policy["observed_calls"] = sorted(
+            set(calls) & (_CONTRACTIONS | _CONVOLUTIONS | _ATTENTION))
     search = _search_correctness(model_obj, observed, corpus, device=device,
                                  state=Path(state) if state else None)
     root.mkdir(parents=True, exist_ok=True)

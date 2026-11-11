@@ -5,22 +5,30 @@ the GH200 rows of l2_share.py (gh096, rows.jsonl) and steps/*.json; output
 report.json beside this file. write_search_set.py reads report.json's rows: per configuration
 its wall time, optimizable share, calls and (a corpus row) dims and dtype, and the merged
 attention-block rows. Rerun 2026-11-11 over the same rows.jsonl to carry the dims and dtype it
-already held; every other field is unchanged.
+already held; every other field is unchanged. Rerun 2026-11-11 again, writing report.json beside
+this file, with convolution kernels counted as library (the vendor_conv primitive): each
+profile row's library and optimizable time are recomputed from its per-kernel times
+("kernels") by l2_share.is_library; only rows with a convolution changed (ConvNeXt
+dwconv_layernorm, Qwen3.5 gdn_in_proj).
 
 share = optimizable ms per call x calls per step / eager step ms, in the execution that decides the
 model's Level 3:
   T3-G (CUDA-graph replay) models: optimizable = non-library kernel time; step = T3-G eager step.
   models whose step is not captured (MegaFold, OLMoE): optimizable = wall time - library kernel
   time (launch overhead counts there); step = eager T3 step.
-Library kernels = GEMM and SDPA. Threshold 1 %.
+Library kernels = GEMM, SDPA and convolution (l2_share.is_library). Threshold 1 %.
 """
 
 import collections
 import json
 import re
 import sys
+from pathlib import Path
+
+from l2_share import is_library
 
 D = "/u/wzhan/.cache/case_rules/l2_share"
+OUT = Path(__file__).with_name("report.json")
 THRESHOLD = 1.0
 NOT_CAPTURED = {"megafold", "olmoe_1b_7b"}
 # MegaFold's eager T3 step: docs/AF3.md section 11, measured 2026-11-06 at 0d1a761 (384 residues).
@@ -48,7 +56,7 @@ def main():
     for r in rows:
         by[(r["model"], r["task"], r["config"])][r["pass"]] = r
     steps = {}
-    for m in {k[0] for k in by}:
+    for m in sorted({k[0] for k in by}):
         if m in EXTERNAL_STEP:
             steps[m] = {"ms": EXTERNAL_STEP[m][0], "regime": "T3 (eager launches)", "src": EXTERNAL_STEP[m][1]}
             continue
@@ -65,7 +73,11 @@ def main():
     for (m, task, config), passes in sorted(by.items()):
         t, p = passes.get("time", {}), passes.get("profile", {})
         calls = t.get("calls") or p.get("calls")
-        wall, lib, nonlib = t.get("wall_ms"), p.get("lib_ms"), p.get("nonlib_ms")
+        if "lib_ms" in p and "kernels" not in p:
+            sys.exit(f"{m} {task} {config}: a profile row without its per-kernel times")
+        kernels = p.get("kernels")
+        lib = None if kernels is None else sum(v for k, v in kernels.items() if is_library(k))
+        wall, nonlib = t.get("wall_ms"), None if kernels is None else sum(kernels.values()) - lib
         if m in NOT_CAPTURED:
             opt = None if wall is None or lib is None else max(wall - lib, 0.0)
         else:
@@ -110,7 +122,7 @@ def main():
         s = r.get("share_pct")
         r["pending"] = r["task"] in PENDING
         r["verdict"] = None if s is None else ("keep" if s >= THRESHOLD else "drop")
-    json.dump({"threshold_pct": THRESHOLD, "steps": steps, "rows": out}, open(f"{D}/report.json", "w"), indent=1)
+    json.dump({"threshold_pct": THRESHOLD, "steps": steps, "rows": out}, open(OUT, "w"), indent=1)
     # Console summary: selected rows.
     print("steps:", {m: (round(v["ms"], 2), v["regime"]) for m, v in sorted(steps.items())})
     print(f"{'model':16} {'task':42} {'cfgs':>4} {'calls':>5} {'wall':>8} {'lib':>8} {'opt':>8} {'share%':>7}  verdict")

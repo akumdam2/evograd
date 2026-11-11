@@ -58,7 +58,8 @@ _DENIED_TORCH_FAMILIES = ("attention", "softmax", "embedding", "layer_norm", "gr
 
 #: Library families denied by the shape of a ``torch`` name (searched in its
 #: lower case), keyed by how the task statement names them: every cuDNN/MIOpen/
-#: oneDNN convolution entry point, and the cuDNN recurrent layers.
+#: oneDNN convolution entry point (granted convolutions go through
+#: ``vendor_conv``), and the cuDNN recurrent layers.
 _DENIED_TORCH_PATTERNS = {
     "conv1d/2d/3d, conv_tbc, conv_transpose*, *convolution*": re.compile(r"conv(\d|_t|olution)"),
     "lstm, gru, rnn_tanh, rnn_relu (and their cells)":
@@ -158,29 +159,41 @@ VENDOR_SDPA_SOURCE = '''
 # Fixed, outside the evolve block, and checked byte-for-byte against
 # evograd.pipelines.shared.primitives. Evolution may call it; it may not
 # change it. The fused-attention kernel eager PyTorch itself runs, chosen the
-# way its dispatcher chooses it: cuDNN in a training configuration, flash
-# under torch.use_deterministic_algorithms (cuDNN's backward is not
-# reproducible, so the deterministic dispatcher excludes it). Verification
-# runs deterministic and compares flash with flash; timing runs as training
-# does and compares cuDNN with cuDNN.
+# way its dispatcher chooses it. Half precision: cuDNN in a training
+# configuration, flash under torch.use_deterministic_algorithms (cuDNN's
+# backward is not reproducible, so the deterministic dispatcher excludes it).
+# Verification runs deterministic and compares flash with flash; timing runs as
+# training does and compares cuDNN with cuDNN. float32, which neither flash nor
+# cuDNN takes: memory-efficient attention in both modes (its backward has a
+# deterministic mode of its own).
 
-def _vendor_sdpa_deterministic():
-    return torch.are_deterministic_algorithms_enabled()
+def _vendor_sdpa_backend(q):
+    if q.dtype == torch.float32:
+        return "efficient"
+    return "flash" if torch.are_deterministic_algorithms_enabled() else "cudnn"
 
 
 def vendor_sdpa_forward(q, k, v, is_causal=True, scale=None):
     """Fused scaled-dot-product attention, forward.
 
     ``q`` is ``[B, HQ, T, D]``; ``k`` and ``v`` are ``[B, HK, T, D]`` with
-    ``HK`` dividing ``HQ`` (grouped-query attention is the kernel's own). No
-    mask, no dropout. Returns ``(out, logsumexp)``; ``logsumexp`` is what the
-    backward needs and is the caller's to save (its layout is the backend's;
-    pass it back unchanged). ``no_grad`` because the pair differentiates itself.
+    ``HK`` dividing ``HQ`` (grouped-query attention is the kernel's own; float32
+    needs ``HK == HQ``). No mask, no dropout. Returns ``(out, logsumexp)``;
+    ``logsumexp`` is what the backward needs and is the caller's to save (its
+    layout is the backend's; pass it back unchanged). ``no_grad`` because the
+    pair differentiates itself.
     """
     if q.dim() != 4 or k.dim() != 4 or v.dim() != 4:
         raise ValueError("vendor_sdpa_forward takes [B, H, T, D] tensors")
+    backend = _vendor_sdpa_backend(q)
+    if backend == "efficient" and not q.shape[1] == k.shape[1] == v.shape[1]:
+        raise ValueError("vendor_sdpa_forward: float32 attention needs as many key/value "
+                         "heads as query heads")
     with torch.no_grad():
-        if _vendor_sdpa_deterministic():
+        if backend == "efficient":
+            out, logsumexp, *_ = torch.ops.aten._scaled_dot_product_efficient_attention(
+                q, k, v, None, True, 0.0, bool(is_causal), scale=scale)
+        elif backend == "flash":
             out, logsumexp, *_ = torch.ops.aten._scaled_dot_product_flash_attention(
                 q, k, v, 0.0, bool(is_causal), False, scale=scale)
         else:
@@ -201,8 +214,13 @@ def vendor_sdpa_backward(dout, q, k, v, out, logsumexp, is_causal=True, scale=No
     # No dropout, no mask, dense [B, H, T, D] inputs: philox state, attn_bias
     # and the nested-layout cum_seq tensors stay undefined (None). A defined
     # cum_seq tensor would select the ragged layout.
+    backend = _vendor_sdpa_backend(q)
     with torch.no_grad():
-        if _vendor_sdpa_deterministic():
+        if backend == "efficient":
+            dq, dk, dv, _ = torch.ops.aten._scaled_dot_product_efficient_attention_backward(
+                dout, q, k, v, None, out, logsumexp, None, None, 0.0, [True, True, True, False],
+                bool(is_causal), scale=scale)
+        elif backend == "flash":
             dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(
                 dout, q, k, v, out, logsumexp, None, None, q.shape[2], k.shape[2], 0.0,
                 bool(is_causal), None, None, scale=scale)
@@ -211,6 +229,58 @@ def vendor_sdpa_backward(dout, q, k, v, out, logsumexp, is_causal=True, scale=No
                 dout, q, k, v, out, logsumexp, None, None, None, None, None,
                 q.shape[2], k.shape[2], 0.0, bool(is_causal), scale=scale)
     return dq, dk, dv
+'''
+
+
+VENDOR_CONV_SOURCE = '''
+
+# ── trusted primitive: vendor_conv ───────────────────────────────────────────
+# Fixed, outside the evolve block, and checked byte-for-byte against
+# evograd.pipelines.shared.primitives. Evolution may call it; it may not
+# change it. The convolution eager PyTorch itself runs: the same aten entry
+# points autograd calls for F.conv1d/F.conv2d, so the same dispatcher picks the
+# kernel (cuDNN, or PyTorch's own depthwise kernels where it prefers them) under
+# the same global cuDNN settings, deterministic or not.
+
+def _vendor_conv_args(x, weight, stride, padding):
+    if x.dim() not in (3, 4) or weight.dim() != x.dim():
+        raise ValueError(f"vendor_conv takes conv1d [N, C, L] or conv2d [N, C, H, W] inputs; "
+                         f"got {tuple(x.shape)} and weight {tuple(weight.shape)}")
+    n = x.dim() - 2
+    stride, padding = ([v] * n if isinstance(v, int) else list(v) for v in (stride, padding))
+    if len(stride) != n or len(padding) != n:
+        raise ValueError(f"vendor_conv: stride {stride} and padding {padding} need {n} entries")
+    return stride, padding, [1] * n, [0] * n
+
+
+def vendor_conv_forward(x, weight, stride=1, padding=0, groups=1):
+    """Convolution forward, no bias (adding it is the caller's work).
+
+    ``x`` is ``[N, C, L]`` (conv1d) or ``[N, C, H, W]`` (conv2d) and ``weight``
+    ``[K, C // groups, *kernel]``; ``stride`` and ``padding`` are ints or one
+    int per spatial dimension (zero padding, no dilation). The output's memory
+    format is the dispatcher's (channels-last in, channels-last out). ``no_grad``
+    because the pair differentiates itself.
+    """
+    stride, padding, dilation, output_padding = _vendor_conv_args(x, weight, stride, padding)
+    with torch.no_grad():
+        return torch.ops.aten.convolution(x, weight, None, stride, padding, dilation, False,
+                                          output_padding, groups)
+
+
+def vendor_conv_backward(dout, x, weight, stride=1, padding=0, groups=1,
+                         input_grad=True, weight_grad=True):
+    """Convolution backward: ``(dx, dweight)`` for the forward's ``x`` and
+    ``weight`` and the gradient ``dout`` of its output, each ``None`` when not
+    asked for. A bias gradient (``dout`` summed over all but the channel
+    dimension) is the caller's work.
+    """
+    stride, padding, dilation, output_padding = _vendor_conv_args(x, weight, stride, padding)
+    with torch.no_grad():
+        dx, dweight, _ = torch.ops.aten.convolution_backward(
+            dout, x, weight, None, stride, padding, dilation, False, output_padding, groups,
+            [bool(input_grad), bool(weight_grad), False])
+    return dx, dweight
 '''
 
 
@@ -224,15 +294,28 @@ REGISTRY: dict[str, TrustedPrimitive] = {
     ),
     "vendor_sdpa": TrustedPrimitive(
         name="vendor_sdpa",
-        symbols=("_vendor_sdpa_deterministic", "vendor_sdpa_forward", "vendor_sdpa_backward"),
+        symbols=("_vendor_sdpa_backend", "vendor_sdpa_forward", "vendor_sdpa_backward"),
         source=VENDOR_SDPA_SOURCE,
         uses=("_scaled_dot_product_cudnn_attention",
               "_scaled_dot_product_cudnn_attention_backward",
               "_scaled_dot_product_flash_attention",
-              "_scaled_dot_product_flash_attention_backward"),
-        summary=("fused causal (grouped-query) attention through the vendor kernel eager runs "
-                 "(cuDNN; flash under deterministic algorithms), as an explicit "
-                 "forward/backward pair, no autograd"),
+              "_scaled_dot_product_flash_attention_backward",
+              "_scaled_dot_product_efficient_attention",
+              "_scaled_dot_product_efficient_attention_backward"),
+        summary=("fused (causal or full, grouped-query) attention through the vendor kernel "
+                 "eager runs (half precision: cuDNN, flash under deterministic algorithms; "
+                 "float32: memory-efficient attention), as an explicit forward/backward pair, "
+                 "no autograd"),
+    ),
+    "vendor_conv": TrustedPrimitive(
+        name="vendor_conv",
+        symbols=("_vendor_conv_args", "vendor_conv_forward", "vendor_conv_backward"),
+        source=VENDOR_CONV_SOURCE,
+        uses=("convolution", "convolution_backward"),
+        summary=("conv1d/conv2d (stride, zero padding, groups; no bias, no dilation) through "
+                 "the kernel eager runs (cuDNN, or PyTorch's depthwise kernels where its "
+                 "dispatcher prefers them), as a forward and a backward giving the input and "
+                 "weight gradients, no autograd"),
     ),
 }
 
@@ -269,8 +352,8 @@ def catalogue(allowed) -> list[dict[str, str]]:
 
 
 #: What a prompt says a grant reaches (TASK.md and the evolve system message).
-GRANT_SCOPE = ("It is the only way to reach a vendor contraction or fused attention: "
-               "every other contraction must be written in Triton (`tl.dot`).")
+GRANT_SCOPE = ("It is the only way to reach a vendor contraction, convolution or fused "
+               "attention: every other contraction must be written in Triton (`tl.dot`).")
 
 
 def describe_grant(allowed, where: str) -> list[str]:
@@ -302,7 +385,9 @@ def describe_rules(where: str) -> str:
         "`torch.bfloat16` are values and stay allowed.",
     )
     return (f"- {where} is checked statically.\n"
-            "  Rejected, whether called, read or imported, and under any name bound to it\n"
+            "  Rejected whatever is granted (a granted library primitive is the only route to\n"
+            "  the vendor GEMM, convolution and attention kernels below), whether called, read\n"
+            "  or imported, and under any name bound to it\n"
             "  (`from torch.X import Y` counts as `torch.X.Y`; after `import torch.X as Y`\n"
             "  or `Y = torch.X`, `Y.Z` counts as `torch.X.Z`):\n"
             + "\n".join(f"  - {rule}" for rule in rules))
@@ -585,10 +670,12 @@ def check_source(source: str, *, allowed=()) -> dict[str, Any]:
             + "; ".join(sorted(set(violations))[:8])
         )
 
-    # 4. Ungranted calls to a trusted symbol name, anywhere.
+    # 4. Ungranted calls to a trusted symbol name, anywhere; the granted ones the
+    #    artifact makes (not the primitives' calls to their own helpers) are counted.
     used = {symbol: 0 for spec in REGISTRY.values() for symbol in spec.symbols}
+    internal = {id(n) for definition in definitions.values() for n in ast.walk(definition)}
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if not isinstance(node, ast.Call) or id(node) in internal:
             continue
         path = _dotted(node.func)
         if path is None or len(path) != 1:

@@ -12,8 +12,9 @@ snapshots) and the measurements committed beside this script, nothing else:
   every multi-configuration L1 task (``l1_timing.py``, GH200, 2026-11-10), found by
   task, dims and dtype;
 * ``l2_share/report.json``: per L2 configuration its eager wall time and its
-  optimizable share of the eager training step (``l2_share/``, GH200, 2026-11-10),
-  with the calls per step and dims it measured.
+  optimizable share of the eager training step (``l2_share/``, GH200, 2026-11-10;
+  convolution kernels counted as library since 2026-11-11), with the calls per step
+  and dims it measured.
 
 The rules are :data:`RULES`, applied by :func:`select`. An observed case the inputs
 do not cover, or cover with other dims, dtype or (outside :data:`RESCALED`) calls,
@@ -38,7 +39,8 @@ L1_TIMING = HERE / "l1_timing.json"
 L2_REPORT = HERE / "l2_share" / "report.json"
 SCHEMA = "evograd-search-set/1"
 
-VENDOR = ("causal_gqa_attention", "linear", "linear_no_bias")
+#: L1 tasks that are one vendor library call (E-2): GEMM, SDPA, cuDNN convolution.
+VENDOR = ("causal_gqa_attention", "linear", "linear_no_bias", "spatial_conv2d")
 SHARE_MIN_PCT = 1.0
 #: Removed L2 tasks: note.
 REMOVED = {"megafold_layernorm_linear": (
@@ -91,8 +93,10 @@ RESCALED = {
 }
 
 RULES = (
-    "L1: linear, linear_no_bias and causal_gqa_attention are vendor primitives (GEMM, SDPA); "
-    "their cases are not searched (vendor).",
+    "L1 (E-2): a task that is entirely one vendor library call is inventory only: linear and "
+    "linear_no_bias (GEMM), causal_gqa_attention (SDPA) and spatial_conv2d (cuDNN convolution, "
+    "since 2026-11-11); their cases are not searched (vendor). Inside larger cases the same "
+    "kernels are granted to candidates (vendor_gemm, vendor_sdpa, vendor_conv).",
     "L1: per (model, task) the searched configuration is the one with the largest eager time "
     "share per step, forward+backward ms per call (l1_timing.json, GH200, order 303) x calls "
     "per step; a single-configuration task searches its one case. The others: "
@@ -114,8 +118,8 @@ RULES = (
     "among the configurations not nested_in a searched case; the others: not_time_max_config.",
     "L2: a searched configuration's optimizable share of the eager step (L2-5: non-library "
     "kernel ms, or wall minus library ms where the step is not CUDA-graph captured, x calls / "
-    "eager step ms; l2_share/report.json) must be at least 1%; below it: "
-    "optimizable_share_below_1pct.",
+    "eager step ms; library = the GEMM, SDPA and convolution kernels the vendor primitives "
+    "run; l2_share/report.json) must be at least 1%; below it: optimizable_share_below_1pct.",
     "L2 exceptions, searched whatever their share (reason null, note says why): every swiglu "
     "MLP (qwen3_swiglu_mlp, llama3_swiglu_mlp, qwen3_5_swiglu_mlp, qwen2_vl_2b_text_mlp) as "
     "the shape-generalisation ablation group; torchrec_dlrm_dlrm_interaction, which keeps "

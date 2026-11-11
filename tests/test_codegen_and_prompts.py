@@ -310,10 +310,10 @@ class TestPromptRendering(unittest.TestCase):
         gemm = render_pair_rules(op, ("vendor_gemm",))
         self.assertIn(REGISTRY["vendor_gemm"].source.strip(), gemm)
         self.assertNotIn("vendor_sdpa", gemm)
-        both = render_pair_rules(op, ("vendor_sdpa", "vendor_gemm"))
+        every = render_pair_rules(op, tuple(REGISTRY))
         for spec in REGISTRY.values():
-            self.assertIn(spec.source.strip(), both)
-        for text in (none, gemm, both):  # nothing granted is called forbidden
+            self.assertIn(spec.source.strip(), every)
+        for text in (none, gemm, every):  # nothing granted is called forbidden
             self.assertNotIn("forbidden", text)
 
     def test_pipeline_a_prompts_carry_the_reference_source_and_the_graph(self):

@@ -27,8 +27,9 @@ writer = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(writer)
 DATA = search_set.load()
 
-#: Decided 2026-11-10: vendor primitives (GEMM, SDPA) are not searched.
-VENDOR_TASKS = {"causal_gqa_attention", "linear", "linear_no_bias"}
+#: Decided 2026-11-10: vendor primitives (GEMM, SDPA) are not searched; 2026-11-11: nor
+#: cuDNN convolution (spatial_conv2d).
+VENDOR_TASKS = {"causal_gqa_attention", "linear", "linear_no_bias", "spatial_conv2d"}
 #: (model, task) searched whatever their optimizable share, and what their note says.
 ABLATION = {("qwen3_0_6b", "qwen3_swiglu_mlp"), ("llama_3_2_1b", "llama3_swiglu_mlp"),
             ("qwen3_5_4b", "qwen3_5_swiglu_mlp"), ("qwen2_vl_2b", "qwen2_vl_2b_text_mlp")}
@@ -141,6 +142,17 @@ def test_the_two_identical_configurations():
                      ("olmoe_1b_7b", "rope", "qwen3_0_6b", "rope")}
     for model, task in (("llama_3_2_1b", "rmsnorm"), ("olmoe_1b_7b", "rope")):
         assert not any(c["searched"] for c in _task(model, task).values()), (model, task)
+
+
+def test_a_convolution_with_more_around_it_stays_searched():
+    """2026-11-11: causal_conv1d is conv + slice + SiLU, searched with the conv granted;
+    the L2 cases holding a convolution keep their share with it counted as library."""
+    (conv1d,) = _task("qwen3_5_4b", "causal_conv1d").values()
+    assert conv1d["searched"]
+    for model, task in (("qwen3_5_4b", "qwen3_5_gdn_in_proj"),
+                        ("convnextv2_tiny", "convnextv2_tiny_dwconv_layernorm")):
+        (case,) = [c for c in _task(model, task).values() if c["searched"]]
+        assert 1.0 <= case["evidence"]["optimizable_share_pct"] < 3.0, (model, task)
 
 
 def test_below_one_percent():

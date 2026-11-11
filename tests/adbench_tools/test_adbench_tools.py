@@ -448,13 +448,18 @@ def test_auto_library_follows_what_the_frontend_preserves(small_task):
 
     assert resolve_library("auto", ["linear", "view"])[0] == ("vendor_gemm",)
     assert resolve_library("auto", ["_grouped_mm"])[0] == ("vendor_gemm",)
-    assert resolve_library("auto", ["conv2d"])[0] == ("vendor_gemm",)
+    # A convolution is cuDNN's (Inductor's extern convolution), not a GEMM.
+    assert resolve_library("auto", ["conv2d"])[0] == ("vendor_conv",)
+    assert resolve_library("auto", ["conv1d", "linear", "silu"])[0] == ("vendor_conv", "vendor_gemm")
     assert resolve_library("auto", ["scaled_dot_product_attention"])[0] == ("vendor_sdpa",)
     assert resolve_library("auto", ["matmul", "scaled_dot_product_attention"])[0] == (
         "vendor_gemm", "vendor_sdpa")
     assert resolve_library("auto", ["mul", "rsqrt"])[0] == ()
     assert resolve_library("vendor_gemm,vendor_sdpa", [])[0] == ("vendor_gemm", "vendor_sdpa")
+    assert resolve_library("vendor_conv", ["linear"])[0] == ("vendor_conv",)
     assert resolve_library("none", ["linear", "scaled_dot_product_attention"])[0] == ()
+    with pytest.raises(ValueError):
+        resolve_library("vendor_blas", [])
     # The pack records what the trace of its reference reached.
     assert small_task.spec["library_policy"]["observed_calls"] == ["linear"]
     assert small_task.allowed_primitives == ("vendor_gemm",)
@@ -473,6 +478,17 @@ REACHED = (
     ("qwen3_0_6b", "qwen3_attention_block/attention_block", "scaled_dot_product_attention",
      ("vendor_gemm", "vendor_sdpa")),
     ("qwen3_0_6b", "qwen3_lm_head_ce/flce", "linear", ("vendor_gemm",)),
+    # Convolutions: the L1 primitives and the L2 cases that contain one.
+    ("qwen3_5_4b", "causal_conv1d/gdn_conv1d", "conv1d", ("vendor_conv",)),
+    ("qwen3_5_4b", "qwen3_5_gdn_in_proj/gdn_in_proj", "conv1d", ("vendor_conv", "vendor_gemm")),
+    ("convnextv2_tiny", "spatial_conv2d/convnextv2.encoder.stages.2.layers.dwconv", "conv2d",
+     ("vendor_conv",)),
+    ("convnextv2_tiny", "convnextv2_tiny_dwconv_layernorm/convnextv2.encoder.stages.2.layers",
+     "conv2d", ("vendor_conv",)),
+    ("dit_s_2", "spatial_conv2d/patch", "conv2d", ("vendor_conv",)),
+    # float32 attention (eager runs memory-efficient attention): vendor_sdpa covers it.
+    ("dit_s_2", "dit_s_2_dit_attention/blocks.attention", "scaled_dot_product_attention",
+     ("vendor_gemm", "vendor_sdpa")),
 )
 
 
