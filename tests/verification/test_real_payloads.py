@@ -370,5 +370,32 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         self.assertIsNone(native.error)
 
 
+class SnapshotBindingTests(unittest.TestCase):
+    """A run opens only a corpus captured at the model's tracked harvest snapshot."""
+
+    def open(self, identity, tracked):
+        from types import SimpleNamespace
+
+        from evograd.verification.integrations.gates import open_run
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = CorpusWriter(Path(tmp) / "corpus").finish(
+                identity={"name": "toy", **identity}, splits={}, coverage={"complete": True})
+            with mock.patch("evograd.verification.integrations.base.observed_cases", lambda model: ()), \
+                    mock.patch("evograd.benchmark.topdown.load_snapshot",
+                               lambda name: {"snapshot_hash": tracked}):
+                return open_run(SimpleNamespace(name="toy"), {}, manifest, Path(tmp) / "out", device="cpu")
+
+    def test_a_corpus_of_the_tracked_snapshot_opens(self):
+        run = self.open({"snapshot_hash": "aaaa"}, "aaaa")
+        self.assertEqual(run.corpus.identity["snapshot_hash"], "aaaa")
+
+    def test_a_corpus_of_another_snapshot_is_refused_with_both_hashes(self):
+        with self.assertRaisesRegex(CorpusError, r"(?s)snapshot_hash old\b.*snapshot_hash new\b.*Recapture"):
+            self.open({"snapshot_hash": "old"}, "new")
+        with self.assertRaisesRegex(CorpusError, r"snapshot_hash None\b.*snapshot_hash new\b"):
+            self.open({}, "new")
+
+
 if __name__ == "__main__":
     unittest.main()
