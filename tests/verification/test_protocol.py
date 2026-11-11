@@ -115,7 +115,8 @@ class Evaluate(unittest.TestCase):
         root = Path(cls.tmp.name)
         cls.model = T.model()
         with T.toy_environment():
-            cls.manifest = base.capture(cls.model, root / "corpus", device="cpu", log=lambda *a: None)
+            cls.manifest = base.capture(cls.model, root / "corpus", selection="all", device="cpu",
+                                        log=lambda *a: None)
         cls.programs = {}
         for name, source in (("good", T.CANDIDATE.format(scale=1.0)),
                              ("fault", T.CANDIDATE.format(scale=1.05)), ("raises", RAISES),

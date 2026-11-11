@@ -2,6 +2,9 @@
 ``python -m evograd.verification.integrations <model> {capture,fidelity,verify}``
 (or ``python -m evograd.verification.integrations.<package> ...``).
 
+``capture --cases benchmark`` (the default) records the model's benchmark rows
+only; ``--cases all`` every observed case.
+
 ``verify`` exits 0 when every candidate is accepted, 1 when one is not, and 3
 when ``--deadline-min`` stopped it: rerun the same command to continue."""
 
@@ -12,11 +15,18 @@ import json
 import time
 from pathlib import Path
 
+from .base import CASE_SELECTIONS
+
 
 def main(model, argv=None) -> int:
     parser = argparse.ArgumentParser(prog=f"evograd.verification.integrations.{model.name}")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("capture", help="record the real-payload corpus").add_argument("--out", required=True)
+    p = sub.add_parser("capture", help="record the real-payload corpus")
+    p.add_argument("--out", required=True)
+    p.add_argument("--cases", choices=CASE_SELECTIONS, default="benchmark",
+                   help="which observed cases get payloads: benchmark (default), the model's "
+                        "benchmark rows in the search set (searched plus identical_config_of); "
+                        "all, every observed case")
     p = sub.add_parser("fidelity", help="replay every payload against the model reference")
     p.add_argument("--corpus", required=True)
     p.add_argument("--out", required=True)
@@ -45,7 +55,8 @@ def main(model, argv=None) -> int:
     if args.cmd == "capture":
         from .base import capture
 
-        print(json.dumps({"manifest": str(capture(model, args.out, log=log))}))
+        manifest = capture(model, args.out, selection=args.cases, log=log)
+        print(json.dumps({"manifest": str(manifest)}))
         return 0
     if args.cmd == "fidelity":
         from .base import replay_fidelity

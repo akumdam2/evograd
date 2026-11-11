@@ -10,7 +10,10 @@ model and live here; the gates are :mod:`.gates`.
 Cases are a model's observed benchmark cases (its ``<model>_observed`` suite).
 A recorded call belongs to the case of its task whose declared shapes and
 dtypes its arguments bind; calls per training step come from the harvest
-snapshot. Nothing here edits a task or a snapshot.
+snapshot. A capture records the payloads of the cases its selection picks
+(:func:`recorded_cases`: by default the model's benchmark rows in the search
+set), and its corpus identity states that selection. Nothing here edits a task
+or a snapshot.
 
 The harvest that writes that snapshot, for every model but MegaFold, runs the
 capture's own first step (:func:`real_run`: the setup :func:`capture` shares,
@@ -30,7 +33,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Collection, Iterable, Mapping, Sequence
 
 ORDERS = (101, 202, 303, 404)
 CALIBRATION_ORDERS = (101, 202)
@@ -558,8 +561,14 @@ def require_harvested_run(model: Model, identity: Mapping[str, Any]) -> None:
 # ── payloads ─────────────────────────────────────────────────────────────────
 
 
-def record_step(writer, invocations: Iterable[dict[str, Any]], batch: dict[str, Any]) -> int:
-    """Write every invocation of one recorded step as payloads; returns how many."""
+def record_step(writer, invocations: Iterable[dict[str, Any]], batch: dict[str, Any], *,
+                case_ids: Collection[str] | None = None) -> int:
+    """Write every invocation of one recorded step (of ``case_ids`` only, when
+    given) as payloads; returns how many were written.
+
+    ``index_in_step`` counts every invocation, written or not, so a call's
+    record is the same whichever cases a capture records.
+    """
     import torch
 
     from evograd.verification.common.tensors import tensor_digest
@@ -567,7 +576,9 @@ def record_step(writer, invocations: Iterable[dict[str, Any]], batch: dict[str, 
 
     writer.new_step()
     count = 0
-    for inv in invocations:
+    for index, inv in enumerate(invocations):
+        if case_ids is not None and inv["case_id"] not in case_ids:
+            continue
         pid = f"o{batch['order']}/{inv['case_id']}/{inv['call']['path']}"
         args = {name: writer.put(value) if torch.is_tensor(value) else {"scalar": value}
                 for name, value in inv["args"].items()}
@@ -581,7 +592,7 @@ def record_step(writer, invocations: Iterable[dict[str, Any]], batch: dict[str, 
                 storages.setdefault(rec["storage"], []).append(name)
         writer.add_payload({
             "payload_id": pid, "case_id": inv["case_id"], "task": inv["task"], "level": inv["level"],
-            "batch": dict(batch), "call": {**inv["call"], "index_in_step": count},
+            "batch": dict(batch), "call": {**inv["call"], "index_in_step": index},
             "args": args, "cotangents": cots, "cotangent_stats": stats,
             "aliases": [sorted(names) for names in storages.values() if len(names) > 1],
             # A recorder may hand the summary over instead of the output (MegaFold's
@@ -640,7 +651,55 @@ def coverage(cases: Sequence[Case], payloads: list[dict[str, Any]]) -> dict[str,
 # ── capture driver ───────────────────────────────────────────────────────────
 
 
-def _capture_identity(model: Model, cases, batch_identity, state, settings) -> dict[str, Any]:
+#: What a capture records (``--cases``). ``benchmark``, the default (user decision
+#: 2026-11-11): the model's benchmark rows, the only cases an evaluation verifies
+#: or times; every other observed case stays in the snapshot without payloads.
+#: ``all``: every observed case.
+CASE_SELECTIONS = ("benchmark", "all")
+BENCHMARK_CASES = ("the model's benchmark rows in the search set "
+                   "(evograd.benchmark.search_set.evaluated): its searched cases plus its "
+                   "identical_config_of cases")
+
+
+def recorded_cases(model: Model, cases: Sequence[Case],
+                   selection: str) -> tuple[tuple[Case, ...], dict[str, Any]]:
+    """``(the cases a capture records, its case_selection record)``, among ``cases``.
+
+    ``benchmark`` needs the model's search-set entry, generated from the tracked
+    snapshot (the same ``snapshot_hash``), whose rows are all observed cases.
+    The record names the rule, the search set's content and the observed cases
+    left out, and enters the corpus identity.
+    """
+    if selection == "all":
+        return tuple(cases), {"rule": "all", "definition": "every observed case"}
+    if selection != "benchmark":
+        raise ValueError(f"case selection {selection!r} is not one of {CASE_SELECTIONS}")
+    from evograd.benchmark import search_set
+    from evograd.benchmark.topdown import load_snapshot
+
+    entry = search_set.entry(model.name)
+    if entry is None:
+        raise KeyError(f"{model.name} has no entry in the search set {search_set.PATH}, so it has "
+                       "no benchmark rows; capture it with --cases all")
+    tracked = load_snapshot(model.name).get("snapshot_hash")
+    if entry["snapshot_hash"] != tracked:
+        raise ValueError(f"{model.name}: the search set was generated from snapshot_hash "
+                         f"{entry['snapshot_hash']}, not the tracked {tracked}; regenerate it: "
+                         "scripts/adbench_selection/write_search_set.py")
+    rows = search_set.evaluated(model.name)
+    observed = {c.case_id for c in cases}
+    if set(rows) - observed:
+        raise ValueError(f"{model.name}: benchmark rows {sorted(set(rows) - observed)} are not "
+                         "observed cases; regenerate the search set")
+    return tuple(c for c in cases if c.case_id in rows), {
+        "rule": "benchmark", "definition": BENCHMARK_CASES,
+        "search_set": {"schema": search_set.SCHEMA, "sha256": sha_file(search_set.PATH),
+                       "snapshot_hash": entry["snapshot_hash"]},
+        "not_recorded": sorted(observed - set(rows))}
+
+
+def _capture_identity(model: Model, cases, selection, batch_identity, state,
+                      settings) -> dict[str, Any]:
     import importlib
 
     import torch
@@ -651,6 +710,7 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
 
     return {"name": f"{model.name}-real-training-payloads", "suite": model.suite,
             "snapshot_hash": load_snapshot(model.name).get("snapshot_hash"),
+            "case_selection": selection,
             "cases": {c.case_id: {"task": c.task, "level": c.level, "dims": dict(c.workload.dims),
                                   "dtype": c.workload.dtype, "frequency": c.frequency,
                                   "recorded": c.calls_recorded} for c in cases},
@@ -670,12 +730,17 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
                 "sha256": sha_file(importlib.import_module(model.live_capture.__module__).__file__)}}
 
 
-def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: str = "cuda") -> Path:
+def capture(model: Model, out: str | Path, *, orders=ORDERS, selection: str = "benchmark",
+            log=print, device: str = "cuda") -> Path:
     """Capture the corpus: one fresh initial model per data order, fidelity per order.
 
-    Refused before anything is written unless the tracked snapshot was
-    harvested on this run (:func:`require_harvested_run`; ``orders`` must hold
-    :data:`HARVEST_ORDER`). The setup is the harvest's (:func:`prepare_run`).
+    Records the payloads of the cases ``selection`` picks (:func:`recorded_cases`;
+    by default the model's benchmark rows). Every recorded call still binds
+    exactly one observed case, and every recorded case must receive its calls
+    per step in every order. Refused before anything is written unless the
+    tracked snapshot was harvested on this run (:func:`require_harvested_run`;
+    ``orders`` must hold :data:`HARVEST_ORDER`). The setup is the harvest's
+    (:func:`prepare_run`).
     """
     import gc
 
@@ -688,7 +753,9 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: 
     if HARVEST_ORDER not in orders:
         raise ValueError(f"orders {tuple(orders)} omit {HARVEST_ORDER}, the order the snapshot's "
                          "harvest ran; the capture checks its run against that order")
-    cases = observed_cases(model)
+    observed = observed_cases(model)
+    cases, chosen = recorded_cases(model, observed, selection)
+    log(f"recording {len(cases)} of {len(observed)} observed cases ({selection})")
     settings, workload, batches, batch_identity = prepare_run(model, orders, device=device)
     objective = objective_of(model)
     if hasattr(objective, "bind"):
@@ -735,7 +802,8 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: 
             raise RuntimeError(f"order {order}: instrumentation changed the step: {fidelity[str(order)]}")
         del loss, output
         batch = {"order": order, "sha256": batch_identity["batches"][str(order)][objective.batch_key]}
-        count = record_step(writer, model.invocations(recorder, net, cases), batch)
+        count = record_step(writer, model.invocations(recorder, net, observed), batch,
+                            case_ids={c.case_id for c in cases})
         log(f"order {order}: {count} payloads, {time.time() - t0:.1f}s, "
             f"{writer.bytes_written / 2**30:.1f} GiB written")
         del recorder, net
@@ -747,7 +815,7 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: 
     if not covered["complete"]:
         raise RuntimeError(f"incomplete capture: {covered['problems'][:5]} {covered['unmapped_cases']}")
     frozen = splits(payloads)
-    identity = _capture_identity(model, cases, batch_identity, state, settings)
+    identity = _capture_identity(model, cases, chosen, batch_identity, state, settings)
     return writer.finish(identity=identity, splits=frozen, coverage=covered,
                          extra={"capture_fidelity": fidelity,
                                 "split_rules": {

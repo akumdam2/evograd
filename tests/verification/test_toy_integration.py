@@ -39,7 +39,8 @@ class ToyIntegration(unittest.TestCase):
         root = Path(cls.tmp.name)
         cls.model = T.model()
         with T.toy_environment():
-            cls.manifest = base.capture(cls.model, root / "corpus", device="cpu", log=lambda *a: None)
+            cls.manifest = base.capture(cls.model, root / "corpus", selection="all", device="cpu",
+                                        log=lambda *a: None)
         cls.programs = {}
         for scale in (1.0, 1.05):
             path = root / f"candidate_{scale}.py"
@@ -88,7 +89,8 @@ class ToyIntegration(unittest.TestCase):
                         "evograd.benchmark.topdown.load_snapshot",
                         lambda name, r=recorded: {"snapshot_hash": "toy", "run": r}), \
                         self.assertRaisesRegex(RuntimeError, "harvest"):
-                    base.capture(self.model, root / label, device="cpu", log=lambda *a: None)
+                    base.capture(self.model, root / label, selection="all", device="cpu",
+                                 log=lambda *a: None)
                 self.assertFalse((root / label).exists())
             # The settings a run executed under are recorded, not compared.
             identity = {**run, "execution": {}}

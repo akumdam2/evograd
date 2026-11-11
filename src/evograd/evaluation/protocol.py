@@ -575,7 +575,9 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                      "tier2_inputs": dict(TIER2_INPUTS),
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
-                              "frequency": c.frequency, "recorded": c.calls_recorded,
+                              "frequency": c.frequency,
+                              "recorded": (c.calls_recorded if run.corpus.records_case(c.case_id)
+                                           else 0),
                               **search_set.row_tag(model.name, c.case_id),
                               "submitted": c.case_id in candidates}
                   for c in observed_cases(model)},

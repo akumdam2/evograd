@@ -100,7 +100,10 @@ case of every model with `searched` and, when not, one reason (`vendor`,
 `optimizable_share_below_1pct`, `removed`); its `rules` field states the rules
 and each model's `snapshot_hash` pins it to the tracked snapshot
 (`tests/test_search_set.py`). `search_set.py` is its stdlib reader; the
-launchers, `candidates/bench.py` and the evaluation's summary read it.
+launchers, `candidates/bench.py`, the evaluation's summary and the payload
+capture read it: a capture records payloads for the model's benchmark rows only
+unless told `--cases all` (`verification/integrations/base.py`,
+`recorded_cases`).
 
 Regenerate it after any snapshot or measurement change, from the repository
 root, CPU only (about 15 s). The exports reach every command, so an activated
@@ -117,7 +120,8 @@ Commit `search_set.json` with the snapshots it was generated from. The
 generator stops, rather than reuse or rescale a measurement, when a case has no
 measurement of its task, dims and dtype, or (outside the call-count changes
 `RESCALED` lists) other calls per step: measure it (`l1_timing.py`,
-`l2_share/`), commit the result beside the script, then regenerate.
+`l2_share/`, which read its payloads, so from a corpus captured with `--cases
+all`), commit the result beside the script, then regenerate.
 
 Registry counts must be queried from `evograd.ops.PRIMITIVES`,
 `evograd.benchmark.TASKS`, `evograd.benchmark.WORKLOADS`, and

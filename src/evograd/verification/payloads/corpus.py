@@ -21,7 +21,9 @@ its storage are dropped).
 
 The manifest (``manifest.json``) holds identity, the storage index, every
 payload record, the frozen splits and the coverage, and its own hash. Once
-written it is never rewritten.
+written it is never rewritten. A model capture's identity lists the cases it
+recorded (``cases``) and the rule that chose them (``case_selection``); a
+request for any other case is refused (:meth:`Corpus.require_case`).
 """
 
 from __future__ import annotations
@@ -295,7 +297,33 @@ class Corpus:
             raise CorpusError(f"corpus {self.corpus_id} has no split {name!r}; "
                               f"splits: {sorted(self.data['splits'])}") from None
 
+    def records_case(self, case_id: str) -> bool:
+        """Whether the corpus records ``case_id``: a case its identity's ``cases`` lists.
+
+        A capture lists the cases it recorded (``case_selection`` says which rule
+        chose them); a corpus whose identity lists none (a test corpus) is not
+        checked here.
+        """
+        cases = self.identity.get("cases")
+        return cases is None or case_id in cases
+
+    def require_case(self, case_id: str) -> None:
+        """Refuse a case the corpus does not record, naming the rule it was recorded under."""
+        if self.records_case(case_id):
+            return
+        selection = self.identity.get("case_selection")
+        rule = (f"the {selection['rule']!r} selection ({selection['definition']})" if selection
+                else "every case observed at its capture")
+        raise CorpusError(f"corpus {self.corpus_id} records no payload of {case_id!r}: it records "
+                          f"{len(self.identity['cases'])} cases, {rule}; a corpus captured with "
+                          "--cases all records every observed case")
+
     def payloads(self, *, case_id: str | None = None, split: str | None = None) -> list[dict[str, Any]]:
+        """The payload records, of one split and one case when given; a case the
+        corpus does not record is refused (:meth:`require_case`), not answered
+        with an empty list."""
+        if case_id is not None:
+            self.require_case(case_id)
         selected = self.data["payloads"]
         if split is not None:
             members = set(self.split(split))

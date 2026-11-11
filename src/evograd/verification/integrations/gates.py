@@ -598,7 +598,8 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
              deadline_min: float | None = None) -> Run:
     """Load the corpus and the candidate programs; refuse cases the model does not
-    have, and a corpus captured at another harvest snapshot than the tracked one."""
+    have or the corpus does not record, and a corpus captured at another harvest
+    snapshot than the tracked one."""
     from evograd.benchmark.topdown import load_snapshot
     from evograd.verification.payloads import Corpus, CorpusError
 
@@ -625,6 +626,8 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             f"per step may differ. Use a corpus captured at the tracked snapshot, or recapture "
             f"one: CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations "
             f"{model.name} capture --out NEW_DIR")
+    for case_id in sorted(candidates):
+        corpus.require_case(case_id)
     return Run(model=model, out=out, state=state, corpus=corpus,
                corpus_path=Path(corpus_path), cases=cases,
                programs={cid: sha_file(path) for cid, path in candidates.items()},

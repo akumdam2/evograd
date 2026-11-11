@@ -37,7 +37,8 @@ class OneRunIdentity(unittest.TestCase):
         model = T.model()
         with T.toy_environment(), tempfile.TemporaryDirectory() as tmp:
             _, _, batch, run = base.real_run(model, device="cpu")
-            corpus = base.capture(model, Path(tmp) / "corpus", device="cpu", log=lambda *a: None)
+            corpus = base.capture(model, Path(tmp) / "corpus", selection="all", device="cpu",
+                                  log=lambda *a: None)
             identity = json.loads(Path(corpus).read_text())["identity"]
         self.assertEqual(base.HARVEST_ORDER, base.ORDERS[0])
         self.assertEqual(set(run), set(base.RUN_KEYS) | {"execution"})
