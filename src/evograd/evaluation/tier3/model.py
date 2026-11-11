@@ -107,8 +107,10 @@ class VerifiableWorkload(TrainingWorkload, Protocol):
     * ``data_identity()`` -- pins of the data (dataset, revision, file hashes,
       preprocessing), independent of the order.
 
-    A next-token language model needs nothing more: the gates read its
-    logits and token-mean NLL. Any other workload also declares
+    A next-token language model needs nothing more: model Gate 2 calls the
+    model as its ``loss(model, batch)`` does and compares that loss and every
+    parameter gradient, and Gate 3 trains on that loss. Any other workload
+    also declares
 
     * ``primary_output(model, batch) -> (loss, primary)`` -- the scalar
       ``loss(model, batch)`` returns, bit for bit, and one output beside it;

@@ -23,7 +23,7 @@ from evograd.verification.common import contracts as C
 from evograd.verification.common.execution import Deployment, Invocation, Sample, candidate
 from evograd.verification.common.reports import FAILED, INCOMPLETE, PASSED
 from evograd.verification.common.tensors import relative_error
-from evograd.verification.gate2.adapters.model import model_scope, next_token_mean_nll
+from evograd.verification.gate2.adapters.model import model_scope
 from evograd.verification.gate2.adapters.operator import OperatorScope
 from evograd.verification.gate2.calibration import (
     ROUNDING_SEEDS, CalibrationError, Gate2Policy, calibrate, rounding_control)
@@ -111,7 +111,7 @@ def _invocation(sample, device):
 
 
 def _loss(outputs, invocation, sample):
-    return next_token_mean_nll(outputs["logits"], invocation.context["labels"])
+    return F.next_token_mean_nll(outputs["logits"], invocation.context["labels"])
 
 
 def lm_scope(**overrides):

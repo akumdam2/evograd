@@ -5,7 +5,11 @@ router can flip one. Model Gate 2 compares every output and parameter gradient,
 so a correct kernel that flips one token's experts would look like a large error.
 So every run of a sample routes as the native model does on that sample: the router
 still computes its probabilities and gets its gradient, but the experts are the ones
-the native run chose. Only the choice is fixed, and only here.
+the native run chose. Only the choice is fixed, and only here. The loss includes
+the 0.01 load-balancing term, which counts each expert's tokens from its own top-k
+of the live router logits (HF ``load_balancing_loss_func``); that count is not
+fixed, so a flip there moves the term and the router gradients' share from it,
+never which experts run.
 
 Gate 3 keeps free routing. It judges the loss curve against thresholds taken from
 native and compile runs, and compile's rounding flips routing as a candidate's does,

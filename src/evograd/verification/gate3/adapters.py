@@ -7,13 +7,16 @@ here, as one explicit adapter for next-token language models:
 * :func:`adamw` -- the optimizer, with its full configuration written down;
 * :func:`next_token_nll` -- ``(sum of -log P(label_{t+1}), valid tokens)`` in
   float32, the weight being the token count;
-* :class:`LanguageModelTraining` -- model/evaluator builders, a training batch
-  sequence and fixed held-out batches. Batches are ``(input_ids, labels)``;
-  any object with ``batch(index)`` (and optionally ``describe()``) or a plain
-  sequence serves;
-* :func:`workload_training` -- the same over a tier-3 ``TrainingWorkload``
-  (Qwen3, Llama): the workload builds the patched model and the trusted
-  evaluator (``eager_evaluator``); this installs replaced sites;
+* :class:`LanguageModelTraining` -- model/evaluator builders, the step's loss
+  (``loss_of``: by default :func:`next_token_nll` of the model's logits), a
+  training batch sequence and fixed held-out batches. Batches are
+  ``(input_ids, labels)``; any object with ``batch(index)`` (and optionally
+  ``describe()``) or a plain sequence serves;
+* :func:`workload_training` -- the same over a tier-3 ``TrainingWorkload`` of a
+  next-token LM (Qwen3, Llama, Qwen3.5, OLMoE): the workload builds the patched
+  model and the trusted evaluator (``eager_evaluator``), and each step
+  differentiates ``workload.loss`` with weight 1, the scalar Tier 3 trains;
+  this installs replaced sites;
 * :func:`workload_objective_training` -- a training-only adapter for a
   workload with its own objective (``primary_output``): vision, diffusion,
   recommendation.
@@ -119,8 +122,22 @@ def _describe(source: Any, count: int | None) -> dict[str, Any]:
     return {"content_hash": stable_hash(digests), "count": len(digests)}
 
 
-def logits_of_hf(model: torch.nn.Module, input_ids: torch.Tensor) -> torch.Tensor:
-    return model(input_ids=input_ids, use_cache=False).logits
+def next_token_nll_of_hf(model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, int]:
+    """:func:`next_token_nll` of ``model(input_ids=..., use_cache=False).logits``."""
+    input_ids, labels = batch
+    return next_token_nll(model(input_ids=input_ids, use_cache=False).logits, labels)
+
+
+#: What :func:`next_token_nll_of_hf` is, bound into the run identity.
+NEXT_TOKEN_OBJECTIVE = {
+    "objective": f"token-weighted next-token NLL (float32, shifted, ignore_index={IGNORE_INDEX})",
+    "backward": "mean over the batch's valid tokens"}
+#: What :func:`workload_training` differentiates.
+WORKLOAD_OBJECTIVE = {
+    "objective": ("workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss "
+                  "as the model returns it (the HF causal-LM loss plus any auxiliary term the "
+                  "model adds), the scalar the tier-3 step differentiates"),
+    "backward": "the workload loss as returned (weight 1)"}
 
 
 @dataclass
@@ -130,7 +147,9 @@ class LanguageModelTraining:
     ``build(deployment, hooks)`` returns the model with the deployment's sites
     installed through ``hooks.wrap``; ``build_native()`` returns the same model
     with nothing replaced (the trusted evaluator). Both must start from the
-    same deterministic initial weights.
+    same deterministic initial weights. ``loss_of(model, batch)`` returns
+    ``(loss_sum, weight)``; a step differentiates ``loss_sum / weight``, and
+    ``objective`` says what that is.
     """
 
     build: Callable[[Deployment, SiteHooks], torch.nn.Module]
@@ -141,15 +160,13 @@ class LanguageModelTraining:
     optimizer: OptimizerSpec
     validation_count: int | None = None
     train_count: int | None = None
-    logits_of: Callable[[torch.nn.Module, torch.Tensor], torch.Tensor] = logits_of_hf
-    ignore_index: int = IGNORE_INDEX
+    loss_of: Callable[[torch.nn.Module, Any], tuple[torch.Tensor, float]] = next_token_nll_of_hf
+    objective: Mapping[str, str] = field(default_factory=lambda: dict(NEXT_TOKEN_OBJECTIVE))
     device: str = "cpu"
     config: Mapping[str, Any] = field(default_factory=dict)
 
     def identity(self) -> dict[str, Any]:
-        return {"objective": "token-weighted next-token NLL (float32, shifted, "
-                             f"ignore_index={self.ignore_index})",
-                "backward": "mean over the batch's valid tokens", "config": dict(self.config)}
+        return {**dict(self.objective), "config": dict(self.config)}
 
     def data_identity(self) -> dict[str, Any]:
         return {"train": _describe(self.train_data, self.train_count),
@@ -178,9 +195,7 @@ class LanguageModelTraining:
         return _batch(self.train_data, index)
 
     def train_loss(self, model: torch.nn.Module, batch: Any) -> tuple[torch.Tensor, float]:
-        input_ids, labels = batch
-        return next_token_nll(self.logits_of(model, input_ids), labels,
-                              ignore_index=self.ignore_index)
+        return self.loss_of(model, batch)
 
     def validation_batches(self) -> Sequence[Any]:
         if self.validation_data is None:
@@ -189,9 +204,7 @@ class LanguageModelTraining:
         return [_batch(self.validation_data, i) for i in range(count)]
 
     def validation_loss(self, evaluator: torch.nn.Module, batch: Any) -> tuple[float, float]:
-        input_ids, labels = batch
-        total, count = next_token_nll(self.logits_of(evaluator, input_ids), labels,
-                                      ignore_index=self.ignore_index)
+        total, count = self.loss_of(evaluator, batch)
         return float(total), float(count)
 
 
@@ -215,29 +228,24 @@ def site_model_training(factory: Callable[[Mapping[str, Callable]], torch.nn.Mod
 def workload_training(workload: Any, *, train_data: Any, optimizer: OptimizerSpec,
                       validation_data: Any = None, validation_count: int | None = None,
                       train_count: int | None = None) -> LanguageModelTraining:
-    """A tier-3 ``TrainingWorkload`` (Qwen3, Llama) as a Gate 3 adapter.
+    """A tier-3 next-token LM ``TrainingWorkload`` as a Gate 3 adapter.
+
+    Each step differentiates ``workload.loss(model, batch)`` with weight 1, so
+    the scalar is the one the tier-3 step differentiates, bit for bit (OLMoE's
+    router load-balancing term included). Validation scores each held-out batch
+    the same way, as an unweighted mean over batches.
 
     For Llama, ``train_data``/``validation_data`` can be the workload's own
     ``SyntheticBatches``; Qwen3's synthetic path is ``batch_for`` (wrap it, e.g.
     ``SeedBatches``) since its ``train_batches`` needs cached real text.
     Without ``validation_data`` the adapter serves training-only plans.
     """
-    from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
-
-    registry = workload.site_registry
-
-    def build(deployment: Deployment, hooks: SiteHooks) -> torch.nn.Module:
-        kernels = KernelSet(registry=registry)
-        for site, fn in deployment.sites.items():
-            kernels = patch(kernels, site, hooks.wrap(site, fn), source=KernelSource(
-                site, registry.require(site).op, None, f"verification:{deployment.name}"))
-        model, _ = workload.build_patched(kernels)
-        return model
-
     return LanguageModelTraining(
-        build=build, build_native=workload.eager_evaluator, train_data=train_data,
-        validation_data=validation_data, validation_count=validation_count,
-        train_count=train_count, optimizer=optimizer,
+        build=_workload_build(workload), build_native=workload.eager_evaluator,
+        train_data=train_data, validation_data=validation_data,
+        validation_count=validation_count, train_count=train_count, optimizer=optimizer,
+        loss_of=lambda model, batch: (workload.loss(model, batch), 1.0),
+        objective=dict(WORKLOAD_OBJECTIVE),
         device=str(getattr(getattr(workload, "spec", None), "device", "cpu")),
         config={"workload": workload.describe()})
 

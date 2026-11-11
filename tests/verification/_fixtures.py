@@ -400,8 +400,16 @@ def lm_batch(seed: int, *, batch: int = 2, seq: int = 9, vocab: int = 32, masked
     return ids, labels
 
 
+def next_token_mean_nll(logits, labels):
+    """A toy LM's token-mean next-token NLL: ``gate3.next_token_nll``'s sum over its count."""
+    from evograd.verification.gate3 import next_token_nll
+
+    total, count = next_token_nll(logits, labels)
+    return total / count
+
+
 def tiny_lm_scope(*, dropout=0.0, device="cpu", tie=True):
-    from evograd.verification.gate2.adapters.model import model_scope, next_token_mean_nll
+    from evograd.verification.gate2.adapters.model import model_scope
 
     def invocation(sample, device):
         ids, labels = lm_batch(sample.seed)
