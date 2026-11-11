@@ -1,7 +1,7 @@
 # Verification, timing, and combination settings
 
 This document describes the current local implementation of formal
-`evograd-evaluation-v4`, called by `candidates/evaluate_model.py`. It is a
+`evograd-evaluation-v5`, called by `candidates/evaluate_model.py`. It is a
 reference for agreeing on an experiment, not evidence that GPU evaluation has
 completed or that all provisional settings have been validated.
 
@@ -16,7 +16,7 @@ execution settings.
 
 | Variable | Value |
 | --- | --- |
-| Protocol | `evograd-evaluation-v4` |
+| Protocol | `evograd-evaluation-v5` |
 | Reference | Native eager model |
 | Compile backend | `inductor` |
 | cuBLAS workspace | `:4096:8` |
@@ -257,7 +257,8 @@ execution settings.
 | Default T3 blocks | `10` |
 | Search root | `/work/hdd/bcjw/wzhan/ADBench` |
 | Submission root | `/work/hdd/bcjw/wzhan/ADBench-redeploy` |
-| Corpus path | `cases.json[model][corpus]` |
+| Cases | `search_set.json`: the searched cases (packs must match exactly) plus `identical_config_of` cases with the source model's submission |
+| Corpus path | `--corpus`, else `cases.json[model][corpus]` (until the recapture; its case lists are not read) |
 | Output root | `~/adbench-evaluation-trials` |
 | Result path | `OUT_ROOT/MODEL/evaluation/AGENT/evaluation.json` |
 | Shared state | `OUT_ROOT/MODEL/state` |
@@ -692,9 +693,12 @@ Use the same source tree, including local modifications, dependencies,
 hardware class, workload/corpus identity, submissions and all settings above.
 Keep failure/incomplete/skipped statuses beside timings. Formal L1/L2 speedup
 aggregates include accepted configurations with valid baseline timings;
-rejected diagnostic timings do not contribute. Report full observed-case
-coverage separately from pass rate over the trial's selected cases. There is
-no single combined score over T2 and T3.
+rejected diagnostic timings do not contribute. Every observed case is a row
+of `evaluation.json`, tagged with the search set's `searched`, `reason` and `of`
+(`src/evograd/benchmark/search_set.json`); the level summaries (funnel,
+coverage, speedup) count only benchmark rows: the searched cases plus the
+`identical_config_of` cases. The other rows stay as the observed inventory.
+There is no single combined score over T2 and T3.
 
 `--deadline-min` controls suspension, not the scientific training horizon,
 number of T3 blocks, or Slurm allocation. Default in the wrapper is 45 minutes.
@@ -710,7 +714,7 @@ With the wrapper, save:
 OUT_ROOT/MODEL/
   state/                              reusable control runs and calibrated policies
   evaluation/AGENT/
-    selection.json                    selected cases, submission hashes, search failures
+    selection.json                    benchmark cases, submission hashes, reused_from, search failures
     evaluation.json                   settings, verdicts, timings, combination
     cases/                            detailed Gate 1/operator Gate 2 reports
     gate2_model/                      individual model Gate 2 reports

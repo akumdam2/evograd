@@ -4,6 +4,9 @@
 Run inside a GPU allocation with the experiment's Python environment active:
     python candidates/evaluate_model.py convnextv2_tiny --agent openevolve
 Search records come from ADBench; evaluated submissions come from ADBench-redeploy.
+The cases are the model's benchmark rows in src/evograd/benchmark/search_set.json: its
+searched cases (the task packs must be exactly those) and its identical_config_of cases,
+evaluated with the source model's submission for the identical configuration.
 Exit 3 means suspended: rerun the identical command in the next allocation.
 """
 from __future__ import annotations
@@ -21,9 +24,12 @@ import sys
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
-MODELS = ("qwen3_0_6b", "qwen3_5_4b", "llama_3_2_1b", "qwen2_vl_2b",
-          "convnextv2_tiny", "dit_s_2", "torchrec_dlrm", "olmoe_1b_7b")
-CASE_COUNTS = dict(zip(MODELS, (8, 14, 7, 6, 8, 3, 2, 7)))
+sys.path.insert(0, str(REPO / "candidates"))
+from _common import search_set  # noqa: E402
+
+#: Which cases are searched and evaluated: src/evograd/benchmark/search_set.json.
+SEARCH_SET = search_set()
+MODELS = tuple(SEARCH_SET.load()["models"])
 AGENTS = ("openevolve", "gepa", "kernelagent", "codex", "claude_code", "geak",
           "evograd", "seed")
 GROUP_AGENTS = ("openevolve", "gepa", "codex")
@@ -57,28 +63,56 @@ def kernel_block(program):
     return b"".join(lines[starts[0] + 1:ends[0]])
 
 
+def submission(args, model, cid):
+    """``(candidate, None)`` or ``(None, search failure)`` for ``model``'s searched case ``cid``."""
+    directory = args.shared_root / args.agent / model / "runs" / args.agent / cid.replace("/", "__")
+    run = read_json(directory / "run.json")
+    status = run.get("status")
+    if not isinstance(status, str) or status in ("", "running", "unfinished", "pending"):
+        raise ValueError(f"Search has not finished: {directory}")
+    record = read_json(directory / "submission.json")
+    if record.get("case_id") != cid or record.get("agent") != args.agent:
+        raise ValueError(f"Submission identity mismatch: {directory}")
+    if "submission" not in record:
+        raise ValueError(f"Incomplete submission record: {directory}")
+    if not record["submission"]:
+        return None, {"status": status, "record": str(directory / "submission.json"),
+                      "packaging_error": record.get("packaging_error")}
+    original, original_digest = checked_program(directory, cid, args.agent)
+    submission_dir = (args.submission_root / args.agent / model / "runs" /
+                      args.agent / cid.replace("/", "__"))
+    program, digest = checked_program(submission_dir, cid, args.agent)
+    if program.resolve() != original.resolve() and kernel_block(program) != kernel_block(original):
+        raise ValueError(f"Kernel EVOLVE-BLOCK changed during repackaging: {program}")
+    candidate = {"path": str(program.resolve()), "sha256": digest}
+    if program.resolve() != original.resolve():
+        candidate.update(original_path=str(original.resolve()), original_sha256=original_digest)
+    return candidate, None
+
+
 def prepare(args):
     """Read frozen packs and submissions without importing candidate code."""
-    registered = read_json(args.shared_root / "cases.json")[args.model]
     model_root = args.shared_root / args.agent / args.model
     tasks = [read_json(p) for p in sorted((model_root / "tasks").glob("*/task.json"))]
-    if not tasks:
-        raise ValueError(f"No task packs under {model_root / 'tasks'}")
     ids = [t["case_id"] for t in tasks]
-    if len(set(ids)) != len(ids):
-        raise ValueError("Duplicate case IDs in task packs")
+    searched = SEARCH_SET.searched(args.model)
+    missing, extra = sorted(set(searched) - set(ids)), sorted(set(ids) - set(searched))
+    if missing or extra or len(set(ids)) != len(ids):
+        raise ValueError(f"Task packs under {model_root / 'tasks'} are not the {len(searched)} "
+                         f"searched cases of {args.model} (search_set.json): missing {missing}, "
+                         f"extra {extra}, {len(ids) - len(set(ids))} duplicated")
     for task in tasks:
         if task.get("model") != args.model or task.get("level") not in (1, 2):
             raise ValueError(f"Invalid task pack: {task['case_id']}")
-    selection = registered.get("cases", registered.get("case_ids"))
-    if selection is not None:
-        expected = {item if isinstance(item, str) else item["case_id"] for item in selection}
-        if set(ids) != expected:
-            raise ValueError("Task packs do not match the selected cases in cases.json")
-    elif len(ids) != CASE_COUNTS[args.model]:
-        raise ValueError(f"Expected {CASE_COUNTS[args.model]} task packs for {args.model}; found {len(ids)}")
 
-    corpus = args.corpus or Path(registered["corpus"])
+    if args.corpus:
+        corpus = args.corpus
+    else:  # Until the recapture: the shared index's corpus, never its case lists.
+        registered = read_json(args.shared_root / "cases.json").get(args.model) or {}
+        if "corpus" not in registered:
+            raise ValueError(f"No corpus for {args.model} in {args.shared_root / 'cases.json'}; "
+                             "use --corpus PATH")
+        corpus = Path(registered["corpus"])
     if not corpus.is_absolute():
         corpus = args.shared_root / corpus
     if corpus.is_dir():
@@ -86,36 +120,21 @@ def prepare(args):
     if not corpus.is_file():
         raise ValueError(f"Corpus manifest not found: {corpus}; use --corpus PATH")
 
-    candidates, failures = {}, {}
-    for cid in sorted(ids):
-        directory = model_root / "runs" / args.agent / cid.replace("/", "__")
-        run = read_json(directory / "run.json")
-        status = run.get("status")
-        if not isinstance(status, str) or status in ("", "running", "unfinished", "pending"):
-            raise ValueError(f"Search has not finished: {directory}")
-        record = read_json(directory / "submission.json")
-        if record.get("case_id") != cid or record.get("agent") != args.agent:
-            raise ValueError(f"Submission identity mismatch: {directory}")
-        if "submission" not in record:
-            raise ValueError(f"Incomplete submission record: {directory}")
-        if not record["submission"]:
-            failures[cid] = {"status": status, "record": str(directory / "submission.json"),
-                             "packaging_error": record.get("packaging_error")}
-            continue
-        original, original_digest = checked_program(directory, cid, args.agent)
-        submission_dir = (args.submission_root / args.agent / args.model / "runs" /
-                          args.agent / cid.replace("/", "__"))
-        program, digest = checked_program(submission_dir, cid, args.agent)
-        if program.resolve() != original.resolve() and kernel_block(program) != kernel_block(original):
-            raise ValueError(f"Kernel EVOLVE-BLOCK changed during repackaging: {program}")
-        candidates[cid] = {"path": str(program.resolve()), "sha256": digest}
-        if program.resolve() != original.resolve():
-            candidates[cid].update(original_path=str(original.resolve()), original_sha256=original_digest)
+    candidates, failures, reused = {}, {}, {}
+    evaluated = SEARCH_SET.evaluated(args.model)
+    for cid, source in evaluated.items():
+        if source is not None:  # identical_config_of: the source model's submission
+            reused[cid] = ":".join(source)
+        candidate, failure = submission(args, *(source or (args.model, cid)))
+        if failure is None:
+            candidates[cid] = candidate
+        else:
+            failures[cid] = failure
     if not candidates:
         raise ValueError("No packaged submissions; retain the search failure records")
     return {"model": args.model, "agent": args.agent, "corpus": str(corpus.resolve()),
-            "selected_cases": sorted(ids), "candidates": candidates,
-            "search_failures": failures}
+            "selected_cases": sorted(evaluated), "reused_from": reused,
+            "candidates": candidates, "search_failures": failures}
 
 
 def environment(model):
@@ -149,7 +168,8 @@ def main(argv=None):
         parser.add_argument("--" + name.replace("_", "-"), action="store_true",
                             help="opt in to " + name.replace("_", " "))
     parser.add_argument("--shared-root", type=Path, default=SHARED,
-                        help="search root containing cases.json and agent directories")
+                        help="search root holding the agent directories (and cases.json, read "
+                             "for the corpus only when --corpus is not given)")
     parser.add_argument("--submission-root", type=Path, default=REDEPLOY,
                         help="repackaged submissions with agent/model/runs/agent/case layout; "
                              "default /work/hdd/bcjw/wzhan/ADBench-redeploy; no fallback to originals")
@@ -208,7 +228,9 @@ def main(argv=None):
     for job in jobs:
         selection = job["selection"]
         print(f"{selection['agent']}/{args.model}: {len(selection['candidates'])} submissions / "
-              f"{len(selection['selected_cases'])} selected cases", flush=True)
+              f"{len(selection['selected_cases'])} benchmark cases", flush=True)
+        for cid, source in selection["reused_from"].items():
+            print(f"Identical configuration: {cid} uses {source}'s submission", flush=True)
         for cid, failure in selection["search_failures"].items():
             print(f"Search produced no submission: {cid} ({failure['status']})", flush=True)
         print(f"Results: {job['out']}/evaluation.json", flush=True)

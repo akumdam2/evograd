@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """The benchmark run of one agent on one model: tasks, runs, the protocol, the summary.
 
-    python candidates/bench.py tasks     --model M --case-id C [C ...] --corpus MANIFEST
+    python candidates/bench.py tasks     --model M (--searched | --case-id C [C ...]) --corpus MANIFEST
     python candidates/bench.py run       --model M --agent A [--budget N] [--case-id C ...] [-- agent flags]
     python candidates/bench.py evaluate  --model M --agent A --corpus MANIFEST [--deadline-min 50]
     python candidates/bench.py summarize --model M --agent A [A ...] [--out summary.md]
 
-Each case of the model (``evograd evaluate``'s unit: an observed configuration
-under the model's reference) gets a task pack; the agent runs its own loop on
-each pack (``candidates/<agent>/run.py --no-score``) and its best program is
-repackaged from the evolve block into ``submission.py``; every submission of the
-agent then goes through the one protocol, ``evograd evaluate``, and
+Each searched case of the model (``evograd evaluate``'s unit: an observed
+configuration under the model's reference; which are searched is
+``src/evograd/benchmark/search_set.json``) gets a task pack; the agent runs its
+own loop on each pack (``candidates/<agent>/run.py --no-score``) and its best
+program is repackaged from the evolve block into ``submission.py``; every
+submission of the agent, plus the source model's submission for each
+``identical_config_of`` case, then goes through the one protocol, ``evograd evaluate``, and
 ``summarize`` reports per level what the protocol counts. ``adbench_tools
 score``/``compare`` (one configuration, seed acceptance, Tier 1 only) stay as
 diagnostics and are not run here.
@@ -73,11 +75,15 @@ def task_dirs(root: Path, case_ids: list[str]) -> dict[str, Path]:
 
 
 def selected_cases(args) -> list[str]:
-    """``--case-id`` as given, else every case that has a task pack."""
+    """``--case-id`` as given, else the model's searched cases (``search_set.json``)."""
     if args.case_id:
         return list(args.case_id)
-    tasks = sorted((args.root / "tasks").glob("*/task.json"))
-    return [json.loads(p.read_text())["case_id"] for p in tasks]
+    from evograd.benchmark import search_set
+
+    try:
+        return search_set.searched(args.model)
+    except KeyError as exc:
+        raise SystemExit(f"{exc.args[0]}; name the cases with --case-id") from None
 
 
 # ── tasks ────────────────────────────────────────────────────────────────────
@@ -88,10 +94,11 @@ def cmd_tasks(args) -> int:
     from evograd.adbench_tools.task import build_task, load
 
     cases = model_cases(args.model)
-    unknown = sorted(set(args.case_id) - set(cases))
+    selected = selected_cases(args)
+    unknown = sorted(set(selected) - set(cases))
     if unknown:
         raise SystemExit(f"{args.model} has no cases {unknown}; known: {sorted(cases)}")
-    for cid, directory in task_dirs(args.root, args.case_id).items():
+    for cid, directory in task_dirs(args.root, selected).items():
         if (directory / "task.json").is_file():
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
@@ -215,7 +222,16 @@ def submissions(root: Path, agent: str) -> dict[str, Path]:
 
 
 def cmd_evaluate(args) -> int:
+    from evograd.benchmark import search_set
+
     chosen = submissions(args.root, args.agent)
+    # An identical configuration is evaluated with its source model's submission.
+    reused = search_set.evaluated(args.model) if search_set.entry(args.model) else {}
+    for cid, source in reused.items():
+        found = source and submissions(root_for(source[0], args.base), args.agent).get(source[1])
+        if found:
+            chosen[cid] = found
+            print(f"{cid}: {':'.join(source)}'s submission (identical configuration)", flush=True)
     if args.case_id:
         chosen = {cid: path for cid, path in chosen.items() if cid in args.case_id}
     if not chosen:
@@ -353,9 +369,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--model", required=True, help="a verified model (evograd evaluate's)")
         p.add_argument("--root", default=None, help="default $ADBENCH_ROOT/<model>")
 
-    p = sub.add_parser("tasks", help="task packs for the model's observed cases")
+    p = sub.add_parser("tasks", help="task packs for the model's searched (or named) cases")
     common(p)
-    p.add_argument("--case-id", nargs="+", required=True, metavar="TASK/COMPONENT")
+    which = p.add_mutually_exclusive_group(required=True)
+    which.add_argument("--searched", action="store_true",
+                       help="every case search_set.json searches for the model")
+    which.add_argument("--case-id", nargs="+", metavar="TASK/COMPONENT")
     p.add_argument("--library", default="auto")
     p.add_argument("--corpus", type=Path, default=None,
                    help="the model's payload corpus manifest (search feedback is Gate 1 on the "
@@ -364,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="reuse and keep operator Gate 2 calibrations here (as evaluate's state)")
     p.set_defaults(run=cmd_tasks)
 
-    p = sub.add_parser("run", help="one agent on every task pack (or --case-id), no scoring")
+    p = sub.add_parser("run", help="one agent on the searched cases' packs (or --case-id), no scoring")
     common(p)
     p.add_argument("--agent", required=True, help="a directory under candidates/")
     p.add_argument("--budget", type=int, default=DEFAULT_BUDGET,
@@ -393,7 +412,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(run=cmd_summarize)
 
     args = parser.parse_args(argv)
-    args.root = root_for(args.model, args.root)
+    args.base, args.root = args.root, root_for(args.model, args.root)
     if getattr(args, "agent_args", None) and args.agent_args[0] == "--":
         args.agent_args = args.agent_args[1:]
     return args.run(args)

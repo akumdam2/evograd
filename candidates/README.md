@@ -28,7 +28,7 @@ neither of them:
 
 ## The benchmark run
 
-The comparison that counts is `evograd evaluate` (`evograd-evaluation-v4`:
+The comparison that counts is `evograd evaluate` (`evograd-evaluation-v5`:
 real-payload gates, Tier 2, single-site Tier 3 and the Level-3 combination), run
 on every agent's submissions by `bench.py`; `score`/`compare` below are
 single-configuration diagnostics. See
@@ -37,7 +37,7 @@ single-configuration diagnostics. See
 ```bash
 export ADBENCH_ROOT=...     # results under $ADBENCH_ROOT/<model>
 export ADBENCH_MODEL=gpt-5.5
-python candidates/bench.py tasks     --model qwen3_0_6b --case-id qwen3_swiglu_mlp/swiglu_mlp rmsnorm/rmsnorm \
+python candidates/bench.py tasks     --model qwen3_0_6b --searched \
                                      --corpus CORPUS/manifest.json   # search feedback: Gate 1 on its payloads
 python candidates/bench.py run       --model qwen3_0_6b --agent seed            # frontend only, no LLM
 python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10

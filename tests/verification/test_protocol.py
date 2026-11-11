@@ -518,6 +518,20 @@ class Summary(unittest.TestCase):
             self.assertEqual(level2["speedup"][baseline]["configurations_covered"], 0)
             self.assertIsNone(level2["speedup"][baseline]["geomean"])
 
+    def test_only_benchmark_rows_are_counted(self):
+        from evograd.evaluation.protocol import summarize
+
+        evaluation = self.evaluation()
+        evaluation["cases"]["swiglu/site"].update(searched=True, reason=None, of=None)
+        unsubmitted = {"task": "swiglu", "level": 2, "family": "activation", "submitted": False}
+        evaluation["cases"]["swiglu/copy"] = {**unsubmitted, "searched": False,
+                                              "reason": "identical_config_of", "of": "other:swiglu/site"}
+        evaluation["cases"]["swiglu/small"] = {**unsubmitted, "searched": False,
+                                               "reason": "not_time_max_config", "of": None}
+        level2 = summarize([evaluation])["level2"]
+        self.assertEqual((level2["funnel"]["configurations"], level2["funnel"]["submitted"]), (2, 1))
+        self.assertEqual(level2["coverage"], 0.5)
+
     def test_single_sites_keep_gates_intervals_and_selection_without_pooling(self):
         from evograd.evaluation.protocol import summarize
 

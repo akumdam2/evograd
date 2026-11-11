@@ -14,7 +14,7 @@ def evaluate_group(plan, *, deadline, tier3_options=None, model=None, log=print,
                    time_tier2=None, time_provider=None, rules=True, check_imports=True, device="cuda",
                    compile_backend="inductor"):
     from evograd.verification.reuse import settings as reuse_settings, check_report_mode
-    from evograd.benchmark import get_task
+    from evograd.benchmark import get_task, search_set
     from evograd.evaluation import group_timing
     from evograd.evaluation.payload_cache import case_payload_cache
     from evograd.evaluation.tier3.runner import assemble_report, provider_order
@@ -60,6 +60,7 @@ def evaluate_group(plan, *, deadline, tier3_options=None, model=None, log=print,
                          "baseline_scope": "T2: shared per case; T3: shared per model"},
             "cases": {cid: {"task": case.task, "level": case.level,
                             "family": get_task(case.task).family, "frequency": case.frequency,
+                            **search_set.row_tag(model.name, cid),
                             "submitted": cid in paths or cid in bad}
                       for cid, case in observed.items()},
         }

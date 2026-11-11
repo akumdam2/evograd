@@ -37,7 +37,10 @@ Every submission follows the same steps, whoever generated it:
    Tier 3 against eager and the whole-model ``torch.compile``.
 5. **Summary** (:func:`summarize`): per level, the speedup over the accepted
    configurations, coverage and the verification funnel; peak memory at
-   Level 3.
+   Level 3. Every observed case is a row of ``evaluation.json``, tagged with
+   the search set's ``searched``/``reason``/``of``
+   (:mod:`evograd.benchmark.search_set`); the level summaries count only the
+   benchmark rows, the searched and the ``identical_config_of`` cases.
 
 Verification runs under the deterministic settings
 :func:`evograd.verification.integrations.base.configure` sets; timing runs with deterministic algorithms off, as training does. Every
@@ -67,7 +70,8 @@ from evograd.verification.integrations.gates import (
     verify_combination,
 )
 
-PROTOCOL = "evograd-evaluation-v4"
+#: /5: case rows carry the search set's tag; the level summaries count only benchmark rows.
+PROTOCOL = "evograd-evaluation-v5"
 #: /2: whole-model torch.compile takes the eager SDPA path (``traced_causal_mask_as_eager``).
 BASELINE_REVISION = "whole-model-baselines/2"
 REFERENCE = "eager"
@@ -547,7 +551,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     ``rules=False`` skips the static rules (a toy pair is not an artifact);
     ``check_imports=False`` skips importing each submission in a process of its own first.
     """
-    from evograd.benchmark import get_task
+    from evograd.benchmark import get_task, search_set
 
     from evograd.verification.integrations.base import configure, observed_cases
 
@@ -572,6 +576,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                      "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
                               "frequency": c.frequency, "recorded": c.calls_recorded,
+                              **search_set.row_tag(model.name, c.case_id),
                               "submitted": c.case_id in candidates}
                   for c in observed_cases(model)},
     }
@@ -709,9 +714,11 @@ def _finite(value) -> bool:
 
 
 def _level_summary(rows: list[dict[str, Any]], level: int) -> dict[str, Any]:
+    """Over the level's benchmark rows (:func:`evograd.benchmark.search_set.benchmark_row`)."""
     from evograd.benchmark.core.report import TaskResult, _pool_by_family
+    from evograd.benchmark.search_set import benchmark_row
 
-    rows = [r for r in rows if r["level"] == level]
+    rows = [r for r in rows if r["level"] == level and benchmark_row(r)]
     funnel = {"configurations": len(rows),
               "submitted": sum(bool(r.get("submitted")) for r in rows),
               "violation": sum("violation" in r for r in rows),
