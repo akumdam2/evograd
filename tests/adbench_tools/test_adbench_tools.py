@@ -34,6 +34,7 @@ from evograd.adbench_tools.score import compare  # noqa: E402
 from evograd.adbench_tools.statement import system_message  # noqa: E402
 from evograd.adbench_tools.task import build_task, load, reference_closure  # noqa: E402
 from tests._small_cases import SMALL
+from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -99,7 +100,7 @@ def test_a_task_pack_is_never_overwritten(small_task):
 
 
 @pytest.mark.parametrize("name", ["llama3_swiglu_mlp", "llama3_qkv_rope", "layernorm",
-                                  "rmsnorm", "qwen3_qkv_norm_rope"])
+                                  "rmsnorm", "qwen3_attention_block", "qwen3_lm_head_ce"])
 def test_the_reference_an_agent_reads_is_the_declared_forward(name):
     from evograd.benchmark import get_task
     from evograd.opdecl.importing import resolve_callable
@@ -265,6 +266,12 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None,
     with mock.patch.object(gates, "operator_calibration", calibration), \
             mock.patch.object(base, "configure", lambda: None):
         return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
+
+
+#: Qwen3's Level-2 cases are the tracked snapshot's, which names the Level-2
+#: tasks of its last harvest; these run once it is regenerated.
+needs_current_qwen3_snapshot = pytest.mark.skipif(not qwen3_snapshot_current(),
+                                                  reason=QWEN3_SNAPSHOT_STALE)
 
 
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
@@ -469,8 +476,11 @@ REACHED = (
     ("qwen3_5_4b", "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope", "linear", ("vendor_gemm",)),
     ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "matmul", ("vendor_gemm",)),
     ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "_grouped_mm", ("vendor_gemm",)),
-    ("qwen3_0_6b", "qwen3_attention/causal_gqa_attention", "scaled_dot_product_attention",
-     ("vendor_gemm", "vendor_sdpa")),
+    pytest.param("qwen3_0_6b", "qwen3_attention_block/attention_block",
+                 "scaled_dot_product_attention", ("vendor_gemm", "vendor_sdpa"),
+                 marks=needs_current_qwen3_snapshot),
+    pytest.param("qwen3_0_6b", "qwen3_lm_head_ce/flce", "linear", ("vendor_gemm",),
+                 marks=needs_current_qwen3_snapshot),
 )
 
 

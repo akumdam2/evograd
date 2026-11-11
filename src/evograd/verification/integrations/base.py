@@ -199,7 +199,13 @@ class Case:
 
 
 def observed_cases(model: Model) -> tuple[Case, ...]:
-    """Every observed L1 and L2 case of the model, calls per step from the snapshot."""
+    """Every observed L1 and L2 case of the model, calls per step from the snapshot.
+
+    A Level-2 entry whose task the code no longer registers (a task removed or
+    merged since the harvest) is no case; the next harvest drops it. A task added
+    since is no case until that harvest records it, so a capture refuses its
+    calls (:func:`case_for`) and a candidate for it is refused.
+    """
     from evograd.benchmark import get_task
     from evograd.benchmark.topdown import load_snapshot
 
@@ -215,10 +221,14 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
                        tuple(c.get("module_paths") or ()))
                   for w, c in zip(workloads, configs)]
     for task, entry in snapshot["tasks"].items():
+        try:
+            op = get_task(task)
+        except KeyError:
+            continue
         if "configurations" in entry:
             # A harvest that observes each L2 boundary per configuration (vision,
             # generated models): one case per configuration, like Level 1.
-            workloads = get_task(task).benchmark_suites[model.suite]
+            workloads = op.benchmark_suites[model.suite]
             configs = entry["configurations"]
             if len(workloads) != len(configs) or any(dict(w.dims) != c["dims"]
                                                      for w, c in zip(workloads, configs)):
@@ -227,7 +237,7 @@ def observed_cases(model: Model) -> tuple[Case, ...]:
                            tuple(c.get("module_paths") or ()))
                       for w, c in zip(workloads, configs)]
             continue
-        (workload,) = get_task(task).benchmark_suites[model.suite]
+        (workload,) = op.benchmark_suites[model.suite]
         # A Level-2 entry's ``frequency`` counts its anchor op; the boundary's
         # own calls per step are the fusion sites or the observed invocations.
         frequency = ((entry.get("fusion_sites") or {}).get("total")

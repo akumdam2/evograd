@@ -110,6 +110,7 @@ class ScopeAdapter(Protocol):
     def cotangents(self, outputs: Mapping[str, Any], invocation: Invocation,
                    sample: Sample) -> Mapping[str, torch.Tensor]: ...
     def numerics_context(self): ...
+    def structure(self, result: Any) -> Any: ...
     def reference_identity(self) -> Mapping[str, Any]: ...
 
 
@@ -209,7 +210,7 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
                 stage = "outputs"
                 outputs = dict(adapter.outputs(result, invocation, sample))
             ex.specs = tuple(adapter.output_specs(invocation))
-            ex.structure = describe_tree(result)
+            ex.structure = adapter.structure(result)
             # Judged as the forward produced them: the backward may legitimately
             # reuse an output buffer nothing reads any more.
             produced_outputs = isolate(_detach_tree(outputs))

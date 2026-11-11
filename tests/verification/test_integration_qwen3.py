@@ -6,8 +6,9 @@ every call maps to exactly one case by shape, payloads round-trip with their
 layouts in each task's ABI, local VJPs come from the payload (not from
 model-level ``.grad``), the residual / CE / tied-head conventions hold, the
 model reference reproduces every live output bit for bit, and Gate 1 and
-operator Gate 2 judge a candidate on the recorded payloads. The real case
-table is checked against the registry and the snapshot.
+operator Gate 2 judge a candidate on the recorded payloads. The Level-2
+references are the modules' own arithmetic, bit for bit in float32 and BF16.
+The real case table is checked against the registry and the snapshot.
 """
 
 from __future__ import annotations
@@ -19,6 +20,8 @@ import warnings
 from pathlib import Path
 
 import torch
+
+from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
 
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -57,15 +60,38 @@ def tiny_cases():
         ("swiglu", "act", {"rows": n, "cols": I}, bf, LAYERS),
         ("causal_gqa_attention", "sdpa", {"B": B, "HQ": HQ, "HK": HK, "T": T, "D": D}, bf, LAYERS),
         ("cross_entropy", "loss", {"rows": n, "cols": V}, "float32", 1),
-        ("qwen3_qkv_norm_rope", "qkv", {"B": B, "T": T, "H": H, "HQ": HQ, "HK": HK, "D": D,
-                                        "QO": HQ * D, "KVO": HK * D}, bf, LAYERS),
-        ("qwen3_attention", "attn", {"B": B, "T": T, "HQ": HQ, "HK": HK, "D": D, "QO": HQ * D,
-                                     "H": H}, bf, LAYERS),
+        ("qwen3_attention_block", "attention_block", {"B": B, "T": T, "H": H, "HQ": HQ, "HK": HK,
+                                                      "D": D, "QO": HQ * D, "KVO": HK * D},
+         bf, LAYERS),
         ("qwen3_swiglu_mlp", "mlp", {"B": B, "T": T, "H": H, "I": I}, bf, LAYERS),
         ("fused_add_rms_norm", "residual", {"rows": n, "cols": H}, bf, 2 * LAYERS),
+        ("qwen3_lm_head_ce", "flce", {"rows": n, "hidden": H, "vocab": V}, bf, 1),
     ]
     return tuple(Case(f"{task}/{slug}", task, get_task(task).level, Workload(dims=dims, dtype=dtype),
                         freq) for task, slug, dims, dtype, freq in rows)
+
+
+def flce_pair(scale: float):
+    """A qwen3_lm_head_ce pair whose weight gradient is ``scale`` times the true one."""
+    import types
+
+    import torch.nn.functional as F
+
+    def loss_of(x, weight, target):
+        return F.cross_entropy(F.linear(x, weight).float(), target, ignore_index=-100)
+
+    def forward_with_saved(x, weight, target):
+        return loss_of(x, weight, target), (x, weight, target)
+
+    def backward_from_saved(dloss, saved):
+        x, weight, target = (t.detach() for t in saved)
+        with torch.enable_grad():
+            x, weight = x.requires_grad_(True), weight.requires_grad_(True)
+            dx, dweight = torch.autograd.grad(loss_of(x, weight, target), (x, weight), dloss)
+        return dx, dweight * scale
+
+    return types.SimpleNamespace(__name__=f"flce_x{scale}", forward_with_saved=forward_with_saved,
+                                 backward_from_saved=backward_from_saved)
 
 
 def linear_pair(scale: float):
@@ -85,10 +111,10 @@ def linear_pair(scale: float):
 
 class ModelReference(unittest.TestCase):
     def test_every_case_task_is_redeclared_under_the_contract(self):
-        from evograd.verification.integrations.base import observed_cases
-        from evograd.verification.integrations.qwen3_0_6b import MODEL, reference
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import TASK_SOURCES, load
+        from evograd.verification.integrations.qwen3_0_6b import reference
 
-        for task in sorted({c.task for c in observed_cases(MODEL)}):
+        for task in sorted({*load()["level1"], *TASK_SOURCES}):
             op = reference.reference_op(task)
             self.assertEqual(op.reference_contract, reference.CONTRACT)
             self.assertIsNone(op.runtime_forward)
@@ -112,29 +138,132 @@ class ModelReference(unittest.TestCase):
         self.assertTrue(torch.equal(out, norm(r + x)))
 
     def test_rmsnorm_generated_inputs_use_the_model_eps(self):
+        from evograd.benchmark import get_task
         from evograd.opdecl.inputs import make_case_inputs
-        from evograd.verification.integrations.base import observed_cases
-        from evograd.verification.integrations.qwen3_0_6b import MODEL, reference
+        from evograd.verification.integrations.qwen3_0_6b import reference
 
-        case = next(c for c in observed_cases(MODEL) if c.case_id == "rmsnorm/k_head_norm")
+        workload = next(w for w in get_task("rmsnorm").benchmark_suites["qwen3_0_6b_observed"]
+                        if w.provenance.component == "k_head_norm")
         op = reference.reference_op("rmsnorm")
-        small = type(case.workload)(dims={"rows": 4, "hidden": 8}, dtype="float32",
-                                    provenance=case.workload.provenance)
+        small = type(workload)(dims={"rows": 4, "hidden": 8}, dtype="float32",
+                               provenance=workload.provenance)
         self.assertEqual(make_case_inputs(op, small, device="cpu")["eps"], reference.RMS_NORM_EPS)
 
 
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class LevelTwoReferencesAreTheModulesArithmetic(unittest.TestCase):
+    """The attention block and the LM head with the loss, against the live modules.
+
+    On the tiny model in float32 and BF16: the reference's output and its
+    gradients (the payload VJPs every gate recomputes) equal the module's own,
+    bit for bit, at the module's own inputs. ``fidelity`` checks the forward
+    again on every recorded call of the pinned model on GPU.
+    """
+
+    def _model(self, dtype):
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+        from evograd.verification.integrations import base as Q
+
+        workload = Qwen3Workload(device="cpu", dtype=dtype, batch_size=B, seq_len=T,
+                                 arch_overrides=ARCH)
+        model = Q.build_model(workload)
+        g = torch.Generator().manual_seed(11)
+        with torch.no_grad():
+            for name, p in sorted(model.named_parameters()):
+                if name.endswith("norm.weight"):
+                    p.copy_(1 + 0.1 * torch.randn(p.shape, generator=g))
+        return model
+
+    @staticmethod
+    def _grads(output, leaves, cotangent):
+        return torch.autograd.grad(output, leaves, cotangent)
+
+    def test_attention_block(self):
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention_block.reference import (
+            qwen3_attention_block_forward as reference)
+
+        for dtype in ("float32", "bfloat16"):
+            with self.subTest(dtype=dtype):
+                model = self._model(dtype)
+                attn, seen = model.model.layers[1].self_attn, {}
+                handle = attn.register_forward_pre_hook(
+                    lambda m, a, k: seen.update(k), with_kwargs=True)
+                ids = torch.randint(0, V, (B, T), generator=torch.Generator().manual_seed(7))
+                with torch.no_grad():
+                    model(input_ids=ids, use_cache=False)
+                handle.remove()
+                self.assertIsNone(seen["attention_mask"])
+                cos, sin = seen["position_embeddings"]
+                x = seen["hidden_states"].detach().requires_grad_(True)
+                dout = torch.randn(B, T, H, generator=torch.Generator().manual_seed(3)).to(x.dtype)
+                weights = [attn.q_proj.weight, attn.k_proj.weight, attn.v_proj.weight,
+                           attn.o_proj.weight, attn.q_norm.weight, attn.k_norm.weight]
+                live, _ = attn(hidden_states=x, position_embeddings=(cos, sin), attention_mask=None)
+                ours = reference(x, *weights, cos[:1], sin[:1], attn.q_norm.variance_epsilon)
+                self.assertTrue(torch.equal(ours, live))
+                for a, b in zip(self._grads(live, [x, *weights], dout),
+                                self._grads(ours, [x, *weights], dout)):
+                    self.assertTrue(torch.equal(a, b))
+
+    def test_lm_head_ce(self):
+        import torch.nn.functional as F
+
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.lm_head_ce.reference import (
+            qwen3_lm_head_ce_forward as reference)
+
+        for dtype in ("float32", "bfloat16"):
+            with self.subTest(dtype=dtype):
+                model = self._model(dtype)
+                labels = torch.randint(0, V, (B, T), generator=torch.Generator().manual_seed(5))
+                hidden = torch.randn(B, T, H, generator=torch.Generator().manual_seed(6)).to(
+                    model.lm_head.weight.dtype).requires_grad_(True)
+                weight = model.lm_head.weight
+                live = model.loss_function(logits=model.lm_head(hidden), labels=labels,
+                                           vocab_size=V)
+                target = F.pad(labels, (0, 1), value=-100)[..., 1:].reshape(-1)
+                ours = reference(hidden.reshape(-1, H), weight, target)
+                self.assertEqual(ours.dtype, torch.float32)
+                self.assertTrue(torch.equal(ours, live))
+                for a, b in zip(self._grads(live, [hidden, weight], torch.ones(())),
+                                self._grads(ours, [hidden, weight], torch.ones(()))):
+                    self.assertTrue(torch.equal(a, b))
+
+
 class RealCaseTable(unittest.TestCase):
+    @unittest.skipUnless(qwen3_snapshot_current(), QWEN3_SNAPSHOT_STALE)
     def test_observed_cases_follow_registry_and_snapshot(self):
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import TASK_SOURCES
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.qwen3_0_6b import MODEL
 
         cases = {c.case_id: c for c in observed_cases(MODEL)}
         self.assertEqual(sum(c.level == 1 for c in cases.values()), 14)
-        self.assertEqual(sum(c.level == 2 for c in cases.values()), 4)
+        self.assertEqual(sorted(c.task for c in cases.values() if c.level == 2),
+                         sorted(TASK_SOURCES))
         self.assertEqual(cases["rmsnorm/rmsnorm"].frequency, 57)
         self.assertEqual(cases["fused_add_rms_norm/residual_rmsnorm"].frequency, 56)
+        self.assertEqual(cases["qwen3_attention_block/attention_block"].frequency, 28)
+        self.assertEqual(cases["qwen3_swiglu_mlp/swiglu_mlp"].frequency, 28)
+        self.assertEqual(cases["qwen3_lm_head_ce/flce"].frequency, 1)
         self.assertEqual(cases["rope/rope_kv"].workload.dims["n_heads"], 8)
         self.assertEqual(cases["linear_no_bias/lm_head"].frequency, 1)
+
+    def test_a_snapshot_entry_of_a_removed_task_is_no_case(self):
+        """Until the next harvest, a merged task's old entries are dropped, and the
+        tasks that replace them are no cases yet."""
+        from unittest import mock
+
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load
+        from evograd.verification.integrations.base import observed_cases
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
+
+        snapshot = load()
+        before = {c.case_id for c in observed_cases(MODEL)}
+        snapshot["tasks"] = {**snapshot["tasks"], "qwen3_removed_task": {"frequency": 1}}
+        with mock.patch("evograd.benchmark.topdown.load_snapshot", lambda name: snapshot):
+            after = {c.case_id for c in observed_cases(MODEL)}
+        self.assertEqual(after, before)
+        self.assertFalse(any(c.startswith("qwen3_removed_task/") for c in after))
 
     def test_pins_match_the_tier3_real_text_workload(self):
         from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.spec import CANONICAL
@@ -241,6 +370,18 @@ class RealRunHarvest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "records no harvested run"):
             self.require(synthetic, self.capture_identity())
 
+    def test_the_snapshot_holds_every_level2_task_at_the_captures_calls_per_step(self):
+        """The harvested calls per step are what the capture emits per order."""
+        tasks = self.snapshot["tasks"]
+        self.assertEqual(set(tasks), set(self.snapshot_module.TASK_SOURCES))
+        per_step = {task: (entry.get("fusion_sites") or {}).get("total") or entry["frequency"]
+                    for task, entry in tasks.items()}
+        self.assertEqual(per_step, {c.task: c.frequency for c in tiny_cases() if c.level == 2})
+        self.assertEqual(tasks["qwen3_attention_block"]["module_paths"],
+                         [f"model.layers.{i}.self_attn" for i in range(LAYERS)])
+        self.assertEqual(sorted(tasks["qwen3_lm_head_ce"]["supporting"]),
+                         ["flat_cross_entropy", "lm_head"])
+
     def test_the_tracked_snapshot_without_a_run_still_loads(self):
         from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import READABLE_SCHEMAS, load
 
@@ -323,6 +464,10 @@ class TinyCaptureTests(unittest.TestCase):
         self.assertEqual(sum(i["level"] == 1 for i in self.invocations), 15 * LAYERS + 3)
         residual = [i for i in self.invocations if i["task"] == "fused_add_rms_norm"]
         self.assertEqual(sorted(i["call"]["role"] for i in residual).count("final_model_norm"), 1)
+        blocks = [i["call"]["path"] for i in self.invocations if i["task"] == "qwen3_attention_block"]
+        self.assertEqual(blocks, [f"model.layers.{i}.self_attn#attention_block" for i in range(LAYERS)])
+        self.assertEqual([i["call"]["path"] for i in self.invocations
+                          if i["task"] == "qwen3_lm_head_ce"], ["lm_head#lm_head_ce"])
 
     def test_payloads_match_each_task_interface(self):
         from evograd.benchmark import get_task
@@ -338,13 +483,26 @@ class TinyCaptureTests(unittest.TestCase):
             list(self.C.invocations(self.recorder, self.model, cases))
 
     def test_cotangent_layouts_survive(self):
-        qkv = next(r for r in self.corpus.payloads()
-                   if r["task"] == "qwen3_qkv_norm_rope" and r["call"]["layer"] == 0)
-        sdpa = self.recorder.sdpa[0]
-        loaded = self.corpus.load(qkv, device="cpu")
-        for name in ("dq", "dk", "dv"):
-            self.assertEqual(qkv["cotangents"][name]["stride"], list(sdpa[name].stride()), name)
-            self.assertEqual(loaded[name].stride(), sdpa[name].stride(), name)
+        sdpa = next(r for r in self.corpus.payloads()
+                    if r["task"] == "causal_gqa_attention" and r["call"]["layer"] == 0)
+        loaded = self.corpus.load(sdpa, device="cpu")
+        for name, recorded in (("q", self.recorder.sdpa[0]["q"]), ("do", self.recorder.sdpa[0]["do"])):
+            entry = sdpa["args"].get(name) or sdpa["cotangents"][name]
+            self.assertEqual(entry["stride"], list(recorded.stride()), name)
+            self.assertEqual(loaded[name].stride(), recorded.stride(), name)
+
+    def test_the_attention_block_payload_is_the_modules_call(self):
+        block = next(r for r in self.corpus.payloads()
+                     if r["task"] == "qwen3_attention_block" and r["call"]["layer"] == 1)
+        loaded = self.corpus.load(block, device="cpu")
+        attn = self.model.model.layers[1].self_attn
+        record = self.recorder.attn[1]
+        self.assertTrue(torch.equal(loaded["x"], record["x"]))
+        self.assertTrue(torch.equal(loaded["dout"], record["dy"]))
+        self.assertTrue(torch.equal(loaded["o_weight"], attn.o_proj.weight))
+        self.assertTrue(torch.equal(loaded["k_norm_weight"], attn.k_norm.weight))
+        self.assertEqual(tuple(loaded["cos"].shape), (1, T, D))
+        self.assertEqual(block["args"]["eps"], {"scalar": attn.q_norm.variance_epsilon})
 
     def test_residual_final_cotangent_is_recorded_as_absent(self):
         final = next(r for r in self.corpus.payloads() if r["call"].get("role") == "final_model_norm")
@@ -364,6 +522,15 @@ class TinyCaptureTests(unittest.TestCase):
         self.assertTrue(torch.equal(target, expected))
         head = next(r for r in self.corpus.payloads() if r["call"]["path"] == "lm_head")
         self.assertEqual(head["notes"].get("tied_weight"), "model.embed_tokens.weight")
+        flce = next(r for r in self.corpus.payloads() if r["task"] == "qwen3_lm_head_ce")
+        loaded = self.corpus.load(flce, device="cpu")
+        self.assertTrue(torch.equal(loaded["target"], expected))
+        self.assertTrue(torch.equal(loaded["x"], self.corpus.load(head, device="cpu")["x"]))
+        self.assertEqual(flce["notes"].get("tied_weight"), "model.embed_tokens.weight")
+        self.assertEqual(flce["notes"]["ignored_rows"], B)
+        # The same tensors as the lm_head and CE payloads: stored once.
+        self.assertEqual(flce["args"]["x"]["storage"], head["args"]["x"]["storage"])
+        self.assertEqual(flce["args"]["target"]["storage"], ce["args"]["target"]["storage"])
 
     def test_local_vjp_comes_from_the_payload_not_model_grad(self):
         from evograd.benchmark import get_task
@@ -400,14 +567,15 @@ class TinyCaptureTests(unittest.TestCase):
         from evograd.verification.integrations.gates import judge_case
         from evograd.verification.integrations.qwen3_0_6b import MODEL
 
-        case = next(c for c in self.cases if c.case_id == "linear_no_bias/q")
-        for scale, expected in ((1.0, "passed"), (1.05, "failed")):
-            reports = judge_case(MODEL, case, linear_pair(scale), self.corpus, device="cpu",
-                                 compile_backend="aot_eager")
-            status = {name: r.status for name, r in reports.items()}
-            self.assertEqual(status, {"gate1_payloads": expected,
-                                      "gate2_operator_calibration": "calibrated",
-                                      "gate2_operator": expected}, scale)
+        for case_id, pair in (("linear_no_bias/q", linear_pair), ("qwen3_lm_head_ce/flce", flce_pair)):
+            case = next(c for c in self.cases if c.case_id == case_id)
+            for scale, expected in ((1.0, "passed"), (1.05, "failed")):
+                reports = judge_case(MODEL, case, pair(scale), self.corpus, device="cpu",
+                                     compile_backend="aot_eager")
+                status = {name: r.status for name, r in reports.items()}
+                self.assertEqual(status, {"gate1_payloads": expected,
+                                          "gate2_operator_calibration": "calibrated",
+                                          "gate2_operator": expected}, (case_id, scale))
 
     def test_development_subset_is_deterministic_and_covers_every_role(self):
         again = self.Q.splits(self.corpus.payloads())

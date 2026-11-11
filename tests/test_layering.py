@@ -160,12 +160,9 @@ class TestQwenOwnershipSplit(unittest.TestCase):
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
 
-    def test_the_benchmark_side_keeps_capture_and_artifact(self):
+    def test_the_benchmark_side_keeps_the_level_manifests(self):
         for relative in ("levels/level1/manifest.py",
-                         "levels/level2/manifest.py",
-                         "layer/artifact.py",
-                         "layer/capture.py",
-                         "layer/prepare.py"):
+                         "levels/level2/manifest.py"):
             with self.subTest(module=relative):
                 self.assertTrue((self.QWEN_BENCH / relative).is_file())
 

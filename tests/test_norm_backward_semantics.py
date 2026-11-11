@@ -215,46 +215,60 @@ class NormBackwardStatements(unittest.TestCase):
 
     # ── q/k/v prefixes ───────────────────────────────────────────────────────
 
-    def test_qwen3_qkv_norm_rope(self):
+    def test_qwen3_attention_block(self):
         B, T, H, HQ, HK, D = 2, 5, 12, 4, 2, 8
+        G, scale = HQ // HK, D**-0.5
         x = _randn(B, T, H)
         wq, wk, wv = _randn(HQ * D, H), _randn(HK * D, H), _randn(HK * D, H)
-        nq, nk = _randn(D), _randn(D)
+        wo, nq, nk = _randn(H, HQ * D), _randn(D), _randn(D)
         cos, sin = _rope_tables(T, D)
-        eps = get_task("qwen3_qkv_norm_rope").args[-1].default
-        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv,
+        eps = get_task("qwen3_attention_block").args[-1].default
+        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv, "o_weight": wo,
                   "q_norm_weight": nq, "k_norm_weight": nk, "cos": cos, "sin": sin}
-        up = _upstream("qwen3_qkv_norm_rope", inputs)
+        up = _upstream("qwen3_attention_block", inputs)
+        dout = up["dout"]
+        c, s = cos.unsqueeze(1), sin.unsqueeze(1)
 
-        def head_norm(d, weight, norm_weight, heads, *, stated):
+        def normed(weight, norm_weight, heads):
             h = (x @ weight.T).view(B, T, heads, D)
             r = torch.rsqrt(h.pow(2).mean(-1, keepdim=True) + eps)
-            dnorm = _unrotate(d, cos, sin).transpose(1, 2)
-            xhat = h * r
-            if stated == "corrected":
-                g = dnorm * norm_weight
-                dh = r * (g - xhat * (g * xhat).mean(-1, keepdim=True))
-            else:  # the text this replaced: an extra norm_weight on the projection term
-                dh = norm_weight * r * (dnorm - h * (dnorm * norm_weight * h).mean(
-                    -1, keepdim=True) * r**2)
-            return dh.reshape(B, T, heads * D), (dnorm * xhat).sum((0, 1, 2))
+            t = (h * r * norm_weight).transpose(1, 2)
+            return t * c + _rotate_half(t) * s, h * r, r
 
-        def formula(stated):
-            dq_flat, dnq = head_norm(up["dq"], wq, nq, HQ, stated=stated)
-            dk_flat, dnk = head_norm(up["dk"], wk, nk, HK, stated=stated)
-            dv_flat = up["dv"].transpose(1, 2).reshape(B, T, HK * D)
-            outer = lambda d: torch.einsum("bto,bth->oh", d, x)  # noqa: E731
-            return {"dx": dq_flat @ wq + dk_flat @ wk + dv_flat @ wv,
-                    "dq_weight": outer(dq_flat), "dk_weight": outer(dk_flat),
-                    "dv_weight": outer(dv_flat), "dq_norm_weight": dnq, "dk_norm_weight": dnk}
+        q, xq, rq = normed(wq, nq, HQ)
+        k, xk, rk = normed(wk, nk, HK)
+        v = (x @ wv.T).view(B, T, HK, D).transpose(1, 2)
+        ke, ve = k.repeat_interleave(G, 1), v.repeat_interleave(G, 1)
+        future = ~torch.ones(T, T, dtype=torch.bool).tril()
+        p = torch.softmax((q @ ke.transpose(-1, -2) * scale).masked_fill(future, float("-inf")), -1)
+        a = (p @ ve).transpose(1, 2).reshape(B, T, HQ * D)
 
-        self.assertGrads("qwen3_qkv_norm_rope", inputs, up, formula("corrected"))
-        # The replaced statement is caught, not merely different in the last bits.
-        old, expected = formula("replaced"), _autograd("qwen3_qkv_norm_rope", inputs, up)
-        self.assertFalse(torch.allclose(old["dx"], expected["dx"], rtol=1e-2, atol=1e-2))
-        text = get_task("qwen3_qkv_norm_rope").backward_semantics
-        self.assertIn("sum over B, T and the heads of dnorm * xhat", text)
+        # The statement, line for line.
+        da = (dout @ wo).view(B, T, HQ, D).transpose(1, 2)
+        dp = da @ ve.transpose(-1, -2)
+        ds = p * (dp - (dp * p).sum(-1, keepdim=True))
+        dq = ds @ ke * scale
+        dk = (ds.transpose(-1, -2) @ q * scale).view(B, HK, G, T, D).sum(2)
+        dv = (p.transpose(-1, -2) @ da).view(B, HK, G, T, D).sum(2)
+
+        def head_norm(d, xhat, r, norm_weight, heads):
+            dn = _unrotate(d, cos, sin).transpose(1, 2)
+            g = dn * norm_weight
+            dh = r * (g - xhat * (g * xhat).mean(-1, keepdim=True))
+            return dh.reshape(B, T, heads * D), (dn * xhat).sum((0, 1, 2))
+
+        dq_flat, dnq = head_norm(dq, xq, rq, nq, HQ)
+        dk_flat, dnk = head_norm(dk, xk, rk, nk, HK)
+        dv_flat = dv.transpose(1, 2).reshape(B, T, HK * D)
+        outer = lambda d: torch.einsum("bto,bth->oh", d, x)  # noqa: E731
+        self.assertGrads("qwen3_attention_block", inputs, up, {
+            "dx": dq_flat @ wq + dk_flat @ wk + dv_flat @ wv,
+            "dq_weight": outer(dq_flat), "dk_weight": outer(dk_flat), "dv_weight": outer(dv_flat),
+            "do_weight": torch.einsum("bth,btq->hq", dout, a),
+            "dq_norm_weight": dnq, "dk_norm_weight": dnk})
+        text = get_task("qwen3_attention_block").backward_semantics
         self.assertIn("dh = r * (g - xhat * mean(g * xhat, -1))", text)
+        self.assertIn("dt*cos - rotate_half(dt*sin)", text)
 
     def test_llama3_qkv_rope(self):
         B, T, H, HQ, HK, D = 2, 5, 12, 4, 2, 8

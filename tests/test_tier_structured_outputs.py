@@ -2,7 +2,7 @@
 
 The coworker's evaluation architecture was written against one output and one
 upstream gradient. Every declaration here has to keep working unchanged, and the
-three multi-output ones have to work at all -- so the same assertions are made
+multi-output ones have to work at all -- so the same assertions are made
 for both arities side by side, which is the only way to see that the
 single-output path was generalized rather than replaced.
 
@@ -48,8 +48,8 @@ if HAVE_TORCH:
 
 #: (op, declared outputs). One single-output operator of each interesting shape,
 #: and every multi-output operator there is.
-SINGLE_OUTPUT = ("layernorm", "qwen3_attention", "causal_gqa_attention")
-MULTI_OUTPUT = ("qwen3_qkv_norm_rope", "fused_add_rms_norm")
+SINGLE_OUTPUT = ("layernorm", "qwen3_attention_block", "causal_gqa_attention")
+MULTI_OUTPUT = ("qwen3_5_gdn_in_proj", "fused_add_rms_norm")
 
 
 def _case(name):
@@ -79,23 +79,12 @@ def _assert_matches(test, results):
 class TestParameterRoles(unittest.TestCase):
     """Which declared arguments an ``nn.Module`` holds, and which it is called with."""
 
-    def test_attention_takes_qkv_and_owns_only_the_output_projection(self):
-        op, _workload, values = _case("qwen3_attention")
-        self.assertEqual(op.parameter_args, ("o_weight",))
-        module = eager_module(op, values)
-        held = dict(module.named_parameters())
-        self.assertEqual(sorted(held), ["o_weight"])
-        # q, k and v arrive from the previous boundary every step. Holding one
-        # of them as module state would measure a layer that keeps its own
-        # queries, which is not the operator the declaration describes.
-        self.assertEqual(list(module._activation_names), ["q", "k", "v"])
-
-    def test_qkv_weights_are_parameters_and_the_rotary_tables_are_buffers(self):
-        op, _workload, values = _case("qwen3_qkv_norm_rope")
+    def test_the_attention_block_weights_are_parameters_and_the_rotary_tables_buffers(self):
+        op, _workload, values = _case("qwen3_attention_block")
         module = eager_module(op, values)
         self.assertEqual(
             sorted(dict(module.named_parameters())),
-            ["k_norm_weight", "k_weight", "q_norm_weight", "q_weight", "v_weight"],
+            ["k_norm_weight", "k_weight", "o_weight", "q_norm_weight", "q_weight", "v_weight"],
         )
         # cos/sin take no gradient and are not optimized; they are precomputed
         # tables the module carries, which is what a buffer is for.
@@ -149,12 +138,12 @@ class TestTierOnePairProtocol(unittest.TestCase):
         self.assertEqual(list(results), ["y", "dx", "dweight", "dbias"])
         self.assertFalse(op.is_multi_output)
 
-    def test_three_outputs_are_each_gated_under_their_declared_name(self):
-        op, results = self._run("qwen3_qkv_norm_rope")
+    def test_six_outputs_are_each_gated_under_their_declared_name(self):
+        op, results = self._run("qwen3_5_gdn_in_proj")
         _assert_matches(self, results)
         names = list(results)
-        self.assertEqual(names[:3], ["q", "k", "v"])
-        self.assertEqual(names[3:], list(op.grad_names()))
+        self.assertEqual(names[:6], ["q", "k", "v", "z", "beta", "g"])
+        self.assertEqual(names[6:], list(op.grad_names()))
 
     def test_the_residual_sum_is_gated_alongside_the_normalized_output(self):
         _op, results = self._run("fused_add_rms_norm")
@@ -177,13 +166,13 @@ class TestTierOnePairProtocol(unittest.TestCase):
                 # has to learn about tuples.
                 self.assertTrue(torch.is_tensor(upstream_grad_values(op, values)))
 
-    def test_a_provider_returning_one_of_three_outputs_is_refused(self):
-        op, _workload, _values = _case("qwen3_qkv_norm_rope")
+    def test_a_provider_returning_one_of_six_outputs_is_refused(self):
+        op, _workload, _values = _case("qwen3_5_gdn_in_proj")
         honest = pytorch_autograd_provider(op)
 
         def forward(values):
             outputs, saved = honest.forward(values)
-            return outputs[0], saved  # drops k and v
+            return outputs[0], saved  # drops k, v, z, beta and g
 
         truncated = PairProvider(
             name="truncated",
@@ -193,8 +182,8 @@ class TestTierOnePairProtocol(unittest.TestCase):
             adapter_kind=honest.adapter_kind,
         )
         with self.assertRaises(ValueError) as caught:
-            self._run("qwen3_qkv_norm_rope", truncated)
-        self.assertIn("3 outputs", str(caught.exception))
+            self._run("qwen3_5_gdn_in_proj", truncated)
+        self.assertIn("6 outputs", str(caught.exception))
 
     def test_a_mismatched_upstream_gradient_count_is_named(self):
         outputs = (torch.zeros(2), torch.zeros(2))
@@ -204,7 +193,7 @@ class TestTierOnePairProtocol(unittest.TestCase):
         self.assertEqual(len(_grad_outputs(outputs, outputs)), 2)
 
     def test_the_identity_control_reuses_the_exact_callables(self):
-        op, _workload, _values = _case("qwen3_qkv_norm_rope")
+        op, _workload, _values = _case("qwen3_5_gdn_in_proj")
         provider = pytorch_autograd_provider(op)
         control = renamed_provider(provider, "eager_control")
         self.assertIs(control.forward, provider.forward)
@@ -213,7 +202,7 @@ class TestTierOnePairProtocol(unittest.TestCase):
         # Same callables on both sides must give the same results; whatever a
         # timed run of this pairing reports is the protocol's noise floor.
         for side in (provider, control):
-            _op, results = self._run("qwen3_qkv_norm_rope", side)
+            _op, results = self._run("qwen3_5_gdn_in_proj", side)
             _assert_matches(self, results)
 
     def test_input_mutation_is_caught_for_a_multi_output_operator(self):
@@ -268,23 +257,25 @@ class TestTierTwoOperatorProtocol(unittest.TestCase):
         # "y", so a report reads the same whatever the operator calls it.
         self.assertEqual(op.output_names, ("y",))
 
-    def test_qkv_norm_rope_routes_all_three_output_gradients(self):
-        op, results = self._check("qwen3_qkv_norm_rope")
+    def test_gdn_in_proj_routes_all_six_output_gradients(self):
+        op, results = self._check("qwen3_5_gdn_in_proj")
         # Every parameter gradient is compared with the oracle, so a backward
-        # that dropped dk or dv would fail here rather than merely look small.
+        # that dropped one output's gradient would fail here rather than look small.
         _assert_matches(self, results)
-        self.assertEqual(list(results)[:3], ["q", "k", "v"])
-        self.assertEqual(list(results)[3:], list(op.grad_names()))
+        self.assertEqual(list(results)[:6], list(op.output_names))
+        self.assertEqual(list(results)[6:], list(op.grad_names()))
 
     def test_fused_add_rms_norm_checks_the_sum_as_well_as_the_norm(self):
         _op, results = self._check("fused_add_rms_norm")
         _assert_matches(self, results)
         self.assertEqual(list(results)[:2], ["out", "summed"])
 
-    def test_qwen3_attention_gradients_reach_q_k_v_and_the_projection(self):
-        _op, results = self._check("qwen3_attention")
+    def test_attention_block_gradients_reach_x_and_every_weight(self):
+        _op, results = self._check("qwen3_attention_block")
         _assert_matches(self, results)
-        self.assertEqual([n for n in results if n != "out"], ["dq", "dk", "dv", "do_weight"])
+        self.assertEqual([n for n in results if n != "out"],
+                         ["dx", "dq_weight", "dk_weight", "dv_weight", "do_weight",
+                          "dq_norm_weight", "dk_norm_weight"])
 
     def test_causal_gqa_attention_measures_without_parameters(self):
         _op, results = self._check("causal_gqa_attention")
@@ -292,13 +283,13 @@ class TestTierTwoOperatorProtocol(unittest.TestCase):
         self.assertEqual(list(results), ["o", "dq", "dk", "dv"])
 
     def test_a_module_dropping_an_output_is_refused_not_averaged(self):
-        op, _workload, values = _case("qwen3_qkv_norm_rope")
+        op, _workload, values = _case("qwen3_5_gdn_in_proj")
         module = eager_module(op, values)
         original = module._call
         module._call = lambda *args, **kwargs: original(*args, **kwargs)[0]
         with self.assertRaises(ValueError) as caught:
             self._step(op, module, values)
-        self.assertIn("3 outputs", str(caught.exception))
+        self.assertIn("6 outputs", str(caught.exception))
 
     def test_the_identity_control_is_two_eager_modules(self):
         specs = identity_control_specs()
@@ -318,7 +309,7 @@ class TestTierTwoOperatorProtocol(unittest.TestCase):
             "adapter_kind": "pytorch_eager_module",
         }
         report = from_tier2_report(
-            "qwen3_qkv_norm_rope",
+            "qwen3_attention_block",
             {
                 "environment": {"gpu_name": "cpu"},
                 "cases": [
@@ -339,7 +330,7 @@ class TestTierTwoOperatorProtocol(unittest.TestCase):
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
 class TestTheDeclarationRefusesAmbiguity(unittest.TestCase):
     def test_the_single_output_accessor_refuses_a_multi_output_declaration(self):
-        op = get_task("qwen3_qkv_norm_rope")
+        op = get_task("fused_add_rms_norm")
         with self.assertRaises(ValueError) as caught:
             op.upstream_grad_name
         self.assertIn("upstream_grad_names", str(caught.exception))

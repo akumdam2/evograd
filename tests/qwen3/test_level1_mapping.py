@@ -349,12 +349,13 @@ class TestCausalGqaAttentionTask(unittest.TestCase):
 class TestComposition(unittest.TestCase):
     """Level-1 outputs must be the Level-2 inputs that were verified."""
 
-    def test_linear_rmsnorm_rope_compose_into_qkv_norm_rope(self):
-        level2 = get_task("qwen3_qkv_norm_rope").benchmark[0].dims
+    def test_projections_norms_rope_and_sdpa_compose_into_the_attention_block(self):
+        level2 = get_task("qwen3_attention_block").benchmark[0].dims
         linear = _by_roles("linear_no_bias")
         self.assertEqual(linear[("q_proj",)]["dims"]["N"], level2["QO"])
         self.assertEqual(linear[("k_proj", "v_proj")]["dims"]["N"], level2["KVO"])
         self.assertEqual(linear[("q_proj",)]["dims"]["K"], level2["H"])
+        self.assertEqual(linear[("q_proj",)]["dims"]["M"], level2["B"] * level2["T"])
         norms = _by_roles("rmsnorm")
         self.assertEqual(norms[("q_norm",)]["dims"]["hidden"], level2["D"])
         self.assertEqual(norms[("k_norm",)]["dims"]["hidden"], level2["D"])
@@ -365,16 +366,20 @@ class TestComposition(unittest.TestCase):
         self.assertEqual(rope_q["dims"]["n_heads"], level2["HQ"])
         self.assertEqual(rope_k["dims"]["n_heads"], level2["HK"])
         self.assertEqual(rope_q["dims"]["head_dim"], level2["D"])
-
-    def test_attention_and_o_proj_compose_into_qwen3_attention(self):
-        level2 = get_task("qwen3_attention").benchmark[0].dims
         sdpa = LEVEL1["causal_gqa_attention"]["configurations"][0]["dims"]
         for dim in ("B", "HQ", "HK", "T", "D"):
             self.assertEqual(sdpa[dim], level2[dim], dim)
-        o_proj = _by_roles("linear_no_bias")[("o_proj",)]["dims"]
+        o_proj = linear[("o_proj",)]["dims"]
         self.assertEqual(o_proj["K"], level2["QO"])
         self.assertEqual(o_proj["N"], level2["H"])
-        self.assertEqual(o_proj["K"], sdpa["HQ"] * sdpa["D"])
+
+    def test_lm_head_and_cross_entropy_compose_into_qwen3_lm_head_ce(self):
+        level2 = get_task("qwen3_lm_head_ce").benchmark[0].dims
+        head = _by_roles("linear_no_bias")[("lm_head",)]["dims"]
+        loss = LEVEL1["cross_entropy"]["configurations"][0]["dims"]
+        self.assertEqual((head["M"], head["K"], head["N"]),
+                         (level2["rows"], level2["hidden"], level2["vocab"]))
+        self.assertEqual((loss["rows"], loss["cols"]), (level2["rows"], level2["vocab"]))
 
     def test_linear_and_swiglu_compose_into_qwen3_swiglu_mlp(self):
         level2 = get_task("qwen3_swiglu_mlp").benchmark[0].dims

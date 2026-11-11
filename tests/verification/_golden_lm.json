@@ -5453,21 +5453,21 @@
     ],
     "scope": "model",
     "site_references": {
-     "attention": {
-      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference:qwen3_attention_forward_ref",
+     "attention_block": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention_block.reference:qwen3_attention_block_forward",
       "kind": "declared_forward_oracle",
       "reference_contract": null,
       "reference_dtype": null,
-      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.attention.reference:qwen3_attention_forward_production",
-      "task": "qwen3_attention"
+      "runtime_forward": null,
+      "task": "qwen3_attention_block"
      },
-     "qkv_norm_rope": {
-      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference:qwen3_qkv_norm_rope_forward_ref",
+     "lm_head_ce": {
+      "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.lm_head_ce.reference:qwen3_lm_head_ce_forward",
       "kind": "declared_forward_oracle",
       "reference_contract": null,
       "reference_dtype": null,
-      "runtime_forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.qkv_norm_rope.reference:qwen3_qkv_norm_rope_forward_production",
-      "task": "qwen3_qkv_norm_rope"
+      "runtime_forward": null,
+      "task": "qwen3_lm_head_ce"
      },
      "residual_rmsnorm": {
       "forward": "evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm.reference:fused_add_rms_norm_forward_ref",
@@ -5523,8 +5523,8 @@
      "data_seed": 0,
      "dtype": "float32",
      "expected_site_counts": {
-      "attention": 2,
-      "qkv_norm_rope": 2,
+      "attention_block": 2,
+      "lm_head_ce": 1,
       "residual_rmsnorm": 4,
       "swiglu_mlp": 2
      },
@@ -6740,8 +6740,8 @@
  },
  "qwen3_capture": {
   "corpus": {
-   "payloads": 86,
-   "records": "2a56eca35fcf2b89e533af16cc6a331554787d77232e9aa3f00f8cc7c5040f5f",
+   "payloads": 84,
+   "records": "a7f2ea6efa66ba083b22d8ca17f51acf64eda13db3d7c7139ef58d2cb7d4063e",
    "shards": [
     "6fe0a824b6dde4b582644c7e439bef1c8404b7813cd00cb17c5cb3ecfd494378"
    ],

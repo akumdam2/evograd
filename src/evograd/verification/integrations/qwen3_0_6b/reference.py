@@ -7,9 +7,10 @@ the unmodified ``Qwen3ForCausalLM`` performs at that call, used alike by the
 Gate 1 oracle, the Gate 2 native and compile controls and boundary replay,
 with no float32 promotion and no second runtime spelling.
 
-Eight tasks' runtime spellings already are that computation; the capture's
-replay checks it bit for bit on every recorded call. RMSNorm and the residual
-add + norm are not: their runtime spelling is ``F.rms_norm``, which rounds the
+Eight tasks' runtime spellings (the attention block's and the LM head with
+the loss's single forward) already are that computation; the capture's replay
+checks it bit for bit on every recorded call. RMSNorm and the residual add +
+norm are not: their runtime spelling is ``F.rms_norm``, which rounds the
 weight product once where ``Qwen3RMSNorm`` rounds twice. They are spelled
 here as the module computes them.
 """

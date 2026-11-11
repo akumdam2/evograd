@@ -72,7 +72,7 @@ class TestSiteRegistry(unittest.TestCase):
 
         mine = {s.name for s in self.sites.llama3_sites().sites}
         theirs = {s.name for s in qwen.qwen3_sites().sites}
-        self.assertEqual(mine & theirs, {"attention", "swiglu_mlp", "residual_rmsnorm"})
+        self.assertEqual(mine & theirs, {"swiglu_mlp", "residual_rmsnorm"})
         self.assertIn("qkv_rope", mine)
         self.assertNotIn("qkv_rope", theirs)
 

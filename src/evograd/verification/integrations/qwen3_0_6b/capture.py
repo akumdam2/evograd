@@ -14,11 +14,15 @@ observed case it belongs to.
   the call's output cotangent. Gradients are cloned in the hook (strides kept).
 * Input gradients recorded by hooks are model-level totals, so they are not
   stored; the gates recompute each payload's local VJP from the reference.
+* Attention block (``qwen3_attention_block``): each ``Qwen3Attention`` call's
+  ``x``, its weights, the rotary tables' first row, ``out`` and ``dout``; 28.
 * Residual fusion sites (``fused_add_rms_norm``): 28 within-layer, 27
   cross-layer and the final norm's sum, 56 in all. The final sum has no
   consumer; its cotangent is supplied as zeros and recorded as such.
 * CE: ``fixed_cross_entropy``'s own ``(source, target)``, labels already
   shifted by ``ForCausalLMLoss``. ``lm_head.weight`` is the tied embedding.
+  The LM head with the loss (``qwen3_lm_head_ce``) is the ``lm_head`` call's
+  input, that weight, the same target, loss and d loss; once per step.
 * Recorders change no arithmetic (checked per order by the shared loop).
 """
 
@@ -171,8 +175,7 @@ class LiveCapture:
             out = original_sdpa(query, key, value, *args, **kwargs)
             record = {"q": query.detach(), "k": key.detach(), "v": value.detach(), "o": out.detach(),
                       "attn_mask_is_none": kwargs.get("attn_mask", args[0] if args else None) is None}
-            for name, tensor in (("dq", query), ("dk", key), ("dv", value), ("do", out)):
-                capture._grad(record, name, tensor)
+            capture._grad(record, "do", out)
             capture.sdpa.append(record)
             return out
 
@@ -309,31 +312,39 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
     for r in capture.ce:
         if r["num_items_in_batch"] is not None or r["ignore_index"] != -100:
             raise ValueError("the CE call is outside the declared case")
+        ignored = int((r["target"] == -100).sum())
         yield emit("cross_entropy", 1,
                    {"path": "loss_function#fixed_cross_entropy", "layer": None, "role": "loss",
                     "kind": "function:fixed_cross_entropy"},
                    {"logits": r["source"], "target": r["target"]},
                    {"dloss": r["dloss"]}, {"loss": r["loss"]},
                    {"target": "labels as ForCausalLMLoss passes them (already shifted once)",
-                    "ignored_rows": int((r["target"] == -100).sum())})
+                    "ignored_rows": ignored})
+        hidden = linear_by_path["lm_head"]["x"]
+        yield emit("qwen3_lm_head_ce", 2,
+                   {"path": "lm_head#lm_head_ce", "layer": None, "role": "lm_head_ce",
+                    "kind": "boundary:lm_head + ForCausalLMLoss"},
+                   {"x": hidden.reshape(-1, hidden.shape[-1]), "weight": model.lm_head.weight,
+                    "target": r["target"]},
+                   {"dloss": r["dloss"]}, {"loss": r["loss"]},
+                   {"target": "labels as ForCausalLMLoss passes them (already shifted once)",
+                    "ignored_rows": ignored,
+                    **({"tied_weight": "model.embed_tokens.weight"} if tied else {})})
 
-    for layer, r in enumerate(capture.attn):
-        attn, sdpa = modules[r["path"]], capture.sdpa[layer]
-        yield emit("qwen3_qkv_norm_rope", 2,
-                   {"path": f"model.layers.{layer}.self_attn#qkv_norm_rope", "layer": layer,
-                    "role": "qkv_norm_rope", "kind": "boundary:Qwen3Attention[:5]"},
+    for r in capture.attn:
+        attn, layer = modules[r["path"]], layer_index(r["path"])
+        if attn.q_norm.variance_epsilon != attn.k_norm.variance_epsilon:
+            raise ValueError(f"{r['path']}: q_norm and k_norm eps differ; the case has one eps")
+        yield emit("qwen3_attention_block", 2,
+                   {"path": f"{r['path']}#attention_block", "layer": layer,
+                    "role": "attention_block", "kind": "boundary:Qwen3Attention"},
                    {"x": r["x"], "q_weight": attn.q_proj.weight, "k_weight": attn.k_proj.weight,
-                    "v_weight": attn.v_proj.weight, "q_norm_weight": attn.q_norm.weight,
-                    "k_norm_weight": attn.k_norm.weight, "cos": shared_row(r["cos"]),
-                    "sin": shared_row(r["sin"]), "eps": attn.q_norm.variance_epsilon},
-                   {"dq": sdpa["dq"], "dk": sdpa["dk"], "dv": sdpa["dv"]},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"]},
-                   {"cotangents": "SDPA input gradients (head-major views, as the model delivers them)"})
-        yield emit("qwen3_attention", 2,
-                   {"path": f"model.layers.{layer}.self_attn#attention", "layer": layer,
-                    "role": "attention", "kind": "boundary:sdpa+o_proj"},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"], "o_weight": attn.o_proj.weight},
-                   {"dout": r["dy"]}, {"out": r["y"]})
+                    "v_weight": attn.v_proj.weight, "o_weight": attn.o_proj.weight,
+                    "q_norm_weight": attn.q_norm.weight, "k_norm_weight": attn.k_norm.weight,
+                    "cos": shared_row(r["cos"]), "sin": shared_row(r["sin"]),
+                    "eps": attn.q_norm.variance_epsilon},
+                   {"dout": r["dy"]}, {"out": r["y"]},
+                   {"cos_sin": "first row of the model's [B, T, D] table (rows verified identical)"})
 
     for r in capture.mlp:
         mlp, layer = modules[r["path"]], layer_index(r["path"])

@@ -15,7 +15,7 @@ so it is the correctness oracle and nothing else.
 would report how much faster a candidate is than a strawman.
 
 The boundary is attention alone. The output projection that usually follows it
-is a separate GEMM and stays in the Level-2 ``qwen3_attention`` task.
+is a separate GEMM, inside the Level-2 attention-block tasks.
 """
 
 import math

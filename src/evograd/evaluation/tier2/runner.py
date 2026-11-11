@@ -88,7 +88,7 @@ def install_call_template(
     The declaration's argument order is the only thing that says where a value
     goes. Concatenating activations, parameters and scalars gives the same list
     only when the declaration happens to list them in that order and declares no
-    inactive tensors; where it does not — ``qwen3_qkv_norm_rope``'s ``cos`` and
+    inactive tensors; where it does not — ``qwen3_attention_block``'s ``cos`` and
     ``sin`` sit between the parameters and ``eps`` — that shortcut drops them.
 
     Resolved once, because ``forward`` runs inside the timed region for *every*

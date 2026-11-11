@@ -113,32 +113,30 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
         },
         "derived": "fusion_sites",
     },
-    # The QKV task's primary configuration is the RoPE application: it is the
-    # last step of the boundary and its two outputs *are* q and k, in the exact
-    # layout the next task receives them. v never passes through RoPE, so its
-    # observed shape and stride are sourced from where it is consumed -- the
-    # SDPA call -- rather than invented.
-    "qwen3_qkv_norm_rope": {
-        "task": "rope_apply",
-        "roles": ["apply_rotary_pos_emb"],
+    # The whole self-attention module, anchored on the observed Qwen3Attention
+    # call (once per layer); every configuration inside it is carried along as
+    # supporting provenance.
+    "qwen3_attention_block": {
+        "task": "attention",
+        "roles": ["self_attn"],
         "supporting_tasks": {
             "q_projection": {"task": "linear", "roles": ["q_proj"]},
             "kv_projection": {"task": "linear", "roles": ["k_proj", "v_proj"]},
             "q_norm": {"task": "rms_norm", "roles": ["q_norm"]},
             "k_norm": {"task": "rms_norm", "roles": ["k_norm"]},
-            "consumer": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
-            "enclosing_attention": {"task": "attention", "roles": ["self_attn"]},
+            "rope": {"task": "rope_apply", "roles": ["apply_rotary_pos_emb"]},
+            "sdpa": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
+            "output_projection": {"task": "linear", "roles": ["o_proj"]},
         },
     },
-    # The attention task's primary configuration is the SDPA call itself; the
-    # output projection is the second half of the same boundary and is carried
-    # as a supporting configuration rather than a separate task.
-    "qwen3_attention": {
-        "task": "sdpa",
-        "roles": ["scaled_dot_product_attention"],
+    # The LM head with the loss, anchored on ForCausalLMLoss (once per step);
+    # the lm_head GEMM and the flattened cross entropy are inside it.
+    "qwen3_lm_head_ce": {
+        "task": "causal_cross_entropy",
+        "roles": ["loss_function"],
         "supporting_tasks": {
-            "output_projection": {"task": "linear", "roles": ["o_proj"]},
-            "enclosing_attention": {"task": "attention", "roles": ["self_attn"]},
+            "lm_head": {"task": "linear", "roles": ["lm_head"]},
+            "flat_cross_entropy": {"task": "cross_entropy", "roles": ["fixed_cross_entropy"]},
         },
     },
 }

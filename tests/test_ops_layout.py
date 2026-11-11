@@ -25,10 +25,10 @@ QWEN_L2 = SRC / "benchmark" / "topdown" / "qwen3_0_6b" / "levels" / "level2"
 
 #: Site package -> the task key it serves. The two differ on purpose.
 QWEN_SITE_TASKS = {
-    "qkv_norm_rope": "qwen3_qkv_norm_rope",
-    "attention": "qwen3_attention",
+    "attention_block": "qwen3_attention_block",
     "swiglu_mlp": "qwen3_swiglu_mlp",
     "residual_rmsnorm": "fused_add_rms_norm",
+    "lm_head_ce": "qwen3_lm_head_ce",
 }
 
 
@@ -103,11 +103,11 @@ class TestFusedTasksLiveInBenchmark(unittest.TestCase):
             with self.subTest(site=site):
                 self.assertIn(task, TASKS)
                 self.assertEqual(TASKS[task].level, 2)
-                for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
+                for part in ("__init__.py", "task.py", "reference.py"):
                     self.assertTrue(
                         (QWEN_L2 / site / part).is_file(),
-                        f"{site}/{part} missing; the site owns its contract, "
-                        f"reference and capture",
+                        f"{site}/{part} missing; the site owns its contract "
+                        f"and reference",
                     )
 
     def test_a_site_package_may_be_named_for_the_place_not_the_task(self):
@@ -142,7 +142,7 @@ class TestRegistryComposition(unittest.TestCase):
         self.assertEqual(counts, {1: 25, 2: 34})
         self.assertEqual(len(PRIMITIVES), 25)
         self.assertEqual(len(TASKS), 59)
-        for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope",
+        for name in ("qwen3_swiglu_mlp", "qwen3_attention_block", "qwen3_lm_head_ce",
                      "llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp",
                      "llama3_residual_rmsnorm", "olmoe_qkv_norm_rope", "olmoe_attention",
                      "olmoe_moe_experts", "olmoe_residual_rmsnorm"):
