@@ -1,0 +1,93 @@
+{
+ "model": "olmoe_1b_7b",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 259.0437113074586,
+ "t3g_ok": false,
+ "t3g_step_ms": null,
+ "t3g_error": "RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or allocate the tensor with pin_memory=True.",
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 259.0437113074586,
+  "step_ms_min": 258.6651814170182,
+  "per_block_ms": [
+   258.6651814170182,
+   258.9758028043434,
+   259.0437113074586,
+   262.009815312922,
+   259.5439627068117
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 259.0437113074586,
+   "min_ms": 258.6651814170182,
+   "q20_ms": 258.91367852687836,
+   "q80_ms": 260.0371332280338
+  },
+  "cpu_bound_fraction": 0.9866353117875273,
+  "cpu_bound_fraction_per_block": [
+   0.9866353117875273,
+   0.9866083426670921,
+   0.9866173998462603,
+   0.9867797189549359,
+   0.9866497526790302
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": false,
+   "failed_at": "capture",
+   "error": "RuntimeError: Cannot copy between CPU and CUDA tensors during CUDA graph capture unless the CPU tensor is pinned. Please use tensor.pin_memory() or allocate the tensor with pin_memory=True."
+  },
+  "units_per_second": 15812.003230367805,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 69258794496,
+  "losses": [
+   2.394305467605591,
+   3.4304070472717285,
+   2.978095769882202,
+   2.3186869621276855,
+   2.6235427856445312
+  ],
+  "loss_trajectory_step_ms": [
+   1478.0867830850184,
+   260.3474978823215,
+   258.62268288619816,
+   258.8708361145109,
+   258.5320300422609
+  ],
+  "first_timed_batch_step_ms": 259.0131680481136,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

@@ -1,0 +1,136 @@
+{
+ "model": "dit_s_2",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 290.5507666990161,
+ "t3g_ok": true,
+ "t3g_step_ms": 289.6446267142892,
+ "t3g_error": null,
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 290.5507666990161,
+  "step_ms_min": 289.59043629001826,
+  "per_block_ms": [
+   289.59043629001826,
+   289.875068096444,
+   290.55598250124604,
+   290.5507666990161,
+   291.1378438817337
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 290.5507666990161,
+   "min_ms": 289.59043629001826,
+   "q20_ms": 289.81814173515886,
+   "q80_ms": 290.67235477734357
+  },
+  "cpu_bound_fraction": 0.9225929824808452,
+  "cpu_bound_fraction_per_block": [
+   0.9227432439513357,
+   0.922513546100533,
+   0.92243082142909,
+   0.922657425203162,
+   0.9225929824808452
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": true,
+   "step_ms": 289.6446267142892,
+   "step_ms_min": 289.1637927852571,
+   "per_block_ms": [
+    290.0895033031702,
+    290.0504644960165,
+    289.6446267142892,
+    289.1637927852571,
+    289.4932838855311
+   ],
+   "latency": {
+    "count": 5,
+    "median_ms": 289.6446267142892,
+    "min_ms": 289.1637927852571,
+    "q20_ms": 289.4273856654763,
+    "q80_ms": 290.05827225744724
+   },
+   "cpu_bound_fraction": 0.29988811892608236,
+   "cpu_bound_fraction_per_block": [
+    0.29883065958037475,
+    0.29988811892608236,
+    0.30052240259027424,
+    0.30053644531473517,
+    0.2993644903734141
+   ],
+   "steps": 10,
+   "blocks": 5,
+   "capture_s": 1.0009782779961824,
+   "check": {
+    "eager_repeats": [
+     {
+      "loss": 0.0,
+      "grad": 2.99200423476053e-07
+     },
+     {
+      "loss": 0.0,
+      "grad": 3.040870891039475e-07
+     }
+    ],
+    "replay": {
+     "loss": 0.0,
+     "grad": 3.018585863683904e-07
+    },
+    "margin": 2.0,
+    "agrees": true
+   }
+  },
+  "units_per_second": 881.0852675022968,
+  "unit_name": "latents",
+  "peak_memory_bytes": 25367699968,
+  "losses": [
+   0.16946227848529816,
+   0.6857542991638184,
+   0.27211689949035645,
+   0.2552456557750702,
+   0.25214865803718567
+  ],
+  "loss_trajectory_step_ms": [
+   588.2047819904983,
+   288.4469230193645,
+   288.5731919668615,
+   291.37451807036996,
+   289.5860909484327
+  ],
+  "first_timed_batch_step_ms": 288.8226890936494,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

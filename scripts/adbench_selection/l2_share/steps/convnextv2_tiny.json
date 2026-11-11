@@ -1,0 +1,136 @@
+{
+ "model": "convnextv2_tiny",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 31.277108215726912,
+ "t3g_ok": true,
+ "t3g_step_ms": 21.929811197333038,
+ "t3g_error": null,
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 31.277108215726912,
+  "step_ms_min": 31.22789370827377,
+  "per_block_ms": [
+   31.46719231735915,
+   31.22789370827377,
+   31.230344786308706,
+   31.277108215726912,
+   31.313459109514955
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 31.277108215726912,
+   "min_ms": 31.22789370827377,
+   "q20_ms": 31.22985457070172,
+   "q80_ms": 31.34420575108379
+  },
+  "cpu_bound_fraction": 0.9925404995786296,
+  "cpu_bound_fraction_per_block": [
+   0.9926713860003566,
+   0.9922156998022666,
+   0.9925929606620196,
+   0.9925404995786296,
+   0.9924232645007123
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": true,
+   "step_ms": 21.929811197333038,
+   "step_ms_min": 21.923376200720668,
+   "per_block_ms": [
+    21.933055901899934,
+    21.932918298989534,
+    21.923376200720668,
+    21.929811197333038,
+    21.926435292698443
+   ],
+   "latency": {
+    "count": 5,
+    "median_ms": 21.929811197333038,
+    "min_ms": 21.923376200720668,
+    "q20_ms": 21.925823474302888,
+    "q80_ms": 21.932945819571614
+   },
+   "cpu_bound_fraction": 0.6439845479570953,
+   "cpu_bound_fraction_per_block": [
+    0.6438571743934061,
+    0.6439446682097785,
+    0.6439845479570953,
+    0.6441751085869414,
+    0.644054649340847
+   ],
+   "steps": 10,
+   "blocks": 5,
+   "capture_s": 0.16243929998017848,
+   "check": {
+    "eager_repeats": [
+     {
+      "loss": 0.0,
+      "grad": 0.0
+     },
+     {
+      "loss": 0.0,
+      "grad": 0.0
+     }
+    ],
+    "replay": {
+     "loss": 0.0,
+     "grad": 0.0
+    },
+    "margin": 2.0,
+    "agrees": true
+   }
+  },
+  "units_per_second": 1023.1124878709087,
+  "unit_name": "images",
+  "peak_memory_bytes": 3032736768,
+  "losses": [
+   0.291015625,
+   0.27734375,
+   0.111328125,
+   0.25390625,
+   0.1689453125
+  ],
+  "loss_trajectory_step_ms": [
+   7393.283947138116,
+   35.236695082858205,
+   33.991578966379166,
+   33.91503798775375,
+   33.97938795387745
+  ],
+  "first_timed_batch_step_ms": 33.919963985681534,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

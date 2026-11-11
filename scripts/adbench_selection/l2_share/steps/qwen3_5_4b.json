@@ -1,0 +1,136 @@
+{
+ "model": "qwen3_5_4b",
+ "options": {
+  "warmup": 3,
+  "steps": 10,
+  "blocks": 5,
+  "loss_steps": 5,
+  "learning_rate": 0.0001,
+  "seed": 0,
+  "cuda_graph": true
+ },
+ "ok": true,
+ "t3_step_ms": 2802.1797530003823,
+ "t3g_ok": true,
+ "t3g_step_ms": 727.5462903082371,
+ "t3g_error": null,
+ "error": null,
+ "row": {
+  "ok": true,
+  "provider": "eager",
+  "step_ms": 2802.1797530003823,
+  "step_ms_min": 2791.1837431020103,
+  "per_block_ms": [
+   2829.9280146951787,
+   2802.1797530003823,
+   2801.1468743905425,
+   2791.1837431020103,
+   2839.8989198962227
+  ],
+  "latency": {
+   "count": 5,
+   "median_ms": 2802.1797530003823,
+   "min_ms": 2791.1837431020103,
+   "q20_ms": 2799.154248132836,
+   "q80_ms": 2831.9221957353875
+  },
+  "cpu_bound_fraction": 0.9994703353327747,
+  "cpu_bound_fraction_per_block": [
+   0.9994018086722981,
+   0.9994983748265697,
+   0.9994214832841533,
+   0.9994703353327747,
+   0.9995995059915402
+  ],
+  "steps": 10,
+  "blocks": 5,
+  "cuda_graph": {
+   "ok": true,
+   "step_ms": 727.5462903082371,
+   "step_ms_min": 727.40962440148,
+   "per_block_ms": [
+    727.5462903082371,
+    727.5186715065502,
+    727.7535109082237,
+    727.5878346990794,
+    727.40962440148
+   ],
+   "latency": {
+    "count": 5,
+    "median_ms": 727.5462903082371,
+    "min_ms": 727.40962440148,
+    "q20_ms": 727.4968620855361,
+    "q80_ms": 727.6209699409083
+   },
+   "cpu_bound_fraction": 0.9953144389494313,
+   "cpu_bound_fraction_per_block": [
+    0.9953179801054065,
+    0.9953148465606467,
+    0.9953136147716571,
+    0.9953136296008063,
+    0.9953144389494313
+   ],
+   "steps": 10,
+   "blocks": 5,
+   "capture_s": 12.373720349976793,
+   "check": {
+    "eager_repeats": [
+     {
+      "loss": 0.0,
+      "grad": 0.009428063001713415
+     },
+     {
+      "loss": 0.0,
+      "grad": 0.0042667533296051365
+     }
+    ],
+    "replay": {
+     "loss": 0.0,
+     "grad": 0.013096109249143947
+    },
+    "margin": 2.0,
+    "agrees": true
+   }
+  },
+  "units_per_second": 730.8596094904839,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 68251450368,
+  "losses": [
+   2.5269622802734375,
+   3.9931859970092773,
+   4.5640716552734375,
+   3.0051002502441406,
+   3.087002754211426
+  ],
+  "loss_trajectory_step_ms": [
+   5690.1325329672545,
+   2809.738394920714,
+   2896.2341969599947,
+   2870.6139780115336,
+   3105.3496439708397
+  ],
+  "first_timed_batch_step_ms": 2803.4238539403304,
+  "patched": [],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [],
+   "actual_sites": [],
+   "paths": {},
+   "counts": {},
+   "modules_replaced": 0
+  },
+  "dynamo": null,
+  "kernel_sources": [],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}
