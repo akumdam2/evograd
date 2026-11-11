@@ -70,7 +70,7 @@ _DENIED_TORCH_PATTERNS = {
 #: ``cffi`` would load a compiled library that calls cuBLAS or cuDNN directly;
 #: ``importlib`` and ``builtins`` would import or look up a name unseen.
 _DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel",
-                           "ctypes", "cffi", "importlib", "builtins"})
+                           "ctypes", "cffi", "importlib", "builtins", "sys"})
 
 #: Denied whatever the receiver is (``torch`` included): the method and
 #: operator-module spellings of a contraction, ``x.mv(v)``, ``x.__matmul__(w)``,

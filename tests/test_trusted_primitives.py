@@ -272,6 +272,12 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
                  "T.func.grad (torch.func.grad)")):
             self._rejects(body, needle)
 
+    def test_the_module_table_is_not_a_way_around_the_rules(self):
+        # ``sys.modules["torch"]`` reaches torch under a name no rule follows.
+        self._rejects("import sys\nreturn sys.modules['torch'].conv2d(x, w), (x,)", "sys")
+        self._rejects("from sys import modules\nreturn modules['torch'].conv2d(x, w), (x,)",
+                      "sys")
+
     def test_a_torch_module_may_not_travel_as_a_value(self):
         # Routes the alias resolution cannot follow: the module itself is refused.
         for body, needle in (
