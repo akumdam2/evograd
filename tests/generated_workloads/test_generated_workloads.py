@@ -15,8 +15,15 @@ def test_generated_harvest():
     manifest = collect(spec)
     snap = snapshot(manifest)
     assert manifest["backward_verified"]
-    assert snap["tasks"]["dit_s_2_dit_mlp"]["frequency"] == spec.arch["depth"]
-    assert snap["tasks"]["dit_s_2_dit_modulation"]["frequency"] == spec.arch["depth"]
+    depth = spec.arch["depth"]
+    for task in ("dit_mlp", "dit_modulation", "dit_attention"):
+        assert snap["tasks"]["dit_s_2_" + task]["frequency"] == depth
+    # Two residual adds per block; the last feeds the final layer (its own configuration).
+    residual = snap["tasks"]["dit_s_2_dit_adaln_residual"]
+    assert [(c["provenance"]["component"], c["frequency"]) for c in residual["configurations"]] == [
+        ("blocks.residual", 2 * depth - 1), ("final_residual", 1)]
+    assert snap["tasks"]["dit_s_2_dit_attention"]["configurations"][0]["provenance"]["free"] == {
+        "heads": spec.arch["num_heads"]}
     assert not spec.is_canonical
     # The tracked suite is the published run's, never this reduced one.
     assert snap["tasks"]["dit_s_2_dit_mlp"]["configurations"][0]["dims"] not in [
@@ -69,7 +76,8 @@ def test_real_run_observes_the_verification_step_and_restores_the_model(tmp_path
     ``run`` and leaves the model's site functions as it found them."""
     from unittest import mock
     from evograd.benchmark.topdown.common.generated import harvest
-    from evograd.benchmark.topdown.common.generated.model import build_model, dit_mlp, make_inputs
+    from evograd.benchmark.topdown.common.generated import model as dit
+    from evograd.benchmark.topdown.common.generated.model import make_inputs
     from evograd.verification.integrations import base, load
 
     for name, small, real_id in (("dit_s_2", SMALL, "dit_s_2-f06efa7f62b01cf5"),
@@ -87,8 +95,10 @@ def test_real_run_observes_the_verification_step_and_restores_the_model(tmp_path
         assert manifest["run"] == run
         assert snapshot(manifest)["run"] == manifest["run"]
         assert snapshot(manifest)["schema_version"] == f"evograd-{name}-snapshot/2"
-        if name == "dit_s_2":
-            assert all(block.mlp_fn is dit_mlp for block in model.blocks)  # sites put back
+        if name == "dit_s_2":  # sites put back
+            assert all((b.mod_fn, b.attn_fn, b.residual_fn, b.mlp_fn) == (
+                dit.dit_modulation, dit.dit_attention, dit.dit_adaln_residual, dit.dit_mlp)
+                for b in model.blocks)
         real = load(name).load_workload().spec
         assert real.input_mode == "real" and real.workload_id == real_id
 

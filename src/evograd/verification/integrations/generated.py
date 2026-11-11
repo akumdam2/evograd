@@ -10,13 +10,18 @@ Level-2 site call becomes one payload of the observed case it belongs to.
   into the task's ``[M, K]`` view.
 * ``nn.Conv2d`` and ``nn.EmbeddingBag``: module forward hooks; the bag's
   indices and offsets are recorded as passed.
-* Level-2 sites (``mod_fn``/``mlp_fn`` of every DiT block, DLRM's
-  ``interaction_fn``): the model attribute is wrapped by a pass-through that
-  records the task-ABI arguments.
+* Level-2 sites (``mod_fn``/``attn_fn``/``residual_fn``/``mlp_fn`` of every
+  DiT block, DLRM's ``interaction_fn``): the model attribute is wrapped by a
+  pass-through that records the task-ABI arguments. ``residual_fn`` is called
+  twice per block (after the attention, after the MLP); the second call is
+  ``<path>#2``.
 
-Output cotangents come from tensor hooks on each call's output (the total
-gradient of that output). Recorders change no arithmetic (checked per order
-by the shared loop).
+Output cotangents come from tensor hooks on each call's outputs. A site with
+several outputs hands each on as a view, so its hook sees only the gradient
+from outside the site (``dit_adaln_residual``'s ``summed`` is also read by its
+own LayerNorm); an output nothing outside reads (the last block's sum) gets a
+zero cotangent, named in the payload's ``absent_cotangents``. Recorders change
+no arithmetic (checked per order by the shared loop).
 """
 
 from __future__ import annotations
@@ -26,7 +31,8 @@ from typing import Any, Callable, Iterator, Sequence
 from .base import Case, invocation
 
 #: Level-2 site attribute -> its task suffix (``<model>_<suffix>``).
-SITES = {"dit_s_2": {"mod_fn": "dit_modulation", "mlp_fn": "dit_mlp"},
+SITES = {"dit_s_2": {"mod_fn": "dit_modulation", "attn_fn": "dit_attention",
+                     "residual_fn": "dit_adaln_residual", "mlp_fn": "dit_mlp"},
          "torchrec_dlrm": {"interaction_fn": "dlrm_interaction"}}
 
 
@@ -88,16 +94,22 @@ class GeneratedCapture:
     def _wrap_site(self, path, owner, attribute, task):
         from evograd.benchmark import get_task
 
-        names = [a.name for a in get_task(task).args]
+        op = get_task(task)
+        names = [a.name for a in op.args]
         original = getattr(owner, attribute)
         capture = self
 
         def site(*args):
             out = original(*args)
+            if op.is_multi_output:
+                out = tuple(v.view_as(v) for v in out)
+            outs = out if op.is_multi_output else (out,)
             record = {"path": path, "task": task,
                       "args": {n: (a.detach() if hasattr(a, "detach") else a) for n, a in zip(names, args)},
-                      "out": out.detach()}
-            _grad(record, "dout", out)
+                      "out": {o.name: v.detach() for o, v in zip(op.outputs, outs)},
+                      "dout": {}, "grads": [o.grad_name for o in op.outputs]}
+            for o, v in zip(op.outputs, outs):
+                _grad(record["dout"], o.grad_name, v)
             capture.sites.append(record)
             return out
 
@@ -171,6 +183,15 @@ def invocations(capture: GeneratedCapture, model, cases: Sequence[Case]) -> Iter
     for r in capture.bags:
         yield invocation(cases, "embedding_bag", 1, call(unique(r["path"]), "module:nn.EmbeddingBag"),
                          r["args"], {"dout": r["dout"]}, {"out": r["out"]})
+    import torch
+
     for r in capture.sites:
+        absent = [g for g in r["grads"] if g not in r["dout"]]
+        outs = dict(zip(r["grads"], r["out"].values()))
+        cotangents = {g: r["dout"][g] if g in r["dout"] else torch.zeros_like(outs[g])
+                      for g in r["grads"]}
         yield invocation(cases, r["task"], 2, call(unique(r["path"]), "site:" + r["path"]),
-                         r["args"], {"dout": r["dout"]}, {"out": r["out"]})
+                         r["args"], cotangents, r["out"],
+                         {"absent_cotangents": absent,
+                          "absent_origin": "no consumer outside the site; zeros supplied"}
+                         if absent else {})

@@ -54,6 +54,8 @@ OLMOE_LEVEL2 = (
 VISION_LEVEL2 = (
     "convnextv2_tiny_convnext_mlp",
     "convnextv2_tiny_dwconv_layernorm",
+    "dit_s_2_dit_adaln_residual",
+    "dit_s_2_dit_attention",
     "dit_s_2_dit_mlp",
     "dit_s_2_dit_modulation",
     "qwen2_vl_2b_text_attention_block",
@@ -130,7 +132,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
         self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
-        self.assertEqual(len(TASKS), 61)
+        self.assertEqual(len(TASKS), 63)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:

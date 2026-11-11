@@ -83,6 +83,9 @@ class TestDerivedNaming(unittest.TestCase):
                     # ConvNeXt V2's two boundaries in each ConvNextV2Layer.
                     "convnextv2_tiny_convnext_mlp",
                     "convnextv2_tiny_dwconv_layernorm",
+                    # DiT-S/2's four boundaries in each block.
+                    "dit_s_2_dit_adaln_residual",
+                    "dit_s_2_dit_attention",
                     "dit_s_2_dit_mlp",
                     "dit_s_2_dit_modulation",
                     # Qwen3-0.6B's residual fusion, under the generic key it

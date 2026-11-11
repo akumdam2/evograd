@@ -37,14 +37,14 @@ def collect(spec, *, model=None, batch=None):
     counter = 0
     weights = {p.data_ptr(): n for n, p in model.named_parameters()}
 
-    def record(level, task, path, dims, names, values, *, note=""):
+    def record(level, task, path, dims, names, values, *, note="", free=None):
         records.append({"level": level, "task": task, "path": path, "dims": dims,
                         "dtype": str(values[0].dtype).removeprefix("torch."),
                         "inputs": [_meta(v) for v in values],
                         "source_inputs": [_meta(v) for v in values],
                         "input_adapter": "identity",
                         "strides": {n: list(v.stride()) for n, v in zip(names, values)},
-                        "provenance": {"component": task, "free": {},
+                        "provenance": {"component": task, "free": dict(free or {}),
                                        "source": "execution", "note": note}})
 
     for path, module in model.named_modules():
@@ -77,9 +77,10 @@ def collect(spec, *, model=None, batch=None):
             handles.append(module.register_forward_pre_hook(bag_hook))
     # The site functions the model holds, put back afterwards.
     sites = ([(owner, name, getattr(owner, name)) for owner in model.blocks
-              for name in ("mod_fn", "mlp_fn")] if spec.model == "dit_s_2"
+              for name in ("mod_fn", "attn_fn", "residual_fn", "mlp_fn")] if spec.model == "dit_s_2"
              else [(model, "interaction_fn", model.interaction_fn)])
     if spec.model == "dit_s_2":
+        last = len(model.blocks) - 1
         for i, block in enumerate(model.blocks):
             def mod_hook(c, weight, bias, i=i, fn=block.mod_fn):
                 b, h = c.shape
@@ -88,6 +89,24 @@ def collect(spec, *, model=None, batch=None):
                        ("c", "weight", "bias"), (c, weight, bias))
                 return fn(c, weight, bias)
             block.mod_fn = mod_hook
+            def attn_hook(x, qkv_weight, qkv_bias, proj_weight, proj_bias, heads, i=i,
+                          fn=block.attn_fn):
+                b, t, h = x.shape
+                record(2, "dit_s_2_dit_attention", f"blocks.{i}.attention",
+                       dict(B=b, T=t, H=h, Q=qkv_weight.shape[0]),
+                       ("x", "qkv_weight", "qkv_bias", "proj_weight", "proj_bias"),
+                       (x, qkv_weight, qkv_bias, proj_weight, proj_bias), free={"heads": heads})
+                return fn(x, qkv_weight, qkv_bias, proj_weight, proj_bias, heads)
+            block.attn_fn = attn_hook
+            # A block's two residual adds: after its attention, then after its MLP;
+            # the last block's second one feeds the final layer, not a block.
+            paths = [f"blocks.{i}.residual", "final_residual" if i == last else f"blocks.{i}.residual"]
+            def residual_hook(x, gate, branch, shift, scale, fn=block.residual_fn, paths=paths):
+                b, t, h = x.shape
+                record(2, "dit_s_2_dit_adaln_residual", paths.pop(0), dict(B=b, T=t, H=h),
+                       ("x", "gate", "branch", "shift", "scale"), (x, gate, branch, shift, scale))
+                return fn(x, gate, branch, shift, scale)
+            block.residual_fn = residual_hook
             def mlp_hook(x, w1, b1, w2, b2, i=i, fn=block.mlp_fn):
                 b, t, h = x.shape
                 record(2, "dit_s_2_dit_mlp", f"blocks.{i}.mlp", dict(B=b, T=t, H=h, I=w1.shape[0]),
@@ -136,7 +155,8 @@ def collect(spec, *, model=None, batch=None):
                      if p.grad is not None and not torch.isfinite(p.grad).all()]
         if missing or nonfinite:
             raise ValueError(f"invalid training gradients: missing={missing}, nonfinite={nonfinite}")
-        expected = 2 * spec.arch["depth"] if spec.model == "dit_s_2" else 1
+        # DiT per block: modulation, attention, MLP and two residual adds.
+        expected = 5 * spec.arch["depth"] if spec.model == "dit_s_2" else 1
         if sum(row["level"] == 2 for row in records) != expected:
             raise ValueError("Level-2 invocation count differs from architecture")
         return {"schema_version": "evograd-generated-harvest/2",

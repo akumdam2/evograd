@@ -51,6 +51,14 @@ SMALL = {
         Workload({'rows': 64, 'cols': 2048}, 'float16'),
         Workload({'rows': 64, 'cols': 2048}, 'bfloat16'),
     ),
+    'dit_s_2_dit_adaln_residual': (
+        Workload({'B': 2, 'T': 7, 'H': 12}, 'float32',
+                 provenance=_p('dit_s_2', 'dit_adaln_residual')),
+    ),
+    'dit_s_2_dit_attention': (
+        Workload({'B': 2, 'T': 7, 'H': 12, 'Q': 36}, 'float32',
+                 provenance=_p('dit_s_2', 'dit_attention', free={'heads': 2})),
+    ),
     'dit_s_2_dit_mlp': (
         Workload({'B': 2, 'T': 7, 'H': 12, 'I': 48}, 'float32',
                  provenance=_p('dit_s_2', 'dit_mlp')),

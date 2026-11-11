@@ -17,11 +17,25 @@ class-drop masks are sampled with probability 0.1. A seed fixes each batch.
 
 The canonical configuration has 12 blocks, hidden width 384, six attention
 heads, 4×32×32 latents, batch 256, float32, and 32,865,056 trainable
-parameters. Its two patch sites are `dit_modulation` (adaLN shift, scale, and
-gate projection) and `dit_mlp` (linear, tanh-approximate GELU, linear). Each
-site is invoked 12 times per model step. Level 1 binds observed `linear` and
-`spatial_conv2d` calls. Attention, affine-free layer normalization, and the
-diffusion loss remain outside the standalone operator pool.
+parameters. Its Level-2 sites are attributes of every `DiTBlock` the model
+calls through:
+
+| Task (`dit_s_2_...`) | Attribute | Boundary | Calls per step |
+| --- | --- | --- | --- |
+| `dit_modulation` | `mod_fn` | SiLU, then the biased projection to the six adaLN-Zero shift, scale and gate vectors | 12 |
+| `dit_attention` | `attn_fn` | biased qkv projection 384 -> 1152, q/k/v of 6 heads x 64, non-causal SDPA, heads merged, biased output projection | 12 |
+| `dit_adaln_residual` | `residual_fn` | `summed = x + gate * branch`, then the next sub-layer's input `LayerNorm(summed) * (1 + scale) + shift` (no affine, eps 1e-6); returns `(modulated, summed)` | 24 |
+| `dit_mlp` | `mlp_fn` | linear, tanh-approximate GELU, linear | 12 |
+
+`residual_fn` runs twice per block: after the attention (its input is the
+block's MLP input) and after the MLP (its input is the next block's attention
+input, or for the last block the final layer's). That is 23 calls of one
+configuration (`blocks.residual`) and one of another (`final_residual`): the
+final layer's shift and scale are halves of a `[B, 2H]` projection, row stride
+2H instead of 6H. The first block's attention input, the LayerNorm and
+modulation of the patch embedding, has no residual add before it and is not
+part of any case. Level 1 binds observed `linear` and `spatial_conv2d` calls;
+the diffusion loss remains outside the operator pool.
 
 Measured Level-1/2 cases are derived from the whole-model harvest of the
 verification run. A reduced configuration can verify execution but cannot

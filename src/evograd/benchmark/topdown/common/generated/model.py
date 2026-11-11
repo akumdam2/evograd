@@ -30,23 +30,30 @@ def dit_modulation(c, weight, bias):
     return F.linear(F.silu(c), weight, bias)
 
 
-def ada_residual(x, c, mod_weight, mod_bias, qkv_weight, qkv_bias, proj_weight,
-                 proj_bias, fc1_weight, fc1_bias, fc2_weight, fc2_bias, heads,
-                 mlp_fn=dit_mlp, mod_fn=dit_modulation):
-    h = x.shape[-1]
-    shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = mod_fn(c, mod_weight, mod_bias).chunk(6, dim=-1)
-    a = F.layer_norm(x, (h,), eps=1e-6)
-    a = modulate(a, shift_a, scale_a)
-    b, n, _ = a.shape
-    qkv = F.linear(a, qkv_weight, qkv_bias).reshape(b, n, 3, heads, h // heads)
+def dit_attention(x, qkv_weight, qkv_bias, proj_weight, proj_bias, heads):
+    """A block's multi-head self-attention, from its modulated input to the projection."""
+    b, n, h = x.shape
+    qkv = F.linear(x, qkv_weight, qkv_bias).reshape(b, n, 3, heads, h // heads)
     q, k, v = qkv.permute(2, 0, 3, 1, 4).unbind(0)
     a = F.scaled_dot_product_attention(q, k, v).transpose(1, 2).reshape(b, n, h)
-    x = x + gate_a[:, None] * F.linear(a, proj_weight, proj_bias)
-    m = modulate(F.layer_norm(x, (h,), eps=1e-6), shift_m, scale_m)
-    return x + gate_m[:, None] * mlp_fn(m, fc1_weight, fc1_bias, fc2_weight, fc2_bias)
+    return F.linear(a, proj_weight, proj_bias)
+
+
+def dit_adaln_residual(x, gate, branch, shift, scale):
+    """A sub-layer's gated residual add, then the next sub-layer's adaLN input.
+
+    Returns ``(modulated, summed)``: the affine-free LayerNorm (eps 1e-6) of the
+    sum, shifted and scaled, and the sum itself, which the next residual add reads.
+    """
+    summed = x + gate[:, None] * branch
+    return modulate(F.layer_norm(summed, (summed.shape[-1],), eps=1e-6), shift, scale), summed
 
 
 class DiTBlock(nn.Module):
+    """One adaLN-Zero block. Its Level-2 sites are attributes the model calls:
+    ``mod_fn`` (once), ``attn_fn`` (once), ``residual_fn`` (twice: after the
+    attention and after the MLP) and ``mlp_fn`` (once)."""
+
     def __init__(self, hidden, heads, ratio):
         super().__init__()
         self.hidden, self.heads = hidden, heads
@@ -57,13 +64,23 @@ class DiTBlock(nn.Module):
         self.fc2 = nn.Linear(ratio * hidden, hidden)
         self.mlp_fn = dit_mlp
         self.mod_fn = dit_modulation
+        self.attn_fn = dit_attention
+        self.residual_fn = dit_adaln_residual
 
-    def forward(self, x, c):
-        return ada_residual(x, c, self.mod.weight, self.mod.bias,
-                            self.qkv.weight, self.qkv.bias, self.proj.weight,
-                            self.proj.bias, self.fc1.weight, self.fc1.bias,
-                            self.fc2.weight, self.fc2.bias, self.heads, self.mlp_fn,
-                            self.mod_fn)
+    def modulation(self, c):
+        """The block's shift, scale and gate of the attention, then of the MLP."""
+        return self.mod_fn(c, self.mod.weight, self.mod.bias).chunk(6, dim=-1)
+
+    def forward(self, x, a, mod, shift, scale):
+        """From the residual stream ``x``, this block's modulated attention input
+        ``a`` and its :meth:`modulation` ``mod`` to ``(modulated, summed)``: the
+        next sub-layer's input, modulated by ``shift`` and ``scale``, and the stream."""
+        _, _, gate_a, shift_m, scale_m, gate_m = mod
+        out = self.attn_fn(a, self.qkv.weight, self.qkv.bias, self.proj.weight, self.proj.bias,
+                           self.heads)
+        m, x = self.residual_fn(x, gate_a, out, shift_m, scale_m)
+        out = self.mlp_fn(m, self.fc1.weight, self.fc1.bias, self.fc2.weight, self.fc2.bias)
+        return self.residual_fn(x, gate_m, out, shift, scale)
 
 
 class DiTModel(nn.Module):
@@ -115,10 +132,17 @@ class DiTModel(nn.Module):
         if drop_mask is not None:
             labels = torch.where(drop_mask.bool(), a["num_classes"], labels)
         c = self.t_embedder(timestep_embedding(timesteps).to(self.patch.weight.dtype)) + self.y_embedder(labels)
-        for block in self.blocks:
-            x = block(x, c)
-        shift, scale = F.linear(F.silu(c), self.final_mod.weight, self.final_mod.bias).chunk(2, -1)
-        x = self.final_linear(modulate(F.layer_norm(x, (x.shape[-1],), eps=1e-6), shift, scale))
+        blocks = self.blocks
+        mod = blocks[0].modulation(c)
+        # The first block's attention input is the one adaLN input no residual add precedes.
+        h = modulate(F.layer_norm(x, (x.shape[-1],), eps=1e-6), mod[0], mod[1])
+        for i, block in enumerate(blocks):
+            # What follows the block's MLP: the next block's attention, or the final layer.
+            following = (blocks[i + 1].modulation(c) if i + 1 < len(blocks) else
+                         F.linear(F.silu(c), self.final_mod.weight, self.final_mod.bias).chunk(2, -1))
+            h, x = block(x, h, mod, following[0], following[1])
+            mod = following
+        x = self.final_linear(h)
         b, _, _ = x.shape
         side = a["input_size"] // p
         return x.reshape(b, side, side, p, p, 2 * a["in_channels"]).permute(0, 5, 1, 3, 2, 4).reshape(

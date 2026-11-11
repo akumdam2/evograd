@@ -235,6 +235,8 @@ class TestSingleOutputRegression(unittest.TestCase):
         "olmoe_residual_rmsnorm",
         # Qwen2-VL: the vision and text residual fusions' (normed, summed).
         "qwen2_vl_2b_vision_residual_layernorm", "qwen2_vl_2b_text_residual_rmsnorm",
+        # DiT: the adaLN residual fusion's (modulated, summed).
+        "dit_s_2_dit_adaln_residual",
     }
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):
