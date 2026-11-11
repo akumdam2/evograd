@@ -1,7 +1,7 @@
-"""Site ``residual_rmsnorm``: the post-attention residual add and its RMSNorm.
+"""Site ``residual_rmsnorm``: a residual add and the RMSNorm that follows it.
 
 ``task`` is the contract, ``reference`` the float32 oracle and the production
-spelling, ``capture`` one real invocation from a captured or config-derived layer.
+spelling (bitwise the model's own).
 """
 
 from .task import op

@@ -47,10 +47,10 @@ OBSERVED_BINDINGS: tuple[ObservedBinding, ...] = tuple(
 
 #: Primitive -> the Level-2 contracts it composes into.
 COMPOSES_INTO: dict[str, tuple[str, ...]] = {
-    "linear_no_bias": ("olmoe_qkv_norm_rope", "olmoe_attention"),
-    "rmsnorm": ("olmoe_qkv_norm_rope", "olmoe_residual_rmsnorm"),
-    "rope": ("olmoe_qkv_norm_rope",),
-    "causal_gqa_attention": ("olmoe_attention",),
+    "linear_no_bias": ("olmoe_attention_block",),
+    "rmsnorm": ("olmoe_attention_block", "olmoe_residual_rmsnorm"),
+    "rope": ("olmoe_attention_block",),
+    "causal_gqa_attention": ("olmoe_attention_block",),
     "swiglu": ("olmoe_moe_experts",),
     # The loss, and the lm_head before it: no lm_head_ce site in this step.
     "cross_entropy": (),

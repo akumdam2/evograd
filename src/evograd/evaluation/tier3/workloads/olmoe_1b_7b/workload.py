@@ -10,7 +10,8 @@ sequence 2048, BF16, CUDA, SDPA, grouped-GEMM experts, ``use_cache`` off, no
 checkpointing, ``model.train()``, random weights through the model's own
 ``post_init``, synthetic tokens. The runner adds AdamW
 (``tier3.runner.OPTIMIZER_DEFAULTS``) around ``loss.backward()``. Sites are
-patched on all 16 layers; the counts are held to the depth.
+patched on all 16 layers (the residual site on ``model.norm`` too); the counts
+are held to the depth.
 
 **No whole-model gate here.** Correctness is judged by the verification
 package's Gates 1/2/3; :meth:`describe` still records ``model_gate`` as not

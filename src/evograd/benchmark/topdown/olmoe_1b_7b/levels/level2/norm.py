@@ -2,7 +2,7 @@
 
 Transformers computes the variance in float32, scales in float32, casts back to
 the input dtype and *then* multiplies by the weight. Two sites reproduce it --
-the q/k norms inside ``qkv_norm_rope`` and the post-attention norm inside
+the q/k norms inside ``attention_block`` and the residual-stream norms inside
 ``residual_rmsnorm`` -- and they must agree bitwise with the module, so the
 spelling is written once here (checked against ``modeling_olmoe`` 5.16.1).
 """

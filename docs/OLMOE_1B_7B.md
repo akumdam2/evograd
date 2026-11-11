@@ -1,9 +1,9 @@
 # OLMoE-1B-7B: how to use the cases
 
 The routed mixture-of-experts decoder at every level: the whole training step
-(L3) at B2 x T2048 with grouped-GEMM experts, four composite sites (L2) and six
-bound primitives (L1). Layer 8, captured or config-derived, is where the L2
-sites take their real invocations from. The package README
+(L3) at B2 x T2048 with grouped-GEMM experts, three composite sites (L2) and six
+bound primitives (L1). Every case's real invocations are the verification
+capture's recorded calls of a real training step. The package README
 (`src/evograd/benchmark/topdown/olmoe_1b_7b/README.md`) describes the cases;
 this page says how to run them and what is deferred.
 
@@ -24,12 +24,11 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 
 ## Sites and tasks
 
-| site | task | what |
-| --- | --- | --- |
-| `qkv_norm_rope` | `olmoe_qkv_norm_rope` | projections, full-width q/k RMSNorm, RoPE |
-| `attention` | `olmoe_attention` | causal SDPA 16/16 D128 + o_proj |
-| `residual_rmsnorm` | `olmoe_residual_rmsnorm` | post-attention add + RMSNorm, two outputs |
-| `moe_experts` | `olmoe_moe_experts` | the 64 routed SwiGLU experts, 8 per token; the router stays native |
+| site | task | what | calls per step |
+| --- | --- | --- | --- |
+| `attention_block` | `olmoe_attention_block` | the whole attention module: projections, full-width q/k RMSNorm, RoPE, causal SDPA 16/16 D128, o_proj | 16 |
+| `residual_rmsnorm` | `olmoe_residual_rmsnorm` | every residual add an RMSNorm follows (post-attention, into the next layer's input norm, into `model.norm`), two outputs | 32 |
+| `moe_experts` | `olmoe_moe_experts` | the 64 routed SwiGLU experts, 8 per token; the router stays native | 16 |
 
 ## Running
 
@@ -42,17 +41,15 @@ python -m evograd.benchmark.topdown.olmoe_1b_7b --out smoke.json
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest harvest.json --write
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --synthetic --out harvest_synthetic.json
-python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture --harvest harvest_synthetic.json --out-dir <dir>
 ```
 
 The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 `evograd.verification.integrations.olmoe_1b_7b` under the verification
 settings); the snapshot records that run (`run`), and a capture refuses a
-snapshot that does not record its own run. The layer capture replays the
-random-weight synthetic step, so it reads a `--synthetic` harvest. It checks
-that artifact against the tracked snapshot's workload id and manifest hash, so
-it works only until the snapshot is regenerated from the real run (open; see
+snapshot that does not record its own run. The tracked snapshot predates the
+three-site case list (it still lists the two former attention tasks and a
+16-call residual site), so the next real-run harvest regenerates it (open; see
 "Regenerating the snapshots" in `src/evograd/verification/README.md`).
 
 If the B2 step does not fit, `--batch-size 1` on the smoke and `--synthetic`
@@ -120,4 +117,4 @@ The write-up is `docs/experiments/olmoe_session_20261016.md`.
 1. The tier-3 per-site and whole-model compile rows and the tier-2 timings.
 2. The L3 whole-model gate; negative controls and faults.
 3. Pretrained `allenai/OLMoE-1B-7B-0924` weights and real text.
-4. Seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.
+4. Seeds and evolution; an `lm_head_ce` site.

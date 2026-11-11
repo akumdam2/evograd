@@ -1,12 +1,15 @@
 """Operator declaration: residual add + RMSNorm, two outputs (site ``residual_rmsnorm``).
 
-Between the attention and the MoE block of every layer: the post-attention
-``residual + branch`` and ``post_attention_layernorm``. Returns the normalized
-value and the sum itself, so the backward combines two upstream gradients -- the
-characteristic error is to ignore ``dsummed``. The layer's input norm and its
-closing residual add are not part of this site (the cross-layer fusion is a
-later step's). OLMoE's norm weight is a plain scale initialized at one, not the
-zero-centred ``(1 + w)`` of Qwen3.5.
+Every residual add an RMSNorm follows, 32 per step: in each layer the
+post-attention ``residual + branch`` with ``post_attention_layernorm``, and the
+layer's closing ``residual + moe`` with the norm after it -- the next layer's
+``input_layernorm``, or ``model.norm`` after the last layer (layer 0's input
+norm follows the embedding and is not one). Returns the normalized value and
+the sum itself, so the backward combines two upstream gradients -- the
+characteristic error is to ignore ``dsummed``. ``dsummed`` is what the sum's
+other consumer returns (the next residual add); the final sum has none, and its
+recorded ``dsummed`` is zeros. OLMoE's norm weight is a plain scale initialized
+at one, not the zero-centred ``(1 + w)`` of Qwen3.5.
 """
 
 from evograd.opdecl import Active, Inactive, declare_op

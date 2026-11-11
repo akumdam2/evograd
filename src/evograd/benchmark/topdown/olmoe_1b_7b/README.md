@@ -33,35 +33,24 @@ session: about 55 GiB of weights, gradients and bf16 moments plus 15-20 GiB of
 activations on a 96 GB GH200 (`levels/level3/spec.py`). If it does not fit, the
 batch falls to 1 as Qwen3.5-4B's did.
 
-### Layer 8 -- where L2 takes its real invocations
-
-Not a level: the layer the L2 sites' real invocations and the calibration's
-real population come from. Boundary
-`hidden_out = layer(hidden_states, position_embeddings)`, cotangent `g`. Two
-sources: **captured** (`layer/capture.py`, `artifact.py`: one canonical L3 step
-with layer 8 hooked -> `layer8.pt`, which also records the experts kernel the
-step ran) and **config-derived** (`layer/prepare.py`: the bare
-`OlmoeDecoderLayer` with the model's initialization rules applied explicitly
--- a standalone layer skips `post_init`, which leaves the router at zero and
-the expert tensors uninitialized -- and seeded inputs).
-
-### L2 -- four sites
+### L2 -- three sites
 
 | site | task | contract |
 | --- | --- | --- |
-| `qkv_norm_rope` | `olmoe_qkv_norm_rope` | q/k/v projections, RMSNorm over the **whole** q (2048) and k (2048) projections, RoPE over the full head -- **new contract** (Qwen3 normalizes per head, Llama not at all) |
-| `attention` | `olmoe_attention` | causal SDPA 16/16 D128 + o_proj |
-| `residual_rmsnorm` | `olmoe_residual_rmsnorm` | residual add + RMSNorm 2048, two outputs |
-| `moe_experts` | `olmoe_moe_experts` | the routed experts: `x [4096, 2048]`, `gate_up_proj [64, 2048, 2048]`, `down_proj [64, 2048, 1024]`, the router's `top_k_index`/`top_k_weights [4096, 8]` -> `out`; the routed SwiGLU experts boundary at this model's widths, under this model's key |
+| `attention_block` | `olmoe_attention_block` | `OlmoeAttention.forward` whole: q/k/v projections, RMSNorm over the **whole** q (2048) and k (2048) projections, RoPE over the full head, causal SDPA 16/16 D128 (multi-head: `HQ == HK`), o_proj -- 16 calls per step |
+| `residual_rmsnorm` | `olmoe_residual_rmsnorm` | residual add + RMSNorm 2048, two outputs: every add an RMSNorm follows -- 16 post-attention, 15 into the next layer's `input_layernorm`, 1 into `model.norm`, 32 calls per step |
+| `moe_experts` | `olmoe_moe_experts` | the routed experts: `x [4096, 2048]`, `gate_up_proj [64, 2048, 2048]`, `down_proj [64, 2048, 1024]`, the router's `top_k_index`/`top_k_weights [4096, 8]` -> `out`; the routed SwiGLU experts boundary at this model's widths, under this model's key -- 16 calls per step |
 
-Each site package has `task.py`, `reference.py` (float32 oracle and the
-production spelling, bitwise the layer's own -- for the experts, Transformers'
-own `grouped_mm_experts_forward` on the declared tensors) and `capture.py` (one
-real invocation, from a layer artifact when present, else a config-derived
-layer). Canonical cases are config-derived (`hf_config`, B2 T2048). Whole-model
-call counts are **observed** (the harvest snapshot's `observed` entries). The
-router (one `[T, E]` GEMM, softmax, top-k) stays native and supplies the
-experts site's routing tensors.
+Each site package has `task.py` and `reference.py` (float32 oracle and the
+production spelling, bitwise the model's own -- for the attention block, the
+module's code with `olmoe_rms_norm` and Transformers' `apply_rotary_pos_emb`;
+for the experts, Transformers' own `grouped_mm_experts_forward` on the declared
+tensors). Real invocations are the verification capture's
+(`evograd/verification/integrations/olmoe_1b_7b/capture.py`: every call of a
+real training step). Canonical cases are config-derived (`hf_config`, B2 T2048).
+Whole-model call counts are **observed** (the harvest snapshot's `observed`
+entries). The router (one `[T, E]` GEMM, softmax, top-k) stays native and
+supplies the experts site's routing tensors.
 
 **Tolerances are provisional**: every site carries the repository's standard
 float32/bfloat16 pair and says so (`PROVISIONAL_TOLERANCES = True`). The
@@ -95,8 +84,6 @@ CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
 PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest harvest.json --write
 PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --synthetic \
     --out harvest_synthetic.json
-PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture \
-    --harvest harvest_synthetic.json --out-dir <run_dir>
 ```
 
 The harvest observes the real-payload capture's first step: the pinned checkpoint
@@ -105,9 +92,9 @@ on the first WikiText-2 TRAIN batch of data order 101, built by
 (`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
-overrides apply to it); the layer capture replays that step and reads such a
-harvest, until the tracked snapshot is regenerated from the real run (see
-"Regenerating the snapshots" in `src/evograd/verification/README.md`).
+overrides apply to it). The tracked snapshot predates the three-site case list
+and is regenerated from the real run (see "Regenerating the snapshots" in
+`src/evograd/verification/README.md`).
 
 The Tier-3 side is `evograd/evaluation/tier3/workloads/olmoe_1b_7b/`. How to run
 everything: `docs/OLMOE_1B_7B.md`.
@@ -118,4 +105,4 @@ The tolerance calibration (the first GPU session, `20261016_gpu1`, ran the
 smoke, harvest, snapshot, layer capture, replay and tier-3 baselines, and
 showed the provisional gates too tight for the weight-gradient reductions at
 the observed size); the L3 whole-model gate; pretrained weights and real text;
-seeds and evolution; the cross-layer residual fusion; an `lm_head_ce` site.
+seeds and evolution; an `lm_head_ce` site.

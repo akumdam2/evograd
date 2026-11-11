@@ -115,7 +115,9 @@ class TestSiteDims(unittest.TestCase):
                 self.assertEqual(rederive_dims(provenance), dims)
         self.assertEqual(manifest.dims_for("moe_experts", CFG, batch=2, seq=2048),
                          {"T": 4096, "H": 2048, "E": 64, "G": 2048, "I": 1024, "K": 8})
-        self.assertEqual(manifest.dims_for("qkv_norm_rope", CFG, batch=2, seq=2048)["QO"], 2048)
+        self.assertEqual(manifest.dims_for("attention_block", CFG, batch=2, seq=2048),
+                         {"B": 2, "T": 2048, "H": 2048, "HQ": 16, "HK": 16, "D": 128,
+                          "QO": 2048, "KVO": 2048})
 
     def test_level1_components_rederive(self):
         self.assertEqual(CFG.moe_activation_dims(tokens=4096), {"rows": 32768, "cols": 1024})

@@ -1,10 +1,11 @@
-"""References for the post-attention residual add and its RMSNorm.
+"""References for a residual add and the RMSNorm that follows it.
 
 Two outputs, like every residual fusion in this repository: the normalized value
-feeds the MoE block and the un-normalized sum is the residual the layer adds
-back at its end. Production is ``residual + branch`` in the model dtype, then
-``OlmoeRMSNorm``'s arithmetic (``norm.olmoe_rms_norm``); the oracle adds and
-normalizes in float32 with the weight applied in float32.
+feeds the next block (the MoE block, the next layer's attention, or the head)
+and the un-normalized sum is the residual the next add takes. Production is
+``residual + branch`` in the model dtype, then ``OlmoeRMSNorm``'s arithmetic
+(``norm.olmoe_rms_norm``); the oracle adds and normalizes in float32 with the
+weight applied in float32.
 """
 
 from __future__ import annotations
