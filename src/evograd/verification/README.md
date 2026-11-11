@@ -203,10 +203,15 @@ acceptance and report the combination as not applicable. Gate 3 uses the
 model's `Model.gate3_steps`, optimizer settings and accumulation for both the
 single-site and combined runs.
 
-`verify` combines every accepted Level-2 candidate. The benchmark protocol
-(`evograd evaluate`, `evaluation/protocol.py`) selects each agent's positive
-Level-2 candidates: accepted, with single-site Tier 3 speedup over eager whose
-95% bootstrap interval has a lower bound strictly above one. The resulting
+`verify` combines every accepted Level-2 candidate, without timing; that
+combination is a verification diagnostic, not a Level-3 result. The benchmark's
+Level-3 combination is the protocol's (`evograd evaluate`,
+`evaluation/protocol.py`, `COMBINATION_RULE`): each agent's accepted Level-2
+candidates whose single-site speedup over eager, both with the training step
+replayed from one CUDA graph (T3-G), has a 95% bootstrap interval with its
+lower bound strictly above one. A candidate without a T3-G result is not
+selected. A model whose eager step cannot be captured (on GH200, MegaFold and
+OLMoE) is judged by the eagerly launched step's interval (T3) instead. The resulting
 combination still needs its own model Gate 2 and Gate 3; individual passes do
 not establish combined correctness. This deployment path installs Level-2
 model sites, not independent Level-1 artifacts.

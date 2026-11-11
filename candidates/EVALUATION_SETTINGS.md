@@ -416,13 +416,12 @@ at replacement sites and bitwise reproducibility of its repeated execution.
 Missing/disqualified controls or mismatched policy bindings leave verification
 incomplete. Policies bind scope, reference, environment, numerics, patch set,
 sample identities and content, and formula. Policy schema:
-`evograd-verification-gate2-policy/4`.
+`evograd-verification-gate2-policy/5`.
 
 ## 5. Gate 3: continuous-training agreement
 
 Run single-site Gate 3 only after Gate 1, operator Gate 2, and model Gate 2
-pass. Run it again for the selected combination. OLMoE has no model-scope
-Gate 2 or Gate 3.
+pass. Run it again for the selected combination.
 
 ### Optimizer and data
 
