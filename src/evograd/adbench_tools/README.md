@@ -109,12 +109,20 @@ two is what the frontend contributes.
 - **Library access.** evograd's frontend preserves what Inductor hands to a
   vendor library: matrix multiplications and convolutions (cuBLAS/cuDNN) and
   fused attention (cuDNN SDPA). So with `--library auto` (the default), every
-  agent may call a trusted `vendor_gemm` primitive whenever the reference
-  contains a matrix multiplication, and the `vendor_sdpa_forward` /
-  `vendor_sdpa_backward` pair whenever it calls
-  `scaled_dot_product_attention`. Every other contraction must be written in
-  Triton. A case whose reference is one preserved call (a bare projection, a
-  bare attention) leaves nothing to evolve: its candidate equals the baseline.
+  agent may call a trusted `vendor_gemm` primitive whenever one call of the
+  reference, traced at the case's configuration (a `TorchFunctionMode`, on the
+  meta device first), reaches a matrix multiplication or convolution (`linear`,
+  `matmul`/`@`, `mm`, `bmm`, `addmm`, `baddbmm`, `einsum`, `_grouped_mm`,
+  `conv*`), however deeply the reference delegates; and the
+  `vendor_sdpa_forward` / `vendor_sdpa_backward` pair whenever it reaches
+  `scaled_dot_product_attention`. The grant is the only library route: the
+  static rules deny the other torch-level library entry points (cuDNN
+  convolutions, normalizations, embeddings, losses, recurrent layers, `torch.nn`,
+  `torch.func`, C++ extensions, private torch modules), so every other
+  contraction must be written in Triton. There is no convolution primitive: a
+  convolution case is searched through Triton or `vendor_gemm` (im2col). A
+  case whose reference is one preserved call (a bare projection, a bare
+  attention) leaves nothing to evolve: its candidate equals the baseline.
 
 ---
 
@@ -353,7 +361,7 @@ needs a GPU; `--state` keeps or reuses that calibration.
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
 | `adbench_primitives.py` | A local `vendor_gemm` so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
-| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives, scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
+| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives and why (`library_policy`, with the library calls one traced reference call reached), scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama_3_2_1b.llama3_swiglu_mlp.swiglu_mlp` (model, then the case id).
 `compare` refuses to mix results from different task ids or statement hashes.
@@ -378,7 +386,7 @@ can't drift from what evograd uses or enforces.
      `torch.testing.assert_close` default for the result's dtype or 4x
      `torch.compile`'s own largest elementwise deviation on that result (never
      less than 4 ulps of the largest value), whichever is larger, measured on
-     held-out real recorded calls (`gate1.tolerances`).
+     the case's real recorded calls of all four orders (`gate1.tolerances`).
 3. **Deliverable and rules.**
    - The exact signatures to define.
    - The `saved_tensors` contract and the gradient order.
@@ -444,8 +452,10 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
   `gate1_calibration_payloads`: Gate 1's rule (dtype defaults or the compile
   envelope, whichever is larger) on the first, middle and last recorded call of
   the case in each calibration order (101, 202), with the envelope operator
-  Gate 2's calibration gives the case; the acceptance calls (303, 404) stay
-  held out. `bench.py tasks` needs the model's `--corpus` and a GPU for it.
+  Gate 2's calibration gives the case; search never sees the acceptance
+  calls (303, 404). Acceptance (Gate 1 and operator Gate 2) judges every call of
+  all four orders, the search calls included, and the envelope is measured on
+  all four. `bench.py tasks` needs the model's `--corpus` and a GPU for it.
   A pack with any other rule (such as the retired `declared_tolerances`) is
   refused. The evaluator sets `EVOGRAD_SEARCH_CORRECTNESS` from the pack alone,
   and a driver refuses to start when the pack's corpus or payloads are missing;

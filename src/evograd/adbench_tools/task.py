@@ -19,7 +19,6 @@ pack.
 
 from __future__ import annotations
 
-import ast
 import hashlib
 import json
 import subprocess
@@ -41,16 +40,17 @@ SKELETON_FILE = "skeleton.py"
 #: comma-separated list of ``evograd.pipelines.shared.primitives`` names.
 LIBRARY_POLICIES = ("auto", "none", "vendor_gemm", "vendor_sdpa", "vendor_gemm,vendor_sdpa")
 
-#: Calls in a forward reference that the unified frontend leaves to a vendor
-#: library (Inductor's extern mm/bmm/addmm/convolution). ``auto`` grants the
-#: trusted GEMM primitive when the reference contains one of them, so an agent
+#: Torch functions that the unified frontend leaves to a vendor library
+#: (Inductor's extern mm/bmm/addmm/convolution). ``auto`` grants the trusted GEMM
+#: primitive when one call of the reference reaches one of them, so an agent
 #: writing from scratch has the library access evograd's seed preserves.
 _CONTRACTIONS = frozenset({
-    "linear", "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "conv1d", "conv2d",
-    "conv3d", "conv_transpose1d", "conv_transpose2d", "conv_transpose3d", "tensordot",
+    "linear", "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "_grouped_mm",
+    "grouped_mm", "conv1d", "conv2d", "conv3d", "conv_transpose1d", "conv_transpose2d",
+    "conv_transpose3d", "tensordot",
 })
 #: Fused attention, which Inductor likewise leaves to a library (cuDNN) and the
-#: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference calls it.
+#: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference reaches it.
 _ATTENTION = frozenset({"scaled_dot_product_attention"})
 
 
@@ -108,25 +108,48 @@ def load(root: str | Path) -> AgentTask:
     return AgentTask(root=root, spec=spec)
 
 
-def _called_leaves(source: str) -> set[str]:
-    """Every function name the reference calls, plus ``@`` as ``matmul``."""
-    leaves: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.MatMult):
-            leaves.add("matmul")
-        if isinstance(node, ast.Call):
-            func = node.func
-            leaf = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
-            if leaf:
-                leaves.add(leaf)
-    return leaves
+def observed_calls(op, workload, *, device: str) -> list[str]:
+    """The torch functions one call of ``op``'s reference reaches at ``workload``,
+    however deeply it delegates (shared helpers, Hugging Face modules,
+    ``transformers.integrations``).
+
+    Recorded at the function level (a ``TorchFunctionMode``), where ``@`` is
+    ``matmul`` and fused attention is ``scaled_dot_product_attention`` on every
+    device; the ATen level would see attention on the meta device as its math
+    decomposition. Run on the meta device, and on ``device`` when the reference
+    needs values.
+    """
+    import torch
+    from torch.overrides import TorchFunctionMode
+
+    from evograd.opdecl.inputs import make_case_inputs
+    from evograd.opdecl.oracle import resolve_forward
+
+    class Reached(TorchFunctionMode):
+        def __init__(self):
+            super().__init__()
+            self.names: set[str] = set()
+
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            self.names.add(getattr(func, "__name__", str(func)))
+            return func(*args, **(kwargs or {}))
+
+    forward = resolve_forward(op)
+    for where in dict.fromkeys(("meta", device)):
+        reached = Reached()
+        try:
+            values = make_case_inputs(op, workload, device=where)
+            with reached:
+                forward(*(values.get(a.name, getattr(a, "default", None)) for a in op.args))
+            return sorted(reached.names)
+        except Exception:
+            if where == device:
+                raise
 
 
-def _uses_contraction(source: str) -> bool:
-    return bool(_called_leaves(source) & _CONTRACTIONS)
-
-
-def resolve_library(policy: str, reference_source: str) -> tuple[tuple[str, ...], str]:
+def resolve_library(policy: str, calls) -> tuple[tuple[str, ...], str]:
+    """The primitives ``policy`` grants. ``auto`` reads ``calls``, the torch
+    functions one call of the reference reaches (:func:`observed_calls`)."""
     if policy not in LIBRARY_POLICIES:
         raise ValueError(f"library policy must be one of {LIBRARY_POLICIES}, got {policy!r}")
     if policy == "none":
@@ -134,19 +157,19 @@ def resolve_library(policy: str, reference_source: str) -> tuple[tuple[str, ...]
     if policy != "auto":
         names = tuple(sorted(policy.split(",")))
         return names, f"requested: {', '.join(names)}"
-    leaves = _called_leaves(reference_source)
+    reached = set(calls)
     granted, reasons = [], []
-    if leaves & _CONTRACTIONS:
+    if reached & _CONTRACTIONS:
         granted.append("vendor_gemm")
         reasons.append("a contraction (vendor_gemm)")
-    if leaves & _ATTENTION:
+    if reached & _ATTENTION:
         granted.append("vendor_sdpa")
         reasons.append("fused attention (vendor_sdpa)")
     if not granted:
-        return (), "auto: the reference contains no contraction or fused attention"
+        return (), "auto: one call of the reference reaches no contraction or fused attention"
     return tuple(granted), (
-        f"auto: the reference contains {' and '.join(reasons)}, which the unified frontend "
-        "keeps in a vendor library call; the primitive gives agents the same access"
+        f"auto: one call of the reference reaches {' and '.join(reasons)}, which the unified "
+        "frontend keeps in a vendor library call; the primitive gives agents the same access"
     )
 
 
@@ -337,7 +360,9 @@ def build_task(
     root = Path(output_dir).resolve()
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
-    # Before the pack exists: a calibration that fails leaves no half-written pack.
+    # Before the pack exists: a trace or calibration that fails leaves no half-written pack.
+    calls = observed_calls(base, workload, device=device)
+    allowed, library_reason = resolve_library(library, calls)
     search = _search_correctness(model_obj, observed, corpus, device=device,
                                  state=Path(state) if state else None)
     root.mkdir(parents=True, exist_ok=True)
@@ -348,7 +373,6 @@ def build_task(
     base = replace(base, declaration=f"{(root / DECLARATION_FILE).resolve()}:op")
     reference, entry = reference_closure(base.forward)
     (root / REFERENCE_FILE).write_text(reference, encoding="utf-8")
-    allowed, library_reason = resolve_library(library, reference)
 
     scoped = scoped_op(base, workload)
     baseline = resolve_performance_baseline(scoped, performance_baseline)
@@ -374,7 +398,8 @@ def build_task(
         "gate1_tolerances": _gate1_tolerances(scoped, workload),
         "search_correctness": search,
         "allowed_primitives": list(allowed),
-        "library_policy": {"requested": library, "decision": library_reason},
+        "library_policy": {"requested": library, "decision": library_reason,
+                           "observed_calls": sorted(set(calls) & (_CONTRACTIONS | _ATTENTION))},
         "scoring": scoring,
         "performance_baseline": baseline,
         "evograd": _evograd_revision(),

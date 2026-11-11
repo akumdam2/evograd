@@ -10,6 +10,7 @@ outside the trusted primitive is a violation either way.
 
 from __future__ import annotations
 
+import re
 import textwrap
 import unittest
 
@@ -19,6 +20,7 @@ from evograd.pipelines.shared.primitives import (
     REGISTRY,
     VENDOR_GEMM_SOURCE,
     PrimitiveViolation,
+    _denied_torch_path,
     catalogue,
     check_source,
     normalize,
@@ -176,6 +178,130 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
         # `tl.dot` is what an evolved matmul kernel is made of; denying it would
         # forbid the search space rather than police it.
         usage = check_source(PURE_TRITON, allowed=())
+        self.assertFalse(usage["uses_trusted_primitives"])
+
+    def _reject_all(self, names, call="(x, w)"):
+        for name in names:
+            self._rejects(f"return {name}{call}, (x,)", name)
+
+    def test_library_convolutions(self):
+        self._reject_all(("torch.conv1d", "torch.conv2d", "torch.conv3d", "torch.conv_tbc",
+                          "torch.conv_transpose2d", "torch.convolution", "torch.cudnn_convolution",
+                          "torch.cudnn_convolution_relu", "torch.miopen_depthwise_convolution",
+                          "torch.mkldnn_convolution", "torch.nn.grad.conv2d_input",
+                          "torch.nn.grad.conv2d_weight", "torch.nn.Conv2d"))
+
+    def test_library_normalizations(self):
+        self._reject_all(("torch.native_layer_norm", "torch.native_group_norm",
+                          "torch.native_batch_norm", "torch.instance_norm",
+                          "torch.cudnn_batch_norm", "torch.layer_norm", "torch.nn.LayerNorm"))
+
+    def test_embeddings_losses_and_recurrent_layers(self):
+        self._reject_all(("torch.embedding", "torch.embedding_bag", "torch.nn.EmbeddingBag",
+                          "torch.kl_div", "torch.ctc_loss", "torch.binary_cross_entropy_with_logits",
+                          "torch.lstm", "torch.gru_cell"))
+
+    def test_attention_in_any_case(self):
+        self._reject_all(("torch.nn.MultiheadAttention", "torch.ao.nn.quantizable.MultiheadAttention"))
+
+    def test_vector_bilinear_and_sparse_contractions(self):
+        self._reject_all(("torch.mv", "torch.addmv", "torch.addr", "torch.ger", "torch.vdot",
+                          "torch.bilinear", "torch.cdist", "torch.linalg.multi_dot",
+                          "torch.linalg.vecdot", "torch.sparse.sampled_addmm",
+                          "torch.fbgemm_linear_fp16_weight", "torch.Tensor.addmm_", "x.mv", "x.addbmm",
+                          "x.outer", "x.kron", "x.__matmul__"))
+        self._rejects("return type(x).__rmatmul__(w, x), (x,)", ".__rmatmul__")
+        self._rejects("import operator\nreturn operator.__matmul__(x, w), (x,)", "operator.__matmul__")
+        self._rejects("from operator import matmul\nreturn matmul(x, w), (x,)",
+                      "from operator import matmul")
+        self._rejects("x @= w\nreturn x, (x,)", "'@='")
+
+    def test_autograd_compilation_and_extension_escapes(self):
+        self._reject_all(("torch.func.grad", "torch.func.vjp", "torch.utils.checkpoint.checkpoint",
+                          "torch.utils.cpp_extension.load_inline", "torch.compiler.disable",
+                          "torch.export.export", "torch.Tensor.backward"))
+        self._rejects("import ctypes\nreturn x, (x,)", "ctypes")
+        self._rejects("import cffi\nreturn x, (x,)", "cffi")
+
+    def test_private_torch_modules_at_any_depth(self):
+        self._reject_all(("torch._inductor.select_algorithm.extern_kernels.convolution",
+                          "torch._C._nn.linear", "torch.cuda._lazy_call"))
+        self._rejects("from torch._inductor.select_algorithm import extern_kernels\n"
+                      "return extern_kernels.convolution(x, w), (x,)", "torch._inductor")
+
+    def test_from_imports_are_judged_by_the_full_path(self):
+        for body, needle in (
+                ("from torch import conv2d\nreturn conv2d(x, w), (x,)", "torch.conv2d"),
+                ("from torch import embedding_bag\nreturn embedding_bag(x, w), (x,)",
+                 "torch.embedding_bag"),
+                ("from torch import nn\nreturn nn.Linear(2, 2)(x), (x,)", "torch.nn"),
+                ("from torch.nn import grad\nreturn grad.conv2d_input(x.shape, w, x), (x,)",
+                 "torch.nn.grad"),
+                ("import torch.nn.grad as g\nreturn g.conv2d_input(x.shape, w, x), (x,)",
+                 "torch.nn.grad"),
+                ("from torch.linalg import multi_dot\nreturn multi_dot([x, w]), (x,)",
+                 "torch.linalg.multi_dot")):
+            self._rejects(body, needle)
+
+    def test_the_archived_dit_cudnn_program_is_rejected(self):
+        # OpenEvolve's dit_s_2 spatial_conv2d candidate of 2026-10-28, scored
+        # correct (1.109) under the rules of the time: its block, verbatim.
+        block = (
+            "import torch\n\n\n"
+            "def spatial_conv2d_forward_with_saved(x, weight, bias, stride=2, padding=0, groups=1):\n"
+            "    out = torch.conv2d(x, weight, bias, stride=stride, padding=padding, groups=groups)\n"
+            "    return out, (x, weight)\n\n\n"
+            "def spatial_conv2d_backward_from_saved(dout, saved_tensors, stride=2, padding=0, groups=1):\n"
+            "    x, weight = saved_tensors\n"
+            "    dx = torch.nn.grad.conv2d_input(x.shape, weight, dout, stride=stride, padding=padding, groups=groups)\n"
+            "    dweight = torch.nn.grad.conv2d_weight(x, weight.shape, dout, stride=stride, padding=padding, groups=groups)\n"
+            "    dbias = dout.sum((0, 2, 3))\n"
+            "    return dx, dweight, dbias\n")
+        source = ("import torch\nimport triton\nimport triton.language as tl\n\n"
+                  "# EVOLVE-BLOCK-START\n" + block + "# EVOLVE-BLOCK-END\n" + VENDOR_GEMM_SOURCE)
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(source, allowed=("vendor_gemm",))
+        for name in ("torch.conv2d", "torch.nn.grad.conv2d_input", "torch.nn.grad.conv2d_weight"):
+            self.assertIn(name, str(caught.exception))
+
+
+class TestTheRulesCoverThisTorch(unittest.TestCase):
+    """The deny rules against the installed torch, by a spelling of their own."""
+
+    #: A library-looking name, written independently of the checker's tables.
+    LIBRARY = re.compile(r"conv|norm|embedding|attention|softmax|loss|entropy|lstm|gru|rnn"
+                         r"|mm($|_)|^mv|dot|matmul|gemm|linear|kl_div|cdist|^ger$|outer|inner|kron")
+    #: Names that look like it and are ordinary tensor math, a sampler or a setting.
+    ORDINARY = frozenset({"norm", "native_norm", "frobenius_norm", "nuclear_norm", "renorm",
+                          "norm_except_dim", "normal", "vector_norm", "matrix_norm", "mvlgamma",
+                          "get_float32_matmul_precision", "set_float32_matmul_precision",
+                          "set_flush_denormal"})
+
+    def test_every_library_entry_point_of_this_torch_is_denied(self):
+        # A name a new torch adds to a library family is denied without a new rule.
+        for prefix, namespace in (((), torch), (("linalg",), torch.linalg)):
+            for name in dir(namespace):
+                if name.startswith("_") or not callable(getattr(namespace, name, None)):
+                    continue
+                if self.LIBRARY.search(name.lower()):
+                    with self.subTest(name=".".join(("torch", *prefix, name))):
+                        self.assertEqual(_denied_torch_path([*prefix, name]),
+                                         name not in self.ORDINARY)
+
+    def test_ordinary_tensor_ops_stay_allowed(self):
+        body = """
+        y = torch.empty_like(x)
+        z = torch.empty_strided((4, 4), (4, 1), device=x.device, dtype=x.dtype)
+        s = torch.where(x > 0, torch.exp(x), torch.cat([x, w]))
+        t = torch.erf(x) + torch.sigmoid(x) + torch.sum(x) + torch.cumsum(x, 0)
+        u = torch.index_select(x, 0, torch.argsort(x[:, 0])) + torch.bincount(x.flatten()).sum()
+        v = torch.linalg.vector_norm(x, dim=-1) + torch.norm(x) + x.unfold(0, 2, 1).sum()
+        a = torch.as_strided(x, (2,), (1,)).float().contiguous().view(-1)
+        stream = torch.cuda.current_stream()
+        with torch.no_grad():
+            return y, (x, z, s, t, u, v, a, stream)
+        """
+        usage = check_source(_with_body(body), allowed=())
         self.assertFalse(usage["uses_trusted_primitives"])
 
 

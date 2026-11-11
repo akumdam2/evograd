@@ -29,44 +29,77 @@ string cannot hide a call, and ``a @ b`` is the same violation as
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from typing import Any
 
-#: Contractions rooted at ``torch``. Denied inside the evolvable region always;
+#: Library entry points rooted at ``torch``, by exact name: contractions
+#: (vector, distance and sparse ones included), ``kl_div`` (a loss without the
+#: word) and ``torch.compile``. Denied inside the evolvable region always;
 #: permitted inside a trusted primitive's own fixed body when it declares them.
 _TORCH_DENIED = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "addbmm", "einsum", "tensordot",
     "dot", "inner", "outer", "chain_matmul", "matrix_power", "kron",
-    "scaled_dot_product_attention", "compile", "rms_norm", "layer_norm",
-    "group_norm", "batch_norm",
-    # Opaque softmax spellings: an attention decomposition whose softmax stage
-    # is ``torch.softmax`` has been wrapped, not evolved.
-    "softmax", "log_softmax",
+    "mv", "addmv", "addmv_", "addr", "ger", "vdot", "cdist", "multi_dot", "vecdot",
+    "smm", "spmm", "hspmm", "dsmm", "hsmm", "saddmm", "sspaddmm", "sampled_addmm",
+    "kl_div", "compile",
 })
 
-#: Namespaces no generated pair math may reach into at all.
-_DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel"})
+#: Library families denied wherever they appear in a ``torch`` name, in any
+#: case: ``torch.native_layer_norm``, ``torch.embedding_bag``, ``torch.ctc_loss``,
+#: ``torch.bilinear``, ``torch.fbgemm_linear_fp16_weight`` and every attention
+#: spelling are a library routine under another name. An opaque softmax counts:
+#: an attention decomposition whose softmax stage is ``torch.softmax`` has been
+#: wrapped, not evolved.
+_DENIED_TORCH_FAMILIES = ("attention", "softmax", "embedding", "layer_norm", "group_norm",
+                          "batch_norm", "instance_norm", "rms_norm", "loss", "cross_entropy",
+                          "linear", "gemm")
 
-#: Denied whatever the receiver is. ``dot`` is deliberately absent: ``tl.dot``
-#: is the Triton language's own contraction and is the evolved kernel's
-#: arithmetic, not an escape from it.
+#: Library families denied by the shape of a ``torch`` name (searched in its
+#: lower case), keyed by how the task statement names them: every cuDNN/MIOpen/
+#: oneDNN convolution entry point, and the cuDNN recurrent layers.
+_DENIED_TORCH_PATTERNS = {
+    "conv1d/2d/3d, conv_tbc, conv_transpose*, *convolution*": re.compile(r"conv(\d|_t|olution)"),
+    "lstm, gru, rnn_tanh, rnn_relu (and their cells)":
+        re.compile(r"^(quantized_)?(lstm|gru|rnn_tanh|rnn_relu)(_cell)?$|^(miopen|mkldnn)_rnn"),
+}
+
+#: Namespaces no generated pair math may reach into at all. ``ctypes`` and
+#: ``cffi`` would load a compiled library that calls cuBLAS or cuDNN directly.
+_DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel",
+                           "ctypes", "cffi"})
+
+#: Denied whatever the receiver is (``torch`` included): the method and
+#: operator-module spellings of a contraction, ``x.mv(v)``, ``x.__matmul__(w)``,
+#: ``operator.matmul(x, w)``. ``dot`` is deliberately absent: ``tl.dot`` is the
+#: Triton language's own contraction and is the evolved kernel's arithmetic,
+#: not an escape from it.
 _DENIED_METHODS = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "linear", "backward",
     "softmax", "log_softmax",
+    "mv", "addmv", "addmv_", "addbmm", "addbmm_", "addmm_", "baddbmm_", "addr", "addr_",
+    "ger", "outer", "inner", "kron", "vdot", "matrix_power", "smm", "sspaddmm",
+    "__matmul__", "__rmatmul__", "__imatmul__", "imatmul", "rmatmul",
 })
 
-#: Attribute paths under ``torch`` that are denied by prefix rather than leaf.
-_DENIED_TORCH_PREFIXES = (("nn", "functional"), ("autograd",), ("_dynamo",),
-                          ("jit",), ("fx",),
-                          # Whole-operator escapes the leaf rule cannot see:
-                          # ``torch.ops.aten._scaled_dot_product_flash_attention``
-                          # is fused attention with a different name.
-                          ("ops",), ("_C",), ("_ops",), ("_VF",), ("nn", "attention"))
+#: Namespaces under ``torch`` that are denied whole: module wrappers
+#: (``torch.nn.Conv2d``, ``torch.nn.grad.conv2d_input``), autograd and its
+#: functional and checkpointing forms, tracing and compilation, sparse
+#: contractions, C++/CUDA extensions, and ``torch.ops`` (whole-operator escapes
+#: the leaf rule cannot see: ``torch.ops.aten._scaled_dot_product_flash_attention``
+#: is fused attention with a different name). Private modules (``torch._C``,
+#: ``torch._inductor``) are denied at any depth by :func:`_denied_torch_path`.
+_DENIED_TORCH_PREFIXES = (("nn",), ("autograd",), ("func",), ("utils", "checkpoint"),
+                          ("jit",), ("fx",), ("compiler",), ("export",), ("ops",),
+                          ("sparse",), ("utils", "cpp_extension"))
 
 
 def _denied_torch_leaf(leaf: str) -> bool:
-    """Private ATen entry points and every attention spelling are denied."""
-    return leaf in _TORCH_DENIED or leaf.startswith("_") or "attention" in leaf
+    """A ``torch`` name the rules deny: by exact name, as a method, or by family."""
+    low = leaf.lower()
+    return (leaf in _TORCH_DENIED or leaf in _DENIED_METHODS
+            or any(family in low for family in _DENIED_TORCH_FAMILIES)
+            or any(pattern.search(low) for pattern in _DENIED_TORCH_PATTERNS.values()))
 
 
 class PrimitiveViolation(RuntimeError):
@@ -274,10 +307,13 @@ def evolve_span(source: str) -> tuple[int, int]:
 _DENIED_BUILTINS = frozenset({"getattr", "__import__", "eval", "exec", "vars", "globals"})
 
 
-def _denied_torch_path(rest: list[str] | tuple[str, ...], leaf: str) -> bool:
-    """A dotted path under ``torch`` that the rules deny, by prefix or leaf."""
-    return (any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES)
-            or _denied_torch_leaf(leaf))
+def _denied_torch_path(rest: list[str] | tuple[str, ...]) -> bool:
+    """A dotted path under ``torch`` that the rules deny: by prefix, by a private
+    component anywhere (``torch._inductor.select_algorithm.extern_kernels``), or
+    by its leaf."""
+    return bool(rest) and (any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES)
+                           or any(part.startswith("_") for part in rest)
+                           or _denied_torch_leaf(rest[-1]))
 
 
 def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
@@ -298,25 +334,28 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
         if isinstance(child, ast.BinOp) and isinstance(child.op, ast.MatMult):
             found.append(f"line {child.lineno}: the '@' matrix-multiply operator")
             continue
+        if isinstance(child, ast.AugAssign) and isinstance(child.op, ast.MatMult):
+            found.append(f"line {child.lineno}: the '@=' matrix-multiply operator")
+            continue
         if isinstance(child, (ast.Import, ast.ImportFrom)):
-            name = getattr(child, "module", None) or ""
-            names = [a.name for a in child.names]
-            for candidate in [name, *names]:
-                root, *rest = candidate.split(".")
+            module = getattr(child, "module", None) or ""
+            from_torch = module.split(".")[0] == "torch"
+            # ``from torch import conv2d`` binds ``torch.conv2d`` to a bare name
+            # the rules never see again, so it is judged by that full path.
+            paths = [module] if module else []
+            paths += [f"{module}.{a.name}" if from_torch else a.name for a in child.names]
+            for path in paths:
+                root, *rest = path.split(".")
                 if root in _DENIED_ROOTS or root in ("importlib", "builtins"):
-                    found.append(f"line {child.lineno}: import of {candidate!r}")
-                elif root == "torch" and rest and _denied_torch_path(rest, rest[-1]):
+                    found.append(f"line {child.lineno}: import of {path!r}")
+                elif root == "torch" and _denied_torch_path(rest):
                     # ``import torch.nn.functional as fn``: the alias would call
                     # the denied namespace under a name the rules never see.
-                    found.append(f"line {child.lineno}: import of {candidate!r}")
-            if name.split(".")[0] == "torch":
-                # ``from torch import matmul`` would otherwise arrive as a bare
-                # call with no ``torch.`` prefix left to recognise.
-                for alias in child.names:
-                    if alias.name in _TORCH_DENIED:
-                        found.append(
-                            f"line {child.lineno}: from {name} import {alias.name}"
-                        )
+                    found.append(f"line {child.lineno}: import of {path!r}")
+            if module and not from_torch:
+                # ``from operator import matmul``: a method spelling as a bare name.
+                found.extend(f"line {child.lineno}: from {module} import {a.name}"
+                             for a in child.names if a.name in _DENIED_METHODS)
             continue
         if isinstance(child, ast.Attribute):
             if id(child) in inner:
@@ -332,7 +371,7 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
             if root in _DENIED_ROOTS:
                 found.append(f"line {child.lineno}: {'.'.join(path)}")
             elif root == "torch":
-                if _denied_torch_path(rest, leaf):
+                if _denied_torch_path(rest):
                     found.append(f"line {child.lineno}: {'.'.join(path)}")
             elif leaf in _DENIED_METHODS:
                 # ``x.matmul`` on any receiver that is not the triton language.

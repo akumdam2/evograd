@@ -46,6 +46,8 @@ def static_rules() -> dict[str, list[str]]:
 
     return {
         "torch_calls": sorted(primitives._TORCH_DENIED),
+        "torch_families": sorted(primitives._DENIED_TORCH_FAMILIES),
+        "torch_patterns": list(primitives._DENIED_TORCH_PATTERNS),
         "torch_prefixes": sorted(".".join(("torch", *p)) for p in primitives._DENIED_TORCH_PREFIXES),
         "roots": sorted(primitives._DENIED_ROOTS),
         "methods": sorted(primitives._DENIED_METHODS),
@@ -90,12 +92,12 @@ def _tolerance_text(gate1: dict) -> str:
     )
     gamma = gate1["envelope_gamma"]
     return f"""Acceptance compares every output and gradient with the reference, element by
-element in float64, on real recorded training calls held out from you:
+element in float64, on real recorded training calls whose values you are not given:
 `|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
 `atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
 dtype (below); `envelope` is {gamma:g}x the larger of the largest elementwise
-deviation of `torch.compile` from the reference on that result, measured on other
-recorded calls, and one unit in the last place of the reference's largest
+deviation of `torch.compile` from the reference on that result, measured on the
+same recorded calls, and one unit in the last place of the reference's largest
 magnitude. So each element may be off by the dtype default or by up to {gamma:g}x
 torch.compile's own error or {gamma:g} ulps of the largest value, whichever is
 larger.
@@ -104,12 +106,14 @@ larger.
 
 
 def _search_text(spec: dict) -> str:
-    """How the evaluator checks correctness during search (``search_correctness``)."""
+    """How the evaluator checks correctness during search (``search_correctness``)
+    and what acceptance judges afterwards (``integrations.gates.PAYLOAD_SPLITS``)."""
     search = spec["search_correctness"]
-    return (f" Its correctness check applies the acceptance rule of section 2 to "
-            f"{len(search['payload_ids'])} recorded training calls (the first, middle and "
-            "last call of this operator in each of two training steps); the calls "
-            "acceptance judges are not among them.")
+    return (f" Its correctness check during search applies the acceptance rule of section 2 "
+            f"to {len(search['payload_ids'])} recorded training calls (the first, middle and "
+            "last call of this operator in each of two training steps). Acceptance then "
+            "judges every recorded call of this operator in all four training steps, these "
+            "calls included; the envelope is measured on those same calls.")
 
 
 def render_statement(task: "AgentTask") -> str:
@@ -187,12 +191,17 @@ module level:
 - The harness wires autograd and the deployment entry from the declaration.
   Do not write a `torch.autograd.Function` or an `nn.Module`, and do not define
   these reserved names: {reserved}.
-- Every line of your module is checked statically. Rejected:
-  - calls `torch.<name>` for: {', '.join(rules['torch_calls'])};
-  - any private `torch._*` entry point, and anything under {', '.join(rules['torch_prefixes'])};
+- Every line of your module is checked statically. Rejected, whether called,
+  read or imported (`from torch.X import Y` counts as `torch.X.Y`):
+  - `torch.<name>` for: {', '.join(rules['torch_calls'])};
+  - any `torch.*` name containing, in any case: {', '.join(rules['torch_families'])};
+  - any `torch.*` convolution or recurrent entry point: {'; '.join(rules['torch_patterns'])};
+  - anything under a private torch module or name (`torch._*`, at any depth), and
+    anything under {', '.join(rules['torch_prefixes'])};
   - imports of or calls into: {', '.join(rules['roots'])};
-  - methods `.<name>()` on any object for: {', '.join(rules['methods'])};
-  - the `@` operator.
+  - methods `.<name>()` on any object, `torch` included, and these names imported
+    from any module, for: {', '.join(rules['methods'])};
+  - the `@` and `@=` operators.
 - Library primitives this task grants:
 {library}
 
