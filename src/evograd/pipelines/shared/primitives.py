@@ -29,6 +29,7 @@ string cannot hide a call, and ``a @ b`` is the same violation as
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -294,7 +295,11 @@ def describe_rules(where: str) -> str:
         f"calls to the builtins {', '.join(f'`{b}`' for b in sorted(_DENIED_BUILTINS))};",
         "methods `.<name>()` on any object, `torch` included, and these names imported "
         f"from any module, for: {', '.join(sorted(_DENIED_METHODS))};",
-        "the `@` and `@=` operators, and `from torch import *` (or from any torch module).",
+        "the `@` and `@=` operators, and `from torch import *` (or from any torch module);",
+        "`torch` or any torch module used as a value (passed, returned, unpacked or put in a "
+        "container): a torch module may only be the receiver of an attribute, as in "
+        "`torch.empty_like(x)`, or bound to a plain name (`la = torch.linalg`); dtypes such as "
+        "`torch.bfloat16` are values and stay allowed.",
     )
     return (f"- {where} is checked statically.\n"
             "  Rejected, whether called, read or imported, and under any name bound to it\n"
@@ -352,6 +357,21 @@ def _denied_path(path: tuple[str, ...]) -> bool:
     return bool(rest) and path[-1] in _DENIED_METHODS
 
 
+def _is_torch_module(path: tuple[str, ...]) -> bool:
+    """Whether ``path`` (rooted at ``torch``) names a module, e.g. ``torch.linalg``."""
+    if not path or path[0] != "torch":
+        return False
+    try:
+        import torch
+
+        obj = torch
+        for part in path[1:]:
+            obj = getattr(obj, part)
+    except Exception:  # not resolvable here: not a module we can vouch for
+        return False
+    return inspect.ismodule(obj)
+
+
 def _torch_aliases(node: ast.AST) -> dict[str, set[tuple[str, ...]]]:
     """Every name ``node`` binds to a ``torch`` path, with each path it is bound to.
 
@@ -406,6 +426,12 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
     # Receivers of an attribute (``torch.nn`` inside ``torch.nn.functional.silu``,
     # ``la`` in ``la.vecdot``) are judged with their chain, not again on their own.
     receivers = {id(child.value) for child in ast.walk(node) if isinstance(child, ast.Attribute)}
+    # ``la = torch.linalg``: a module bound to a plain name is followed by
+    # ``_torch_aliases``, so only the other ways a module can travel are refused.
+    tracked = {id(child.value) for child in ast.walk(node)
+               if isinstance(child, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and child.value
+               and all(isinstance(t, ast.Name)
+                       for t in (child.targets if isinstance(child, ast.Assign) else [child.target]))}
     for child in ast.walk(node):
         if isinstance(child, ast.BinOp) and isinstance(child.op, ast.MatMult):
             found.append(f"line {child.lineno}: the '@' matrix-multiply operator")
@@ -451,6 +477,11 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
             if full is not None:
                 found.append(f"line {child.lineno}: {spelled}"
                              + (f" ({full})" if full != spelled else ""))
+            elif (isinstance(child.ctx, ast.Load) and id(child) not in tracked
+                  and any(_is_torch_module(p) for p in meanings)):
+                # ``[torch.linalg]``: a torch module passed on as a value could be
+                # read later under a name the rules never connect to it.
+                found.append(f"line {child.lineno}: {spelled} used as a value")
             continue
         if (isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
                 and id(child) not in receivers):
@@ -458,6 +489,11 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
             full = next((p for p in aliases.get(child.id, ()) if _denied_path(p)), None)
             if full is not None:
                 found.append(f"line {child.lineno}: {child.id} ({'.'.join(full)})")
+            elif id(child) not in tracked and (
+                    child.id == "torch" or any(_is_torch_module(p) for p in aliases.get(child.id, ()))):
+                # ``t=torch`` as a default, ``(torch,)``, ``f(torch)``, ``T, _ = torch, 1``:
+                # a torch module may only be the receiver of an attribute, never a value.
+                found.append(f"line {child.lineno}: {child.id} used as a value")
             continue
         if not isinstance(child, ast.Call):
             continue

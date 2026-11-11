@@ -269,6 +269,25 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
                  "T.func.grad (torch.func.grad)")):
             self._rejects(body, needle)
 
+    def test_a_torch_module_may_not_travel_as_a_value(self):
+        # Routes the alias resolution cannot follow: the module itself is refused.
+        for body, needle in (
+                ("T, _ = torch, 1\nreturn T.conv2d(x, w), (x,)", "torch used as a value"),
+                ("M = [torch]\nreturn M[0].conv2d(x, w), (x,)", "torch used as a value"),
+                ("M = [torch.linalg]\nreturn M[0].multi_dot([x, w]), (x,)",
+                 "torch.linalg used as a value"),
+                ("from torch import linalg\nM = (linalg,)\nreturn M[0].multi_dot([x, w]), (x,)",
+                 "linalg used as a value"),
+                ("for t in (torch,):\n    return t.conv2d(x, w), (x,)", "torch used as a value"),
+                ("f = (lambda m: m.conv2d)\nreturn f(torch)(x, w), (x,)", "torch used as a value")):
+            self._rejects(body, needle)
+        source = ("import torch\n\n# EVOLVE-BLOCK-START\n"
+                  "def op_forward_with_saved(x, w, t=torch):\n    return t.conv2d(x, w), (x,)\n\n"
+                  "def op_backward_from_saved(dout, saved):\n    return (dout,)\n# EVOLVE-BLOCK-END\n")
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(source, allowed=())
+        self.assertIn("torch used as a value", str(caught.exception))
+
     def test_a_dtype_or_ordinary_torch_alias_stays_allowed(self):
         body = """
         X = torch.bfloat16
