@@ -467,20 +467,31 @@ class TestSeedLowerings(unittest.TestCase):
                      weight, indices, offsets, target='aten._embedding_bag.default')
         self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(mean)))
 
-    def test_an_integer_sort_is_a_stable_torch_sort_and_a_float_sort_stays_handwritten(self):
-        # OLMoE sorts its 32768 int64 expert ids; there is no handwritten integer sort.
-        from evograd.pipelines.shared.primitives import check_source
+    def test_an_integer_sort_lowers_to_the_handwritten_counting_sort(self):
+        # OLMoE sorts its 32768 int64 expert ids (sort.default); sort.stable by keyword.
+        import ast
 
-        keys = torch.randint(0, 5, (64,))
-        expressions, (values, order) = _rendered(lambda k: torch.sort(k), keys)
-        self.assertEqual(expressions['aten.sort.default'],
-                         'torch.sort(t_k_1, dim=-1, descending=False, stable=True)')
-        expected = torch.sort(keys, stable=True)
-        self.assertTrue(torch.equal(values, expected.values) and torch.equal(order, expected.indices))
-        check_source('# EVOLVE-BLOCK-START\ndef f(k):\n    return ' + expressions['aten.sort.default']
-                     + '\n# EVOLVE-BLOCK-END\n')
-        floats, _ = _rendered(lambda a: torch.sort(a, dim=0, descending=True), torch.randn(8))
-        self.assertNotIn('torch.sort', floats['aten.sort.default'])
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import _audit_primitive_library, _semantic_expr
+
+        keys = torch.randint(0, 5, (6, 4))
+        for fn, options in ((lambda k: torch.sort(k), {'dim': -1, 'descending': False}),
+                            (lambda k: torch.sort(k, dim=0, descending=True, stable=True),
+                             {'dim': 0, 'descending': True})):
+            node = _node(fn, keys, target=('aten.sort.stable' if options['dim'] == 0
+                                           else 'aten.sort.default'))
+            kernel = make_kernel(node)
+            self.assertEqual(_nonlocals(kernel), options)
+            builder = _ProgramBuilder()
+            expression = _semantic_expr(builder, node)
+            library = builder.render_kernel_library()
+            _audit_primitive_library(ast.parse(library))
+            self.assertIn('def integer_sort(', library)
+            self.assertNotIn('torch.sort', expression + library)
+        floats = make_kernel(_node(lambda a: torch.sort(a, dim=0, descending=True), torch.randn(8),
+                                   target='aten.sort.default'))
+        self.assertEqual(floats.__name__, 'triton_sort')
 
     def test_moe_routing_counts_offsets_and_inverse_permutation(self):
         # OLMoE: histc of the sorted ids, an int32 cumsum of the counts (the
@@ -619,6 +630,32 @@ from evograd.pipelines.b_dispatch.layout_kernels import flip_copy
 a = torch.randn(3, 4, 5)
 result['flip'] = all(torch.equal(flip_copy(t, dims), torch.flip(t, dims))
                      for t in (a, a.transpose(0, 2)) for dims in ([0], [2], [0, 2], [1, 2, 0]))
+from evograd.atenir.primitive_triton.reduction import integer_sort
+def stable_sort(name, keys, dim=-1, descending=False):
+    values, order = integer_sort(keys, dim, descending)
+    expected = torch.sort(keys, dim=dim, descending=descending, stable=True)
+    result['sort_' + name] = (torch.equal(values, expected.values) and values.dtype == keys.dtype
+                              and torch.equal(order, expected.indices) and order.dtype == torch.int64)
+# OLMoE's 32768 expert ids; then ties, presorted runs and ragged blocks (256 keys each).
+stable_sort('olmoe', torch.randint(0, 64, (32768,)))
+stable_sort('duplicates', torch.randint(-2, 3, (2500,)))
+stable_sort('all_equal', torch.full((1500,), 7))
+stable_sort('sorted', torch.arange(-300, 1700))
+stable_sort('reversed', torch.arange(1700, -300, -1))
+stable_sort('descending', torch.randint(0, 9, (2049,)), descending=True)
+stable_sort('int32', torch.randint(0, 40, (777,), dtype=torch.int32))
+stable_sort('int8', torch.randint(-128, 128, (300,), dtype=torch.int8), descending=True)
+stable_sort('bool', torch.rand(500) > 0.5)
+stable_sort('rows', torch.randint(0, 9, (5, 70)))
+stable_sort('dim0', torch.randint(0, 9, (70, 3)), dim=0, descending=True)
+stable_sort('single', torch.tensor([4]))
+stable_sort('empty', torch.empty(0, dtype=torch.int64))
+for name, keys in (('wide_range', torch.tensor([0, 4096])), ('float_keys', torch.randn(4))):
+    try:
+        integer_sort(keys)
+        result['refuses_' + name] = False
+    except NotImplementedError:
+        result['refuses_' + name] = True
 print(json.dumps(result))
 """
 
@@ -691,6 +728,22 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
 
         a = torch.randn(2, 32, 64, device='cuda')
         self.assertTrue(torch.equal(flip_copy(a, [2]), torch.flip(a, [2])))
+
+    def test_integer_sort_matches_cuda_stable_sort_bit_for_bit(self):
+        from evograd.atenir.primitive_triton.reduction import integer_sort
+
+        torch.manual_seed(0)
+        for keys, dim, descending in (
+                (torch.randint(0, 64, (32768,), device='cuda'), -1, False),  # OLMoE's expert ids
+                (torch.randint(-3, 4, (32768,), device='cuda'), -1, True),
+                (torch.full((5000,), 3, device='cuda', dtype=torch.int32), -1, False),
+                (torch.arange(3000, 0, -1, device='cuda'), -1, False),
+                (torch.randint(0, 9, (70, 33), device='cuda'), 0, False)):
+            values, order = integer_sort(keys, dim, descending)
+            expected = torch.sort(keys, dim=dim, descending=descending, stable=True)
+            with self.subTest(n=keys.numel(), descending=descending):
+                self.assertTrue(torch.equal(values, expected.values))
+                self.assertTrue(torch.equal(order, expected.indices))
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""

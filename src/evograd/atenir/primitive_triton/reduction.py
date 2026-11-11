@@ -187,6 +187,66 @@ if HAS_TRITON:
         tl.store(Y + row * C + lane, values, lane < C)
         tl.store(I + row * C + lane, indices, lane < C)
 
+    @triton.jit
+    def _int_extremes_kernel(X, OUT, N, BLOCK: tl.constexpr):
+        """OUT[0] and OUT[1]: the smallest and the largest of N integer keys, as int64."""
+        lane = tl.arange(0, BLOCK)
+        first = tl.load(X).to(tl.int64)
+        low = tl.full((BLOCK,), 0, tl.int64) + first
+        high = low
+        for start in range(0, N, BLOCK):
+            offsets = start + lane
+            keys = tl.load(X + offsets, offsets < N, other=0).to(tl.int64)
+            keys = tl.where(offsets < N, keys, first)
+            low = tl.minimum(low, keys)
+            high = tl.maximum(high, keys)
+        tl.store(OUT, tl.min(low, 0))
+        tl.store(OUT + 1, tl.max(high, 0))
+
+    @triton.jit
+    def _key_bins(ROW, cols, C, base, DESCENDING: tl.constexpr):
+        """The counting-sort bin of each key in ROW[cols]: its distance from the
+        smallest key (ascending) or the largest (descending); -1 past the row."""
+        keys = tl.load(ROW + cols, cols < C, other=0).to(tl.int64)
+        bins = base - keys if DESCENDING else keys - base
+        return tl.where(cols < C, bins, -1).to(tl.int32)
+
+    @triton.jit
+    def _key_counts_kernel(X, COUNTS, C, BLOCKS, base, BINS, DESCENDING: tl.constexpr,
+                           BLOCK: tl.constexpr, CHUNK: tl.constexpr):
+        """COUNTS[row, bin * BLOCKS + block]: how many keys of one block of a row
+        fall in each bin, every bin written."""
+        row, block = tl.program_id(0) // BLOCKS, tl.program_id(0) % BLOCKS
+        bins = _key_bins(X + row * C, block * BLOCK + tl.arange(0, BLOCK), C, base, DESCENDING)
+        for start in range(0, BINS, CHUNK):
+            ids = start + tl.arange(0, CHUNK)
+            count = tl.sum((bins[:, None] == ids[None, :]).to(tl.int32), 0)
+            tl.store(COUNTS + row * BINS * BLOCKS + ids * BLOCKS + block, count, ids < BINS)
+
+    @triton.jit
+    def _counting_sort_scatter_kernel(X, COUNTS, ENDS, VALUES, INDICES, C, BLOCKS, base, BINS,
+                                      DESCENDING: tl.constexpr, BLOCK: tl.constexpr,
+                                      CHUNK: tl.constexpr):
+        """Place each key of one block of a row: where its (bin, block) starts in
+        the row (ENDS, the running sum of COUNTS, minus COUNTS), plus how many
+        earlier keys of its block share its bin. Equal keys keep their order."""
+        row, block = tl.program_id(0) // BLOCKS, tl.program_id(0) % BLOCKS
+        lane = tl.arange(0, BLOCK)
+        cols = block * BLOCK + lane
+        mask = cols < C
+        bins = _key_bins(X + row * C, cols, C, base, DESCENDING)
+        rank = tl.zeros((BLOCK,), tl.int32)
+        for start in range(0, BLOCK, CHUNK):
+            peers = start + tl.arange(0, CHUNK)
+            peer_bins = _key_bins(X + row * C, block * BLOCK + peers, C, base, DESCENDING)
+            earlier = (peer_bins[None, :] == bins[:, None]) & (peers[None, :] < lane[:, None])
+            rank += tl.sum(earlier.to(tl.int32), 1)
+        slot = tl.where(mask, row * BINS * BLOCKS + bins * BLOCKS + block, 0)
+        first = tl.load(ENDS + slot, mask, other=0) - tl.load(COUNTS + slot, mask, other=0)
+        position = row * C + first + rank
+        tl.store(VALUES + position, tl.load(X + row * C + cols, mask), mask)
+        tl.store(INDICES + position, cols.to(tl.int64), mask)
+
 
 def _require_cuda(a):
     if not HAS_TRITON or not a.is_cuda:
@@ -428,3 +488,43 @@ def make_sort_kernel(dim=-1, descending=False, stable=False) -> Callable:
                                        LOG_BLOCK=block.bit_length()-1, BLOCK=block)
         return values.reshape(shape).permute(inverse), indices.reshape(shape).permute(inverse)
     return triton_sort
+
+
+#: The most distinct key values integer_sort takes: its counting sort's bins.
+_SORT_KEY_RANGE = 4096
+
+
+def integer_sort(a, dim=-1, descending=False):
+    """``aten.sort(stable=True)`` of integer or bool keys: ``(values, int64
+    indices)``, equal keys in input order. A counting sort: the keys' range is
+    read back to size the bins (at most ``_SORT_KEY_RANGE``), each block of a
+    row counts its keys per bin, a running sum over (bin, block) gives where
+    each bin's keys from each block start, and each key lands there after the
+    earlier keys of its block in the same bin."""
+    if a.is_floating_point() or a.is_complex():
+        raise NotImplementedError('integer_sort takes integer or bool keys')
+    matrix, shape, inverse = _axis_matrix(a, dim)
+    rows, width = matrix.shape
+    values = torch.empty(matrix.shape, device=a.device, dtype=a.dtype)
+    indices = torch.empty(matrix.shape, device=a.device, dtype=torch.int64)
+    if rows and width:
+        extremes = torch.empty((2,), device=a.device, dtype=torch.int64)
+        _int_extremes_kernel[(1,)](matrix, extremes, rows * width, BLOCK=1024)
+        low, high = extremes.tolist()
+        if high - low >= _SORT_KEY_RANGE:
+            raise NotImplementedError(f'handwritten integer sort takes keys spanning at most '
+                                      f'{_SORT_KEY_RANGE} values, not {high - low + 1}')
+        # Blocks of at most 256 keys: their pairwise rank stays in registers.
+        bins, block = high - low + 1, min(max(_next_pow2(width), 16), 256)
+        blocks = triton.cdiv(width, block)
+        counts = torch.empty((rows, bins * blocks), device=a.device, dtype=torch.int32)
+        ends = torch.empty((rows, bins * blocks), device=a.device, dtype=torch.int64)
+        base = high if descending else low
+        _key_counts_kernel[(rows * blocks,)](matrix, counts, width, blocks, base, bins,
+                                             DESCENDING=bool(descending), BLOCK=block, CHUNK=16)
+        _cumsum_rows_kernel[(rows,)](counts, ends, bins * blocks,
+                                     BLOCK=min(_next_pow2(bins * blocks), 1024))
+        _counting_sort_scatter_kernel[(rows * blocks,)](
+            matrix, counts, ends, values, indices, width, blocks, base, bins,
+            DESCENDING=bool(descending), BLOCK=block, CHUNK=16)
+    return values.reshape(shape).permute(inverse), indices.reshape(shape).permute(inverse)

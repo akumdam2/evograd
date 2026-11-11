@@ -807,6 +807,13 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         positional = _positional_entries(node)
         dim = _keyword(node, "dim", positional[1]["value"] if len(positional) > 1 else -1)
         descending = _keyword(node, "descending", positional[2]["value"] if len(positional) > 2 else False)
+        keys = (node.get("input_nodes") or [{}])[0].get("dtype", "")
+        if keys and not keys.startswith(("torch.float", "torch.bfloat")):
+            # Integer keys: a stable counting sort, which any tie order permits.
+            def _integer_sort(a):
+                return reduction.integer_sort(a, dim, descending)
+
+            return _integer_sort
         return reduction.make_sort_kernel(dim, descending, stable=_keyword(node, "stable", False))
 
     # ── Category 3: new reductions ────────────────────────────────────────────
