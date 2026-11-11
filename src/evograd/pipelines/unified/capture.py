@@ -55,7 +55,7 @@ _SUPPORTED_EXTERNALS = {
     "torch.ops.aten._scaled_dot_product_flash_attention_backward.default":
         "aten._scaled_dot_product_flash_attention_backward.default",
     # float32, which neither cuDNN nor flash takes: memory-efficient attention in
-    # every mode, as vendor_sdpa runs it.
+    # every mode, as vendor_sdpa runs it (for float32 only: _FLOAT32_EXTERNALS).
     "torch.ops.aten._scaled_dot_product_efficient_attention.default":
         "aten._scaled_dot_product_efficient_attention.default",
     "torch.ops.aten._scaled_dot_product_efficient_attention_backward.default":
@@ -63,6 +63,14 @@ _SUPPORTED_EXTERNALS = {
     # A mixture of experts' grouped GEMM (cuBLAS/CUTLASS), forward and backward.
     "extern_kernels._grouped_mm": "aten._grouped_mm.default",
 }
+
+#: Externs preserved for float32 operands only. Half-precision attention that
+#: the dispatcher hands to memory-efficient attention (a masked one, say) is
+#: not what vendor_sdpa runs, so it is not pinned to that backend.
+_FLOAT32_EXTERNALS = frozenset({
+    "torch.ops.aten._scaled_dot_product_efficient_attention.default",
+    "torch.ops.aten._scaled_dot_product_efficient_attention_backward.default",
+})
 
 # Compiler fallbacks to ATen's own CUDA kernels, not to a vendor library: the
 # seed implements their semantics itself, so they stay in the evolvable region
@@ -240,6 +248,11 @@ def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[E
                 f"Unified pipeline cannot map {side} {kernel} ({name!r}) back to an "
                 "unchanged semantic ATen call; compiler fusion/rewriting needs "
                 "an explicit region mapping"
+            )
+        if kernel in _FLOAT32_EXTERNALS and semantic["input_nodes"][0]["dtype"] != "torch.float32":
+            raise NotImplementedError(
+                f"Unified pipeline preserves {kernel} for float32 operands only, not "
+                f"{semantic['input_nodes'][0]['dtype']}"
             )
         if name in seen_nodes:
             raise NotImplementedError(

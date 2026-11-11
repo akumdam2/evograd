@@ -10,8 +10,8 @@ from torch.fx.experimental.proxy_tensor import make_fx
 from evograd.benchmark import get_task
 from evograd.opdecl import Active, Workload, declare_op
 from evograd.pipelines.d_inductor.capture import _backward_arg_spec, capture_inductor_pair
-from evograd.pipelines.unified.capture import (_capture_device, _encode_arg, _same_call,
-                                               _serialize_graph)
+from evograd.pipelines.unified.capture import (_capture_device, _encode_arg, _external_regions,
+                                               _same_call, _serialize_graph)
 from tests._small_cases import SMALL
 
 
@@ -96,6 +96,30 @@ class TestCompilerRewrites(unittest.TestCase):
             redraw = gm.graph.call_function(rand.target, rand.args, rand.kwargs)
         mm.replace_input_with(rand, redraw)
         self.assertFalse(_same_call(by_name[mm.name], mm, by_name))
+
+    def test_memory_efficient_attention_is_preserved_for_float32_only(self):
+        # vendor_sdpa runs it for float32; half precision there is cuDNN's or flash's.
+        from types import SimpleNamespace
+
+        from torch._inductor import ir
+
+        kernel = "torch.ops.aten._scaled_dot_product_efficient_attention.default"
+        for dtype in (torch.float32, torch.bfloat16):
+            q = torch.randn(1, 2, 8, 16, dtype=dtype)
+            gm = make_fx(lambda q, k, v: torch.ops.aten._scaled_dot_product_efficient_attention(
+                q, k, v, None, True), tracing_mode="fake")(q, q, q)
+            buffer = object.__new__(ir.ExternKernel)  # the compiler's call, as lowering leaves it
+            for name, value in (("python_kernel_name", kernel), ("name", "buf0"),
+                                ("fx_node", next(n for n in gm.graph.nodes if str(n.target) in kernel))):
+                object.__setattr__(buffer, name, value)
+            lowering = SimpleNamespace(buffers=[buffer], operations=[])
+            with self.subTest(dtype=dtype):
+                if dtype == torch.float32:
+                    (region,) = _external_regions("forward", lowering, _serialize_graph(gm))
+                    self.assertEqual(region.kernel, kernel)
+                else:
+                    with self.assertRaisesRegex(NotImplementedError, "float32 operands only"):
+                        _external_regions("forward", lowering, _serialize_graph(gm))
 
 
 class TestSavedActivationLayout(unittest.TestCase):
