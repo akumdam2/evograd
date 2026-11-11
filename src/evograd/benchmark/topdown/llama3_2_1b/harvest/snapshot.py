@@ -9,11 +9,11 @@ shapes come from a real training step rather than from someone's judgement.
 The snapshot is the reconciliation. Reading and verifying one is shared; what is
 here is the part that names things.
 
-**This workload has no tracked snapshot yet.** ``snapshot.json`` is *derived*,
-not authored: it comes out of a harvest, and nobody has run one for Llama-3.
-Until someone does::
+``snapshot.json`` is *derived*, not authored: it comes out of a harvest of the
+real-payload capture's first step (pinned checkpoint, order-101 batch)::
 
-    python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 \\
+        python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
         --out results/llama3-level3/harvest.json
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot \\
         --harvest results/llama3-level3/harvest.json --write
@@ -55,6 +55,7 @@ from ...common import snapshot_extract as _extract
 
 __all__ = [
     "LEVEL1_SOURCES",
+    "READABLE_SCHEMAS",
     "SCHEMA_VERSION",
     "SNAPSHOT_PATH",
     "SnapshotError",
@@ -67,7 +68,13 @@ __all__ = [
     "task",
 ]
 
-SCHEMA_VERSION = "evograd-llama3-snapshot/1"
+#: Bumped from /1 when the snapshot began to record ``run``: the verification
+#: run its harvest observed (the integration's pinned weights and data, the first
+#: TRAIN batch of order 101 and the initial parameter state). A /1 snapshot has
+#: none; it still loads, and a capture refuses it.
+SCHEMA_VERSION = "evograd-llama3-snapshot/2"
+#: Every revision this module reads.
+READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-llama3-snapshot/1")
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
@@ -152,7 +159,8 @@ _UNHARVESTED = """{path} does not exist.
 A snapshot is derived from a harvest, not authored, and no Llama-3 harvest has
 been run. On a machine with a GPU:
 
-    python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 \\
+        python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \\
         --out results/llama3-level3/harvest.json
     python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot \\
         --harvest results/llama3-level3/harvest.json --write
@@ -162,7 +170,7 @@ purpose: the shapes are meant to be what a real training step ran."""
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
-    """The frozen Llama-3 snapshot, with its hash and exact schema verified.
+    """The frozen Llama-3 snapshot, with its hash and schema verified.
 
     Only *absence* is re-reported. A snapshot that exists and fails its hash or
     schema check still raises the shared reader's error, because that is a
@@ -171,7 +179,7 @@ def load(path: Path | None = None) -> dict[str, Any]:
     path = Path(path or SNAPSHOT_PATH)
     if not path.is_file():
         raise SnapshotError(_UNHARVESTED.format(path=path))
-    return _load(path, schema_version=SCHEMA_VERSION)
+    return _load(path, schema_version=READABLE_SCHEMAS)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
@@ -179,7 +187,7 @@ def task(name: str, path: Path | None = None) -> dict[str, Any]:
     path = Path(path or SNAPSHOT_PATH)
     if not path.is_file():
         raise SnapshotError(_UNHARVESTED.format(path=path))
-    return _task(name, path, schema_version=SCHEMA_VERSION)
+    return _task(name, path, schema_version=READABLE_SCHEMAS)
 
 
 def extract(manifest: dict[str, Any], *, layer_index: int) -> dict[str, Any]:

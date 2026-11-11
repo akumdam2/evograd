@@ -182,7 +182,16 @@ recorder of its training calls (`capture.py`), and its model reference
 computation). The capture loop, replay and fidelity (`base.py`), the gates
 (`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
 boundary of one training step per data order becomes a payload of the case
-its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only).
+its shapes bind. The cases and their calls per step come from the model's
+harvest snapshot, and that harvest observes the capture's own first step
+(`base.real_run`: this package's settings, workload and model builder on the
+first TRAIN batch of order 101). The snapshot records that run (`run`: pinned
+workload, data identity, the order-101 batch and its digest, the initial
+parameter state), and `capture` refuses, before writing anything, a snapshot
+whose `run` is missing or differs from its own (`base.require_harvested_run`;
+MegaFold, whose harvest records its run its own way, sets
+`requires_harvested_run=False`). Gate 1 runs on the acceptance payloads (real
+inputs only).
 Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
 four batches (native repeats, compile and the rounding perturbation) with
@@ -220,6 +229,8 @@ results at Tier 2 through deployment and autograd, and whole-model results at
 Tier 3; Tier 1 remains search feedback and standalone pair diagnostics.
 
 ```bash
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --out HARVEST.json
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot --harvest HARVEST.json --write
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b verify \
   --corpus CORPUS/manifest.json --out DIR --candidate qwen3_swiglu_mlp/swiglu_mlp=candidate.py

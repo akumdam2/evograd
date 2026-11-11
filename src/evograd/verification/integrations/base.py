@@ -11,6 +11,12 @@ Cases are a model's observed benchmark cases (its ``<model>_observed`` suite).
 A recorded call belongs to the case of its task whose declared shapes and
 dtypes its arguments bind; calls per training step come from the harvest
 snapshot. Nothing here edits a task or a snapshot.
+
+The harvest that writes that snapshot runs the capture's own first step
+(:func:`real_run`: this module's settings, workload, model builder and the
+first TRAIN batch of order :data:`HARVEST_ORDER`) and records its
+:func:`run_identity` as the snapshot's ``run``; :func:`capture` refuses a
+snapshot whose ``run`` is missing or not its own (:func:`require_harvested_run`).
 """
 
 from __future__ import annotations
@@ -27,6 +33,10 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 ORDERS = (101, 202, 303, 404)
 CALIBRATION_ORDERS = (101, 202)
 ACCEPTANCE_ORDERS = (303, 404)
+#: The data order whose first TRAIN batch the harvest runs: the capture's first.
+HARVEST_ORDER = ORDERS[0]
+#: The fields of a :func:`run_identity` a capture compares with its snapshot's ``run``.
+RUN_KEYS = ("model", "workload", "data", "order", "batch", "parameter_state")
 DETERMINISM = {"CUBLAS_WORKSPACE_CONFIG": ":4096:8", "use_deterministic_algorithms": True,
                "cudnn.deterministic": True, "cudnn.benchmark": False,
                "cuda.matmul.allow_tf32": False, "float32_matmul_precision": "highest",
@@ -101,6 +111,12 @@ class Model:
     #: records a declared subset of each case's calls (MegaFold: a full step is
     #: 275 GiB of payloads); ``None`` records every call.
     recorded_calls: Callable[["Case"], int] | None = None
+    #: Whether a capture requires the tracked snapshot to record this run
+    #: (:func:`require_harvested_run`). MegaFold: no. Its harvest runs the
+    #: capture's own workload, model builder, recorder and settings at step seed
+    #: 0 and records the run as ``config`` and ``data``; its recorder checks the
+    #: snapshot's schema instead.
+    requires_harvested_run: bool = True
 
 
 def objective_of(model: Model):
@@ -371,6 +387,78 @@ def step_record(model, output) -> dict[str, Any]:
             "logits_digest": tensor_digest(output.logits.detach()), "grads": grads}
 
 
+# ── the harvested run ────────────────────────────────────────────────────────
+
+
+def run_identity(model: Model, state: Mapping[str, Any], batch_identity: Mapping[str, Any], *,
+                 order: int = HARVEST_ORDER) -> dict[str, Any]:
+    """The run a harvest observes and a capture's order-``order`` step repeats.
+
+    ``state`` is the objective's ``parameter_state`` of a freshly built model;
+    ``batch_identity`` is ``model.train_batches``' identity, of order ``order``
+    alone (a harvest) or of every order (a capture). The record holds the
+    pinned workload (weights and data pins), the data identity, the order, its
+    first batch (with its content digest) and the initial parameter state, as
+    plain JSON so that a recorded copy compares equal.
+    """
+    return json.loads(json.dumps({
+        "model": model.name, "workload": dict(model.workload_config),
+        "data": {key: value for key, value in batch_identity.items() if key != "batches"},
+        "order": order, "batch": dict(batch_identity["batches"][str(order)]),
+        "parameter_state": dict(state)}, default=str))
+
+
+def real_run(model: Model, *, device: str = "cuda") -> tuple[Any, Any, Any, dict[str, Any]]:
+    """The capture's first step, for a harvest to observe: ``(workload, net, batch, identity)``.
+
+    Under :func:`configure`: the pinned workload (``model.load_workload``), a
+    fresh native model at its initial state (:func:`build_model`, as every
+    capture builds it) and the first TRAIN batch of data order
+    :data:`HARVEST_ORDER` on ``device``. ``identity`` is :func:`run_identity`
+    plus the settings it runs under (``execution``, recorded, not compared);
+    the harvest records it as its snapshot's ``run``.
+    """
+    from .objectives import to_device
+
+    settings = configure()
+    workload = model.load_workload()
+    batches, batch_identity = model.train_batches(workload, (HARVEST_ORDER,))
+    net = build_model(workload)
+    identity = {**run_identity(model, objective_of(model).parameter_state(net), batch_identity),
+                "execution": settings}
+    return workload, net, to_device(batches[HARVEST_ORDER], device), identity
+
+
+def require_harvested_run(model: Model, identity: Mapping[str, Any]) -> None:
+    """Refuse to capture against a snapshot that was not harvested on this run.
+
+    The capture binds every recorded call to a snapshot case and counts it
+    against that case's calls per step; those describe this capture only if
+    the harvest ran the same pinned weights, data and first batch of order
+    :data:`HARVEST_ORDER` from the same initial parameters. ``identity`` is the
+    capture's own :func:`run_identity`; every :data:`RUN_KEYS` field must equal
+    the snapshot's ``run``. A snapshot without one (harvested before the
+    harvest ran the real step, or from a random-weight synthetic-token debug
+    harvest) is refused as well. Models with ``requires_harvested_run`` False
+    are not checked.
+    """
+    from evograd.benchmark.topdown import TOPDOWN_WORKLOADS, load_snapshot
+
+    if not model.requires_harvested_run:
+        return
+    recorded = load_snapshot(model.name).get("run")
+    rerun = (f"rerun python -m evograd.benchmark.topdown."
+             f"{TOPDOWN_WORKLOADS.get(model.name, model.name)}.harvest.harvest on a GPU node and "
+             "regenerate the snapshot from it")
+    if not recorded:
+        raise RuntimeError(f"{model.name}: the tracked snapshot records no harvested run, so its "
+                           f"cases may not describe this capture; {rerun}")
+    differ = [key for key in RUN_KEYS if recorded.get(key) != identity.get(key)]
+    if differ:
+        raise RuntimeError(f"{model.name}: the tracked snapshot was harvested on another run "
+                           f"({', '.join(differ)} differ); {rerun}")
+
+
 # ── payloads ─────────────────────────────────────────────────────────────────
 
 
@@ -487,7 +575,12 @@ def _capture_identity(model: Model, cases, batch_identity, state, settings) -> d
 
 
 def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: str = "cuda") -> Path:
-    """Capture the corpus: one fresh initial model per data order, fidelity per order."""
+    """Capture the corpus: one fresh initial model per data order, fidelity per order.
+
+    Refused before anything is written unless the tracked snapshot was
+    harvested on this run (:func:`require_harvested_run`; ``orders`` must hold
+    :data:`HARVEST_ORDER`).
+    """
     import gc
 
     import torch
@@ -504,7 +597,7 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: 
         objective = objective.bind(workload)
     primary = objective.primary
     batches, batch_identity = model.train_batches(workload, orders)
-    writer = CorpusWriter(out)
+    writer = None
     fidelity: dict[str, Any] = {}
     state = None
     for order in orders:
@@ -512,7 +605,10 @@ def capture(model: Model, out: str | Path, *, orders=ORDERS, log=print, device: 
         batch_now = to_device(batches[order], device)
         net = build_model(workload)
         state_now = objective.parameter_state(net)
-        state = state or state_now
+        if state is None:
+            # Before anything is written: the snapshot must describe this run.
+            require_harvested_run(model, run_identity(model, state_now, batch_identity))
+            state, writer = state_now, CorpusWriter(out)
         if state_now != state:
             raise RuntimeError("the initial parameter state differs between captures")
         plain = record(net, *objective.capture_step(net, batch_now), primary)

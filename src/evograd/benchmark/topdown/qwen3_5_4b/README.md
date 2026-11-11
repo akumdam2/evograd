@@ -84,17 +84,30 @@ case's provenance), `causal_gqa_attention`, `swiglu`, `cross_entropy`
 
 ## Harvest
 
-`harvest/` observes one whole canonical step (loss + backward) and freezes it
-into `harvest/snapshot.json` (provenance `observed`). Every layer is held to its
+`harvest/` observes one whole training step (loss + backward), the one the
+real-payload capture runs first, and freezes it into `harvest/snapshot.json`
+(provenance `observed`). Every layer is held to its
 layer kind's mandatory boundaries; `snapshot.check_declared_dims` holds every
 site's declared dims to the harvested shapes.
 
 ```bash
-PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+    python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest harvest.json --write
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --synthetic \
+    --out harvest_synthetic.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture \
-    --harvest harvest.json --out-dir <run_dir>
+    --harvest harvest_synthetic.json --out-dir <run_dir>
 ```
+
+The harvest observes the real-payload capture's first step: the pinned checkpoint
+on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.qwen3_5_4b` under the verification settings
+(`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
+a capture refuses a snapshot that does not record its own run. `--synthetic`
+harvests the random-weight, synthetic-token canonical spec instead (debug
+overrides apply to it); the layer capture replays that step and reads such a
+harvest.
 
 The Tier-3 side is `evograd/evaluation/tier3/workloads/qwen3_5_4b/`. How to run
 everything: `docs/QWEN3_5_4B.md`.

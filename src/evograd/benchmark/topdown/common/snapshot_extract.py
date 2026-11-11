@@ -21,6 +21,12 @@ it is kept apart -- nothing that imports ``evograd.ops`` pays for it.
 ``schema_version``
     So a snapshot declares which workload produced it.
 
+Every snapshot also carries the harvest's ``run``: the verification run it
+observed (pinned workload, data identity, the first TRAIN batch of order 101
+with its digest, the initial parameter state), or ``None`` for a harvest of
+random weights on synthetic tokens. A capture refuses a snapshot whose ``run``
+is not its own (``evograd.verification.integrations.base.require_harvested_run``).
+
 An unmapped role is an error rather than a smaller snapshot. A configuration the
 model really ran, silently dropped, would leave a task with shapes that do not
 add up to the step -- so a role with no component raises and names itself.
@@ -455,6 +461,7 @@ def extract_blocks(
         ),
         "representative_layers": layers,
         "tasks": tasks,
+        "run": manifest.get("run"),
     }
     payload["snapshot_hash"] = snapshot_hash(payload)
     return payload
@@ -521,6 +528,7 @@ def extract(
             "event_ordinal": layer_events[0]["ordinal"],
         },
         "tasks": tasks,
+        "run": manifest.get("run"),
     }
     payload["snapshot_hash"] = snapshot_hash(payload)
     return payload

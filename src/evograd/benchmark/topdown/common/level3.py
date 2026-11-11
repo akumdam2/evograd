@@ -26,7 +26,23 @@ from typing import Any, Callable, Mapping
 
 from .model import ModelClasses
 from .observe import ObservationPlan
-from .spec import WorkloadSpec
+from .spec import WorkloadSpec, WorkloadSpecError
+
+
+def _require_random_synthetic(spec: WorkloadSpec) -> None:
+    """The shared builders make random weights and synthetic tokens only.
+
+    A spec naming a checkpoint or a dataset would otherwise run on random
+    weights and random tokens under the pretrained/real-text workload id. Such
+    a run is built by its verification integration instead
+    (``evograd.verification.integrations.base.real_run``).
+    """
+    weights, data = getattr(spec, "weights", "random"), getattr(spec, "data", "synthetic")
+    if weights != "random" or data != "synthetic":
+        raise WorkloadSpecError(
+            f"{spec.workload_id}: weights {weights!r}, data {data!r}; the shared Level-3 builders "
+            "make random weights and synthetic tokens only. Build this run through its "
+            "verification integration (integrations.base.real_run).")
 
 
 @dataclass(frozen=True)
@@ -78,13 +94,17 @@ class Level3Workload:
         return _model.require_transformers(self.classes)
 
     def build_model(self, spec: WorkloadSpec):
+        """Random weights under ``spec.seed``; a spec naming a checkpoint is refused."""
         from . import model as _model
 
+        _require_random_synthetic(spec)
         return _model.build_model(spec, self.classes)
 
     def make_inputs(self, spec: WorkloadSpec):
+        """Synthetic tokens under ``spec.seed``; a spec naming real data is refused."""
         from . import model as _model
 
+        _require_random_synthetic(spec)
         return _model.make_inputs(spec)
 
     def effective_settings(self, model, spec: WorkloadSpec) -> dict[str, Any]:

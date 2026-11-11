@@ -49,7 +49,7 @@ class TestSnapshot(unittest.TestCase):
 
     def test_the_snapshot_loads_and_its_hash_verifies(self):
         payload = snapshot_module.load()
-        self.assertEqual(payload["schema_version"], snapshot_module.SCHEMA_VERSION)
+        self.assertIn(payload["schema_version"], snapshot_module.READABLE_SCHEMAS)
         self.assertEqual(
             payload["snapshot_hash"], snapshot_module.snapshot_hash(payload)
         )

@@ -338,6 +338,44 @@ class TestManifestIntegrity(HarvestFixture):
         self.assertIn("raw events", text)
         self.assertIn("deduplicated configurations", text)
 
+    def test_a_synthetic_harvest_records_its_sources_and_no_run(self):
+        self.assertEqual(self.manifest["workload"]["weights"], "random")
+        self.assertEqual(self.manifest["workload"]["data"], "synthetic")
+        self.assertIsNone(self.manifest["run"])
+        self.assertIn("run=none", summarize(self.manifest))
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
+class TestHarvestCommand(HarvestFixture):
+    """The command harvests the real run; debug overrides need ``--synthetic``."""
+
+    def test_the_command_harvests_the_real_run(self):
+        import contextlib
+        import io
+        import tempfile
+        from pathlib import Path
+
+        from evograd.benchmark.topdown.common.cli import harvest_main
+        from evograd.benchmark.topdown.qwen3_0_6b.declaration import WORKLOAD
+
+        calls = []
+
+        def real_run():
+            calls.append(1)
+            return self.manifest
+
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()):
+            out = Path(directory) / "harvest.json"
+            self.assertEqual(harvest_main(WORKLOAD, ["--out", str(out)], real_run=real_run), 0)
+            self.assertEqual(json.loads(out.read_text())["manifest_hash"],
+                             self.manifest["manifest_hash"])
+        self.assertEqual(calls, [1])
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(harvest_main(WORKLOAD, ["--device", "cpu"], real_run=real_run), 2)
+        self.assertIn("--synthetic", err.getvalue())
+        self.assertEqual(calls, [1])
+
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers not installed on this machine")
 class TestDeterminism(unittest.TestCase):

@@ -46,10 +46,18 @@ has chosen its torch kernels (`evograd/opdecl/sidecar.py`).
 
 ```bash
 python -m evograd.benchmark.topdown.qwen3_5_4b --out smoke.json
-python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest harvest.json --write
-python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture --harvest harvest.json --out-dir <dir>
+python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --synthetic --out harvest_synthetic.json
+python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture --harvest harvest_synthetic.json --out-dir <dir>
 ```
+
+The harvest observes the real-payload capture's first step (the pinned
+checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.qwen3_5_4b` under the verification settings); the
+snapshot records that run (`run`), and a capture refuses a snapshot that does
+not record its own run. The layer capture replays the random-weight synthetic
+step, so it reads a `--synthetic` harvest.
 
 **Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 

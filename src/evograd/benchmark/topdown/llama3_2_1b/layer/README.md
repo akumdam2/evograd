@@ -133,10 +133,16 @@ right numbers with the wrong label.
 ## Running it
 
 ```bash
+PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest --synthetic \
+    --out results/llama3-level3/harvest_synthetic.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.layer.capture \
-    --harvest results/llama3-level3/harvest.json \
+    --harvest results/llama3-level3/harvest_synthetic.json \
     --out results/llama3-level3/layer16.pt
 ```
+
+The capture replays the random-weight synthetic step, so it reads a
+`--synthetic` harvest; the harvest behind the tracked snapshot runs the
+pretrained real-text step instead (`../harvest/harvest.py`).
 
 `--layer` defaults to 16; the JSON sidecar defaults to `--out` with a `.json`
 suffix. `--expect-workload-id` / `--expect-manifest-hash` / `--expect-layer`

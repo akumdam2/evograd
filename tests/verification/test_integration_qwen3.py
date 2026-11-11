@@ -148,6 +148,106 @@ class RealCaseTable(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class RealRunHarvest(unittest.TestCase):
+    """The harvest observes the capture's own first step; the capture checks that it did.
+
+    The integration's model with a tiny random CPU workload and seeded batches
+    in place of the pinned checkpoint and WikiText: the harvest builds through
+    ``base.real_run`` exactly as on a GPU node, its snapshot records the run,
+    and a capture's own identity of the same run is accepted against it while
+    another run's is refused.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import dataclasses
+        import json
+        from unittest import mock
+
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest import harvest, snapshot
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+        from evograd.verification.common.tensors import tensor_digest
+        from evograd.verification.integrations import base
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
+        from tests.verification._toy_integration import configured
+
+        workload = Qwen3Workload(device="cpu", dtype="bfloat16", batch_size=B, seq_len=T,
+                                 arch_overrides=ARCH)
+
+        def train_batches(_workload, orders, offset=0):
+            seeded = {o: torch.Generator().manual_seed(o + offset) for o in orders}
+            ids = {o: torch.randint(0, V, (B, T), generator=g) for o, g in seeded.items()}
+            batches = {str(o): {"order": o, "input_ids_sha256": tensor_digest(i)}
+                       for o, i in ids.items()}
+            identity = {"dataset": "tiny", "batches": batches}
+            return {o: (i, i.clone()) for o, i in ids.items()}, identity
+
+        cls.base, cls.snapshot_module, cls.workload = base, snapshot, workload
+        cls.train_batches = staticmethod(train_batches)
+        cls.model = dataclasses.replace(
+            MODEL, workload_config={"model": "qwen3_0_6b", "device": "cpu", "arch_overrides": ARCH},
+            load_workload=lambda: workload, train_batches=train_batches)
+        with configured(), \
+                mock.patch("evograd.verification.integrations.qwen3_0_6b.MODEL", cls.model):
+            cls.manifest = json.loads(json.dumps(harvest.harvest_real_run(device="cpu")))
+        cls.snapshot = snapshot.extract(cls.manifest, layer_index=1)
+
+    def capture_identity(self, *, offset=0, perturb=False):
+        """What a capture of ``orders`` computes for the run check."""
+        model = self.base.build_model(self.workload)
+        if perturb:
+            with torch.no_grad():
+                model.model.norm.weight.add_(1)
+        state = self.base.objective_of(self.model).parameter_state(model)
+        batches = self.train_batches(self.workload, self.base.ORDERS, offset=offset)[1]
+        return self.base.run_identity(self.model, state, batches)
+
+    def require(self, snapshot, identity):
+        from unittest import mock
+
+        with mock.patch("evograd.benchmark.topdown.load_snapshot", lambda name: snapshot):
+            self.base.require_harvested_run(self.model, identity)
+
+    def test_the_harvest_observes_the_order_101_batch_of_the_built_model(self):
+        run = self.manifest["run"]
+        ids = self.train_batches(self.workload, (101,))[0][101][0]
+        self.assertEqual(run["order"], 101)
+        effective = self.manifest["validation"]["effective"]
+        self.assertEqual(effective["input_ids_checksum"], int(ids.sum()))
+        self.assertEqual(run["parameter_state"],
+                         self.base.parameter_state(self.base.build_model(self.workload)))
+        self.assertTrue(run["execution"]["deterministic_algorithms"])
+        self.assertEqual(self.manifest["workload_id"], self.workload.spec.workload_id)
+        self.assertEqual(self.manifest["workload"]["weights"], "random")
+
+    def test_the_snapshot_records_the_run(self):
+        self.assertEqual(self.snapshot["schema_version"], self.snapshot_module.SCHEMA_VERSION)
+        self.assertEqual(self.snapshot["run"], self.manifest["run"])
+        self.assertEqual(self.snapshot["snapshot_hash"],
+                         self.snapshot_module.snapshot_hash(self.snapshot))
+
+    def test_a_capture_of_the_same_run_is_accepted_and_of_another_refused(self):
+        self.require(self.snapshot, self.capture_identity())
+        for label, identity in (("batch", self.capture_identity(offset=1)),
+                                ("weights", self.capture_identity(perturb=True))):
+            with self.subTest(label), self.assertRaisesRegex(RuntimeError, "another run"):
+                self.require(self.snapshot, identity)
+
+    def test_a_synthetic_harvest_backs_no_capture(self):
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest import run_harvest
+
+        synthetic = self.snapshot_module.extract(run_harvest(self.workload.spec), layer_index=1)
+        self.assertIsNone(synthetic["run"])
+        with self.assertRaisesRegex(RuntimeError, "records no harvested run"):
+            self.require(synthetic, self.capture_identity())
+
+    def test_the_tracked_snapshot_without_a_run_still_loads(self):
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import READABLE_SCHEMAS, load
+
+        self.assertIn(load()["schema_version"], READABLE_SCHEMAS)
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
 class TinyCaptureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

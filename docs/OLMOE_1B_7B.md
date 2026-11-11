@@ -37,13 +37,22 @@ Every shell, from the repository root: `export PYTHONPATH=$PWD/src`; check with
 
 ```bash
 python -m evograd.benchmark.topdown.olmoe_1b_7b --out smoke.json
-python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest harvest.json --write
-python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture --harvest harvest.json --out-dir <dir>
+python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --synthetic --out harvest_synthetic.json
+python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture --harvest harvest_synthetic.json --out-dir <dir>
 ```
 
-If the B2 step does not fit, `--batch-size 1` on the smoke and harvest commands
-runs the B1 variant (non-canonical: the report says so).
+The harvest observes the real-payload capture's first step (the pinned
+checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.olmoe_1b_7b` under the verification settings); the
+snapshot records that run (`run`), and a capture refuses a snapshot that does
+not record its own run. The layer capture replays the random-weight synthetic
+step, so it reads a `--synthetic` harvest.
+
+If the B2 step does not fit, `--batch-size 1` on the smoke and `--synthetic`
+harvest commands runs the B1 variant (non-canonical: the report says so). The
+real-run harvest is pinned at the capture's B2.
 
 **Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 

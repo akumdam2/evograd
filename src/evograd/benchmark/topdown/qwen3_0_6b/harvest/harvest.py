@@ -1,12 +1,18 @@
-"""Harvest the canonical Qwen3 training step into a workload manifest.
+"""Harvest the Qwen3 training step the capture runs into a workload manifest.
 
-    PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
+    CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+        python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
         --out results/qwen3-level3/harvest.json
 
-This is the Level-3 smoke run with an observer attached. It reuses the same
-build, the same inputs, the same step and the same gradient validation -- the
-point of the milestone is that the harvest describes *the* canonical execution,
-and a second, subtly different implementation of it would defeat that.
+The step is the real-payload capture's first one, built by the verification
+integration (:mod:`evograd.verification.integrations.qwen3_0_6b`) under the
+verification settings: the pinned ``Qwen/Qwen3-0.6B`` checkpoint on the first
+WikiText-2 TRAIN batch of data order 101, B2 x T2048, observed with the same
+observer, checks and gradient validation as before. The manifest records that
+run (``run``), and a capture accepts only a snapshot derived from it.
+``--synthetic`` harvests the random-weight, synthetic-token canonical spec
+instead (the debug overrides apply to it); so do the tiny CPU tests, through
+:func:`run_harvest`.
 
 Unlike the smoke run, a failure here does not produce a file. A smoke report
 that says "it failed" is useful; a manifest missing a boundary is worse than no
@@ -15,7 +21,6 @@ manifest, because everything derived from it would inherit the gap silently.
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 from ...common import cli as _cli
@@ -24,16 +29,27 @@ from ...common.spec import WorkloadSpec
 
 
 def run_harvest(spec: WorkloadSpec | None = None) -> dict[str, Any]:
-    """Execute the canonical Qwen3 step under observation and return the manifest."""
+    """The random-weight, synthetic-token Qwen3 step under observation."""
     from ..declaration import WORKLOAD
 
     return _common.run_harvest(WORKLOAD, spec)
 
 
+def harvest_real_run(device: str = "cuda") -> dict[str, Any]:
+    """The capture's first step (pinned checkpoint, order-101 batch) under observation."""
+    from evograd.verification.integrations.base import real_run
+    from evograd.verification.integrations.qwen3_0_6b import MODEL
+
+    from ..declaration import WORKLOAD
+
+    workload, net, batch, identity = real_run(MODEL, device=device)
+    return _common.run_harvest(WORKLOAD, workload.spec, model=net, batch=batch, identity=identity)
+
+
 def main(argv: list[str] | None = None) -> int:
     from ..declaration import WORKLOAD
 
-    return _cli.harvest_main(WORKLOAD, argv, description=__doc__)
+    return _cli.harvest_main(WORKLOAD, argv, description=__doc__, real_run=harvest_real_run)
 
 
 if __name__ == "__main__":

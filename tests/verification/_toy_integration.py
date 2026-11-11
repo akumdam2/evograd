@@ -151,9 +151,9 @@ def model(gate3_steps: int = 4):
 
 
 @contextlib.contextmanager
-def toy_environment():
-    """The toy's cases and snapshot in place of a registry suite, and the
-    deterministic settings ``configure()`` sets, restored afterwards."""
+def configured():
+    """The ``CUBLAS_WORKSPACE_CONFIG`` that ``configure()`` requires, and every
+    setting it changes restored afterwards."""
     previous = {"deterministic": torch.are_deterministic_algorithms_enabled(),
                 "warn_only": torch.is_deterministic_algorithms_warn_only_enabled(),
                 "cudnn_deterministic": torch.backends.cudnn.deterministic,
@@ -164,11 +164,7 @@ def toy_environment():
     env = os.environ.get("CUBLAS_WORKSPACE_CONFIG")
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     try:
-        with mock.patch("evograd.verification.integrations.base.observed_cases",
-                        lambda m: cases()), \
-                mock.patch("evograd.benchmark.topdown.load_snapshot",
-                           lambda name: {"snapshot_hash": "toy"}):
-            yield SimpleNamespace(cases=cases())
+        yield
     finally:
         torch.use_deterministic_algorithms(previous["deterministic"], warn_only=previous["warn_only"])
         torch.backends.cudnn.deterministic = previous["cudnn_deterministic"]
@@ -180,3 +176,22 @@ def toy_environment():
             os.environ.pop("CUBLAS_WORKSPACE_CONFIG", None)
         else:
             os.environ["CUBLAS_WORKSPACE_CONFIG"] = env
+
+
+@contextlib.contextmanager
+def toy_environment():
+    """The toy's cases and snapshot in place of a registry suite, and the
+    deterministic settings ``configure()`` sets, restored afterwards.
+
+    The snapshot records the run a harvest of the toy would observe
+    (``base.real_run``), so a capture accepts it.
+    """
+    from evograd.verification.integrations.base import real_run
+
+    with configured():
+        run = real_run(model(), device="cpu")[3]
+        with mock.patch("evograd.verification.integrations.base.observed_cases",
+                        lambda m: cases()), \
+                mock.patch("evograd.benchmark.topdown.load_snapshot",
+                           lambda name: {"snapshot_hash": "toy", "run": run}):
+            yield SimpleNamespace(cases=cases(), run=run)

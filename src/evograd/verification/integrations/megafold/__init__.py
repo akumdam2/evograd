@@ -99,7 +99,7 @@ MODEL = Model(name="megafold", suite="megafold_observed", workload_config=WORKLO
               live_capture=lambda model: MegaFoldCapture(model, _cases()), invocations=invocations,
               reference_op=reference_op, contract=CONTRACT, source_identity=source_identity,
               modeling_modules=MODELING_MODULES, objective=_objective(), gate3_applies=False,
-              recorded_calls=recorded_calls)
+              recorded_calls=recorded_calls, requires_harvested_run=False)
 
 
 def _cases():

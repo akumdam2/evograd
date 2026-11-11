@@ -109,6 +109,10 @@ def workload_info(spec: WorkloadSpec) -> dict[str, Any]:
         "gradient_checkpointing": spec.gradient_checkpointing,
         "training": spec.training,
         "seed": spec.seed,
+        # Where the parameters and the tokens come from: "random"/"synthetic"
+        # for the canonical spec, the checkpoint and dataset pins for a real run.
+        "weights": getattr(spec, "weights", "random"),
+        "data": getattr(spec, "data", "synthetic"),
     }
 
 

@@ -16,13 +16,28 @@ python -m evograd.benchmark.topdown.qwen3_0_6b \
 ```
 
 This smoke command does not run an optimizer or measure steady-state speedup.
-To capture the representative decoder layer, first harvest the model:
+
+The harvest behind the tracked snapshot (`harvest/snapshot.json`) observes the
+real-payload capture's first step: the pinned checkpoint on the first WikiText-2
+TRAIN batch of data order 101, built by `evograd.verification.integrations.qwen3_0_6b`
+under the verification settings. The snapshot records that run (`run`), and a
+capture refuses a snapshot that does not record its own run:
 
 ```bash
-python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
   --out results/qwen3-level3/harvest.json
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot \
+  --harvest results/qwen3-level3/harvest.json --write
+```
+
+The representative-layer capture replays the random-weight synthetic step, so it
+reads a `--synthetic` harvest:
+
+```bash
+python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --synthetic \
+  --out results/qwen3-level3/harvest_synthetic.json
 python -m evograd.benchmark.topdown.qwen3_0_6b.layer.capture \
-  --layer 14 --harvest results/qwen3-level3/harvest.json \
+  --layer 14 --harvest results/qwen3-level3/harvest_synthetic.json \
   --out results/qwen3-level3/layer14.pt
 ```
 
