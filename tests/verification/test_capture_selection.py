@@ -57,12 +57,15 @@ def backward_from_saved(dy, saved):
 '''
 
 
-def search_set_file(path: Path, *, model="qwen3_0_6b", snapshot_hash="tiny", extra=()) -> Path:
+def search_set_file(path: Path, *, model="qwen3_0_6b", snapshot_hash="tiny", extra=(),
+                    empty=False) -> Path:
     """A search set in which ``ROWS`` and ``extra`` (searched) are the tiny model's benchmark rows."""
     from evograd.benchmark import search_set
     from tests.verification.test_integration_qwen3 import tiny_cases
 
     def row(case_id):
+        if empty:
+            return {"searched": False, "reason": "not_time_max_config", "of": None}
         if case_id == IDENTICAL:
             return {"searched": False, "reason": "identical_config_of", "of": "llama_3_2_1b:rope/x"}
         if case_id in SEARCHED or case_id in extra:
@@ -263,6 +266,8 @@ class BenchmarkCapture(unittest.TestCase):
                          KeyError, "no entry in the search set"),
             "unobserved": (search_set_file(self.root / "unobserved.json", extra=["rope/gone"]),
                            ValueError, "not observed cases"),
+            "empty": (search_set_file(self.root / "empty.json", empty=True),
+                      ValueError, "has no benchmark row"),
         }
         for label, (path, error, message) in files.items():
             with self.subTest(label), self.environment(search_set=path), \

@@ -687,6 +687,9 @@ def recorded_cases(model: Model, cases: Sequence[Case],
                          f"{entry['snapshot_hash']}, not the tracked {tracked}; regenerate it: "
                          "scripts/adbench_selection/write_search_set.py")
     rows = search_set.evaluated(model.name)
+    if not rows:
+        raise ValueError(f"{model.name}: the search set has no benchmark row, so a benchmark "
+                         "capture would record nothing; capture it with --cases all")
     observed = {c.case_id for c in cases}
     if set(rows) - observed:
         raise ValueError(f"{model.name}: benchmark rows {sorted(set(rows) - observed)} are not "
