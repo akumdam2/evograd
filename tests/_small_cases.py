@@ -37,6 +37,12 @@ SMALL = {
         Workload({'B': 1, 'Y': 3, 'X': 5, 'H': 8, 'I': 32}, 'bfloat16',
                  provenance=_p('convnextv2_tiny', 'convnext_mlp')),
     ),
+    'convnextv2_tiny_dwconv_layernorm': (
+        Workload({'B': 2, 'C': 8, 'Y': 5, 'X': 6, 'K': 7}, 'float32',
+                 provenance=_p('convnextv2_tiny', 'dwconv_layernorm', free={'eps': 1e-6})),
+        Workload({'B': 2, 'C': 8, 'Y': 5, 'X': 6, 'K': 7}, 'bfloat16',
+                 provenance=_p('convnextv2_tiny', 'dwconv_layernorm', free={'eps': 1e-6})),
+    ),
     'cross_entropy': (
         Workload({'rows': 8, 'cols': 512}, 'float32'),
         Workload({'rows': 16, 'cols': 1024}, 'float32'),
@@ -318,11 +324,35 @@ SMALL = {
         Workload({'B': 1, 'T': 7, 'H': 16, 'I': 32}, 'bfloat16',
                  provenance=_p('qwen2_vl_2b', 'text_mlp')),
     ),
+    'qwen2_vl_2b_text_attention_block': (
+        Workload({'B': 1, 'T': 7, 'H': 16, 'KV': 8, 'D': 4}, 'float32',
+                 provenance=_p('qwen2_vl_2b', 'text_attention_block')),
+        Workload({'B': 2, 'T': 7, 'H': 16, 'KV': 8, 'D': 4}, 'bfloat16',
+                 provenance=_p('qwen2_vl_2b', 'text_attention_block')),
+    ),
+    'qwen2_vl_2b_text_residual_rmsnorm': (
+        Workload({'B': 1, 'T': 7, 'H': 16}, 'float32',
+                 provenance=_p('qwen2_vl_2b', 'text_residual_rmsnorm', free={'eps': 1e-6})),
+        Workload({'B': 1, 'T': 7, 'H': 16}, 'bfloat16',
+                 provenance=_p('qwen2_vl_2b', 'text_residual_rmsnorm', free={'eps': 1e-6})),
+    ),
     'qwen2_vl_2b_vision_mlp': (
         Workload({'T': 7, 'H': 16, 'I': 32}, 'float32',
                  provenance=_p('qwen2_vl_2b', 'vision_mlp')),
         Workload({'T': 7, 'H': 16, 'I': 32}, 'bfloat16',
                  provenance=_p('qwen2_vl_2b', 'vision_mlp')),
+    ),
+    'qwen2_vl_2b_vision_attention': (
+        Workload({'T': 6, 'H': 16, 'QKV': 48, 'D': 4}, 'float32',
+                 provenance=_p('qwen2_vl_2b', 'vision_attention')),
+        Workload({'T': 6, 'H': 16, 'QKV': 48, 'D': 4}, 'bfloat16',
+                 provenance=_p('qwen2_vl_2b', 'vision_attention')),
+    ),
+    'qwen2_vl_2b_vision_residual_layernorm': (
+        Workload({'T': 7, 'H': 16}, 'float32',
+                 provenance=_p('qwen2_vl_2b', 'vision_residual_layernorm', free={'eps': 1e-6})),
+        Workload({'T': 7, 'H': 16}, 'bfloat16',
+                 provenance=_p('qwen2_vl_2b', 'vision_residual_layernorm', free={'eps': 1e-6})),
     ),
     'qwen3_5_gated_attention': (
         Workload({'B': 1, 'T': 12, 'HQ': 4, 'HK': 2, 'D': 16, 'QO': 64, 'H': 32}, 'float32',

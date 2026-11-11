@@ -9,9 +9,15 @@ becomes one payload of the observed case it belongs to.
   (ConvNeXt's channels-first norms are recorded in the NHWC view they
   normalize), ``ConvNextV2GRN``, the RMSNorm, and the GELU / QuickGELU
   activations; leading dimensions are flattened into each task's 2-D view.
-* Level 2: the boundaries Tier 3 installs at (``vision.operators.bindings``):
-  ConvNeXt's ``pwconv1 .. pwconv2`` (input after the layer norm), Qwen2-VL's
-  text ``Qwen2MLP`` and vision ``VisionMlp``.
+* Level 2: the boundaries Tier 3 installs at. Module boundaries
+  (``vision.operators.bindings``, arguments read off the call's positional and
+  keyword arguments): ConvNeXt's ``dwconv .. layernorm`` and ``pwconv1 ..
+  pwconv2``, Qwen2-VL's ``VisionAttention``, ``VisionMlp``, ``Qwen2VLAttention``
+  and ``Qwen2MLP``. Residual streams (``vision.operators.residual_streams``):
+  each add of an attention or MLP branch to Qwen2-VL's vision or text stream
+  with the norm that follows it, 2 per block. Their ``dsummed`` is the gradient
+  of the next sum in the stream (the sum's other consumer); the last sum's
+  (into ``merger.ln_q`` / ``model.norm``) has none and is supplied as zeros.
 
 Output cotangents come from tensor hooks on each call's output. Recorders
 change no arithmetic (checked per order by the shared loop).
@@ -41,21 +47,23 @@ class VisionCapture:
         self.model = model
         self.calls: list[dict] = []
         self.sites: list[dict] = []
+        self.streams: list[dict] = []
         self._handles: list = []
 
     def install(self) -> "VisionCapture":
         import torch
 
-        from evograd.benchmark.topdown.common.vision.operators import bindings
+        from evograd.benchmark.topdown.common.vision.operators import bindings, residual_streams
 
         for path, module in self.model.named_modules():
             kind = type(module).__name__
             if isinstance(module, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.LayerNorm)) \
                     or kind in ("ConvNextV2GRN", *RMSNORMS, *ACTIVATIONS):
                 self._module(path, module, kind)
-        for site, path, owner, first, pack in bindings(self.model):
-            last = owner.pwconv2 if site == "convnext_mlp" else owner
-            self._site(site, path, first, last, pack)
+        for binding in bindings(self.model):
+            self._site(binding)
+        for stream in residual_streams(self.model):
+            self._stream(stream)
         return self
 
     def _module(self, path, module, kind):
@@ -73,19 +81,47 @@ class VisionCapture:
         self._handles.append(module.register_forward_pre_hook(pre))
         self._handles.append(module.register_forward_hook(post))
 
-    def _site(self, site, path, first, last, pack):
+    def _site(self, binding):
         state: dict = {}
 
-        def pre(mod, args):
-            state["args"] = tuple(a.detach() if hasattr(a, "detach") else a for a in pack(args[0]))
+        def pre(mod, args, kwargs):
+            state["args"] = tuple(a.detach() if hasattr(a, "detach") else a
+                                  for a in binding.pack(args, kwargs))
 
         def post(mod, args, output):
-            record = {"path": path, "site": site, "args": state.pop("args"), "out": output.detach()}
-            _grad(record, "dout", output)
+            out = output[0] if isinstance(output, tuple) else output
+            record = {"path": binding.path, "site": binding.site, "args": state.pop("args"),
+                      "out": out.detach()}
+            _grad(record, "dout", out)
             self.sites.append(record)
 
-        self._handles.append(first.register_forward_pre_hook(pre))
-        self._handles.append(last.register_forward_hook(post))
+        self._handles.append(binding.first.register_forward_pre_hook(pre, with_kwargs=True))
+        self._handles.append(binding.last.register_forward_hook(post))
+
+    def _stream(self, stream):
+        """Each norm's input (with its total gradient) and output, and each branch's output."""
+        record = {"stream": stream, "norms": {}, "branches": {}}
+        self.streams.append(record)
+        for k, (path, norm) in enumerate(stream.norms):
+
+            def pre(mod, args, k=k, path=path):
+                entry = record["norms"][k] = {"path": path, "module": mod, "x": args[0].detach()}
+                _grad(entry, "dx", args[0])
+
+            def post(mod, args, output, k=k):
+                entry = record["norms"][k]
+                entry["y"] = output.detach()
+                _grad(entry, "dy", output)
+
+            self._handles.append(norm.register_forward_pre_hook(pre))
+            self._handles.append(norm.register_forward_hook(post))
+        for k, (_, branch) in enumerate(stream.branches, start=1):
+
+            def branch_out(mod, args, output, k=k):
+                out = output[0] if isinstance(output, tuple) else output
+                record["branches"][k] = out.detach()
+
+            self._handles.append(branch.register_forward_hook(branch_out))
 
     def remove(self) -> None:
         for handle in self._handles:
@@ -134,6 +170,8 @@ def _level1(r) -> tuple[str, dict, dict, dict, dict]:
 
 def invocations(capture: VisionCapture, model, cases: Sequence[Case]) -> Iterator[dict[str, Any]]:
     """Every recorded L1 call and L2 boundary of one step, in its case's task ABI."""
+    import torch
+
     from evograd.benchmark import get_task
     from evograd.benchmark.topdown.common.harvest_roles import role_of
 
@@ -157,3 +195,23 @@ def invocations(capture: VisionCapture, model, cases: Sequence[Case]) -> Iterato
         names = [a.name for a in get_task(task).args]
         yield invocation(cases, task, 2, call(r["path"] + "#" + r["site"], "boundary:" + r["site"]),
                          dict(zip(names, r["args"])), {"dout": r["dout"]}, {"out": r["out"]})
+    for r in capture.streams:
+        stream, norms = r["stream"], r["norms"]
+        task = f"{capture.model_name}_{stream.site}"
+        names = [a.name for a in get_task(task).args]
+        for k in range(1, len(stream.norms)):
+            norm = norms[k]
+            args = dict(zip(names, (r["branches"][k], norms[k - 1]["x"],
+                                    *stream.norm_args(norm["module"]))))
+            if k + 1 < len(stream.norms):
+                dsummed = norms[k + 1]["dx"]
+                notes = {"dsummed_origin": "total gradient of the next sum in the stream"}
+            else:
+                dsummed = torch.zeros_like(norm["x"])
+                notes = {"dsummed_origin": "absent in the model (the last sum feeds only the final "
+                                           "norm); zeros supplied for the declared two-output ABI",
+                         "absent_cotangents": ["dsummed"]}
+            yield invocation(cases, task, 2, call(norm["path"] + "#" + stream.site,
+                                                  "boundary:" + stream.site),
+                             args, {"dnormed": norm["dy"], "dsummed": dsummed},
+                             {"normed": norm["y"], "summed": norm["x"]}, notes)

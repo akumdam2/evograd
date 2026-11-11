@@ -2,9 +2,11 @@
 
 The cases come from the harvest's own snapshot grouping of the tiny model.
 Instrumentation does not change the step (loss, logits, every gradient),
-every call maps to exactly one case, payloads round-trip in each task's ABI,
-the model reference reproduces every live output bit for bit, and Gate 1 and
-operator Gate 2 judge a linear candidate on the recorded payloads.
+every call maps to exactly one case, every Level-2 task is recorded as often
+per step as the architecture calls it, payloads round-trip in each task's ABI,
+the model reference reproduces every live output bit for bit (in float32 and
+bfloat16), and Gate 1 and operator Gate 2 judge a linear candidate on the
+recorded payloads.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ except ImportError:
     HAVE_TRANSFORMERS = False
 
 
-def small_spec(model):
+def small_spec(model, dtype="float32"):
     """The vision test suite's tiny configurations (``tests/vision_workloads``)."""
     from evograd.benchmark.topdown.common.vision.spec import canonical
 
@@ -43,7 +45,7 @@ def small_spec(model):
             "vision_config": {"depth": 1, "embed_dim": 32, "num_heads": 4, "hidden_size": 32},
         }
         image, tokens = 28, 8
-    return canonical(model).replace(device="cpu", dtype="float32", batch_size=1, image_size=image,
+    return canonical(model).replace(device="cpu", dtype=dtype, batch_size=1, image_size=image,
                                     seq_len=tokens, arch_overrides=overrides)
 
 
@@ -91,6 +93,7 @@ def _contiguous(shape):
 
 class _Tiny:
     name = ""
+    dtype = "float32"
 
     @classmethod
     def setUpClass(cls):
@@ -101,7 +104,7 @@ class _Tiny:
         from evograd.verification.payloads import Corpus, CorpusWriter
 
         cls.MODEL = load(cls.name)
-        spec = small_spec(cls.name)
+        spec = small_spec(cls.name, cls.dtype)
         cls.workload = VisionWorkload(spec)
         cls.cases = tiny_cases(spec)
         objective = cls.MODEL.objective.bind(cls.workload)
@@ -145,6 +148,16 @@ class _Tiny:
     def test_every_call_is_one_payload_of_its_case(self):
         self.assertTrue(self.coverage["complete"], self.coverage["problems"])
 
+    def test_each_level2_task_has_its_calls_per_step(self):
+        from evograd.benchmark.topdown.common.vision.operators import calls_per_step
+
+        counts = {}
+        for record in self.corpus.payloads():
+            if record["level"] == 2 and record["batch"]["order"] == 101:
+                counts[record["task"]] = counts.get(record["task"], 0) + 1
+        self.assertEqual(counts, {f"{self.name}_{site}": n for site, n in
+                                  calls_per_step(self.name, self.workload.spec.arch).items()})
+
     def test_payloads_match_each_task_interface(self):
         from evograd.benchmark import get_task
         from evograd.verification.payloads.gate1 import check_payload_interface
@@ -172,6 +185,9 @@ class _Tiny:
     def test_gate1_and_operator_gate2_judge_a_linear_candidate(self):
         from evograd.verification.integrations.gates import judge_case
 
+        if self.dtype != "float32":
+            self.skipTest("the linear control is judged in float32")
+
         case = max((c for c in self.cases if c.task == "linear"), key=lambda c: c.frequency)
         for scale, expected in ((1.0, "passed"), (1.05, "failed")):
             reports = judge_case(self.MODEL, case, linear_pair(scale), self.corpus, device="cpu",
@@ -186,21 +202,50 @@ class _Tiny:
 class TinyConvNeXt(_Tiny, unittest.TestCase):
     name = "convnextv2_tiny"
 
-    def test_stage_sites_are_four_cases_of_one_task(self):
+    def test_stage_sites_are_four_cases_of_each_task(self):
         level2 = [c for c in self.cases if c.level == 2]
-        self.assertEqual(len(level2), 4)
-        self.assertEqual({c.task for c in level2}, {"convnextv2_tiny_convnext_mlp"})
+        self.assertEqual(len(level2), 8)
+        self.assertEqual({c.task for c in level2},
+                         {"convnextv2_tiny_convnext_mlp", "convnextv2_tiny_dwconv_layernorm"})
 
     def test_each_stage_case_has_its_own_site(self):
         from evograd.verification.integrations.gates import site_for_case
 
         sites = {site_for_case(self.workload.site_registry, c) for c in self.cases if c.level == 2}
-        self.assertEqual(sites, {f"convnext_mlp_stage{i}" for i in range(4)})
+        self.assertEqual(sites, {f"{site}_stage{i}" for site in ("convnext_mlp", "dwconv_layernorm")
+                                 for i in range(4)})
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
 class TinyQwen2VL(_Tiny, unittest.TestCase):
     name = "qwen2_vl_2b"
+
+    def test_text_attention_payloads_carry_the_padding_mask(self):
+        for record in self.corpus.payloads():
+            if record["task"] == "qwen2_vl_2b_text_attention_block":
+                mask = self.corpus.load(record, device="cpu")["attention_mask"]
+                self.assertEqual(mask.dtype, torch.bool)
+                self.assertFalse(mask[..., -2:].any())     # the two right-padded keys
+                self.assertTrue(mask[0, 0].diagonal()[:6].all())
+
+    def test_last_residual_sum_has_no_consumer(self):
+        for record in self.corpus.payloads():
+            if record["task"].endswith("_residual_layernorm") or \
+                    record["task"].endswith("_residual_rmsnorm"):
+                last = record["call"]["path"].split("#")[0] in ("model.visual.merger.ln_q",
+                                                                 "model.language_model.norm")
+                self.assertEqual(record["notes"].get("absent_cotangents"),
+                                 ["dsummed"] if last else None, record["payload_id"])
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class TinyConvNeXtBF16(TinyConvNeXt):
+    dtype = "bfloat16"
+
+
+@unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
+class TinyQwen2VLBF16(TinyQwen2VL):
+    dtype = "bfloat16"
 
 
 if __name__ == "__main__":

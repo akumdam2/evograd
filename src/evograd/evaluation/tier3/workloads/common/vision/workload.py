@@ -8,12 +8,16 @@ from evograd.evaluation.tier3.compile_baseline import (
 )
 from evograd.benchmark.topdown.common.vision.spec import VisionSpec, REVISIONS
 from evograd.benchmark.topdown.common.vision.model import build_model, make_inputs, forward
-from evograd.benchmark.topdown.common.vision.operators import FUNCTIONS
-from .sites import install, preflight_cases
+from evograd.benchmark.topdown.common.vision.operators import FUNCTIONS, calls_per_step
+from .sites import base_site, install, preflight_cases
 
+#: Model sites. ConvNeXt's per stage (one configuration each), both held by
+#: each ``ConvNextV2Layer``.
 SITES = {
-    "convnextv2_tiny": tuple(f"convnext_mlp_stage{i}" for i in range(4)),
-    "qwen2_vl_2b": ("text_mlp", "vision_mlp"),
+    "convnextv2_tiny": tuple(f"{site}_stage{i}" for site in ("convnext_mlp", "dwconv_layernorm")
+                             for i in range(4)),
+    "qwen2_vl_2b": ("text_mlp", "vision_mlp", "vision_attention", "vision_residual_layernorm",
+                    "text_attention_block", "text_residual_rmsnorm"),
 }
 
 
@@ -59,10 +63,8 @@ class VisionWorkload:
             tuple(
                 Site(
                     site,
-                    self.spec.model
-                    + "_"
-                    + ("convnext_mlp" if site.startswith("convnext_mlp_stage") else site),
-                    FUNCTIONS["convnext_mlp" if site.startswith("convnext_mlp_stage") else site],
+                    self.spec.model + "_" + base_site(site),
+                    FUNCTIONS[base_site(site)],
                     preflight_cases(self.spec, site),
                 )
                 for site in SITES[self.spec.model]
@@ -99,14 +101,7 @@ class VisionWorkload:
         if whole_model_compile_requested(kernels):
             return compile_model(model, kernels)
         provenance = install(model, kernels)
-        expected = (
-            {f"convnext_mlp_stage{i}": depth for i, depth in enumerate(self.spec.arch["depths"])}
-            if self.spec.model == "convnextv2_tiny"
-            else {
-                "text_mlp": self.spec.arch["num_hidden_layers"],
-                "vision_mlp": self.spec.arch["vision_config"]["depth"],
-            }
-        )
+        expected = self.expected_site_calls()
         for site in kernels.patched:
             if len(provenance.paths[site]) != expected[site]:
                 raise ValueError(f"{site}: replacement module count differs from architecture")
@@ -143,10 +138,10 @@ class VisionWorkload:
         return output.loss, output.logits
 
     def expected_site_calls(self):
-        arch = self.spec.arch
         if self.spec.model == "convnextv2_tiny":
-            return {f"convnext_mlp_stage{i}": depth for i, depth in enumerate(arch["depths"])}
-        return {"text_mlp": arch["num_hidden_layers"], "vision_mlp": arch["vision_config"]["depth"]}
+            return {site: self.spec.arch["depths"][int(site.rsplit("_stage", 1)[1])]
+                    for site in SITES[self.spec.model]}
+        return calls_per_step(self.spec.model, self.spec.arch)
 
     def data_recipe(self):
         recipe = {"batch_size": self.spec.batch_size, "image_size": self.spec.image_size,

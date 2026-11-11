@@ -62,10 +62,35 @@ a different specialist contract and requires a new harvest/calibration.
 
 ## Coverage
 
-| Model | Observed L1 contracts | Patchable L2 sites |
+| Model | Observed L1 contracts | Patchable L2 sites (calls per step, canonical) |
 |---|---|---|
-| ConvNeXt | `spatial_conv2d`, `linear`, `layernorm`, `gelu`, `grn` | `convnext_mlp_stage0` … `stage3` → `convnextv2_tiny_convnext_mlp` |
-| Qwen2-VL | `linear`, `linear_no_bias`, `layernorm`, `rmsnorm`, `quick_gelu`, `gelu` | `text_mlp` → `qwen2_vl_2b_text_mlp`; `vision_mlp` → `qwen2_vl_2b_vision_mlp` |
+| ConvNeXt | `spatial_conv2d`, `linear`, `layernorm`, `gelu`, `grn` | `dwconv_layernorm_stage0` … `stage3` → `convnextv2_tiny_dwconv_layernorm` (18); `convnext_mlp_stage0` … `stage3` → `convnextv2_tiny_convnext_mlp` (18) |
+| Qwen2-VL | `linear`, `linear_no_bias`, `layernorm`, `rmsnorm`, `quick_gelu`, `gelu` | vision: `vision_attention` (32), `vision_mlp` (32), `vision_residual_layernorm` (64); text: `text_attention_block` (28), `text_mlp` (28), `text_residual_rmsnorm` (56); each → `qwen2_vl_2b_<site>` |
+
+The Level-2 boundaries are the HF modules' own computation, recorded and
+replayed bit for bit (`common/vision/operators.py`):
+
+* `dwconv_layernorm`: `ConvNextV2Layer`'s 7×7 depthwise conv (bias) on the
+  NCHW input, the permute to NHWC and its LayerNorm (eps 1e-6); output NHWC.
+  Each `ConvNextV2Layer` holds this site and `convnext_mlp`; Tier 3 runs
+  whichever of the two is not patched natively.
+* `vision_attention`: `VisionAttention` (SDPA): biased qkv, the 2-D RoPE in
+  float32 cast back (cos/sin are float32 inputs), non-causal SDPA over the one
+  image's tokens (a single `cu_seqlens` segment; more images per call are
+  refused), biased proj.
+* `text_attention_block`: `Qwen2VLAttention` (SDPA): biased q/k/v, M-RoPE (the
+  cos/sin tables after their section interleave), GQA SDPA with the boolean
+  causal + padding mask the right-padded rows produce (KV heads repeated, no
+  `is_causal`), biasless o_proj. An unpadded row (SDPA's `is_causal`, another
+  computation) is refused; the synthetic fixture pads like the real pool.
+* `vision_residual_layernorm` / `text_residual_rmsnorm`: each add of an
+  attention or MLP branch to the residual stream, fused with the norm that
+  follows it (`norm2`, the next block's `norm1`, `merger.ln_q`; Qwen2's
+  `post_attention_layernorm`, the next `input_layernorm`, `model.norm`), two
+  per block. They return `(normed, summed)`; `summed`'s cotangent is the next
+  sum's gradient, zero (recorded as absent) for the last. Tier 3 rebinds the
+  blocks so that each hands its second normalized sum to the next block or the
+  final norm, with the sum itself flowing between blocks as before.
 
 `spatial_conv2d` is a biased, square-kernel Conv2D contract supporting
 stride, padding and groups (dilation 1).
@@ -79,11 +104,13 @@ L2 contracts keep their native ranks. Shape/frequency records are produced by an
 and backward, then deduplicated by configuration; they are never invented
 from parameter counts.
 
-These are selected boundaries, not exhaustive primitive coverage. Attention,
-multimodal RoPE, the Conv3D patch embedding, loss, residual addition and pooling
-still execute in the full model but are not all separate L1/L2 tasks. Each
-manifest lists its unbound boundaries. L1/L2 configuration counts come from
-the CUDA harvest of the verification run.
+These are selected boundaries, not exhaustive primitive coverage. SDPA and
+both RoPEs (inside the Qwen2-VL attention boundaries only), the Conv3D patch
+embedding, loss, ConvNeXt's residual addition and pooling still execute in the
+full model but are not separate L1 tasks. Each manifest lists its unbound
+boundaries. L1/L2 configuration counts come from the CUDA harvest of the
+verification run; the tracked snapshots predate the four Qwen2-VL boundaries
+and `dwconv_layernorm`, which become cases at the next harvest.
 
 ## Install and harvest
 

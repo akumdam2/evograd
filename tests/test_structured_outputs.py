@@ -237,6 +237,8 @@ class TestSingleOutputRegression(unittest.TestCase):
         # OLMoE: the attention prefix's (q, k, v) and the residual fusion's
         # (normed, summed).
         "olmoe_qkv_norm_rope", "olmoe_residual_rmsnorm",
+        # Qwen2-VL: the vision and text residual fusions' (normed, summed).
+        "qwen2_vl_2b_vision_residual_layernorm", "qwen2_vl_2b_text_residual_rmsnorm",
     }
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):

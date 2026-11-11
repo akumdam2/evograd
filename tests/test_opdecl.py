@@ -80,7 +80,9 @@ class TestDerivedNaming(unittest.TestCase):
                     "swiglu",
                 ],
                 2: [
+                    # ConvNeXt V2's two boundaries in each ConvNextV2Layer.
                     "convnextv2_tiny_convnext_mlp",
+                    "convnextv2_tiny_dwconv_layernorm",
                     "dit_s_2_dit_mlp",
                     "dit_s_2_dit_modulation",
                     # Qwen3-0.6B's residual fusion, under the generic key it
@@ -114,9 +116,15 @@ class TestDerivedNaming(unittest.TestCase):
                     "olmoe_moe_experts",
                     "olmoe_qkv_norm_rope",
                     "olmoe_residual_rmsnorm",
-                    # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
+                    # Qwen2-VL-2B's three boundaries in each of its two
+                    # towers: attention, MLP and the residual add + norm.
+                    "qwen2_vl_2b_text_attention_block",
                     "qwen2_vl_2b_text_mlp",
+                    "qwen2_vl_2b_text_residual_rmsnorm",
+                    "qwen2_vl_2b_vision_attention",
                     "qwen2_vl_2b_vision_mlp",
+                    "qwen2_vl_2b_vision_residual_layernorm",
+                    # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
                     "qwen3_5_gated_attention",
                     "qwen3_5_gated_delta_rule",
                     "qwen3_5_gdn_in_proj",

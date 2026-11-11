@@ -8,6 +8,7 @@ from evograd.evaluation.tier3.workloads.common.vision.workload import (
     structural_identity_kernels,
 )
 from evograd.benchmark.topdown.common.vision.harvest import collect, snapshot
+from evograd.benchmark.topdown.common.vision.operators import calls_per_step
 from evograd.evaluation.tier3.patch import KernelSet
 
 
@@ -81,26 +82,33 @@ def test_harvest_is_executed_and_deduplicated(name):
     result = snapshot(manifest)
     assert manifest["backward_verified"]
     assert result["schema_version"] == f"evograd-{name}-snapshot/2" and result["run"] is None
-    assert sum(e["frequency"] for e in result["tasks"].values()) == (
-        4 if name == "convnextv2_tiny" else 2
-    )
+    calls = calls_per_step(name, spec.arch)
+    assert {task: e["frequency"] for task, e in result["tasks"].items()} == {
+        f"{name}_{site}": n for site, n in calls.items()}
+    assert sum(calls.values()) == 8
     assert result["level1"]["linear"]["frequency"] > 0
     assert result["not_bound"]
 
 
 @pytest.mark.parametrize("padded", [False, True])
 def test_qwen2_vl_harvest_sees_the_batch_padding_mask(padded):
-    """Right-padded rows (the real TextVQA pool) give the text SDPA an explicit mask."""
+    """Right-padded rows (the real TextVQA pool, and the synthetic fixture) give the
+    text SDPA an explicit mask; the text attention boundary refuses unpadded rows
+    (SDPA's ``is_causal``, another computation)."""
     from evograd.benchmark.topdown.common.vision.model import make_inputs
 
     spec = small_spec("qwen2_vl_2b")
     batch = make_inputs(spec)
-    if padded:
-        batch["attention_mask"][:, -2:] = 0
-        batch["labels"][:, -2:] = -100
+    assert batch["attention_mask"][0].tolist() == [1] * 6 + [0] * 2
+    assert batch["labels"][0, -2:].eq(-100).all()
+    if not padded:
+        batch["attention_mask"].fill_(1)
+        with pytest.raises(ValueError, match="padding mask"):
+            collect(spec, batch=batch)
+        return
     manifest = collect(spec, batch=batch)
     mask = {"shape": [1, 1, 8, 8], "stride": [64, 64, 8, 1], "dtype": "torch.bool",
-            "requires_grad": False} if padded else None
+            "requires_grad": False}
     assert manifest["text_attention_masks"] == [{"mask": mask, "calls": 1}]
     assert snapshot(manifest)["text_attention_masks"] == manifest["text_attention_masks"]
 
@@ -210,8 +218,8 @@ def test_qwen2_vl_host_inputs_are_the_hf_step_bitwise(padded):
     spec = small_spec("qwen2_vl_2b")
     model = VisionWorkload(spec).build(KernelSet(registry=VisionWorkload(spec).site_registry))
     batch = VisionWorkload(spec).batch_for(seed=3)
-    if padded:
-        batch["attention_mask"][:, -2:] = 0
+    if not padded:
+        batch["attention_mask"].fill_(1)
 
     def step(call):
         model.zero_grad(set_to_none=True)
@@ -243,3 +251,108 @@ def test_qwen2_vl_host_inputs_are_the_hf_step_bitwise(padded):
         assert clone.model.forward.args[0] is clone.model
         assert torch.equal(vision.forward(clone, batch, spec.model).loss, hf_loss)
         assert torch.equal(clone(**batch, use_cache=False).loss, hf_loss)
+
+
+@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
+@pytest.mark.parametrize("name", ["convnextv2_tiny", "qwen2_vl_2b"])
+def test_sites_holding_their_model_reference_are_the_model_bitwise(name, dtype):
+    """Each site alone, and every site together, holding its model reference: the same
+    loss and gradients bit for bit. ConvNeXt's layer adapter holds both of its sites;
+    a residual stream's blocks hand each normalized sum to the next block."""
+    from evograd.evaluation.tier3.patch import patch
+
+    workload = VisionWorkload(small_spec(name).replace(dtype=dtype))
+    registry, expected = workload.site_registry, workload.expected_site_calls()
+    batch = workload.batch_for(seed=5)
+
+    def step(sites):
+        kernels, calls = KernelSet(registry=registry), {}
+
+        def counted(site):
+            fn = registry.require(site).default
+
+            def call(*args):
+                calls[site] = calls.get(site, 0) + 1
+                return fn(*args)
+
+            return call
+
+        for site in sites:
+            kernels = patch(kernels, site, counted(site))
+        model, provenance = workload.build_patched(kernels)
+        assert set(provenance.actual_sites) == set(sites)
+        loss = workload.loss(model, batch)
+        loss.backward()
+        assert calls == {site: expected[site] for site in sites}
+        return loss.detach(), {n: p.grad for n, p in model.named_parameters()}
+
+    loss, grads = step(())
+    groups = [(site,) for site in registry.names] + [registry.names]
+    if name == "convnextv2_tiny":
+        groups.append(("convnext_mlp_stage1", "dwconv_layernorm_stage1"))
+    else:
+        groups.append(("vision_attention", "vision_residual_layernorm", "text_attention_block",
+                       "text_residual_rmsnorm"))
+    for sites in groups:
+        patched_loss, patched_grads = step(sites)
+        assert torch.equal(patched_loss, loss), sites
+        for n, grad in grads.items():
+            assert torch.equal(patched_grads[n], grad), (sites, n)
+
+
+@pytest.mark.parametrize("name", ["convnextv2_tiny", "qwen2_vl_2b"])
+def test_each_harvested_level2_configuration_has_one_site_at_its_calls(name):
+    """The configuration-derived site dims are the harvest's, so the observed cases
+    route to their sites; each site's expected calls are its configuration's."""
+    spec = small_spec(name)
+    workload = VisionWorkload(spec)
+    registry, expected = workload.site_registry, workload.expected_site_calls()
+    assert set(expected) == set(registry.names)
+    served = {}
+    for task, entry in snapshot(collect(spec))["tasks"].items():
+        for config in entry["configurations"]:
+            sites = [s for s in registry.names if registry.require(s).op == task
+                     and registry.require(s).preflight[0].dims == config["dims"]]
+            assert len(sites) == 1, (task, config["dims"])
+            served[sites[0]] = served.get(sites[0], 0) + config["frequency"]
+    assert served == expected
+
+
+def test_text_attention_site_refuses_an_unpadded_batch():
+    from evograd.evaluation.tier3.patch import patch
+
+    workload = VisionWorkload(small_spec("qwen2_vl_2b"))
+    site = "text_attention_block"
+    kernels = patch(KernelSet(registry=workload.site_registry), site,
+                    workload.site_registry.require(site).default)
+    model, _ = workload.build_patched(kernels)
+    batch = workload.batch_for(seed=1)
+    batch["attention_mask"].fill_(1)
+    with pytest.raises(ValueError, match="padding mask"):
+        workload.loss(model, batch)
+
+
+def test_canonical_architectures_have_the_planned_level2_calls():
+    """On the published architectures (meta tensors): every module boundary and
+    residual-stream boundary, against the calls per step the harvest requires."""
+    from transformers import ConvNextV2Config, ConvNextV2ForImageClassification
+    from transformers import Qwen2VLConfig, Qwen2VLForConditionalGeneration
+    from evograd.benchmark.topdown.common.vision.operators import bindings, residual_streams
+    from evograd.benchmark.topdown.common.vision.spec import architecture
+
+    for name, config, model in (
+        ("convnextv2_tiny", ConvNextV2Config, ConvNextV2ForImageClassification),
+        ("qwen2_vl_2b", Qwen2VLConfig, Qwen2VLForConditionalGeneration),
+    ):
+        with torch.device("meta"):
+            instance = model(config.from_dict(architecture(name)))
+        counts = {}
+        for binding in bindings(instance):
+            counts[binding.site] = counts.get(binding.site, 0) + 1
+        for stream in residual_streams(instance):
+            assert len(stream.norms) == len(stream.branches) + 1 == 2 * len(stream.blocks) + 1
+            counts[stream.site] = len(stream.branches)
+        assert counts == calls_per_step(name, architecture(name))
+    assert counts == {"text_mlp": 28, "vision_mlp": 32, "vision_attention": 32,
+                      "vision_residual_layernorm": 64, "text_attention_block": 28,
+                      "text_residual_rmsnorm": 56}
