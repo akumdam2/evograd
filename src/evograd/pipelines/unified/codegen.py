@@ -236,10 +236,20 @@ def _semantic_expr(builder: _ProgramBuilder, node: dict) -> str:
         return f"{args[0]}.{operation}({', '.join(args[1:])})"
     if operation in {"split", "split_with_sizes"}:
         return f"{args[0]}.split({', '.join(args[1:])})"
+    if target == "prims.rev.default":
+        return f"flip_copy({args[0]}, {args[1]})"
+    if operation == "constant_pad_nd":
+        pads = node["positional_args"][1]["items"]
+        if any(item.get("kind") != "scalar" or item["value"] != 0 for item in pads):
+            raise UnsupportedSemanticNode(f"{target} with nonzero padding")
+        return args[0]
     # Fresh storage, which the graph then fills (an index_put of a permutation, a copy).
     if operation == "empty":
         device = node.get("kwargs_ordered", {}).get("device", {}).get("value", "cuda")
         return f"torch.empty({args[0]}, dtype={node['output_dtype']}, device={device!r})"
+    if operation == "new_empty_strided":
+        return (f"torch.empty_strided({args[1]}, {args[2]}, dtype={node['output_dtype']}, "
+                f"device={args[0]}.device)")
     if target in {"aten.sort.default", "aten.sort.stable"} and \
             not node["input_nodes"][0]["dtype"].startswith(("torch.float", "torch.bfloat")):
         # No handwritten integer sort: a plain stable PyTorch sort, which every

@@ -534,6 +534,28 @@ class TestSeedLowerings(unittest.TestCase):
         # logsumexp and the rng state, which this backend keeps on the host.
         self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1', 'g2', 'g3'})
 
+    def test_strided_storage_zero_padding_flip_and_copy(self):
+        # Qwen3.5's gated delta rule pads by zero, flips a chunk axis, and copies
+        # into fresh strided storage; the copy is of the source, not the storage.
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import UnsupportedSemanticNode, _semantic_expr
+
+        x = torch.randn(2, 3)
+        _, (strided, padded) = _rendered(
+            lambda x: [x.new_empty_strided((3, 2), (1, 3)), torch.constant_pad_nd(x, [0, 0, 0, 0])], x)
+        self.assertEqual((strided.shape, strided.stride(), strided.dtype), ((3, 2), (1, 3), x.dtype))
+        self.assertIs(padded, x)
+        flipped = _node(lambda x: torch.ops.prims.rev(x, [1]), x, target='prims.rev.default')
+        self.assertEqual(_semantic_expr(_ProgramBuilder(), flipped), 'flip_copy(t_x_1, [1])')
+        padding = _node(lambda x: torch.constant_pad_nd(x, [1, 0]), x,
+                        target='aten.constant_pad_nd.default')
+        with self.assertRaisesRegex(UnsupportedSemanticNode, 'nonzero padding'):
+            _semantic_expr(_ProgramBuilder(), padding)
+        dst, src = torch.empty(2, 3, dtype=torch.float64), torch.randn(3)
+        copy = make_kernel(_node(torch.ops.aten.copy, dst, src, target='aten.copy.default'))
+        self.assertTrue(torch.equal(copy(dst, src), src.to(torch.float64).expand(2, 3)))
+
 
 _EFFICIENT_NODE = {
     'name': 'attn', 'external_kernel': 'torch.ops.aten._scaled_dot_product_efficient_attention.default',
@@ -593,6 +615,10 @@ result['histc_int'] = torch.equal(sg.histc(ids.to(torch.int32), 64, 0, 63),
                                   torch.histc(ids.float(), 64, 0, 63).to(torch.int32))
 values = torch.randn(4000) * 3
 result['histc_float'] = torch.equal(sg.histc(values, 37, -2.5, 4.0), torch.histc(values, 37, -2.5, 4.0))
+from evograd.pipelines.b_dispatch.layout_kernels import flip_copy
+a = torch.randn(3, 4, 5)
+result['flip'] = all(torch.equal(flip_copy(t, dims), torch.flip(t, dims))
+                     for t in (a, a.transpose(0, 2)) for dims in ([0], [2], [0, 2], [1, 2, 0]))
 print(json.dumps(result))
 """
 
@@ -659,6 +685,12 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
                 torch.use_deterministic_algorithms(False)
             with self.subTest(deterministic=deterministic):
                 self.assertTrue(torch.equal(out, eager))
+
+    def test_flip_copy_matches_torch_flip(self):
+        from evograd.pipelines.b_dispatch.layout_kernels import flip_copy
+
+        a = torch.randn(2, 32, 64, device='cuda')
+        self.assertTrue(torch.equal(flip_copy(a, [2]), torch.flip(a, [2])))
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""

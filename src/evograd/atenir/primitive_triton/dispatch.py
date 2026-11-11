@@ -917,6 +917,13 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _copy_
 
+    if target == "aten.copy.default":
+        # copy(self, src): src's values, in self's shape, dtype and device.
+        def _copy(dst, src):
+            return src.to(dtype=dst.dtype, device=dst.device).expand(dst.shape).contiguous()
+
+        return _copy
+
     if "aten.clone" in target or "aten.copy" in target or "aten.contiguous" in target:
         return lambda a: a.contiguous().clone()
 
