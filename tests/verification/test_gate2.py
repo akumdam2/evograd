@@ -277,8 +277,7 @@ class TestModelScope(unittest.TestCase):
         native = gate2.execute(self.scope, Deployment.native(), sample)
         model = F.TinyLM(F.NATIVE_SITES)
         ids, labels = F.lm_batch(41)
-        from evograd.verification.gate2.adapters.model import next_token_mean_nll
-        next_token_mean_nll(model(ids)["logits"], labels).backward()
+        F.next_token_mean_nll(model(ids)["logits"], labels).backward()
         self.assertTrue(torch.equal(native.results["grad:embed.weight"], model.embed.weight.grad))
 
     def test_correct_and_wrong_candidates(self):

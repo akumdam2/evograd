@@ -8,7 +8,7 @@
  "gate3_llama": {
   "identity": {
    "adapter": {
-    "backward": "mean over the batch's valid tokens",
+    "backward": "the workload loss as returned (weight 1)",
     "config": {
      "workload": {
       "attn_implementation": "sdpa",
@@ -66,7 +66,7 @@
       "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
      }
     },
-    "objective": "token-weighted next-token NLL (float32, shifted, ignore_index=-100)"
+    "objective": "workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss as the model returns it (the HF causal-LM loss plus any auxiliary term the model adds)"
    },
    "data": {
     "train": {
@@ -110,7 +110,7 @@
    },
    "seed": 0
   },
-  "identity_hash": "da9ce89cd3d24b8a9a95a94cbed45be16b2745c87504f17e508fe4f9e3658fe4",
+  "identity_hash": "8261970ff4eb5a63955f3e95fde9e8e6c772a9865ee0404a8e8712670b792646",
   "objectives": [
    4.911254405975342,
    4.904953479766846,
@@ -122,16 +122,8 @@
  },
  "model_scope": {
   "llama_3_2_1b": {
-   "contract_digest": "98b632e01ecb0152b1b1789ceb7bb0877c41f7145e2200000f2f635ef2b222b2",
+   "contract_digest": "e5e042652304078b156677f2736aca7bcfe40a02386014245ba9caf67410e9e9",
    "control_measurements": [
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "native_repeat"
-    },
     {
      "E2": 0.0,
      "Emax": 0.0,
@@ -299,14 +291,6 @@
      "result": "grad:model.norm.weight",
      "sample_id": "golden/seed1",
      "source": "native_repeat"
-    },
-    {
-     "E2": 1.429723467374758e-07,
-     "Emax": 1.3060759189891837e-06,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
     },
     {
      "E2": 0.0,
@@ -473,14 +457,6 @@
      "Emax": 3.4124474456385094e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.2613220457154046e-07,
-     "Emax": 6.530379594945918e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -653,14 +629,6 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.341124536320482e-07,
-     "Emax": 1.3060759189891837e-06,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
@@ -825,14 +793,6 @@
      "Emax": 2.559335584228882e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.2507962811458061e-07,
-     "Emax": 6.530379594945918e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -1008,14 +968,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "trusted_compile"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed1",
      "source": "trusted_compile"
@@ -1184,14 +1136,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "native_repeat"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
@@ -1355,14 +1299,6 @@
      "result": "grad:model.norm.weight",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
-    },
-    {
-     "E2": 1.300466443267864e-07,
-     "Emax": 1.3150625999002832e-06,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
     },
     {
      "E2": 1.948106343229064e-07,
@@ -1529,14 +1465,6 @@
      "Emax": 5.567429452146376e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.3373182280529033e-07,
-     "Emax": 9.862969499252124e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -1709,14 +1637,6 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.1970461490921313e-07,
-     "Emax": 6.575312999501416e-07,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
      "E2": 1.948106343229064e-07,
      "Emax": 1.948106343229064e-07,
      "kind": "output",
@@ -1881,14 +1801,6 @@
      "Emax": 5.567429452146376e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.3601274533618663e-07,
-     "Emax": 1.3150625999002832e-06,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -2064,14 +1976,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "trusted_compile"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed2",
      "source": "trusted_compile"
@@ -2238,10 +2142,9 @@
     }
    ],
    "identity": {
-    "bridge": "tier3.TrainingWorkload",
-    "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+    "bridge": "tier3.TrainingWorkload.loss",
+    "loss": "workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss as the model returns it (the HF causal-LM loss plus any auxiliary term the model adds)",
     "outputs": [
-     "logits",
      "loss"
     ],
     "scope": "model",
@@ -2335,8 +2238,8 @@
      "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
     }
    },
-   "results_digest": "b47573ae60a61fec86b4ca524356f26cf39df290125653ef4288a61f5f0ea95e",
-   "sample_fingerprint": "4365dfae2d89b622bf8c5bdcd9063d49386cc8a5a02328586bf26ae2783ae5a3",
+   "results_digest": "6308540c9ead3cd3956931676da643cdee154ea97cbe5f73665f7cec6e128db9",
+   "sample_fingerprint": "ca7f5b2505ee90d61f30ac2e3d4a6837e4c41500bec0c1cdfd14432e28865442",
    "thresholds": {
     "grad:model.embed_tokens.weight": {
      "E2": 0.0002,
@@ -3098,44 +3001,6 @@
       ]
      }
     },
-    "out:logits": {
-     "E2": 2e-05,
-     "Emax": 0.002,
-     "components": {
-      "E2": {
-       "binding": "floor",
-       "floor": 1e-05,
-       "gamma": 2.0,
-       "native_repeat": 0.0,
-       "rounding_perturbation": 1.429723467374758e-07,
-       "trusted_compile": 0.0
-      },
-      "Emax": {
-       "binding": "floor",
-       "floor": 0.001,
-       "gamma": 2.0,
-       "native_repeat": 0.0,
-       "rounding_perturbation": 1.3150625999002832e-06,
-       "trusted_compile": 0.0
-      }
-     },
-     "envelope": 0.0,
-     "kind": "output",
-     "samples": {
-      "native_repeat": [
-       "golden/seed1",
-       "golden/seed2"
-      ],
-      "rounding_perturbation": [
-       "golden/seed1",
-       "golden/seed2"
-      ],
-      "trusted_compile": [
-       "golden/seed1",
-       "golden/seed2"
-      ]
-     }
-    },
     "out:loss": {
      "E2": 2e-05,
      "Emax": 0.002,
@@ -3177,16 +3042,8 @@
    }
   },
   "qwen3_0_6b": {
-   "contract_digest": "eb48c59e505b21c7a838f4582dfde55774e3d0c8800ee73b129c1e934c520169",
+   "contract_digest": "8bdbe6b90e087f524ab36cac807de9e6eb52d900a7c8171ca38e3c14a6982530",
    "control_measurements": [
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "native_repeat"
-    },
     {
      "E2": 0.0,
      "Emax": 0.0,
@@ -3386,14 +3243,6 @@
      "result": "grad:model.norm.weight",
      "sample_id": "golden/seed1",
      "source": "native_repeat"
-    },
-    {
-     "E2": 1.4375196319428196e-07,
-     "Emax": 6.510852660407523e-07,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
     },
     {
      "E2": 0.0,
@@ -3592,14 +3441,6 @@
      "Emax": 3.866133875694087e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.421053267069738e-07,
-     "Emax": 6.510852660407523e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -3804,14 +3645,6 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.432176852406526e-07,
-     "Emax": 9.766278990611284e-07,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
@@ -4008,14 +3841,6 @@
      "Emax": 5.79920081354113e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed1",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.4232844805637688e-07,
-     "Emax": 9.766278990611284e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -4223,14 +4048,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed1",
-     "source": "trusted_compile"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed1",
      "source": "trusted_compile"
@@ -4431,14 +4248,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "native_repeat"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
@@ -4634,14 +4443,6 @@
      "result": "grad:model.norm.weight",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
-    },
-    {
-     "E2": 1.6126201700907642e-07,
-     "Emax": 1.324669857857358e-06,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
     },
     {
      "E2": 0.0,
@@ -4840,14 +4641,6 @@
      "Emax": 4.4803988137014305e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.6311371833587895e-07,
-     "Emax": 1.324669857857358e-06,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -5052,14 +4845,6 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.5968269566395842e-07,
-     "Emax": 1.324669857857358e-06,
-     "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
@@ -5256,14 +5041,6 @@
      "Emax": 3.9825767232901607e-07,
      "kind": "param_grad",
      "result": "grad:model.norm.weight",
-     "sample_id": "golden/seed2",
-     "source": "rounding_perturbation"
-    },
-    {
-     "E2": 1.612275545601565e-07,
-     "Emax": 9.935023933930186e-07,
-     "kind": "output",
-     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -5471,14 +5248,6 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:logits",
-     "sample_id": "golden/seed2",
-     "source": "trusted_compile"
-    },
-    {
-     "E2": 0.0,
-     "Emax": 0.0,
-     "kind": "output",
      "result": "out:loss",
      "sample_id": "golden/seed2",
      "source": "trusted_compile"
@@ -5677,10 +5446,9 @@
     }
    ],
    "identity": {
-    "bridge": "tier3.TrainingWorkload",
-    "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+    "bridge": "tier3.TrainingWorkload.loss",
+    "loss": "workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss as the model returns it (the HF causal-LM loss plus any auxiliary term the model adds)",
     "outputs": [
-     "logits",
      "loss"
     ],
     "scope": "model",
@@ -5776,8 +5544,8 @@
      "workload_id": "qwen3-0.6b.train.bs1.seq16.fp32.cpu.sdpa.17481814"
     }
    },
-   "results_digest": "2a09bdaa6c5bec2e252c3e9b9965502c43fb3706498777a949b5dcd1e9545985",
-   "sample_fingerprint": "a18f80582f2272986d04a63ad76a5477b07f0ee5e9d0ad3f32cd3863813ac476",
+   "results_digest": "d119f5835211f179bc199bdda943324abdc617fc526d6609497884039e51acd3",
+   "sample_fingerprint": "f58bcf0fc6cdb59ae651c062be0dda4a38dac388e9b0498e3fb814026c160d13",
    "thresholds": {
     "grad:model.embed_tokens.weight": {
      "E2": 0.0002,
@@ -6676,44 +6444,6 @@
      },
      "envelope": 0.0,
      "kind": "param_grad",
-     "samples": {
-      "native_repeat": [
-       "golden/seed1",
-       "golden/seed2"
-      ],
-      "rounding_perturbation": [
-       "golden/seed1",
-       "golden/seed2"
-      ],
-      "trusted_compile": [
-       "golden/seed1",
-       "golden/seed2"
-      ]
-     }
-    },
-    "out:logits": {
-     "E2": 2e-05,
-     "Emax": 0.002,
-     "components": {
-      "E2": {
-       "binding": "floor",
-       "floor": 1e-05,
-       "gamma": 2.0,
-       "native_repeat": 0.0,
-       "rounding_perturbation": 1.6311371833587895e-07,
-       "trusted_compile": 0.0
-      },
-      "Emax": {
-       "binding": "floor",
-       "floor": 0.001,
-       "gamma": 2.0,
-       "native_repeat": 0.0,
-       "rounding_perturbation": 1.324669857857358e-06,
-       "trusted_compile": 0.0
-      }
-     },
-     "envelope": 0.0,
-     "kind": "output",
      "samples": {
       "native_repeat": [
        "golden/seed1",

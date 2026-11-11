@@ -3,11 +3,14 @@
 A :class:`~evograd.verification.integrations.base.Model` names one of these:
 
 * :class:`NextTokenLM` (the default) -- an HF causal LM. Batches are
-  ``(input_ids, labels)``; the step is ``model(input_ids, labels=labels).loss``;
-  Gate 2 model scope compares logits and the token-mean next-token NLL
-  (``WorkloadModelScope``); Gate 3 trains with ``gate3.workload_training``.
-  Every record, key and identity is exactly what the Qwen3 and Qwen3.5
-  integrations have always produced.
+  ``(input_ids, labels)``; the step is ``workload.loss``,
+  ``model(input_ids, labels=labels, use_cache=False).loss``, with any auxiliary
+  term the model adds (OLMoE's router load-balancing loss). Gate 2 model scope
+  calls the model the same way and compares that loss and every parameter
+  gradient (``WorkloadModelScope``); Gate 3 trains on that loss with weight 1
+  (``gate3.workload_training``). Logits are compared by neither: a site fusing
+  the LM head with the cross-entropy never materializes them. Capture records
+  and keys are what the Qwen3 and Qwen3.5 integrations have always produced.
 * :class:`PrimaryOutput` -- any other workload with ``primary_output(model,
   batch) -> (loss, primary)``: classification logits, a diffusion prediction,
   a click logit. Batches are dicts of tensors; Gate 2 model scope compares

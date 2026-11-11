@@ -26,6 +26,12 @@ NATIVE = "native"
 CONTROL = "control"
 CANDIDATE = "candidate"
 ROLES = (NATIVE, CONTROL, CANDIDATE)
+#: What both model gates judge for a next-token LM workload, in their identities:
+#: model Gate 2 compares it (``WorkloadModelScope``), Gate 3 trains on it
+#: (``gate3.workload_training``).
+WORKLOAD_LM_LOSS = ("workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss "
+                    "as the model returns it (the HF causal-LM loss plus any auxiliary term the "
+                    "model adds)")
 
 
 @dataclass(frozen=True)

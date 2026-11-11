@@ -160,7 +160,7 @@ Read the case's provenance, not just its suite name.
 | Formal T2 (`evograd evaluate`) | The verification corpus's recorded calls of the case in one training step: arguments, weights and output gradients | Candidate and every baseline on copies of the same calls; correctness is the gates' |
 | L2 real invocation (captured layer) | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
 | L2 real invocation (config-derived layer) | Seeded layer, inputs and external gradients | Native layer on that case |
-| Whole model | Checkpoint or seeded weights; real-text or synthetic token IDs and labels | Model logits and LM loss; backward supplies the intermediate and parameter gradients |
+| Whole model | Checkpoint or seeded weights; real-text or synthetic token IDs and labels | The LM loss as `workload.loss` returns it (with any auxiliary term); backward supplies the intermediate and parameter gradients |
 
 Capture hooks save detached CPU copies from a full-model forward/backward.
 The replay verifies artifact identity. A historical capture need not use the

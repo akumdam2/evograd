@@ -5,20 +5,23 @@ sites: outputs are what ``select_outputs`` declares plus ``loss``, and the
 backward is seeded with ``d loss = 1`` only -- the same as ``loss.backward()``.
 
 :class:`WorkloadModelScope` bridges an existing tier-3 ``TrainingWorkload``
-(Qwen3-0.6B, Llama-3.2-1B): the workload builds the model (``build_patched``,
-random initialization from its spec, no download) and the batch
+of a next-token language model (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B,
+OLMoE-1B-7B): the workload builds the model (``build_patched``) and the batch
 (``batch_for(seed=...)``); this adapter installs each replaced site's callable
-through a ``KernelSet`` and declares ``logits`` and the token-mean next-token
-NLL as the outputs. The old model gates (envelope, KL, global gradient,
-protocol 4) are not used.
+through a ``KernelSet`` and calls the model as ``workload.loss`` does,
+``model(input_ids=..., labels=labels, use_cache=False)``. Its one output is the
+``.loss`` the model returns -- the scalar the tier-3 step differentiates, with
+any auxiliary term the model adds (OLMoE's 0.01 router load-balancing loss) --
+and every parameter gradient is compared beside it. Logits are not an output:
+a site that fuses the LM head with the cross-entropy never materializes them.
+The old model gates (envelope, KL, global gradient, protocol 4) are not used.
 
 Model scope uses the ``matched_inputs`` sample protocol: a policy is calibrated
 on fixed samples and judges fresh executions of those same samples, matched by
 content (see :mod:`evograd.verification.gate2.calibration`).
 
-Not covered: Qwen3-Next, or any model with routed experts. Its routing would
-need a fixed-routing execution condition this bridge does not define, so no
-such workload is wired here.
+Routed experts need a fixed-routing execution condition this bridge does not
+define; OLMoE adds it in a subclass (``integrations.olmoe_1b_7b.routing``).
 """
 
 from __future__ import annotations
@@ -28,12 +31,11 @@ from typing import Any, Callable, Mapping
 import torch
 
 from evograd.verification.common import contracts as C
-from evograd.verification.common.execution import Deployment, Invocation, Sample, SiteHooks
+from evograd.verification.common.execution import (WORKLOAD_LM_LOSS, Deployment, Invocation,
+                                                    Sample, SiteHooks)
 from evograd.verification.gate2.adapters.base import ScopeBase, seeded_samples
 from evograd.verification.gate2.adapters.module import ModuleScope
 from evograd.verification.gate2.runner import OutputStructureError
-
-IGNORE_INDEX = -100
 
 
 def model_scope(*, name: str, factory: Callable[[Mapping[str, Callable]], torch.nn.Module],
@@ -71,20 +73,6 @@ def model_scope(*, name: str, factory: Callable[[Mapping[str, Callable]], torch.
         autocast_dtype=autocast_dtype, training=training)
 
 
-def next_token_mean_nll(logits: torch.Tensor, labels: torch.Tensor, *,
-                        ignore_index: int = IGNORE_INDEX) -> torch.Tensor:
-    """Sum of ``-log P(label_{t+1})`` over valid positions / their count, in float32."""
-    shifted = logits[:, :-1].float()
-    targets = labels[:, 1:]
-    count = int((targets != ignore_index).sum())
-    if count == 0:
-        raise ValueError("a batch with no valid next-token positions")
-    total = torch.nn.functional.cross_entropy(shifted.reshape(-1, shifted.shape[-1]),
-                                              targets.reshape(-1), ignore_index=ignore_index,
-                                              reduction="sum")
-    return total / count
-
-
 class WorkloadModelScope(ScopeBase):
     """A tier-3 ``TrainingWorkload`` at model scope. See the module docstring."""
 
@@ -104,10 +92,9 @@ class WorkloadModelScope(ScopeBase):
         self._expected: dict[str, int] = {}
 
     def identity(self) -> dict[str, Any]:
-        return {"scope": self.scope, "bridge": "tier3.TrainingWorkload",
+        return {"scope": self.scope, "bridge": "tier3.TrainingWorkload.loss",
                 "workload": dict(self.workload.describe()),
-                "outputs": ["logits", "loss"],
-                "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+                "outputs": ["loss"], "loss": WORKLOAD_LM_LOSS,
                 "site_references": self.site_references(), **self.replaced_identity()}
 
     def replaced_identity(self) -> dict[str, Any]:
@@ -159,7 +146,7 @@ class WorkloadModelScope(ScopeBase):
         return {**self.base_numerics(), "dtype": self.dtype}
 
     def reference_parts(self) -> dict[str, Any]:
-        return {"workload_class": type(self.workload), "loss": next_token_mean_nll,
+        return {"workload_class": type(self.workload), "loss": type(self.workload).loss,
                 "native_sites": {site: self.native_site(site) for site in self.sites()}}
 
     def sites(self) -> tuple[str, ...]:
@@ -195,19 +182,18 @@ class WorkloadModelScope(ScopeBase):
         return dict(self._expected) if deployment.sites else {}
 
     def invocation(self, sample: Sample, module: torch.nn.Module) -> Invocation:
+        """The model called as ``workload.loss`` calls it, labels included."""
         input_ids, labels = self.workload.batch_for(seed=int(sample.seed))
-        return Invocation(kwargs={"input_ids": input_ids, "use_cache": False},
-                          context={"labels": labels})
+        return Invocation(kwargs={"input_ids": input_ids, "labels": labels, "use_cache": False})
 
     def output_specs(self, invocation: Invocation) -> tuple[C.ResultSpec, ...]:
-        return (C.ResultSpec("out:logits", C.OUTPUT), C.ResultSpec("out:loss", C.OUTPUT))
+        return (C.ResultSpec("out:loss", C.OUTPUT),)
 
     def outputs(self, result: Any, invocation: Invocation, sample: Sample) -> dict[str, Any]:
-        logits = getattr(result, "logits", None)
-        if not torch.is_tensor(logits):
-            raise OutputStructureError("the model returned no logits")
-        return {"logits": logits,
-                "loss": next_token_mean_nll(logits, invocation.context["labels"])}
+        loss = getattr(result, "loss", None)
+        if not (torch.is_tensor(loss) and loss.dim() == 0):
+            raise OutputStructureError("the model returned no scalar loss")
+        return {"loss": loss}
 
     def cotangents(self, outputs: Mapping[str, Any], invocation: Invocation,
                    sample: Sample) -> dict[str, torch.Tensor]:

@@ -8,7 +8,8 @@ Routed experts flip their top-k choice under tiny numerical differences. Model
 Gate 2 compares every output and gradient, so it runs on the native run's routing.
 Gate 3 keeps free routing: it judges the loss curve against native and compile
 runs, and compile flips routing too, so its thresholds already hold that spread.
-Its objective is the next-token loss, without the router's 0.01 load-balancing term.
+Both judge the loss Tier 3 trains: the next-token loss plus the router's 0.01
+load-balancing term (``output_router_logits`` is pinned on).
 
 Gate 3's optimizer is Qwen3.5's, and model Gate 2's margin is the protocol's. Neither
 has been measured on this model.

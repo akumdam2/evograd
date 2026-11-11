@@ -6,7 +6,7 @@ calls have identical shapes here, as in the real model, and are told apart by
 role -- payloads round-trip in each task's ABI (the experts' routing indices
 and weights included), the model reference reproduces every live output bit
 for bit, and model Gate 2 holds the routing to the native run's while Gate 3 leaves
-it free.
+it free. Both gates judge that same loss, the load-balancing term included.
 """
 
 from __future__ import annotations
@@ -191,6 +191,22 @@ class ForcedRouting(unittest.TestCase):
         self.assertEqual(self.scope.identity()["routing"], self.R.RULE)
         self.assertIn("forced_outputs", self.scope.reference_parts())
 
+    def test_the_loss_compared_is_tier3s_with_the_load_balancing_term(self):
+        from evograd.verification import gate2, gate3
+
+        ex = gate2.execute(self.scope, self.native, self.sample)
+        self.assertIsNone(ex.error, ex.error)
+        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:loss"})
+        batch = self.workload.batch_for(seed=self.sample.seed)
+        model = self.build()
+        out = model(input_ids=batch[0], labels=batch[1], use_cache=False)
+        loss = ex.results["out:loss"]
+        self.assertTrue(torch.equal(loss, self.workload.loss(self.build(), batch)))
+        total, count = gate3.next_token_nll(out.logits, batch[1])
+        aux = model.config.router_aux_loss_coef * float(out.aux_loss.detach())
+        self.assertGreater(aux, 0.0)
+        self.assertAlmostEqual(float(loss) - float(total.detach() / count), aux, places=5)
+
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
 class TheGatesReachOLMoE(unittest.TestCase):
@@ -215,7 +231,9 @@ class TheGatesReachOLMoE(unittest.TestCase):
         self.assertFalse(any(router._forward_hooks for _p, router in R.routers(model)))
         loss, weight = adapter.train_loss(model, adapter.train_batch(0))
         self.assertTrue(torch.isfinite(loss))
-        self.assertGreater(weight, 0)
+        # The tier-3 loss, load-balancing term included, with weight 1.
+        self.assertEqual(weight, 1.0)
+        self.assertTrue(torch.equal(loss, workload.loss(model, adapter.train_batch(0))))
         self.assertFalse(adapter.build_evaluator().training)
 
     def test_a_candidate_passes_model_gate2_end_to_end(self):

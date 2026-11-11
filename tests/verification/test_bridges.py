@@ -2,7 +2,8 @@
 
 * ``WorkloadModelScope`` over the Qwen3-0.6B and Llama-3.2-1B workloads,
   shrunk with ``arch_overrides`` (random initialization, no download);
-* Gate 3 over the Llama workload with its own ``SyntheticBatches``.
+* Gate 3 over the Llama workload with its own ``SyntheticBatches``;
+* both gates judge ``workload.loss``, the scalar Tier 3 differentiates.
 
 Real-size models, bf16 and GPUs are not exercised here.
 """
@@ -100,10 +101,11 @@ class TestWorkloadModelBridge(unittest.TestCase):
         bad = gate2.verify_integration(scope, candidate("off", {site: bound_eager(op_name, 1.01)}),
                                        policy=cal.policy, samples=fixed)
         self.assertEqual(bad.status, FAILED)
-        # A 1% fault inside a random tiny model barely moves the scalar loss;
-        # the logits and the parameter gradients carry it.
+        # The loss is the one output; a 1% fault inside a random tiny model
+        # barely moves it, and the parameter gradients carry it.
+        outputs = {r.name for c in bad.cases for r in c.results if r.name.startswith("out:")}
+        self.assertEqual(outputs, {"out:loss"})
         failed = {r.name for c in bad.cases for r in c.results if r.status == FAILED}
-        self.assertIn("out:logits", failed)
         self.assertTrue(any(name.startswith("grad:") for name in failed))
 
     def test_llama(self):
@@ -143,6 +145,32 @@ class TestWorkloadModelBridge(unittest.TestCase):
                                  arch_overrides={**ARCH, "num_key_value_heads": 2})
         self.check(workload, "swiglu_mlp", "qwen3_swiglu_mlp", "qwen3")
 
+    def test_the_loss_and_gradients_are_workload_loss_bit_for_bit(self):
+        """Model Gate 2 calls the model as ``workload.loss`` does (labels in, no
+        logits out), so what it compares is what a tier-3 step differentiates."""
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+        from evograd.verification.common.execution import SiteHooks
+        from evograd.verification.common.tensors import isolated_rng
+
+        workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
+                                 arch_overrides={**ARCH, "num_key_value_heads": 2})
+        scope = WorkloadModelScope(workload)
+        sample = Sample("qwen3/seed1", 1)
+        ex = gate2.execute(scope, Deployment.native(), sample)
+        self.assertIsNone(ex.error, ex.error)
+        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:loss"})
+        self.assertIn("labels", scope.invocation(sample, None).kwargs)
+        with isolated_rng(sample.seed, "cpu"):
+            model = scope.build(Deployment.native(), sample, SiteHooks())
+        loss = workload.loss(model, workload.batch_for(seed=sample.seed))
+        loss.backward()
+        self.assertTrue(torch.equal(ex.results["out:loss"], loss.detach()))
+        grads = {k: v for k, v in ex.results.items() if k.startswith("grad:")}
+        self.assertTrue(grads)
+        params = dict(model.named_parameters())
+        for name, grad in grads.items():
+            self.assertTrue(torch.equal(grad, params[name.split(":", 1)[1]].grad), name)
+
 
 @needs_transformers
 class TestWorkloadTrainingBridge(unittest.TestCase):
@@ -173,6 +201,33 @@ class TestWorkloadTrainingBridge(unittest.TestCase):
         comparison = gate3.compare_curves(cand, native).to_dict()
         self.assertEqual(comparison["status"], "incomplete")
         self.assertIsNotNone(comparison["distances"])
+
+    def test_the_step_objective_is_workload_loss_bit_for_bit(self):
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+        from evograd.verification.common.execution import SiteHooks
+        from evograd.verification.common.tensors import isolated_rng
+        from evograd.verification.common.execution import WORKLOAD_LM_LOSS
+
+        workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
+                                 arch_overrides={**ARCH, "num_key_value_heads": 2})
+        adapter = gate3.workload_training(
+            workload, train_data=gate3.SeedBatches(workload, 0, "train"), train_count=2,
+            optimizer=gate3.adamw(lr=1e-3))
+        self.assertEqual(adapter.identity()["objective"], WORKLOAD_LM_LOSS)
+        plan = gate3.TrainingPlan(steps=2, window=1, checkpoints=(), validation=False)
+        run = gate3.measure_training(adapter, candidate("bound", {
+            "swiglu_mlp": bound_eager("qwen3_swiglu_mlp")}), plan, seed=0)
+        self.assertTrue(run.completed, [f.to_dict() for f in run.findings])
+        self.assertEqual(run.site_calls["total"],
+                         {"swiglu_mlp": ARCH["num_hidden_layers"] * plan.steps})
+        native = gate3.measure_training(adapter, Deployment.native(), plan, seed=0)
+        with isolated_rng(0, "cpu"):
+            model = adapter.build_model(Deployment.native(), SiteHooks())
+        loss = float(workload.loss(model, adapter.train_batch(0)).detach())
+        first = native.train_steps[0]
+        self.assertEqual(first["weight"], 1.0)
+        self.assertEqual(first["objective"], loss)
+        self.assertEqual(first["loss_sum"], loss)
 
 
 if __name__ == "__main__":
