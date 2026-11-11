@@ -78,7 +78,7 @@ LLAMA_3_2_1B: Mapping[str, Any] = {
     "rope_theta": 500000.0,
     # Llama-3.2 scales RoPE where Llama-3 did not. This changes the *values* in
     # the cos/sin tables, not any kernel's contract: `LlamaRotaryEmbedding`
-    # builds them once per forward and the qkv_rope boundary receives them as
+    # builds them once per forward and the attention block receives them as
     # Inactive inputs. So the declared operator is unchanged and only the
     # numbers flowing through it move.
     "rope_scaling": {

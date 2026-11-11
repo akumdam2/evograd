@@ -362,7 +362,13 @@ def _supporting(manifest: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any
 
 def _task_entry(manifest: dict[str, Any], record: dict[str, Any],
                 spec: dict[str, Any]) -> dict[str, Any]:
-    """One Level-2 task's frozen record: its primary configuration and supports."""
+    """One Level-2 task's frozen record: its primary configuration and supports.
+
+    A module called with keyword arguments only (a decoder layer passes its
+    attention ``hidden_states=``) has its input tensors under ``input_kwargs``.
+    """
+    inputs = (_tensor_entries(record["inputs"])
+              or _tensor_entries(list((record.get("input_kwargs") or {}).values())))
     return {
         "config_id": record["config_id"],
         "harvested_task": record["task"],
@@ -370,9 +376,9 @@ def _task_entry(manifest: dict[str, Any], record: dict[str, Any],
         "frequency": record["frequency"],
         "module_paths": list(record["module_paths"]),
         "layer_indices": list(record["layer_indices"]),
-        "input_shapes": _tensor_entries(record["inputs"]),
+        "input_shapes": inputs,
         "output_shapes": _tensor_entries(record["outputs"]),
-        "dtype": _tensor_entries(record["inputs"])[0]["dtype"],
+        "dtype": inputs[0]["dtype"],
         "params": {
             name: {"shape": meta["shape"], "dtype": meta["dtype"]}
             for name, meta in sorted(record.get("params", {}).items())

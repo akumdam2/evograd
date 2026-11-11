@@ -14,11 +14,11 @@ attention and this benchmark had no generic task for it.
 
 | generic task | family | harvested from | roles it keys on | composes into |
 | --- | --- | --- | --- | --- |
-| `linear_no_bias` | gemm | `linear` | `q_proj`, `k_proj`, `o_proj`, `gate_proj`, `down_proj`, `lm_head` | `llama3_qkv_rope`, `llama3_attention`, `llama3_swiglu_mlp` |
+| `linear_no_bias` | gemm | `linear` | `q_proj`, `k_proj`, `o_proj`, `gate_proj`, `down_proj`, `lm_head` | `llama3_attention_block`, `llama3_swiglu_mlp` |
 | `rmsnorm` | norm | `rms_norm` | `input_layernorm` | `llama3_residual_rmsnorm` |
-| `rope` | positional | `rope_apply` | `apply_rotary_pos_emb` | `llama3_qkv_rope` |
+| `rope` | positional | `rope_apply` | `apply_rotary_pos_emb` | `llama3_attention_block` |
 | `swiglu` | activation | `silu` | `act_fn` | `llama3_swiglu_mlp` |
-| `causal_gqa_attention` | attention | `sdpa` | `scaled_dot_product_attention` | `llama3_attention` |
+| `causal_gqa_attention` | attention | `sdpa` | `scaled_dot_product_attention` | `llama3_attention_block` |
 | `cross_entropy` | loss | `cross_entropy` | `fixed_cross_entropy` | — |
 
 `COMPOSES_INTO` in `manifest.py` states that last column once, and the focused
@@ -120,39 +120,8 @@ configuration the model really ran, silently dropped, would leave a task with
 shapes that do not add up to the step, so a role with no component raises and
 names itself.
 
-## Running it
+## Where the cases come from
 
-```bash
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping mapping \
-    --report results/llama3-level3/l1-mapping.json
-
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping calibrate \
-    --op causal_gqa_attention \
-    --report results/llama3-level3/causal_gqa_attention-tolerance.json
-
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping verify \
-    --source results/llama3-level3/layer16.pt \
-    --report results/llama3-level3/layer16-sdpa-verify.json
-
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping loss \
-    --report results/llama3-level3/l1-loss.json
-
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.levels.level1.mapping cross-entropy \
-    --report results/llama3-level3/l1-cross-entropy.json
-```
-
-- **`mapping`** prints the six-task table with each configuration's id,
-  frequency, roles and dims, read out of the tracked snapshot.
-- **`calibrate`** measures what a correct implementation of one task needs, by
-  comparing the declared oracle against `runtime_forward`.
-- **`verify`** checks `causal_gqa_attention` against the model's own SDPA call.
-  **Pass `--source` explicitly** — the canonical artifact is `layer16.pt`.
-- **`loss`** is an `ln(vocab)` sanity check at the observed shape: a randomly
-  initialised model over 128256 tokens predicts near-uniformly, so the expected
-  loss is about `ln(128256) = 11.76`. It is a smell test, not the proof.
-- **`cross-entropy`** is the proof: it compares the Level-1 contract against
-  the model's own loss call.
-
-`layer16.pt` stays the only tensor artifact. The canonical SDPA check
-re-derives its tensors by replaying that artifact; the vocabulary-width check
-builds its logits on demand and drops them.
+`mapping()` in `manifest.py` reads this table out of the tracked snapshot. The
+payloads every case is judged on are the calls the real-payload capture
+records (`evograd.verification.integrations.llama3_2_1b`).

@@ -92,8 +92,7 @@ class TestDerivedNaming(unittest.TestCase):
                     # share one implementation; the tasks stay distinct because
                     # the cases, widths, provenance and tolerances are the
                     # model's, and a report row keys off the name.
-                    "llama3_attention",
-                    "llama3_qkv_rope",
+                    "llama3_attention_block",
                     "llama3_residual_rmsnorm",
                     "llama3_swiglu_mlp",
                     # MegaFold's mixed-precision LayerNorm+Linear and

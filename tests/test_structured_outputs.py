@@ -220,15 +220,14 @@ class TestSingleOutputRegression(unittest.TestCase):
 
     #: The registered operators with structured outputs. Listed explicitly so
     #: adding another cannot silently weaken the regression coverage below.
-    #: The projection boundaries return (q, k, v) and the residual fusions
-    #: return (out, summed) -- two of each, because each harvested architecture
-    #: owns its own Level-2 identities. Qwen3 normalizes its attention heads and
-    #: Llama-3 does not, so even the mathematics of the two projection
-    #: boundaries differs; the two residual fusions compute the same thing at
-    #: different widths and are separate tasks for the same reason the rest are.
+    #: Qwen3's projection boundary returns (q, k, v) and the residual fusions
+    #: return (out, summed); Llama's attention block returns one output. The
+    #: residual fusions compute the same thing at different widths and are
+    #: separate tasks because each harvested architecture owns its own Level-2
+    #: identities.
     MULTI_OUTPUT = {
         "qwen3_qkv_norm_rope", "fused_add_rms_norm",
-        "llama3_qkv_rope", "llama3_residual_rmsnorm",
+        "llama3_residual_rmsnorm",
         # Qwen3.5: the GDN gates (g, beta), the GDN input stage's six outputs,
         # the attention prefix's (q, k, v, gate) and the residual fusion's
         # (normed, summed).

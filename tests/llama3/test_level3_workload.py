@@ -67,8 +67,8 @@ class TestPublishedArchitecture(unittest.TestCase):
 
     def test_rope_is_scaled_the_way_llama_3_2_scales_it(self):
         """Llama-3.2 scales RoPE where Llama-3 did not. It changes the values in
-        the cos/sin tables and no kernel's contract -- they reach the qkv_rope
-        boundary as Inactive inputs -- but a missing scaling would put different
+        the cos/sin tables and no kernel's contract -- they reach the attention
+        block as Inactive inputs -- but a missing scaling would put different
         numbers through every rotary kernel."""
         scaling = LLAMA_3_2_1B["rope_scaling"]
         self.assertEqual(scaling["rope_type"], "llama3")
@@ -357,28 +357,29 @@ class TestItActuallyHarvests(unittest.TestCase):
             for config in entry["configurations"]:
                 self.assertTrue(config["provenance"]["component"])
 
-    def test_the_snapshot_carries_all_four_level2_boundaries(self):
+    def test_the_snapshot_carries_the_three_level2_boundaries(self):
         """A Level-2 entry names a declared operator and resolves its supporting
-        configurations out of the harvest. All four resolve; the one that could
-        not before is the projection prefix, which needed ``llama3_qkv_rope`` to
-        exist because Llama has no per-head q/k norm to point a shared entry at.
+        configurations out of the harvest. The attention block is read from the
+        ``LlamaAttention`` module itself, whose input arrives by keyword.
         """
         from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import extract
 
         snapshot = extract(self.manifest, layer_index=1)
         self.assertEqual(
             sorted(snapshot["tasks"]),
-            # Alphabetical, and all four this model's own: a snapshot records
-            # what one captured step observed, so it is keyed by the tasks
-            # those observations belong to and never by another model's.
-            ["llama3_attention", "llama3_qkv_rope", "llama3_residual_rmsnorm",
-             "llama3_swiglu_mlp"],
+            # Alphabetical, and all this model's own: a snapshot records what
+            # one captured step observed, so it is keyed by the tasks those
+            # observations belong to and never by another model's.
+            ["llama3_attention_block", "llama3_residual_rmsnorm", "llama3_swiglu_mlp"],
         )
-        # Two supporting roles fewer than Qwen3's projection task: there is no
-        # `q_norm` and no `k_norm` in this model to observe.
+        block = snapshot["tasks"]["llama3_attention_block"]
+        self.assertEqual((block["harvested_task"], block["frequency"]), ("attention", 2))
+        self.assertEqual(block["input_shapes"][0]["shape"], [1, 64, 2048])
+        self.assertEqual(block["output_shapes"][0]["shape"], [1, 64, 2048])
+        # No `q_norm` and no `k_norm` in this model to observe.
         self.assertEqual(
-            sorted(snapshot["tasks"]["llama3_qkv_rope"]["supporting"]),
-            ["consumer", "enclosing_attention", "kv_projection", "q_projection"],
+            sorted(block["supporting"]),
+            ["kv_projection", "output_projection", "q_projection", "rope", "sdpa"],
         )
 
     def test_the_extracted_snapshot_names_llama_not_qwen(self):

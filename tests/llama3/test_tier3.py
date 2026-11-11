@@ -64,36 +64,23 @@ class TestSiteRegistry(unittest.TestCase):
 
         self.sites = sites
 
-    def test_the_four_site_names_do_not_collide_with_qwen3s(self):
-        """A shared name would let one model's kernel set be restricted onto the
-        other's model without complaint. ``qkv_rope`` is a different operator
-        from ``qkv_norm_rope`` and says so."""
+    def test_every_site_is_gated_against_a_llama_declaration(self):
+        """A Qwen3 declaration at a Llama site would let one model's kernel be
+        installed in the other's model without complaint."""
+        from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import sites as qwen
 
-        mine = {s.name for s in self.sites.llama3_sites().sites}
-        theirs = {s.name for s in qwen.qwen3_sites().sites}
-        self.assertEqual(mine & theirs, {"attention", "swiglu_mlp", "residual_rmsnorm"})
-        self.assertIn("qkv_rope", mine)
-        self.assertNotIn("qkv_rope", theirs)
-
-    def test_the_projection_site_is_gated_against_llamas_own_declaration(self):
         registry = self.sites.llama3_sites()
-        self.assertEqual(registry.require("qkv_rope").op, "llama3_qkv_rope")
-
-    def test_patching_either_attention_site_makes_both_live(self):
-        """One ``LlamaAttention`` adapter holds two switches, so a count read
-        against the requested sites alone would be wrong."""
-        self.assertEqual(self.sites.live_sites(("qkv_rope",)),
-                         ("attention", "qkv_rope"))
-        self.assertEqual(self.sites.supporting_sites(("qkv_rope",)), ("attention",))
+        self.assertEqual(registry.site_ops, manifest.SITE_TASKS)
+        self.assertFalse(set(registry.site_ops.values())
+                         & set(qwen.qwen3_sites().site_ops.values()))
 
     def test_expected_counts_follow_the_layer_count(self):
         """``2 * layers`` fusions, not ``2 * layers + 1``: layer 0's
         ``input_layernorm`` has no preceding decoder add."""
         self.assertEqual(
-            self.sites.expected_counts(32),
-            {"qkv_rope": 32, "attention": 32, "swiglu_mlp": 32,
-             "residual_rmsnorm": 64},
+            self.sites.expected_counts(16),
+            {"attention_block": 16, "swiglu_mlp": 16, "residual_rmsnorm": 32},
         )
 
     def test_production_attention_does_not_pass_sliding_window(self):
@@ -101,7 +88,7 @@ class TestSiteRegistry(unittest.TestCase):
         Copying Qwen3's call would be a different call, not the same one twice."""
         import inspect
 
-        source = inspect.getsource(self.sites.production_attention)
+        source = inspect.getsource(self.sites.production_attention_block)
         self.assertNotIn("sliding_window", source.split('"""')[2])
 
 
@@ -163,8 +150,29 @@ class TestIdentityControls(unittest.TestCase):
         )
         self.assertEqual(
             built.observed(),
-            {"qkv_rope": 2, "attention": 2, "swiglu_mlp": 2, "residual_rmsnorm": 4},
+            {"attention_block": 2, "swiglu_mlp": 2, "residual_rmsnorm": 4},
         )
+
+    def test_the_model_reference_at_the_attention_site_is_bitwise(self):
+        """The attention block's model reference installed at every layer, as
+        model Gate 2 and Gate 3 install natives: the [1, T, D] rotary row and
+        the reference's arithmetic change nothing, loss and every gradient."""
+        from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.llama3_2_1b.reference import reference_op
+
+        native = resolve_runtime_forward(reference_op("llama3_attention_block"))
+        kernels = patch(KernelSet(registry=self.workload.site_registry), "attention_block",
+                        native, source=KernelSource(site="attention_block",
+                                                    op_name="llama3_attention_block",
+                                                    origin="model_reference"))
+        loss, grads, _p, built = _step(self.workload, kernels)
+        self.assertEqual(loss, self.eager_loss)
+        for name, grad in grads.items():
+            with self.subTest(parameter=name):
+                self.assertTrue(bool(torch.equal(grad, self.eager_grads[name])))
+        self.assertEqual(built.observed(), {"attention_block": 2})
+        self.assertEqual(built.count_problems(), [])
 
     def test_the_bound_pair_reaches_every_site_through_bind(self):
         """The path an evolved kernel takes: the declared operator wrapped in a
@@ -180,7 +188,7 @@ class TestIdentityControls(unittest.TestCase):
         full = bound_pair_identity_kernels(TASKS, None, self.workload.site_registry)
         self.assertEqual(
             sorted(full.patched),
-            ["attention", "qkv_rope", "residual_rmsnorm", "swiglu_mlp"],
+            ["attention_block", "residual_rmsnorm", "swiglu_mlp"],
         )
         for site in sorted(full.patched):
             with self.subTest(site=site):

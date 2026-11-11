@@ -263,7 +263,7 @@ Or run everything for one model case, one agent after another on the same GPU:
 CUDA_VISIBLE_DEVICES=0 bash candidates/run_all.sh llama_3_2_1b llama3_swiglu_mlp/swiglu_mlp \
     $CORPUS/manifest.json 10
 AGENTS="evograd gepa" bash candidates/run_all.sh llama_3_2_1b \
-    llama3_attention/causal_gqa_attention $CORPUS/manifest.json        # a subset
+    llama3_attention_block/attention_block $CORPUS/manifest.json       # a subset
 ```
 
 To check and run the five OpenAI-model agents (no GEAK or Claude Code) in one go, use

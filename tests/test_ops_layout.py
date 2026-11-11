@@ -129,21 +129,19 @@ class TestRegistryComposition(unittest.TestCase):
         level 3. Whole-model tasks are WorkloadDecls, not pair contracts, and
         are counted on their own registry.
 
-        Each harvested architecture owns its four Level-2 identities rather
-        than sharing another model's. ``llama3_qkv_rope`` is a separate
-        declaration for a separate reason as well: ``LlamaAttention`` has no
-        per-head query/key RMSNorm, so it is the same three projections and the
-        same rotation with two fewer weights and two fewer gradients -- a
-        different computation, not a second suite on Qwen's.
+        Each harvested architecture owns its Level-2 identities rather than
+        sharing another model's. ``llama3_attention_block`` is the whole
+        ``LlamaAttention`` module, which has no per-head query/key RMSNorm -- a
+        different computation from Qwen3's, not a second suite on it.
         """
         counts: dict[int, int] = {}
         for op in TASKS.values():
             counts[op.level] = counts.get(op.level, 0) + 1
-        self.assertEqual(counts, {1: 25, 2: 34})
+        self.assertEqual(counts, {1: 25, 2: 33})
         self.assertEqual(len(PRIMITIVES), 25)
-        self.assertEqual(len(TASKS), 59)
+        self.assertEqual(len(TASKS), 58)
         for name in ("qwen3_swiglu_mlp", "qwen3_attention", "qwen3_qkv_norm_rope",
-                     "llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp",
+                     "llama3_attention_block", "llama3_swiglu_mlp",
                      "llama3_residual_rmsnorm", "olmoe_qkv_norm_rope", "olmoe_attention",
                      "olmoe_moe_experts", "olmoe_residual_rmsnorm"):
             self.assertIn(name, TASKS)

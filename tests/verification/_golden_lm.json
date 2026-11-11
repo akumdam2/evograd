@@ -44,8 +44,7 @@
       "data_seed": 0,
       "dtype": "float32",
       "expected_site_counts": {
-       "attention": 2,
-       "qkv_rope": 2,
+       "attention_block": 2,
        "residual_rmsnorm": 4,
        "swiglu_mlp": 2
       },
@@ -110,7 +109,7 @@
    },
    "seed": 0
   },
-  "identity_hash": "8261970ff4eb5a63955f3e95fde9e8e6c772a9865ee0404a8e8712670b792646",
+  "identity_hash": "948e9545787a2e57589f8abda34b98de0070a0b2bf020b163e9faad0ba424cf1",
   "objectives": [
    4.911254405975342,
    4.904953479766846,
@@ -2149,21 +2148,13 @@
     ],
     "scope": "model",
     "site_references": {
-     "attention": {
-      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention.reference:llama3_attention_forward_ref",
+     "attention_block": {
+      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention_block.reference:llama3_attention_block_forward_ref",
       "kind": "declared_forward_oracle",
       "reference_contract": null,
       "reference_dtype": null,
-      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention.reference:llama3_attention_forward_production",
-      "task": "llama3_attention"
-     },
-     "qkv_rope": {
-      "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope.reference:llama3_qkv_rope_forward_ref",
-      "kind": "declared_forward_oracle",
-      "reference_contract": null,
-      "reference_dtype": null,
-      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope.reference:llama3_qkv_rope_forward_production",
-      "task": "llama3_qkv_rope"
+      "runtime_forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.attention_block.reference:llama3_attention_block_forward_production",
+      "task": "llama3_attention_block"
      },
      "residual_rmsnorm": {
       "forward": "evograd.benchmark.topdown.llama3_2_1b.levels.level2.residual_rmsnorm.reference:llama3_residual_rmsnorm_forward_ref",
@@ -2216,8 +2207,7 @@
      "data_seed": 0,
      "dtype": "float32",
      "expected_site_counts": {
-      "attention": 2,
-      "qkv_rope": 2,
+      "attention_block": 2,
       "residual_rmsnorm": 4,
       "swiglu_mlp": 2
      },

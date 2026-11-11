@@ -166,6 +166,13 @@ class ModelConfig:
             "KVO": self.kv_out,
         }
 
+    def attention_block_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The whole attention module: ``x`` in, the output projection out.
+
+        The widths are the projection prefix's: ``o_proj`` is ``[H, QO]``.
+        """
+        return self.qkv_norm_rope_dims(batch=batch, seq=seq)
+
     def causal_gqa_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """Causal grouped-query SDPA plus the output projection.
 

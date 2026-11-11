@@ -1,8 +1,7 @@
-"""The four fused tasks one Llama-3-8B decoder layer decomposes into.
+"""The three fused tasks one Llama-3.2-1B decoder layer decomposes into.
 
-Each site package owns its contract, its reference and the capture that derives
-its case. :mod:`manifest` is the one place the site names, task keys and
-frequencies are written down.
+Each site package owns its contract and its reference. :mod:`manifest` is the
+one place the site names, task keys and frequencies are written down.
 
 Judging an implementation of one of these contracts is not done here -- that
 belongs to :mod:`evograd.verification`.

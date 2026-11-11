@@ -23,35 +23,28 @@ from evograd.opdecl import Workload
 from tests._small_cases import SMALL
 
 
-class TestQkvRopeDeclaration(unittest.TestCase):
-    """``llama3_qkv_rope``: the one operator this workload had to introduce."""
+class TestAttentionBlockDeclaration(unittest.TestCase):
+    """``llama3_attention_block``: the whole ``LlamaAttention`` module."""
 
     @classmethod
     def setUpClass(cls):
         from evograd.benchmark import get_task
 
-        cls.op = get_task("llama3_qkv_rope")
+        cls.op = get_task("llama3_attention_block")
 
-    def test_it_has_no_per_head_norm_weights(self):
-        """The whole reason it is not ``qwen3_qkv_norm_rope``. Four active
-        arguments, not six; four gradients, not six."""
-        from evograd.benchmark import get_task
-
+    def test_it_has_no_per_head_norm_weights_and_no_eps(self):
+        """Llama-3 has no per-head query/key RMSNorm: the four projection
+        weights are the only parameters, and there is no normalization for an
+        ``eps`` to belong to."""
         names = {arg.name for arg in self.op.args}
-        self.assertNotIn("q_norm_weight", names)
-        self.assertNotIn("k_norm_weight", names)
-        self.assertEqual(
-            self.op.grad_names(), ("dx", "dq_weight", "dk_weight", "dv_weight")
-        )
-        qwen = get_task("qwen3_qkv_norm_rope")
-        self.assertEqual(len(qwen.grad_names()) - len(self.op.grad_names()), 2)
+        self.assertFalse(names & {"q_norm_weight", "k_norm_weight", "eps"})
+        self.assertEqual(self.op.parameter_args,
+                         ("q_weight", "k_weight", "v_weight", "o_weight"))
+        self.assertEqual(self.op.grad_names(),
+                         ("dx", "dq_weight", "dk_weight", "dv_weight", "do_weight"))
 
-    def test_it_carries_no_eps(self):
-        """There is no normalization inside the boundary for one to belong to."""
-        self.assertNotIn("eps", {arg.name for arg in self.op.args})
-
-    def test_it_returns_q_k_and_v_in_that_order(self):
-        self.assertEqual(self.op.output_names, ("q", "k", "v"))
+    def test_it_returns_the_module_output(self):
+        self.assertEqual(self.op.output_names, ("out",))
 
     def test_the_benchmark_shape_is_llama_3_2_1bs(self):
         """Derived from the published configuration, not written out."""
@@ -59,24 +52,7 @@ class TestQkvRopeDeclaration(unittest.TestCase):
 
         self.assertEqual(
             self.op.benchmark[0].dims,
-            LLAMA_3_2_1B.qkv_norm_rope_dims(batch=2, seq=2048),
-        )
-
-    def test_the_declared_layout_is_the_head_major_view(self):
-        """The model reaches q/k/v by view-then-transpose, so what a kernel
-        receives and must return is a non-contiguous view."""
-        from evograd.ops._common import is_head_major_view
-
-        self.assertTrue(is_head_major_view(self.op.benchmark[0]))
-
-    def test_the_observed_suite_appears_only_once_harvested(self):
-        """A suite named ``observed`` must come from an observation. It is wired
-        and inert; the harvest is what turns it on, with no edit here."""
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level2.qkv_rope import task as decl
-
-        self.assertEqual(decl.HARVESTED, has_snapshot("llama_3_2_1b"))
-        self.assertEqual(
-            "llama_3_2_1b_observed" in self.op.benchmark_suites, decl.HARVESTED
+            LLAMA_3_2_1B.attention_block_dims(batch=2, seq=2048),
         )
 
     @unittest.skipIf(torch is None, "torch is required")
@@ -87,42 +63,56 @@ class TestQkvRopeDeclaration(unittest.TestCase):
         from tests.verification import _fixtures as F
 
         report = F.gate1_report(self.op, eager_pair_for(self.op),
-                                workloads=SMALL["llama3_qkv_rope"])
+                                workloads=SMALL["llama3_attention_block"])
         self.assertEqual(report.status, "passed", report.to_dict())
 
     @unittest.skipIf(torch is None, "torch is required")
-    def test_the_pair_runs_forward_and_backward_on_small_cases(self):
-        from evograd.evaluation.tier3.patch import eager_pair_for
+    def test_the_runtime_spelling_is_llamaattention_bit_for_bit(self):
+        """The model reference every gate judges against is the module's own
+        arithmetic: a live ``LlamaAttention`` (SDPA, train mode, no mask) and
+        the runtime forward agree exactly, forward and every gradient."""
+        try:
+            from transformers import LlamaConfig
+            from transformers.models.llama.modeling_llama import (
+                LlamaAttention, LlamaRotaryEmbedding)
+        except ImportError:  # pragma: no cover
+            self.skipTest("transformers is not installed")
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.base import shared_row
 
-        pair = eager_pair_for(self.op)
-        for workload in SMALL["llama3_qkv_rope"]:
-            with self.subTest(dims=workload.dims, dtype=workload.dtype):
-                values = self.op.make_inputs(torch, self.op, workload, device="cpu")
-                args = tuple(values[a.name] for a in self.op.args)
-                outputs, saved = pair.forward_with_saved(*args)
-                dims = workload.dims
-                # The head-major stride signature, which is part of the
-                # contract rather than an implementation detail.
-                self.assertEqual(
-                    outputs[0].stride(),
-                    (dims["T"] * dims["HQ"] * dims["D"], dims["D"],
-                     dims["HQ"] * dims["D"], 1),
-                )
-                grads = pair.backward_from_saved(
-                    tuple(values[f"d{n}"] for n in self.op.output_names), saved
-                )
-                self.assertEqual(len(grads), len(self.op.grad_names()))
-                for name, grad in zip(self.op.grad_names(), grads):
-                    self.assertIsNotNone(grad, name)
+        forward = resolve_runtime_forward(self.op)
+        for dtype in (torch.float32, torch.bfloat16):
+            with self.subTest(dtype=dtype):
+                config = LlamaConfig(hidden_size=64, num_attention_heads=4,
+                                     num_key_value_heads=1, head_dim=16,
+                                     intermediate_size=128, num_hidden_layers=1,
+                                     attention_dropout=0.0)
+                config._attn_implementation = "sdpa"
+                torch.manual_seed(0)
+                module = LlamaAttention(config, layer_idx=0).to(dtype).train()
+                x = torch.randn(2, 24, 64, dtype=dtype, requires_grad=True)
+                ids = torch.arange(24)[None].expand(2, -1)
+                cos, sin = LlamaRotaryEmbedding(config)(x, ids)
+                live, _ = module(hidden_states=x, position_embeddings=(cos, sin),
+                                 attention_mask=None)
+                dout = torch.randn_like(live)
+                weights = [module.q_proj.weight, module.k_proj.weight,
+                           module.v_proj.weight, module.o_proj.weight]
+                live_grads = torch.autograd.grad(live, [x, *weights], dout)
+                ours = forward(x, *weights, shared_row(cos), shared_row(sin))
+                our_grads = torch.autograd.grad(ours, [x, *weights], dout)
+                self.assertTrue(torch.equal(ours, live))
+                for name, a, b in zip(self.op.grad_names(), our_grads, live_grads):
+                    self.assertTrue(torch.equal(a, b), name)
 
 
 #: What ``mapping()`` reports as the composition, once a harvest exists.
 COMPOSES_INTO_EXPECTED = {
-    "linear_no_bias": ("llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp"),
+    "linear_no_bias": ("llama3_attention_block", "llama3_swiglu_mlp"),
     "rmsnorm": ("llama3_residual_rmsnorm",),
-    "rope": ("llama3_qkv_rope",),
+    "rope": ("llama3_attention_block",),
     "swiglu": ("llama3_swiglu_mlp",),
-    "causal_gqa_attention": ("llama3_attention",),
+    "causal_gqa_attention": ("llama3_attention_block",),
     "cross_entropy": (),
 }
 
@@ -179,7 +169,7 @@ class TestLevel1Mapping(unittest.TestCase):
         )
 
         self.assertEqual(COMPOSES_INTO["rmsnorm"], ("llama3_residual_rmsnorm",))
-        self.assertEqual(COMPOSES_INTO["rope"], ("llama3_qkv_rope",))
+        self.assertEqual(COMPOSES_INTO["rope"], ("llama3_attention_block",))
 
     def test_every_named_operator_exists(self):
         from evograd.benchmark import TASKS
@@ -230,11 +220,12 @@ class TestLevel1Mapping(unittest.TestCase):
 
 
 class TestLevel2Package(unittest.TestCase):
-    def test_the_projection_boundary_is_llamas_own_declaration(self):
+    def test_the_attention_boundary_is_llamas_own_declaration(self):
         from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
-        self.assertEqual(manifest.SITE_TASKS["qkv_rope"], "llama3_qkv_rope")
-        self.assertEqual(manifest.task_key("qkv_rope"), "llama3_qkv_rope")
+        self.assertEqual(manifest.SITES, ("attention_block", "swiglu_mlp", "residual_rmsnorm"))
+        self.assertEqual(manifest.task_key("attention_block"), "llama3_attention_block")
+        self.assertEqual(manifest.frequency("attention_block"), 16)
 
     def test_every_calibrated_operator_exists(self):
         from evograd.benchmark import TASKS
@@ -258,33 +249,6 @@ class TestLevel2Package(unittest.TestCase):
                 # compares what the registry will register rather than a
                 # second string that could drift away from it.
                 self.assertEqual(module.op.name, op_name)
-                capture = importlib.import_module(
-                    f"evograd.benchmark.topdown.llama3_2_1b.levels.level2."
-                    f"{module_name}.capture"
-                )
-                self.assertEqual(capture.TASK_NAME, op_name)
-
-
-class TestLevel3Package(unittest.TestCase):
-    def test_the_representative_layer_is_this_architectures(self):
-        """Half depth, as Qwen3 picks half of 28. Naming one is what makes two
-        captures comparable."""
-        from evograd.benchmark.topdown.llama3_2_1b.layer import capture
-        from evograd.benchmark.topdown.llama3_2_1b.levels.level3.spec import LLAMA_3_2_1B
-
-        self.assertEqual(
-            capture.CANONICAL_LAYER_INDEX, LLAMA_3_2_1B["num_hidden_layers"] // 2
-        )
-
-    def test_the_schemas_are_llamas_own(self):
-        """A Qwen3 capture relabelled as a Llama one would otherwise load."""
-        from evograd.benchmark.topdown.llama3_2_1b.layer import artifact
-        from evograd.benchmark.topdown.qwen3_0_6b.layer import (
-            artifact as qwen_artifact,
-        )
-
-        self.assertIn("llama3", artifact.SCHEMA_VERSION)
-        self.assertNotEqual(artifact.SCHEMA_VERSION, qwen_artifact.SCHEMA_VERSION)
 
 
 class TestUnharvestedStagesRefuseByName(unittest.TestCase):

@@ -100,10 +100,9 @@ class Llama3Workload:
     """Llama-3.2-1B next-token training, one step at a time.
 
     Implements tier 3's ``TrainingWorkload`` protocol and owns the Llama site
-    registry. Qwen3's is untouched: the two share no site name -- Llama's
-    projection site is ``qkv_rope`` against ``llama3_qkv_rope``, Qwen3's is
-    ``qkv_norm_rope`` against a different declaration -- so neither one's
-    identity control, baseline discovery or report can reach the other's sites.
+    registry. Qwen3's is untouched: every Llama site is gated against a Llama
+    declaration, so neither one's identity control, baseline discovery or
+    report can reach the other's sites.
     """
 
     #: Every field here is JSON-serializable, and together they reconstruct the
