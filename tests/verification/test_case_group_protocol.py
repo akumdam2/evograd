@@ -22,7 +22,8 @@ class CaseGroupProtocolTests(unittest.TestCase):
                 calibration_reuse({name: reuse for name in FLAGS}, log=lambda *a: None):
             root = Path(directory)
             model = T.model()
-            manifest = base.capture(model, root / "corpus", device="cpu", log=lambda *a: None)
+            manifest = base.capture(model, root / "corpus", selection="all", device="cpu",
+                                    log=lambda *a: None)
             plan = {"model": "toy", "state": str(root / "state"), "jobs": []}
             for agent, scale in (("good", 1.0), ("fault", 1.05)):
                 program = root / f"{agent}.py"

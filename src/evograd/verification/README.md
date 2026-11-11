@@ -187,7 +187,18 @@ its shapes bind. The cases and their calls per step come from the model's
 harvest snapshot, and that harvest observes the capture's own first step
 (`base.real_run`; see [Regenerating the snapshots](#regenerating-the-snapshots)).
 `capture` refuses, before writing anything, a snapshot whose `run` is missing
-or differs from its own (`base.require_harvested_run`). Gate 1 and operator
+or differs from its own (`base.require_harvested_run`). It records payloads for
+the cases its `--cases` selection picks (`base.recorded_cases`): by default
+(`benchmark`, user decision 2026-11-11) the model's benchmark rows in
+`benchmark/search_set.json` (its searched cases plus its `identical_config_of`
+cases, the only cases an evaluation verifies or times), refused when the search
+set was generated from another snapshot; `--cases all` records every observed
+case. Every recorded call still binds exactly one observed case, and each
+recorded case must receive its calls per step in every order. The corpus
+identity lists the recorded cases (`cases`) and states the rule
+(`case_selection`: rule, the search set's SHA-256 and snapshot hash, the
+observed cases left out); a request for any other case fails
+(`Corpus.require_case`), in `open_run` before any gate. Gate 1 and operator
 Gate 2 (gamma 2) both use every payload of the case, orders 101/202/303/404
 (`PAYLOAD_SPLITS`): operator Gate 2 calibrates on those payloads and judges
 fresh executions of the same ones. The corpus split into calibration (101/202)
@@ -233,6 +244,7 @@ results at Tier 2 through deployment and autograd, and whole-model results at
 Tier 3; Tier 1 remains search feedback and standalone pair diagnostics.
 
 ```bash
+# The model's benchmark rows; --cases all records every observed case.
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b capture --out CORPUS
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations.qwen3_0_6b verify \
   --corpus CORPUS/manifest.json --out DIR --candidate qwen3_swiglu_mlp/swiglu_mlp=candidate.py
