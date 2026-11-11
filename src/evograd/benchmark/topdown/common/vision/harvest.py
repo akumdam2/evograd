@@ -1,5 +1,11 @@
 """Observe semantic module boundaries during a real whole-model backward.
 
+The tracked snapshot comes from :func:`real_run`: the verification capture's
+first step (pinned pretrained weights, the first batch of data order 101 from
+the frozen real-data pool, the verification settings), with that run's
+identity. :func:`collect` on a spec alone (random weights, synthetic inputs)
+serves reduced checks and never publishes.
+
 Unsupported functional boundaries are listed, never inferred as observations.
 Hooks store metadata only; they retain no activation graphs.
 """
@@ -9,7 +15,7 @@ import json
 import math
 from pathlib import Path
 import torch
-from .spec import canonical, VisionSpec, digest
+from .spec import REVISIONS, digest
 from .model import build_model, make_inputs, forward
 from .operators import bindings
 from .contracts import SHAPES
@@ -30,10 +36,16 @@ def meta(t):
     }
 
 
-def collect(spec):
-    model = build_model(spec)
+def collect(spec, *, model=None, batch=None):
+    """One forward and backward of ``model`` (default: built from ``spec``) on
+    ``batch`` (default: ``spec``'s synthetic inputs), observed."""
+    model = build_model(spec) if model is None else model
+    batch = make_inputs(spec) if batch is None else batch
     records = []
     handles = []
+    # The mask each Qwen2-VL text attention call receives (None: SDPA is_causal).
+    # Right-padded real rows give an explicit mask; an all-ones mask gives None.
+    masks = {}
 
     def record(level, task, path, dims, values, names, free=None):
         source_inputs = [meta(x) for x in values]
@@ -178,6 +190,14 @@ def collect(spec):
                     ["x"],
                 )
 
+        if kind == "Qwen2VLAttention":
+
+            def mask_hook(m, args, kwargs):
+                mask = kwargs.get("attention_mask")
+                key = json.dumps(None if mask is None else meta(mask))
+                masks[key] = masks.get(key, 0) + 1
+
+            handles.append(module.register_forward_pre_hook(mask_hook, with_kwargs=True))
         if isinstance(module, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.LayerNorm)) or kind in (
             "ConvNextV2GRN",
             "Qwen2RMSNorm",
@@ -188,7 +208,7 @@ def collect(spec):
         ):
             handles.append(module.register_forward_pre_hook(hook))
     try:
-        result = forward(model, make_inputs(spec), spec.model)
+        result = forward(model, batch, spec.model)
         if not torch.isfinite(result.loss):
             raise ValueError("nonfinite model loss")
         result.loss.backward()
@@ -215,7 +235,7 @@ def collect(spec):
             if actual != count:
                 raise ValueError(f"{site}: expected {count} invocations, observed {actual}")
         return {
-            "schema_version": "evograd-vision-harvest/1",
+            "schema_version": "evograd-vision-harvest/2",
             "workload_id": spec.workload_id,
             "config": spec.to_config(),
             "architecture": spec.arch,
@@ -226,6 +246,11 @@ def collect(spec):
             "torch": torch.__version__,
             "transformers": __import__("transformers").__version__,
             "records": records,
+            **(
+                {"text_attention_masks": [{"mask": json.loads(k), "calls": n}
+                                          for k, n in masks.items()]}
+                if spec.model == "qwen2_vl_2b" else {}
+            ),
             "backward_verified": True,
             "not_bound": (
                 [
@@ -244,17 +269,43 @@ def collect(spec):
             handle.remove()
 
 
+def real_run(name):
+    """The harvest of ``name``'s verification run, with its run identity."""
+    from evograd.verification.integrations import load
+    from evograd.verification.integrations.harvest_run import first_step
+
+    workload, model, batch, run, settings = first_step(load(name))
+    spec = workload.spec
+    return {**collect(spec, model=model, batch=batch),
+            "run": {"weights": f"pretrained:{spec.model_name}@{REVISIONS[spec.model]}", **run},
+            "determinism": settings}
+
+
+def require_real_run(manifest, name):
+    """Only a harvest of the verification run (:func:`real_run`) publishes the snapshot."""
+    from evograd.verification.integrations import load
+
+    spec = load(name).load_workload().spec
+    if manifest["config"] != spec.to_config() or not manifest.get("run") \
+            or not manifest.get("backward_verified"):
+        raise ValueError(f"a forward/backward harvest of the {name} verification run is required")
+    if manifest["workload_id"] != spec.workload_id or manifest["architecture"] != spec.arch:
+        raise ValueError("harvest configuration does not match current architecture")
+
+
 def snapshot(manifest):
     from evograd.benchmark.topdown.common.harvest_roles import group_configurations
 
     groups = {level: group_configurations(manifest["records"], level, digest) for level in (1, 2)}
     payload = {
-        "schema_version": f"evograd-{manifest['config']['model']}-snapshot/1",
+        "schema_version": f"evograd-{manifest['config']['model']}-snapshot/2",
         "manifest_hash": digest(manifest),
         "workload_id": manifest["workload_id"],
         "config": manifest["config"],
-        "canonical": manifest["canonical"],
+        "run": manifest.get("run"),
         "not_bound": manifest["not_bound"],
+        **({"text_attention_masks": manifest["text_attention_masks"]}
+           if "text_attention_masks" in manifest else {}),
         "level1": {},
         "tasks": {},
     }
@@ -276,24 +327,13 @@ def snapshot(manifest):
 
 
 def main(model):
-    parser = argparse.ArgumentParser(description="Whole-model forward/backward harvest")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="JSON execution overrides (reduced smoke workloads are not canonical)",
+    parser = argparse.ArgumentParser(
+        description="Whole-model forward/backward harvest of the verification run (order 101)"
     )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-snapshot", action="store_true")
     args = parser.parse_args()
-    config = canonical(model).to_config()
-    if args.config:
-        config.update(json.loads(args.config.read_text()))
-    if config["model"] != model:
-        raise ValueError("config names a different model")
-    spec = VisionSpec(**config)
-    if args.write_snapshot and not spec.is_canonical:
-        raise ValueError("only a canonical execution can publish the tracked snapshot")
-    manifest = collect(spec)
+    manifest = real_run(model)
     payload = snapshot(manifest)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -305,7 +345,8 @@ def main(model):
         json.dumps(
             {
                 "manifest": str(args.out),
-                "canonical": spec.is_canonical,
+                "workload_id": manifest["workload_id"],
+                "weights": manifest["run"]["weights"],
                 "L1_configurations": sum(
                     len(e["configurations"]) for e in payload["level1"].values()
                 ),
@@ -319,17 +360,13 @@ def main(model):
 
 def snapshot_main(model):
     parser = argparse.ArgumentParser(
-        description="Derive a tracked snapshot from a canonical harvest"
+        description="Derive a tracked snapshot from a harvest of the verification run"
     )
     parser.add_argument("--harvest", type=Path, required=True)
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     manifest = json.loads(args.harvest.read_text())
-    spec = VisionSpec(**manifest["config"])
-    if spec.model != model or not spec.is_canonical or not manifest.get("backward_verified"):
-        raise ValueError("a canonical forward/backward harvest for this model is required")
-    if manifest["workload_id"] != spec.workload_id or manifest["architecture"] != spec.arch:
-        raise ValueError("harvest configuration does not match current architecture")
+    require_real_run(manifest, model)
     payload = snapshot(manifest)
     if args.write:
         from evograd.benchmark.topdown import snapshot_path

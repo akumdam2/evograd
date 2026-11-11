@@ -17,20 +17,20 @@ Neither model imports from `references/`. Removing that directory is safe.
 | Precision / attention | BF16 | BF16 / SDPA, both vision and text |
 | Loss | image classification cross entropy | image-conditioned next-token cross entropy; image markers and padding are ignored targets |
 | Trainable parameters | all | all, including vision encoder and merger |
-| Default initialization | seeded random | seeded random, tied embedding/output weights retained |
-| `--real-input` checkpoint | pinned published safetensors | pinned published safetensors and tokenizer |
-| `--real-input` dataset | Imagenette 320px train shard, labels mapped to ImageNet-1K | TextVQA train shard, image/question/answer teacher forcing |
+| Benchmark spec (`canonical`) initialization | seeded random | seeded random, tied embedding/output weights retained |
+| Harvest and verification checkpoint | pinned published safetensors | pinned published safetensors and tokenizer |
+| Harvest and verification data | frozen pool of the Imagenette 320px train shard, labels mapped to ImageNet-1K | frozen pool of TextVQA train shard 0, image/question/answer teacher forcing, right-padded to T512 |
 
 Both use CUDA, training mode, no cache, no gradient checkpointing, and the
 existing Tier-3 AdamW step (`lr=1e-4`, betas 0.9/0.999, eps 1e-8, weight decay
 0.01). Existing timing code and Tier-2 timing fields have not changed.
 
 Architecture JSON and default benchmark JSON are shipped under each model's
-`benchmark/topdown/<model>/` package. Model construction is offline. The default
-uses random weights; `--real-input` loads the pinned checkpoint and refuses to
-run until its weights, processor and dataset shard are cached. Runtime model internals are supported on
-`transformers>=4.57,<4.58`, tested on **4.57.6**. Use a separate environment
-from workloads requiring Transformers 5.x.
+`benchmark/topdown/<model>/` package. Model construction is offline. The
+benchmark spec (`spec.canonical`) uses random weights; the harvest and the
+verification workload load the pinned checkpoint and refuse to run until its
+weights, processor and real-data pool are cached. Runtime model internals
+require `transformers>=4.57` (tested on 4.57.6 and 5.16.1).
 
 Pinned configuration sources:
 
@@ -82,10 +82,23 @@ from parameter counts.
 These are selected boundaries, not exhaustive primitive coverage. Attention,
 multimodal RoPE, the Conv3D patch embedding, loss, residual addition and pooling
 still execute in the full model but are not all separate L1/L2 tasks. Each
-manifest lists its unbound boundaries. L1/L2 configuration counts remain
-unreported until a canonical CUDA harvest exists.
+manifest lists its unbound boundaries. L1/L2 configuration counts come from
+the CUDA harvest of the verification run.
 
 ## Install and harvest
+
+The harvest runs the step the verification capture records first: the
+verification workload (`evograd.verification.integrations.<model>`: the pinned
+checkpoint and the frozen real-data pool), a fresh native model, the first
+training batch of data order 101, under the verification's deterministic
+settings (`integrations.harvest_run.first_step`). Its snapshot (schema `/2`)
+names that run under `run`: `weights` (checkpoint and revision), `data` (the
+data identity the capture records, without its per-order batches), `order`,
+`batch_digest` (the batch, as the capture names it) and
+`parameter_state_sha256` (the initial parameters). Qwen2-VL's pool rows
+are right-padded, so its text attention gets an explicit mask rather than
+SDPA's `is_causal`; `text_attention_masks` records the mask each text
+attention call received.
 
 ```bash
 pip install -e '.[vision_workloads,gpu,dev]'
@@ -97,36 +110,43 @@ python -m evograd.benchmark.topdown.qwen2_vl_2b.harvest.harvest \
   --out results/qwen2_vl_2b/harvest.json --write-snapshot
 ```
 
-Only a canonical run can publish a tracked snapshot. Before that, the model
-adapters are available, but observed benchmark suites are empty. Site verification still uses explicitly labelled
-configuration-derived shapes; changing a workload cannot silently reuse another
-configuration’s verification cases. A fresh process loads the new snapshots and binds those
-cases to each task under `<model>_observed`. Harvest fails on missing/nonfinite
-parameter gradients or missing declared primitive boundaries.
+`python -m evograd.benchmark.topdown.<model>.harvest.snapshot --harvest
+HARVEST.json [--write]` derives the snapshot from a saved harvest without a
+GPU. Only a harvest of the verification run publishes a tracked snapshot. A
+fresh process loads the new snapshots and binds those cases to each task under
+`<model>_observed`; a workload whose `workload_id` differs from the snapshot's
+uses explicitly labelled configuration-derived shapes for site verification,
+so changing a workload cannot silently reuse another configuration's cases.
+Harvest fails on missing/nonfinite parameter gradients or missing declared
+primitive boundaries.
 
-`--config file.json` accepts explicit reduced architecture/device overrides for
-smoke harvests. Such runs are marked noncanonical and cannot write a tracked
-snapshot. Tests contain small configurations for both models.
+Reduced configurations (explicit architecture/device overrides, random
+weights, synthetic inputs) run from Python with `collect(spec)` and never
+write a tracked snapshot. Tests contain small configurations for both models.
 
-## Pinned real input
+## Pinned real data
 
-`--real-input` changes **both** the weights and inputs. ConvNeXt uses the
-published 1,000-class checkpoint, official image processor, and the first 320
-rows of the revision-pinned Imagenette 320px training shard, ten B32 batches.
-Its ten dataset labels are mapped to the checkpoint's ImageNet-1K indices and checked against its label
-names. Qwen2-VL uses the published checkpoint and processor, with the first
-ten rows of the pinned TextVQA training shard (B1). Each image is resized to
-224×224; the chat template includes the real question, and only tokens of a
+Both forms use the published checkpoint and its processor. ConvNeXt's ten
+Imagenette labels are mapped to the checkpoint's ImageNet-1K indices and
+checked against its label names. Each Qwen2-VL image is resized to 224×224;
+the chat template includes the real question, and only tokens of a
 deterministically selected reference answer and `<|im_end|>` contribute to
-loss. Both run the existing differentiable full-model training step.
+loss.
 
-The model and dataset commits, selected row indices, processor revision and
-prepared tensor artifact are recorded. The artifact is validated for the fixed
-specialist shapes before use. This checks the declared inputs; it does not
-prove correctness for other resolutions, questions or shapes.
+* The frozen pool (`common/vision/stream.py`, harvest and verification): every
+  row of the pinned shard (Qwen2-VL rows longer than T512 skipped and
+  counted), processed once (`build_pool`, CPU), with a seeded permutation per
+  data order and epoch.
+* The prepared artifact (`common/vision/data.py`, a workload's `data_path`
+  with pretrained weights): the first 320 Imagenette rows as ten B32 batches,
+  or the first ten TextVQA rows (B1), with the model and dataset commits,
+  selected row indices and processor revision recorded and validated for the
+  fixed specialist shapes before use.
+
+Neither proves correctness for other resolutions, questions or shapes.
 
 Prepare the pinned assets once from the repository root. Each benchmark keeps
-its Hugging Face cache in `data/<model>/hf_cache`, which the CLI reads by
+its Hugging Face cache in `data/<model>/hf_cache`, which the code reads by
 default:
 
 ```bash
@@ -136,9 +156,8 @@ python scripts/prepare_benchmark_inputs.py --benchmark qwen2_vl_2b
 
 ## Optional prepared-data path
 
-A workload's `data_path`, without real input, accepts caller-supplied image
-examples while keeping random weights. It is separate from the pinned
-real-input mode.
+A workload's `data_path`, with random weights, accepts caller-supplied image
+examples. It is separate from the pinned real data above.
 Prepare local examples as JSON:
 
 ```json
@@ -150,7 +169,7 @@ Image paths are relative to the JSON. Classification labels must use the
 checkpoint's ImageNet class ordering.
 The legacy preparation command may download the official processor/tokenizer.
 It does not download a dataset or model weights. These caller-supplied batches
-are not accepted under `--real-input`.
+are not accepted with pretrained weights.
 
 Example for ConvNeXt (substitute the Qwen2 model/config and sites as needed):
 

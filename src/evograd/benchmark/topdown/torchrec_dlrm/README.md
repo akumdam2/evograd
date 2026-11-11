@@ -2,9 +2,11 @@
 
 This workload reproduces the single-device TorchRec DLRM example architecture
 with local PyTorch modules. It does not import from `references/` or require
-TorchRec at runtime. The whole-model Level-3 path trains on seeded generated
-dense features, categorical IDs, and binary labels. `--real-input` reads fixed
-Criteo Kaggle training rows from TorchRec's preprocessed NumPy format.
+TorchRec at runtime. The benchmark spec (`spec.canonical`) trains on seeded
+generated dense features, categorical IDs, and binary labels. The harvest and
+the verification stream Criteo Kaggle training rows from TorchRec's
+preprocessed NumPy format. Both start from the seed-0 initialization: the
+model has no published weights.
 
 The canonical configuration uses 13 dense features, 26 embedding tables of
 100,000 rows each, embedding width 64, batch 32, dense MLP
@@ -50,17 +52,28 @@ workload, not TorchRec's full-cardinality distributed benchmark.
 ls data/torchrec_dlrm/processed/train_{dense,sparse,labels}.npy
 ```
 
-Harvest can use `--real-input`; prepared batches live under
-`data/torchrec_dlrm/batches/` by default.
-Real-input harvests do not publish the generated-input canonical snapshot.
+Prepared batches (a workload's `data_path`) live under
+`data/torchrec_dlrm/batches/` by default; the harvest and the verification
+read the processed arrays directly (`dlrm_data.CriteoStream`, override the
+directory with `EVOGRAD_DLRM_CRITEO_DIR`).
 
-## Canonical generated-input harvest
+## Harvest
+
+The harvest runs the step the verification capture records first: the
+verification workload (`evograd.verification.integrations.torchrec_dlrm`:
+the streamed Criteo rows), a fresh native model at the seed-0 initialization,
+the first training batch of data order 101, under the verification's
+deterministic settings (`integrations.harvest_run.first_step`). Its snapshot
+(schema `/2`) names that run under `run`: `weights` (`random:seed0`), `data`
+(the data identity the capture records, without its per-order batches),
+`order`, `batch_digest` and `parameter_state_sha256`.
 
 ```bash
-python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.harvest \
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.harvest \
   --out results/torchrec_dlrm/harvest.json --write-snapshot
 ```
 
-For a reduced check, supply a JSON configuration that lowers the number and
-size of embedding tables. Pass it to harvest with `--config` and omit
-`--write-snapshot`.
+`python -m evograd.benchmark.topdown.torchrec_dlrm.harvest.snapshot --harvest
+HARVEST.json [--write]` derives the snapshot from a saved harvest without a
+GPU. For a reduced check, call `collect(spec)` from Python on a spec with
+fewer and smaller embedding tables; it never writes a tracked snapshot.
