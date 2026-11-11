@@ -751,10 +751,13 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Per level: speedup over the accepted configurations (geometric mean over
     configurations, then tasks, then families), coverage and the verification
     funnel. Level 2 also retains each site's model-scope measurement without
-    pooling it; Level 3 reports each model's combination, its speedup in the
+    pooling it: every benchmark row, and a submitted row that is not one marked
+    ``benchmark_row: false`` (it can still enter the combination); Level 3
+    reports each model's combination, its speedup in the
     model's primary execution (T3-G where the step can be captured), both
     executions' speedups and peak memory."""
     from evograd.benchmark.core.report import geomean
+    from evograd.benchmark.search_set import benchmark_row
 
     for ev in evaluations:
         if ev.get("protocol") != PROTOCOL:
@@ -770,7 +773,8 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         timed = combination.get("tier3") or {}
         selected = set(combination.get("cases", ()))
         single_sites[ev["model"]] = {
-            cid: {"task": row["task"], "submitted": bool(row.get("submitted")),
+            cid: {"task": row["task"], "benchmark_row": benchmark_row(row),
+                  "submitted": bool(row.get("submitted")),
                   "executable": bool(row.get("executable")),
                   "accepted": bool(row.get("accepted")),
                   **{gate: row.get(gate) for gate in
@@ -778,7 +782,8 @@ def summarize(evaluations: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                   "positive": _positive(row, execution),
                   "selected_for_combination": cid in selected,
                   "tier3": dict(row.get("tier3_single_site") or {})}
-            for cid, row in sorted(ev["cases"].items()) if row["level"] == 2}
+            for cid, row in sorted(ev["cases"].items())
+            if row["level"] == 2 and (benchmark_row(row) or row.get("submitted"))}
         models[ev["model"]] = {
             "baselines": baselines, "execution": execution,
             "primary_speedup": _primary(timed, execution).get("speedup"),

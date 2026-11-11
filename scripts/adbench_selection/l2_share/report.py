@@ -3,7 +3,9 @@
 Record of the report, kept as it ran (its paths are DeltaAI's). Run 2026-11-10 18:41 CST over
 the GH200 rows of l2_share.py (gh096, rows.jsonl) and steps/*.json; output
 report.json beside this file. write_search_set.py reads report.json's rows: per configuration
-its wall time and optimizable share, and the merged attention-block rows.
+its wall time, optimizable share, calls and (a corpus row) dims and dtype, and the merged
+attention-block rows. Rerun 2026-11-11 over the same rows.jsonl to carry the dims and dtype it
+already held; every other field is unchanged.
 
 share = optimizable ms per call x calls per step / eager step ms, in the execution that decides the
 model's Level 3:
@@ -71,7 +73,8 @@ def main():
         step = steps.get(m)
         share = None if opt is None or not step else 100.0 * opt * calls / step["ms"]
         out.append({"model": m, "task": task, "config": config, "kind": t.get("kind") or p.get("kind"),
-                    "calls": calls, "wall_ms": wall, "kernel_ms": p.get("kernel_ms"), "lib_ms": lib,
+                    "calls": calls, "dims": t.get("dims") or p.get("dims"),
+                    "dtype": t.get("dtype") or p.get("dtype"), "wall_ms": wall, "kernel_ms": p.get("kernel_ms"), "lib_ms": lib,
                     "opt_ms": opt, "time_share_ms": None if wall is None else wall * calls,
                     "share_pct": share, "nested": nested(m, task, config),
                     "step": step, "error": t.get("error") or p.get("error")})

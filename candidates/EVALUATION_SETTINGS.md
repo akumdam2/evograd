@@ -697,7 +697,8 @@ rejected diagnostic timings do not contribute. Every observed case is a row
 of `evaluation.json`, tagged with the search set's `searched`, `reason` and `of`
 (`src/evograd/benchmark/search_set.json`); the level summaries (funnel,
 coverage, speedup) count only benchmark rows: the searched cases plus the
-`identical_config_of` cases. The other rows stay as the observed inventory.
+`identical_config_of` cases. The other rows stay as the observed inventory;
+the Level-2 single-site list shows a submitted one marked `benchmark_row: false`.
 There is no single combined score over T2 and T3.
 
 `--deadline-min` controls suspension, not the scientific training horizon,

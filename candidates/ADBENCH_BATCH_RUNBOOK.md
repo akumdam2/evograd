@@ -293,7 +293,9 @@ model's searched cases; preflight names the missing and extra ones and stops.
 Build packs for them with
 `python candidates/bench.py tasks --root /work/hdd/bcjw/wzhan/ADBench/tasks --model M --searched --corpus MANIFEST --state /work/hdd/bcjw/wzhan/ADBench/tasks/M/state`.
 An `identical_config_of` case is not searched: its source model's search covers
-it, and the evaluation reuses that submission. `ADBench/cases.json` no longer
+it, and the evaluation reuses that submission; a finished source search without
+a submission is the case's search failure, and an unfinished one stops preflight
+(`evaluate_model.py` and `bench.py evaluate` alike). `ADBench/cases.json` no longer
 names cases; the evaluation launcher reads only its corpus path, until the
 recapture (or pass `--corpus`). Slurm cannot be inspected from the local
 development machine; preflight fails before submission if the runtime layout is

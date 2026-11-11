@@ -101,6 +101,27 @@ class ModelEvaluationTests(unittest.TestCase):
         self.assertEqual(saved["reused_from"], {"mlp/copy": "dit_s_2:mlp/source"})
         self.assertEqual(saved["selected_cases"], ["mlp/copy", *self.ids])
 
+    def test_a_source_search_without_a_submission_is_the_identical_case_search_failure(self):
+        """As bench.py evaluate: recorded, not dropped; an unfinished source search stops."""
+        searched = {"searched": True, "reason": None, "of": None}
+        self.search_set({**{cid: searched for cid in self.ids},
+                         "mlp/copy": {"searched": False, "reason": "identical_config_of",
+                                      "of": "dit_s_2:mlp/source"}},
+                        dit_s_2={"mlp/source": searched})
+        source = self.run_dir("mlp/source", "dit_s_2")
+        write(source / "run.json", {"status": "completed"})
+        write(source / "submission.json", {"case_id": "mlp/source", "agent": "openevolve",
+                                           "submission": None})
+        with patch.object(runner.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as launch:
+            self.assertEqual(self.invoke(), 0)
+            self.assertEqual(launch.call_args.args[0].count("--candidate"), 2)
+        saved = json.loads((self.out / "convnextv2_tiny/evaluation/openevolve/selection.json").read_text())
+        self.assertEqual(saved["reused_from"], {"mlp/copy": "dit_s_2:mlp/source"})
+        self.assertEqual(Path(saved["search_failures"]["mlp/copy"]["record"]).resolve(),
+                         (source / "submission.json").resolve())
+        write(source / "run.json", {"status": "running"})
+        self.assertEqual(self.invoke(["--dry-run"]), 1)
+
     def test_missing_and_running_cases_stop_before_launch(self):
         ledger = self.run_dir(self.ids[1]) / "run.json"
         write(ledger, {"status": "running"})

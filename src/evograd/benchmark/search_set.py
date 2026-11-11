@@ -4,7 +4,7 @@
 
     PYTHONPATH=src:. python scripts/adbench_selection/write_search_set.py [--check]
 
-It names, for every model, the tracked snapshot it was generated from
+(the full command, with the test, is in ``README.md`` beside this file). It names, for every model, the tracked snapshot it was generated from
 (``snapshot_hash``) and, for every observed case of that model
 (``observed_cases``), whether it is searched; a case that is not names one
 reason from :data:`REASONS`, and ``of`` the case it defers to

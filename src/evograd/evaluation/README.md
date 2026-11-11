@@ -70,7 +70,9 @@ evograd summarize RUN_A/evaluation.json RUN_B/evaluation.json --out summary.json
    observed cases `src/evograd/benchmark/search_set.json` searches plus its
    `identical_config_of` cases; every observed case stays a row of
    `evaluation.json`, tagged `searched`/`reason`/`of`, and the rest count
-   nowhere (v5; a model the search set does not list counts every row). Level 3 reports each model's
+   nowhere (v5; a model the search set does not list counts every row). Level 2's
+   single-site list shows the benchmark rows, and any other submitted row marked
+   `benchmark_row: false`. Level 3 reports each model's
    combination with its T3-G speedup, its T3 speedup and peak-memory ratio. There is no single
    overall score. Gate verdicts sit beside every runtime, so a rejected
    candidate's numbers are visible but counted nowhere.
