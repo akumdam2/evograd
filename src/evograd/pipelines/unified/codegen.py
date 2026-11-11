@@ -232,9 +232,9 @@ def _semantic_expr(builder: _ProgramBuilder, node: dict) -> str:
         dim0, dim1 = int(ordered[1]["value"]), int(ordered[2]["value"])
         dims[dim0], dims[dim1] = dims[dim1], dims[dim0]
         return f"permute_copy({args[0]}, {tuple(dims)!r})"
-    if operation in {"squeeze", "unsqueeze"}:
+    if operation in {"squeeze", "unsqueeze", "unbind"}:
         return f"{args[0]}.{operation}({', '.join(args[1:])})"
-    if operation == "split":
+    if operation in {"split", "split_with_sizes"}:
         return f"{args[0]}.split({', '.join(args[1:])})"
     if operation == "select_scatter":
         from evograd.atenir.primitive_triton.scatter_gather import select_scatter

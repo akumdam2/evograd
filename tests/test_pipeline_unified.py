@@ -398,6 +398,43 @@ class TestFixedConfiguration(unittest.TestCase):
             self.assertEqual(selected.make_inputs, op.make_inputs)
 
 
+def _rendered(fn, *inputs):
+    """``fn``'s ATen graph as the unified seed renders it: each node's expression,
+    and the graph's outputs computed from them on CPU (layout and host nodes only)."""
+    from torch.fx.experimental.proxy_tensor import make_fx
+
+    from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder, _pyname
+    from evograd.pipelines.unified.capture import _serialize_graph
+    from evograd.pipelines.unified.codegen import _outputs, _semantic_expr
+
+    graph = _serialize_graph(make_fx(fn)(*inputs))
+    builder, values, expressions = _ProgramBuilder(), {}, {}
+    placeholders = [n['name'] for n in graph['nodes'] if n['op'] == 'placeholder']
+    values.update({_pyname(name): value for name, value in zip(placeholders, inputs)})
+    for node in graph['nodes']:
+        if node['op'] == 'call_function':
+            expressions[node['target']] = expression = _semantic_expr(builder, node)
+            try:
+                values[_pyname(node['name'])] = eval(expression, {'torch': torch}, values)
+            except (NameError, NotImplementedError):  # a Triton kernel's (CUDA-only) result
+                pass
+    return expressions, [values.get(_pyname(name)) for name in _outputs(graph)]
+
+
+class TestSeedLowerings(unittest.TestCase):
+    """Semantic nodes the new benchmark cases reach, rendered without a GPU."""
+
+    def test_unbind_and_split_with_sizes_render_as_views(self):
+        # qkv.unbind(0) in Qwen2-VL's vision attention and DLRM's interaction;
+        # in_proj splits in Qwen3.5's gated delta net.
+        x = torch.randn(3, 4, 5)
+        expressions, outputs = _rendered(lambda x: [*x.unbind(1), *torch.split(x, [1, 4], 2)], x)
+        self.assertEqual(expressions['aten.unbind.int'], 't_x_1.unbind(1)')
+        self.assertEqual(expressions['aten.split_with_sizes.default'], 't_x_1.split([1, 4], 2)')
+        for got, want in zip(outputs, [*x.unbind(1), *torch.split(x, [1, 4], 2)], strict=True):
+            self.assertTrue(torch.equal(got, want))
+
+
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""
     return (a @ b).square() * offset
