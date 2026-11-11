@@ -13,10 +13,15 @@ settings) runs per data order with recorders attached; the shared loop is
   ``fixed_cross_entropy``, and the experts' ``_apply_gate`` (the gate and up
   halves of every routed token, as the strided views the model passes).
   The router's ``F.linear`` and the experts' grouped GEMMs are not cases.
-* Level 2: q/k/v projection + q/k norms + rope (cotangents: SDPA's input
-  gradients), SDPA + ``o_proj``, the routed experts (``OlmoeExperts``: tokens,
-  routing indices and weights, both expert weight tensors), and the
-  post-attention residual add + norm.
+* Level 2: the attention block (``OlmoeAttention``'s own input, rotary
+  tables, weights, output and output gradient), the routed experts
+  (``OlmoeExperts``: tokens, routing indices and weights, both expert weight
+  tensors), and every residual add an RMSNorm follows: 16 post-attention, 15
+  cross-layer (a layer's closing add with the next layer's input norm) and the
+  final one with ``model.norm``, 32 in all. ``dsummed`` is the sum's external
+  gradient, the total gradient of the next residual sum it feeds, never
+  including its own norm's; the final sum feeds none and gets zeros, recorded
+  as such.
 
 Arguments are ``detach()``-ed views of what the model passed; output
 cotangents come from tensor hooks. Recorders change no arithmetic (checked
@@ -245,6 +250,8 @@ class LiveCapture:
 
 def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[dict[str, Any]]:
     """Every recorded L1 call and L2 boundary of one step, in its case's task ABI."""
+    import torch
+
     modules = dict(model.named_modules())
 
     def emit(*parts):
@@ -305,23 +312,18 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
                    {"dloss": r["dloss"]}, {"loss": r["loss"]},
                    {"target": "labels as ForCausalLMLoss passes them (already shifted once)"})
 
-    for layer, r in enumerate(capture.attn):
-        attn, sdpa = modules[r["path"]], capture.sdpa[layer]
-        yield emit("olmoe_qkv_norm_rope", 2,
-                   {"path": f"model.layers.{layer}.self_attn#qkv_norm_rope", "layer": layer,
-                    "role": "qkv_norm_rope", "kind": "boundary:OlmoeAttention[:rope]"},
+    for r in capture.attn:
+        attn, layer = modules[r["path"]], layer_index(r["path"])
+        yield emit("olmoe_attention_block", 2,
+                   {"path": f"model.layers.{layer}.self_attn#attention_block", "layer": layer,
+                    "role": "attention_block", "kind": "boundary:OlmoeAttention"},
                    {"x": r["x"], "q_weight": attn.q_proj.weight, "k_weight": attn.k_proj.weight,
                     "v_weight": attn.v_proj.weight, "q_norm_weight": attn.q_norm.weight,
-                    "k_norm_weight": attn.k_norm.weight, "cos": shared_row(r["cos"]),
-                    "sin": shared_row(r["sin"]), "eps": attn.q_norm.variance_epsilon},
-                   {"dq": sdpa["dq"], "dk": sdpa["dk"], "dv": sdpa["dv"]},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"]},
-                   {"cotangents": "SDPA input gradients (head-major views, as the model delivers them)"})
-        yield emit("olmoe_attention", 2,
-                   {"path": f"model.layers.{layer}.self_attn#attention", "layer": layer,
-                    "role": "attention", "kind": "boundary:sdpa+o_proj"},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"], "o_weight": attn.o_proj.weight},
-                   {"dy": r["dy"]}, {"y": r["y"]})
+                    "k_norm_weight": attn.k_norm.weight, "o_weight": attn.o_proj.weight,
+                    "cos": shared_row(r["cos"]), "sin": shared_row(r["sin"]),
+                    "eps": attn.q_norm.variance_epsilon},
+                   {"dout": r["dy"]}, {"out": r["y"]},
+                   {"cos_sin": "first row of the model's [B, T, D] table (rows verified identical)"})
 
     for r in capture.experts:
         module, layer = modules[r["path"]], layer_index(r["path"])
@@ -335,17 +337,38 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
                    {"routing": "the router's own top-k indices and weights of this step"})
 
     norms = {r["path"]: r for r in capture.rmsnorm}
+    by_path = {r["path"]: r for r in (*capture.layers, *capture.attn, *capture.experts)}
     n_layers = len(capture.layers)
     for layer in range(n_layers):
-        post = norms[f"model.layers.{layer}.post_attention_layernorm"]
+        prefix = f"model.layers.{layer}"
+        post = norms[f"{prefix}.post_attention_layernorm"]
         nxt = (norms[f"model.layers.{layer + 1}.input_layernorm"] if layer + 1 < n_layers
                else norms["model.norm"])
-        yield emit("olmoe_residual_rmsnorm", 2,
-                   {"path": f"model.layers.{layer}#residual_post_attention", "layer": layer,
-                    "role": "post_attention", "norm": post["path"],
-                    "kind": "boundary:residual add + OlmoeRMSNorm"},
-                   {"branch": capture.attn[layer]["y"], "residual": capture.layers[layer]["x"],
-                    "weight": modules[post["path"]].weight, "eps": post["eps"]},
-                   {"dnormed": post["dy"], "dsummed": nxt["dx"]},
-                   {"normed": post["y"], "summed": post["x"]},
-                   {"dsummed_origin": "total gradient of the next residual sum (the next norm's input)"})
+        # The MoE block's output: the experts' [T, H] output reshaped to [B, T, H], as
+        # OlmoeSparseMoeBlock returns it.
+        moe = by_path[f"{prefix}.mlp.experts"]["out"].reshape(post["x"].shape)
+        sites = [(f"{prefix}#residual_post_attention", "within_layer",
+                  by_path[f"{prefix}.self_attn"]["y"], by_path[prefix]["x"], post, nxt["dx"])]
+        if layer + 1 < n_layers:
+            sites.append((f"{prefix}#residual_mlp_to_next", "cross_layer", moe,
+                          post["x"], nxt,
+                          norms[f"model.layers.{layer + 1}.post_attention_layernorm"]["dx"]))
+        else:
+            sites.append((f"{prefix}#residual_mlp_to_final", "final_model_norm", moe,
+                          post["x"], nxt, None))
+        for call, role, branch, residual, norm, external in sites:
+            yield emit("olmoe_residual_rmsnorm", 2,
+                       {"path": call, "layer": layer, "role": role, "norm": norm["path"],
+                        "kind": "boundary:residual add + OlmoeRMSNorm"},
+                       {"branch": branch, "residual": residual,
+                        "weight": modules[norm["path"]].weight, "eps": norm["eps"]},
+                       {"dnormed": norm["dy"],
+                        "dsummed": external if external is not None else
+                        torch.zeros_like(norm["x"])},
+                       {"normed": norm["y"], "summed": norm["x"]},
+                       {"dsummed_origin": "total gradient of the next residual sum"}
+                       if external is not None else
+                       {"dsummed_origin": "absent in the model (the final sum has no other "
+                                          "consumer); zeros supplied for the declared "
+                                          "two-output ABI",
+                        "absent_cotangents": ["dsummed"]})

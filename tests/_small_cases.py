@@ -258,13 +258,13 @@ SMALL = {
         Workload({'B': 2, 'N': 9, 'C': 8, 'G': 40}, 'bfloat16',
                  provenance=_p('megafold', 'fixture')),
     ),
-    'olmoe_attention': (
-        Workload({'B': 1, 'T': 12, 'HQ': 4, 'HK': 4, 'D': 16, 'QO': 64, 'H': 64}, 'float32',
-                 provenance=_p('olmoe_1b_7b', 'attention', strides=(('v', (768, 16, 64, 1)),))),
-        Workload({'B': 2, 'T': 20, 'HQ': 8, 'HK': 2, 'D': 16, 'QO': 128, 'H': 64}, 'float32',
-                 provenance=_p('olmoe_1b_7b', 'attention', strides=(('v', (640, 16, 32, 1)),))),
-        Workload({'B': 2, 'T': 24, 'HQ': 4, 'HK': 4, 'D': 32, 'QO': 128, 'H': 128}, 'bfloat16',
-                 provenance=_p('olmoe_1b_7b', 'attention', strides=(('v', (3072, 32, 128, 1)),))),
+    'olmoe_attention_block': (
+        Workload({'B': 1, 'T': 12, 'H': 32, 'HQ': 4, 'HK': 4, 'D': 8, 'QO': 32, 'KVO': 32}, 'float32',
+                 provenance=_p('olmoe_1b_7b', 'attention_block')),
+        Workload({'B': 2, 'T': 20, 'H': 64, 'HQ': 4, 'HK': 4, 'D': 16, 'QO': 64, 'KVO': 64}, 'float32',
+                 provenance=_p('olmoe_1b_7b', 'attention_block')),
+        Workload({'B': 2, 'T': 24, 'H': 64, 'HQ': 8, 'HK': 8, 'D': 8, 'QO': 64, 'KVO': 64}, 'bfloat16',
+                 provenance=_p('olmoe_1b_7b', 'attention_block')),
     ),
     'olmoe_moe_experts': (
         Workload({'T': 16, 'H': 64, 'E': 4, 'G': 64, 'I': 32, 'K': 2}, 'float32',
@@ -273,14 +273,6 @@ SMALL = {
                  provenance=_p('olmoe_1b_7b', 'moe_experts')),
         Workload({'T': 48, 'H': 64, 'E': 8, 'G': 64, 'I': 32, 'K': 4}, 'bfloat16',
                  provenance=_p('olmoe_1b_7b', 'moe_experts')),
-    ),
-    'olmoe_qkv_norm_rope': (
-        Workload({'B': 1, 'T': 12, 'H': 32, 'HQ': 4, 'HK': 4, 'D': 8, 'QO': 32, 'KVO': 32}, 'float32',
-                 provenance=_p('olmoe_1b_7b', 'qkv_norm_rope')),
-        Workload({'B': 2, 'T': 20, 'H': 64, 'HQ': 4, 'HK': 2, 'D': 16, 'QO': 64, 'KVO': 32}, 'float32',
-                 provenance=_p('olmoe_1b_7b', 'qkv_norm_rope')),
-        Workload({'B': 2, 'T': 24, 'H': 64, 'HQ': 8, 'HK': 8, 'D': 8, 'QO': 64, 'KVO': 64}, 'bfloat16',
-                 provenance=_p('olmoe_1b_7b', 'qkv_norm_rope')),
     ),
     'olmoe_residual_rmsnorm': (
         Workload({'B': 1, 'T': 8, 'H': 64}, 'float32',

@@ -106,12 +106,11 @@ class TestDerivedNaming(unittest.TestCase):
                     "megafold_triangle_attention_starting",
                     "megafold_triangle_multiplication_incoming",
                     "megafold_triangle_multiplication_outgoing",
-                    # OLMoE-1B-7B's four sites: the attention prefix with
-                    # full-width q/k norms, the attention core, the routed
-                    # experts (the router stays native) and the residual fusion.
-                    "olmoe_attention",
+                    # OLMoE-1B-7B's three sites: the whole attention module
+                    # (full-width q/k norms), the routed experts (the router
+                    # stays native) and the residual fusion.
+                    "olmoe_attention_block",
                     "olmoe_moe_experts",
-                    "olmoe_qkv_norm_rope",
                     "olmoe_residual_rmsnorm",
                     # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
                     "qwen2_vl_2b_text_mlp",

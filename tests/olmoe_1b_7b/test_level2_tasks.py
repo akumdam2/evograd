@@ -1,33 +1,27 @@
-"""The four OLMoE Level-2 tasks, on CPU.
+"""The three OLMoE Level-2 tasks, on CPU.
 
-Three claims per task:
+Three claims:
 
 * the declaration is coherent: its production spelling traces under compile, and
   the experts site's kernels agree with its oracle on CPU-sized cases;
 * its canonical case is the configuration's (``hf_config`` provenance that
   re-derives) at B2 x T2048;
-* ``capture.py`` takes a real invocation out of a tiny layer -- config-derived,
-  and captured from a tiny whole-model step -- whose shapes are exactly the
-  declaration's, and the production spelling, run on the captured inputs,
-  reproduces what the layer computed **bitwise**. For the experts site that is
-  what makes the grouped-GEMM spelling *the* model's kernel rather than an
-  equivalent of it.
+* the attention block's production spelling is ``OlmoeAttention.forward``'s
+  arithmetic: on a tiny model's own attention module, input and rotary tables
+  it reproduces the module's output, and the gradients autograd takes through
+  it, **bitwise** in float32 and bfloat16. Every site's spelling against every
+  call of a live step, the residual site's three wirings included, is the
+  real-payload capture's test (``tests/verification/test_integration_olmoe.py``).
 """
 
 from __future__ import annotations
 
-import importlib
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import torch
 
 from evograd.benchmark import TASKS
-from evograd.benchmark.topdown.olmoe_1b_7b.architecture import config_record
-from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import capture_tools, manifest
-from evograd.opdecl import bind_shape
+from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import manifest
 from evograd.opdecl.models import OLMOE_1B_7B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
@@ -35,27 +29,15 @@ from tests.olmoe_1b_7b._tiny import BATCH, LAYER, SEQ, TINY_ARCH
 from tests._small_cases import SMALL
 
 
-
-_SOURCES: dict = {}
-
-
-def _source(dtype: str, experts: str = "grouped_mm"):
-    key = (dtype, experts)
-    if key not in _SOURCES:
-        _SOURCES[key] = capture_tools.config_source(LAYER, arch=TINY_ARCH, batch=BATCH, seq=SEQ,
-                                                    dtype=dtype, seed=0,
-                                                    experts_implementation=experts)
-    return _SOURCES[key]
-
-
 class TestDeclarations(unittest.TestCase):
-    def test_four_sites_once_per_layer(self):
-        self.assertEqual(manifest.SITES, ("qkv_norm_rope", "attention", "residual_rmsnorm",
-                                          "moe_experts"))
+    def test_three_sites_and_their_calls_per_step(self):
+        self.assertEqual(manifest.SITES, ("attention_block", "residual_rmsnorm", "moe_experts"))
+        self.assertEqual(manifest.SITE_TASKS["attention_block"], "olmoe_attention_block")
         self.assertEqual(manifest.SITE_TASKS["moe_experts"], "olmoe_moe_experts")
         self.assertEqual({s: manifest.expected_model_frequency(s) for s in manifest.SITES},
-                         {s: 16 for s in manifest.SITES})
+                         {"attention_block": 16, "residual_rmsnorm": 32, "moe_experts": 16})
         self.assertIn("router", manifest.DEFERRED)
+        self.assertEqual(sorted(manifest.DEFERRED), ["lm_head_ce", "router"])
 
     def test_canonical_cases_are_config_derived_at_b2(self):
         for site, task in manifest.SITE_TASKS.items():
@@ -81,14 +63,21 @@ class TestDeclarations(unittest.TestCase):
         self.assertEqual(op.benchmark[0].dims,
                          {"T": 4096, "H": 2048, "E": 64, "G": 2048, "I": 1024, "K": 8})
 
-    def test_the_qkv_contract_is_full_width(self):
-        op = TASKS["olmoe_qkv_norm_rope"]
+    def test_the_attention_block_contract_is_the_whole_module(self):
+        op = TASKS["olmoe_attention_block"]
         shapes = {a.name: a.shape for a in op.args}
         self.assertEqual(shapes["q_norm_weight"], "[QO]")
         self.assertEqual(shapes["k_norm_weight"], "[KVO]")
-        self.assertEqual(op.output_names, ("q", "k", "v"))
+        self.assertEqual(shapes["o_weight"], "[H, QO]")
+        self.assertEqual(op.output_names, ("out",))
         self.assertEqual(op.grad_names(), ("dx", "dq_weight", "dk_weight", "dv_weight",
-                                           "dq_norm_weight", "dk_norm_weight"))
+                                           "dq_norm_weight", "dk_norm_weight", "do_weight"))
+        self.assertEqual(op.parameter_args, ("q_weight", "k_weight", "v_weight",
+                                             "q_norm_weight", "k_norm_weight", "o_weight"))
+        self.assertEqual(op.benchmark[0].dims, {"B": 2, "T": 2048, "H": 2048, "HQ": 16, "HK": 16,
+                                                "D": 128, "QO": 2048, "KVO": 2048})
+        self.assertNotIn("olmoe_qkv_norm_rope", TASKS)
+        self.assertNotIn("olmoe_attention", TASKS)
 
     def test_the_experts_production_kernels_agree(self):
         from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2.moe_experts.reference import (
@@ -108,94 +97,76 @@ class TestDeclarations(unittest.TestCase):
                 self.assertTrue(torch.allclose(grouped.float(), oracle.float(), atol=tol, rtol=tol))
 
 
-class TestCapturedInvocations(unittest.TestCase):
-    def _check_shapes(self, call, op, dims):
-        for arg in op.args:
-            if getattr(arg, "shape", None) is None:
-                continue
-            self.assertEqual(tuple(call.inputs[arg.name].shape), bind_shape(arg.shape, dims),
-                             arg.name)
-        for out in op.outputs:
-            self.assertEqual(tuple(call.upstream[out.grad_name].shape),
-                             bind_shape(out.shape, dims), out.grad_name)
-            self.assertEqual(tuple(call.outputs[out.name].shape), bind_shape(out.shape, dims),
-                             out.name)
+def _tiny_model(dtype: str):
+    """A tiny OLMoE built as the workload builds it, q/k norm weights moved off one."""
+    from evograd.benchmark.topdown.olmoe_1b_7b.levels.level3.model import build_model
+    from evograd.benchmark.topdown.olmoe_1b_7b.levels.level3.spec import CANONICAL
 
-    def test_every_site_captures_with_its_declared_shapes(self):
-        record = config_record(TINY_ARCH, name="tiny")
-        captures = manifest.captures()
-        for site, task in manifest.SITE_TASKS.items():
-            op = TASKS[task]
-            dims = manifest.dims_for(site, record, batch=BATCH, seq=SEQ)
-            with self.subTest(site=site):
-                call = captures[site](_source("bfloat16"))
-                self.assertEqual(call.task, task)
-                self.assertEqual(call.source, "config")
-                self._check_shapes(call, op, dims)
+    model = build_model(CANONICAL.replace(arch=TINY_ARCH, device="cpu", seq_len=SEQ,
+                                          batch_size=BATCH, dtype=dtype))
+    generator = torch.Generator().manual_seed(3)
+    with torch.no_grad():
+        for name, p in sorted(model.named_parameters()):
+            if name.endswith("norm.weight"):
+                p.copy_(1 + 0.1 * torch.randn(p.shape, generator=generator))
+    return model
 
-    def test_production_reproduces_the_layer_bitwise(self):
-        captures = manifest.captures()
+
+class TestAttentionBlockIsTheModule(unittest.TestCase):
+    ARGS = ("q_weight", "k_weight", "v_weight", "q_norm_weight", "k_norm_weight", "o_weight")
+
+    def _call(self, dtype):
+        model = _tiny_model(dtype)
+        attn = model.model.layers[LAYER].self_attn
+        generator = torch.Generator().manual_seed(5)
+        x = torch.randn((BATCH, SEQ, TINY_ARCH["hidden_size"]), generator=generator).to(
+            getattr(torch, dtype))
+        cos, sin = model.model.rotary_emb(x, torch.arange(SEQ)[None])
+        weights = {"q_weight": attn.q_proj.weight, "k_weight": attn.k_proj.weight,
+                   "v_weight": attn.v_proj.weight, "q_norm_weight": attn.q_norm.weight,
+                   "k_norm_weight": attn.k_norm.weight, "o_weight": attn.o_proj.weight}
+        return attn, x, cos, sin, weights
+
+    def _grads(self, out, x, weights, dout):
+        return torch.autograd.grad(out, [x, *weights.values()], dout)
+
+    def test_production_reproduces_the_module_bitwise(self):
+        production = resolve_runtime_forward(TASKS["olmoe_attention_block"])
         for dtype in ("float32", "bfloat16"):
-            for site, task in manifest.SITE_TASKS.items():
-                op = TASKS[task]
-                production = resolve_runtime_forward(op)
-                with self.subTest(site=site, dtype=dtype):
-                    call = captures[site](_source(dtype))
-                    args = [call.inputs.get(a.name, getattr(a, "default", None))
-                            for a in op.args]
-                    out = production(*args)
-                    out = out if isinstance(out, tuple) else (out,)
-                    for name, value in zip(op.output_names, out):
-                        self.assertTrue(torch.equal(value, call.outputs[name]), name)
-                        self.assertEqual(value.stride(), call.outputs[name].stride(), name)
+            with self.subTest(dtype=dtype):
+                attn, x, cos, sin, weights = self._call(dtype)
+                self.assertEqual(tuple(cos.shape), (1, SEQ, TINY_ARCH["hidden_size"] // 4))
+                x = x.requires_grad_(True)
+                native, _ = attn(hidden_states=x, position_embeddings=(cos, sin),
+                                 attention_mask=None)
+                spelled = production(x, *weights.values(), cos, sin,
+                                     float(attn.q_norm.variance_epsilon))
+                self.assertTrue(torch.equal(spelled, native))
+                self.assertEqual(spelled.stride(), native.stride())
+                dout = torch.randn(native.shape, generator=torch.Generator().manual_seed(6)).to(
+                    native.dtype)
+                for name, a, b in zip(("dx", *self.ARGS), self._grads(native, x, weights, dout),
+                                      self._grads(spelled, x, weights, dout)):
+                    self.assertTrue(torch.equal(a, b), name)
 
-    def test_the_experts_capture_carries_the_routers_choice(self):
-        call = manifest.captures()["moe_experts"](_source("bfloat16"))
-        index, weights = call.inputs["top_k_index"], call.inputs["top_k_weights"]
-        self.assertEqual(index.dtype, torch.int64)
-        self.assertEqual(weights.dtype, torch.bfloat16)
-        self.assertEqual(tuple(index.shape), (BATCH * SEQ, 2))
-        self.assertTrue(bool((index < 4).all()))
-        self.assertTrue(bool((index[:, 0] != index[:, 1]).all()), "distinct experts per token")
-        self.assertTrue(bool((weights.float().sum(-1) < 1).all()), "not renormalized")
-        self.assertEqual(tuple(call.inputs["gate_up_proj"].shape), (4, 64, 64))
-        self.assertTrue(call.inputs["x"].is_contiguous())
+    def test_a_grouped_call_is_refused(self):
+        production = resolve_runtime_forward(TASKS["olmoe_attention_block"])
+        _attn, x, cos, sin, weights = self._call("float32")
+        half = weights["k_weight"].shape[0] // 2
+        grouped = dict(weights, k_weight=weights["k_weight"][:half],
+                       v_weight=weights["v_weight"][:half],
+                       k_norm_weight=weights["k_norm_weight"][:half])
+        with self.assertRaisesRegex(ValueError, "multi-head"):
+            production(x, *grouped.values(), cos, sin)
 
-    def test_v_reaches_sdpa_as_a_head_major_view(self):
-        call = manifest.captures()["attention"](_source("bfloat16"))
-        v = call.inputs["v"]
-        self.assertFalse(v.is_contiguous())
-        self.assertEqual(v.stride(), (SEQ * 2 * 16, 16, 2 * 16, 1))
+    def test_the_oracle_agrees_in_float32(self):
+        op = TASKS["olmoe_attention_block"]
+        attn, x, cos, sin, weights = self._call("float32")
+        from evograd.opdecl.importing import resolve_callable
 
-    def test_sites_capture_from_a_captured_layer_artifact(self):
-        """The captured source (a Level-3 artifact from a tiny whole-model step)
-        feeds the same captures, and production still reproduces it bitwise."""
-        from evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest import run_harvest
-        from evograd.benchmark.topdown.olmoe_1b_7b.layer.capture import (
-            run_capture, write_captures)
-        from evograd.benchmark.topdown.olmoe_1b_7b.levels.level3.spec import CANONICAL
-
-        spec = CANONICAL.replace(arch=TINY_ARCH, device="cpu", batch_size=1, seq_len=SEQ)
-        with tempfile.TemporaryDirectory() as tmp:
-            harvest = Path(tmp) / "harvest.json"
-            harvest.write_text(json.dumps(run_harvest(spec), default=str))
-            write_captures(run_capture(spec, manifest_path=harvest, layers=[LAYER]), Path(tmp))
-            record = config_record(TINY_ARCH, name="tiny")
-            captures = manifest.captures()
-            source = capture_tools.captured_source(Path(tmp) / f"layer{LAYER}.pt",
-                                                   canonical=False)
-            self.assertEqual((source.kind, source.source), ("decoder_layer", "captured"))
-            for site in manifest.SITES:
-                op = TASKS[manifest.SITE_TASKS[site]]
-                with self.subTest(site=site):
-                    call = captures[site](source)
-                    self.assertEqual(call.source, "captured")
-                    self._check_shapes(call, op, manifest.dims_for(site, record, batch=1, seq=SEQ))
-                    out = resolve_runtime_forward(op)(
-                        *[call.inputs.get(a.name, getattr(a, "default", None)) for a in op.args])
-                    out = out if isinstance(out, tuple) else (out,)
-                    for name, value in zip(op.output_names, out):
-                        self.assertTrue(torch.equal(value, call.outputs[name]), name)
+        oracle = resolve_callable(op.forward)(x, *weights.values(), cos, sin)
+        native, _ = attn(hidden_states=x, position_embeddings=(cos, sin), attention_mask=None)
+        self.assertTrue(torch.allclose(oracle, native, atol=1e-5, rtol=1e-4))
 
 
 class TestProductionCompiles(unittest.TestCase):

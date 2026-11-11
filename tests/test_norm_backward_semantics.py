@@ -308,33 +308,73 @@ class NormBackwardStatements(unittest.TestCase):
             "dq_weight": outer(dq_flat), "dk_weight": outer(dk_flat), "dv_weight": outer(dv_flat),
             "do_weight": torch.einsum("bth,bto->ho", dout, merged)})
 
-    def test_olmoe_qkv_norm_rope(self):
-        B, T, H, HQ, HK, D = 2, 5, 12, 4, 2, 8
+    def test_olmoe_attention_block(self):
+        B, T, H, HQ, D = 2, 5, 12, 2, 8
+        QO = HQ * D
         x = _randn(B, T, H)
-        wq, wk, wv = _randn(HQ * D, H), _randn(HK * D, H), _randn(HK * D, H)
-        nq, nk = _randn(HQ * D), _randn(HK * D)
+        # Projections at unit output scale: the oracle's float32 attention then
+        # rounds well inside the tolerances.
+        wq, wk, wv = (_randn(QO, H) * H ** -0.5 for _ in range(3))
+        wo = _randn(H, QO) * QO ** -0.5
+        nq, nk = _randn(QO), _randn(QO)
         cos, sin = _rope_tables(T, D)
-        eps = get_task("olmoe_qkv_norm_rope").args[-1].default
-        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv,
-                  "q_norm_weight": nq, "k_norm_weight": nk, "cos": cos, "sin": sin}
-        up = _upstream("olmoe_qkv_norm_rope", inputs)
+        task = "olmoe_attention_block"
+        eps = get_task(task).args[-1].default
+        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv, "q_norm_weight": nq,
+                  "k_norm_weight": nk, "o_weight": wo, "cos": cos, "sin": sin}
+        up = _upstream(task, inputs)
+        dout, scale = up["dout"], D ** -0.5
 
-        def full_width_norm(d, weight, w, heads):
-            h = x @ weight.T
-            r = torch.rsqrt(h.pow(2).mean(-1, keepdim=True) + eps)
-            dnorm = _unrotate(d, cos, sin).transpose(1, 2).reshape(B, T, heads * D)
+        def heads(t):  # [B, T, QO] -> [B, HQ, T, D]
+            return t.view(B, T, HQ, D).transpose(1, 2)
+
+        def flat(t):  # [B, HQ, T, D] -> [B, T, QO]
+            return t.transpose(1, 2).reshape(B, T, QO)
+
+        def rotate(t):
+            return t * cos.unsqueeze(1) + _rotate_half(t) * sin.unsqueeze(1)
+
+        hq, hk = x @ wq.T, x @ wk.T
+        rq = torch.rsqrt(hq.pow(2).mean(-1, keepdim=True) + eps)
+        rk = torch.rsqrt(hk.pow(2).mean(-1, keepdim=True) + eps)
+        q, k, v = rotate(heads(hq * rq * nq)), rotate(heads(hk * rk * nk)), heads(x @ wv.T)
+        scores = (q @ k.transpose(-2, -1) * scale).masked_fill(
+            ~torch.ones(T, T, dtype=torch.bool).tril(), float("-inf"))
+        P = torch.softmax(scores, -1)
+        a = flat(P @ v)
+
+        # The statement, line for line.
+        do_weight = torch.einsum("bth,btq->hq", dout, a)
+        da = heads(dout @ wo)
+        dv = P.transpose(-2, -1) @ da
+        dP = da @ v.transpose(-2, -1)
+        dS = P * (dP - (dP * P).sum(-1, keepdim=True))
+        dq, dk = dS @ k * scale, dS.transpose(-2, -1) @ q * scale
+
+        def full_width_norm(d, h, r, w):
+            dnorm = flat(_unrotate(d, cos, sin))
             xhat, g = h * r, dnorm * w
             return (r * (g - xhat * (g * xhat).mean(-1, keepdim=True)),
                     (dnorm * h * r).sum((0, 1)))
 
-        dqp, dnq = full_width_norm(up["dq"], wq, nq, HQ)
-        dkp, dnk = full_width_norm(up["dk"], wk, nk, HK)
-        dvp = up["dv"].transpose(1, 2).reshape(B, T, HK * D)
+        dqp, dnq = full_width_norm(dq, hq, rq, nq)
+        dkp, dnk = full_width_norm(dk, hk, rk, nk)
+        dvp = flat(dv)
         outer = lambda d: torch.einsum("bto,bth->oh", d, x)  # noqa: E731
-        self.assertGrads("olmoe_qkv_norm_rope", inputs, up, {
-            "dx": dqp @ wq + dkp @ wk + dvp @ wv, "dq_weight": outer(dqp),
-            "dk_weight": outer(dkp), "dv_weight": outer(dvp),
-            "dq_norm_weight": dnq, "dk_norm_weight": dnk})
+        formula = {"dx": dqp @ wq + dkp @ wk + dvp @ wv, "dq_weight": outer(dqp),
+                   "dk_weight": outer(dkp), "dv_weight": outer(dvp),
+                   "dq_norm_weight": dnq, "dk_norm_weight": dnk, "do_weight": do_weight}
+        expected = _autograd(task, inputs, up)
+        self.assertEqual(sorted(formula), sorted(expected))
+        for name, value in formula.items():
+            with self.subTest(task=task, grad=name):
+                # The oracle's float32 runs two GEMM levels and a softmax deeper than
+                # a norm alone, so its rounding reaches ~1e-6 absolute; a formula error
+                # is still O(1).
+                torch.testing.assert_close(value, expected[name], rtol=1e-4, atol=1e-5)
+        text = get_task(task).backward_semantics
+        self.assertIn("dS = P * (dP - sum(dP * P, -1))", text)
+        self.assertIn("dh = r * (g - xhat * mean(g * xhat, -1))", text)
 
     def test_qwen3_5_qkv_norm_partial_rope(self):
         B, T, H, HQ, HK, D, R = 2, 5, 12, 4, 2, 8, 4

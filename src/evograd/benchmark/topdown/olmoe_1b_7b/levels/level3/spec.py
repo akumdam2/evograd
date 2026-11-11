@@ -138,7 +138,7 @@ class WorkloadSpec(_WorkloadSpec):
             raise WorkloadSpecError(f"num_experts_per_tok={top_k} exceeds num_experts={experts}")
         if arch.get("clip_qkv") is not None:
             raise WorkloadSpecError(
-                "clip_qkv must be None: the qkv site is declared without the clamp, and "
+                "clip_qkv must be None: the attention block is declared without the clamp, and "
                 "OLMoE-1B-7B publishes none"
             )
         return self

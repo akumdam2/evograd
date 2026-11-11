@@ -20,7 +20,8 @@ What is OLMoE's is here:
 
 This is a **whole-model** harvest: the snapshot's ``frequency`` fields and each
 task's ``observed`` entry count what one canonical training step actually
-invoked (16 of every site), read from the events, never derived.
+invoked (16 attention blocks and expert calls, 32 residual norms), read from
+the events, never derived.
 
 This module imports json, hashlib and pathlib, and nothing that needs torch.
 """
@@ -38,7 +39,7 @@ from ...common.snapshot import load as _load
 from ...common.snapshot import task as _task
 from ...common.snapshot_extract import diff
 from ...common import snapshot_extract as _extract
-from ..architecture import BLOCK_KIND, REPRESENTATIVE_LAYERS
+from ..architecture import REPRESENTATIVE_LAYERS
 
 #: Bumped from /1 when the snapshot began to record ``run``: the verification
 #: run its harvest observed (the integration's pinned weights and data, the first
@@ -112,23 +113,20 @@ LEVEL1_SOURCES: dict[str, dict[str, Any]] = {
 _ATTN = {"task": "attention", "roles": ["self_attn"]}
 _MOE = {"task": "moe", "roles": ["mlp"]}
 
-#: Each Level-2 task, and the harvested boundaries it is read from.
+#: Each Level-2 task, and the harvested boundaries it is read from. The
+#: attention block is the ``self_attn`` module (``enclosing``); the module is
+#: called with keyword arguments only, so its record has no positional input
+#: shapes, and the entry is keyed on the SDPA call inside it.
 TASK_SOURCES: dict[str, dict[str, Any]] = {
-    "olmoe_qkv_norm_rope": {
-        "task": "rope_apply", "roles": ["apply_rotary_pos_emb"],
+    "olmoe_attention_block": {
+        "task": "sdpa", "roles": ["scaled_dot_product_attention"],
         "supporting_tasks": {
             "q_projection": {"task": "linear", "roles": ["q_proj"]},
             "kv_projection": {"task": "linear", "roles": ["k_proj", "v_proj"]},
+            "output_projection": {"task": "linear", "roles": ["o_proj"]},
             "q_norm": {"task": "rms_norm", "roles": ["q_norm"]},
             "k_norm": {"task": "rms_norm", "roles": ["k_norm"]},
-            "consumer": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
-            "enclosing": _ATTN,
-        },
-    },
-    "olmoe_attention": {
-        "task": "sdpa", "roles": ["scaled_dot_product_attention"],
-        "supporting_tasks": {
-            "output_projection": {"task": "linear", "roles": ["o_proj"]},
+            "rope": {"task": "rope_apply", "roles": ["apply_rotary_pos_emb"]},
             "enclosing": _ATTN,
         },
     },
@@ -140,36 +138,48 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
             "enclosing": _MOE,
         },
     },
+    # The three norms a residual add feeds are one configuration: one case.
     "olmoe_residual_rmsnorm": {
-        "task": "rms_norm", "roles": ["post_attention_layernorm"],
+        "task": "rms_norm", "roles": ["input_layernorm", "norm", "post_attention_layernorm"],
         "supporting_tasks": {
             "consumer": _MOE,
         },
     },
 }
 
-#: Which observed events count one invocation of each site: ``(task, role)``.
-SITE_EVENTS: dict[str, tuple[str, str]] = {
-    "olmoe_qkv_norm_rope": ("rope_apply", "apply_rotary_pos_emb"),
-    "olmoe_attention": ("sdpa", "scaled_dot_product_attention"),
-    "olmoe_moe_experts": ("experts", "experts"),
-    "olmoe_residual_rmsnorm": ("rms_norm", "post_attention_layernorm"),
+#: Which observed events count one invocation of each site: ``(task, role)``
+#: anchors. The residual site is every RMSNorm a residual add feeds: each
+#: layer's post-attention norm, the next layer's input norm after the layer's
+#: closing add, and ``model.norm`` after the last one.
+SITE_EVENTS: dict[str, tuple[tuple[str, str], ...]] = {
+    "olmoe_attention_block": (("attention", "self_attn"),),
+    "olmoe_moe_experts": (("experts", "experts"),),
+    "olmoe_residual_rmsnorm": (("rms_norm", "post_attention_layernorm"),
+                               ("rms_norm", "input_layernorm"), ("rms_norm", "norm")),
 }
+
+#: Anchored events that are not an invocation, as ``(task, role, layer)``: layer
+#: 0's input norm follows the embedding, not a residual add.
+NOT_INVOCATIONS: frozenset[tuple[str, str, int]] = frozenset({("rms_norm", "input_layernorm", 0)})
 
 
 def observed_counts(manifest: dict[str, Any]):
     """``(task_name, record) -> {...}``: one site's whole-model invocations, from the events."""
 
     def count(name: str, record: dict[str, Any]) -> dict[str, Any]:
-        task, role = SITE_EVENTS[name]
-        layers = [e["layer_index"] for e in manifest["events"]
-                  if e["task"] == task and e["role"] == role]
+        anchors = SITE_EVENTS[name]
+        events = [e for e in manifest["events"] if (e["task"], e["role"]) in anchors
+                  and (e["task"], e["role"], e["layer_index"]) not in NOT_INVOCATIONS]
         return {
             "kind": "observed",
-            "whole_model_invocations": len(layers),
-            "by_layer_type": {BLOCK_KIND: len(layers)},
-            "layer_indices": sorted(i for i in layers if i is not None),
-            "anchor": {"task": task, "role": role},
+            "whole_model_invocations": len(events),
+            "by_anchor": {f"{task}:{role}": sum((e["task"], e["role"]) == (task, role)
+                                                for e in events) for task, role in anchors},
+            "layer_indices": sorted({e["layer_index"] for e in events
+                                     if e["layer_index"] is not None}),
+            "anchors": [{"task": task, "role": role} for task, role in anchors],
+            "not_invocations": [list(key) for key in sorted(NOT_INVOCATIONS)
+                                if (key[0], key[1]) in anchors],
             "note": "counted from the harvest's events: one canonical training step's forward",
         }
 
@@ -211,19 +221,13 @@ def site_dims(snapshot: dict[str, Any]) -> dict[str, dict[str, int]]:
     tasks = snapshot["tasks"]
     out: dict[str, dict[str, int]] = {}
 
-    entry = tasks["olmoe_qkv_norm_rope"]
-    q, k = entry["output_shapes"][0]["shape"], entry["output_shapes"][1]["shape"]
+    entry = tasks["olmoe_attention_block"]
+    q, k = _shape(entry, 0), _shape(entry, 1)
     sup = entry["supporting"]
     qo, hidden = sup["q_projection"]["params"]["weight"]["shape"]
     kvo = sup["kv_projection"]["params"]["weight"]["shape"][0]
-    out["qkv_norm_rope"] = {"B": q[0], "T": q[2], "H": hidden, "HQ": q[1], "HK": k[1],
-                            "D": q[3], "QO": qo, "KVO": kvo}
-
-    entry = tasks["olmoe_attention"]
-    q, k = _shape(entry, 0), _shape(entry, 1)
-    hidden, qo = entry["supporting"]["output_projection"]["params"]["weight"]["shape"]
-    out["attention"] = {"B": q[0], "T": q[2], "HQ": q[1], "HK": k[1], "D": q[3],
-                        "QO": qo, "H": hidden}
+    out["attention_block"] = {"B": q[0], "T": q[2], "H": hidden, "HQ": q[1], "HK": k[1],
+                              "D": q[3], "QO": qo, "KVO": kvo}
 
     entry = tasks["olmoe_moe_experts"]
     tokens, hidden = _shape(entry, 0)
@@ -293,10 +297,10 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["LEVEL1_SOURCES", "MODEL_FIELDS", "REPRESENTATIVE_LAYERS", "READABLE_SCHEMAS",
-           "SCHEMA_VERSION", "SITE_EVENTS", "SNAPSHOT_PATH", "SnapshotError", "TASK_SOURCES",
-           "check_declared_dims", "diff", "extract", "load", "main", "observed_counts",
-           "site_dims", "task"]
+__all__ = ["LEVEL1_SOURCES", "MODEL_FIELDS", "NOT_INVOCATIONS", "REPRESENTATIVE_LAYERS",
+           "READABLE_SCHEMAS", "SCHEMA_VERSION", "SITE_EVENTS", "SNAPSHOT_PATH", "SnapshotError",
+           "TASK_SOURCES", "check_declared_dims", "diff", "extract", "load", "main",
+           "observed_counts", "site_dims", "task"]
 
 
 if __name__ == "__main__":

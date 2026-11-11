@@ -39,7 +39,7 @@ MODEL_NAME = "OLMoE-1B-7B"
 OLMOE_1B_7B: Mapping[str, Any] = {
     "attention_bias": False,
     "attention_dropout": 0.0,
-    # ``None``: no clamp on q/k/v after projection. The qkv site is declared
+    # ``None``: no clamp on q/k/v after projection. The attention block is declared
     # without one, and the spec refuses an architecture that sets it.
     "clip_qkv": None,
     "eos_token_id": 50279,

@@ -1,10 +1,10 @@
-"""The four fused sites an OLMoE decoder layer decomposes into.
+"""The three fused sites an OLMoE decoder layer decomposes into.
 
-Each site package owns its contract (``task``), its reference (``reference``:
-float32 oracle and the production spelling, bitwise the layer's own) and its
-capture (``capture``: one real invocation, from a captured layer when one
-exists, else from a config-derived layer); :mod:`.manifest` is the one place the
-site names, task keys and frequencies are written down. Judging an
+Each site package owns its contract (``task``) and its reference
+(``reference``: float32 oracle and the production spelling, bitwise the
+model's own); :mod:`.manifest` is the one place the site names, task keys and
+frequencies are written down. Real invocations are the verification capture's
+(:mod:`evograd.verification.integrations.olmoe_1b_7b.capture`); judging an
 implementation of one of these contracts is evaluation's.
 """
 

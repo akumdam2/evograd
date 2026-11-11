@@ -137,12 +137,12 @@ class TestRegistryComposition(unittest.TestCase):
         counts: dict[int, int] = {}
         for op in TASKS.values():
             counts[op.level] = counts.get(op.level, 0) + 1
-        self.assertEqual(counts, {1: 25, 2: 33})
+        self.assertEqual(counts, {1: 25, 2: 32})
         self.assertEqual(len(PRIMITIVES), 25)
-        self.assertEqual(len(TASKS), 58)
+        self.assertEqual(len(TASKS), 57)
         for name in ("qwen3_swiglu_mlp", "qwen3_attention_block", "qwen3_lm_head_ce",
                      "llama3_attention_block", "llama3_swiglu_mlp",
-                     "llama3_residual_rmsnorm", "olmoe_qkv_norm_rope", "olmoe_attention",
+                     "llama3_residual_rmsnorm", "olmoe_attention_block",
                      "olmoe_moe_experts", "olmoe_residual_rmsnorm"):
             self.assertIn(name, TASKS)
             self.assertEqual(TASKS[name].level, 2)

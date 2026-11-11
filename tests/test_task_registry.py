@@ -46,11 +46,10 @@ QWEN3_5_LEVEL2 = (
     "qwen3_5_residual_rmsnorm",
     "qwen3_5_swiglu_mlp",
 )
-#: OLMoE-1B-7B's four sites (the router and lm_head_ce are not sites).
+#: OLMoE-1B-7B's three sites (the router and lm_head_ce are not sites).
 OLMOE_LEVEL2 = (
-    "olmoe_attention",
+    "olmoe_attention_block",
     "olmoe_moe_experts",
-    "olmoe_qkv_norm_rope",
     "olmoe_residual_rmsnorm",
 )
 VISION_LEVEL2 = (
@@ -127,7 +126,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
         self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
-        self.assertEqual(len(TASKS), 58)
+        self.assertEqual(len(TASKS), 57)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:

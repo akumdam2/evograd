@@ -1,9 +1,11 @@
 """The OLMoE Level-3 Tier-3 workload, on a 4-layer tiny model (CPU).
 
-Covers: the per-site patch counts, structural identity against the unpatched
-model (loss and every gradient, bitwise), the runner on the workload, the bound
-pair at the experts site, and the experts kernel in the identity and the
-read-back.
+Covers: the per-site patch counts (the residual site's ``2 * layers``, through
+every decoder layer and ``model.norm``), structural identity against the
+unpatched model (loss and every gradient, bitwise), the model reference at every
+site through the adapters' kernel ABI (bitwise too: that is what model-scope
+gates install as the native), the runner on the workload, the bound pair at the
+experts site, and the experts kernel in the identity and the read-back.
 """
 
 from __future__ import annotations
@@ -33,33 +35,73 @@ def _step(workload, kernels):
     return loss.detach(), grads, workload.last_build
 
 
+def _reference_kernels(registry):
+    """Every site holding its model reference in the declared ABI, as model-scope
+    Gate 2 and Gate 3 install the native."""
+    from evograd.opdecl.oracle import resolve_runtime_forward
+    from evograd.verification.integrations.olmoe_1b_7b.reference import reference_op
+
+    kernels = KernelSet(registry=registry)
+    for site in registry.names:
+        kernels = patch(kernels, site,
+                        resolve_runtime_forward(reference_op(registry.require(site).op)))
+    return kernels
+
+
 class TestCounts(unittest.TestCase):
     def test_the_published_counts(self):
-        self.assertEqual(sites.expected_counts(16), {s: 16 for s in sites.olmoe_sites().names})
+        self.assertEqual(sites.expected_counts(16),
+                         {"attention_block": 16, "residual_rmsnorm": 32, "moe_experts": 16})
+        self.assertEqual(sites.olmoe_sites().names,
+                         ("attention_block", "residual_rmsnorm", "moe_experts"))
 
     def test_every_site_patched_on_every_layer(self):
         workload = tiny_workload()
         _, _, build = _step(workload, sites.structural_identity_kernels(workload.site_registry))
-        self.assertEqual(build.observed(), {s: 4 for s in sites.olmoe_sites().names})
+        self.assertEqual(build.observed(),
+                         {"attention_block": 4, "residual_rmsnorm": 8, "moe_experts": 4})
         self.assertEqual(build.count_problems(), [])
-        self.assertEqual(len(build.provenance.paths["moe_experts"]), 4)
-        self.assertTrue(all(".mlp.experts" in p for p in build.provenance.paths["moe_experts"]))
-        self.assertTrue(all(".self_attn" in p for p in build.provenance.paths["qkv_norm_rope"]))
+        paths = build.provenance.paths
+        self.assertEqual(len(paths["moe_experts"]), 4)
+        self.assertTrue(all(".mlp.experts" in p for p in paths["moe_experts"]))
+        self.assertEqual(paths["attention_block"],
+                         tuple(f"model.layers.{i}.self_attn" for i in range(4)))
+        self.assertEqual(paths["residual_rmsnorm"],
+                         (*(f"model.layers.{i}" for i in range(4)), "model.norm"))
+        self.assertIsNotNone(build.carrier)
+        self.assertIsNone(build.carrier.pending, "model.norm took the last layer's branch")
 
-    def test_one_site_patched_counts_only_its_adapter_group(self):
+    def test_one_site_patched_counts_only_its_adapter(self):
+        from evograd.evaluation.tier3.patch import restrict
+
+        workload = tiny_workload()
+        for site, calls in (("moe_experts", 4), ("attention_block", 4), ("residual_rmsnorm", 8)):
+            with self.subTest(site=site):
+                control = restrict(sites.structural_identity_kernels(workload.site_registry),
+                                   (site,))
+                _, _, build = _step(workload, control)
+                self.assertEqual(build.observed(), {site: calls})
+                self.assertEqual(build.count_problems(), [])
+                self.assertEqual(build.carrier is None, site != "residual_rmsnorm")
+
+    def test_the_residual_calls_are_the_three_wirings(self):
+        """Four layers: 4 post-attention fusions, 3 into the next layer's input norm,
+        1 into model.norm -- each handed to a listener under (layer, category)."""
+        from collections import Counter
+
         from evograd.evaluation.tier3.patch import restrict
 
         workload = tiny_workload()
         control = restrict(sites.structural_identity_kernels(workload.site_registry),
-                           ("moe_experts",))
-        _, _, build = _step(workload, control)
-        self.assertEqual(build.observed(), {"moe_experts": 4})
-        self.assertEqual(build.count_problems(), [])
-        control = restrict(sites.structural_identity_kernels(workload.site_registry),
-                           ("attention",))
-        _, _, build = _step(workload, control)
-        self.assertEqual(build.observed(), {"attention": 4, "qkv_norm_rope": 4})
-        self.assertEqual(sites.supporting_sites(("attention",)), ("qkv_norm_rope",))
+                           ("residual_rmsnorm",))
+        model, _ = workload.build_patched(control)
+        seen = []
+        sites.set_tap(model, lambda site, inputs, outputs, upstream, emitted, layer:
+                      seen.append(layer))
+        workload.loss(model, workload.batch_for(seed=0)).backward()
+        self.assertEqual(Counter(category for _layer, category in seen),
+                         {"post_attention": 4, "mlp_to_next_input": 3, "final_model_norm": 1})
+        self.assertEqual(sorted(l for l, c in seen if c == "mlp_to_next_input"), [1, 2, 3])
 
 
 class TestStructuralIdentity(unittest.TestCase):
@@ -75,6 +117,21 @@ class TestStructuralIdentity(unittest.TestCase):
                     self.assertEqual(sorted(grads0), sorted(grads1))
                     for name in grads0:
                         self.assertTrue(torch.equal(grads0[name], grads1[name]), name)
+
+    def test_the_model_reference_at_every_site_is_bitwise_native(self):
+        """The model reference in each site's declared ABI -- the attention block's
+        and the residual fusions' kernel calls, the carrier's wiring -- reproduces
+        the unpatched loss and every gradient bit for bit."""
+        for dtype in ("float32", "bfloat16"):
+            workload = tiny_workload(dtype)
+            with self.subTest(dtype=dtype):
+                loss0, grads0, _ = _step(workload, KernelSet(registry=workload.site_registry))
+                loss1, grads1, build = _step(workload, _reference_kernels(workload.site_registry))
+                self.assertEqual(build.count_problems(), [])
+                self.assertTrue(torch.equal(loss0, loss1))
+                for name in grads0:
+                    self.assertTrue(torch.equal(grads0[name], grads1[name]), name)
+
 
 class TestRunnerAndBoundPair(unittest.TestCase):
     def test_the_runner_measures_every_provider(self):
@@ -124,7 +181,8 @@ class TestWorkloadProtocol(unittest.TestCase):
         described = workload.describe()
         self.assertEqual(described["experts"]["num_experts"], 4)
         self.assertEqual(described["experts_implementation"], "grouped_mm")
-        self.assertEqual(described["expected_site_counts"]["moe_experts"], 4)
+        self.assertEqual(described["expected_site_counts"],
+                         {"attention_block": 4, "residual_rmsnorm": 8, "moe_experts": 4})
         self.assertIs(described["model_gate"]["implemented"], False)
         model, _ = workload.build_patched(KernelSet(registry=workload.site_registry))
         report = workload.runtime_report(model)

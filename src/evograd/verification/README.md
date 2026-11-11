@@ -300,6 +300,8 @@ python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest --out $H
 python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --validate
 python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --write
 # olmoe_1b_7b, --mem=64g (14 GB of BF16 weights are read on the host), EVOGRAD_HF_CACHE=$V/hf_cache
+# (its --validate also reports the L2 task list: olmoe_attention_block replaces
+# olmoe_qkv_norm_rope + olmoe_attention, and olmoe_residual_rmsnorm counts 32 calls, not 16)
 H=results/benchmark/topdown/olmoe_1b_7b/harvest.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out $H
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest $H --validate

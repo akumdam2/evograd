@@ -8,10 +8,8 @@ multi-head attention block and a routed mixture of 64 SwiGLU experts of which 8
 serve every token: 6.92B parameters, 1.28B of them active per token.
 
 * :mod:`.architecture` -- ``config.json`` field by field;
-* :mod:`.levels` -- the Level-3 step, the four Level-2 sites, the Level-1
+* :mod:`.levels` -- the Level-3 step, the three Level-2 sites, the Level-1
   bindings;
-* :mod:`.layer` -- layer 8, captured or config-derived: where the Level-2
-  sites take their real invocations from;
 * :mod:`.harvest` -- the observed whole-model step frozen into
   ``harvest/snapshot.json``.
 

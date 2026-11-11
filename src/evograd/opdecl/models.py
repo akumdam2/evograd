@@ -710,18 +710,14 @@ class MoeModelConfig:
         return 2 * self.intermediate
 
     # ── Level-2 site dims ────────────────────────────────────────────────
-    def qkv_norm_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
-        """Projections, the full-width q/k RMSNorms and RoPE: the attention prefix."""
+    def attention_block_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The attention module: projections, the full-width q/k RMSNorms, RoPE,
+        causal SDPA and the output projection."""
         return {
             "B": batch, "T": seq, "H": self.hidden,
             "HQ": self.n_heads, "HK": self.n_kv_heads, "D": self.head_dim,
             "QO": self.q_out, "KVO": self.kv_out,
         }
-
-    def attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
-        """Causal (grouped-query) SDPA plus the output projection."""
-        return {"B": batch, "T": seq, "HQ": self.n_heads, "HK": self.n_kv_heads,
-                "D": self.head_dim, "QO": self.q_out, "H": self.hidden}
 
     def moe_experts_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """The routed experts, token-flat as the block hands them over: ``T`` is
