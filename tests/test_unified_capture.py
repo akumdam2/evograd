@@ -1,5 +1,6 @@
 """Capture ABI regressions independent of GPU compilation."""
 
+import shutil
 import unittest
 from unittest.mock import patch
 
@@ -7,10 +8,16 @@ import torch
 from torch.fx.experimental.proxy_tensor import make_fx
 
 from evograd.benchmark import get_task
+from evograd.opdecl import Active, Workload, declare_op
 from evograd.pipelines.d_inductor.capture import _backward_arg_spec, capture_inductor_pair
 from evograd.pipelines.unified.capture import (_capture_device, _encode_arg, _same_call,
                                                _serialize_graph)
 from tests._small_cases import SMALL
+
+
+def saved_sum_ref(x):
+    """Saves a [R, C] float32 reduction whose rows Inductor pads when C > 1024."""
+    return x.sum(-1).square().sum(-1)
 
 
 class TestUnifiedCaptureContract(unittest.TestCase):
@@ -79,6 +86,26 @@ class TestCompilerRewrites(unittest.TestCase):
         self.assertTrue(_same_call(by_name[mm.name], mm, by_name))
         mm.replace_input_with(repeat, other)
         self.assertFalse(_same_call(by_name[mm.name], mm, by_name))
+
+
+class TestSavedActivationLayout(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("g++"), "Inductor's CPU backend needs a C++ compiler")
+    def test_the_backward_takes_a_saved_activation_the_forward_padded(self):
+        # Qwen3.5's gated delta rule: Inductor padded a saved float32 [.., 33, 33]
+        # buffer to a 1120-element stride, and the backward, compiled for 1089,
+        # rejected it at run time unless the capture hands it the real strides.
+        import torch._inductor.config as inductor_config
+
+        op = declare_op(
+            name="padded_saved_sum", forward="tests.test_unified_capture:saved_sum_ref",
+            dims=("R", "C", "P"), args=(Active("x", "[R, C, P]"),), output=Active("y", "[R]"),
+            forward_semantics="Sum, square, sum.", backward_semantics="Its gradient.",
+            benchmark=(Workload(dims={"R": 4, "C": 1089, "P": 2}, dtype="float32"),),
+        )
+        with inductor_config.patch({"disable_padding_cpu": False, "cpp.cxx": (None, "g++")}):
+            pair = capture_inductor_pair(op, op.benchmark[0], device="cpu", dynamic=False)
+        self.assertIn("1120", pair.forward_source)
+        self.assertEqual([s.shape for s in pair.saved if not s.is_input], [(4, 1089)])
 
 
 if __name__ == "__main__":
