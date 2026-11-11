@@ -1,9 +1,10 @@
-"""The post-attention residual add and its ``(1 + w)`` RMSNorm.
+"""A residual add and the ``(1 + w)`` RMSNorm that follows it.
 
 Two outputs, like every residual fusion in this repository: the normalized value
-feeds the MLP and the un-normalized sum is the residual the block adds back at
-its end. Production is ``residual + branch`` in the model dtype, then the
-``(1 + w)`` RMSNorm arithmetic; the oracle adds and normalizes in float32.
+feeds the next sub-block and the un-normalized sum is the residual the next add
+takes. Production is ``residual + branch`` in the model dtype, then the
+``(1 + w)`` RMSNorm arithmetic as ``Qwen3_5RMSNorm`` runs it (float32, one cast
+at the end); the oracle adds and normalizes in float32.
 """
 
 from __future__ import annotations

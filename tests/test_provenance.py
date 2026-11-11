@@ -73,7 +73,7 @@ class TestModelRegistry(unittest.TestCase):
         """Every Qwen3.5 site case is config-derived from its own record, at B1."""
         self.assertEqual(MODELS["qwen3_5_4b"].hidden, 2560)
         names = [n for n in TASKS if n.startswith("qwen3_5_")]
-        self.assertEqual(len(names), 7)
+        self.assertEqual(len(names), 6)
         for name in names:
             for workload in TASKS[name].benchmark:
                 with self.subTest(op=name):

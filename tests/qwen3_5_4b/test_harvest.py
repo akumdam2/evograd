@@ -1,19 +1,17 @@
-"""The Qwen3.5 Level-3 smoke, the whole-model harvest, its snapshot, the layer
-capture, and the Level-1 bindings -- on a tiny model (CPU).
+"""The Qwen3.5 Level-3 smoke, the whole-model harvest, its snapshot and the
+Level-1 bindings -- on a tiny model (CPU).
 
 The canonical run of each is a GPU session's; these hold the machinery: every
 layer is held to its block kind's mandatory boundaries, the snapshot's site
-dims agree with the declared ones, the whole-model counts are observed, a
-captured layer is self-describing, and the observed Level-1 cases
-carry the model's own RoPE theta.
+dims agree with the declared ones, the whole-model counts are observed (two
+residual fusions per layer), and the observed Level-1 cases carry the model's
+own RoPE theta.
 """
 
 from __future__ import annotations
 
 import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import torch
 
@@ -170,6 +168,8 @@ class TestHarvest(unittest.TestCase):
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as sites
 
         snap = snapshot.extract(tiny_manifest(), representative_layers=LAYERS)
+        self.assertEqual(set(snap["tasks"]), set(sites.TASKS))
+        kinds = TINY_ARCH["layer_types"]
         for site in sites.SITES:
             entry = snap["tasks"][sites.task_key(site)]["observed"]
             with self.subTest(site=site):
@@ -178,6 +178,17 @@ class TestHarvest(unittest.TestCase):
                                  sites.expected_model_frequency(site, TINY_ARCH))
                 self.assertEqual(sites.observed_model_frequency(site, snap),
                                  entry["whole_model_invocations"])
+                self.assertEqual(entry["by_layer_type"], {
+                    kind: sites.FREQUENCY[kind][site] * kinds.count(kind)
+                    for kind in sorted(set(kinds)) if site in sites.FREQUENCY[kind]})
+        # Each layer's two fusions: post-attention, and the closing add into the next
+        # input norm (model.norm after the last layer); layer 0's input norm is none.
+        residual = snap["tasks"]["qwen3_5_residual_rmsnorm"]
+        self.assertEqual(residual["observed"]["layer_indices"], [0, 0, 1, 1, 2, 2, 3, 3])
+        self.assertEqual(residual["roles"], ["input_layernorm", "norm", "post_attention_layernorm"])
+        self.assertEqual(residual["frequency"], 2 * len(kinds) + 1)
+        self.assertEqual(snap["tasks"]["qwen3_5_attention_block"]["observed"]["layer_indices"],
+                         [FULL_LAYER])
 
     def test_every_level1_component_rederives(self):
         from evograd.opdecl.models import MODELS
@@ -199,52 +210,25 @@ class TestHarvest(unittest.TestCase):
         from evograd.benchmark.topdown import TOPDOWN_WORKLOADS, has_snapshot
 
         self.assertEqual(TOPDOWN_WORKLOADS["qwen3_5_4b"], "qwen3_5_4b")
+        self.assertEqual("qwen3_5_4b_observed" in TASKS["partial_rope"].benchmark_suites,
+                         has_snapshot("qwen3_5_4b"))
+
+    def test_the_tracked_snapshot_has_the_declared_dims(self):
+        """Once frozen from the current sources: the hash verifies and every
+        site's harvested dims are the declared ones."""
+        from evograd.benchmark.topdown import has_snapshot
+        from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as sites
+        from evograd.opdecl.models import QWEN3_5_4B
+
         if not has_snapshot("qwen3_5_4b"):
-            self.assertNotIn("qwen3_5_4b_observed", TASKS["partial_rope"].benchmark_suites)
-        else:  # once frozen: the hash verifies and the dims are the declared ones
-            from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as sites
-            from evograd.opdecl.models import QWEN3_5_4B
-
-            snap = snapshot.load()
-            declared = {site: sites.dims_for(site, QWEN3_5_4B, batch=1, seq=2048)
-                        for site in sites.SITES}
-            self.assertEqual(snapshot.check_declared_dims(snap, declared), [])
-            self.assertIn("qwen3_5_4b_observed", TASKS["partial_rope"].benchmark_suites)
-
-
-class TestCapture(unittest.TestCase):
-    def test_capture_writes_a_self_describing_artifact(self):
-        from evograd.benchmark.topdown.qwen3_5_4b.layer.artifact import LayerArtifact
-        from evograd.benchmark.topdown.qwen3_5_4b.layer.capture import (
-            run_capture, write_captures)
-
-        spec = tiny_spec(dtype="float32")
-        with tempfile.TemporaryDirectory() as tmp:
-            harvest = Path(tmp) / "harvest.json"
-            harvest.write_text(json.dumps(run_harvest(spec), default=str))
-            written = write_captures(run_capture(spec, manifest_path=harvest,
-                                                 layers=[GDN_LAYER, FULL_LAYER]), Path(tmp))
-            self.assertEqual(len(written), 4)
-            for index, kind in ((GDN_LAYER, "linear_attention"), (FULL_LAYER, "full_attention")):
-                artifact = LayerArtifact.load(Path(tmp) / f"layer{index}.pt")
-                with self.subTest(layer=index):
-                    self.assertEqual(artifact.identity["layer_kind"], kind)
-                    self.assertIn("position_embeddings", artifact.payload["kwargs"])
-
-    def test_a_relabelled_artifact_is_refused(self):
-        from evograd.benchmark.topdown.qwen3_5_4b.layer.artifact import (
-            ArtifactError, LayerArtifact)
-        from evograd.benchmark.topdown.qwen3_5_4b.layer.capture import run_capture
-
-        spec = tiny_spec(dtype="float32")
-        with tempfile.TemporaryDirectory() as tmp:
-            harvest = Path(tmp) / "harvest.json"
-            harvest.write_text(json.dumps(run_harvest(spec), default=str))
-            artifact, _ = run_capture(spec, manifest_path=harvest, layers=[GDN_LAYER])[GDN_LAYER]
-            artifact.payload["identity"]["layer_index"] = 1
-            path = artifact.save(Path(tmp) / "relabelled.pt")
-            with self.assertRaises(ArtifactError):
-                LayerArtifact.load(path)
+            self.skipTest("no tracked snapshot")
+        snap = snapshot.load()
+        if set(snap["tasks"]) != set(snapshot.TASK_SOURCES):
+            self.skipTest("the tracked snapshot predates the current Level-2 tasks; regenerate "
+                          "it on a GPU node")
+        declared = {site: sites.dims_for(site, QWEN3_5_4B, batch=1, seq=2048)
+                    for site in sites.SITES}
+        self.assertEqual(snapshot.check_declared_dims(snap, declared), [])
 
 
 class TestLevel1Bindings(unittest.TestCase):

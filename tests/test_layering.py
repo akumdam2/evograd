@@ -235,9 +235,9 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
 
 
 class TestQwen3_5OwnershipSplit(unittest.TestCase):
-    """Qwen3.5-4B: the benchmark side owns levels 4-1 and the harvest, imports
+    """Qwen3.5-4B: the benchmark side owns levels 3-1 and the harvest, imports
     none of evaluation, and passes no verdict; every site package carries its
-    contract, reference and capture."""
+    contract and reference (its real invocations are the verification capture's)."""
 
     BENCH = EVOGRAD / "benchmark" / "topdown" / "qwen3_5_4b"
 
@@ -251,18 +251,17 @@ class TestQwen3_5OwnershipSplit(unittest.TestCase):
         for relative in ("architecture.py", "declaration.py", "cli.py",
                          "levels/level3/spec.py", "levels/level3/model.py",
                          "levels/level3/smoke.py", "levels/level3/report.py",
-                         "layer/prepare.py", "layer/artifact.py",
-                         "layer/capture.py", "levels/level2/manifest.py",
+                         "levels/level2/manifest.py",
                          "levels/level1/manifest.py", "harvest/observe.py",
                          "harvest/manifest.py", "harvest/harvest.py", "harvest/snapshot.py"):
             with self.subTest(module=relative):
                 self.assertTrue((self.BENCH / relative).is_file())
 
-    def test_each_site_package_owns_its_contract_reference_and_capture(self):
+    def test_each_site_package_owns_its_contract_and_reference(self):
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
 
         for site in manifest.SITES:
-            for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
+            for part in ("__init__.py", "task.py", "reference.py"):
                 with self.subTest(site=site, part=part):
                     self.assertTrue((self.BENCH / "levels" / "level2" / site / part).is_file())
 

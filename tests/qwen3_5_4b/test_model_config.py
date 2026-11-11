@@ -121,12 +121,9 @@ class TestDims(unittest.TestCase):
                          {"B": 1, "T": 2048, "HV": 32, "D": 128})
         self.assertEqual(CFG.gdn_norm_out_dims(batch=1, seq=2048),
                          {"B": 1, "T": 2048, "HV": 32, "D": 128, "VD": 4096, "H": 2560})
-        self.assertEqual(CFG.qkv_norm_partial_rope_dims(batch=1, seq=2048),
+        self.assertEqual(CFG.attention_block_dims(batch=1, seq=2048),
                          {"B": 1, "T": 2048, "H": 2560, "HQ": 16, "HK": 4, "D": 256, "R": 64,
                           "QG": 8192, "KVO": 1024, "QO": 4096})
-        self.assertEqual(CFG.gated_attention_dims(batch=1, seq=2048),
-                         {"B": 1, "T": 2048, "HQ": 16, "HK": 4, "D": 256, "QO": 4096,
-                          "H": 2560})
         self.assertEqual(CFG.residual_rmsnorm_dims(batch=1, seq=2048),
                          {"B": 1, "T": 2048, "H": 2560})
         self.assertEqual(CFG.swiglu_mlp_dims(batch=1, seq=2048),

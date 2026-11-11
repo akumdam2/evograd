@@ -10,7 +10,7 @@ batch 1, sequence 2048, BF16, CUDA, SDPA, ``use_cache`` off, no checkpointing,
 ``model.train()``, random weights through the model's own ``post_init``,
 synthetic tokens. The runner adds AdamW (``tier3.runner.OPTIMIZER_DEFAULTS``)
 around ``loss.backward()``. Sites are patched on all 32 layers, each by its
-type; the counts are held to the layer types (24 / 8 / 32).
+type; the counts are held to the layer types (24 / 8 / 32 / 64).
 
 **No whole-model gate here.** Correctness is judged by the verification
 package's Gates 1/2/3; :meth:`describe` still records ``model_gate`` as not

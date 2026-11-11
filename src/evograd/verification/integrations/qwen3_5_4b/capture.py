@@ -16,12 +16,13 @@ shared loop is :func:`evograd.verification.integrations.base.capture`.
 * Values the model only forms inline are taken where they enter or leave a
   recorded call: ``swiglu`` from gate/up outputs and down_proj's input;
   ``gdn_gating``'s ``a``/``b`` from ``in_proj_a``/``in_proj_b`` and its ``g``/``beta``
-  from the delta rule's arguments (their only consumer); the attention
-  ``gate`` and its cotangent from the gate half of ``q_proj``'s output (pure
-  data movement, the same values as the model's reshape); the residual add
-  from the layer input, the mixer output and ``post_attention_layernorm``.
-* Output cotangents come from tensor hooks (total gradient of the tensor);
-  no cotangent is absent in this model.
+  from the delta rule's arguments (their only consumer); the residual adds from
+  the layer input, the mixer and MLP outputs and the norm that follows each add.
+* Output cotangents come from tensor hooks (total gradient of the tensor). A
+  residual fusion's ``dsummed`` is the gradient its sum receives from the next
+  residual add (the total gradient of that add's result), not the sum's own
+  total, which includes the fused norm's path. The last sum feeds only
+  ``model.norm``: its ``dsummed`` is absent in the model, and zeros are supplied.
 """
 
 from __future__ import annotations
@@ -273,6 +274,8 @@ class LiveCapture:
 
 def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[dict[str, Any]]:
     """Every recorded L1 call and L2 boundary of one step, in its case's task ABI."""
+    import torch
+
     modules = dict(model.named_modules())
     tied = model.get_output_embeddings().weight is model.get_input_embeddings().weight
     linear = {r["path"]: r for r in capture.linear}
@@ -292,13 +295,6 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
 
     def call(path, role, kind):
         return {"path": path, "layer": layer_index(path), "role": role, "kind": kind}
-
-    def gate_half(attn_path, tensor):
-        """The attention gate: the second half of each head of q_proj's output."""
-        module = modules[attn_path]
-        b, t, _ = tensor.shape
-        heads, d = module.config.num_attention_heads, module.head_dim
-        return tensor.view(b, t, heads, 2 * d)[..., d:].reshape(b, t, heads * d)
 
     # Level 1 ---------------------------------------------------------------
 
@@ -405,37 +401,48 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
                    {"dy": mixer["dy"]}, {"y": mixer["y"]})
 
     for path, mixer in attn.items():
-        module, s, ro = modules[path], sdpa[path], rope[path]
-        q_proj = linear[f"{path}.q_proj"]
-        gate, dgate = gate_half(path, q_proj["y"]), gate_half(path, q_proj["dy"])
-        yield emit("qwen3_5_qkv_norm_partial_rope", 2,
-                   call(f"{path}#qkv_norm_partial_rope", "qkv_norm_partial_rope",
-                        "boundary:Qwen3_5Attention[:rope]"),
-                   {"x": mixer["x"], "q_weight": module.q_proj.weight, "k_weight": module.k_proj.weight,
-                    "v_weight": module.v_proj.weight, "q_norm_weight": module.q_norm.weight,
-                    "k_norm_weight": module.k_norm.weight, "cos": shared_row(mixer["cos"]),
+        module = modules[path]
+        if module.q_norm.eps != module.k_norm.eps:
+            raise ValueError(f"{path}: q_norm and k_norm eps differ; the case declares one eps")
+        yield emit("qwen3_5_attention_block", 2,
+                   call(f"{path}#attention_block", "attention_block", "boundary:Qwen3_5Attention"),
+                   {"x": mixer["x"], "q_weight": module.q_proj.weight,
+                    "k_weight": module.k_proj.weight, "v_weight": module.v_proj.weight,
+                    "q_norm_weight": module.q_norm.weight, "k_norm_weight": module.k_norm.weight,
+                    "o_weight": module.o_proj.weight, "cos": shared_row(mixer["cos"]),
                     "sin": shared_row(mixer["sin"]), "eps": module.q_norm.eps},
-                   {"dq": ro["dq_embed"], "dk": ro["dk_embed"], "dv": s["dv"], "dgate": dgate},
-                   {"q": ro["q_embed"], "k": ro["k_embed"], "v": s["v"], "gate": gate},
-                   {"gate": "gate half of q_proj's output and cotangent (data movement only)"})
-        yield emit("qwen3_5_gated_attention", 2, call(f"{path}#gated_attention", "gated_attention",
-                                                      "boundary:sdpa * sigmoid(gate) + o_proj"),
-                   {"q": s["q"], "k": s["k"], "v": s["v"], "gate": gate,
-                    "o_weight": module.o_proj.weight},
                    {"dy": mixer["dy"]}, {"y": mixer["y"]})
 
-    for layer in capture.layers:
-        prefix = layer["path"]
+    mlps = {r["path"]: r for r in capture.mlp}
+    n_layers = len(capture.layers)
+    for index, layer in enumerate(capture.layers):
+        prefix, after = layer["path"], f"model.layers.{index + 1}"
         mixer = gdn.get(f"{prefix}.linear_attn") or attn[f"{prefix}.self_attn"]
         post = norms[f"{prefix}.post_attention_layernorm"]
-        yield emit("qwen3_5_residual_rmsnorm", 2, call(f"{prefix}#residual_post_attention",
-                                                       "residual_post_attention",
-                                                       "boundary:residual add + Qwen3_5RMSNorm"),
-                   {"branch": mixer["y"], "residual": layer["x"],
-                    "weight": modules[post["path"]].weight, "eps": post["eps"]},
-                   {"dnormed": post["dy"], "dsummed": post["dx"]},
-                   {"normed": post["y"], "summed": post["x"]},
-                   {"dsummed": "total gradient of the residual sum (post norm and next residual add)"})
+        last = index + 1 == n_layers
+        nxt = norms["model.norm" if last else f"{after}.input_layernorm"]
+        # (call, role, branch, residual, the norm after the add, the next sum's gradient)
+        sites = [(f"{prefix}#residual_post_attention", "within_layer", mixer["y"], layer["x"],
+                  post, nxt["dx"]),
+                 (f"{prefix}#residual_mlp_to_final", "final_model_norm",
+                  mlps[f"{prefix}.mlp"]["y"], post["x"], nxt, None) if last else
+                 (f"{prefix}#residual_mlp_to_next", "cross_layer", mlps[f"{prefix}.mlp"]["y"],
+                  post["x"], nxt, norms[f"{after}.post_attention_layernorm"]["dx"])]
+        for site, role, branch, residual, norm, external in sites:
+            notes = ({"dsummed_origin": "total gradient of the next residual sum"}
+                     if external is not None else
+                     {"dsummed_origin": "absent in the model (the final sum has no consumer "
+                                        "but model.norm); zeros supplied for the declared "
+                                        "two-output ABI",
+                      "absent_cotangents": ["dsummed"]})
+            yield emit("qwen3_5_residual_rmsnorm", 2,
+                       {**call(site, role, "boundary:residual add + Qwen3_5RMSNorm"),
+                        "norm": norm["path"]},
+                       {"branch": branch, "residual": residual,
+                        "weight": modules[norm["path"]].weight, "eps": norm["eps"]},
+                       {"dnormed": norm["dy"],
+                        "dsummed": torch.zeros_like(norm["x"]) if external is None else external},
+                       {"normed": norm["y"], "summed": norm["x"]}, notes)
 
     for r in capture.mlp:
         module = modules[r["path"]]

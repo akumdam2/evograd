@@ -1,11 +1,11 @@
 """Reference mathematics shared by the hybrid Gated-DeltaNet / gated-attention decoders.
 
-The gated delta rule, the gated RMSNorm, the ``(1 + w)`` RMSNorm, gated attention
-and the partial RoPE apply, as Transformers' hybrid decoders (Qwen3.5) run them
-(checked on Transformers 5.16.1). A model owns its own *tasks* -- keys, cases,
-tolerances, provenance -- but the definition of each computation is written
-here once, so two declarations cannot drift into computing subtly different
-things while claiming to measure the same boundary.
+The gated delta rule, the gated RMSNorm, the ``(1 + w)`` RMSNorm and the gated
+full-attention module (partial RoPE included), as Transformers' hybrid decoders
+(Qwen3.5) run them (checked on Transformers 5.16.1). A model owns its own
+*tasks* -- keys, cases, tolerances, provenance -- but the definition of each
+computation is written here once, so two declarations cannot drift into
+computing subtly different things while claiming to measure the same boundary.
 
 Where a production spelling must reach Transformers' own function -- the torch
 chunk delta rule, ``apply_rotary_pos_emb`` -- it takes the ``modeling`` module

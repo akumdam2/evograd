@@ -36,13 +36,12 @@ LLAMA_LEVEL2 = (
     "llama3_residual_rmsnorm",
     "llama3_swiglu_mlp",
 )
-#: Qwen3.5-4B's seven sites (lm_head_ce deferred).
+#: Qwen3.5-4B's six sites (lm_head_ce deferred).
 QWEN3_5_LEVEL2 = (
-    "qwen3_5_gated_attention",
+    "qwen3_5_attention_block",
     "qwen3_5_gated_delta_rule",
     "qwen3_5_gdn_in_proj",
     "qwen3_5_gdn_norm_out",
-    "qwen3_5_qkv_norm_partial_rope",
     "qwen3_5_residual_rmsnorm",
     "qwen3_5_swiglu_mlp",
 )
@@ -127,7 +126,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
         self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
-        self.assertEqual(len(TASKS), 59)
+        self.assertEqual(len(TASKS), 58)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:
@@ -307,8 +306,7 @@ class TestQwen3_5LevelTwoInvariance(unittest.TestCase):
         "qwen3_5_gdn_in_proj": ("q", "k", "v", "z", "beta", "g"),
         "qwen3_5_gated_delta_rule": ("o",),
         "qwen3_5_gdn_norm_out": ("y",),
-        "qwen3_5_qkv_norm_partial_rope": ("q", "k", "v", "gate"),
-        "qwen3_5_gated_attention": ("y",),
+        "qwen3_5_attention_block": ("y",),
         "qwen3_5_residual_rmsnorm": ("normed", "summed"),
         "qwen3_5_swiglu_mlp": ("out",),
     }
@@ -317,9 +315,8 @@ class TestQwen3_5LevelTwoInvariance(unittest.TestCase):
                                 "ddt_bias"),
         "qwen3_5_gated_delta_rule": ("dq", "dk", "dv", "dg", "dbeta"),
         "qwen3_5_gdn_norm_out": ("do", "dz", "dw_norm", "dw_out"),
-        "qwen3_5_qkv_norm_partial_rope": ("dx", "dq_weight", "dk_weight", "dv_weight",
-                                          "dq_norm_weight", "dk_norm_weight"),
-        "qwen3_5_gated_attention": ("dq", "dk", "dv", "dgate", "do_weight"),
+        "qwen3_5_attention_block": ("dx", "dq_weight", "dk_weight", "dv_weight",
+                                    "dq_norm_weight", "dk_norm_weight", "do_weight"),
         "qwen3_5_residual_rmsnorm": ("dbranch", "dresidual", "dweight"),
         "qwen3_5_swiglu_mlp": ("dx", "dgate_weight", "dup_weight", "ddown_weight"),
     }
@@ -330,7 +327,7 @@ class TestQwen3_5LevelTwoInvariance(unittest.TestCase):
             ("gdn_in_proj", "gated_delta_rule", "gdn_norm_out", "residual_rmsnorm", "swiglu_mlp"))
         self.assertEqual(
             qwen3_5_manifest.SITES_BY_BLOCK["full_attention"],
-            ("qkv_norm_partial_rope", "gated_attention", "residual_rmsnorm", "swiglu_mlp"))
+            ("attention_block", "residual_rmsnorm", "swiglu_mlp"))
 
     def test_outputs_and_gradient_order(self):
         for task, names in self.EXPECTED_OUTPUTS.items():

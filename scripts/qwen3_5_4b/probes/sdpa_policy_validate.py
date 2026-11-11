@@ -8,8 +8,9 @@ situation the hazard needs -- runs at Qwen3.5-4B's observed attention shape:
 
 1. the Level-1 ``causal_gqa_attention`` task (its contiguous cotangent),
    oracle vs production;
-2. the Level-2 ``qwen3_5_gated_attention`` task (the transposed cotangent a
-   Transformers module hands back), oracle vs production -- session 1's trigger;
+2. the Level-2 ``qwen3_5_attention_block`` task (the transposed cotangent a
+   Transformers module hands back to its SDPA), oracle vs production -- session 1's
+   trigger (then ``qwen3_5_gated_attention``, now inside the attention block);
 3. the Level-1 task again;
 4. plain ``F.scaled_dot_product_attention`` with dO alternating t, c, t, c.
 
@@ -58,7 +59,7 @@ def child() -> dict:
 
     out = {"policy": sdpa_policy.describe(), "steps": []}
     out["steps"].append(task_check("causal_gqa_attention", "qwen3_5_4b_observed"))
-    out["steps"].append(task_check("qwen3_5_gated_attention", "qwen3_5_4b_observed"))
+    out["steps"].append(task_check("qwen3_5_attention_block", "qwen3_5_4b_observed"))
     out["steps"].append(task_check("causal_gqa_attention", "qwen3_5_4b_observed"))
 
     hq, hk, d, b, t = 16, 4, 256, 1, 2048

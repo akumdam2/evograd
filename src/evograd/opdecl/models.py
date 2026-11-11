@@ -548,17 +548,15 @@ class HybridDenseModelConfig:
         return {"B": batch, "T": seq, "HV": self.linear_num_value_heads,
                 "D": self.linear_value_head_dim, "VD": self.value_dim, "H": self.hidden}
 
-    def qkv_norm_partial_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+    def attention_block_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The whole gated full-attention module: q|gate, k, v, the q/k norms,
+        partial RoPE, SDPA, the gate and o_proj."""
         return {
             "B": batch, "T": seq, "H": self.hidden,
             "HQ": self.n_heads, "HK": self.n_kv_heads, "D": self.head_dim,
             "R": self.rotary_dim, "QG": self.q_gate_out, "KVO": self.kv_out,
             "QO": self.q_out,
         }
-
-    def gated_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
-        return {"B": batch, "T": seq, "HQ": self.n_heads, "HK": self.n_kv_heads,
-                "D": self.head_dim, "QO": self.q_out, "H": self.hidden}
 
     def residual_rmsnorm_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         return {"B": batch, "T": seq, "H": self.hidden}

@@ -16,7 +16,8 @@ What is Qwen3.5's is here:
 This is a **whole-model** harvest: the
 snapshot's ``frequency`` fields and each task's ``observed`` entry count what
 one canonical training step actually invoked (24 GDN layers, 8 full-attention
-layers, 32 MLPs and post-attention norms), read from the events, never derived.
+layers, 32 MLPs, 64 residual fusions), read from the events
+(:data:`SITE_EVENTS`), never derived.
 
 This module imports json, hashlib and pathlib, and nothing that needs torch.
 """
@@ -228,26 +229,25 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
             "enclosing": _GDN,
         },
     },
-    "qwen3_5_qkv_norm_partial_rope": {
+    "qwen3_5_attention_block": {
+        # The attention module is called with keyword arguments only, so its own
+        # event records no input shapes; the RoPE call inside it carries q, k and
+        # the rotary tables.
         "task": "rope_apply", "roles": ["apply_rotary_pos_emb"],
         "supporting_tasks": {
             "q_projection": {"task": "linear", "roles": ["q_proj"]},
             "kv_projection": {"task": "linear", "roles": ["k_proj", "v_proj"]},
             "q_norm": {"task": "rms_norm", "roles": ["q_norm"]},
             "k_norm": {"task": "rms_norm", "roles": ["k_norm"]},
-            "consumer": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
-            "enclosing": _ATTN,
-        },
-    },
-    "qwen3_5_gated_attention": {
-        "task": "sdpa", "roles": ["scaled_dot_product_attention"],
-        "supporting_tasks": {
+            "attention": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
             "output_projection": {"task": "linear", "roles": ["o_proj"]},
             "enclosing": _ATTN,
         },
     },
     "qwen3_5_residual_rmsnorm": {
-        "task": "rms_norm", "roles": ["post_attention_layernorm"],
+        # One configuration holds every residual-width norm: each layer's
+        # post-attention and input norms and model.norm.
+        "task": "rms_norm", "roles": ["input_layernorm", "norm", "post_attention_layernorm"],
         "supporting_tasks": {
             "consumer": {"task": "mlp", "roles": ["mlp"]},
         },
@@ -262,17 +262,22 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
     },
 }
 
-#: Which observed events count one invocation of each site: ``(task, role)``.
-#: One per call of the site in a training step -- the site is one call of its
-#: anchor boundary, wherever in the stack that happened.
-SITE_EVENTS: dict[str, tuple[str, str]] = {
-    "qwen3_5_gdn_in_proj": ("gated_delta_rule", "chunk_gated_delta_rule"),
-    "qwen3_5_gated_delta_rule": ("gated_delta_rule", "chunk_gated_delta_rule"),
-    "qwen3_5_gdn_norm_out": ("rms_norm_gated", "norm"),
-    "qwen3_5_qkv_norm_partial_rope": ("rope_apply", "apply_rotary_pos_emb"),
-    "qwen3_5_gated_attention": ("sdpa", "scaled_dot_product_attention"),
-    "qwen3_5_residual_rmsnorm": ("rms_norm", "post_attention_layernorm"),
-    "qwen3_5_swiglu_mlp": ("mlp", "mlp"),
+#: Which observed events count one invocation of each site: ``(task, role,
+#: shift)`` anchors, one site call per anchor event. ``shift`` names the decoder
+#: layer the call belongs to, relative to the event's own: ``0`` that layer;
+#: ``-1`` the one before (an input norm fuses the previous layer's closing MLP
+#: add, so layer 0's, after the embedding, is no site); ``None`` the last layer
+#: (``model.norm`` fuses its closing add). The residual fusion has three anchors,
+#: two calls per layer; every other site one, one call per layer of its kind.
+SITE_EVENTS: dict[str, tuple[tuple[str, str, int | None], ...]] = {
+    "qwen3_5_gdn_in_proj": (("gated_delta_rule", "chunk_gated_delta_rule", 0),),
+    "qwen3_5_gated_delta_rule": (("gated_delta_rule", "chunk_gated_delta_rule", 0),),
+    "qwen3_5_gdn_norm_out": (("rms_norm_gated", "norm", 0),),
+    "qwen3_5_attention_block": (("attention", "self_attn", 0),),
+    "qwen3_5_residual_rmsnorm": (("rms_norm", "post_attention_layernorm", 0),
+                                 ("rms_norm", "input_layernorm", -1),
+                                 ("rms_norm", "norm", None)),
+    "qwen3_5_swiglu_mlp": (("mlp", "mlp", 0),),
 }
 
 
@@ -283,21 +288,28 @@ def observed_counts(manifest: dict[str, Any]):
         if event["task"] == "decoder_layer":
             by_layer[event["layer_index"]] = event["module_path"]
     kinds = manifest["workload"]["config"].get("layer_types") or []
+    last = max(by_layer) if by_layer else None
 
     def count(name: str, record: dict[str, Any]) -> dict[str, Any]:
-        task, role = SITE_EVENTS[name]
-        layers = [e["layer_index"] for e in manifest["events"]
-                  if e["task"] == task and e["role"] == role]
+        layers = []
+        for task, role, shift in SITE_EVENTS[name]:
+            for event in manifest["events"]:
+                if event["task"] != task or event["role"] != role:
+                    continue
+                index = last if shift is None else event["layer_index"] + shift
+                if index >= 0:
+                    layers.append(index)
         by_kind: dict[str, int] = {}
         for index in layers:
-            kind = kinds[index] if index is not None and index < len(kinds) else "unknown"
+            kind = kinds[index] if index < len(kinds) else "unknown"
             by_kind[kind] = by_kind.get(kind, 0) + 1
         return {
             "kind": "observed",
             "whole_model_invocations": len(layers),
             "by_layer_type": dict(sorted(by_kind.items())),
-            "layer_indices": sorted(i for i in layers if i is not None),
-            "anchor": {"task": task, "role": role},
+            "layer_indices": sorted(layers),
+            "anchors": [{"task": task, "role": role, "shift": shift}
+                        for task, role, shift in SITE_EVENTS[name]],
             "note": "counted from the harvest's events: one canonical training step's forward",
         }
 
@@ -359,20 +371,17 @@ def site_dims(snapshot: dict[str, Any]) -> dict[str, dict[str, int]]:
     d = _shape(entry, 0)[-1]
     out["gdn_norm_out"] = {"B": batch, "T": tokens, "HV": vd // d, "D": d, "VD": vd, "H": hidden}
 
-    entry = tasks["qwen3_5_qkv_norm_partial_rope"]
+    entry = tasks["qwen3_5_attention_block"]
     q, k = entry["output_shapes"][0]["shape"], entry["output_shapes"][1]["shape"]
     rotary = _shape(entry, 2)[-1]
     sup = entry["supporting"]
     qg, hidden = sup["q_projection"]["params"]["weight"]["shape"]
     kvo = sup["kv_projection"]["params"]["weight"]["shape"][0]
-    out["qkv_norm_partial_rope"] = {"B": q[0], "T": q[2], "H": hidden, "HQ": q[1], "HK": k[1],
-                                    "D": q[3], "R": rotary, "QG": qg, "KVO": kvo, "QO": qg // 2}
-
-    entry = tasks["qwen3_5_gated_attention"]
-    q, k = _shape(entry, 0), _shape(entry, 1)
-    hidden, qo = entry["supporting"]["output_projection"]["params"]["weight"]["shape"]
-    out["gated_attention"] = {"B": q[0], "T": q[2], "HQ": q[1], "HK": k[1], "D": q[3],
-                              "QO": qo, "H": hidden}
+    o_hidden, qo = sup["output_projection"]["params"]["weight"]["shape"]
+    if o_hidden != hidden:
+        raise SnapshotError(f"o_proj writes {o_hidden} channels, q_proj reads {hidden}")
+    out["attention_block"] = {"B": q[0], "T": q[2], "H": hidden, "HQ": q[1], "HK": k[1],
+                              "D": q[3], "R": rotary, "QG": qg, "KVO": kvo, "QO": qo}
 
     batch, tokens, hidden = _shape(tasks["qwen3_5_residual_rmsnorm"], 0)
     out["residual_rmsnorm"] = {"B": batch, "T": tokens, "H": hidden}

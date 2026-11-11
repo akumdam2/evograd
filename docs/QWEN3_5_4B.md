@@ -1,10 +1,9 @@
 # Qwen3.5-4B: how to use the cases
 
 The text model of Qwen3.5-4B at every level: the whole training step (L3) at
-B1 x T2048 on one GH200, seven composite sites (L2) and ten bound primitives
-(L1). Layer 14 (Gated DeltaNet) and layer 15 (gated full attention), captured
-or config-derived, are where the L2 sites take their real invocations from;
-they are not a level.
+B1 x T2048 on one GH200, six composite sites (L2) and ten bound primitives
+(L1). Every L2 and L1 case is judged on the training calls the verification
+capture records from the real run (`evograd.verification.integrations.qwen3_5_4b`).
 The package README (`src/evograd/benchmark/topdown/qwen3_5_4b/README.md`)
 describes the cases; this page says how to run them and what is deferred.
 
@@ -26,15 +25,21 @@ host memory.
 
 ## Sites, tasks and reference lines
 
-| layer | site | task | library line |
+| layers (calls/step) | site | task | library line |
 | --- | --- | --- | --- |
-| 14 | `gdn_in_proj` | `qwen3_5_gdn_in_proj` | none |
-| 14 | `gated_delta_rule` | `qwen3_5_gated_delta_rule` | `fla` (`chunk_gated_delta_rule`, sidecar) |
-| 14 | `gdn_norm_out` | `qwen3_5_gdn_norm_out` | `fla` (`FusedRMSNormGated` + out_proj, sidecar) |
-| 15 | `qkv_norm_partial_rope` | `qwen3_5_qkv_norm_partial_rope` | none |
-| 15 | `gated_attention` | `qwen3_5_gated_attention` | none |
-| both | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | none |
-| both | `swiglu_mlp` | `qwen3_5_swiglu_mlp` | none |
+| GDN (24) | `gdn_in_proj` | `qwen3_5_gdn_in_proj` | none |
+| GDN (24) | `gated_delta_rule` | `qwen3_5_gated_delta_rule` | `fla` (`chunk_gated_delta_rule`, sidecar) |
+| GDN (24) | `gdn_norm_out` | `qwen3_5_gdn_norm_out` | `fla` (`FusedRMSNormGated` + out_proj, sidecar) |
+| full attention (8) | `attention_block` | `qwen3_5_attention_block` | none |
+| all (64: two per layer) | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | none |
+| all (32) | `swiglu_mlp` | `qwen3_5_swiglu_mlp` | none |
+
+`attention_block` is the whole `Qwen3_5Attention` module (projections, (1 + w)
+q/k norms, partial RoPE, causal GQA SDPA, the sigmoid gate, o_proj).
+`residual_rmsnorm` covers both residual adds of every layer: the post-attention
+add with its norm, and the closing add with the next layer's input norm (with
+`model.norm` after the last layer). Its `dsummed` is what the next residual add
+delivers; the last sum has no other consumer, so zeros are supplied.
 
 FLA lives outside the environment (`~/.cache/evograd-fla/0.5.2`, never on
 `PYTHONPATH`); only a baseline's own child imports it, after `modeling_qwen3_5`
@@ -50,19 +55,16 @@ host and needs `--mem=64g` on DeltaAI; environment and every model's commands:
 python -m evograd.benchmark.topdown.qwen3_5_4b --out smoke.json
 CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest harvest.json --write
-python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --synthetic --out harvest_synthetic.json
-python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture --harvest harvest_synthetic.json --out-dir <dir>
 ```
 
 The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 `evograd.verification.integrations.qwen3_5_4b` under the verification settings);
 the snapshot records that run (`run`), and a capture refuses a snapshot that
-does not record its own run. The layer capture replays the random-weight
-synthetic step, so it reads a `--synthetic` harvest. It checks that artifact
-against the tracked snapshot's workload id and manifest hash, so it works only
-until the snapshot is regenerated from the real run (open; see "Regenerating the
-snapshots" in `src/evograd/verification/README.md`).
+does not record its own run. The tracked snapshot predates the merged
+`attention_block` and the 64-call residual fusion: until it is regenerated
+(`--validate` then reports those two tasks as well as the identity fields) no
+Qwen3.5 case can be read, and the corpus must be recaptured after it.
 
 **Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 
@@ -137,8 +139,7 @@ deterministic algorithms.
 
 ## Deferred
 
-1. The L3 whole-model gate; negative controls and faults; the cross-layer
-   residual fusion site.
+1. The L3 whole-model gate; negative controls and faults.
 2. Pretrained `Qwen/Qwen3.5-4B@<rev>` weights (text part) and WikiText-2 with
    the Qwen3.5 tokenizer (`weights`/`data` are reserved in the spec).
 3. The GDN bar (eager, compile or FLA).

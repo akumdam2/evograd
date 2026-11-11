@@ -1,11 +1,11 @@
-"""The seven fused sites a Qwen3.5 decoder block decomposes into.
+"""The six fused sites a Qwen3.5 decoder block decomposes into.
 
-Each site package owns its contract (``task``), its reference (``reference``:
-float32 oracle and the production spelling, bitwise the block's own) and its
-capture (``capture``: one real invocation, from a captured layer when one
-exists, else from a config-derived block); :mod:`.manifest` is the one place the
-site names, task keys, block kinds and frequencies are written down. Judging an
-implementation of one of these contracts is evaluation's.
+Each site package owns its contract (``task``) and its reference
+(``reference``: float32 oracle and the production spelling, bitwise the
+model's own); :mod:`.manifest` is the one place the site names, task keys,
+block kinds and frequencies are written down. The real invocations are the
+verification capture's (:mod:`evograd.verification.integrations.qwen3_5_4b`).
+Judging an implementation of one of these contracts is evaluation's.
 """
 
 from .manifest import SITES, SITES_BY_BLOCK, SITE_TASKS, TASKS, task_key

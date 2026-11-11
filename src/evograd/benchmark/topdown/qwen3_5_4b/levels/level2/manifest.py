@@ -2,14 +2,19 @@
 
 A Gated DeltaNet block (layer 14) runs ``gdn_in_proj``, ``gated_delta_rule`` and
 ``gdn_norm_out``; a gated full-attention block (layer 15) runs
-``qkv_norm_partial_rope`` and ``gated_attention``; both run the post-attention
-residual fusion and the dense SwiGLU MLP. Each site runs once per block forward.
+``attention_block``, the whole attention module; both run the residual fusion
+and the dense SwiGLU MLP. Every site runs once per block forward but the
+residual fusion, which runs twice: each of the layer's two residual adds fused
+with the (1 + w) RMSNorm that follows it -- the post-attention norm, and the
+next layer's input norm (``model.norm`` after the last layer). Layer 0's input
+norm follows the embedding, not an add, and is no site.
 
-The whole-model call counts (24 GDN layers, 8 full-attention layers, 32 of the
-rest) are **observed**: :func:`observed_model_frequency` reads them off the
-tracked whole-model harvest snapshot. :func:`expected_model_frequency` derives
-the same numbers from the layer types, which is what a tiny test model or a
-Tier-3 count check holds the observation to.
+The whole-model call counts (24 GDN layers, 8 full-attention layers, 32 MLPs,
+64 residual fusions) are **observed**: :func:`observed_model_frequency` reads
+them off the tracked whole-model harvest snapshot.
+:func:`expected_model_frequency` derives the same numbers from the layer types,
+which is what a tiny test model or a Tier-3 count check holds the observation
+to.
 
 ``lm_head_ce`` (lm_head + cross entropy, ~15% of a step's FLOPs) is not a site
 in this step.
@@ -32,13 +37,12 @@ BLOCK_KINDS: tuple[str, ...] = (BLOCK_GDN, BLOCK_FULL)
 SITE_GDN_IN = "gdn_in_proj"
 SITE_GDR = "gated_delta_rule"
 SITE_GDN_OUT = "gdn_norm_out"
-SITE_QKV = "qkv_norm_partial_rope"
-SITE_ATTENTION = "gated_attention"
+SITE_ATTENTION_BLOCK = "attention_block"
 SITE_RESIDUAL = "residual_rmsnorm"
 SITE_MLP = "swiglu_mlp"
 
-#: All seven, in the order a block of either kind executes its own subset.
-SITES: tuple[str, ...] = (SITE_GDN_IN, SITE_GDR, SITE_GDN_OUT, SITE_QKV, SITE_ATTENTION,
+#: All six, in the order a block of either kind executes its own subset.
+SITES: tuple[str, ...] = (SITE_GDN_IN, SITE_GDR, SITE_GDN_OUT, SITE_ATTENTION_BLOCK,
                           SITE_RESIDUAL, SITE_MLP)
 
 #: Site -> the task key its contract is registered under.
@@ -47,12 +51,14 @@ SITE_TASKS: dict[str, str] = {site: f"qwen3_5_{site}" for site in SITES}
 #: The sites each block kind contains, in execution order.
 SITES_BY_BLOCK: dict[str, tuple[str, ...]] = {
     BLOCK_GDN: (SITE_GDN_IN, SITE_GDR, SITE_GDN_OUT, SITE_RESIDUAL, SITE_MLP),
-    BLOCK_FULL: (SITE_QKV, SITE_ATTENTION, SITE_RESIDUAL, SITE_MLP),
+    BLOCK_FULL: (SITE_ATTENTION_BLOCK, SITE_RESIDUAL, SITE_MLP),
 }
 
-#: How many times one block forward invokes each of its sites.
+#: How many times one block forward invokes each of its sites: once, but the
+#: residual fusion twice (the layer's attention add and its closing MLP add).
 FREQUENCY: dict[str, dict[str, int]] = {
-    kind: {site: 1 for site in sites} for kind, sites in SITES_BY_BLOCK.items()
+    kind: {site: 2 if site == SITE_RESIDUAL else 1 for site in sites}
+    for kind, sites in SITES_BY_BLOCK.items()
 }
 
 #: Sites named by the design and not built in this step, and why.
@@ -129,17 +135,11 @@ def declarations() -> dict[str, Any]:
     return {site: importlib.import_module(f"{__package__}.{site}.task").op for site in SITES}
 
 
-def captures() -> dict[str, Any]:
-    """Site -> its ``capture`` function (``source -> DerivedCall``)."""
-    return {site: importlib.import_module(f"{__package__}.{site}.capture").capture
-            for site in SITES}
-
-
 __all__ = [
     "BLOCK_FULL", "BLOCK_GDN", "BLOCK_KINDS", "COMPONENTS", "DEFERRED", "FREQUENCY",
-    "REPRESENTATIVE_LAYERS", "SITES", "SITES_BY_BLOCK", "SITE_ATTENTION", "SITE_GDN_IN",
-    "SITE_GDN_OUT", "SITE_GDR", "SITE_MLP", "SITE_QKV", "SITE_RESIDUAL", "SITE_TASKS", "TASKS",
-    "UnknownSite", "WORKLOAD", "block_kind_for_layer", "captures", "declarations", "dims_for",
+    "REPRESENTATIVE_LAYERS", "SITES", "SITES_BY_BLOCK", "SITE_ATTENTION_BLOCK", "SITE_GDN_IN",
+    "SITE_GDN_OUT", "SITE_GDR", "SITE_MLP", "SITE_RESIDUAL", "SITE_TASKS", "TASKS",
+    "UnknownSite", "WORKLOAD", "block_kind_for_layer", "declarations", "dims_for",
     "expected_model_frequency", "kind_of_site", "observed_model_frequency", "site_for",
     "sites_for_layer", "task_key",
 ]

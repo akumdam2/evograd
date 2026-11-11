@@ -2,9 +2,9 @@
 
     python scripts/qwen3_5_4b/probes/attention_layout_mixing.py ORDER OUT.json
 
-ORDER is a comma list of ``eager`` / ``compiled``: the ``qwen3_5_gated_attention``
+ORDER is a comma list of ``eager`` / ``compiled``: the ``qwen3_5_attention_block``
 production spelling and its ``torch.compile`` (what the trusted-compile control
-and the ``--compile-site gated_attention`` provider run), executed forward +
+and the ``--compile-site attention_block`` provider run), executed forward +
 backward in that order in this one process at the observed B1 x T2048 case.
 Each is compared with the declaration's float32 oracle (explicit matmuls, no
 SDPA, so no cuDNN state can touch it). Run once per order, each in a fresh
@@ -27,7 +27,7 @@ from evograd.opdecl.oracle import oracle, resolve_runtime_forward
 
 def main() -> int:
     order = sys.argv[1].split(",")
-    op = TASKS["qwen3_5_gated_attention"]
+    op = TASKS["qwen3_5_attention_block"]
     workload = op.benchmark_workloads(suite="qwen3_5_4b_observed")[0]
     values = make_case_inputs(op, workload, device="cuda")
     _ref_out, ref_grads = oracle(op, values)
