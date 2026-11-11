@@ -1,8 +1,8 @@
-"""References for the post-attention residual add and its (1 + w) RMSNorm.
+"""References for a residual add and the (1 + w) RMSNorm that follows it.
 
 Shared with every hybrid model (:mod:`....common.hybrid.residual_norm`); two
-outputs: the normalized value (for the MLP) and the sum itself (the residual the
-block adds back at its end).
+outputs: the normalized value (for the MLP or the next token mixer) and the sum
+itself (the residual the next add takes).
 """
 
 from __future__ import annotations

@@ -1,10 +1,13 @@
 """Qwen3.5-4B real-payload capture, on a tiny random Qwen3.5 on CPU.
 
 Eight layers in the published pattern (six Gated DeltaNet, two gated
-attention), two data orders. Pins: instrumentation changes nothing, every
-call maps to exactly one case by shape, payloads follow each task's ABI, and
-the model reference reproduces every live output bit for bit. The real case
-table is checked against the registry and the snapshot.
+attention), two data orders, in bfloat16 and float32. Pins: instrumentation
+changes nothing, every call maps to exactly one case by shape, each Level-2
+task gets the calls per step the harvest counts (``manifest.FREQUENCY``),
+payloads follow each task's ABI, and the model reference reproduces every live
+output bit for bit -- the attention block and the 2-per-layer residual fusion
+included. The real case table is checked against the registry and the
+snapshot once the tracked snapshot is regenerated.
 """
 
 from __future__ import annotations
@@ -31,12 +34,19 @@ HV, DK, C, VD = 4, 16, 128, 64                                # GDN: 4 value hea
 GDN_LAYERS, ATTN_LAYERS = 6, 2
 
 
-def tiny_cases():
+def tiny_cases(dtype: str = "bfloat16"):
+    """The tiny model's case table; every Level-2 task's calls per step are the
+    manifest's (what the harvest snapshot counts, ``test_harvest``)."""
     from evograd.benchmark import get_task
+    from evograd.benchmark.topdown.qwen3_5_4b.architecture import QWEN3_5_4B, with_layers
+    from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
     from evograd.opdecl.activity import Workload
     from evograd.verification.integrations.base import Case
 
-    bf, layers = "bfloat16", GDN_LAYERS + ATTN_LAYERS
+    bf, layers = dtype, GDN_LAYERS + ATTN_LAYERS
+    calls = {manifest.task_key(site):
+             manifest.expected_model_frequency(site, with_layers(QWEN3_5_4B, layers))
+             for site in manifest.SITES}
     rows = [
         ("linear_no_bias", "gate_up", {"M": T, "K": H, "N": I}, bf, 2 * layers),
         ("linear_no_bias", "down", {"M": T, "K": I, "N": H}, bf, layers),
@@ -60,32 +70,52 @@ def tiny_cases():
         ("swiglu", "act", {"rows": T, "cols": I}, bf, layers),
         ("cross_entropy", "loss", {"rows": T, "cols": V}, "float32", 1),
         ("qwen3_5_gdn_in_proj", "in_proj", {"B": 1, "T": T, "H": H, "C": C, "VD": VD, "HV": HV,
-                                            "K": 4, "D": DK}, bf, GDN_LAYERS),
-        ("qwen3_5_gated_delta_rule", "delta", {"B": 1, "T": T, "HV": HV, "D": DK}, bf, GDN_LAYERS),
+                                            "K": 4, "D": DK}, bf, calls["qwen3_5_gdn_in_proj"]),
+        ("qwen3_5_gated_delta_rule", "delta", {"B": 1, "T": T, "HV": HV, "D": DK}, bf,
+         calls["qwen3_5_gated_delta_rule"]),
         ("qwen3_5_gdn_norm_out", "norm_out", {"B": 1, "T": T, "HV": HV, "D": DK, "VD": VD, "H": H},
-         bf, GDN_LAYERS),
-        ("qwen3_5_qkv_norm_partial_rope", "qkv", {"B": 1, "T": T, "H": H, "HQ": HQ, "HK": HK, "D": D,
-                                                  "R": R, "QG": 2 * HQ * D, "KVO": HK * D,
-                                                  "QO": HQ * D}, bf, ATTN_LAYERS),
-        ("qwen3_5_gated_attention", "attn", {"B": 1, "T": T, "HQ": HQ, "HK": HK, "D": D, "QO": HQ * D,
-                                             "H": H}, bf, ATTN_LAYERS),
-        ("qwen3_5_residual_rmsnorm", "residual", {"B": 1, "T": T, "H": H}, bf, layers),
-        ("qwen3_5_swiglu_mlp", "mlp", {"B": 1, "T": T, "H": H, "I": I}, bf, layers),
+         bf, calls["qwen3_5_gdn_norm_out"]),
+        ("qwen3_5_attention_block", "attention_block",
+         {"B": 1, "T": T, "H": H, "HQ": HQ, "HK": HK, "D": D, "R": R, "QG": 2 * HQ * D,
+          "KVO": HK * D, "QO": HQ * D}, bf, calls["qwen3_5_attention_block"]),
+        ("qwen3_5_residual_rmsnorm", "residual", {"B": 1, "T": T, "H": H}, bf,
+         calls["qwen3_5_residual_rmsnorm"]),
+        ("qwen3_5_swiglu_mlp", "mlp", {"B": 1, "T": T, "H": H, "I": I}, bf,
+         calls["qwen3_5_swiglu_mlp"]),
     ]
     return tuple(Case(f"{task}/{slug}", task, get_task(task).level, Workload(dims=dims, dtype=dtype),
                       freq) for task, slug, dims, dtype, freq in rows)
 
 
+def snapshot_is_current() -> bool:
+    """Whether the tracked snapshot holds the Level-2 tasks the code declares; it
+    predates them until the GPU harvest regenerates it."""
+    from evograd.benchmark.topdown import load_snapshot
+    from evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot import TASK_SOURCES
+
+    return set(load_snapshot("qwen3_5_4b")["tasks"]) == set(TASK_SOURCES)
+
+
+STALE_SNAPSHOT = ("the tracked Qwen3.5 snapshot predates its Level-2 tasks "
+                  "(qwen3_5_attention_block, the 64-call residual fusion); regenerate it on a "
+                  "GPU node")
+
+
 class RealCaseTable(unittest.TestCase):
+    @unittest.skipUnless(snapshot_is_current(), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
+        from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.qwen3_5_4b import MODEL
 
         cases = {c.case_id: c for c in observed_cases(MODEL)}
         self.assertEqual(sum(c.frequency for c in cases.values() if c.level == 1), 507)
-        self.assertEqual(sum(c.frequency for c in cases.values() if c.level == 2), 152)
-        # The residual site's own calls, not its anchor norm's 65.
-        self.assertEqual(cases["qwen3_5_residual_rmsnorm/residual_rmsnorm"].frequency, 32)
+        self.assertEqual({c.task: c.frequency for c in cases.values() if c.level == 2},
+                         {manifest.task_key(site): manifest.expected_model_frequency(site)
+                          for site in manifest.SITES})
+        # The residual site's own calls (two per layer), not its anchor norm's 65.
+        self.assertEqual(cases["qwen3_5_residual_rmsnorm/residual_rmsnorm"].frequency, 64)
+        self.assertEqual(cases["qwen3_5_attention_block/attention_block"].frequency, 8)
 
     def test_gate3_horizon_is_per_model(self):
         from evograd.verification.integrations.convnextv2_tiny import MODEL as CONVNEXT
@@ -98,6 +128,7 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(MODEL.gate3_optimizer, {"warmup_steps": 100, "clip_grad_norm": 1.0,
                                                  "lr": 3e-5})
 
+    @unittest.skipUnless(snapshot_is_current(), STALE_SNAPSHOT)
     def test_every_case_task_is_redeclared_under_the_contract(self):
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.qwen3_5_4b import MODEL, reference
@@ -110,6 +141,8 @@ class RealCaseTable(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")
 class TinyCaptureTests(unittest.TestCase):
+    DTYPE = "bfloat16"
+
     @classmethod
     def setUpClass(cls):
         from evograd.benchmark.topdown.qwen3_5_4b.architecture import QWEN3_5_4B, with_layers
@@ -120,7 +153,7 @@ class TinyCaptureTests(unittest.TestCase):
         from tests.qwen3_5_4b._tiny import TINY_OVERRIDES
 
         cls.Q, cls.C = Q, C
-        workload = Qwen3_5Workload(device="cpu", dtype="bfloat16", batch_size=1, seq_len=T,
+        workload = Qwen3_5Workload(device="cpu", dtype=cls.DTYPE, batch_size=1, seq_len=T,
                                    arch_overrides={**with_layers(QWEN3_5_4B, 8), **TINY_OVERRIDES})
 
         def build():
@@ -144,7 +177,7 @@ class TinyCaptureTests(unittest.TestCase):
                               {"order": order, "sha256": str(order)})
             return model, recorder, output
 
-        cls.cases = tiny_cases()
+        cls.cases = tiny_cases(cls.DTYPE)
         cls.ids = torch.randint(0, V, (1, T), generator=torch.Generator().manual_seed(7))
         plain = build()
         cls.plain = Q.step_record(plain, Q.run_step(plain, cls.ids, cls.ids.clone()))
@@ -205,22 +238,75 @@ class TinyCaptureTests(unittest.TestCase):
                 self.assertEqual(tensor_digest(outs[name]), live["digest"],
                                  f"{record['payload_id']}:{name}")
 
-    def test_gate_and_residual_conventions(self):
-        attn = next(r for r in self.corpus.payloads() if r["task"] == "qwen3_5_gated_attention")
-        qkv = next(r for r in self.corpus.payloads()
-                   if r["task"] == "qwen3_5_qkv_norm_partial_rope" and r["call"]["layer"] == attn["call"]["layer"]
-                   and r["batch"] == attn["batch"])
-        from evograd.verification.common.tensors import tensor_digest
+    def _by_order(self, task):
+        out: dict[int, list] = {}
+        for record in self.corpus.payloads():
+            if record["task"] == task:
+                out.setdefault(record["batch"]["order"], []).append(record)
+        return out
 
-        loaded_attn = self.corpus.load(attn, device="cpu")
-        loaded_qkv = self.corpus.load(qkv, device="cpu")
-        self.assertEqual(attn["args"]["gate"]["shape"], [1, T, HQ * D])
-        # The gate the attention consumes is the gate the QKV boundary produces.
-        self.assertEqual(tensor_digest(loaded_attn["gate"]), qkv["live_outputs"]["gate"]["digest"])
-        self.assertTrue(loaded_qkv["dgate"].is_contiguous())
-        residual = [r for r in self.corpus.payloads() if r["task"] == "qwen3_5_residual_rmsnorm"]
-        self.assertEqual(len(residual), 2 * (GDN_LAYERS + ATTN_LAYERS))
-        self.assertTrue(all(not r["cotangent_stats"]["dsummed"].get("all_zero") for r in residual))
+    def test_the_attention_block_is_the_whole_module(self):
+        by_order = self._by_order("qwen3_5_attention_block")
+        self.assertEqual(sorted(by_order), [101, 303])
+        for order, records in by_order.items():
+            self.assertEqual(sorted(r["call"]["layer"] for r in records), [3, 7], order)
+            for record in records:
+                self.assertEqual(record["args"]["cos"]["shape"], [1, T, R])
+                self.assertEqual(record["args"]["o_weight"]["shape"], [H, HQ * D])
+                self.assertEqual(sorted(record["cotangents"]), ["dy"])
+
+    def _dresidual(self, record):
+        """The residual input's gradient, by autograd of the model reference on the
+        payload's own cotangents: what the fusion hands back to the sum before it."""
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.qwen3_5_4b.reference import reference_op
+
+        op = reference_op(record["task"])
+        values = self.corpus.load(record, device="cpu")
+        branch, residual = (values[n].clone().requires_grad_(True) for n in ("branch", "residual"))
+        normed, summed = resolve_runtime_forward(op)(branch, residual, values["weight"],
+                                                     values.get("eps", op.args[-1].default))
+        return torch.autograd.grad((normed, summed), (branch, residual),
+                                   (values["dnormed"], values["dsummed"]))[1]
+
+    def test_two_residual_fusions_per_layer_and_the_external_dsummed(self):
+        """``dsummed`` is what the next residual add delivers, so replaying each
+        fusion's backward on its payload gives exactly the ``dsummed`` of the
+        fusion before it: the chain closes bit for bit. A ``dsummed`` that
+        included the fused norm's own path (the old Qwen3.5 recording) breaks it."""
+        layers = GDN_LAYERS + ATTN_LAYERS
+        for order, records in self._by_order("qwen3_5_residual_rmsnorm").items():
+            roles: dict[str, dict[int, dict]] = {}
+            for record in records:
+                roles.setdefault(record["call"]["role"], {})[record["call"]["layer"]] = record
+            self.assertEqual({role: sorted(found) for role, found in roles.items()},
+                             {"within_layer": list(range(layers)),
+                              "cross_layer": list(range(layers - 1)),
+                              "final_model_norm": [layers - 1]})
+            final = roles["final_model_norm"][layers - 1]
+            self.assertEqual(final["call"]["norm"], "model.norm")
+            self.assertTrue(final["cotangent_stats"]["dsummed"]["all_zero"])
+            self.assertEqual(final["notes"]["absent_cotangents"], ["dsummed"])
+            closing = {**roles["cross_layer"], layers - 1: final}
+            for layer in range(layers):
+                within = roles["within_layer"][layer]
+                self.assertFalse(within["cotangent_stats"]["dsummed"].get("all_zero"))
+                with self.subTest(order=order, layer=layer, fusion="mlp add"):
+                    self.assertTrue(torch.equal(
+                        self._dresidual(closing[layer]),
+                        self.corpus.load(within, device="cpu")["dsummed"]))
+                if layer:
+                    with self.subTest(order=order, layer=layer, fusion="attention add"):
+                        self.assertTrue(torch.equal(
+                            self._dresidual(within),
+                            self.corpus.load(roles["cross_layer"][layer - 1],
+                                             device="cpu")["dsummed"]))
+
+
+class TinyCaptureFloat32Tests(TinyCaptureTests):
+    """The same capture of a float32 model: the references reproduce it bitwise too."""
+
+    DTYPE = "float32"
 
 
 if __name__ == "__main__":

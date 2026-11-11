@@ -482,7 +482,8 @@ def test_auto_library_follows_what_the_frontend_preserves(small_task):
 #: ``scaled_dot_product_attention`` at the function level (ATen on the meta device
 #: would see its math decomposition, ``bmm``).
 REACHED = (
-    ("qwen3_5_4b", "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope", "linear", ("vendor_gemm",)),
+    ("qwen3_5_4b", "qwen3_5_attention_block/attention_block", "scaled_dot_product_attention",
+     ("vendor_gemm", "vendor_sdpa")),
     ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "matmul", ("vendor_gemm",)),
     ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "_grouped_mm", ("vendor_gemm",)),
     pytest.param("qwen3_0_6b", "qwen3_attention_block/attention_block",

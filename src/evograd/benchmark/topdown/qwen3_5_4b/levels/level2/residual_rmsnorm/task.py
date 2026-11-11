@@ -1,12 +1,14 @@
 """Operator declaration: residual add + zero-centred RMSNorm, two outputs
 (site ``residual_rmsnorm``).
 
-Between the token mixer and the MLP of both block kinds: the post-attention
-``residual + branch`` and ``post_attention_layernorm``. Returns the normalized
-value and the sum itself, so the backward combines two upstream gradients -- the
-characteristic error is to ignore ``dsummed``. Block semantics: the layer's input
-norm and its closing residual add are not part of this site (the cross-layer
-fusion is a later step's).
+Every residual add of the stack with the (1 + w) RMSNorm that follows it, two
+per layer of either kind (64 calls per step): the post-attention ``residual +
+branch`` with ``post_attention_layernorm``, and the layer's closing ``residual +
+mlp`` with the next layer's ``input_layernorm`` (``model.norm`` after the last
+layer). Returns the normalized value and the sum itself, so the backward
+combines two upstream gradients -- the characteristic error is to ignore
+``dsummed``. ``dsummed`` is what the sum's other consumer delivers (the next
+residual add); the final sum has none, and its ``dsummed`` is zeros.
 """
 
 from evograd.opdecl import Active, Inactive, declare_op

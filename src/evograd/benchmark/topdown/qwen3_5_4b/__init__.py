@@ -10,10 +10,8 @@ training step at B2 does not fit one 96 GB card (see
 :mod:`.levels.level3.spec`).
 
 * :mod:`.architecture` -- ``text_config`` field by field;
-* :mod:`.levels` -- the Level-3 step, the seven Level-2 sites, the Level-1
+* :mod:`.levels` -- the Level-3 step, the six Level-2 sites, the Level-1
   bindings;
-* :mod:`.layer` -- layers 14 (GDN) and 15 (full attention), captured or
-  config-derived: where the Level-2 sites take their real invocations from;
 * :mod:`.harvest` -- the observed whole-model step frozen into
   ``harvest/snapshot.json``.
 

@@ -376,39 +376,70 @@ class NormBackwardStatements(unittest.TestCase):
         self.assertIn("dS = P * (dP - sum(dP * P, -1))", text)
         self.assertIn("dh = r * (g - xhat * mean(g * xhat, -1))", text)
 
-    def test_qwen3_5_qkv_norm_partial_rope(self):
+    def test_qwen3_5_attention_block(self):
         B, T, H, HQ, HK, D, R = 2, 5, 12, 4, 2, 8, 4
         x = _randn(B, T, H)
-        wq, wk, wv = _randn(HQ * 2 * D, H), _randn(HK * D, H), _randn(HK * D, H)
+        wq, wk, wv = (_randn(HQ * 2 * D, H) / H ** 0.5, _randn(HK * D, H) / H ** 0.5,
+                      _randn(HK * D, H) / H ** 0.5)
+        wo = _randn(H, HQ * D) / (HQ * D) ** 0.5
         nq, nk = _randn(D), _randn(D)
         cos, sin = _rope_tables(T, R)
-        eps = get_task("qwen3_5_qkv_norm_partial_rope").args[-1].default
-        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv,
-                  "q_norm_weight": nq, "k_norm_weight": nk, "cos": cos, "sin": sin}
-        up = _upstream("qwen3_5_qkv_norm_partial_rope", inputs)
+        eps = get_task("qwen3_5_attention_block").args[-1].default
+        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv, "q_norm_weight": nq,
+                  "k_norm_weight": nk, "o_weight": wo, "cos": cos, "sin": sin}
+        up = _upstream("qwen3_5_attention_block", inputs)
+        dy, groups, scale = up["dy"], HQ // HK, D ** -0.5
+
+        def rope(t):
+            c, s = cos.unsqueeze(1), sin.unsqueeze(1)
+            return torch.cat((t[..., :R] * c + _rotate_half(t[..., :R]) * s, t[..., R:]), -1)
 
         def unrotate_first_r(d):
             return torch.cat((_unrotate(d[..., :R], cos, sin), d[..., R:]), -1)
 
-        def head_norm(h, d, w):
+        def head_norm(h, w):
             r = torch.rsqrt(h.pow(2).mean(-1, keepdim=True) + eps)
+            return h * r * (1 + w), r
+
+        def head_norm_backward(h, r, d, w):
             dnorm = unrotate_first_r(d).transpose(1, 2)
             xhat, g = h * r, dnorm * (1 + w)
             return r * (g - xhat * (g * xhat).mean(-1, keepdim=True)), (dnorm * xhat).sum((0, 1, 2))
 
-        query = (x @ wq.T).view(B, T, HQ, 2 * D)[..., :D]
-        dquery, dnq = head_norm(query, up["dq"], nq)
-        dk_heads, dnk = head_norm((x @ wk.T).view(B, T, HK, D), up["dk"], nk)
+        # The forward, to have its intermediates.
+        qg = (x @ wq.T).view(B, T, HQ, 2 * D)
+        hq, gate = qg[..., :D], qg[..., D:].reshape(B, T, HQ * D)
+        hk = (x @ wk.T).view(B, T, HK, D)
+        (qn, rq), (kn, rk) = head_norm(hq, nq), head_norm(hk, nk)
+        q, k = rope(qn.transpose(1, 2)), rope(kn.transpose(1, 2))
+        v = (x @ wv.T).view(B, T, HK, D).transpose(1, 2)
+        kr, vr = k.repeat_interleave(groups, 1), v.repeat_interleave(groups, 1)
+        causal = torch.ones(T, T, dtype=torch.bool).tril()
+        scores = (q @ kr.transpose(-2, -1) * scale).masked_fill(~causal, float("-inf"))
+        P = torch.softmax(scores, -1)
+        a = (P @ vr).transpose(1, 2).reshape(B, T, HQ * D)
+        s = torch.sigmoid(gate)
+        # The statement, line for line.
+        do_weight = torch.einsum("bth,btq->hq", dy, a * s)
+        dag = dy @ wo
+        dgate = dag * a * s * (1 - s)
+        da = (dag * s).view(B, T, HQ, D).transpose(1, 2)
+        dP = da @ vr.transpose(-2, -1)
+        dS = P * (dP - (dP * P).sum(-1, keepdim=True))
+        dq = dS @ kr * scale
+        dk = (dS.transpose(-2, -1) @ q * scale).view(B, HK, groups, T, D).sum(2)
+        dv = (P.transpose(-2, -1) @ da).view(B, HK, groups, T, D).sum(2)
+        dquery, dnq = head_norm_backward(hq, rq, dq, nq)
+        dk_heads, dnk = head_norm_backward(hk, rk, dk, nk)
         # Re-interleave per head: [query | gate] in the [B, T, HQ, 2D] layout.
-        dqg = torch.cat((dquery, up["dgate"].view(B, T, HQ, D)), -1).reshape(B, T, HQ * 2 * D)
+        dqg = torch.cat((dquery, dgate.view(B, T, HQ, D)), -1).reshape(B, T, HQ * 2 * D)
         dk_flat = dk_heads.reshape(B, T, HK * D)
-        dv_flat = up["dv"].transpose(1, 2).reshape(B, T, HK * D)
+        dv_flat = dv.transpose(1, 2).reshape(B, T, HK * D)
         outer = lambda d: torch.einsum("bto,bth->oh", d, x)  # noqa: E731
-        self.assertGrads("qwen3_5_qkv_norm_partial_rope", inputs, up, {
+        self.assertGrads("qwen3_5_attention_block", inputs, up, {
             "dx": dqg @ wq + dk_flat @ wk + dv_flat @ wv, "dq_weight": outer(dqg),
             "dk_weight": outer(dk_flat), "dv_weight": outer(dv_flat),
-            "dq_norm_weight": dnq, "dk_norm_weight": dnk})
-
+            "dq_norm_weight": dnq, "dk_norm_weight": dnk, "do_weight": do_weight})
 
 if __name__ == "__main__":
     unittest.main()

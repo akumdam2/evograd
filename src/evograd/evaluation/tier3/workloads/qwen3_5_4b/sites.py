@@ -1,31 +1,33 @@
 """Drop-in sites inside a Qwen3.5 decoder layer, and across the whole model.
 
-Seven sites in two block kinds (``levels.level2.manifest.SITES_BY_BLOCK``)::
+Six sites in two block kinds (``levels.level2.manifest.SITES_BY_BLOCK``)::
 
     Gated DeltaNet layer (24 of 32)       full-attention layer (8 of 32)
-      gdn_in_proj                           qkv_norm_partial_rope
-      gated_delta_rule                      gated_attention
+      gdn_in_proj                           attention_block
+      gated_delta_rule
       gdn_norm_out
-      residual_rmsnorm                      residual_rmsnorm
+      residual_rmsnorm (x2)                 residual_rmsnorm (x2)
       swiglu_mlp                            swiglu_mlp
 
-One registry holds all seven sites and patches every layer by its type; a
+One registry holds all six sites and patches every layer by its type; a
 per-kind registry (one layer type's sites) refuses a candidate for a site that
 layer type does not have, by name.
 
 **Nothing is replaced.** As for Qwen3-0.6B, every adapter rebinds
 ``forward`` on the existing module instance; parameters are the same objects, so
 state dict, parameter order, dtype and ``requires_grad`` are unchanged by
-construction. Four adapters, one per module that holds sites:
+construction. Five adapters, one per module that holds sites:
 
 * ``Qwen3_5GatedDeltaNet.forward`` -- sites 1-3 (four input projections, no
   deinterleave);
-* ``Qwen3_5Attention.forward``     -- sites 4, 5;
+* ``Qwen3_5Attention.forward``     -- the whole attention module;
 * ``Qwen3_5MLP.forward``           -- the dense SwiGLU (Qwen3-0.6B's adapter);
-* ``Qwen3_5DecoderLayer.forward``  -- the post-attention residual site: the
-  input norm and the closing residual add stay native.
-  The cross-layer fusion and the final-norm fusion (Qwen3-0.6B's
-  ``ResidualCarrier``) are a later step's.
+* ``Qwen3_5DecoderLayer.forward`` and ``model.norm`` -- the residual site, as
+  Qwen3-0.6B's ``ResidualCarrier`` runs it: each layer fuses the previous
+  layer's closing add into its input norm (layer 0's input norm stays native,
+  no add precedes it), fuses its own post-attention add, and hands its
+  un-added MLP branch on; ``model.norm`` fuses the last layer's. Two calls per
+  layer, 64 per step.
 
 **Production spellings are pinned.** Each registry default is the exact code the
 installed Transformers runs, written against the module, with the two
@@ -50,17 +52,18 @@ import torch
 import torch.nn.functional as F
 
 from evograd.evaluation.tier3.patch import ModulePatch, PatchProvenance, Site, SiteRegistry
+from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import ResidualCarrier
 
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import hf_modules
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2.manifest import (
     BLOCK_FULL,
     BLOCK_GDN,
-    SITE_ATTENTION,
+    FREQUENCY,
+    SITE_ATTENTION_BLOCK,
     SITE_GDN_IN,
     SITE_GDN_OUT,
     SITE_GDR,
     SITE_MLP,
-    SITE_QKV,
     SITE_RESIDUAL,
     SITE_TASKS,
     SITES,
@@ -75,7 +78,7 @@ OBSERVED_SUITE = "qwen3_5_4b_observed"
 #: unpatched ones through their production spelling.
 ADAPTER_GROUPS: tuple[tuple[str, ...], ...] = (
     (SITE_GDN_IN, SITE_GDR, SITE_GDN_OUT),
-    (SITE_QKV, SITE_ATTENTION),
+    (SITE_ATTENTION_BLOCK,),
     (SITE_RESIDUAL,),
     (SITE_MLP,),
 )
@@ -164,7 +167,9 @@ def production_gdn_norm_out(module, core_attn_out, z):
     return module.out_proj(core_attn_out)
 
 
-def production_qkv_norm_partial_rope(module, hidden_states, cos, sin):
+def production_attention_block(module, hidden_states, cos, sin, attention_mask, **kwargs):
+    """Exactly ``Qwen3_5Attention.forward``, cache-free."""
+    modeling = _modeling()
     input_shape = hidden_states.shape[:-1]
     hidden_shape = (*input_shape, -1, module.head_dim)
     query_states, gate = torch.chunk(
@@ -173,17 +178,11 @@ def production_qkv_norm_partial_rope(module, hidden_states, cos, sin):
     query_states = module.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
     key_states = module.k_norm(module.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
     value_states = module.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-    query_states, key_states = _modeling().apply_rotary_pos_emb(query_states, key_states, cos, sin)
-    return query_states, key_states, value_states, gate
-
-
-def production_gated_attention(module, query, key, value, gate, attention_mask, input_shape,
-                               **kwargs):
-    modeling = _modeling()
+    query_states, key_states = modeling.apply_rotary_pos_emb(query_states, key_states, cos, sin)
     attention_interface: Callable = modeling.ALL_ATTENTION_FUNCTIONS.get_interface(
         module.config._attn_implementation, modeling.eager_attention_forward)
     attn_output, _ = attention_interface(
-        module, query, key, value, attention_mask,
+        module, query_states, key_states, value_states, attention_mask,
         dropout=0.0 if not module.training else module.attention_dropout,
         scaling=module.scaling, **kwargs)
     attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -191,9 +190,15 @@ def production_gated_attention(module, query, key, value, gate, attention_mask, 
     return module.o_proj(attn_output)
 
 
-def production_residual_rmsnorm(norm_module, branch, residual):
+def production_residual_rmsnorm(norm_call, branch, residual):
+    """``residual + branch``, then the norm, as the decoder layer writes them.
+
+    ``norm_call`` is the original ``Qwen3_5RMSNorm`` computation: for
+    ``model.norm``, whose forward this file rebinds, the bound method captured
+    before rebinding, or the production path would call itself.
+    """
     summed = residual + branch
-    return norm_module(summed), summed
+    return norm_call(summed), summed
 
 
 def production_swiglu_mlp(module, x):
@@ -205,8 +210,7 @@ PRODUCTION: dict[str, Callable] = {
     SITE_GDN_IN: production_gdn_in_proj,
     SITE_GDR: production_gated_delta_rule,
     SITE_GDN_OUT: production_gdn_norm_out,
-    SITE_QKV: production_qkv_norm_partial_rope,
-    SITE_ATTENTION: production_gated_attention,
+    SITE_ATTENTION_BLOCK: production_attention_block,
     SITE_RESIDUAL: production_residual_rmsnorm,
     SITE_MLP: production_swiglu_mlp,
 }
@@ -222,7 +226,7 @@ _REGISTRIES: dict[str | None, SiteRegistry] = {}
 
 
 def qwen3_5_sites(kind: str | None = None) -> SiteRegistry:
-    """The seven sites (``kind=None``), or one layer kind's subset.
+    """The six sites (``kind=None``), or one layer kind's subset.
 
     The observed shapes are checked at real size by the gates, not here.
     """
@@ -351,42 +355,32 @@ def _gdn_forward(self, hidden_states, cache_params=None, attention_mask=None, **
 
 def _attention_forward(self, hidden_states, position_embeddings=None, attention_mask=None,
                        past_key_values=None, **kwargs):
+    """``Qwen3_5Attention.forward`` as one site, input to output."""
     state = getattr(self, _TAG + "state")
     counters, kernels = state["counters"], state["kernels"]
     if past_key_values is not None:
         raise NotImplementedError("the Qwen3.5 attention adapter is a training boundary; "
                                   "cache-enabled execution is not supported")
     cos, sin = position_embeddings
-    input_shape = hidden_states.shape[:-1]
-
-    kernel = kernels.get(SITE_QKV)
-    counters.hit(SITE_QKV)
-    query, key, value, gate = _run_site(
-        state, SITE_QKV,
-        {"x": hidden_states, "q_weight": self.q_proj.weight, "k_weight": self.k_proj.weight,
-         "v_weight": self.v_proj.weight, "q_norm_weight": self.q_norm.weight,
-         "k_norm_weight": self.k_norm.weight, "cos": _shared_positions(cos),
-         "sin": _shared_positions(sin), "eps": float(self.q_norm.eps)},
-        ("x",),
-        lambda i: (production_qkv_norm_partial_rope(self, i["x"], cos, sin)
-                   if _is_production(kernel, SITE_QKV)
-                   else kernel(i["x"], i["q_weight"], i["k_weight"], i["v_weight"],
-                               i["q_norm_weight"], i["k_norm_weight"], i["cos"], i["sin"],
-                               i["eps"])))
-
-    kernel = kernels.get(SITE_ATTENTION)
-    counters.hit(SITE_ATTENTION)
-    if not _is_production(kernel, SITE_ATTENTION) and attention_mask is not None:
-        raise NotImplementedError("qwen3_5_gated_attention is declared for the mask-free "
+    kernel = kernels.get(SITE_ATTENTION_BLOCK)
+    counters.hit(SITE_ATTENTION_BLOCK)
+    production = _is_production(kernel, SITE_ATTENTION_BLOCK)
+    if not production and attention_mask is not None:
+        raise NotImplementedError("qwen3_5_attention_block is declared for the mask-free "
                                   "causal branch; this call supplied an attention mask")
     out = _run_site(
-        state, SITE_ATTENTION,
-        {"q": query, "k": key, "v": value, "gate": gate, "o_weight": self.o_proj.weight},
-        ("q", "k", "v", "gate"),
-        lambda i: (production_gated_attention(self, i["q"], i["k"], i["v"], i["gate"],
-                                              attention_mask, input_shape, **kwargs)
-                   if _is_production(kernel, SITE_ATTENTION)
-                   else kernel(i["q"], i["k"], i["v"], i["gate"], i["o_weight"])))
+        state, SITE_ATTENTION_BLOCK,
+        {"x": hidden_states, "q_weight": self.q_proj.weight, "k_weight": self.k_proj.weight,
+         "v_weight": self.v_proj.weight, "q_norm_weight": self.q_norm.weight,
+         "k_norm_weight": self.k_norm.weight, "o_weight": self.o_proj.weight,
+         "cos": _shared_positions(cos), "sin": _shared_positions(sin),
+         "eps": float(self.q_norm.eps)},
+        ("x",),
+        lambda i: (production_attention_block(self, i["x"], cos, sin, attention_mask, **kwargs)
+                   if production
+                   else kernel(i["x"], i["q_weight"], i["k_weight"], i["v_weight"],
+                               i["q_norm_weight"], i["k_norm_weight"], i["o_weight"], i["cos"],
+                               i["sin"], i["eps"])))
     return out, None
 
 
@@ -403,59 +397,90 @@ def _mlp_forward(self, x):
                    else kernel(i["x"], i["gate_weight"], i["up_weight"], i["down_weight"])))
 
 
-def _layer_forward(self, hidden_states, position_embeddings=None, attention_mask=None,
-                   position_ids=None, past_key_values=None, **kwargs):
-    """``Qwen3_5DecoderLayer.forward`` with the post-attention add + norm as a site.
-
-    Same operations in the same order: input norm native, the token mixer
-    through its own (possibly adapted) forward, the residual site, the MLP, and
-    the closing ``residual + branch`` as the original writes it.
-    """
-    state = getattr(self, _TAG + "state")
-    counters, kernels = state["counters"], state["kernels"]
-    if past_key_values is not None:
-        raise NotImplementedError("the Qwen3.5 decoder adapter is a training boundary")
-    residual = hidden_states
-    hidden_states = self.input_layernorm(hidden_states)
-    if self.block_type == "linear_attention":
-        branch = self.linear_attn(hidden_states=hidden_states, cache_params=past_key_values,
-                                  attention_mask=attention_mask, **kwargs)
-    else:
-        branch, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask,
-                                   position_ids=position_ids, past_key_values=past_key_values,
-                                   position_embeddings=position_embeddings, **kwargs)
-    kernel = kernels.get(SITE_RESIDUAL)
-    counters.hit(SITE_RESIDUAL)
-    norm = self.post_attention_layernorm
-    normed, summed = _run_site(
+def _residual_site(state, branch, residual, norm, norm_call=None):
+    """One residual fusion: ``residual + branch`` and the norm after it."""
+    kernel = state["kernels"].get(SITE_RESIDUAL)
+    state["counters"].hit(SITE_RESIDUAL)
+    return _run_site(
         state, SITE_RESIDUAL,
         {"branch": branch, "residual": residual, "weight": norm.weight, "eps": float(norm.eps)},
         ("branch", "residual"),
-        lambda i: (production_residual_rmsnorm(norm, i["branch"], i["residual"])
+        lambda i: (production_residual_rmsnorm(norm_call or norm, i["branch"], i["residual"])
                    if _is_production(kernel, SITE_RESIDUAL)
                    else kernel(i["branch"], i["residual"], i["weight"], i["eps"])))
-    return summed + self.mlp(normed)
 
 
-def _install(module, forward, kernels: dict, counters: SiteCounters, layer_idx) -> None:
+def _decoder_layer_forward(self, hidden_states, position_embeddings=None, attention_mask=None,
+                           position_ids=None, past_key_values=None, **kwargs):
+    """``Qwen3_5DecoderLayer.forward`` with both residual adds as fusion sites.
+
+    Same operations in the same order. The input norm fuses the previous
+    layer's closing add, taken from the carrier (layer 0's follows the
+    embedding and stays native); the token mixer runs through its own (possibly
+    adapted) forward; the post-attention add and norm are the second site; the
+    MLP runs, and its branch is returned un-added, with the pair left in the
+    carrier for the next layer's input norm or ``model.norm``.
+    """
+    state = getattr(self, _TAG + "state")
+    carrier = state["carrier"]
+    if past_key_values is not None:
+        raise NotImplementedError("the Qwen3.5 decoder adapter is a training boundary")
+    if kwargs.get("output_hidden_states"):
+        raise NotImplementedError("the fused residual path hands the un-added branch from layer "
+                                  "to layer, so output_hidden_states would report a tensor that "
+                                  "is not the residual stream")
+    if state["layer_idx"] == 0:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+    else:
+        branch, previous = carrier.take()
+        if branch is not hidden_states:
+            raise RuntimeError("a decoder layer received a tensor the previous layer did not "
+                               "produce; the model loop is not the one this adapter was built for")
+        hidden_states, residual = _residual_site(state, branch, previous, self.input_layernorm)
+    if self.block_type == "linear_attention":
+        mixed = self.linear_attn(hidden_states=hidden_states, cache_params=past_key_values,
+                                 attention_mask=attention_mask, **kwargs)
+    else:
+        mixed, _ = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask,
+                                  position_ids=position_ids, past_key_values=past_key_values,
+                                  position_embeddings=position_embeddings, **kwargs)
+    normed, summed = _residual_site(state, mixed, residual, self.post_attention_layernorm)
+    branch = self.mlp(normed)
+    carrier.put(branch, summed)
+    return branch
+
+
+def _final_norm_forward(self, hidden_states):
+    """``model.norm``, fused with the last layer's closing add from the carrier."""
+    state = getattr(self, _TAG + "state")
+    branch, residual = state["carrier"].take()
+    if branch is not hidden_states:
+        raise RuntimeError("the final norm received a tensor the last decoder layer did not "
+                           "produce; the model loop is not the one this adapter was built for")
+    normed, _summed = _residual_site(state, branch, residual, self, state["norm_forward"])
+    return normed
+
+
+def _install(module, forward, kernels: dict, counters: SiteCounters, layer_idx, **extra) -> None:
     state = getattr(module, _TAG + "state", None)
     if state is None:
         state = {}
         setattr(module, _TAG + "state", state)
         module.forward = types.MethodType(forward, module)
-    state.update({"kernels": dict(kernels), "counters": counters, "layer_idx": layer_idx})
+    state.update({"kernels": dict(kernels), "counters": counters, "layer_idx": layer_idx, **extra})
 
 
 _GDN_SITES = (SITE_GDN_IN, SITE_GDR, SITE_GDN_OUT)
-_ATTN_SITES = (SITE_QKV, SITE_ATTENTION)
 
 
 def install_sites(layer, kernels: dict, counters: SiteCounters,
                   layer_idx: int | None = None) -> dict[str, tuple[str, ...]]:
-    """Install every requested site's adapter on one decoder layer; return local paths.
+    """Install every requested module adapter on one decoder layer; return local paths.
 
     Sites the layer's kind does not have are skipped (a whole-model patch asks
-    every layer for every site).
+    every layer for every site). The residual site spans layers:
+    :func:`install_residual_sites`.
     """
     paths: dict[str, tuple[str, ...]] = {}
     requested = set(kernels)
@@ -463,17 +488,34 @@ def install_sites(layer, kernels: dict, counters: SiteCounters,
         _install(layer.linear_attn, _gdn_forward, kernels, counters, layer_idx)
         for site in requested & set(_GDN_SITES):
             paths[site] = ("linear_attn",)
-    if requested & set(_ATTN_SITES) and getattr(layer, "self_attn", None) is not None:
+    if SITE_ATTENTION_BLOCK in requested and getattr(layer, "self_attn", None) is not None:
         _install(layer.self_attn, _attention_forward, kernels, counters, layer_idx)
-        for site in requested & set(_ATTN_SITES):
-            paths[site] = ("self_attn",)
-    if SITE_RESIDUAL in requested:
-        _install(layer, _layer_forward, kernels, counters, layer_idx)
-        paths[SITE_RESIDUAL] = ("post_attention_layernorm",)
+        paths[SITE_ATTENTION_BLOCK] = ("self_attn",)
     if SITE_MLP in requested:
         _install(layer.mlp, _mlp_forward, kernels, counters, layer_idx)
         paths[SITE_MLP] = ("mlp",)
     return paths
+
+
+def install_residual_sites(model, kernels: dict,
+                           counters: SiteCounters) -> tuple[list[str], ResidualCarrier]:
+    """Rebind every decoder layer and ``model.norm`` onto one shared carrier.
+
+    One coordinated site: patching only some of them would leave a residual
+    stream half carried and half added. Returns the module paths and the carrier.
+    """
+    inner = model.model
+    carrier = ResidualCarrier()
+    paths: list[str] = []
+    for index, layer in enumerate(inner.layers):
+        _install(layer, _decoder_layer_forward, kernels, counters, index, carrier=carrier)
+        paths.append(f"model.layers.{index}")
+    # The class's forward, not the instance's: the production path must reach the
+    # original computation, never the adapter that replaces it.
+    _install(inner.norm, _final_norm_forward, kernels, counters, None, carrier=carrier,
+             norm_forward=types.MethodType(type(inner.norm).forward, inner.norm))
+    paths.append("model.norm")
+    return paths, carrier
 
 
 # ── the whole model ──────────────────────────────────────────────────────────
@@ -481,9 +523,19 @@ def install_sites(layer, kernels: dict, counters: SiteCounters,
 
 def expected_counts(layer_types: Sequence[str]) -> dict[str, int]:
     """What one forward of a model with these layer types invokes, per site:
-    24 / 8 / 32 for Qwen3.5-4B (each site once per layer of a kind holding it)."""
-    return {site: sum(1 for kind in layer_types if site in SITES_BY_BLOCK[kind])
-            for site in SITES}
+    24 / 8 / 32 / 64 for Qwen3.5-4B (``manifest.FREQUENCY`` per layer of a kind
+    holding the site: the residual fusion twice per layer)."""
+    return {site: sum(FREQUENCY[kind].get(site, 0) for kind in layer_types) for site in SITES}
+
+
+def modules_reached(layer_types: Sequence[str]) -> dict[str, int]:
+    """How many modules each site's adapter rebinds: one per layer of a kind
+    holding the site, and for the residual site every decoder layer and
+    ``model.norm``."""
+    reach = {site: sum(1 for kind in layer_types if site in SITES_BY_BLOCK[kind])
+             for site in SITES}
+    reach[SITE_RESIDUAL] = len(layer_types) + 1
+    return reach
 
 
 def _layer_types(model) -> tuple[str, ...]:
@@ -494,8 +546,8 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
                 *, expected_layers: int | None = None):
     """Install every requested site on a built ``Qwen3_5ForCausalLM``.
 
-    Returns ``(provenance, counters, carrier)``; ``carrier`` is always ``None``
-    (no cross-layer fusion in this step), kept for the Qwen3-0.6B shape. A
+    Returns ``(provenance, counters, carrier)``; ``carrier`` is the residual
+    site's :class:`ResidualCarrier` when that site is patched, else ``None``. A
     requested site that reaches fewer modules than the layer types say raises:
     a provider labelled "patched" that is partly native would report native
     numbers as the kernel's.
@@ -518,7 +570,10 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
                              f"{types_[index]}")
         for site, local in install_sites(layer, selected, counters, index).items():
             paths.setdefault(site, []).extend(f"model.layers.{index}.{p}" for p in local)
-    want = expected_counts(types_)
+    carrier = None
+    if SITE_RESIDUAL in selected:
+        paths[SITE_RESIDUAL], carrier = install_residual_sites(model, selected, counters)
+    want = modules_reached(types_)
     for site in requested:
         found = len(paths.get(site, ()))
         if found != want[site]:
@@ -527,7 +582,7 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
     provenance = PatchProvenance(
         method="module_surgery", requested_sites=tuple(sorted(requested)),
         actual_sites=tuple(sorted(paths)), paths={k: tuple(v) for k, v in paths.items()})
-    return provenance, counters, None
+    return provenance, counters, carrier
 
 
 def module_patches() -> tuple[ModulePatch, ...]:
@@ -538,8 +593,7 @@ def module_patches() -> tuple[ModulePatch, ...]:
     return (
         ModulePatch(SITE_GDN_IN, _named("Qwen3_5GatedDeltaNet"), lambda o, k: o,
                     sites=(SITE_GDR, SITE_GDN_OUT)),
-        ModulePatch(SITE_QKV, _named("Qwen3_5Attention"), lambda o, k: o,
-                    sites=(SITE_ATTENTION,)),
+        ModulePatch(SITE_ATTENTION_BLOCK, _named("Qwen3_5Attention"), lambda o, k: o),
         ModulePatch(SITE_RESIDUAL, _named("Qwen3_5DecoderLayer"), lambda o, k: o),
         ModulePatch(SITE_MLP, _named("Qwen3_5MLP"), lambda o, k: o),
     )
@@ -577,7 +631,8 @@ class PatchedModel:
 
 __all__ = [
     "ADAPTER_GROUPS", "BLOCK_FULL", "BLOCK_GDN", "OBSERVED_SUITE", "PRODUCTION", "PatchedModel",
-    "SiteCounters", "bound_pair_identity_kernels", "expected_counts", "install_sites",
-    "live_sites", "module_patches", "patch_model", "qwen3_5_sites", "set_tap",
+    "ResidualCarrier", "SiteCounters", "bound_pair_identity_kernels", "expected_counts",
+    "install_residual_sites", "install_sites", "live_sites", "module_patches",
+    "modules_reached", "patch_model", "qwen3_5_sites", "set_tap",
     "structural_identity_kernels", "supporting_sites",
 ]

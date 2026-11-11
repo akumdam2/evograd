@@ -1,4 +1,4 @@
-"""Qwen3.5-4B GPU baseline sessions: L3 feasibility, harvest, capture, smokes.
+"""Qwen3.5-4B GPU baseline sessions: L3 feasibility, harvest, smokes.
 
     python scripts/qwen3_5_4b/driver.py --run-dir results/experiments/qwen3_5_4b_cases/<run_id>
 
@@ -20,9 +20,7 @@ Session 1 (feasibility)
   ops_smoke    every bound L1 primitive at its observed shapes and every L2 task
                at its canonical case: oracle vs runtime_forward, max errors; the
                Liger cross entropy on the 248,320-wide rows.
-Session 2 (capture)
-  capture      layers 14 and 15 from one canonical step -> layer14.pt, layer15.pt
-Session 3 (recorded only)
+Session 2 (recorded only)
   table        BASELINES.md from everything above.
 """
 
@@ -47,14 +45,13 @@ RC_B1_OOM = 3
 
 SESSION1 = ("l3_b1", "l3_b2", "l3_smoke", "harvest", "ops_smoke", "ops_smoke_l2",
             "l3_identity")
-SESSION2 = ("capture",)
-SESSION3 = ("table",)
-STEPS = SESSION1 + SESSION2 + SESSION3
+SESSION2 = ("table",)
+STEPS = SESSION1 + SESSION2
 
 #: Seconds a step's child may run before it is killed and recorded as such.
 TIMEOUTS = {"l3_b1": 1200, "l3_b2": 900, "l3_smoke": 900, "harvest": 1200,
             "ops_smoke": 1800, "ops_smoke_l2": 1800,
-            "l3_identity": 1500, "capture": 1200, "table": 300}
+            "l3_identity": 1500, "table": 300}
 
 
 def log(message: str) -> None:
@@ -449,26 +446,7 @@ def step_ops_smoke(run_dir: Path, level2: bool = False) -> dict:
             "liger_cross_entropy_248k": liger}
 
 
-
-def step_capture(run_dir: Path) -> dict:
-    from evograd.benchmark.topdown.qwen3_5_4b.layer.capture import (
-        run_capture, write_captures)
-
-    peak_reset()
-    tick = time.perf_counter()
-    results = run_capture(manifest_path=run_dir / "harvest_manifest.json")
-    written = write_captures(results, run_dir)
-    return {"written": [str(p) for p in written],
-            "artifacts": {str(i): {"artifact_hash": a.payload["artifact_hash"],
-                                   "content_hash": a.payload["content_hash"],
-                                   "layer_kind": a.identity["layer_kind"],
-                                   "bytes": (run_dir / f"layer{i}.pt").stat().st_size,
-                                   "full_model_loss": m["full_model_validation"]["loss"]}
-                          for i, (a, m) in results.items()},
-            "wall_time_s": time.perf_counter() - tick, **peak()}
-
-
-# ── session 3 ────────────────────────────────────────────────────────────────
+# ── session 2 ────────────────────────────────────────────────────────────────
 
 
 def step_table(run_dir: Path) -> dict:
@@ -483,7 +461,7 @@ def step_table(run_dir: Path) -> dict:
 FUNCTIONS = {"l3_b1": step_l3_b1, "l3_b2": step_l3_b2, "l3_smoke": step_l3_smoke,
              "harvest": step_harvest, "ops_smoke": step_ops_smoke,
              "ops_smoke_l2": lambda run_dir: step_ops_smoke(run_dir, level2=True),
-             "l3_identity": step_l3_identity, "capture": step_capture, "table": step_table}
+             "l3_identity": step_l3_identity, "table": step_table}
 
 
 def run_child(run_dir: Path, name: str) -> int:
@@ -513,7 +491,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--only", action="append", choices=STEPS, default=None)
-    parser.add_argument("--session", type=int, choices=(1, 2, 3), default=None,
+    parser.add_argument("--session", type=int, choices=(1, 2), default=None,
                         help="stop after this session's steps")
     parser.add_argument("--child", choices=STEPS, default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -531,7 +509,7 @@ def main(argv=None) -> int:
     if not str(evograd.__file__).startswith(str(REPO / "src")):
         log("evograd is not imported from this worktree; export PYTHONPATH first")
         return 2
-    last = {1: SESSION1, 2: SESSION1 + SESSION2, 3: STEPS}.get(args.session, STEPS)
+    last = {1: SESSION1, 2: STEPS}.get(args.session, STEPS)
     env = {k: v for k, v in os.environ.items() if k != "EVOGRAD_SIDECARS"}
     for name in STEPS:
         if name not in last or (args.only and name not in args.only):

@@ -112,14 +112,13 @@ class TestDerivedNaming(unittest.TestCase):
                     "olmoe_attention_block",
                     "olmoe_moe_experts",
                     "olmoe_residual_rmsnorm",
-                    # Qwen3.5-4B's seven sites (two layer kinds, dense MLP).
+                    # Qwen3.5-4B's six sites (two layer kinds, dense MLP).
                     "qwen2_vl_2b_text_mlp",
                     "qwen2_vl_2b_vision_mlp",
-                    "qwen3_5_gated_attention",
+                    "qwen3_5_attention_block",
                     "qwen3_5_gated_delta_rule",
                     "qwen3_5_gdn_in_proj",
                     "qwen3_5_gdn_norm_out",
-                    "qwen3_5_qkv_norm_partial_rope",
                     "qwen3_5_residual_rmsnorm",
                     "qwen3_5_swiglu_mlp",
                     # Qwen3-0.6B's whole attention module and its LM head with

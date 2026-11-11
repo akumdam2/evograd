@@ -15,7 +15,7 @@ fails the extraction rather than being dropped.
 
 ``partial_rope`` cases read theta 1e7 from their provenance (the record's
 ``rope_theta``); ``cross_entropy`` runs on 248,320-wide
-rows -- both are exercised by ``tests/qwen3_5_4b/test_level1_bindings.py``.
+rows -- both are exercised by ``tests/qwen3_5_4b/test_harvest.py``.
 """
 
 from __future__ import annotations
@@ -48,15 +48,14 @@ OBSERVED_BINDINGS: tuple[ObservedBinding, ...] = tuple(
 #: Primitive -> the Level-2 contracts it composes into.
 COMPOSES_INTO: dict[str, tuple[str, ...]] = {
     "linear_no_bias": ("qwen3_5_gdn_in_proj", "qwen3_5_gdn_norm_out",
-                       "qwen3_5_qkv_norm_partial_rope", "qwen3_5_gated_attention",
-                       "qwen3_5_swiglu_mlp"),
+                       "qwen3_5_attention_block", "qwen3_5_swiglu_mlp"),
     "causal_conv1d": ("qwen3_5_gdn_in_proj",),
     "gdn_gating": ("qwen3_5_gdn_in_proj",),
     "l2norm": ("qwen3_5_gated_delta_rule",),
     "gated_rmsnorm": ("qwen3_5_gdn_norm_out",),
-    "gemma_rmsnorm": ("qwen3_5_qkv_norm_partial_rope", "qwen3_5_residual_rmsnorm"),
-    "partial_rope": ("qwen3_5_qkv_norm_partial_rope",),
-    "causal_gqa_attention": ("qwen3_5_gated_attention",),
+    "gemma_rmsnorm": ("qwen3_5_attention_block", "qwen3_5_residual_rmsnorm"),
+    "partial_rope": ("qwen3_5_attention_block",),
+    "causal_gqa_attention": ("qwen3_5_attention_block",),
     "swiglu": ("qwen3_5_swiglu_mlp",),
     # The loss, and the lm_head before it: the lm_head_ce site is deferred, so
     # this composes into nothing declared yet.

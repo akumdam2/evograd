@@ -1,7 +1,8 @@
-"""Site ``residual_rmsnorm``: the post-attention residual add and its (1 + w) RMSNorm.
+"""Site ``residual_rmsnorm``: a residual add and the (1 + w) RMSNorm that follows it.
 
 ``task`` is the contract, ``reference`` the float32 oracle and the production
-spelling, ``capture`` one real invocation from a captured or config-derived block.
+spelling; the real invocations are the verification capture's
+(:mod:`evograd.verification.integrations.qwen3_5_4b.capture`).
 """
 
 from .task import op

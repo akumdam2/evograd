@@ -26,48 +26,23 @@ multi-GPU. The Tier-3 workload adds AdamW
 (`tier3.runner.OPTIMIZER_DEFAULTS`). Correctness is judged by the
 verification package's Gates 1/2/3, not by Tier 3.
 
-### Decoder layers 14 and 15 -- where L2 takes its real invocations
-
-Not a level: the two layers the L2
-sites' real invocations and the calibration's real population come from.
-
-| layer | kind | sites |
-| --- | --- | --- |
-| 14 | Gated DeltaNet | `gdn_in_proj`, `gated_delta_rule`, `gdn_norm_out`, `residual_rmsnorm`, `swiglu_mlp` |
-| 15 | gated full attention | `qkv_norm_partial_rope`, `gated_attention`, `residual_rmsnorm`, `swiglu_mlp` |
-
-Boundary `hidden_out = layer(hidden_states, position_embeddings)`, cotangent
-`g`; no aux loss, no routing. Two sources:
-
-- **captured** (`layer/capture.py`, `artifact.py`): one canonical L3 step with
-  layers 14 and 15 hooked -> `layer14.pt`, `layer15.pt` (weights, call
-  arguments, output, upstream gradient, reference gradients; hashed content
-  and identity);
-- **config-derived** (`layer/prepare.py`): the bare layer with the model's
-  initialization rules applied explicitly -- a standalone `Qwen3_5DecoderLayer`
-  skips `post_init` (**T-init**) -- and seeded inputs.
-
-`layer/prepare.py` pins `sdpa`, no cache, train mode, no checkpointing, and reads
-back the import-time kernel dispatch of `modeling_qwen3_5` (**T-dispatch**: an
-importable `fla`/`causal_conv1d` silently wins); the production spellings call
-the torch functions through `__wrapped__`.
-
-### L2 -- seven sites
+### L2 -- six sites
 
 | layer kind (calls/step) | site | task | contract |
 | --- | --- | --- | --- |
 | GDN (x24) | `gdn_in_proj` | `qwen3_5_gdn_in_proj` | four GEMMs (q\|k\|v, z, b, a; no deinterleave), conv1d(K4)+SiLU, split, gates, q/k repeat x2 -- **new contract** |
 | GDN (x24) | `gated_delta_rule` | `qwen3_5_gated_delta_rule` | chunked delta rule, in-kernel l2norm, no state; `v` a strided view |
 | GDN (x24) | `gdn_norm_out` | `qwen3_5_gdn_norm_out` | gated RMSNorm(128) + out_proj 4096 -> 2560 |
-| full (x8) | `qkv_norm_partial_rope` | `qwen3_5_qkv_norm_partial_rope` | q+gate 2560 -> 8192, k/v 2560 -> 1024, (1+w) norm(256), RoPE 64/256 |
-| full (x8) | `gated_attention` | `qwen3_5_gated_attention` | causal GQA SDPA 16/4 D256 x sigmoid(gate) + o_proj 4096 -> 2560 |
-| all (x32) | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | residual add + (1+w) RMSNorm 2560, two outputs |
+| full (x8) | `attention_block` | `qwen3_5_attention_block` | the whole attention module: q+gate 2560 -> 8192, k/v 2560 -> 1024, (1+w) norm(256), RoPE 64/256, causal GQA SDPA 16/4 D256, x sigmoid(gate), o_proj 4096 -> 2560 |
+| all (x64) | `residual_rmsnorm` | `qwen3_5_residual_rmsnorm` | residual add + (1+w) RMSNorm 2560, two outputs; both adds of every layer (post-attention, and the closing add fused into the next input norm or `model.norm`) |
 | all (x32) | `swiglu_mlp` | `qwen3_5_swiglu_mlp` | 2560 -> 9216 -> 2560 |
 
-Each site package has `task.py`, `reference.py` (float32 oracle and the
-production spelling, bitwise the layer's own) and `capture.py` (one real
-invocation, from a layer artifact when present, else a config-derived layer).
-The shared mathematics is `benchmark/topdown/common/hybrid/`.
+Each site package has `task.py` and `reference.py` (float32 oracle and the
+production spelling, bitwise the model's own). The real invocations are the
+verification capture's recorded training calls
+(`evograd.verification.integrations.qwen3_5_4b`); a residual call's `dsummed`
+is what the next residual add delivers (zeros for the last sum, which only
+`model.norm` reads). The shared mathematics is `benchmark/topdown/common/hybrid/`.
 Canonical cases are config-derived
 (`hf_config`, B1 T2048). Whole-model call counts are **observed** (the harvest
 snapshot's `observed` entries). Every task is calibrated (L2 run
@@ -94,10 +69,6 @@ site's declared dims to the harvested shapes.
 CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
     python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --out harvest.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest harvest.json --write
-PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest --synthetic \
-    --out harvest_synthetic.json
-PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_5_4b.layer.capture \
-    --harvest harvest_synthetic.json --out-dir <run_dir>
 ```
 
 The harvest observes the real-payload capture's first step: the pinned checkpoint
@@ -106,9 +77,7 @@ on the first WikiText-2 TRAIN batch of data order 101, built by
 (`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
-overrides apply to it); the layer capture replays that step and reads such a
-harvest, until the tracked snapshot is regenerated from the real run (see
-"Regenerating the snapshots" in `src/evograd/verification/README.md`).
+overrides apply to it); it cannot replace the tracked snapshot.
 
 The Tier-3 side is `evograd/evaluation/tier3/workloads/qwen3_5_4b/`. How to run
 everything: `docs/QWEN3_5_4B.md`.
@@ -116,4 +85,4 @@ everything: `docs/QWEN3_5_4B.md`.
 ## Not yet done
 
 The L3 whole-model gate; pretrained weights and real text; the GDN bar; the
-`lm_head_ce` site; seeds and evolution; the cross-layer residual fusion.
+`lm_head_ce` site; seeds and evolution.

@@ -1,64 +1,43 @@
-"""The seven Qwen3.5 Level-2 tasks, on CPU.
+"""The six Qwen3.5 Level-2 tasks, on CPU.
 
-Three claims per task:
-
-* the declaration is coherent: its production spelling traces whole under
-  compile on a CPU-sized case;
-* its canonical case is the configuration's (``hf_config`` provenance that
+* the sites and their calls per step, by block kind;
+* every canonical case is the configuration's (``hf_config`` provenance that
   re-derives) at B1 x T2048;
-* ``capture.py`` takes a real invocation out of a tiny block -- config-derived,
-  and captured from a tiny whole-model step -- whose shapes are exactly the
-  declaration's, and the production spelling, run on the captured inputs,
-  reproduces what the block computed **bitwise**. That is what makes
-  ``runtime_forward`` *the* model's spelling rather than an equivalent of it.
+* every production spelling traces whole under compile on a CPU-sized case;
+* the attention block's runtime spelling is ``Qwen3_5Attention.forward`` bit
+  for bit, at a batch of two, from the module's own inputs and one shared row
+  of the rotary tables. The whole-model capture
+  (``tests/verification/test_integration_qwen3_5.py``) and the Tier-3 adapters
+  (``test_tier3_model.py``) hold every task to the live model the same way.
 """
 
 from __future__ import annotations
 
-import importlib
-import tempfile
 import unittest
-from pathlib import Path
 
 import torch
 
 from evograd.benchmark import TASKS
-from evograd.benchmark.topdown.qwen3_5_4b.architecture import config_record
-from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import capture_tools, manifest
-from evograd.opdecl import bind_shape
+from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
 from evograd.opdecl.models import QWEN3_5_4B, rederive_dims
 from evograd.opdecl.oracle import resolve_runtime_forward
 
-from tests.qwen3_5_4b._tiny import BATCH, FULL_LAYER, GDN_LAYER, SEQ, TINY_ARCH
+from tests.qwen3_5_4b._tiny import FULL_LAYER, SEQ, TINY_ARCH
 from tests._small_cases import SMALL
 
 
-
-_SOURCES: dict = {}
-
-
-def _source(kind: str, dtype: str):
-    key = (kind, dtype)
-    if key not in _SOURCES:
-        index = GDN_LAYER if kind == "linear_attention" else FULL_LAYER
-        _SOURCES[key] = capture_tools.config_source(index, arch=TINY_ARCH, batch=BATCH, seq=SEQ,
-                                                    dtype=dtype, seed=0)
-    return _SOURCES[key]
-
-
 class TestDeclarations(unittest.TestCase):
-    def test_seven_sites_in_two_block_kinds(self):
-        self.assertEqual(len(manifest.SITES), 7)
+    def test_six_sites_in_two_block_kinds(self):
+        self.assertEqual(len(manifest.SITES), 6)
         self.assertEqual(set(manifest.SITES_BY_BLOCK["linear_attention"]),
                          {"gdn_in_proj", "gated_delta_rule", "gdn_norm_out",
                           "residual_rmsnorm", "swiglu_mlp"})
         self.assertEqual(set(manifest.SITES_BY_BLOCK["full_attention"]),
-                         {"qkv_norm_partial_rope", "gated_attention", "residual_rmsnorm",
-                          "swiglu_mlp"})
+                         {"attention_block", "residual_rmsnorm", "swiglu_mlp"})
+        # Two residual fusions per layer: the attention add and the closing MLP add.
         self.assertEqual({s: manifest.expected_model_frequency(s) for s in manifest.SITES},
                          {"gdn_in_proj": 24, "gated_delta_rule": 24, "gdn_norm_out": 24,
-                          "qkv_norm_partial_rope": 8, "gated_attention": 8,
-                          "residual_rmsnorm": 32, "swiglu_mlp": 32})
+                          "attention_block": 8, "residual_rmsnorm": 64, "swiglu_mlp": 32})
 
     def test_canonical_cases_are_config_derived_at_b1(self):
         for site, task in manifest.SITE_TASKS.items():
@@ -75,103 +54,57 @@ class TestDeclarations(unittest.TestCase):
                 self.assertEqual(op.coverage, op.benchmark)
                 self.assertIn("qwen3_5_4b_observed", op.benchmark_suites)
 
+    def test_the_attention_block_case(self):
+        self.assertEqual(TASKS["qwen3_5_attention_block"].benchmark[0].dims,
+                         {"B": 1, "T": 2048, "H": 2560, "HQ": 16, "HK": 4, "D": 256, "R": 64,
+                          "QG": 8192, "KVO": 1024, "QO": 4096})
+
     def test_library_baselines_are_declared(self):
         self.assertIn("fla", TASKS["qwen3_5_gated_delta_rule"].performance_baselines)
         self.assertIn("fla", TASKS["qwen3_5_gdn_norm_out"].performance_baselines)
+        self.assertFalse(TASKS["qwen3_5_attention_block"].performance_baselines)
         self.assertFalse(TASKS["qwen3_5_residual_rmsnorm"].performance_baselines)
         self.assertFalse(TASKS["qwen3_5_swiglu_mlp"].performance_baselines)
 
 
-class TestCapturedInvocations(unittest.TestCase):
-    def _check_shapes(self, call, op, dims):
-        for arg in op.args:
-            if getattr(arg, "shape", None) is None:
-                continue
-            self.assertEqual(tuple(call.inputs[arg.name].shape), bind_shape(arg.shape, dims),
-                             arg.name)
-        for out in op.outputs:
-            self.assertEqual(tuple(call.upstream[out.grad_name].shape),
-                             bind_shape(out.shape, dims), out.grad_name)
-            self.assertEqual(tuple(call.outputs[out.name].shape), bind_shape(out.shape, dims),
-                             out.name)
-
-    def test_every_site_captures_with_its_declared_shapes(self):
-        record = config_record(TINY_ARCH, name="tiny")
-        captures = manifest.captures()
-        for site, task in manifest.SITE_TASKS.items():
-            op = TASKS[task]
-            dims = manifest.dims_for(site, record, batch=BATCH, seq=SEQ)
-            for kind, sites in manifest.SITES_BY_BLOCK.items():
-                if site not in sites:
-                    continue
-                with self.subTest(site=site, kind=kind):
-                    call = captures[site](_source(kind, "bfloat16"))
-                    self.assertEqual(call.task, task)
-                    self.assertEqual(call.source, "config")
-                    self._check_shapes(call, op, dims)
-
-    def test_production_reproduces_the_block_bitwise(self):
-        captures = manifest.captures()
-        for dtype in ("float32", "bfloat16"):
-            for site, task in manifest.SITE_TASKS.items():
-                op = TASKS[task]
-                production = resolve_runtime_forward(op)
-                for kind, sites in manifest.SITES_BY_BLOCK.items():
-                    if site not in sites:
-                        continue
-                    with self.subTest(site=site, kind=kind, dtype=dtype):
-                        call = captures[site](_source(kind, dtype))
-                        args = [call.inputs.get(a.name, getattr(a, "default", None))
-                                for a in op.args]
-                        out = production(*args)
-                        out = out if isinstance(out, tuple) else (out,)
-                        for name, value in zip(op.output_names, out):
-                            self.assertTrue(torch.equal(value, call.outputs[name]), name)
-                            self.assertEqual(value.stride(), call.outputs[name].stride(), name)
-
-    def test_v_reaches_the_delta_rule_as_a_strided_view(self):
-        call = manifest.captures()["gated_delta_rule"](_source("linear_attention", "bfloat16"))
-        v = call.inputs["v"]
-        self.assertFalse(v.is_contiguous())
-        conv_dim = config_record(TINY_ARCH, name="tiny").conv_dim
-        self.assertEqual(v.stride(), (conv_dim * SEQ, 1, v.shape[-1] * SEQ, SEQ))
-        self.assertEqual(call.inputs["g"].dtype, torch.float32)
-        self.assertEqual(call.inputs["beta"].dtype, torch.bfloat16)
-
-    def test_sites_capture_from_a_captured_layer_artifact(self):
-        """The captured source (a Level-3 artifact from a tiny whole-model step)
-        feeds the same captures, and production still reproduces it bitwise."""
-        from evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest import run_harvest
-        from evograd.benchmark.topdown.qwen3_5_4b.layer.capture import (
-            run_capture, write_captures)
+class TestAttentionBlockIsTheModule(unittest.TestCase):
+    def test_runtime_spelling_is_bitwise_the_attention_module(self):
+        from evograd.benchmark.topdown.qwen3_5_4b.levels.level3.model import build_model
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level3.spec import CANONICAL
-        import json
 
-        spec = CANONICAL.replace(arch=TINY_ARCH, device="cpu", batch_size=1, seq_len=SEQ)
-        with tempfile.TemporaryDirectory() as tmp:
-            harvest = Path(tmp) / "harvest.json"
-            harvest.write_text(json.dumps(run_harvest(spec), default=str))
-            write_captures(run_capture(spec, manifest_path=harvest,
-                                       layers=[GDN_LAYER, FULL_LAYER]), Path(tmp))
-            record = config_record(TINY_ARCH, name="tiny")
-            captures = manifest.captures()
-            for kind, index in (("linear_attention", GDN_LAYER), ("full_attention", FULL_LAYER)):
-                source = capture_tools.captured_source(Path(tmp) / f"layer{index}.pt",
-                                                       canonical=False)
-                self.assertEqual((source.kind, source.source), (kind, "captured"))
-                for site in manifest.SITES_BY_BLOCK[kind]:
-                    op = TASKS[manifest.SITE_TASKS[site]]
-                    with self.subTest(site=site, kind=kind):
-                        call = captures[site](source)
-                        self.assertEqual(call.source, "captured")
-                        self._check_shapes(call, op,
-                                           manifest.dims_for(site, record, batch=1, seq=SEQ))
-                        out = resolve_runtime_forward(op)(
-                            *[call.inputs.get(a.name, getattr(a, "default", None))
-                              for a in op.args])
-                        out = out if isinstance(out, tuple) else (out,)
-                        for name, value in zip(op.output_names, out):
-                            self.assertTrue(torch.equal(value, call.outputs[name]), name)
+        production = resolve_runtime_forward(TASKS["qwen3_5_attention_block"])
+        for dtype in ("float32", "bfloat16"):
+            torch.manual_seed(0)
+            model = build_model(CANONICAL.replace(arch=TINY_ARCH, device="cpu", batch_size=2,
+                                                  seq_len=SEQ, dtype=dtype))
+            with torch.no_grad():                    # a trained spread, not the zero init
+                for name, p in model.named_parameters():
+                    if name.endswith("norm.weight"):
+                        p.copy_(0.1 * torch.randn(p.shape))
+            attn = model.model.layers[FULL_LAYER].self_attn
+            seen = {}
+
+            def keep(module, args, kwargs, output):
+                seen["x"] = kwargs["hidden_states"]
+                seen["cos"], seen["sin"] = kwargs["position_embeddings"]
+                seen["y"] = output[0]
+
+            handle = attn.register_forward_hook(keep, with_kwargs=True)
+            try:
+                with torch.no_grad():
+                    model(input_ids=torch.randint(0, TINY_ARCH["vocab_size"], (2, SEQ)),
+                          use_cache=False)
+            finally:
+                handle.remove()
+            cos, sin = seen["cos"], seen["sin"]
+            self.assertEqual(tuple(cos.shape), (2, SEQ, 8))
+            self.assertTrue(torch.equal(cos[0], cos[1]))
+            with self.subTest(dtype=dtype), torch.no_grad():
+                y = production(seen["x"], attn.q_proj.weight, attn.k_proj.weight,
+                               attn.v_proj.weight, attn.q_norm.weight, attn.k_norm.weight,
+                               attn.o_proj.weight, cos[:1], sin[:1], attn.q_norm.eps)
+                self.assertTrue(torch.equal(y, seen["y"]))
+                self.assertEqual(y.stride(), seen["y"].stride())
 
 
 class TestProductionCompiles(unittest.TestCase):

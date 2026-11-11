@@ -21,9 +21,9 @@ L2 sites take their real invocations from is a data source
 - `benchmark/topdown/<model>` owns model configurations, harvested cases and
   captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and MegaFold.
 - Qwen3.5-4B (`benchmark/topdown/qwen3_5_4b`, text model): L3 at B1 x T2048 on one
-  GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), seven
-  L2 sites and ten bound L1 primitives; L2 invocations come from
-  layers 14 and 15, captured or config-derived. No L3 gate yet; see
+  GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), six
+  L2 sites and ten bound L1 primitives; every case is judged on the training
+  calls the verification capture records. No L3 gate yet; see
   `docs/QWEN3_5_4B.md`.
 - OLMoE-1B-7B (`benchmark/topdown/olmoe_1b_7b`): L3 at B2 x T2048 with
   grouped-GEMM experts (16 layers of multi-head attention and 64 routed SwiGLU
