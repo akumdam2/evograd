@@ -233,6 +233,8 @@ class TestSingleOutputRegression(unittest.TestCase):
         "gdn_gating", "qwen3_5_gdn_in_proj", "qwen3_5_residual_rmsnorm",
         # OLMoE: the residual fusion's (normed, summed).
         "olmoe_residual_rmsnorm",
+        # Qwen2-VL: the vision and text residual fusions' (normed, summed).
+        "qwen2_vl_2b_vision_residual_layernorm", "qwen2_vl_2b_text_residual_rmsnorm",
     }
 
     def test_the_multi_output_registry_is_exactly_what_is_expected(self):

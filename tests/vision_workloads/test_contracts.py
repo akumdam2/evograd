@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import torch
 from evograd.benchmark import TASKS
-from evograd.opdecl.inputs import make_case_inputs
+from evograd.opdecl.inputs import as_output_tuple, make_case_inputs
 from evograd.opdecl.oracle import resolve_runtime_forward
 from evograd.evaluation.tier3.patch import eager_pair_for, kernel_from_pair
 from tests._small_cases import SMALL
@@ -13,8 +13,13 @@ from tests._small_cases import SMALL
     "name",
     [
         "convnextv2_tiny_convnext_mlp",
+        "convnextv2_tiny_dwconv_layernorm",
+        "qwen2_vl_2b_text_attention_block",
         "qwen2_vl_2b_text_mlp",
+        "qwen2_vl_2b_text_residual_rmsnorm",
+        "qwen2_vl_2b_vision_attention",
         "qwen2_vl_2b_vision_mlp",
+        "qwen2_vl_2b_vision_residual_layernorm",
         "spatial_conv2d",
         "grn",
         "gelu",
@@ -23,6 +28,7 @@ from tests._small_cases import SMALL
 )
 def test_pair_binding_all_gradients(name):
     op = TASKS[name]
+    active = {a.name for a in op.active_args()}
     for case in SMALL[name]:
         if case.dtype != "float32":
             continue
@@ -30,21 +36,43 @@ def test_pair_binding_all_gradients(name):
         args = [
             (
                 values[a.name].detach().requires_grad_(True)
-                if isinstance(values[a.name], torch.Tensor)
+                if a.name in active
                 else values[a.name]
             )
             for a in op.args
         ]
         fn = resolve_runtime_forward(op)
-        expected = fn(*args)
-        upstream = values[op.outputs[0].grad_name]
-        leaves = [a for a in args if isinstance(a, torch.Tensor)]
+        expected = as_output_tuple(op, fn(*args))
+        upstream = [values[n] for n in op.upstream_grad_names]
+        leaves = [a for a, d in zip(args, op.args) if d.name in active]
         ref = torch.autograd.grad(expected, leaves, upstream)
-        actual = kernel_from_pair(op, eager_pair_for(op))(*args)
+        actual = as_output_tuple(op, kernel_from_pair(op, eager_pair_for(op))(*args))
         got = torch.autograd.grad(actual, leaves, upstream)
-        torch.testing.assert_close(expected, actual)
+        for a, b in zip(expected, actual):
+            torch.testing.assert_close(a, b)
         for a, b in zip(ref, got):
             torch.testing.assert_close(a, b)
+
+
+@pytest.mark.parametrize("name", ["convnextv2_tiny_dwconv_layernorm",
+                                  "qwen2_vl_2b_text_attention_block",
+                                  "qwen2_vl_2b_text_residual_rmsnorm",
+                                  "qwen2_vl_2b_vision_attention",
+                                  "qwen2_vl_2b_vision_residual_layernorm"])
+def test_the_reference_an_agent_reads_is_the_declared_forward(name):
+    """The standalone reference closure (what a task pack shows) computes the same."""
+    from evograd.opdecl.importing import reference_closure
+
+    op = TASKS[name]
+    source, _ = reference_closure(op.forward)
+    namespace: dict = {}
+    exec(compile(source, "reference", "exec"), namespace)
+    for case in SMALL[name]:
+        values = make_case_inputs(op, case, device="cpu")
+        args = [values[a.name] for a in op.args]
+        ours = as_output_tuple(op, namespace["reference_forward"](*args))
+        declared = as_output_tuple(op, resolve_runtime_forward(op)(*args))
+        assert all(torch.equal(a, b) for a, b in zip(ours, declared))
 
 
 def test_no_reference_dependency():

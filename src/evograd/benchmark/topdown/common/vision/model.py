@@ -153,9 +153,13 @@ def make_inputs(spec, seed=0):
         ids[:, 1 + n_image] = a["vision_end_token_id"]
         labels = ids.clone()
         labels[:, : 2 + n_image] = -100
+        # Right padding, as in the real pool: text attention gets an explicit mask.
+        attention_mask = torch.ones_like(ids)
+        attention_mask[:, spec.seq_len - min(spec.seq_len // 4, spec.seq_len - n_image - 3):] = 0
+        labels[attention_mask == 0] = -100
         batch = {
             "input_ids": ids,
-            "attention_mask": torch.ones_like(ids),
+            "attention_mask": attention_mask,
             "labels": labels,
             "pixel_values": torch.randn(
                 spec.batch_size * grid * grid,

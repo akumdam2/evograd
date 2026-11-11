@@ -8,7 +8,10 @@ harvest writes it (``integrations.base.require_real_run``). :func:`collect` on
 a spec alone (random weights, synthetic inputs) serves reduced checks.
 
 Unsupported functional boundaries are listed, never inferred as observations.
-Hooks store metadata only; they retain no activation graphs.
+Level-2 boundaries are the module boundaries and residual streams of
+``operators``; the calls per step they must reach are ``calls_per_step``.
+Hooks store metadata only (a residual stream's hooks hold its last sum and
+branch until the next norm reads them); they retain no activation graphs.
 """
 
 import argparse
@@ -18,8 +21,8 @@ from pathlib import Path
 import torch
 from .spec import digest
 from .model import build_model, make_inputs, forward
-from .operators import bindings
-from .contracts import SHAPES
+from .operators import bindings, calls_per_step, residual_streams
+from .contracts import BOUNDARIES, dims_of
 from evograd.benchmark.topdown.common.snapshot import snapshot_hash
 
 PRIMITIVES = {
@@ -44,8 +47,11 @@ def collect(spec, *, model=None, batch=None):
     batch = make_inputs(spec) if batch is None else batch
     records = []
     handles = []
-    # The mask each Qwen2-VL text attention call receives (None: SDPA is_causal).
-    # Right-padded real rows give an explicit mask; an all-ones mask gives None.
+    streams = []  # per residual stream, the last N_{k-1} input and B_k output (dropped after)
+    # The mask each Qwen2-VL text attention call receives. Right-padded rows (the
+    # real pool, the synthetic fixture) give an explicit one, which the
+    # text_attention_block boundary requires; unpadded rows (None: SDPA
+    # is_causal) are refused there.
     masks = {}
 
     def record(level, task, path, dims, values, names, free=None):
@@ -82,23 +88,38 @@ def collect(spec, *, model=None, batch=None):
             }
         )
 
-    for site, path, owner, first, pack in bindings(model):
+    def boundary(site, path, values):
+        args = BOUNDARIES[site].args
+        tensors = [(a.name, v) for a, v in zip(args, values) if getattr(a, "shape", None)]
+        free = {a.name: v for a, v in zip(args, values) if not getattr(a, "shape", None)}
+        record(2, spec.model + "_" + site, path, dims_of(args, values), [v for _, v in tensors],
+               [n for n, _ in tensors], free)
 
-        def hook(module, args, site=site, path=path, pack=pack):
-            values = pack(args[0])
-            x = values[0]
-            if site == "convnext_mlp":
-                b, y, w, h = x.shape
-                dims = dict(B=b, Y=y, X=w, H=h, I=values[1].shape[0])
-            elif site == "text_mlp":
-                b, t, h = x.shape
-                dims = dict(B=b, T=t, H=h, I=values[1].shape[0])
-            else:
-                t, h = x.shape
-                dims = dict(T=t, H=h, I=values[1].shape[0])
-            record(2, spec.model + "_" + site, path, dims, values, [n for n, _ in SHAPES[site]])
+    for binding in bindings(model):
 
-        handles.append(first.register_forward_pre_hook(hook))
+        def hook(module, args, kwargs, binding=binding):
+            boundary(binding.site, binding.path, binding.pack(args, kwargs))
+
+        handles.append(binding.first.register_forward_pre_hook(hook, with_kwargs=True))
+    for stream in residual_streams(model):
+        # Boundary k: N_k's input is the sum of B_k's output and N_{k-1}'s input.
+        state = {}
+        for k, (path, norm) in enumerate(stream.norms):
+
+            def norm_hook(module, args, k=k, path=path, stream=stream, state=state):
+                if k:
+                    boundary(stream.site, path, (state.pop("branch"), state["stream"],
+                                                 *stream.norm_args(module)))
+                state["stream"] = args[0]
+
+            handles.append(norm.register_forward_pre_hook(norm_hook))
+        for _, branch in stream.branches:
+
+            def branch_hook(module, args, output, state=state):
+                state["branch"] = output[0] if isinstance(output, tuple) else output
+
+            handles.append(branch.register_forward_hook(branch_hook))
+        streams.append(state)
     for path, module in model.named_modules():
         kind = type(module).__name__
 
@@ -223,14 +244,7 @@ def collect(spec, *, model=None, batch=None):
             raise ValueError(
                 f"invalid training gradients: missing={missing}, nonfinite={nonfinite}"
             )
-        expected = (
-            {"convnext_mlp": sum(spec.arch["depths"])}
-            if spec.model == "convnextv2_tiny"
-            else {
-                "text_mlp": spec.arch["num_hidden_layers"],
-                "vision_mlp": spec.arch["vision_config"]["depth"],
-            }
-        )
+        expected = calls_per_step(spec.model, spec.arch)
         for site, count in expected.items():
             actual = sum(r["level"] == 2 and r["task"] == spec.model + "_" + site for r in records)
             if actual != count:
@@ -255,8 +269,8 @@ def collect(spec, *, model=None, batch=None):
             "backward_verified": True,
             "not_bound": (
                 [
-                    "attention (vision and causal text)",
-                    "multimodal RoPE",
+                    "attention, 2-D RoPE and multimodal RoPE as primitives (bound inside the "
+                    "Level-2 attention boundaries only)",
                     "Conv3D patch embedding",
                     "SwiGLU activation",
                     "cross entropy",
@@ -268,6 +282,8 @@ def collect(spec, *, model=None, batch=None):
     finally:
         for handle in handles:
             handle.remove()
+        for state in streams:
+            state.clear()
 
 
 def real_run(name, *, device="cuda"):

@@ -25,8 +25,9 @@ def test_pinned_artifact_identity_and_supervision(tmp_path, model):
         batch["labels"][:] = IMAGENETTE_CLASS_IDS[0]
         selection = [{"row": i, "label": 0} for i in range(spec.batch_size)]
     else:
-        start = int((batch["labels"][0] == -100).sum())
-        selection = [{"row": 0, "answer_start": start, "answer_end": spec.seq_len}]
+        supervised = (batch["labels"][0] != -100).nonzero().squeeze(1)
+        selection = [{"row": 0, "answer_start": int(supervised[0]),
+                      "answer_end": int(supervised[-1]) + 1}]
     repo, revision, filename = DATASETS[model]
     data = {
         "schema_version": "evograd-vision-data/2", "model": model,
