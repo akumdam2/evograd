@@ -208,7 +208,7 @@ class TestPreservedAttention(unittest.TestCase):
              'positional_args': [{'kind': 'node', 'name': 'q'}, {'kind': 'node', 'name': 'q'}]},
             {'op': 'output', 'name': 'output', 'args': [['out', 'lse', 'q', 'other']]},
         ]}
-        self.assertEqual(_sdpa_state_outputs(graph, 1), {'lse'})
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'lse': False})
 
     def test_a_flash_capture_renders_on_the_same_helpers_in_cudnn_order(self):
         from evograd.pipelines.unified.codegen import UNIFIED_SDPA_SOURCE, _sdpa_call
@@ -542,8 +542,8 @@ class TestSeedLowerings(unittest.TestCase):
               for i in range(4)),
             {'op': 'output', 'name': 'output', 'args': [['g0', 'g1', 'g2', 'g3']]},
         ]}
-        # logsumexp and the rng state, which this backend keeps on the host.
-        self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1', 'g2', 'g3'})
+        # logsumexp (on the GPU) and the rng state, which this backend keeps on the host.
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1': False, 'g2': True, 'g3': True})
 
     def test_strided_storage_zero_padding_flip_and_copy(self):
         # Qwen3.5's gated delta rule pads by zero, flips a chunk axis, and copies

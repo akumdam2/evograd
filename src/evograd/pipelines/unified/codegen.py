@@ -338,25 +338,31 @@ def _audit_primitive_library(tree: ast.AST) -> None:
 #: Preserved attention forwards whose logsumexp and rng state the backward takes back.
 _ATTENTION_STATE = frozenset({*_SDPA_FORWARD,
                               "torch.ops.aten._scaled_dot_product_efficient_attention.default"})
+#: The results of those forwards that may live on the host: memory-efficient
+#: attention's philox seed and offset (CPU tensors unless dropout runs under
+#: CUDA graph capture).
+_HOST_STATE = {"torch.ops.aten._scaled_dot_product_efficient_attention.default": {2, 3}}
 
 
-def _sdpa_state_outputs(forward_graph: dict, n_outputs: int) -> set[str]:
-    """Forward outputs (saved state) that a preserved attention kernel produced.
+def _sdpa_state_outputs(forward_graph: dict, n_outputs: int) -> dict[str, bool]:
+    """Forward outputs (saved state) that a preserved attention kernel produced,
+    each mapped to whether it may live on the host.
 
     Its logsumexp and rng state are the backend's own and go straight back into
-    the backend's backward; their layout differs between cuDNN and flash, and
-    memory-efficient attention keeps its rng state on the host, so the seed's
-    configuration guards must not pin them to the captured backend's.
+    the backend's backward; their layout differs between cuDNN and flash, so the
+    seed's configuration guards must not pin them to the captured backend's.
     """
     nodes = {n["name"]: n for n in forward_graph["nodes"] if "name" in n}
-    state: set[str] = set()
+    state: dict[str, bool] = {}
     for value in _outputs(forward_graph)[n_outputs:]:
         node = nodes.get(value) if isinstance(value, str) else None
+        index = None
         while node is not None and "getitem" in str(node.get("target", "")):
-            source = (node.get("positional_args") or node.get("args_ordered") or [{}])[0]
+            source, *rest = node.get("positional_args") or node.get("args_ordered") or [{}]
+            index = rest[0].get("value") if rest else None
             node = nodes.get(source.get("name")) if source.get("kind") in {"node", "sym_node"} else None
         if node is not None and node.get("external_kernel") in _ATTENTION_STATE:
-            state.add(value)
+            state[value] = index in _HOST_STATE.get(node["external_kernel"], ())
     return state
 
 
@@ -415,10 +421,8 @@ def _pair_source(op: OpDecl, workload: Workload, captured: Any) -> str:
     backward_guards = []
     for (kind, index), node in zip(pair.backward_arg_spec, bwd_placeholders):
         value = f"saved_tensors[{index}]" if kind == "s" else upstream_names[index]
-        if kind == "s" and saved_names[index] in backend_state:
-            # The attention backend's own state (logsumexp, rng): its layout and
-            # device are the backend's, and the backend chosen at run time may
-            # not be the captured one.
+        if kind == "s" and backend_state.get(saved_names[index]):
+            # memory-efficient attention's host-side rng state.
             backward_guards.extend([
                 f"    if not isinstance({value}, torch.Tensor):",
                 "        raise ValueError('unified backward requires tensors')",
@@ -427,6 +431,16 @@ def _pair_source(op: OpDecl, workload: Workload, captured: Any) -> str:
         backward_guards.extend([
             f"    if not isinstance({value}, torch.Tensor) or not {value}.is_cuda:",
             "        raise ValueError('unified backward requires CUDA tensors')",
+        ])
+        if kind == "s" and saved_names[index] in backend_state:
+            # The attention backend's own state (logsumexp, rng): its layout is
+            # the backend's, and the backend chosen at run time may not be the
+            # captured one.
+            backward_guards.append(
+                f"    if {value}.device != torch.device({pair.device!r}):\n"
+                "        raise ValueError('unified backward configuration mismatch')")
+            continue
+        backward_guards.extend([
             f"    if tuple({value}.shape) != {tuple(node['shape'])!r} or {value}.dtype != {node['dtype']} or {value}.device != torch.device({pair.device!r}):",
             "        raise ValueError('unified backward configuration mismatch')",
         ])
