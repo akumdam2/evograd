@@ -99,7 +99,7 @@ if __name__ == "__main__":
 class TestDeclaredArgumentOrder(unittest.TestCase):
     """The direct-deployment wrapper must call by declaration, not by category.
 
-    ``qwen3_qkv_norm_rope`` declares ``cos`` and ``sin`` as inactive tensors
+    ``qwen3_attention_block`` declares ``cos`` and ``sin`` as inactive tensors
     sitting between the parameters and ``eps``. Concatenating activations,
     parameters and scalars silently omits them, and the resulting TypeError only
     appears once a candidate is actually run at that operator.
@@ -124,7 +124,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
         return op, values, seen["args"]
 
     def test_every_declared_argument_reaches_the_deployment_entry(self):
-        op, values, args = self._spy_module("qwen3_qkv_norm_rope")
+        op, values, args = self._spy_module("qwen3_attention_block")
         self.assertEqual(len(args), len(op.args))
         for arg, got in zip(op.args, args):
             if torch.is_tensor(values[arg.name]):
@@ -136,7 +136,7 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
                 self.assertEqual(got, values[arg.name])
 
     def test_the_inactive_tensors_are_passed_not_dropped(self):
-        _, values, args = self._spy_module("qwen3_qkv_norm_rope")
+        _, values, args = self._spy_module("qwen3_attention_block")
         self.assertTrue(any(torch.is_tensor(a) and torch.equal(a, values["cos"])
                             for a in args))
         self.assertTrue(any(torch.is_tensor(a) and torch.equal(a, values["sin"])
@@ -147,8 +147,8 @@ class TestDeclaredArgumentOrder(unittest.TestCase):
         from evograd.opdecl.inputs import make_case_inputs
         from evograd.benchmark import get_task
 
-        op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
+        op = get_task("qwen3_attention_block")
+        values = make_case_inputs(op, SMALL["qwen3_attention_block"][0], device="cpu")
         seen: dict[str, tuple] = {}
 
         def spy(*args):

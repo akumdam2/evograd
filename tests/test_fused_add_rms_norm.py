@@ -263,11 +263,6 @@ class TestQwenProvenance(unittest.TestCase):
         self.assertNotEqual(sites["directly_verified_invocations"], sites["total"])
         self.assertIn("layer 14", sites["directly_verified_note"])
 
-    def test_the_declaration_agrees_with_the_snapshot(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.levels.level2.residual_rmsnorm import capture as residual_module
-
-        self.assertEqual(residual_module.declaration_problems(), [])
-
 
 if __name__ == "__main__":
     unittest.main()

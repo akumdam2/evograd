@@ -429,16 +429,16 @@ class TestRankAdaptationCases(unittest.TestCase):
         self.assertIn("return CrossEntropyFunction.apply(logits, target)", layer)
 
     def test_a_mixed_rank_declaration_gets_no_adaptation(self):
-        # qwen3_attention takes [B, HQ, T, D] and returns [B, T, H]: inputs and
-        # outputs disagree on rank, so no single leading shape exists. Guessing
-        # one would silently reshape a result.
+        # qwen3_5_gdn_norm_out takes [B, T, HV, D] and returns [B, T, H]: inputs
+        # and outputs disagree on rank, so no single leading shape exists.
+        # Guessing one would silently reshape a result.
         from evograd.pipelines.shared.artifact import batched_names
 
-        op = get_task("qwen3_attention")
+        op = get_task("qwen3_5_gdn_norm_out")
         args, outs, rank = batched_names(op)
         self.assertEqual(rank, 4)
         self.assertEqual(outs, ())          # no output shares the argument rank
-        self.assertNotIn("_leading", self._layer("qwen3_attention"))
+        self.assertNotIn("_leading", self._layer("qwen3_5_gdn_norm_out"))
 
     def test_every_declaration_generates_parseable_code(self):
         from evograd.benchmark import TASKS
@@ -456,4 +456,4 @@ class TestRankAdaptationCases(unittest.TestCase):
         self.assertIn("fused_add_rms_norm", adapting)
         self.assertIn("rmsnorm", adapting)
         self.assertNotIn("cross_entropy", adapting)
-        self.assertNotIn("qwen3_attention", adapting)
+        self.assertNotIn("qwen3_5_gdn_norm_out", adapting)

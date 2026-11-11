@@ -8,9 +8,9 @@ declarations, in the capture code, in the evaluation gate and in the Tier-3
 adapter, which is four chances to disagree.
 
 They are written here once, and everything below the model reads them from
-here. The shapes, strides, dtypes, frequencies and module paths themselves are
-*not* copied into this file: they live in the tracked harvest snapshot, which
-is derived from a real canonical step and hashed. This module is the narrow API
+here. The frequencies and module paths themselves are *not* copied into this
+file: they live in the tracked harvest snapshot, which is derived from the
+real-payload capture's first step and hashed. This module is the narrow API
 over that snapshot, not a second copy of it.
 """
 
@@ -21,10 +21,10 @@ from typing import Any
 #: The workload whose harvest owns these sites.
 WORKLOAD = "qwen3_0_6b"
 
-SITE_QKV = "qkv_norm_rope"
-SITE_ATTENTION = "attention"
+SITE_ATTENTION_BLOCK = "attention_block"
 SITE_MLP = "swiglu_mlp"
 SITE_RESIDUAL = "residual_rmsnorm"
+SITE_LM_HEAD_CE = "lm_head_ce"
 
 #: Site -> the task key its contract is registered under.
 #:
@@ -35,20 +35,21 @@ SITE_RESIDUAL = "residual_rmsnorm"
 #: currently deployed against it. Another architecture may bind its own site to
 #: its own task rather than reusing this key.
 SITE_TASKS: dict[str, str] = {
-    SITE_QKV: "qwen3_qkv_norm_rope",
-    SITE_ATTENTION: "qwen3_attention",
+    SITE_ATTENTION_BLOCK: "qwen3_attention_block",
     SITE_MLP: "qwen3_swiglu_mlp",
     SITE_RESIDUAL: "fused_add_rms_norm",
+    SITE_LM_HEAD_CE: "qwen3_lm_head_ce",
 }
 
-#: The four sites, in the order a decoder layer executes them.
-SITES: tuple[str, ...] = (SITE_QKV, SITE_ATTENTION, SITE_MLP, SITE_RESIDUAL)
+#: The four sites: a decoder layer's three, in the order it executes them, then
+#: the LM head with the loss.
+SITES: tuple[str, ...] = (SITE_ATTENTION_BLOCK, SITE_MLP, SITE_RESIDUAL, SITE_LM_HEAD_CE)
 
 #: The task keys this workload's Level-2 contracts are registered under.
 TASKS: tuple[str, ...] = tuple(SITE_TASKS[site] for site in SITES)
 
-#: Site -> the module in this package that owns its contract, reference and
-#: capture. Import paths are derived from it rather than spelled out again.
+#: Site -> the module in this package that owns its contract and reference.
+#: Import paths are derived from it rather than spelled out again.
 SITE_PACKAGES: dict[str, str] = {site: site for site in SITES}
 
 
@@ -122,10 +123,10 @@ def declarations() -> dict[str, Any]:
 
 __all__ = [
     "SITES",
-    "SITE_ATTENTION",
+    "SITE_ATTENTION_BLOCK",
+    "SITE_LM_HEAD_CE",
     "SITE_MLP",
     "SITE_PACKAGES",
-    "SITE_QKV",
     "SITE_RESIDUAL",
     "SITE_TASKS",
     "TASKS",

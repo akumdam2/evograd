@@ -57,12 +57,12 @@ OBSERVED_BINDINGS: tuple[ObservedBinding, ...] = (
 #: Generic task -> the Level-2 contract its outputs feed. Checked structurally
 #: by the focused tests; recorded here so the composition is stated once.
 COMPOSES_INTO = {
-    "linear_no_bias": ("qwen3_qkv_norm_rope", "qwen3_attention", "qwen3_swiglu_mlp"),
-    "rmsnorm": ("qwen3_qkv_norm_rope", "fused_add_rms_norm"),
-    "rope": ("qwen3_qkv_norm_rope",),
+    "linear_no_bias": ("qwen3_attention_block", "qwen3_swiglu_mlp", "qwen3_lm_head_ce"),
+    "rmsnorm": ("qwen3_attention_block", "fused_add_rms_norm"),
+    "rope": ("qwen3_attention_block",),
     "swiglu": ("qwen3_swiglu_mlp",),
-    "causal_gqa_attention": ("qwen3_attention",),
-    "cross_entropy": (),
+    "causal_gqa_attention": ("qwen3_attention_block",),
+    "cross_entropy": ("qwen3_lm_head_ce",),
 }
 
 

@@ -166,6 +166,24 @@ class ModelConfig:
             "KVO": self.kv_out,
         }
 
+    def attention_block_dims(self, *, batch: int, seq: int) -> dict[str, int]:
+        """The whole self-attention module, ``x [B, T, H] -> out [B, T, H]``.
+
+        Projections, any per-head norms, the rotary embedding, causal
+        grouped-query SDPA and the output projection: the union of
+        :meth:`qkv_norm_rope_dims` and :meth:`causal_gqa_attention_dims`.
+        """
+        return {
+            "B": batch,
+            "T": seq,
+            "H": self.hidden,
+            "HQ": self.n_heads,
+            "HK": self.n_kv_heads,
+            "D": self.head_dim,
+            "QO": self.q_out,
+            "KVO": self.kv_out,
+        }
+
     def causal_gqa_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """Causal grouped-query SDPA plus the output projection.
 

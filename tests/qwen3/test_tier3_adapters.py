@@ -37,9 +37,9 @@ if HAVE_TORCH:
 if HAVE_TRANSFORMERS:
     from evograd.evaluation.tier3.patch import KernelSet, restrict
     from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
-        SITE_ATTENTION,
+        SITE_ATTENTION_BLOCK,
+        SITE_LM_HEAD_CE,
         SITE_MLP,
-        SITE_QKV,
         SITE_RESIDUAL,
         ResidualCarrier,
         expected_counts,
@@ -161,10 +161,10 @@ class TestRegistryOwnership(unittest.TestCase):
         self.assertEqual(
             qwen3_sites().site_ops,
             {
-                SITE_QKV: "qwen3_qkv_norm_rope",
-                SITE_ATTENTION: "qwen3_attention",
+                SITE_ATTENTION_BLOCK: "qwen3_attention_block",
                 SITE_MLP: "qwen3_swiglu_mlp",
                 SITE_RESIDUAL: "fused_add_rms_norm",
+                SITE_LM_HEAD_CE: "qwen3_lm_head_ce",
             },
         )
 
@@ -251,7 +251,7 @@ def _full_step(workload, kernels, batch, learning_rate=1e-4):
     missing = [n for n, p in model.named_parameters() if p.grad is None]
     optimizer.step()
     return {
-        "logits": outputs.logits.detach().clone(),
+        "logits": None if outputs.logits is None else outputs.logits.detach().clone(),
         "loss": outputs.loss.detach().clone(),
         "grads": grads,
         "missing_grads": missing,
@@ -275,11 +275,11 @@ class TestInvocationCounts(unittest.TestCase):
         workload.loss(model, workload.batch_for(seed=0))
         return workload.last_build
 
-    def test_the_declared_counts_are_l_l_l_and_two_l(self):
+    def test_the_declared_counts_are_l_l_two_l_and_one(self):
         self.assertEqual(
             expected_counts(LAYERS),
-            {SITE_QKV: LAYERS, SITE_ATTENTION: LAYERS,
-             SITE_MLP: LAYERS, SITE_RESIDUAL: 2 * LAYERS},
+            {SITE_ATTENTION_BLOCK: LAYERS, SITE_MLP: LAYERS,
+             SITE_RESIDUAL: 2 * LAYERS, SITE_LM_HEAD_CE: 1},
         )
         self.assertEqual(expected_counts(28)[SITE_RESIDUAL], 56)
 
@@ -294,20 +294,12 @@ class TestInvocationCounts(unittest.TestCase):
         self.assertEqual(self._run().observed()[SITE_RESIDUAL], 2 * LAYERS)
 
     def test_a_single_site_runs_alone(self):
-        for site in (SITE_QKV, SITE_ATTENTION, SITE_MLP, SITE_RESIDUAL):
+        # Every site has its own adapter: patching one counts that one only.
+        for site in (SITE_ATTENTION_BLOCK, SITE_MLP, SITE_RESIDUAL, SITE_LM_HEAD_CE):
             with self.subTest(site=site):
                 built = self._run((site,))
-                observed = built.observed()
-                self.assertEqual(observed.get(site), expected_counts(LAYERS)[site])
-
-    def test_selecting_one_attention_site_still_runs_the_module_once(self):
-        # One composite adapter, not two sequential replacements: both sites are
-        # counted because both boundaries execute, but only the selected one
-        # takes the patched path.
-        built = self._run((SITE_QKV,))
-        self.assertEqual(built.observed()[SITE_QKV], LAYERS)
-        self.assertEqual(built.observed()[SITE_ATTENTION], LAYERS)
-        self.assertEqual(built.provenance.actual_sites, (SITE_QKV,))
+                self.assertEqual(built.observed(), {site: expected_counts(LAYERS)[site]})
+                self.assertEqual(built.provenance.actual_sites, (site,))
 
 
 @_skip
@@ -403,10 +395,12 @@ class TestPartialAndFailedPatching(unittest.TestCase):
 
             _require(1, 2, [SITE_MLP], "Qwen3MLP")
 
-    def test_the_declarative_patch_view_covers_both_attention_sites_once(self):
+    def test_the_declarative_patch_view_has_one_patch_per_site(self):
         patches = {p.site: p for p in module_patches()}
-        self.assertEqual(patches[SITE_QKV].covered, (SITE_QKV, SITE_ATTENTION))
-        self.assertNotIn(SITE_ATTENTION, patches)  # one module, one patch
+        self.assertEqual(set(patches), set(qwen3_sites().names))
+        for site, patch in patches.items():
+            with self.subTest(site=site):
+                self.assertEqual(patch.covered, (site,))
 
     def test_the_carrier_refuses_to_be_used_out_of_order(self):
         carrier = ResidualCarrier()
@@ -421,13 +415,13 @@ class TestPartialAndFailedPatching(unittest.TestCase):
 
 @_skip
 class TestStructuredOutputsThroughTheSites(unittest.TestCase):
-    def test_the_two_multi_output_sites_are_wired_as_tuples(self):
+    def test_the_residual_site_is_wired_as_a_tuple(self):
         from evograd.benchmark import get_task
 
-        self.assertTrue(get_task("qwen3_qkv_norm_rope").is_multi_output)
         self.assertTrue(get_task("fused_add_rms_norm").is_multi_output)
-        self.assertEqual(get_task("qwen3_qkv_norm_rope").output_names, ("q", "k", "v"))
         self.assertEqual(get_task("fused_add_rms_norm").output_names, ("out", "summed"))
+        for task in ("qwen3_attention_block", "qwen3_swiglu_mlp", "qwen3_lm_head_ce"):
+            self.assertFalse(get_task(task).is_multi_output, task)
 
     def test_both_residual_outputs_are_used(self):
         # `summed` is the residual stream and `out` continues into the next
@@ -446,9 +440,9 @@ class TestStructuredOutputsThroughTheSites(unittest.TestCase):
         self.assertTrue(torch.equal(summed, residual + branch))
         self.assertTrue(torch.equal(normed, norm(summed)))
 
-    def test_the_qkv_outputs_reach_attention_without_a_detour(self):
-        # No detach, no contiguous, no recomputation between the two sites: the
-        # three tensors the first returns are the three the second receives.
+    def test_the_attention_block_receives_the_modules_own_tensors(self):
+        # No detach, no copy: the input the adapter hands over is what the
+        # decoder layer passed, and every weight is the module's parameter.
         seen = {}
         workload = _workload()
         model, _p = workload.build_patched(
@@ -457,17 +451,160 @@ class TestStructuredOutputsThroughTheSites(unittest.TestCase):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import set_tap
 
         def tap(site, key, inputs, outputs):
-            seen.setdefault(site, []).append((inputs, outputs))
+            seen.setdefault(site, []).append((key, inputs, outputs))
 
         set_tap(model, tap)
         workload.loss(model, workload.batch_for(seed=0))
         set_tap(model, None)
-        qkv_out = seen[SITE_QKV][0][1]
-        attn_in = seen[SITE_ATTENTION][0][0]
-        for name, tensor in zip(("q", "k", "v"), qkv_out):
-            with self.subTest(tensor=name):
-                self.assertIs(attn_in[name], tensor)
-                self.assertTrue(tensor.requires_grad)
+        self.assertEqual([key for key, _i, _o in seen[SITE_ATTENTION_BLOCK]], list(range(LAYERS)))
+        _key, inputs, out = seen[SITE_ATTENTION_BLOCK][1]
+        attention = model.model.layers[1].self_attn
+        for name, module in (("q_weight", attention.q_proj), ("o_weight", attention.o_proj),
+                             ("k_norm_weight", attention.k_norm)):
+            self.assertIs(inputs[name], module.weight, name)
+        self.assertTrue(inputs["x"].requires_grad)
+        self.assertEqual(tuple(out.shape), tuple(inputs["x"].shape))
+        ((_key, head, (logits, loss)),) = seen[SITE_LM_HEAD_CE]
+        self.assertIs(head["weight"], model.lm_head.weight)
+        self.assertEqual(tuple(loss.shape), ())
+
+
+def _with(workload, kernels: dict):
+    """A kernel set with ``{site: callable}`` patched in as candidates."""
+    from evograd.evaluation.tier3.patch import patch
+
+    patched = _eager(workload)
+    for site, kernel in kernels.items():
+        patched = patch(patched, site, kernel)
+    return patched
+
+
+def _reference(task):
+    from evograd.benchmark import get_task
+    from evograd.opdecl.oracle import resolve_runtime_forward
+
+    return resolve_runtime_forward(get_task(task))
+
+
+@_skip
+class TestCandidateBranches(unittest.TestCase):
+    """What a candidate is handed, and what the model then returns.
+
+    The candidate here is the declared reference itself, called through the
+    candidate branch: the module's own arithmetic, so the step must be bitwise
+    the unpatched one. That pins the wiring (argument order, the shared rotary
+    row, the label shift, the flattened rows) and nothing else.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workload = _workload()
+        cls.batch = cls.workload.batch_for(seed=0)
+        cls.eager = _full_step(cls.workload, _eager(cls.workload), cls.batch)
+
+    def _assert_bitwise(self, got, *, logits=True):
+        self.assertTrue(torch.equal(got["loss"], self.eager["loss"]))
+        if logits:
+            self.assertTrue(torch.equal(got["logits"], self.eager["logits"]))
+        self.assertEqual(got["missing_grads"], [])
+        mismatched = [n for n, g in self.eager["grads"].items()
+                      if not torch.equal(got["grads"][n], g)]
+        self.assertEqual(mismatched, [])
+
+    def test_the_attention_block_reference_as_a_candidate_is_bitwise_the_model(self):
+        kernels = _with(self.workload, {SITE_ATTENTION_BLOCK: _reference("qwen3_attention_block")})
+        self._assert_bitwise(_full_step(self.workload, kernels, self.batch))
+        self.assertEqual(self.workload.last_build.count_problems(), [])
+
+    def test_the_lm_head_ce_reference_as_a_candidate_is_bitwise_the_loss(self):
+        kernels = _with(self.workload, {SITE_LM_HEAD_CE: _reference("qwen3_lm_head_ce")})
+        model, _p = self.workload.build_patched(kernels)
+        input_ids, labels = self.batch
+        output = model(input_ids=input_ids, labels=labels, use_cache=False)
+        self.assertIsNone(output.logits)
+        output.loss.backward()
+        grads = {n: p.grad for n, p in model.named_parameters()}
+        self.assertTrue(torch.equal(output.loss.detach(), self.eager["loss"]))
+        self.assertEqual([n for n, g in self.eager["grads"].items()
+                          if not torch.equal(grads[n], g)], [])
+        self.assertEqual(self.workload.last_build.observed(), {SITE_LM_HEAD_CE: 1})
+
+    def test_a_bound_pair_at_every_site_trains_like_the_model(self):
+        from evograd.benchmark import TASKS
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import (
+            bound_pair_identity_kernels)
+
+        got = _full_step(self.workload, bound_pair_identity_kernels(TASKS), self.batch)
+        self.assertIsNone(got["logits"])
+        torch.testing.assert_close(got["loss"], self.eager["loss"])
+        for name, grad in self.eager["grads"].items():
+            with self.subTest(grad=name):
+                torch.testing.assert_close(got["grads"][name], grad, atol=1e-4, rtol=1e-3)
+        self.assertEqual(self.workload.last_build.count_problems(), [])
+        self.assertEqual(self.workload.last_build.observed(), expected_counts(LAYERS))
+
+    def test_the_lm_head_ce_candidate_branch_adds_no_host_read(self):
+        """CUDA-graph capturable: what the adapter adds around the kernel (the label
+        shift, the flattening, the output) reads nothing back to the host. Counted
+        at the Python level against the unpatched step, which T3-G already captures."""
+        from collections import Counter
+
+        from torch.overrides import TorchFunctionMode
+
+        reads = ("item", "tolist", "__bool__", "__int__", "__float__", "__index__",
+                 "equal", "nonzero", "cpu", "numpy")
+
+        class HostReads(TorchFunctionMode):
+            def __init__(self):
+                super().__init__()
+                self.seen = Counter()
+
+            def __torch_function__(self, func, types, args=(), kwargs=None):
+                name = getattr(func, "__name__", "")
+                if name in reads:
+                    self.seen[name] += 1
+                return func(*args, **(kwargs or {}))
+
+        def step(kernels):
+            model, _p = self.workload.build_patched(kernels)
+            with HostReads() as mode:
+                self.workload.loss(model, self.batch).backward()
+            return mode.seen
+
+        native = step(_eager(self.workload))
+        patched = step(_with(self.workload, {SITE_LM_HEAD_CE: _reference("qwen3_lm_head_ce")}))
+        self.assertEqual(patched - native, Counter())
+
+    def test_the_lm_head_ce_candidate_refuses_calls_outside_its_case(self):
+        kernels = _with(self.workload, {SITE_LM_HEAD_CE: _reference("qwen3_lm_head_ce")})
+        model, _p = self.workload.build_patched(kernels)
+        input_ids, labels = self.batch
+        # No labels: it has no loss to compute and returns no logits, so a gate
+        # that dropped the labels fails here instead of never running the kernel.
+        with self.assertRaises(NotImplementedError):
+            model(input_ids=input_ids, use_cache=False)
+        with self.assertRaises(NotImplementedError):
+            model(input_ids=input_ids, labels=labels, use_cache=False, logits_to_keep=1)
+        with self.assertRaises(NotImplementedError):
+            model(input_ids=input_ids, labels=labels, use_cache=False,
+                  num_items_in_batch=torch.tensor(7))
+
+    def test_the_candidate_receives_the_shifted_flattened_rows(self):
+        seen = {}
+
+        def kernel(x, weight, target):
+            seen.update(x=x, weight=weight, target=target)
+            return _reference("qwen3_lm_head_ce")(x, weight, target)
+
+        model, _p = self.workload.build_patched(_with(self.workload, {SITE_LM_HEAD_CE: kernel}))
+        input_ids, labels = self.batch
+        model(input_ids=input_ids, labels=labels, use_cache=False)
+        batch, tokens = labels.shape
+        expected = torch.cat([labels[:, 1:], torch.full((batch, 1), -100)], 1).reshape(-1)
+        self.assertTrue(torch.equal(seen["target"], expected))
+        self.assertEqual(tuple(seen["x"].shape), (batch * tokens, model.config.hidden_size))
+        self.assertIs(seen["weight"], model.lm_head.weight)
+        self.assertIs(model.lm_head.weight, model.model.embed_tokens.weight)
 
 
 @_skip

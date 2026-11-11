@@ -20,11 +20,12 @@ from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest as llam
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as qwen3_5_manifest
 from evograd.ops import PRIMITIVES, get_primitive
+from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
 
 QWEN_LEVEL2 = (
     "fused_add_rms_norm",
-    "qwen3_attention",
-    "qwen3_qkv_norm_rope",
+    "qwen3_attention_block",
+    "qwen3_lm_head_ce",
     "qwen3_swiglu_mlp",
 )
 #: Llama-3-8B's four. A harvested architecture owns its Level-2 identities
@@ -104,7 +105,7 @@ class TestPrimitiveRegistry(unittest.TestCase):
 
     def test_get_primitive_refuses_a_task_that_is_not_one(self):
         with self.assertRaises(KeyError):
-            get_primitive("qwen3_attention")
+            get_primitive("qwen3_attention_block")
 
     def test_the_primitive_contract_carries_no_model_suite(self):
         """A primitive's own declaration must not name a harvested workload.
@@ -236,22 +237,22 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
     """Site-to-task mapping, output names and gradient order are contracts."""
 
     EXPECTED_SITES = {
-        "qkv_norm_rope": "qwen3_qkv_norm_rope",
-        "attention": "qwen3_attention",
+        "attention_block": "qwen3_attention_block",
         "swiglu_mlp": "qwen3_swiglu_mlp",
         "residual_rmsnorm": "fused_add_rms_norm",
+        "lm_head_ce": "qwen3_lm_head_ce",
     }
     EXPECTED_OUTPUTS = {
-        "qwen3_qkv_norm_rope": ("q", "k", "v"),
-        "qwen3_attention": ("out",),
+        "qwen3_attention_block": ("out",),
         "qwen3_swiglu_mlp": ("out",),
         "fused_add_rms_norm": ("out", "summed"),
+        "qwen3_lm_head_ce": ("loss",),
     }
     EXPECTED_GRADS = {
-        "qwen3_qkv_norm_rope": ("dx", "dq_weight", "dk_weight", "dv_weight",
-                                "dq_norm_weight", "dk_norm_weight"),
-        "qwen3_attention": ("dq", "dk", "dv", "do_weight"),
+        "qwen3_attention_block": ("dx", "dq_weight", "dk_weight", "dv_weight", "do_weight",
+                                  "dq_norm_weight", "dk_norm_weight"),
         "qwen3_swiglu_mlp": ("dx", "dgate_weight", "dup_weight", "ddown_weight"),
+        "qwen3_lm_head_ce": ("dx", "dweight"),
     }
 
     def test_the_site_to_task_mapping_is_unchanged(self):
@@ -260,10 +261,7 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
     def test_the_manifest_and_the_tier3_registry_agree(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b import sites
 
-        self.assertEqual(
-            {sites.SITE_QKV, sites.SITE_ATTENTION, sites.SITE_MLP, sites.SITE_RESIDUAL},
-            set(manifest.SITES),
-        )
+        self.assertEqual(sites.qwen3_sites().site_ops, manifest.SITE_TASKS)
 
     def test_structured_outputs_are_unchanged(self):
         for task, names in self.EXPECTED_OUTPUTS.items():
@@ -287,6 +285,7 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
                     TASKS[task].forward,
                 )
 
+    @unittest.skipUnless(qwen3_snapshot_current(), QWEN3_SNAPSHOT_STALE)
     def test_the_manifest_reads_frequency_from_the_snapshot(self):
         for site in manifest.SITES:
             with self.subTest(site=site):

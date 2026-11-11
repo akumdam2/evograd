@@ -4,10 +4,12 @@ Four places in the model where a kernel can be swapped, and the machinery that
 puts one there without the call site, the state dict, the parameters, or the
 training loop noticing:
 
-    qkv_norm_rope     projections, per-head Q/K RMSNorm, RoPE
-    attention         causal GQA SDPA, then the output projection
+    attention_block   the whole Qwen3Attention: projections, per-head Q/K
+                      RMSNorm, RoPE, causal GQA SDPA, the output projection
     swiglu_mlp        the gated MLP block
     residual_rmsnorm  a residual add immediately followed by an RMSNorm
+    lm_head_ce        the LM head and the causal-LM loss (a candidate returns
+                      the loss and no logits)
 
 **Nothing is replaced.** Every adapter rebinds ``forward`` on the *existing*
 module instance and leaves ``_parameters``, ``_buffers`` and ``_modules``
@@ -46,42 +48,12 @@ import torch.nn.functional as F
 
 from evograd.evaluation.tier3.patch import ModulePatch, PatchProvenance, Site, SiteRegistry
 
-#: What the four sites are called, and which declaration governs each.
-SITE_QKV = "qkv_norm_rope"
-SITE_ATTENTION = "attention"
+#: What the four sites are called, and which declaration governs each. Each
+#: has its own adapter, and no site's boundary holds another's calls.
+SITE_ATTENTION_BLOCK = "attention_block"
 SITE_MLP = "swiglu_mlp"
 SITE_RESIDUAL = "residual_rmsnorm"
-
-#: Which sites share one installed adapter. Patching any member of a group
-#: installs that group's adapter, and the adapter runs *every* member's boundary
-#: on the same call -- the unpatched ones through their production spelling.
-#: ``qkv_norm_rope`` and ``attention`` are one Qwen3Attention adapter with two
-#: switches, so patching either makes both live. Anything reading counts has to
-#: know that, and this is the one place it is written down.
-ADAPTER_GROUPS: tuple[tuple[str, ...], ...] = (
-    (SITE_QKV, SITE_ATTENTION),
-    (SITE_MLP,),
-    (SITE_RESIDUAL,),
-)
-
-
-def live_sites(requested) -> tuple[str, ...]:
-    """Every site that becomes a live boundary when ``requested`` is patched.
-
-    A superset of ``requested``: the sites that merely come along because they
-    share an adapter with something that was asked for.
-    """
-    wanted = set(requested)
-    live: set[str] = set()
-    for group in ADAPTER_GROUPS:
-        if wanted.intersection(group):
-            live.update(group)
-    return tuple(sorted(live))
-
-
-def supporting_sites(requested) -> tuple[str, ...]:
-    """The live sites that were carried along rather than asked for."""
-    return tuple(sorted(set(live_sites(requested)) - set(requested)))
+SITE_LM_HEAD_CE = "lm_head_ce"
 
 
 #: Attribute prefix for everything an adapter attaches to a live module. Plain
@@ -163,52 +135,36 @@ class ResidualCarrier:
 # ── the production spellings, as the model calls them ────────────────────────
 
 
-def production_qkv_norm_rope(module, hidden_states, cos, sin):
-    """Exactly ``Qwen3Attention.forward``'s first five lines, on ``module``.
+def production_attention_block(module, hidden_states, position_embeddings, attention_mask,
+                               **kwargs):
+    """``Qwen3Attention.forward`` of the installed Transformers, on ``module``.
 
-    Not a re-derivation: the same submodule calls in the same order, so
-    replacing the structure changes no arithmetic. ``apply_rotary_pos_emb`` is
-    imported from the installed Transformers rather than reimplemented.
+    The class's own code, not a re-derivation: the adapter rebinds the
+    instance's ``forward``, so the class attribute is still the original, and
+    the result is ``(attn_output, attn_weights)`` as the decoder layer expects.
     """
-    from transformers.models.qwen3.modeling_qwen3 import apply_rotary_pos_emb
+    from transformers.models.qwen3.modeling_qwen3 import Qwen3Attention
 
-    input_shape = hidden_states.shape[:-1]
-    hidden_shape = (*input_shape, -1, module.head_dim)
-    query_states = module.q_norm(module.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-    key_states = module.k_norm(module.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-    value_states = module.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-    return query_states, key_states, value_states
-
-
-def production_attention(module, query, key, value, attention_mask, input_shape, **kwargs):
-    """Exactly ``Qwen3Attention.forward``'s attention interface and output projection."""
-    from transformers.models.qwen3.modeling_qwen3 import (
-        ALL_ATTENTION_FUNCTIONS,
-        eager_attention_forward,
-    )
-
-    attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-        module.config._attn_implementation, eager_attention_forward
-    )
-    attn_output, attn_weights = attention_interface(
-        module,
-        query,
-        key,
-        value,
-        attention_mask,
-        dropout=0.0 if not module.training else module.attention_dropout,
-        scaling=module.scaling,
-        sliding_window=module.sliding_window,
-        **kwargs,
-    )
-    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-    return module.o_proj(attn_output), attn_weights
+    return Qwen3Attention.forward(module, hidden_states, position_embeddings, attention_mask,
+                                  **kwargs)
 
 
 def production_swiglu_mlp(module, x):
     """Exactly ``Qwen3MLP.forward``."""
     return module.down_proj(module.act_fn(module.gate_proj(x)) * module.up_proj(x))
+
+
+def production_lm_head_ce(model, hidden_states, labels, **kwargs):
+    """The last two lines of ``Qwen3ForCausalLM.forward``: ``(logits, loss)``.
+
+    ``loss`` is ``None`` without labels, as in the model.
+    """
+    logits = model.lm_head(hidden_states)
+    loss = None
+    if labels is not None:
+        loss = model.loss_function(logits=logits, labels=labels,
+                                   vocab_size=model.config.vocab_size, **kwargs)
+    return logits, loss
 
 
 def production_residual_rmsnorm(norm_call, branch, residual):
@@ -239,7 +195,7 @@ def _observed(op_name: str):
 
 
 def build_registry() -> SiteRegistry:
-    """Qwen3's four sites, with their calibrated shapes attached to preflight.
+    """Qwen3's four sites, with their observed shapes attached to preflight.
 
     The preflight workloads are the whole point of attaching them here: they are
     the configurations this model actually presents, and until the tolerance
@@ -249,14 +205,14 @@ def build_registry() -> SiteRegistry:
     return SiteRegistry(
         name="qwen3_0_6b",
         sites=(
-            Site(SITE_QKV, "qwen3_qkv_norm_rope", production_qkv_norm_rope,
-                 preflight=_observed("qwen3_qkv_norm_rope")),
-            Site(SITE_ATTENTION, "qwen3_attention", production_attention,
-                 preflight=_observed("qwen3_attention")),
+            Site(SITE_ATTENTION_BLOCK, "qwen3_attention_block", production_attention_block,
+                 preflight=_observed("qwen3_attention_block")),
             Site(SITE_MLP, "qwen3_swiglu_mlp", production_swiglu_mlp,
                  preflight=_observed("qwen3_swiglu_mlp")),
             Site(SITE_RESIDUAL, "fused_add_rms_norm", production_residual_rmsnorm,
                  preflight=_observed("fused_add_rms_norm")),
+            Site(SITE_LM_HEAD_CE, "qwen3_lm_head_ce", production_lm_head_ce,
+                 preflight=_observed("qwen3_lm_head_ce")),
         ),
     )
 
@@ -321,7 +277,7 @@ def bound_pair_identity_kernels(ops, sites: tuple[str, ...] | None = None,
     return identity_control_kernels(ops, sites, registry=registry or qwen3_sites())
 
 
-# ── the composite attention adapter ──────────────────────────────────────────
+# ── boundary probes ──────────────────────────────────────────────────────────
 
 
 def _probe_outputs(state, outputs):
@@ -413,75 +369,52 @@ def _tap(state, site: str, inputs: dict, outputs, key=_UNSET, emitted=None):
 
 def _attention_forward(self, hidden_states, position_embeddings=None,
                        attention_mask=None, past_key_values=None, **kwargs):
-    """One adapter, two independently selectable sites, one module replaced.
+    """``Qwen3Attention.forward`` with the whole module one site.
 
     The external signature is the installed Transformers 5.16.1 one and the
     return is its ``(attn_output, attn_weights)`` pair, so ``Qwen3DecoderLayer``
-    calls this exactly as it called the original. Two sequential patches on the
-    same module would have meant two wrappers, two sets of provenance, and an
-    ordering question; one adapter holding two switches has none of that.
+    calls this exactly as it called the original.
     """
     state = getattr(self, _TAG + "state")
-    counters = state["counters"]
     if past_key_values is not None:
         raise NotImplementedError(
             "the Qwen3 tier-3 attention adapter is a training-step boundary; "
             "cache-enabled execution is not supported"
         )
+    kernel = state["kernels"].get(SITE_ATTENTION_BLOCK)
+    state["counters"].hit(SITE_ATTENTION_BLOCK)
     cos, sin = position_embeddings
-    input_shape = hidden_states.shape[:-1]
-
-    qkv_kernel = state["kernels"].get(SITE_QKV)
-    counters.hit(SITE_QKV)
-    qkv_inputs = {
-        "x": hidden_states, "q_weight": self.q_proj.weight,
-        "k_weight": self.k_proj.weight, "v_weight": self.v_proj.weight,
+    inputs = {
+        "x": hidden_states, "q_weight": self.q_proj.weight, "k_weight": self.k_proj.weight,
+        "v_weight": self.v_proj.weight, "o_weight": self.o_proj.weight,
         "q_norm_weight": self.q_norm.weight, "k_norm_weight": self.k_norm.weight,
         "cos": cos, "sin": sin, "eps": self.q_norm.variance_epsilon,
     }
-    qkv_inputs, qkv_emitted = _probe_inputs(state, qkv_inputs, ("x",))
-    if qkv_kernel is None or _is_production(qkv_kernel, SITE_QKV):
-        query, key, value = _tap(
-            state, SITE_QKV, qkv_inputs,
-            production_qkv_norm_rope(self, qkv_inputs["x"], cos, sin),
-            emitted=qkv_emitted,
-        )
-    else:
-        # The declared contract's cos/sin are [1, T, D]: one row of positions,
-        # broadcast over the batch. The model's are [B, T, D] with identical
-        # rows -- `position_ids` has no padding here -- so taking the first row
-        # is exact rather than an approximation, and it is checked once.
-        qkv_inputs["cos"] = _shared_positions(state, cos)
-        qkv_inputs["sin"] = _shared_positions(state, sin)
-        query, key, value = _tap(state, SITE_QKV, qkv_inputs, qkv_kernel(
-            qkv_inputs["x"],
-            self.q_proj.weight, self.k_proj.weight, self.v_proj.weight,
-            self.q_norm.weight, self.k_norm.weight,
-            qkv_inputs["cos"], qkv_inputs["sin"], self.q_norm.variance_epsilon,
-        ), emitted=qkv_emitted)
-
-    attn_kernel = state["kernels"].get(SITE_ATTENTION)
-    counters.hit(SITE_ATTENTION)
-    attn_inputs = {"q": query, "k": key, "v": value, "o_weight": self.o_proj.weight}
-    attn_inputs, attn_emitted = _probe_inputs(state, attn_inputs, ("q", "k", "v"))
-    if attn_kernel is None or _is_production(attn_kernel, SITE_ATTENTION):
-        out, weights = production_attention(
-            self, attn_inputs["q"], attn_inputs["k"], attn_inputs["v"],
-            attention_mask, input_shape, **kwargs
-        )
-        return _tap(state, SITE_ATTENTION, attn_inputs, out,
-                    emitted=attn_emitted), weights
+    inputs, emitted = _probe_inputs(state, inputs, ("x",))
+    if kernel is None or _is_production(kernel, SITE_ATTENTION_BLOCK):
+        out, weights = production_attention_block(self, inputs["x"], position_embeddings,
+                                                  attention_mask, **kwargs)
+        return _tap(state, SITE_ATTENTION_BLOCK, inputs, out, emitted=emitted), weights
     if attention_mask is not None:
         raise NotImplementedError(
-            "qwen3_attention is declared for the mask-free causal branch "
+            "qwen3_attention_block is declared for the mask-free causal branch "
             "(attn_mask=None, is_causal=True), which is what the canonical "
             "workload takes; this call supplied an explicit attention mask"
         )
-    # The three outputs of the first site feed the second directly: no detach,
-    # no recomputation, no contiguous() the contract does not ask for.
-    return _tap(state, SITE_ATTENTION, attn_inputs,
-                attn_kernel(attn_inputs["q"], attn_inputs["k"], attn_inputs["v"],
-                            self.o_proj.weight), emitted=attn_emitted), None
+    if self.training and self.attention_dropout:
+        raise NotImplementedError("qwen3_attention_block is declared without attention dropout")
+    if self.q_norm.variance_epsilon != self.k_norm.variance_epsilon:
+        raise NotImplementedError("qwen3_attention_block takes one eps for q_norm and k_norm")
+    # The declared cos/sin are [1, T, D]: one row of positions, broadcast over
+    # the batch. The model's are [B, T, D] with identical rows -- `position_ids`
+    # has no padding here -- so taking the first row is exact, and it is checked.
+    inputs["cos"] = _shared_positions(state, cos)
+    inputs["sin"] = _shared_positions(state, sin)
+    return _tap(state, SITE_ATTENTION_BLOCK, inputs, kernel(
+        inputs["x"], self.q_proj.weight, self.k_proj.weight, self.v_proj.weight,
+        self.o_proj.weight, self.q_norm.weight, self.k_norm.weight,
+        inputs["cos"], inputs["sin"], self.q_norm.variance_epsilon,
+    ), emitted=emitted), None
 
 
 def _shared_positions(state, table: torch.Tensor) -> torch.Tensor:
@@ -497,7 +430,7 @@ def _shared_positions(state, table: torch.Tensor) -> torch.Tensor:
         if not bool(torch.equal(table[0], table[1])):
             raise NotImplementedError(
                 "the rotary tables differ across the batch, so the declared "
-                "[1, T, D] cos/sin cannot represent them; qwen3_qkv_norm_rope "
+                "[1, T, D] cos/sin cannot represent them; qwen3_attention_block "
                 "is declared for the unpadded canonical workload"
             )
         state["positions_checked"] = True
@@ -693,6 +626,91 @@ def install_residual_adapters(model, kernels: dict[str, Callable], counters: Sit
     return paths, carrier
 
 
+# ── the LM head and the loss ─────────────────────────────────────────────────
+
+#: ``ForCausalLMLoss`` arguments outside the declared case (mean over targets
+#: != -100, labels shifted by the loss itself).
+_LOSS_KWARGS = ("num_items_in_batch", "ignore_index", "shift_labels")
+
+
+def _causal_lm_forward(self, input_ids=None, attention_mask=None, position_ids=None,
+                       past_key_values=None, inputs_embeds=None, labels=None,
+                       use_cache=None, logits_to_keep=0, **kwargs):
+    """``Qwen3ForCausalLM.forward`` (Transformers 5.16.1) with its last two lines a site.
+
+    The body is the model's: ``self.model(...)``, the ``logits_to_keep`` slice,
+    then :func:`production_lm_head_ce`. A candidate instead receives the
+    flattened hidden states, the tied head and the labels shifted as
+    ``ForCausalLMLoss`` shifts them (pad with -100, drop the first position,
+    flatten), returns the loss, and the output carries no logits. The shift is
+    device work only, so the step stays CUDA-graph capturable.
+    """
+    from transformers.modeling_outputs import CausalLMOutputWithPast
+
+    state = getattr(self, _TAG + "state")
+    if past_key_values is not None or use_cache:
+        raise NotImplementedError(
+            "the Qwen3 tier-3 LM-head adapter is a training-step boundary; "
+            "cache-enabled execution is not supported"
+        )
+    if not isinstance(logits_to_keep, int) or logits_to_keep != 0:
+        raise NotImplementedError("qwen3_lm_head_ce is declared on every position (logits_to_keep=0)")
+    if kwargs.pop("return_dict", None) is False:
+        raise NotImplementedError("the LM-head adapter returns a CausalLMOutputWithPast")
+    outputs = self.model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        position_ids=position_ids,
+        past_key_values=past_key_values,
+        inputs_embeds=inputs_embeds,
+        use_cache=use_cache,
+        **kwargs,
+    )
+    hidden_states = outputs.last_hidden_state[:, slice(-logits_to_keep, None), :]
+    kernel = state["kernels"].get(SITE_LM_HEAD_CE)
+    state["counters"].hit(SITE_LM_HEAD_CE)
+    if kernel is None or _is_production(kernel, SITE_LM_HEAD_CE):
+        inputs = {"x": hidden_states, "weight": self.lm_head.weight, "labels": labels}
+        inputs, emitted = _probe_inputs(state, inputs, ("x",))
+        logits, loss = _tap(state, SITE_LM_HEAD_CE, inputs,
+                            production_lm_head_ce(self, inputs["x"], labels, **kwargs),
+                            key=None, emitted=emitted)
+    else:
+        if labels is None:
+            raise NotImplementedError(
+                "a qwen3_lm_head_ce candidate computes the loss and no logits; this call "
+                "passed no labels, so it would return nothing the caller asked for"
+            )
+        refused = sorted(set(kwargs) & set(_LOSS_KWARGS))
+        if refused:
+            raise NotImplementedError(f"qwen3_lm_head_ce is declared without {refused}")
+        target = F.pad(labels, (0, 1), value=-100)[..., 1:].contiguous().view(-1)
+        inputs = {"x": hidden_states.reshape(-1, hidden_states.shape[-1]),
+                  "weight": self.lm_head.weight, "target": target}
+        inputs, emitted = _probe_inputs(state, inputs, ("x",))
+        loss = _tap(state, SITE_LM_HEAD_CE, inputs,
+                    kernel(inputs["x"], self.lm_head.weight, target),
+                    key=None, emitted=emitted)
+        logits = None
+    return CausalLMOutputWithPast(
+        loss=loss,
+        logits=logits,
+        past_key_values=outputs.past_key_values,
+        hidden_states=outputs.hidden_states,
+        attentions=outputs.attentions,
+    )
+
+
+def install_lm_head_ce_adapter(model, kernels: dict[str, Callable], counters: SiteCounters):
+    """Rebind ``forward`` on the live ``Qwen3ForCausalLM`` itself. Nothing is copied."""
+    if type(model).__name__ != "Qwen3ForCausalLM":
+        raise ValueError(f"the lm_head_ce adapter follows Qwen3ForCausalLM.forward, "
+                         f"not {type(model).__name__}")
+    setattr(model, _TAG + "state", {"kernels": dict(kernels), "counters": counters})
+    model.forward = types.MethodType(_causal_lm_forward, model)
+    return model
+
+
 # ── structural counts ────────────────────────────────────────────────────────
 
 
@@ -703,13 +721,14 @@ def expected_counts(layers: int) -> dict[str, int]:
     add, one per layer for the MLP add -- of which ``layers - 1`` are consumed
     by the next layer's ``input_layernorm`` and the last by ``model.norm``.
     Layer 0's ``input_layernorm`` is not one, and that is the whole of the
-    difference between ``2 * layers`` and ``2 * layers + 1``.
+    difference between ``2 * layers`` and ``2 * layers + 1``. One LM head with
+    the loss per forward.
     """
     return {
-        SITE_QKV: layers,
-        SITE_ATTENTION: layers,
+        SITE_ATTENTION_BLOCK: layers,
         SITE_MLP: layers,
         SITE_RESIDUAL: 2 * layers,
+        SITE_LM_HEAD_CE: 1,
     }
 
 
@@ -743,16 +762,13 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
         )
     paths: dict[str, tuple[str, ...]] = {}
 
-    attention_group = next(g for g in ADAPTER_GROUPS if SITE_QKV in g)
-    attention_sites = [s for s in attention_group if s in selected]
-    if attention_sites:
+    if SITE_ATTENTION_BLOCK in selected:
         touched = []
         for index, layer in enumerate(model.model.layers):
             install_attention_adapter(layer.self_attn, selected, counters, index)
             touched.append(f"model.layers.{index}.self_attn")
-        _require(len(touched), layers, attention_sites, "Qwen3Attention")
-        for site in attention_sites:
-            paths[site] = tuple(touched)
+        _require(len(touched), layers, [SITE_ATTENTION_BLOCK], "Qwen3Attention")
+        paths[SITE_ATTENTION_BLOCK] = tuple(touched)
 
     if SITE_MLP in selected:
         touched = []
@@ -767,6 +783,11 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
         touched, carrier = install_residual_adapters(model, selected, counters)
         _require(len(touched), layers + 1, [SITE_RESIDUAL], "decoder layer / final norm")
         paths[SITE_RESIDUAL] = tuple(touched)
+
+    if SITE_LM_HEAD_CE in selected:
+        # The adapter rebinds the model's own forward; the boundary is the head.
+        install_lm_head_ce_adapter(model, selected, counters)
+        paths[SITE_LM_HEAD_CE] = ("lm_head",)
 
     provenance = PatchProvenance(
         method="module_surgery",
@@ -791,16 +812,17 @@ def module_patches() -> tuple[ModulePatch, ...]:
 
     ``patch_model`` does the installing, because the residual site is not a
     submodule replacement at all -- it is a decoder-layer and model-loop
-    integration. These describe the same set for anything that wants to read it.
+    integration -- and the LM-head site rebinds the model's own forward. These
+    describe the same set for anything that wants to read it.
     """
     def _named(kind: str):
         return lambda module: type(module).__name__ == kind
 
     return (
-        ModulePatch(SITE_QKV, _named("Qwen3Attention"), lambda o, k: o,
-                    sites=(SITE_ATTENTION,)),
+        ModulePatch(SITE_ATTENTION_BLOCK, _named("Qwen3Attention"), lambda o, k: o),
         ModulePatch(SITE_MLP, _named("Qwen3MLP"), lambda o, k: o),
         ModulePatch(SITE_RESIDUAL, _named("Qwen3DecoderLayer"), lambda o, k: o),
+        ModulePatch(SITE_LM_HEAD_CE, _named("Qwen3ForCausalLM"), lambda o, k: o),
     )
 
 

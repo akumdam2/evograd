@@ -281,12 +281,12 @@ class TestGate1Envelope(unittest.TestCase):
         from evograd.benchmark import get_task
         from evograd.verification.integrations.gates import gate1_envelope
 
-        op = get_task("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_attention_block")
         # The policy's envelopes are its gamma (2) x compile's deviation; Gate 1 uses 4x.
         policy = SimpleNamespace(gamma=2.0, thresholds={
-            "out:q": {"envelope": 0.75}, "grad:q_weight": {"envelope": 0.0039},
+            "out:out": {"envelope": 0.75}, "grad:q_weight": {"envelope": 0.0039},
             "grad_in:x": {"envelope": 0.0001}, "grad:v_weight": {"E2": 1.0}})   # no envelope
         self.assertEqual(gate1_envelope(op, policy),
-                         {"out:q": 1.5, "grad_in:dq_weight": 0.0078, "grad_in:dx": 0.0002})
+                         {"out:out": 1.5, "grad_in:dq_weight": 0.0078, "grad_in:dx": 0.0002})
         self.assertEqual(gate1_envelope(op, None), {})
 

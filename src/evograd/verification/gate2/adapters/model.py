@@ -189,6 +189,14 @@ class WorkloadModelScope(ScopeBase):
     def output_specs(self, invocation: Invocation) -> tuple[C.ResultSpec, ...]:
         return (C.ResultSpec("out:loss", C.OUTPUT),)
 
+    def structure(self, result: Any) -> Any:
+        """The model's return without its logits, which a site fusing the LM head
+        with the loss does not produce; every other field must be the native one's."""
+        tree = super().structure(result)
+        if isinstance(tree, dict):
+            tree.pop("logits", None)
+        return tree
+
     def outputs(self, result: Any, invocation: Invocation, sample: Sample) -> dict[str, Any]:
         loss = getattr(result, "loss", None)
         if not (torch.is_tensor(loss) and loss.dim() == 0):

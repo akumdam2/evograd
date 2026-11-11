@@ -311,6 +311,14 @@ python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --v
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --write
 ```
 
+Qwen3-0.6B's `TASK_SOURCES` changed after its snapshot was written:
+`qwen3_attention_block` (the whole attention module, 28 calls) and
+`qwen3_lm_head_ce` (the LM head with the loss, 1 call) replace
+`qwen3_qkv_norm_rope` and `qwen3_attention`. Its `--validate` therefore also
+differs in those four `tasks` entries; `qwen3_swiglu_mlp`, `fused_add_rms_norm`
+and every `level1` case must not move. Until the snapshot is written, the two
+old entries are no cases and the two new tasks have none.
+
 The vision and generated models write the snapshot in the harvest, all at
 `--mem=32g` (Qwen2-VL: 64g if it runs out) with `EVOGRAD_HF_CACHE=$V/hf_cache`. They read their real-data
 pools under `$EVOGRAD_BENCHMARK_DATA_ROOT/<model>/batches` (DiT also its warm

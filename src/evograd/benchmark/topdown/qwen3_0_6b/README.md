@@ -11,11 +11,8 @@ qwen3_0_6b/
 ├── levels/
 │   ├── level3/          model spec, build, smoke, and report
 │   ├── level2/          manifest.py plus one package per site:
-│   │                    <site>/{task,reference,capture}.py
+│   │                    <site>/{task,reference}.py
 │   └── level1/          manifest.py -- which primitives this model runs
-├── layer/               artifact.py, capture.py, prepare.py -- the captured
-│                        decoder layer the L2 sites draw their real
-│                        invocations from, and what it takes to replay it
 └── harvest/             observation, manifest, and frozen snapshot
 ```
 
@@ -34,11 +31,11 @@ separate concern with a separate owner: the verification package's Gates 1/2/3
 
 - L3: the Qwen3-0.6B whole-model training workload, smoke, harvest, and
   snapshot.
-- L2: `qkv_norm_rope`, `attention`, `swiglu_mlp`, and
-  `residual_rmsnorm`/`fused_add_rms_norm` model boundaries.
+- L2: `attention_block` (the whole `Qwen3Attention`), `swiglu_mlp`,
+  `residual_rmsnorm`/`fused_add_rms_norm` and `lm_head_ce` (the LM head with the
+  causal-LM loss) model boundaries. Their payloads are the real-payload
+  capture's (`evograd.verification.integrations.qwen3_0_6b`).
 - L1: the primitive mapping for those boundaries.
-- `layer/`: the representative decoder layer (layer 14), captured; a data
-  source for L2, not a level.
 
 Benchmark Level describes integration scope. T1/T2/T3 are evaluation execution
 contexts; `fast`/`fair` are measurement modes.
@@ -60,6 +57,6 @@ on the first WikiText-2 TRAIN batch of data order 101, built by
 (`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
-overrides apply to it); the layer capture replays that step and reads such a
-harvest, until the tracked snapshot is regenerated from the real run (see
-"Regenerating the snapshots" in `src/evograd/verification/README.md`).
+overrides apply to it) and never backs a capture. Regenerate the tracked
+snapshot from the real run whenever `harvest/snapshot.py`'s `TASK_SOURCES`
+change (see "Regenerating the snapshots" in `src/evograd/verification/README.md`).

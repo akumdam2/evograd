@@ -60,10 +60,10 @@ def _qwen_like_registry() -> "SiteRegistry":
     return SiteRegistry(
         name="qwen3_0_6b",
         sites=(
-            Site("qkv_norm_rope", "qwen3_qkv_norm_rope", lambda *a, **k: None),
-            Site("attention", "qwen3_attention", lambda *a, **k: None),
+            Site("attention_block", "qwen3_attention_block", lambda *a, **k: None),
             Site("swiglu_mlp", "qwen3_swiglu_mlp", lambda *a, **k: None),
             Site("residual_rmsnorm", "fused_add_rms_norm", lambda *a, **k: None),
+            Site("lm_head_ce", "qwen3_lm_head_ce", lambda *a, **k: None),
         ),
     )
 
@@ -112,9 +112,9 @@ class TestTwoIndependentRegistries(unittest.TestCase):
 
     def test_a_kernel_set_carries_its_registry_through_every_operation(self):
         qwen = _qwen_like_registry()
-        kernels = patch(KernelSet(registry=qwen), "attention", lambda *a: None)
+        kernels = patch(KernelSet(registry=qwen), "attention_block", lambda *a: None)
         self.assertIs(kernels.registry, qwen)
-        self.assertIs(restrict(kernels, ("attention",)).registry, qwen)
+        self.assertIs(restrict(kernels, ("attention_block",)).registry, qwen)
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")
@@ -139,13 +139,13 @@ class TestIdentityControlStaysInItsRegistry(unittest.TestCase):
         self.assertEqual(kernels.patched, ("swiglu_mlp",))
 
     def test_a_multi_output_site_gets_a_working_control(self):
-        # qwen3_qkv_norm_rope returns three tensors. The control is built the
+        # fused_add_rms_norm returns two tensors. The control is built the
         # same way whatever the arity, which is what makes a future site a
         # registry entry rather than an adapter change.
         qwen = _qwen_like_registry()
-        kernels = identity_control_kernels(TASKS, ("qkv_norm_rope",), registry=qwen)
-        self.assertTrue(callable(kernels.kernel_for("qkv_norm_rope")))
-        self.assertTrue(get_task("qwen3_qkv_norm_rope").is_multi_output)
+        kernels = identity_control_kernels(TASKS, ("residual_rmsnorm",), registry=qwen)
+        self.assertTrue(callable(kernels.kernel_for("residual_rmsnorm")))
+        self.assertTrue(get_task("fused_add_rms_norm").is_multi_output)
 
 
 @unittest.skipUnless(HAVE_TORCH, "torch not installed on this machine")

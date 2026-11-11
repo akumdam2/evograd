@@ -93,8 +93,8 @@ def _load_pretrained(spec: WorkloadSpec):
     calibration was derived from. A checkpoint whose config disagrees -- a
     different head count, an untied embedding, a wider vocabulary -- would run
     and silently measure a different model, so each field is compared before
-    the weights are trusted. The QKV site's own shapes are asserted as well,
-    because that is the contract the patched kernel was generated against.
+    the weights are trusted. The attention block's own shapes are asserted as
+    well, because that is the contract the patched kernel was generated against.
     """
     from transformers import Qwen3ForCausalLM
 
@@ -140,13 +140,14 @@ def _load_pretrained(spec: WorkloadSpec):
     if declared.get("tie_word_embeddings") and not tied:
         raise RuntimeError("declared tie_word_embeddings=True but the loaded head is untied")
 
-    # The QKV contract the patched kernel was generated against.
+    # The attention-block contract the patched kernel was generated against.
     attention = model.model.layers[0].self_attn
     head_dim = declared["head_dim"]
     expected = {
         "q_proj.weight": (declared["num_attention_heads"] * head_dim, declared["hidden_size"]),
         "k_proj.weight": (declared["num_key_value_heads"] * head_dim, declared["hidden_size"]),
         "v_proj.weight": (declared["num_key_value_heads"] * head_dim, declared["hidden_size"]),
+        "o_proj.weight": (declared["hidden_size"], declared["num_attention_heads"] * head_dim),
         "q_norm.weight": (head_dim,),
         "k_norm.weight": (head_dim,),
     }
@@ -154,7 +155,7 @@ def _load_pretrained(spec: WorkloadSpec):
         module_name, _, param = name.partition(".")
         actual = tuple(getattr(getattr(attention, module_name), param).shape)
         if actual != shape:
-            raise RuntimeError(f"self_attn.{name} is {actual}, the QKV contract needs {shape}")
+            raise RuntimeError(f"self_attn.{name} is {actual}, the attention block needs {shape}")
     if getattr(attention, "q_proj").bias is not None and not declared.get("attention_bias"):
         raise RuntimeError("checkpoint has attention bias; the declared contract has none")
     return model

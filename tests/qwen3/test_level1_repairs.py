@@ -201,15 +201,16 @@ class TestComposition(unittest.TestCase):
             tuple(c["roles"]): c["dims"]
             for c in load()["level1"]["linear_no_bias"]["configurations"]
         }
-        qkv = get_task("qwen3_qkv_norm_rope").benchmark[0].dims
+        attention = get_task("qwen3_attention_block").benchmark[0].dims
         mlp = get_task("qwen3_swiglu_mlp").benchmark[0].dims
-        attention = get_task("qwen3_attention").benchmark[0].dims
-        self.assertEqual(configs[("q_proj",)]["N"], qkv["QO"])
-        self.assertEqual(configs[("k_proj", "v_proj")]["N"], qkv["KVO"])
+        head = get_task("qwen3_lm_head_ce").benchmark[0].dims
+        self.assertEqual(configs[("q_proj",)]["N"], attention["QO"])
+        self.assertEqual(configs[("k_proj", "v_proj")]["N"], attention["KVO"])
         self.assertEqual(configs[("gate_proj", "up_proj")]["N"], mlp["I"])
         self.assertEqual(configs[("down_proj",)]["K"], mlp["I"])
         self.assertEqual(configs[("o_proj",)]["K"], attention["QO"])
-        self.assertEqual(configs[("lm_head",)]["K"], qkv["H"])
+        self.assertEqual(configs[("lm_head",)]["K"], head["hidden"])
+        self.assertEqual(configs[("lm_head",)]["N"], head["vocab"])
 
 
 if __name__ == "__main__":

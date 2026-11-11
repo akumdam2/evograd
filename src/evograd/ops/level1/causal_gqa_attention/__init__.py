@@ -8,8 +8,8 @@ dimension) describes every GQA decoder, and both Llama-3-8B and Qwen3-0.6B
 grids are derived from their published configurations.
 
 Attention alone. The output projection that follows it in a real layer is a
-separate GEMM and belongs to the Level-2 ``qwen3_attention`` task; the two meet
-exactly where this one's output becomes that one's input.
+separate GEMM; both are inside the Level-2 attention-block tasks (for example
+``qwen3_attention_block``), which take the whole attention module.
 """
 
 from evograd.opdecl import Active, declare_op

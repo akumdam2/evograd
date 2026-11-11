@@ -26,6 +26,12 @@ class ScopeBase:
         return torch.autocast(device_type=torch.device(self.device).type,
                               dtype=getattr(torch, self.autocast_dtype))
 
+    def structure(self, result: Any) -> Any:
+        """The return structure a candidate's must equal the native one's."""
+        from evograd.verification.common.execution import describe_tree
+
+        return describe_tree(result)
+
     def reference_parts(self) -> dict[str, Any]:
         """The objects that define the native reference: native sites, the
         module factory, output/loss selection, the input recipe. Subclasses

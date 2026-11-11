@@ -402,7 +402,7 @@ class TestExistingArtifactsAreUnaffected(unittest.TestCase):
         from evograd.benchmark import get_task
         from evograd.pipelines.shared.artifact import render_deployment_layer
 
-        op = get_task("qwen3_qkv_norm_rope")
+        op = get_task("qwen3_attention_block")
         plain = render_deployment_layer(op)
         hybrid = render_deployment_layer(op, allowed_primitives=("vendor_gemm",))
         self.assertIn("'allowed_primitives': []", plain)

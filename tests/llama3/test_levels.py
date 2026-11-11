@@ -33,18 +33,14 @@ class TestQkvRopeDeclaration(unittest.TestCase):
         cls.op = get_task("llama3_qkv_rope")
 
     def test_it_has_no_per_head_norm_weights(self):
-        """The whole reason it is not ``qwen3_qkv_norm_rope``. Four active
-        arguments, not six; four gradients, not six."""
-        from evograd.benchmark import get_task
-
+        """LlamaAttention has no per-head norms: four active arguments, four
+        gradients."""
         names = {arg.name for arg in self.op.args}
         self.assertNotIn("q_norm_weight", names)
         self.assertNotIn("k_norm_weight", names)
         self.assertEqual(
             self.op.grad_names(), ("dx", "dq_weight", "dk_weight", "dv_weight")
         )
-        qwen = get_task("qwen3_qkv_norm_rope")
-        self.assertEqual(len(qwen.grad_names()) - len(self.op.grad_names()), 2)
 
     def test_it_carries_no_eps(self):
         """There is no normalization inside the boundary for one to belong to."""
@@ -277,14 +273,10 @@ class TestLevel3Package(unittest.TestCase):
         )
 
     def test_the_schemas_are_llamas_own(self):
-        """A Qwen3 capture relabelled as a Llama one would otherwise load."""
+        """A capture of another model relabelled as a Llama one would otherwise load."""
         from evograd.benchmark.topdown.llama3_2_1b.layer import artifact
-        from evograd.benchmark.topdown.qwen3_0_6b.layer import (
-            artifact as qwen_artifact,
-        )
 
         self.assertIn("llama3", artifact.SCHEMA_VERSION)
-        self.assertNotEqual(artifact.SCHEMA_VERSION, qwen_artifact.SCHEMA_VERSION)
 
 
 class TestUnharvestedStagesRefuseByName(unittest.TestCase):

@@ -30,22 +30,8 @@ python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot \
   --harvest results/qwen3-level3/harvest.json --write
 ```
 
-The representative-layer capture replays the random-weight synthetic step, so it
-reads a `--synthetic` harvest. It checks that artifact against the tracked
-snapshot's workload id and manifest hash, so it works only until the snapshot is
-regenerated from the real run (open; see "Regenerating the snapshots" in
-`src/evograd/verification/README.md`).
-
-```bash
-python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest --synthetic \
-  --out results/qwen3-level3/harvest_synthetic.json
-python -m evograd.benchmark.topdown.qwen3_0_6b.layer.capture \
-  --layer 14 --harvest results/qwen3-level3/harvest_synthetic.json \
-  --out results/qwen3-level3/layer14.pt
-```
-
-Artifacts contain weights, call arguments, outputs, incoming gradients and
-reference gradients. They are local files, not distributed with the repo.
+Regenerate the snapshot this way whenever `harvest/snapshot.py`'s `TASK_SOURCES`
+change; until then a capture refuses it and the case list is the old one.
 
 ## Whole-model evaluation (Level 3)
 
@@ -60,13 +46,13 @@ Candidate files must implement the corresponding declared operator.
 
 | Site | Task | Calls per step |
 | --- | --- | ---: |
-| `qkv_norm_rope` | `qwen3_qkv_norm_rope` | 28 |
-| `attention` | `qwen3_attention` | 28 |
+| `attention_block` | `qwen3_attention_block` | 28 (the whole `Qwen3Attention`: projections, q/k norms, RoPE, SDPA, `o_proj`) |
 | `swiglu_mlp` | `qwen3_swiglu_mlp` | 28 |
 | `residual_rmsnorm` | `fused_add_rms_norm` | 56 (both adds per layer; the cross-layer and final-norm fusions included) |
+| `lm_head_ce` | `qwen3_lm_head_ce` | 1 (`lm_head` plus `ForCausalLMLoss`; a candidate returns no logits) |
 
-The captured layer above is the source of the Level-2
-sites' real invocations.
+The Level-2 sites' real invocations are the real-payload capture's
+(`python -m evograd.verification.integrations.qwen3_0_6b capture`).
 
 See the [evaluation method and input sources](../src/evograd/evaluation/README.md)
 and [the 2026-09-17 end-to-end report](experiments/benchmark_run_20260917.md).

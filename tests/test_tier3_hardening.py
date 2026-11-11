@@ -10,10 +10,10 @@ that changed:
   interval;
 * what a provider actually patched travels with that provider.
 
-All CPU. ``qwen3_qkv_norm_rope`` and ``fused_add_rms_norm`` appear as
-multi-output fixtures. Neither is a model patch site yet -- the point is that
-the adapters are written against ``op.outputs`` rather than against the three
-sites that happen to have one output each today.
+All CPU. ``qwen3_5_gdn_in_proj`` and ``fused_add_rms_norm`` appear as
+multi-output fixtures. Neither is a site of the sample registry -- the point is
+that the adapters are written against ``op.outputs`` rather than against the
+sites that happen to have one output each.
 """
 
 from __future__ import annotations
@@ -62,9 +62,8 @@ if HAVE_TORCH:
         SAMPLE_SITES,
     )
 
-#: Not patch sites. Fixtures, chosen because they are the only declarations in
-#: the repository that return more than one tensor.
-MULTI_OUTPUT = ("fused_add_rms_norm", "qwen3_qkv_norm_rope")
+#: Not patch sites of the sample registry. Fixtures with two and six outputs.
+MULTI_OUTPUT = ("fused_add_rms_norm", "qwen3_5_gdn_in_proj")
 
 
 # ── a workload small enough to drive a whole run on CPU ──────────────────────
@@ -159,23 +158,20 @@ class TestRankAdaptation(unittest.TestCase):
         self.assertIsInstance(outputs, tuple)
         self.assertEqual([tuple(t.shape) for t in outputs], [(2, 5, 8), (2, 5, 8)])
 
-    def test_three_outputs_with_a_rank_three_declaration(self):
+    def test_six_outputs_with_a_rank_three_declaration(self):
         # x is declared [B, T, H]; handing it a fourth leading dimension is what
         # exercises the adapter on an operator that is already batched.
-        op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
+        from evograd.opdecl.activity import bind_shape
+
+        op = get_task("qwen3_5_gdn_in_proj")
+        workload = SMALL["qwen3_5_gdn_in_proj"][0]
+        values = make_case_inputs(op, workload, device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
         x = values["x"].detach().unsqueeze(0).repeat(2, 1, 1, 1).requires_grad_(True)
-        weights = [
-            values[n].detach().requires_grad_(True)
-            for n in ("q_weight", "k_weight", "v_weight",
-                      "q_norm_weight", "k_norm_weight")
-        ]
-        q, k, v = kernel(x, *weights, values["cos"], values["sin"], values["eps"])
-        dims = SMALL["qwen3_qkv_norm_rope"][0].dims
-        self.assertEqual(tuple(q.shape), (2, dims["B"], dims["HQ"], dims["T"], dims["D"]))
-        self.assertEqual(tuple(k.shape), (2, dims["B"], dims["HK"], dims["T"], dims["D"]))
-        self.assertEqual(tuple(v.shape), tuple(k.shape))
+        weights = [values[a.name].detach().requires_grad_(True) for a in op.args[1:]]
+        outputs = kernel(x, *weights)
+        self.assertEqual([tuple(t.shape) for t in outputs],
+                         [(2, *bind_shape(out.shape, workload.dims)) for out in op.outputs])
 
     def test_a_scalar_output_is_never_unflattened(self):
         op, kernel = self._control("cross_entropy")
@@ -232,19 +228,15 @@ class TestGradientRouting(unittest.TestCase):
 
         self.assertFalse(torch.allclose(dr_for(True), dr_for(False)))
 
-    def test_three_outputs_all_route_back(self):
-        op = get_task("qwen3_qkv_norm_rope")
-        values = make_case_inputs(op, SMALL["qwen3_qkv_norm_rope"][0], device="cpu")
+    def test_six_outputs_all_route_back(self):
+        op = get_task("qwen3_5_gdn_in_proj")
+        values = make_case_inputs(op, SMALL["qwen3_5_gdn_in_proj"][0], device="cpu")
         kernel = kernel_from_pair(op, eager_pair_for(op))
-        x = values["x"].detach().requires_grad_(True)
-        names = ("q_weight", "k_weight", "v_weight", "q_norm_weight", "k_norm_weight")
-        weights = [values[n].detach().requires_grad_(True) for n in names]
-        q, k, v = kernel(x, *weights, values["cos"], values["sin"], values["eps"])
-        (q.sum() + k.sum() + v.sum()).backward()
-        self.assertIsNotNone(x.grad)
-        for name, weight in zip(names, weights):
-            with self.subTest(weight=name):
-                self.assertIsNotNone(weight.grad)
+        inputs = [values[a.name].detach().requires_grad_(True) for a in op.args]
+        sum(out.sum() for out in kernel(*inputs)).backward()
+        for arg, value in zip(op.args, inputs):
+            with self.subTest(arg=arg.name):
+                self.assertIsNotNone(value.grad)
 
     def test_the_control_refuses_a_mismatched_gradient_count(self):
         op = get_task("fused_add_rms_norm")

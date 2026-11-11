@@ -124,8 +124,10 @@ class TestDerivedNaming(unittest.TestCase):
                     "qwen3_5_qkv_norm_partial_rope",
                     "qwen3_5_residual_rmsnorm",
                     "qwen3_5_swiglu_mlp",
-                    "qwen3_attention",
-                    "qwen3_qkv_norm_rope",
+                    # Qwen3-0.6B's whole attention module and its LM head with
+                    # the loss (with fused_add_rms_norm and the MLP above).
+                    "qwen3_attention_block",
+                    "qwen3_lm_head_ce",
                     "qwen3_swiglu_mlp",
                     "torchrec_dlrm_dlrm_interaction",
                 ],

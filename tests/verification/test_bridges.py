@@ -88,7 +88,7 @@ class TestScopes(unittest.TestCase):
 
 @needs_transformers
 class TestWorkloadModelBridge(unittest.TestCase):
-    def check(self, workload, site, op_name, prefix):
+    def check(self, workload, site, op_name, prefix, calls=ARCH["num_hidden_layers"]):
         scope = WorkloadModelScope(workload)
         fixed = samples(f"{prefix}/fixed", [1, 2])
         cal = calibrate(scope, patch_set=(site,), samples=fixed, compile_backend=FAST)
@@ -96,8 +96,7 @@ class TestWorkloadModelBridge(unittest.TestCase):
         good = gate2.verify_integration(scope, candidate("bound", {site: bound_eager(op_name)}),
                                         policy=cal.policy, samples=fixed)
         self.assertEqual(good.status, PASSED, codes(good))
-        layers = ARCH["num_hidden_layers"]
-        self.assertEqual(good.cases[0].evidence["candidate"]["site_calls"], {site: layers})
+        self.assertEqual(good.cases[0].evidence["candidate"]["site_calls"], {site: calls})
         bad = gate2.verify_integration(scope, candidate("off", {site: bound_eager(op_name, 1.01)}),
                                        policy=cal.policy, samples=fixed)
         self.assertEqual(bad.status, FAILED)
@@ -144,6 +143,16 @@ class TestWorkloadModelBridge(unittest.TestCase):
         workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
                                  arch_overrides={**ARCH, "num_key_value_heads": 2})
         self.check(workload, "swiglu_mlp", "qwen3_swiglu_mlp", "qwen3")
+
+    def test_qwen3_attention_block_and_lm_head_ce(self):
+        """Both new sites run inside model Gate 2: the whole attention module once
+        per layer, and the LM head with the loss once (the scope passes labels)."""
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+
+        workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
+                                 arch_overrides={**ARCH, "num_key_value_heads": 2})
+        self.check(workload, "attention_block", "qwen3_attention_block", "qwen3ab")
+        self.check(workload, "lm_head_ce", "qwen3_lm_head_ce", "qwen3ce", calls=1)
 
     def test_the_loss_and_gradients_are_workload_loss_bit_for_bit(self):
         """Model Gate 2 calls the model as ``workload.loss`` does (labels in, no
@@ -220,6 +229,10 @@ class TestWorkloadTrainingBridge(unittest.TestCase):
         self.assertTrue(run.completed, [f.to_dict() for f in run.findings])
         self.assertEqual(run.site_calls["total"],
                          {"swiglu_mlp": ARCH["num_hidden_layers"] * plan.steps})
+        head = gate3.measure_training(adapter, candidate("bound", {
+            "lm_head_ce": bound_eager("qwen3_lm_head_ce")}), plan, seed=0)
+        self.assertTrue(head.completed, [f.to_dict() for f in head.findings])
+        self.assertEqual(head.site_calls["total"], {"lm_head_ce": plan.steps})
         native = gate3.measure_training(adapter, Deployment.native(), plan, seed=0)
         with isolated_rng(0, "cpu"):
             model = adapter.build_model(Deployment.native(), SiteHooks())

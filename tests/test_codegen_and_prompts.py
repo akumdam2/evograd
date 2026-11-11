@@ -144,7 +144,7 @@ class TestWrapperCodegen(unittest.TestCase):
             render_autograd_pair_wrapper,
         )
 
-        for name in ("fused_add_rms_norm", "qwen3_qkv_norm_rope"):
+        for name in ("fused_add_rms_norm", "qwen3_5_gdn_in_proj"):
             with self.subTest(op=name):
                 op = get_task(name)
                 source = render_autograd_pair_wrapper("pkg.mod:fn", op)
