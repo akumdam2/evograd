@@ -925,9 +925,12 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         return _copy_
 
     if target == "aten.copy.default":
-        # copy(self, src): src's values, in self's shape, dtype and device.
+        # copy(self, src): src's values, in self's shape, dtype and device, in
+        # fresh storage (never src itself).
         def _copy(dst, src):
-            return src.to(dtype=dst.dtype, device=dst.device).expand(dst.shape).contiguous()
+            out = torch.empty(dst.shape, dtype=dst.dtype, device=dst.device)
+            out.copy_(src)
+            return out
 
         return _copy
 
