@@ -39,8 +39,9 @@ results, do not evaluate it.
   runs): run them one after the other. Different models can run on different GPUs at once.
 - One evaluation process per GPU; nothing else on that GPU while it runs.
 - Corpora and data pools: the frozen ones already on DeltaAI (`cases.json[model].corpus`), read-only.
-- OLMoE has no model-scope Gate 2 or Gate 3: its L2 acceptance is Gate 1 + operator Gate 2, and its
-  combination cannot be an accepted L3. MegaFold has no Gate 3.
+- OLMoE gets every gate: model Gate 2 holds each run's expert routing to the native run's choice,
+  and Gate 3 trains with free routing (100 updates, lr 3e-5, warmup 100, clip 1.0). MegaFold has
+  no Gate 3.
 
 ## MegaFold search (before its evaluation)
 

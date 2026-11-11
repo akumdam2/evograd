@@ -391,10 +391,13 @@ class SnapshotBindingTests(unittest.TestCase):
         self.assertEqual(run.corpus.identity["snapshot_hash"], "aaaa")
 
     def test_a_corpus_of_another_snapshot_is_refused_with_both_hashes(self):
-        with self.assertRaisesRegex(CorpusError, r"(?s)snapshot_hash old\b.*snapshot_hash new\b.*Recapture"):
+        with self.assertRaisesRegex(CorpusError, r"(?s)snapshot_hash old\b.*snapshot_hash new\b.*"
+                                                 r"recapture one: CUBLAS_WORKSPACE_CONFIG=:4096:8 "):
             self.open({"snapshot_hash": "old"}, "new")
         with self.assertRaisesRegex(CorpusError, r"snapshot_hash None\b.*snapshot_hash new\b"):
             self.open({}, "new")
+        with self.assertRaisesRegex(CorpusError, r"snapshot_hash None\b.*snapshot_hash None\b"):
+            self.open({}, None)
 
 
 if __name__ == "__main__":

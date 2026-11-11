@@ -613,11 +613,12 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     corpus = Corpus.open(corpus_path)
     recorded = corpus.identity.get("snapshot_hash")
     tracked = load_snapshot(model.name).get("snapshot_hash")
-    if recorded != tracked:
+    if recorded is None or recorded != tracked:
         raise CorpusError(
             f"corpus {corpus.corpus_id} was captured at snapshot_hash {recorded}, but "
             f"{model.name}'s tracked snapshot has snapshot_hash {tracked}; its cases and calls "
-            f"per step may differ. Recapture it: python -m evograd.verification.integrations "
+            f"per step may differ. Use a corpus captured at the tracked snapshot, or recapture "
+            f"one: CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations "
             f"{model.name} capture --out NEW_DIR")
     return Run(model=model, out=out, state=state, corpus=corpus,
                corpus_path=Path(corpus_path), cases=cases,

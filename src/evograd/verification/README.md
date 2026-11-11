@@ -182,8 +182,11 @@ recorder of its training calls (`capture.py`), and its model reference
 computation). The capture loop, replay and fidelity (`base.py`), the gates
 (`gates.py`) and the command line (`cli.py`) are shared. Every L1 call and L2
 boundary of one training step per data order becomes a payload of the case
-its shapes bind. Gate 1 runs on the acceptance payloads (real inputs only).
-Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
+its shapes bind. Gate 1 and operator Gate 2 (gamma 2) both use every payload of
+the case, orders 101/202/303/404 (`PAYLOAD_SPLITS`): operator Gate 2 calibrates
+on those payloads and judges fresh executions of the same ones. The corpus
+split into calibration (101/202) and acceptance (303/404) only keeps 303/404
+out of the search's feedback.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
 four batches (native repeats, compile and the rounding perturbation) with
 gamma 4, on the whole model's outputs and parameter gradients
@@ -211,10 +214,10 @@ candidates whose single-site speedup over eager, both with the training step
 replayed from one CUDA graph (T3-G), has a 95% bootstrap interval with its
 lower bound strictly above one. A candidate without a T3-G result is not
 selected. A model whose eager step cannot be captured (on GH200, MegaFold and
-OLMoE) is judged by the eagerly launched step's interval (T3) instead. The resulting
-combination still needs its own model Gate 2 and Gate 3; individual passes do
-not establish combined correctness. This deployment path installs Level-2
-model sites, not independent Level-1 artifacts.
+OLMoE) is judged by the eagerly launched step's interval (T3) instead. The
+resulting combination still needs its own model Gate 2 and Gate 3; individual
+passes do not establish combined correctness. This deployment path installs
+Level-2 model sites, not independent Level-1 artifacts.
 
 Single-site training records are stored under `gate3_single_site/<case>/`,
 separately from `combination/`. Controls are shared through `--state` when their
