@@ -243,7 +243,7 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
-def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None):
+def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None, **build):
     """A model case's pack without a GPU: a tiny real corpus holds its calibration calls
     (placeholders unless ``payloads`` gives them at the case's interface); only the
     operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
@@ -264,7 +264,7 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None)
 
     with mock.patch.object(gates, "operator_calibration", calibration), \
             mock.patch.object(base, "configure", lambda: None):
-        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest)
+        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
 
 
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
@@ -443,18 +443,103 @@ def get_task_forward(name: str) -> str:
     return get_task(name).forward
 
 
-def test_auto_library_follows_what_the_frontend_preserves():
+def test_auto_library_follows_what_the_frontend_preserves(small_task):
     from evograd.adbench_tools.task import resolve_library
 
-    gemm = "def f(x, w):\n    return torch.nn.functional.linear(x, w)\n"
-    sdpa = "def f(q, k, v):\n    return F.scaled_dot_product_attention(q, k, v, is_causal=True)\n"
-    both = gemm + sdpa
-    assert resolve_library("auto", gemm)[0] == ("vendor_gemm",)
-    assert resolve_library("auto", sdpa)[0] == ("vendor_sdpa",)
-    assert resolve_library("auto", both)[0] == ("vendor_gemm", "vendor_sdpa")
-    assert resolve_library("auto", "def f(x):\n    return x * 2\n")[0] == ()
-    assert resolve_library("vendor_gemm,vendor_sdpa", "")[0] == ("vendor_gemm", "vendor_sdpa")
-    assert resolve_library("none", both)[0] == ()
+    assert resolve_library("auto", ["linear", "view"])[0] == ("vendor_gemm",)
+    assert resolve_library("auto", ["_grouped_mm"])[0] == ("vendor_gemm",)
+    assert resolve_library("auto", ["conv2d"])[0] == ("vendor_gemm",)
+    assert resolve_library("auto", ["scaled_dot_product_attention"])[0] == ("vendor_sdpa",)
+    assert resolve_library("auto", ["matmul", "scaled_dot_product_attention"])[0] == (
+        "vendor_gemm", "vendor_sdpa")
+    assert resolve_library("auto", ["mul", "rsqrt"])[0] == ()
+    assert resolve_library("vendor_gemm,vendor_sdpa", [])[0] == ("vendor_gemm", "vendor_sdpa")
+    assert resolve_library("none", ["linear", "scaled_dot_product_attention"])[0] == ()
+    # The pack records what the trace of its reference reached.
+    assert small_task.spec["library_policy"]["observed_calls"] == ["linear"]
+    assert small_task.allowed_primitives == ("vendor_gemm",)
+
+
+#: Cases whose contraction the reference reaches only through code ``reference.py``
+#: imports (a shared helper, a Hugging Face function, ``transformers.integrations``):
+#: a scan of the reference source granted them nothing. Fused attention stays
+#: ``scaled_dot_product_attention`` at the function level (ATen on the meta device
+#: would see its math decomposition, ``bmm``).
+REACHED = (
+    ("qwen3_5_4b", "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope", "linear", ("vendor_gemm",)),
+    ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "matmul", ("vendor_gemm",)),
+    ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "_grouped_mm", ("vendor_gemm",)),
+    ("qwen3_0_6b", "qwen3_attention/causal_gqa_attention", "scaled_dot_product_attention",
+     ("vendor_gemm", "vendor_sdpa")),
+)
+
+
+@pytest.mark.parametrize("model,case_id,reached,granted", REACHED)
+def test_the_auto_grant_follows_what_one_reference_call_reaches(model, case_id, reached, granted):
+    from evograd.adbench_tools.task import observed_calls, observed_case, resolve_library
+
+    model_obj, case = observed_case(model, case_id)
+    calls = observed_calls(model_obj.reference_op(case.task), case.workload, device="meta")
+    assert reached in calls
+    assert resolve_library("auto", calls)[0] == granted
+
+
+def test_only_the_auto_policy_traces_the_reference(tmp_path, monkeypatch):
+    """A requested grant never depends on the reference running anywhere."""
+    from evograd.adbench_tools import task as task_module
+
+    monkeypatch.setattr(task_module, "observed_calls",
+                        lambda *a, **k: pytest.fail("the reference was traced"))
+    task = payload_rule_task(tmp_path / "task", SMALL_MODEL, SMALL_CASE, library="none")
+    assert task.allowed_primitives == ()
+    assert task.spec["library_policy"] == {"requested": "none",
+                                           "decision": "requested: no library primitives"}
+
+
+def test_a_reference_that_needs_values_is_traced_on_the_build_device(monkeypatch):
+    import evograd.opdecl.oracle  # noqa: F401 - the module, not the function it exports
+    from evograd.adbench_tools.task import observed_calls, observed_case
+
+    def forward(x, weight, bias):
+        if x.is_meta:
+            raise NotImplementedError("needs values")
+        return torch.nn.functional.linear(x, weight, bias)
+
+    monkeypatch.setattr(sys.modules["evograd.opdecl.oracle"], "resolve_forward", lambda op: forward)
+    model_obj, case = observed_case(SMALL_MODEL, SMALL_CASE)
+    op = model_obj.reference_op(case.task)
+    assert "linear" in observed_calls(op, case.workload, device="cpu")
+    with pytest.raises(NotImplementedError):
+        observed_calls(op, case.workload, device="meta")
+
+
+def test_the_statement_states_the_rules_and_what_acceptance_judges(small_task):
+    from evograd.verification.integrations.gates import MODEL_ORDERS, PAYLOAD_SPLITS
+
+    rules = small_task.statement.split("## 3.")[1].split("## 4.")[0]
+    for text in ("conv1d/2d/3d", "embedding", "batch_norm", "loss", "lstm", "torch.nn,",
+                 "torch.func", "torch.utils.cpp_extension", "`torch._*`, at any depth",
+                 "`from torch.X import Y` counts as `torch.X.Y`",
+                 "after `import torch.X as Y`", "`Y = torch.X`, `Y.Z` counts as `torch.X.Z`",
+                 "`from torch import *`", "ctypes", "importlib", "builtins", "`getattr`",
+                 "`__import__`", "`eval`", "`exec`", "__matmul__", "`@=`"):
+        assert text in rules, text
+    # Pipeline A's prompt states the same rules, from the same tables.
+    from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
+    from evograd.pipelines.shared.primitives import describe_rules
+
+    assert describe_rules("Every line of your module") in rules
+    shared = describe_rules("Every line inside the block")
+    assert shared in render_pair_rules(small_task.op(), small_task.allowed_primitives)
+    # Acceptance (Gate 1, operator Gate 2) judges every payload of both splits --
+    # all four orders, the search calls included -- and calibrates the envelope on them.
+    assert PAYLOAD_SPLITS == ("calibration", "acceptance") and len(MODEL_ORDERS) == 4
+    scored = small_task.statement.split("## 4.")[1]
+    assert ("Acceptance then judges every recorded call of this operator in all four "
+            "training steps, these calls included; the envelope is measured on those same "
+            "calls.") in scored
+    assert "not among them" not in small_task.statement
+    assert "held out" not in small_task.statement
 
 
 # ── coding-agent glue (candidates/claude_code, candidates/codex) ─────────────

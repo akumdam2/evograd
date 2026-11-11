@@ -9,7 +9,7 @@ AtenIR graph summary.
 from __future__ import annotations
 
 from evograd.opdecl.activity import OpDecl
-from evograd.pipelines.shared.primitives import REGISTRY, normalize
+from evograd.pipelines.shared.primitives import REGISTRY, describe_rules, normalize
 
 SYSTEM_MESSAGE = """You are a Triton compiler engineer.
 You synthesize a forward/backward autograd pair.  The forward may save tensors
@@ -104,12 +104,8 @@ Output contract:
   entry, `DEPLOYMENT_ENTRY` or `ARTIFACT_CONTRACT`: EvoGrad generates them from
   the declaration and appends them, with the argument, output and gradient
   orders fixed.
-- Static rules, checked on every line inside the block: no `@`; no torch
-  contraction, softmax, normalization or attention, as a function or a method
-  (`torch.matmul`, `x.mm`, `torch.einsum`, `torch.softmax`, ...); nothing from
-  `F` or `torch.nn.functional`; no `torch.autograd`, `.backward()`,
-  `torch.compile`, `torch.ops`, `torch._C` or other private `torch._*` name.
-  Allocations, views and shape checks on the host are fine.
+{describe_rules('Every line inside the block')}
+- Allocations, views and shape checks on the host are fine.
 - An unsupported shape, dtype or device raises; never fall back to eager
   PyTorch, another library or the reference.
 - Cache nothing that depends on argument values between calls; all of the

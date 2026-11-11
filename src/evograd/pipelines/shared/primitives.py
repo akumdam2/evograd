@@ -29,44 +29,79 @@ string cannot hide a call, and ``a @ b`` is the same violation as
 from __future__ import annotations
 
 import ast
+import inspect
+import re
 from dataclasses import dataclass
 from typing import Any
 
-#: Contractions rooted at ``torch``. Denied inside the evolvable region always;
+#: Library entry points rooted at ``torch``, by exact name: contractions
+#: (vector, distance and sparse ones included), ``kl_div`` (a loss without the
+#: word) and ``torch.compile``. Denied inside the evolvable region always;
 #: permitted inside a trusted primitive's own fixed body when it declares them.
 _TORCH_DENIED = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "addbmm", "einsum", "tensordot",
     "dot", "inner", "outer", "chain_matmul", "matrix_power", "kron",
-    "scaled_dot_product_attention", "compile", "rms_norm", "layer_norm",
-    "group_norm", "batch_norm",
-    # Opaque softmax spellings: an attention decomposition whose softmax stage
-    # is ``torch.softmax`` has been wrapped, not evolved.
-    "softmax", "log_softmax",
+    "mv", "addmv", "addmv_", "addr", "ger", "vdot", "cdist", "multi_dot", "vecdot",
+    "smm", "spmm", "hspmm", "dsmm", "hsmm", "saddmm", "sspaddmm", "sampled_addmm",
+    "kl_div", "compile",
 })
 
-#: Namespaces no generated pair math may reach into at all.
-_DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel"})
+#: Library families denied wherever they appear in a ``torch`` name, in any
+#: case: ``torch.native_layer_norm``, ``torch.embedding_bag``, ``torch.ctc_loss``,
+#: ``torch.bilinear``, ``torch.fbgemm_linear_fp16_weight`` and every attention
+#: spelling are a library routine under another name. An opaque softmax counts:
+#: an attention decomposition whose softmax stage is ``torch.softmax`` has been
+#: wrapped, not evolved.
+_DENIED_TORCH_FAMILIES = ("attention", "softmax", "embedding", "layer_norm", "group_norm",
+                          "batch_norm", "instance_norm", "rms_norm", "loss", "cross_entropy",
+                          "linear", "gemm")
 
-#: Denied whatever the receiver is. ``dot`` is deliberately absent: ``tl.dot``
-#: is the Triton language's own contraction and is the evolved kernel's
-#: arithmetic, not an escape from it.
+#: Library families denied by the shape of a ``torch`` name (searched in its
+#: lower case), keyed by how the task statement names them: every cuDNN/MIOpen/
+#: oneDNN convolution entry point, and the cuDNN recurrent layers.
+_DENIED_TORCH_PATTERNS = {
+    "conv1d/2d/3d, conv_tbc, conv_transpose*, *convolution*": re.compile(r"conv(\d|_t|olution)"),
+    "lstm, gru, rnn_tanh, rnn_relu (and their cells)":
+        re.compile(r"^(quantized_)?(lstm|gru|rnn_tanh|rnn_relu)(_cell)?$|^(miopen|mkldnn)_rnn"),
+}
+
+#: Namespaces no generated pair math may reach into at all. ``ctypes`` and
+#: ``cffi`` would load a compiled library that calls cuBLAS or cuDNN directly;
+#: ``importlib`` and ``builtins`` would import or look up a name unseen.
+_DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel",
+                           "ctypes", "cffi", "importlib", "builtins"})
+
+#: Denied whatever the receiver is (``torch`` included): the method and
+#: operator-module spellings of a contraction, ``x.mv(v)``, ``x.__matmul__(w)``,
+#: ``operator.matmul(x, w)``. ``dot`` is deliberately absent: ``tl.dot`` is the
+#: Triton language's own contraction and is the evolved kernel's arithmetic,
+#: not an escape from it.
 _DENIED_METHODS = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "linear", "backward",
     "softmax", "log_softmax",
+    "mv", "addmv", "addmv_", "addbmm", "addbmm_", "addmm_", "baddbmm_", "addr", "addr_",
+    "ger", "outer", "inner", "kron", "vdot", "matrix_power", "smm", "sspaddmm",
+    "__matmul__", "__rmatmul__", "__imatmul__", "imatmul", "rmatmul",
 })
 
-#: Attribute paths under ``torch`` that are denied by prefix rather than leaf.
-_DENIED_TORCH_PREFIXES = (("nn", "functional"), ("autograd",), ("_dynamo",),
-                          ("jit",), ("fx",),
-                          # Whole-operator escapes the leaf rule cannot see:
-                          # ``torch.ops.aten._scaled_dot_product_flash_attention``
-                          # is fused attention with a different name.
-                          ("ops",), ("_C",), ("_ops",), ("_VF",), ("nn", "attention"))
+#: Namespaces under ``torch`` that are denied whole: module wrappers
+#: (``torch.nn.Conv2d``, ``torch.nn.grad.conv2d_input``), autograd and its
+#: functional and checkpointing forms, tracing and compilation, sparse
+#: contractions, C++/CUDA extensions, and ``torch.ops`` (whole-operator escapes
+#: the leaf rule cannot see: ``torch.ops.aten._scaled_dot_product_flash_attention``
+#: is fused attention with a different name). Private modules (``torch._C``,
+#: ``torch._inductor``) are denied at any depth by :func:`_denied_torch_path`.
+_DENIED_TORCH_PREFIXES = (("nn",), ("autograd",), ("func",), ("utils", "checkpoint"),
+                          ("jit",), ("fx",), ("compiler",), ("export",), ("ops",),
+                          ("sparse",), ("utils", "cpp_extension"))
 
 
 def _denied_torch_leaf(leaf: str) -> bool:
-    """Private ATen entry points and every attention spelling are denied."""
-    return leaf in _TORCH_DENIED or leaf.startswith("_") or "attention" in leaf
+    """A ``torch`` name the rules deny: by exact name, as a method, or by family."""
+    low = leaf.lower()
+    return (leaf in _TORCH_DENIED or leaf in _DENIED_METHODS
+            or any(family in low for family in _DENIED_TORCH_FAMILIES)
+            or any(pattern.search(low) for pattern in _DENIED_TORCH_PATTERNS.values()))
 
 
 class PrimitiveViolation(RuntimeError):
@@ -245,6 +280,34 @@ def describe_grant(allowed, where: str) -> list[str]:
             f"{where}; call it by name, do not define or import it." for name in allowed]
 
 
+def describe_rules(where: str) -> str:
+    """The prompt bullet stating what :func:`check_source` rejects in ``where``,
+    read from its own tables (TASK.md section 3 and Pipeline A's prompt)."""
+    torch_prefixes = sorted(".".join(("torch", *p)) for p in _DENIED_TORCH_PREFIXES)
+    rules = (
+        f"`torch.<name>` for: {', '.join(sorted(_TORCH_DENIED))};",
+        "any `torch.*` name containing, in any case: "
+        f"{', '.join(sorted(_DENIED_TORCH_FAMILIES))};",
+        f"any `torch.*` convolution or recurrent entry point: {'; '.join(_DENIED_TORCH_PATTERNS)};",
+        "anything under a private torch module or name (`torch._*`, at any depth), and "
+        f"anything under {', '.join(torch_prefixes)};",
+        f"imports of or calls into: {', '.join(sorted(_DENIED_ROOTS))};",
+        f"calls to the builtins {', '.join(f'`{b}`' for b in sorted(_DENIED_BUILTINS))};",
+        "methods `.<name>()` on any object, `torch` included, and these names imported "
+        f"from any module, for: {', '.join(sorted(_DENIED_METHODS))};",
+        "the `@` and `@=` operators, and `from torch import *` (or from any torch module);",
+        "`torch` or any torch module used as a value (passed, returned, unpacked or put in a "
+        "container): a torch module may only be the receiver of an attribute, as in "
+        "`torch.empty_like(x)`, or bound to a plain name (`la = torch.linalg`); dtypes such as "
+        "`torch.bfloat16` are values and stay allowed.",
+    )
+    return (f"- {where} is checked statically.\n"
+            "  Rejected, whether called, read or imported, and under any name bound to it\n"
+            "  (`from torch.X import Y` counts as `torch.X.Y`; after `import torch.X as Y`\n"
+            "  or `Y = torch.X`, `Y.Z` counts as `torch.X.Z`):\n"
+            + "\n".join(f"  - {rule}" for rule in rules))
+
+
 # ── source analysis ──────────────────────────────────────────────────────────
 
 
@@ -274,10 +337,78 @@ def evolve_span(source: str) -> tuple[int, int]:
 _DENIED_BUILTINS = frozenset({"getattr", "__import__", "eval", "exec", "vars", "globals"})
 
 
-def _denied_torch_path(rest: list[str] | tuple[str, ...], leaf: str) -> bool:
-    """A dotted path under ``torch`` that the rules deny, by prefix or leaf."""
-    return (any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES)
-            or _denied_torch_leaf(leaf))
+def _denied_torch_path(rest: list[str] | tuple[str, ...]) -> bool:
+    """A dotted path under ``torch`` that the rules deny: by prefix, by a private
+    component anywhere (``torch._inductor.select_algorithm.extern_kernels``), or
+    by its leaf."""
+    return bool(rest) and (any(tuple(rest[: len(p)]) == p for p in _DENIED_TORCH_PREFIXES)
+                           or any(part.startswith("_") for part in rest)
+                           or _denied_torch_leaf(rest[-1]))
+
+
+def _denied_path(path: tuple[str, ...]) -> bool:
+    """A dotted name the rules deny: under a denied root, under ``torch``, or a
+    method spelling on any other receiver (``x.matmul``; ``tl.dot`` is allowed)."""
+    root, *rest = path
+    if root in _DENIED_ROOTS:
+        return True
+    if root == "torch":
+        return _denied_torch_path(rest)
+    return bool(rest) and path[-1] in _DENIED_METHODS
+
+
+def _is_torch_module(path: tuple[str, ...]) -> bool:
+    """Whether ``path`` (rooted at ``torch``) names a module, e.g. ``torch.linalg``."""
+    if not path or path[0] != "torch":
+        return False
+    try:
+        import torch
+
+        obj = torch
+        for part in path[1:]:
+            obj = getattr(obj, part)
+    except Exception:  # not resolvable here: not a module we can vouch for
+        return False
+    return inspect.ismodule(obj)
+
+
+def _torch_aliases(node: ast.AST) -> dict[str, set[tuple[str, ...]]]:
+    """Every name ``node`` binds to a ``torch`` path, with each path it is bound to.
+
+    ``import torch.linalg as la``, ``from torch import conv2d``, ``T = torch`` and
+    ``U = T.linalg`` give a torch namespace or routine a name that does not start
+    with ``torch``; the rules judge that name's uses by the path it stands for.
+    """
+    aliases: dict[str, set[tuple[str, ...]]] = {}
+    assigned: list[tuple[str, tuple[str, ...]]] = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Import):
+            for a in child.names:
+                if a.asname and a.name.split(".")[0] == "torch":
+                    aliases.setdefault(a.asname, set()).add(tuple(a.name.split(".")))
+        elif isinstance(child, ast.ImportFrom) and (child.module or "").split(".")[0] == "torch":
+            for a in child.names:  # ``from torch import *`` is rejected on its own
+                if a.name != "*":
+                    aliases.setdefault(a.asname or a.name, set()).add(
+                        (*child.module.split("."), a.name))
+        elif isinstance(child, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and child.value:
+            value = _dotted(child.value)
+            targets = child.targets if isinstance(child, ast.Assign) else [child.target]
+            if value is not None:
+                assigned.extend((t.id, value) for t in targets if isinstance(t, ast.Name))
+    # ``U = T`` may come before ``T = torch`` in the walk: propagate until nothing
+    # grows, at most once per assignment (no chain of aliases is longer).
+    for _ in assigned:
+        grown = False
+        for name, (head, *tail) in assigned:
+            roots = {("torch",)} if head == "torch" else aliases.get(head, set())
+            new = {(*root, *tail) for root in roots} - aliases.get(name, set())
+            if new:
+                aliases.setdefault(name, set()).update(new)
+                grown = True
+        if not grown:
+            break
+    return aliases
 
 
 def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
@@ -287,39 +418,50 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
     is called: ``import torch.nn.functional as fn``, ``_f = F.silu`` and
     ``getattr(torch, "matmul")`` each bind a library routine to a name the call
     rule could not recognise later, so the import, the attribute read and the
-    dynamic lookup are violations themselves.
+    dynamic lookup are violations themselves. A name bound to a torch path
+    (:func:`_torch_aliases`) is judged by that path wherever it is used.
     """
     found: list[str] = []
-    # Inner links of a dotted chain (``torch.nn`` inside ``torch.nn.functional.silu``)
-    # are judged with their chain, not again on their own.
-    inner = {id(child.value) for child in ast.walk(node)
-             if isinstance(child, ast.Attribute) and isinstance(child.value, ast.Attribute)}
+    aliases = _torch_aliases(node)
+    # Receivers of an attribute (``torch.nn`` inside ``torch.nn.functional.silu``,
+    # ``la`` in ``la.vecdot``) are judged with their chain, not again on their own.
+    receivers = {id(child.value) for child in ast.walk(node) if isinstance(child, ast.Attribute)}
+    # ``la = torch.linalg``: a module bound to a plain name is followed by
+    # ``_torch_aliases``, so only the other ways a module can travel are refused.
+    tracked = {id(child.value) for child in ast.walk(node)
+               if isinstance(child, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and child.value
+               and all(isinstance(t, ast.Name)
+                       for t in (child.targets if isinstance(child, ast.Assign) else [child.target]))}
     for child in ast.walk(node):
         if isinstance(child, ast.BinOp) and isinstance(child.op, ast.MatMult):
             found.append(f"line {child.lineno}: the '@' matrix-multiply operator")
             continue
+        if isinstance(child, ast.AugAssign) and isinstance(child.op, ast.MatMult):
+            found.append(f"line {child.lineno}: the '@=' matrix-multiply operator")
+            continue
         if isinstance(child, (ast.Import, ast.ImportFrom)):
-            name = getattr(child, "module", None) or ""
-            names = [a.name for a in child.names]
-            for candidate in [name, *names]:
-                root, *rest = candidate.split(".")
-                if root in _DENIED_ROOTS or root in ("importlib", "builtins"):
-                    found.append(f"line {child.lineno}: import of {candidate!r}")
-                elif root == "torch" and rest and _denied_torch_path(rest, rest[-1]):
+            module = getattr(child, "module", None) or ""
+            from_torch = module.split(".")[0] == "torch"
+            # ``from torch import conv2d`` is judged by its full path here, and
+            # every later use of ``conv2d`` by the same path (``_torch_aliases``).
+            paths = [module] if module else []
+            paths += [f"{module}.{a.name}" if from_torch else a.name for a in child.names]
+            for path in paths:
+                root, *rest = path.split(".")
+                if root in _DENIED_ROOTS or (root == "torch" and _denied_torch_path(rest)):
                     # ``import torch.nn.functional as fn``: the alias would call
                     # the denied namespace under a name the rules never see.
-                    found.append(f"line {child.lineno}: import of {candidate!r}")
-            if name.split(".")[0] == "torch":
-                # ``from torch import matmul`` would otherwise arrive as a bare
-                # call with no ``torch.`` prefix left to recognise.
-                for alias in child.names:
-                    if alias.name in _TORCH_DENIED:
-                        found.append(
-                            f"line {child.lineno}: from {name} import {alias.name}"
-                        )
+                    found.append(f"line {child.lineno}: import of {path!r}")
+            if from_torch and any(a.name == "*" for a in child.names):
+                # Binds every torch name, denied ones included, to a bare name.
+                found.append(f"line {child.lineno}: from {module} import *")
+            if module and not from_torch:
+                # ``from operator import matmul``: a method spelling as a bare name.
+                found.extend(f"line {child.lineno}: from {module} import {a.name}"
+                             for a in child.names if a.name in _DENIED_METHODS)
             continue
         if isinstance(child, ast.Attribute):
-            if id(child) in inner:
+            if id(child) in receivers:
                 continue
             path = _dotted(child)
             if path is None:
@@ -327,16 +469,31 @@ def _violations_in(node: ast.AST, *, granted: frozenset[str]) -> list[str]:
                 if child.attr in _DENIED_METHODS:
                     found.append(f"line {child.lineno}: .{child.attr}")
                 continue
-            root, *rest = path
-            leaf = path[-1]
-            if root in _DENIED_ROOTS:
-                found.append(f"line {child.lineno}: {'.'.join(path)}")
-            elif root == "torch":
-                if _denied_torch_path(rest, leaf):
-                    found.append(f"line {child.lineno}: {'.'.join(path)}")
-            elif leaf in _DENIED_METHODS:
-                # ``x.matmul`` on any receiver that is not the triton language.
-                found.append(f"line {child.lineno}: {'.'.join(path)}")
+            # As written, and as every torch path its receiver stands for
+            # (``la.vecdot`` after ``import torch.linalg as la``).
+            spelled = ".".join(path)
+            meanings = (path, *((*root, *path[1:]) for root in aliases.get(path[0], ())))
+            full = next((".".join(p) for p in meanings if _denied_path(p)), None)
+            if full is not None:
+                found.append(f"line {child.lineno}: {spelled}"
+                             + (f" ({full})" if full != spelled else ""))
+            elif (isinstance(child.ctx, ast.Load) and id(child) not in tracked
+                  and any(_is_torch_module(p) for p in meanings)):
+                # ``[torch.linalg]``: a torch module passed on as a value could be
+                # read later under a name the rules never connect to it.
+                found.append(f"line {child.lineno}: {spelled} used as a value")
+            continue
+        if (isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+                and id(child) not in receivers):
+            # A bare alias: ``conv2d(x, w)`` after ``from torch import conv2d``.
+            full = next((p for p in aliases.get(child.id, ()) if _denied_path(p)), None)
+            if full is not None:
+                found.append(f"line {child.lineno}: {child.id} ({'.'.join(full)})")
+            elif id(child) not in tracked and (
+                    child.id == "torch" or any(_is_torch_module(p) for p in aliases.get(child.id, ()))):
+                # ``t=torch`` as a default, ``(torch,)``, ``f(torch)``, ``T, _ = torch, 1``:
+                # a torch module may only be the receiver of an attribute, never a value.
+                found.append(f"line {child.lineno}: {child.id} used as a value")
             continue
         if not isinstance(child, ast.Call):
             continue
