@@ -80,12 +80,59 @@ def test_harvest_is_executed_and_deduplicated(name):
     manifest = collect(spec)
     result = snapshot(manifest)
     assert manifest["backward_verified"]
-    assert not result["canonical"]
+    assert result["schema_version"] == f"evograd-{name}-snapshot/2" and result["run"] is None
     assert sum(e["frequency"] for e in result["tasks"].values()) == (
         4 if name == "convnextv2_tiny" else 2
     )
     assert result["level1"]["linear"]["frequency"] > 0
     assert result["not_bound"]
+
+
+@pytest.mark.parametrize("padded", [False, True])
+def test_qwen2_vl_harvest_sees_the_batch_padding_mask(padded):
+    """Right-padded rows (the real TextVQA pool) give the text SDPA an explicit mask."""
+    from evograd.benchmark.topdown.common.vision.model import make_inputs
+
+    spec = small_spec("qwen2_vl_2b")
+    batch = make_inputs(spec)
+    if padded:
+        batch["attention_mask"][:, -2:] = 0
+        batch["labels"][:, -2:] = -100
+    manifest = collect(spec, batch=batch)
+    mask = {"shape": [1, 1, 8, 8], "stride": [64, 64, 8, 1], "dtype": "torch.bool",
+            "requires_grad": False} if padded else None
+    assert manifest["text_attention_masks"] == [{"mask": mask, "calls": 1}]
+    assert snapshot(manifest)["text_attention_masks"] == manifest["text_attention_masks"]
+
+
+def test_real_run_records_its_identity_and_only_the_verification_run_publishes():
+    from unittest import mock
+    from evograd.benchmark.topdown.common.vision import harvest
+    from evograd.benchmark.topdown.common.vision.model import build_model, make_inputs
+    from evograd.verification.integrations import load
+
+    spec = small_spec("convnextv2_tiny")
+    run = {"data": {"data": {"pool_sha256": "p"}}, "order": 101, "batch_digest": "b",
+           "parameter_state_sha256": "s"}
+    step = (VisionWorkload(spec), build_model(spec), make_inputs(spec), run, {"threads": 8})
+    with mock.patch("evograd.verification.integrations.harvest_run.first_step",
+                    return_value=step) as first_step:
+        manifest = harvest.real_run("convnextv2_tiny")
+    assert first_step.call_args.args == (load("convnextv2_tiny"),)
+    assert manifest["run"] == {
+        "weights": "pretrained:facebook/convnextv2-tiny-1k-224@f4db009e63145e02b3c075aa64d90ce41bcca4b1",
+        **run}
+    assert manifest["determinism"] == {"threads": 8}
+    assert snapshot(manifest)["run"] == manifest["run"]
+    with pytest.raises(ValueError, match="verification run"):
+        harvest.require_real_run(manifest, "convnextv2_tiny")  # a reduced spec never publishes
+    real = load("convnextv2_tiny").load_workload().spec
+    assert real.weights == "pretrained" and real.workload_id == "convnextv2_tiny-023afe318b1f76e4"
+    published = json.loads(json.dumps({**manifest, "config": real.to_config(),
+                                       "workload_id": real.workload_id, "architecture": real.arch}))
+    harvest.require_real_run(published, "convnextv2_tiny")
+    with pytest.raises(ValueError, match="verification run"):
+        harvest.require_real_run({**published, "run": None}, "convnextv2_tiny")
 
 
 def test_configuration_and_inputs():

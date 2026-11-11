@@ -1,4 +1,11 @@
-"""Execution-derived Level-1/2 cases from a complete generated training step."""
+"""Execution-derived Level-1/2 cases from a complete generated training step.
+
+The tracked snapshot comes from :func:`real_run`: the verification capture's
+first step (DiT from its frozen warm start, DLRM from its seed-0 initialization,
+the first batch of data order 101 of the real-data stream, the verification
+settings), with that run's identity. :func:`collect` on a spec alone (seeded
+initialization, generated inputs) serves reduced checks and never publishes.
+"""
 
 import argparse
 import json
@@ -10,8 +17,8 @@ from torch.nn import functional as F
 
 from evograd.benchmark.topdown.common.snapshot import snapshot_hash
 from evograd.benchmark.topdown import snapshot_path
-from .spec import GeneratedSpec, canonical, digest
-from .model import build_model, make_inputs, forward_loss, dit_mlp, dit_modulation, dlrm_interaction
+from .spec import digest
+from .model import build_model, make_inputs, forward_loss
 
 
 def _meta(t):
@@ -19,8 +26,10 @@ def _meta(t):
             "requires_grad": t.requires_grad}
 
 
-def collect(spec, batch=None):
-    model = build_model(spec)
+def collect(spec, *, model=None, batch=None):
+    """One forward and backward of ``model`` (default: built from ``spec``) on
+    ``batch`` (default: ``spec``'s generated inputs), observed."""
+    model = build_model(spec) if model is None else model
     records = []
     handles = []
     counter = 0
@@ -64,28 +73,32 @@ def collect(spec, batch=None):
                             L=indices.numel()),
                        ("weight", "indices", "offsets"), (m.weight, indices, offsets))
             handles.append(module.register_forward_pre_hook(bag_hook))
+    # The site functions the model holds, put back afterwards.
+    sites = ([(owner, name, getattr(owner, name)) for owner in model.blocks
+              for name in ("mod_fn", "mlp_fn")] if spec.model == "dit_s_2"
+             else [(model, "interaction_fn", model.interaction_fn)])
     if spec.model == "dit_s_2":
         for i, block in enumerate(model.blocks):
-            def mod_hook(c, weight, bias, i=i):
+            def mod_hook(c, weight, bias, i=i, fn=block.mod_fn):
                 b, h = c.shape
                 record(2, "dit_s_2_dit_modulation", f"blocks.{i}.modulation",
                        dict(B=b, H=h, J=weight.shape[0]),
                        ("c", "weight", "bias"), (c, weight, bias))
-                return dit_modulation(c, weight, bias)
+                return fn(c, weight, bias)
             block.mod_fn = mod_hook
-            def mlp_hook(x, w1, b1, w2, b2, i=i):
+            def mlp_hook(x, w1, b1, w2, b2, i=i, fn=block.mlp_fn):
                 b, t, h = x.shape
                 record(2, "dit_s_2_dit_mlp", f"blocks.{i}.mlp", dict(B=b, T=t, H=h, I=w1.shape[0]),
                        ("x", "w1", "b1", "w2", "b2"), (x, w1, b1, w2, b2))
-                return dit_mlp(x, w1, b1, w2, b2)
+                return fn(x, w1, b1, w2, b2)
             block.mlp_fn = mlp_hook
     else:
-        def interaction_hook(dense, sparse):
+        def interaction_hook(dense, sparse, fn=model.interaction_fn):
             b, s, d = sparse.shape
             record(2, "torchrec_dlrm_dlrm_interaction", "interaction", dict(
                 B=b, S=s, D=d, O=d + s * (s + 1) // 2),
                 ("dense", "sparse"), (dense, sparse))
-            return dlrm_interaction(dense, sparse)
+            return fn(dense, sparse)
         model.interaction_fn = interaction_hook
 
     original_linear = F.linear
@@ -124,7 +137,7 @@ def collect(spec, batch=None):
         expected = 2 * spec.arch["depth"] if spec.model == "dit_s_2" else 1
         if sum(row["level"] == 2 for row in records) != expected:
             raise ValueError("Level-2 invocation count differs from architecture")
-        return {"schema_version": "evograd-generated-harvest/1",
+        return {"schema_version": "evograd-generated-harvest/2",
                 "workload_id": spec.workload_id, "config": spec.to_config(),
                 "architecture": spec.arch, "canonical": spec.is_canonical,
                 "execution_scope": "model", "loss": float(loss.detach()),
@@ -138,15 +151,42 @@ def collect(spec, batch=None):
         F.linear = original_linear
         for handle in handles:
             handle.remove()
+        for owner, name, fn in sites:
+            setattr(owner, name, fn)
+
+
+def real_run(name):
+    """The harvest of ``name``'s verification run, with its run identity."""
+    from evograd.verification.integrations import load
+    from evograd.verification.integrations.harvest_run import first_step
+
+    workload, model, batch, run, settings = first_step(load(name))
+    # GeneratedSpec.workload_hash does not cover the warm start: the weights pin does.
+    weights = (f"warm_start:sha256:{workload.initial_state()[1]['sha256']}"
+               if workload.init_checkpoint else f"random:seed{workload.spec.seed}")
+    return {**collect(workload.spec, model=model, batch=batch),
+            "run": {"weights": weights, **run}, "determinism": settings}
+
+
+def require_real_run(manifest, name):
+    """Only a harvest of the verification run (:func:`real_run`) publishes the snapshot."""
+    from evograd.verification.integrations import load
+
+    spec = load(name).load_workload().spec
+    if manifest["config"] != spec.to_config() or not manifest.get("run") \
+            or not manifest.get("backward_verified"):
+        raise ValueError(f"a forward/backward harvest of the {name} verification run is required")
+    if manifest["workload_id"] != spec.workload_id or manifest["architecture"] != spec.arch:
+        raise ValueError("harvest does not match current architecture")
 
 
 def snapshot(manifest):
     from evograd.benchmark.topdown.common.harvest_roles import group_configurations
 
     groups = {level: group_configurations(manifest["records"], level, digest) for level in (1, 2)}
-    payload = {"schema_version": f"evograd-{manifest['config']['model']}-snapshot/1",
+    payload = {"schema_version": f"evograd-{manifest['config']['model']}-snapshot/2",
                "manifest_hash": digest(manifest), "workload_id": manifest["workload_id"],
-               "config": manifest["config"], "canonical": manifest["canonical"],
+               "config": manifest["config"], "run": manifest.get("run"),
                "not_bound": manifest["not_bound"], "level1": {}, "tasks": {}}
     for level, name in ((1, "level1"), (2, "tasks")):
         payload[name] = {task: {"configurations": configs,
@@ -161,51 +201,31 @@ def snapshot(manifest):
 
 
 def main(model):
-    parser = argparse.ArgumentParser(description="Whole-model generated-input forward/backward harvest")
-    parser.add_argument("--config", type=Path, help="JSON execution overrides")
+    parser = argparse.ArgumentParser(
+        description="Whole-model forward/backward harvest of the verification run (order 101)")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--write-snapshot", action="store_true")
-    parser.add_argument("--real-input", action="store_true", help="harvest from prepared real inputs")
-    parser.add_argument("--data", type=Path, help="prepared real-input artifact path")
-    parser.add_argument("--criteo-dir", type=Path, help="TorchRec-preprocessed Criteo Kaggle NumPy directory")
     args = parser.parse_args()
-    config = canonical(model).to_config()
-    if args.config:
-        config.update(json.loads(args.config.read_text()))
-    if config["model"] != model:
-        raise ValueError("config names a different model")
-    config["input_mode"] = "real" if args.real_input else "generated"
-    spec = GeneratedSpec(**config)
-    if args.write_snapshot and not spec.is_canonical:
-        raise ValueError("only a canonical execution can publish the tracked snapshot")
-    batch = None
-    if args.real_input:
-        from .data import ensure_pinned_data, load_data
-        from types import SimpleNamespace
-        path = ensure_pinned_data(spec, args.data, batch_count=1, source_dir=args.criteo_dir)
-        batch = {k: v.to(spec.device) for k, v in load_data(SimpleNamespace(spec=spec, data_path=path))[0]["batches"][0].items()}
-    manifest = collect(spec, batch)
+    manifest = real_run(model)
     payload = snapshot(manifest)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, indent=2) + "\n")
     if args.write_snapshot:
         snapshot_path(model).write_text(json.dumps(payload, indent=2) + "\n")
-    print(json.dumps({"manifest": str(args.out), "canonical": spec.is_canonical,
+    print(json.dumps({"manifest": str(args.out), "workload_id": manifest["workload_id"],
+                      "weights": manifest["run"]["weights"],
                       "L1_configurations": sum(len(e["configurations"]) for e in payload["level1"].values()),
                       "L2_configurations": sum(len(e["configurations"]) for e in payload["tasks"].values())}))
 
 
 def snapshot_main(model):
-    parser = argparse.ArgumentParser(description="Derive a tracked snapshot from canonical harvest")
+    parser = argparse.ArgumentParser(
+        description="Derive a tracked snapshot from a harvest of the verification run")
     parser.add_argument("--harvest", type=Path, required=True)
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     manifest = json.loads(args.harvest.read_text())
-    spec = GeneratedSpec(**manifest["config"])
-    if spec.model != model or not spec.is_canonical or not manifest.get("backward_verified"):
-        raise ValueError("canonical forward/backward harvest for this model required")
-    if manifest["workload_id"] != spec.workload_id or manifest["architecture"] != spec.arch:
-        raise ValueError("harvest does not match current architecture")
+    require_real_run(manifest, model)
     payload = snapshot(manifest)
     if args.write:
         snapshot_path(model).write_text(json.dumps(payload, indent=2) + "\n")

@@ -1,10 +1,13 @@
 # Generated-input DiT-S/2 benchmark
 
 This workload executes a full DiT-S/2 forward, diffusion loss, backward, and
-AdamW step at Level 3. It uses deterministic generated batches by default.
-`--real-input` uses pinned Imagenette images encoded with the pinned
-`stabilityai/sd-vae-ft-mse` VAE. DiT-S/2 weights remain seeded random weights:
-the reference project does not provide an official S/2 checkpoint. This is
+AdamW step at Level 3. The benchmark spec (`spec.canonical`) uses
+deterministic generated batches and seeded random weights. The harvest and the
+verification use pinned Imagenette images encoded with the pinned
+`stabilityai/sd-vae-ft-mse` VAE, and start from a frozen warm start of the
+seeded initialization (`evograd.verification.integrations.warm_start`): the
+reference project does not provide an official S/2 checkpoint, and at the
+initialization adaLN-Zero leaves every block without gradient. This is
 real-image-derived training input, not pretrained DiT fine-tuning or the full
 ImageNet distribution. The implementation imports nothing from `references/`.
 
@@ -20,19 +23,38 @@ site is invoked 12 times per model step. Level 1 binds observed `linear` and
 `spatial_conv2d` calls. Attention, affine-free layer normalization, and the
 diffusion loss remain outside the standalone operator pool.
 
-Measured Level-1/2 cases are derived from a canonical whole-model harvest;
-they remain empty until its snapshot is saved. A reduced configuration can
-verify execution but cannot publish a canonical timing snapshot.
+Measured Level-1/2 cases are derived from the whole-model harvest of the
+verification run. A reduced configuration can verify execution but cannot
+publish a snapshot.
 
-## Canonical generated-input harvest
+## Harvest
+
+The harvest runs the step the verification capture records first: the
+verification workload (`evograd.verification.integrations.dit_s_2`: real
+input, the streamed latent pool, the warm start), a fresh native model, the
+first training batch of data order 101, under the verification's deterministic
+settings (`integrations.harvest_run.first_step`). Its snapshot (schema `/2`)
+names that run under `run`: `weights` (`warm_start:sha256:<file digest>`; the
+workload hash does not cover the warm start), `data` (the data identity the
+capture records, without its per-order batches), `order`, `batch_digest`
+(the batch, as the capture names it) and `parameter_state_sha256` (the
+warm-started parameters).
 
 ```bash
-python -m evograd.benchmark.topdown.dit_s_2.harvest.harvest \
+CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.benchmark.topdown.dit_s_2.harvest.harvest \
   --out results/dit_s_2/harvest.json --write-snapshot
 ```
 
-For a reduced run, pass a JSON file with changed `batch_size`, `device`, and
-`arch_overrides` to harvest as `--config`, and omit `--write-snapshot`.
+`python -m evograd.benchmark.topdown.dit_s_2.harvest.snapshot --harvest
+HARVEST.json [--write]` derives the snapshot from a saved harvest without a
+GPU; it, too, accepts only a harvest of the verification run. Reduced
+configurations (changed `batch_size`, `device`, `arch_overrides`) run from
+Python with `collect(spec)` and never write a tracked snapshot.
+
+The latent pool is `data/dit_s_2/batches/latent_pool.pt` (override with
+`EVOGRAD_DIT_LATENT_POOL`; build it once with `data.build_latent_pool()` on a
+GPU) and the warm start `data/dit_s_2/batches/warm_start.pt` (override with
+`EVOGRAD_DIT_S_2_WARM_START`; written by `integrations.warm_start`).
 
 ## Pinned real-image input
 
@@ -46,12 +68,8 @@ python scripts/prepare_benchmark_inputs.py --benchmark dit_s_2
 Preparation uses a 256-pixel center crop, random horizontal flip, `[-1, 1]`
 normalization, and VAE latent scale 0.18215. A fixed seed controls flips,
 latent sampling, diffusion noise, timesteps, and class dropout. Prepared
-batches are cached at `data/dit_s_2/batches/` (override with
-`EVOGRAD_DIT_DATA_CACHE`). Imagenette labels are mapped to their ImageNet-1k
-IDs.
-
-Add `--real-input` to the harvest command to observe Level-1/2 shapes from
-the first prepared image batch. The tracked canonical snapshot remains the
-generated-input identity; real-input harvests use `--out` without
-`--write-snapshot`. Shapes are the same under both modes for the fixed
-configuration.
+batches (a workload's `data_path`) are cached at `data/dit_s_2/batches/`
+(override with `EVOGRAD_DIT_DATA_CACHE`). Imagenette labels are mapped to
+their ImageNet-1k IDs. The latent pool encodes every training image the same
+way, and the stream draws fresh noise, timesteps and class dropout per data
+order and step.
