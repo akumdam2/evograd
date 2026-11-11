@@ -1,13 +1,22 @@
-"""Harvest a canonical training step into a workload manifest.
+"""Harvest a training step into a workload manifest.
 
     PYTHONPATH=src python -m <workload package>.harvest.harvest \
         --out results/harvest.json
 
 This is the Level-3 smoke run with an observer attached. It reuses
-``build_model``, ``make_inputs``, ``training_step``, the effective-setting
-checks and the gradient validation unchanged -- the point of the milestone is
-that the harvest describes *the* canonical execution, and a second, subtly
-different implementation of it would defeat that.
+``training_step``, the effective-setting checks and the gradient validation
+unchanged -- the point of the milestone is that the harvest describes *the*
+execution the cases come from, and a second, subtly different implementation
+of it would defeat that.
+
+The harvest behind a tracked snapshot observes the verification capture's own
+first step: the model's integration builds the pinned pretrained model and the
+first TRAIN batch of data order 101 under the verification settings
+(``evograd.verification.integrations.base.real_run``), and passes them here
+with their run identity, which the manifest records as ``run``. Without a
+model and a batch, the spec's random weights and synthetic tokens are built
+here (``build_model``/``make_inputs``): the CPU tests' tiny runs and debug
+variants, whose manifest records no run and backs no capture.
 
 Unlike the smoke run, a failure here does not produce a file. A smoke report
 that says "it failed" is useful; a manifest missing a boundary is worse than no
@@ -36,9 +45,15 @@ from .smoke import environment_info, gradient_coverage, workload_info
 from .spec import WorkloadSpec
 
 
-def run_harvest(workload: Level3Workload,
-                spec: WorkloadSpec | None = None) -> dict[str, Any]:
-    """Execute the canonical step under observation and return the manifest.
+def run_harvest(workload: Level3Workload, spec: WorkloadSpec | None = None, *,
+                model=None, batch=None,
+                identity: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Execute one step under observation and return the manifest.
+
+    ``model`` and ``batch`` (``(input_ids, labels)`` on ``spec.device``), when
+    given, are the run to observe, and ``spec`` must describe it; otherwise the
+    spec's random-weight model and synthetic tokens are built. ``identity`` is
+    recorded as the manifest's ``run`` (``None`` when not given).
 
     Raises on any failure -- a bad effective setting, a missing mandatory
     boundary, a non-finite loss, an incomplete gradient. The caller decides what
@@ -48,15 +63,16 @@ def run_harvest(workload: Level3Workload,
     workload.require_transformers()
     if spec.device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError(
-            "the canonical harvest runs on CUDA and no CUDA device is visible; "
-            "allocate a GPU node, or pass --device cpu for a (non-canonical) debug run"
+            "the harvest runs on CUDA and no CUDA device is visible; allocate a GPU "
+            "node, or pass --synthetic --device cpu for a (non-canonical) debug run"
         )
     if spec.device.startswith("cuda"):
         torch.cuda.reset_peak_memory_stats()
 
     started = time.perf_counter()
-    model = workload.build_model(spec)
-    input_ids, labels = workload.make_inputs(spec)
+    if model is None:
+        model = workload.build_model(spec)
+    input_ids, labels = batch if batch is not None else workload.make_inputs(spec)
 
     effective = workload.effective_settings(model, spec)
     effective["input_ids_dtype"] = str(input_ids.dtype)
@@ -115,7 +131,7 @@ def run_harvest(workload: Level3Workload,
         )
 
     extra = {} if workload.not_observed is None else {"not_observed": workload.not_observed}
-    return build_manifest(
+    manifest = build_manifest(
         observation,
         schema_version=workload.manifest_schema,
         function_wrappers=workload.function_wrappers,
@@ -134,3 +150,6 @@ def run_harvest(workload: Level3Workload,
             ),
         },
     )
+    # Outside the manifest hash, like the workload section; the snapshot copies it.
+    manifest["run"] = None if identity is None else dict(identity)
+    return manifest

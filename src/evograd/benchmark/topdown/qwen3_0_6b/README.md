@@ -47,6 +47,18 @@ contexts; `fast`/`fair` are measurement modes.
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.cli smoke
-PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+  python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.harvest \
   --out results/benchmark/topdown/qwen3_0_6b/harvest.json
+PYTHONPATH=src python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot \
+  --harvest results/benchmark/topdown/qwen3_0_6b/harvest.json --write
 ```
+
+The harvest observes the real-payload capture's first step: the pinned checkpoint
+on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.qwen3_0_6b` under the verification settings
+(`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
+a capture refuses a snapshot that does not record its own run. `--synthetic`
+harvests the random-weight, synthetic-token canonical spec instead (debug
+overrides apply to it); the layer capture replays that step and reads such a
+harvest.

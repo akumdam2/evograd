@@ -300,6 +300,8 @@ def summarize(manifest: dict[str, Any], *, top_linear: int = 8,
     lines.append(
         f"  canonical={workload.get('canonical')}  config_hash={manifest['config_hash']}"
     )
+    lines.append(f"  weights={workload.get('weights')}  data={workload.get('data')}  "
+                 f"run={'recorded' if manifest.get('run') else 'none'}")
     lines.append(f"  manifest_hash={manifest['manifest_hash']}")
     lines.append("")
     configs = [dict(c) for c in manifest["configurations"]]

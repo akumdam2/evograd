@@ -42,3 +42,30 @@ class TestPretrainedArchitectureGuard(unittest.TestCase):
                     "num_key_value_heads", "head_dim", "vocab_size", "intermediate_size",
                     "tie_word_embeddings", "attention_bias", "rms_norm_eps"):
             self.assertEqual(loaded.get(key), QWEN3_0_6B[key], key)
+
+
+class TestSharedBuildersRefuseRealRuns(unittest.TestCase):
+    """The shared builders make random weights and synthetic tokens only; a spec
+    naming a checkpoint or a dataset is refused rather than run on random ones
+    under its pretrained/real-text id."""
+
+    def test_a_pretrained_or_real_text_spec_is_refused(self):
+        from evograd.benchmark.topdown.common.harvest import run_harvest
+        from evograd.benchmark.topdown.qwen3_0_6b.declaration import WORKLOAD
+        from evograd.benchmark.topdown.qwen3_0_6b.levels.level3.spec import WorkloadSpecError
+        from evograd.verification.integrations.qwen3_0_6b.capture import PRETRAINED, REAL_TEXT
+
+        from tests.qwen3.test_level3_workload import HAVE_TRANSFORMERS, tiny_spec
+
+        spec = tiny_spec()
+        for label, real in (("weights", spec.replace(weights=PRETRAINED)),
+                            ("data", spec.replace(data=REAL_TEXT)),
+                            ("both", spec.replace(weights=PRETRAINED, data=REAL_TEXT))):
+            with self.subTest(label):
+                with self.assertRaisesRegex(WorkloadSpecError, "random weights and synthetic"):
+                    WORKLOAD.build_model(real)
+                with self.assertRaisesRegex(WorkloadSpecError, "random weights and synthetic"):
+                    WORKLOAD.make_inputs(real)
+                if HAVE_TRANSFORMERS:
+                    with self.assertRaises(WorkloadSpecError):
+                        run_harvest(WORKLOAD, real)

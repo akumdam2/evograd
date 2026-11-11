@@ -50,12 +50,14 @@ def snapshot_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical(body).encode("utf-8")).hexdigest()
 
 
-def load(path: Path, *, schema_version: str | None = None) -> dict[str, Any]:
+def load(path: Path, *,
+         schema_version: str | tuple[str, ...] | None = None) -> dict[str, Any]:
     """The frozen snapshot at ``path``, with its hash verified.
 
-    ``schema_version`` pins the exact revision when a caller knows which one it
-    expects; without it the string is only required to be well formed, so this
-    function can read any workload's snapshot without being told about it.
+    ``schema_version`` pins the exact revision (or the revisions, as a tuple)
+    when a caller knows which one it expects; without it the string is only
+    required to be well formed, so this function can read any workload's
+    snapshot without being told about it.
     """
     path = Path(path)
     try:
@@ -63,9 +65,10 @@ def load(path: Path, *, schema_version: str | None = None) -> dict[str, Any]:
     except FileNotFoundError as exc:  # pragma: no cover - tracked in the repo
         raise SnapshotError(f"{path} is missing; it is tracked, not generated") from exc
     declared = payload.get("schema_version")
-    if schema_version is not None and declared != schema_version:
+    accepted = (schema_version,) if isinstance(schema_version, str) else schema_version
+    if accepted is not None and declared not in accepted:
         raise SnapshotError(
-            f"{path}: schema {declared!r}, expected {schema_version!r}"
+            f"{path}: schema {declared!r}, expected {' or '.join(map(repr, accepted))}"
         )
     if schema_version is None and not (
         isinstance(declared, str) and SCHEMA_PATTERN.match(declared)
@@ -84,7 +87,8 @@ def load(path: Path, *, schema_version: str | None = None) -> dict[str, Any]:
     return payload
 
 
-def task(name: str, path: Path, *, schema_version: str | None = None) -> dict[str, Any]:
+def task(name: str, path: Path, *,
+         schema_version: str | tuple[str, ...] | None = None) -> dict[str, Any]:
     """One Level-2 task entry from the snapshot at ``path``."""
     payload = load(path, schema_version=schema_version)
     try:

@@ -151,7 +151,8 @@ class TestHarvest(unittest.TestCase):
     def test_snapshot_extraction_and_declared_dims(self):
         manifest = tiny_manifest()
         snap = snapshot.extract(manifest, representative_layers=LAYERS)
-        self.assertEqual(snap["schema_version"], "evograd-qwen3_5-snapshot/1")
+        self.assertEqual(snap["schema_version"], "evograd-qwen3_5-snapshot/2")
+        self.assertIsNone(snap["run"])  # a random-weight synthetic harvest records no run
         self.assertEqual(snap["provenance"], "observed")
         self.assertEqual(snap["snapshot_hash"], snapshot.snapshot_hash(snap))
         self.assertEqual(sorted(snap["level1"]), sorted(

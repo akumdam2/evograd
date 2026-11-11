@@ -94,8 +94,10 @@ def load_snapshot(name: str) -> dict[str, Any]:
     if not path.is_file():
         raise UnharvestedWorkload(
             f"{name} has no tracked snapshot at {path}. A snapshot is derived "
-            f"from a harvest, not authored, so run one on a machine with a GPU:\n"
-            f"    python -m evograd.benchmark.topdown.{TOPDOWN_WORKLOADS[name]}.harvest.harvest "
+            f"from a harvest of the verification capture's first step, not authored, "
+            f"so run one on a machine with a GPU:\n"
+            f"    CUBLAS_WORKSPACE_CONFIG=:4096:8 "
+            f"python -m evograd.benchmark.topdown.{TOPDOWN_WORKLOADS[name]}.harvest.harvest "
             f"--out results/benchmark/topdown/{TOPDOWN_WORKLOADS[name]}/harvest.json\n"
             f"    python -m evograd.benchmark.topdown.{TOPDOWN_WORKLOADS[name]}.harvest.snapshot "
             f"--harvest results/benchmark/topdown/{TOPDOWN_WORKLOADS[name]}/harvest.json --write"

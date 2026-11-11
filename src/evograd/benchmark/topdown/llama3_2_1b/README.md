@@ -59,9 +59,21 @@ PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b --print-spec
 
 PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b \
   --out results/llama3-level3/canonical.json
-PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+  python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest \
   --out results/benchmark/topdown/llama3_2_1b/harvest.json
+PYTHONPATH=src python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot \
+  --harvest results/benchmark/topdown/llama3_2_1b/harvest.json --write
 ```
+
+The harvest observes the real-payload capture's first step: the pinned (gated)
+checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.llama3_2_1b` under the verification settings
+(`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
+a capture refuses a snapshot that does not record its own run. `--synthetic`
+harvests the random-weight, synthetic-token canonical spec instead (debug
+overrides apply to it); the layer capture replays that step and reads such a
+harvest.
 
 The smoke entry point takes no subcommand: `--out` and the override flags go
 directly to `python -m evograd.benchmark.topdown.llama3_2_1b`.

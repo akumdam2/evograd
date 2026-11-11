@@ -47,6 +47,7 @@ from ...common import snapshot_extract as _extract
 
 __all__ = [
     "LEVEL1_SOURCES",
+    "READABLE_SCHEMAS",
     "SCHEMA_VERSION",
     "SNAPSHOT_PATH",
     "SnapshotError",
@@ -68,7 +69,13 @@ __all__ = [
 #: biasless, and a zero-valued bias is not an equivalent benchmark -- it adds a
 #: broadcast add, a dbias reduction and a third gradient the model never
 #: computes. /2 added the `level1` section itself.
-SCHEMA_VERSION = "evograd-qwen3-snapshot/4"
+#: Bumped from /4 when the snapshot began to record ``run``: the verification
+#: run its harvest observed (the integration's pinned weights and data, the first
+#: TRAIN batch of order 101 and the initial parameter state). A /4 snapshot has
+#: none; it still loads, and a capture refuses it.
+SCHEMA_VERSION = "evograd-qwen3-snapshot/5"
+#: Every revision this module reads.
+READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-qwen3-snapshot/4")
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
@@ -137,13 +144,13 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
-    """The frozen Qwen3 snapshot, with its hash and exact schema verified."""
-    return _load(Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
+    """The frozen Qwen3 snapshot, with its hash and schema verified."""
+    return _load(Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
     """One Level-2 task entry from the Qwen3 snapshot."""
-    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
+    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
 
 
 # --------------------------------------------------------------------------

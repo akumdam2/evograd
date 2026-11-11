@@ -67,6 +67,37 @@ class ToyIntegration(unittest.TestCase):
         self.assertEqual(sorted(manifest["identity"]["parameter_state"]), ["parameters", "state_sha256",
                                                                            "tied"])
 
+    def test_capture_refuses_a_snapshot_not_harvested_on_its_run(self):
+        """The harvest's ``run`` must be the capture's own; nothing is written otherwise."""
+        import dataclasses
+
+        from evograd.verification.integrations import base
+
+        root = Path(self.tmp.name) / "refused"
+        with self.T.toy_environment() as env:
+            run = env.run
+            self.assertEqual(run["order"], base.HARVEST_ORDER)
+            self.assertEqual(set(base.RUN_KEYS) | {"execution"}, set(run))
+            other_state = {**run["parameter_state"], "state_sha256": "0" * 64}
+            other_batch = {**run["batch"], "batch_sha256": "0" * 64}
+            for label, recorded in (("no run", None),
+                                    ("weights", {**run, "parameter_state": other_state}),
+                                    ("batch", {**run, "batch": other_batch}),
+                                    ("order", {**run, "order": 202})):
+                with self.subTest(label), mock.patch(
+                        "evograd.benchmark.topdown.load_snapshot",
+                        lambda name, r=recorded: {"snapshot_hash": "toy", "run": r}), \
+                        self.assertRaisesRegex(RuntimeError, "harvest"):
+                    base.capture(self.model, root / label, device="cpu", log=lambda *a: None)
+                self.assertFalse((root / label).exists())
+            # The settings a run executed under are recorded, not compared.
+            identity = {**run, "execution": {}}
+            base.require_harvested_run(self.model, identity)
+            unchecked = dataclasses.replace(self.model, requires_harvested_run=False)
+            with mock.patch("evograd.benchmark.topdown.load_snapshot",
+                            lambda name: {"snapshot_hash": "toy"}):
+                base.require_harvested_run(unchecked, identity)
+
     def test_native_equivalent_is_accepted_and_a_fault_rejected(self):
         root = Path(self.tmp.name)
         good = self.verify(1.0, root / "good")

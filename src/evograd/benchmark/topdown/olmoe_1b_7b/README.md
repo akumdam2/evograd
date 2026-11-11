@@ -80,8 +80,9 @@ residual norms and the full-width q/k norms), `rope`, `causal_gqa_attention`,
 
 ## Harvest
 
-`harvest/` observes one whole canonical step (loss + backward) and freezes it
-into `harvest/snapshot.json` (provenance `observed`). Every layer is held to
+`harvest/` observes one whole training step (loss + backward), the one the
+real-payload capture runs first, and freezes it into `harvest/snapshot.json`
+(provenance `observed`). Every layer is held to
 the decoder block's mandatory boundaries -- attention, RoPE, SDPA, the MoE
 block, its router, its experts and their SiLU -- and the per-task counts to
 the depth; `snapshot.check_declared_dims` holds every site's declared dims to
@@ -89,11 +90,23 @@ the harvested shapes.
 
 ```bash
 PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b --out smoke.json
-PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=src \
+    python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out harvest.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest harvest.json --write
+PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --synthetic \
+    --out harvest_synthetic.json
 PYTHONPATH=src python -m evograd.benchmark.topdown.olmoe_1b_7b.layer.capture \
-    --harvest harvest.json --out-dir <run_dir>
+    --harvest harvest_synthetic.json --out-dir <run_dir>
 ```
+
+The harvest observes the real-payload capture's first step: the pinned checkpoint
+on the first WikiText-2 TRAIN batch of data order 101, built by
+`evograd.verification.integrations.olmoe_1b_7b` under the verification settings
+(`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
+a capture refuses a snapshot that does not record its own run. `--synthetic`
+harvests the random-weight, synthetic-token canonical spec instead (debug
+overrides apply to it); the layer capture replays that step and reads such a
+harvest.
 
 The Tier-3 side is `evograd/evaluation/tier3/workloads/olmoe_1b_7b/`. How to run
 everything: `docs/OLMOE_1B_7B.md`.
