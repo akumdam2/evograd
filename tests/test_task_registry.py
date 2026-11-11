@@ -20,7 +20,6 @@ from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest as llam
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as qwen3_5_manifest
 from evograd.ops import PRIMITIVES, get_primitive
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 QWEN_LEVEL2 = (
     "fused_add_rms_norm",
@@ -289,7 +288,6 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
                     TASKS[task].forward,
                 )
 
-    @unittest.skipUnless(snapshot_is_current("qwen3_0_6b"), STALE_SNAPSHOT)
     def test_the_manifest_reads_frequency_from_the_snapshot(self):
         for site in manifest.SITES:
             with self.subTest(site=site):
@@ -307,7 +305,7 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
     def test_the_manifest_names_the_canonical_workload(self):
         self.assertEqual(
             manifest.workload_id(),
-            "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad",
+            "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
         )
 
 

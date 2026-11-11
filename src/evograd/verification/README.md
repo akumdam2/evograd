@@ -311,8 +311,8 @@ python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --v
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --write
 ```
 
-Each language model's `TASK_SOURCES` changed after its snapshot was written, so
-its `--validate` also differs in these Level-2 `tasks` entries:
+Each language model's `TASK_SOURCES` had changed since its previous snapshot, so
+the regeneration of 2026-11-11 also moved these Level-2 `tasks` entries:
 
 - Qwen3-0.6B: `qwen3_attention_block` (the whole attention module, 28 calls)
   and `qwen3_lm_head_ce` (the LM head with the loss, 1 call) replace
@@ -325,9 +325,7 @@ its `--validate` also differs in these Level-2 `tasks` entries:
   `qwen3_5_qkv_norm_partial_rope` and `qwen3_5_gated_attention`;
   `qwen3_5_residual_rmsnorm` counts 64 calls, not 32.
 
-The other Level-2 entries and every `level1` case must not move. Until a
-snapshot is written, its removed entries are no cases and its new tasks have
-none.
+The other Level-2 entries and every `level1` case must not move.
 
 The vision and generated models write the snapshot in the harvest, all at
 `--mem=32g` (Qwen2-VL: 64g if it runs out) with `EVOGRAD_HF_CACHE=$V/hf_cache`. They read their real-data
@@ -365,13 +363,11 @@ print(old == new)' src/evograd/benchmark/topdown/convnextv2_tiny/harvest/snapsho
 Then commit the eight `snapshot.json` files and update what pins the old
 identity: `tests/test_task_registry.py` (the Qwen3 manifest's workload id),
 `tests/qwen3/test_level2_swiglu_mlp.py` (`PROVENANCE_CHAIN`: workload id and
-manifest hash), `tests/llama3/test_real_text.py` (the canonical workload id
-equals the snapshot's), and the old revision in each language model's
-`READABLE_SCHEMAS`. After that, the random canonical Tier-3 vision and
+manifest hash) and `tests/llama3/test_real_text.py` (the snapshot's workload id
+is the real run's). After that, the random canonical Tier-3 vision and
 generated workloads fall back to specification preflight cases (their workload
-id is no longer the snapshot's). Corpora
-captured before keep the old `snapshot_hash` and still verify; new captures
-refuse until the snapshots are regenerated.
+id is no longer the snapshot's). Corpora captured before keep the old
+`snapshot_hash`, which `verify` refuses; recapture them.
 
 ## Gate 3: continuous training and global loss
 

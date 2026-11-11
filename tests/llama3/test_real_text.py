@@ -40,10 +40,13 @@ def _real_workload(monkeypatch, **overrides):
 
 
 def test_the_canonical_identity_is_unchanged():
-    """Adding the two fields must not move the tracked snapshot's binding."""
+    """Adding the two fields must not move the canonical identity; the tracked
+    snapshot binds the real run's."""
     snapshot = json.loads(SNAPSHOT.read_text())
-    assert CANONICAL.workload_id == snapshot["workload_id"]
+    assert CANONICAL.workload_id == "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.6f7a86d3"
     assert "weights" not in CANONICAL.to_dict() and "data" not in CANONICAL.to_dict()
+    assert snapshot["workload_id"] == CANONICAL.replace(weights=PRETRAINED,
+                                                        data=REAL_TEXT).workload_id
 
 
 def test_real_text_is_its_own_workload_identity():

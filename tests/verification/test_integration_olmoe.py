@@ -22,8 +22,6 @@ from pathlib import Path
 
 import torch
 
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
-
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -67,7 +65,6 @@ def tiny_cases():
 
 
 class RealCaseTable(unittest.TestCase):
-    @unittest.skipUnless(snapshot_is_current("olmoe_1b_7b"), STALE_SNAPSHOT)
     def test_observed_cases(self):
         from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import manifest
         from evograd.verification.integrations.base import observed_cases

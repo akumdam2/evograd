@@ -34,7 +34,6 @@ from evograd.adbench_tools.score import compare  # noqa: E402
 from evograd.adbench_tools.statement import system_message  # noqa: E402
 from evograd.adbench_tools.task import build_task, load, reference_closure  # noqa: E402
 from tests._small_cases import SMALL
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -401,9 +400,7 @@ def test_the_evaluator_judges_correctness_only_by_the_packs_rule(tmp_path, monke
 #: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
 #: the task's declared default is another model's or the generic grid's.
 MODEL_SCALARS = (
-    pytest.param("llama_3_2_1b", "llama3_residual_rmsnorm/residual_rmsnorm", {"eps": 1e-5},
-                 marks=pytest.mark.skipif(not snapshot_is_current("llama_3_2_1b"),
-                                          reason=STALE_SNAPSHOT)),
+    ("llama_3_2_1b", "llama3_residual_rmsnorm/residual_rmsnorm", {"eps": 1e-5}),
     ("qwen3_0_6b", "rmsnorm/rmsnorm", {"eps": 1e-6}),
     ("qwen2_vl_2b", "layernorm/model.visual.blocks.norm1", {"eps": 1e-6}),
     ("qwen2_vl_2b", "rmsnorm/model.language_model.layers.input_layernorm", {"eps": 1e-6}),
@@ -483,8 +480,6 @@ REACHED = (
 def test_the_auto_grant_follows_what_one_reference_call_reaches(model, case_id, reached, granted):
     from evograd.adbench_tools.task import observed_calls, observed_case, resolve_library
 
-    if not snapshot_is_current(model):
-        pytest.skip(STALE_SNAPSHOT)
     model_obj, case = observed_case(model, case_id)
     calls = observed_calls(model_obj.reference_op(case.task), case.workload, device="meta")
     assert reached in calls

@@ -47,10 +47,9 @@ The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 `evograd.verification.integrations.olmoe_1b_7b` under the verification
 settings); the snapshot records that run (`run`), and a capture refuses a
-snapshot that does not record its own run. The tracked snapshot predates the
-three-site case list (it still lists the two former attention tasks and a
-16-call residual site), so the next real-run harvest regenerates it (open; see
-"Regenerating the snapshots" in `src/evograd/verification/README.md`).
+snapshot that does not record its own run. The tracked snapshot, regenerated
+from the real run, holds the three-site case list (see "Regenerating the
+snapshots" in `src/evograd/verification/README.md`).
 
 If the B2 step does not fit, `--batch-size 1` on the smoke and `--synthetic`
 harvest commands runs the B1 variant (non-canonical: the report says so). The

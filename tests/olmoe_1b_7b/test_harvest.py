@@ -19,7 +19,6 @@ from evograd.benchmark.topdown.olmoe_1b_7b.harvest import snapshot
 from evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest import run_harvest
 from evograd.benchmark.topdown.olmoe_1b_7b.levels.level3.spec import CANONICAL
 
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 from tests.olmoe_1b_7b._tiny import LAYER, LAYERS, SEQ, TINY_ARCH
 
 
@@ -230,8 +229,6 @@ class TestHarvest(unittest.TestCase):
             self.assertNotIn("olmoe_1b_7b_observed", TASKS["swiglu"].benchmark_suites)
             return
         self.assertIn("olmoe_1b_7b_observed", TASKS["swiglu"].benchmark_suites)
-        if not snapshot_is_current("olmoe_1b_7b"):
-            self.skipTest(STALE_SNAPSHOT)
         snap = snapshot.load()
         # Once frozen from the real run: the dims are the declared ones.
         from evograd.benchmark.topdown.olmoe_1b_7b.levels.level2 import manifest as sites

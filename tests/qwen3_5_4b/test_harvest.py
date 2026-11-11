@@ -20,7 +20,6 @@ from evograd.benchmark.topdown.qwen3_5_4b.harvest import snapshot
 from evograd.benchmark.topdown.qwen3_5_4b.harvest.harvest import run_harvest
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level3.spec import CANONICAL
 
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 from tests.qwen3_5_4b._tiny import FULL_LAYER, GDN_LAYER, SEQ, TINY_ARCH
 
 LAYERS = {"linear_attention": GDN_LAYER, "full_attention": FULL_LAYER}
@@ -223,8 +222,6 @@ class TestHarvest(unittest.TestCase):
 
         if not has_snapshot("qwen3_5_4b"):
             self.skipTest("no tracked snapshot")
-        if not snapshot_is_current("qwen3_5_4b"):
-            self.skipTest(STALE_SNAPSHOT)
         snap = snapshot.load()
         declared = {site: sites.dims_for(site, QWEN3_5_4B, batch=1, seq=2048)
                     for site in sites.SITES}

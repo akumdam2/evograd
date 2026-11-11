@@ -61,10 +61,9 @@ The harvest observes the real-payload capture's first step (the pinned
 checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 `evograd.verification.integrations.qwen3_5_4b` under the verification settings);
 the snapshot records that run (`run`), and a capture refuses a snapshot that
-does not record its own run. The tracked snapshot predates the merged
-`attention_block` and the 64-call residual fusion: until it is regenerated
-(`--validate` then reports those two tasks as well as the identity fields) no
-Qwen3.5 case can be read, and the corpus must be recaptured after it.
+does not record its own run. The tracked snapshot, regenerated from the real
+run, holds the merged `attention_block` and the 64-call residual fusion; a
+corpus captured before it must be recaptured.
 
 **Evaluation** (Gates 1/2/3 on real payloads, then Tier 2/3 timing):
 

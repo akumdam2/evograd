@@ -21,8 +21,6 @@ from pathlib import Path
 
 import torch
 
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
-
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -230,7 +228,6 @@ class LevelTwoReferencesAreTheModulesArithmetic(unittest.TestCase):
 
 
 class RealCaseTable(unittest.TestCase):
-    @unittest.skipUnless(snapshot_is_current("qwen3_0_6b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import TASK_SOURCES
         from evograd.verification.integrations.base import observed_cases
@@ -247,6 +244,13 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(cases["qwen3_lm_head_ce/flce"].frequency, 1)
         self.assertEqual(cases["rope/rope_kv"].workload.dims["n_heads"], 8)
         self.assertEqual(cases["linear_no_bias/lm_head"].frequency, 1)
+
+    def test_the_tracked_snapshot_records_the_verification_run(self):
+        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import load
+        from evograd.verification.integrations import base
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
+
+        base.require_real_run(MODEL, load())
 
     def test_a_snapshot_entry_of_a_removed_task_is_no_case(self):
         """Until the next harvest, a merged task's old entries are dropped, and the
@@ -383,11 +387,6 @@ class RealRunHarvest(unittest.TestCase):
                          ["flat_cross_entropy", "lm_head"])
         # Anchored on the loss function: no module path.
         self.assertEqual(tasks["qwen3_lm_head_ce"]["module_paths"], [])
-
-    def test_the_tracked_snapshot_without_a_run_still_loads(self):
-        from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import READABLE_SCHEMAS, load
-
-        self.assertIn(load()["schema_version"], READABLE_SCHEMAS)
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")

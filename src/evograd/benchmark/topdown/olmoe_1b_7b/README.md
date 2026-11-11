@@ -92,8 +92,8 @@ on the first WikiText-2 TRAIN batch of data order 101, built by
 (`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
-overrides apply to it). The tracked snapshot predates the three-site case list
-and is regenerated from the real run (see "Regenerating the snapshots" in
+overrides apply to it). The tracked snapshot, regenerated from the real run,
+holds the three-site case list (see "Regenerating the snapshots" in
 `src/evograd/verification/README.md`).
 
 The Tier-3 side is `evograd/evaluation/tier3/workloads/olmoe_1b_7b/`. How to run

@@ -34,7 +34,7 @@ class TestSnapshot(unittest.TestCase):
 
     def test_the_snapshot_loads_and_its_hash_verifies(self):
         payload = snapshot_module.load()
-        self.assertIn(payload["schema_version"], snapshot_module.READABLE_SCHEMAS)
+        self.assertEqual(payload["schema_version"], snapshot_module.SCHEMA_VERSION)
         self.assertEqual(
             payload["snapshot_hash"], snapshot_module.snapshot_hash(payload)
         )
@@ -172,8 +172,8 @@ class TestDeclaration(unittest.TestCase):
     def test_the_provenance_chain_is_complete(self):
         joined = " | ".join(PROVENANCE_CHAIN)
         for link in (
-            "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.6e7919ad",
-            "3ab24571b6d5860859eb5c947daef94f30dfee4d949ec3cf0dea518ad9c7fabc",
+            "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+            "7ba7c1019f24a3dd135f01a71088052d86d0613e478f6431313ac670d98915b1",
             "model.layers.14",
             "replay",
             "Qwen3MLP",

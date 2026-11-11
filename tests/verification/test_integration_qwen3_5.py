@@ -7,7 +7,7 @@ task gets the calls per step the harvest counts (``manifest.FREQUENCY``),
 payloads follow each task's ABI, and the model reference reproduces every live
 output bit for bit -- the attention block and the 2-per-layer residual fusion
 included. The real case table is checked against the registry and the
-snapshot once the tracked snapshot is regenerated.
+snapshot.
 """
 
 from __future__ import annotations
@@ -19,8 +19,6 @@ import warnings
 from pathlib import Path
 
 import torch
-
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -90,7 +88,6 @@ def tiny_cases(dtype: str = "bfloat16"):
 
 
 class RealCaseTable(unittest.TestCase):
-    @unittest.skipUnless(snapshot_is_current("qwen3_5_4b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
         from evograd.verification.integrations.base import observed_cases
@@ -116,7 +113,6 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(MODEL.gate3_optimizer, {"warmup_steps": 100, "clip_grad_norm": 1.0,
                                                  "lr": 3e-5})
 
-    @unittest.skipUnless(snapshot_is_current("qwen3_5_4b"), STALE_SNAPSHOT)
     def test_every_case_task_is_redeclared_under_the_contract(self):
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.qwen3_5_4b import MODEL, reference

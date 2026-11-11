@@ -47,7 +47,6 @@ from ...common import snapshot_extract as _extract
 
 __all__ = [
     "LEVEL1_SOURCES",
-    "READABLE_SCHEMAS",
     "SCHEMA_VERSION",
     "SNAPSHOT_PATH",
     "SnapshotError",
@@ -71,12 +70,8 @@ __all__ = [
 #: computes. /2 added the `level1` section itself.
 #: Bumped from /4 when the snapshot began to record ``run``: the verification
 #: run its harvest observed (the integration's pinned weights and data, the first
-#: TRAIN batch of order 101 and the initial parameter state). A /4 snapshot has
-#: none; it still loads, and a capture refuses it.
+#: TRAIN batch of order 101 and the initial parameter state).
 SCHEMA_VERSION = "evograd-qwen3-snapshot/5"
-#: Every revision this module reads; drop the old one once the tracked snapshot is
-#: regenerated from the real run.
-READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-qwen3-snapshot/4")
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
@@ -144,12 +139,12 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
 
 def load(path: Path | None = None) -> dict[str, Any]:
     """The frozen Qwen3 snapshot, with its hash and schema verified."""
-    return _load(Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
+    return _load(Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
     """One Level-2 task entry from the Qwen3 snapshot."""
-    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
+    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 # --------------------------------------------------------------------------

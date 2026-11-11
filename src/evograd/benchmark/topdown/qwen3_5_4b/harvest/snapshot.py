@@ -39,12 +39,8 @@ from ..architecture import REPRESENTATIVE_LAYERS
 
 #: Bumped from /1 when the snapshot began to record ``run``: the verification
 #: run its harvest observed (the integration's pinned weights and data, the first
-#: TRAIN batch of order 101 and the initial parameter state). A /1 snapshot has
-#: none; it still loads, and a capture refuses it.
+#: TRAIN batch of order 101 and the initial parameter state).
 SCHEMA_VERSION = "evograd-qwen3_5-snapshot/2"
-#: Every revision this module reads; drop the old one once the tracked snapshot is
-#: regenerated from the real run.
-READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-qwen3_5-snapshot/1")
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
 #: The architecture fields the snapshot's ``model`` section records.
@@ -316,11 +312,11 @@ def observed_counts(manifest: dict[str, Any]):
 
 
 def load(path: Path | None = None) -> dict[str, Any]:
-    return _load(Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
+    return _load(Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
-    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=READABLE_SCHEMAS)
+    return _task(name, Path(path or SNAPSHOT_PATH), schema_version=SCHEMA_VERSION)
 
 
 def extract(manifest: dict[str, Any], *,
@@ -448,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = ["DIM_RULES", "LEVEL1_SOURCES", "MODEL_FIELDS", "REPRESENTATIVE_LAYERS",
-           "READABLE_SCHEMAS", "SCHEMA_VERSION", "SITE_EVENTS", "SNAPSHOT_PATH", "SnapshotError",
+           "SCHEMA_VERSION", "SITE_EVENTS", "SNAPSHOT_PATH", "SnapshotError",
            "TASK_SOURCES",
            "check_declared_dims", "diff", "extract", "load", "main", "observed_counts",
            "site_dims", "task"]

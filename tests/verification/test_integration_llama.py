@@ -18,8 +18,6 @@ from pathlib import Path
 
 import torch
 
-from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
-
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -95,7 +93,6 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(manifest.FREQUENCY,
                          {"attention_block": 16, "swiglu_mlp": 16, "residual_rmsnorm": 32})
 
-    @unittest.skipUnless(snapshot_is_current("llama_3_2_1b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.llama3_2_1b import MODEL

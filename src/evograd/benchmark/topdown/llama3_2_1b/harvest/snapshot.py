@@ -48,7 +48,6 @@ from ...common import snapshot_extract as _extract
 
 __all__ = [
     "LEVEL1_SOURCES",
-    "READABLE_SCHEMAS",
     "SCHEMA_VERSION",
     "SNAPSHOT_PATH",
     "SnapshotError",
@@ -63,12 +62,8 @@ __all__ = [
 
 #: Bumped from /1 when the snapshot began to record ``run``: the verification
 #: run its harvest observed (the integration's pinned weights and data, the first
-#: TRAIN batch of order 101 and the initial parameter state). A /1 snapshot has
-#: none; it still loads, and a capture refuses it.
+#: TRAIN batch of order 101 and the initial parameter state).
 SCHEMA_VERSION = "evograd-llama3-snapshot/2"
-#: Every revision this module reads; drop the old one once the tracked snapshot is
-#: regenerated from the real run.
-READABLE_SCHEMAS = (SCHEMA_VERSION, "evograd-llama3-snapshot/1")
 
 SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 
@@ -155,7 +150,7 @@ def load(path: Path | None = None) -> dict[str, Any]:
     path = Path(path or SNAPSHOT_PATH)
     if not path.is_file():
         raise SnapshotError(_UNHARVESTED.format(path=path))
-    return _load(path, schema_version=READABLE_SCHEMAS)
+    return _load(path, schema_version=SCHEMA_VERSION)
 
 
 def task(name: str, path: Path | None = None) -> dict[str, Any]:
@@ -163,7 +158,7 @@ def task(name: str, path: Path | None = None) -> dict[str, Any]:
     path = Path(path or SNAPSHOT_PATH)
     if not path.is_file():
         raise SnapshotError(_UNHARVESTED.format(path=path))
-    return _task(name, path, schema_version=READABLE_SCHEMAS)
+    return _task(name, path, schema_version=SCHEMA_VERSION)
 
 
 def extract(manifest: dict[str, Any], *, layer_index: int) -> dict[str, Any]:
