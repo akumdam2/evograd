@@ -107,22 +107,26 @@ two is what the frontend contributes.
   user, so a filesystem or process search could still find it. Whether they
   edited `evaluate.py` is recorded. Claude Code runs on a Claude model.
 - **Library access.** evograd's frontend preserves what Inductor hands to a
-  vendor library: matrix multiplications and convolutions (cuBLAS/cuDNN) and
-  fused attention (cuDNN SDPA). So with `--library auto` (the default), every
-  agent may call a trusted `vendor_gemm` primitive whenever one call of the
-  reference, traced at the case's configuration (a `TorchFunctionMode`, on the
-  meta device first), reaches a matrix multiplication or convolution (`linear`,
-  `matmul`/`@`, `mm`, `bmm`, `addmm`, `baddbmm`, `einsum`, `_grouped_mm`,
-  `conv*`), however deeply the reference delegates; and the
-  `vendor_sdpa_forward` / `vendor_sdpa_backward` pair whenever it reaches
-  `scaled_dot_product_attention`. The grant is the only library route: the
-  static rules deny the other torch-level library entry points (cuDNN
-  convolutions, normalizations, embeddings, losses, recurrent layers, `torch.nn`,
+  vendor library: matrix multiplications (cuBLAS), convolutions (cuDNN) and
+  fused attention (SDPA). So with `--library auto` (the default), every agent
+  may call the trusted primitive for what one call of the reference, traced at
+  the case's configuration (a `TorchFunctionMode`, on the meta device first),
+  reaches, however deeply the reference delegates: `vendor_gemm` for a matrix
+  multiplication (`linear`, `matmul`/`@`, `mm`, `bmm`, `addmm`, `baddbmm`,
+  `einsum`, `_grouped_mm`), the `vendor_conv_forward` / `vendor_conv_backward`
+  pair for `conv1d` or `conv2d`, and the `vendor_sdpa_forward` /
+  `vendor_sdpa_backward` pair for `scaled_dot_product_attention`. Each runs the
+  kernel eager runs for its inputs: cuDNN attention in training and flash under
+  deterministic algorithms for half precision, memory-efficient attention for
+  float32; the convolution eager's dispatcher picks (cuDNN, or PyTorch's own
+  depthwise kernels). The grant is the only library route: the static rules
+  deny the torch-level library entry points (convolutions included,
+  normalizations, embeddings, losses, recurrent layers, `torch.nn`,
   `torch.func`, C++ extensions, private torch modules), so every other
-  contraction must be written in Triton. There is no convolution primitive: a
-  convolution case is searched through Triton or `vendor_gemm` (im2col). A
-  case whose reference is one preserved call (a bare projection, a bare
-  attention) leaves nothing to evolve: its candidate equals the baseline.
+  contraction must be written in Triton. A case whose reference is one
+  preserved call (a bare projection, convolution or attention) leaves nothing
+  to evolve: its candidate equals the baseline, and the search set lists it as
+  `vendor` (rule E-2).
 
 ---
 
@@ -360,7 +364,7 @@ needs a GPU; `--state` keeps or reuses that calibration.
 | `reference.py` | The forward reference as a self-contained file, ending in `reference_forward = <fn>` | `reference_closure`: starts from the declared forward, copies in every evograd helper and constant it uses, and turns library names into imports. Checked bit-identical to the declared forward for all 63 operators |
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
-| `adbench_primitives.py` | A local `vendor_gemm` so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
+| `adbench_primitives.py` | The granted primitives (`vendor_gemm`, `vendor_conv_*`, `vendor_sdpa_*`) so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
 | `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives and why (`library_policy`; under `auto`, also the library calls one traced reference call reached), scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama_3_2_1b.llama3_swiglu_mlp.swiglu_mlp` (model, then the case id).

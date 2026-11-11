@@ -56,8 +56,8 @@ EvoGrad defines these functions after `# EVOLVE-BLOCK-END`; call them by name
 from the pair, and do not define, import or copy them. Use them for the work
 they cover wherever the reference does it, in the forward and in the backward
 (input and weight gradients alike), and spend Triton on what they cannot fuse.
-They are the only way to reach a vendor contraction or fused attention: every
-other contraction is a Triton `tl.dot`.
+They are the only way to reach a vendor contraction, convolution or fused
+attention: every other contraction is a Triton `tl.dot`.
 
 ```python
 {sources}

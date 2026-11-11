@@ -112,9 +112,11 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
      block, exactly as evograd's own pipelines emit it.
 
    Library access is matched to the frontend's. The unified frontend keeps
-   GEMMs and convolutions in vendor library calls. So `--library auto` (the
-   default) grants the trusted `vendor_gemm` primitive (cuBLAS) whenever the
-   reference contains a contraction.
+   GEMMs, convolutions and fused attention in vendor library calls. So
+   `--library auto` (the default) grants the trusted primitive for each that
+   one call of the reference reaches: `vendor_gemm` (cuBLAS) for a
+   contraction, `vendor_conv` (cuDNN) for a convolution, `vendor_sdpa` for
+   fused attention.
 4. **Same judge.** In-loop scores and feedback come from
    `evograd.evolve.evaluator_entry`, the evaluator `evograd evolve` uses, with
    the environment it sets.
