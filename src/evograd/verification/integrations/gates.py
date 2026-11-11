@@ -38,8 +38,14 @@ judged once more:
   ``gate3_accumulation`` where it sets them); thresholds from
   native/native/compile trajectories.
 
-``verify`` combines every accepted Level-2 candidate; ``evaluate``
-(:mod:`.evaluate`) combines those whose single-site training step is faster.
+``verify`` combines every accepted Level-2 candidate, without timing: a
+verification diagnostic, not a Level-3 result. The benchmark's Level-3
+combination follows :data:`evograd.evaluation.protocol.COMBINATION_RULE`
+(``evograd evaluate``; :mod:`evograd.evaluation.model_group` for several
+agents): the accepted Level-2 candidates whose single-site speedup over eager,
+both with the step replayed from a CUDA graph (T3-G), has a 95% bootstrap
+interval with its lower bound above one; for a model whose eager step cannot
+be captured, the eagerly launched step's interval (T3) decides instead.
 Gate 3 control runs and Gate 2 calibrations do not depend on the candidate and
 are kept under ``--state`` (default ``DIR/controls``) for reuse; the
 candidate's own runs never are. Every report is written to ``DIR``.
@@ -586,8 +592,10 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              controls: str | Path | None = None, state: str | Path | None = None,
              device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
              deadline_min: float | None = None) -> Run:
-    """Load the corpus and the candidate programs; refuse cases the model does not have."""
-    from evograd.verification.payloads import Corpus
+    """Load the corpus and the candidate programs; refuse cases the model does not
+    have, and a corpus captured at another harvest snapshot than the tracked one."""
+    from evograd.benchmark.topdown import load_snapshot
+    from evograd.verification.payloads import Corpus, CorpusError
 
     from .base import observed_cases, sha_file
 
@@ -602,7 +610,17 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     unknown = sorted(set(candidates) - set(cases))
     if unknown:
         raise ValueError(f"not observed cases: {unknown}; known: {sorted(cases)}")
-    return Run(model=model, out=out, state=state, corpus=Corpus.open(corpus_path),
+    corpus = Corpus.open(corpus_path)
+    recorded = corpus.identity.get("snapshot_hash")
+    tracked = load_snapshot(model.name).get("snapshot_hash")
+    if recorded is None or recorded != tracked:
+        raise CorpusError(
+            f"corpus {corpus.corpus_id} was captured at snapshot_hash {recorded}, but "
+            f"{model.name}'s tracked snapshot has snapshot_hash {tracked}; its cases and calls "
+            f"per step may differ. Use a corpus captured at the tracked snapshot, or recapture "
+            f"one: CUBLAS_WORKSPACE_CONFIG=:4096:8 python -m evograd.verification.integrations "
+            f"{model.name} capture --out NEW_DIR")
+    return Run(model=model, out=out, state=state, corpus=corpus,
                corpus_path=Path(corpus_path), cases=cases,
                programs={cid: sha_file(path) for cid, path in candidates.items()},
                paths={cid: str(path) for cid, path in candidates.items()},
@@ -745,7 +763,8 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
            device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
            deadline_min: float | None = None) -> dict[str, Any]:
     """Every gate that applies to each candidate, then the combination of every
-    accepted Level-2 candidate; writes ``DIR/verdict.json``.
+    accepted Level-2 candidate (a diagnostic, not the benchmark's Level-3
+    selection); writes ``DIR/verdict.json``.
 
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
     what does not depend on the candidate -- Gate 3 control runs and Gate 2

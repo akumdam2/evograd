@@ -212,8 +212,6 @@ def main(argv=None):
         for cid, failure in selection["search_failures"].items():
             print(f"Search produced no submission: {cid} ({failure['status']})", flush=True)
         print(f"Results: {job['out']}/evaluation.json", flush=True)
-    if args.model == "olmoe_1b_7b":
-        print("OLMoE has no model-scope verification gates; report this limitation with T3.", flush=True)
     print(shlex.join(command), flush=True)
     if args.dry_run:
         return 0

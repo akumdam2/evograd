@@ -186,9 +186,11 @@ its shapes bind. The cases and their calls per step come from the model's
 harvest snapshot, and that harvest observes the capture's own first step
 (`base.real_run`; see [Regenerating the snapshots](#regenerating-the-snapshots)).
 `capture` refuses, before writing anything, a snapshot whose `run` is missing
-or differs from its own (`base.require_harvested_run`). Gate 1 runs on the
-acceptance payloads (real inputs only).
-Operator Gate 2 calibrates on orders 101/202 and judges 303/404, with gamma 2.
+or differs from its own (`base.require_harvested_run`). Gate 1 and operator
+Gate 2 (gamma 2) both use every payload of the case, orders 101/202/303/404
+(`PAYLOAD_SPLITS`): operator Gate 2 calibrates on those payloads and judges
+fresh executions of the same ones. The corpus split into calibration (101/202)
+and acceptance (303/404) only keeps 303/404 out of the search's feedback.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
 four batches (native repeats, compile and the rounding perturbation) with
 gamma 4, on the whole model's outputs and parameter gradients
@@ -208,13 +210,18 @@ acceptance and report the combination as not applicable. Gate 3 uses the
 model's `Model.gate3_steps`, optimizer settings and accumulation for both the
 single-site and combined runs.
 
-`verify` combines every accepted Level-2 candidate. The benchmark protocol
-(`evograd evaluate`, `evaluation/protocol.py`) selects each agent's positive
-Level-2 candidates: accepted, with single-site Tier 3 speedup over eager whose
-95% bootstrap interval has a lower bound strictly above one. The resulting
-combination still needs its own model Gate 2 and Gate 3; individual passes do
-not establish combined correctness. This deployment path installs Level-2
-model sites, not independent Level-1 artifacts.
+`verify` combines every accepted Level-2 candidate, without timing; that
+combination is a verification diagnostic, not a Level-3 result. The benchmark's
+Level-3 combination is the protocol's (`evograd evaluate`,
+`evaluation/protocol.py`, `COMBINATION_RULE`): each agent's accepted Level-2
+candidates whose single-site speedup over eager, both with the training step
+replayed from one CUDA graph (T3-G), has a 95% bootstrap interval with its
+lower bound strictly above one. A candidate without a T3-G result is not
+selected. A model whose eager step cannot be captured (on GH200, MegaFold and
+OLMoE) is judged by the eagerly launched step's interval (T3) instead. The
+resulting combination still needs its own model Gate 2 and Gate 3; individual
+passes do not establish combined correctness. This deployment path installs
+Level-2 model sites, not independent Level-1 artifacts.
 
 Single-site training records are stored under `gate3_single_site/<case>/`,
 separately from `combination/`. Controls are shared through `--state` when their

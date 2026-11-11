@@ -94,7 +94,7 @@ execution settings.
 | Control pooling | Maximum over four samples |
 | Local boundary replay | `False` |
 | Pass condition | `E2 <= T_E2 AND Emax <= T_Emax` |
-| OLMoE model gates | Disabled |
+| OLMoE expert routing | Each run of a sample uses the native run's top-k choice; router probabilities and gradients stay live |
 
 ### Gate 3 — single-site and combined
 
@@ -134,7 +134,7 @@ execution settings.
 | ConvNeXt Tiny | 50 | 1e-4 | 0 | None | 1 | 3 |
 | DiT-S/2 | 100 | 1e-4 | 0 | None | 1 | 2 |
 | DLRM | 50 | 1e-4 | 0 | None | 1 | 2 |
-| OLMoE | Disabled | — | — | — | — | — |
+| OLMoE | 100 | 3e-5 | 100 | 1.0 | 1 | 2 |
 
 ### Tier 2
 
@@ -242,7 +242,6 @@ execution settings.
 | Combined verification | Model Gate 2 + Gate 3 |
 | Combined acceptance | `gate2_model == passed AND gate3 == passed` |
 | Combined timing baselines | Eager, whole-model compile where available |
-| Accepted OLMoE L3 | Unavailable |
 
 ### Run management
 
@@ -416,13 +415,12 @@ at replacement sites and bitwise reproducibility of its repeated execution.
 Missing/disqualified controls or mismatched policy bindings leave verification
 incomplete. Policies bind scope, reference, environment, numerics, patch set,
 sample identities and content, and formula. Policy schema:
-`evograd-verification-gate2-policy/4`.
+`evograd-verification-gate2-policy/5`.
 
 ## 5. Gate 3: continuous-training agreement
 
 Run single-site Gate 3 only after Gate 1, operator Gate 2, and model Gate 2
-pass. Run it again for the selected combination. OLMoE has no model-scope
-Gate 2 or Gate 3.
+pass. Run it again for the selected combination.
 
 ### Optimizer and data
 
@@ -451,7 +449,7 @@ Current model overrides:
 | convnextv2_tiny | 50 | 1e-4 | 0 | None | 1 | 3 | 3 |
 | dit_s_2 | 100 | 1e-4 | 0 | None | 1 | 4 | 2 |
 | torchrec_dlrm | 50 | 1e-4 | 0 | None | 1 | 4 | 2 |
-| olmoe_1b_7b | Not applicable | — | — | — | — | — | — |
+| olmoe_1b_7b | 100 | 3e-5 | 100 | 1.0 | 1 | 4 | 2 |
 
 Linear warmup at update `t` (1-based) uses
 `target_lr * min(1, t / warmup_updates)`. Consequently, Qwen2-VL's 10-update
@@ -494,8 +492,7 @@ identifier: `evograd-verification-gate3-global-loss-policy/1`.
 
 - L1 acceptance requires Gate 1 and operator Gate 2 to pass.
 - L2 acceptance additionally requires model Gate 2 and single-site Gate 3 to
-  pass where model-scope gates are supported.
-- OLMoE L2 acceptance currently requires only Gate 1 and operator Gate 2.
+  pass.
 - Failed, skipped or incomplete required gates do not count as passed.
 - Executability is separate: the deployed forward/backward must run, return
   the required eager shapes/dtypes, and respect input mutation rules. The
@@ -689,11 +686,6 @@ candidate qualifies, the combination is empty. One qualifying candidate makes
 a one-candidate combination. Passing all individual candidates does not imply
 their combination passes.
 
-OLMoE is a special limitation: individual L2 acceptance omits model gates;
-`verify_combination` explicitly marks model-scope acceptance unavailable.
-Nonempty diagnostic combination timing can still occur, but it must not be
-reported as an accepted L3 result.
-
 ## 10. Reporting, resume and agreement between evaluators
 
 Use the same source tree, including local modifications, dependencies,
@@ -744,9 +736,11 @@ root after switching artifacts; retain earlier reports as historical evidence.
 The older six-agent plan's provisional Gate 3 table is inconsistent with the
 current implementation. Its 1000/200/125-update horizons are not what these
 commands execute. In addition, code comments identify Qwen3.5's Gate 3 setting
-as not yet measured with seeds/faults and Qwen2-VL's shortened horizon as
-interim. Agree on these limitations before naming a run final. Changing
-thresholds because a particular candidate fails defines a different experiment.
+as not yet measured with seeds/faults, OLMoE's Gate 3 optimizer (Qwen3.5's) and
+model Gate 2 factor (the protocol's 4) as not measured on OLMoE, and Qwen2-VL's
+shortened horizon as interim. Agree on these limitations before naming a run
+final. Changing thresholds because a particular candidate fails defines a
+different experiment.
 
 ## 11. Implementation sources
 
