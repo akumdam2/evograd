@@ -364,11 +364,14 @@ def _task_entry(manifest: dict[str, Any], record: dict[str, Any],
                 spec: dict[str, Any]) -> dict[str, Any]:
     """One Level-2 task's frozen record: its primary configuration and supports.
 
-    ``dtype`` is the first positional tensor input's, or the first output's for
-    a module called with keywords only (a decoder layer calls its attention
-    module as ``self_attn(hidden_states=...)``).
+    ``input_shapes`` are the positional tensor inputs, or the ``hidden_states``
+    keyword of a module called with keywords only (a decoder layer calls its
+    attention as ``self_attn(hidden_states=...)``). ``dtype`` is the first
+    input's, or the first output's when no input tensor was recorded.
     """
-    tensors = _tensor_entries(record["inputs"]) or _tensor_entries(record["outputs"])
+    kwargs = record.get("input_kwargs") or {}
+    inputs = (_tensor_entries(record["inputs"])
+              or _tensor_entries([kwargs["hidden_states"]] if "hidden_states" in kwargs else []))
     return {
         "config_id": record["config_id"],
         "harvested_task": record["task"],
@@ -376,9 +379,9 @@ def _task_entry(manifest: dict[str, Any], record: dict[str, Any],
         "frequency": record["frequency"],
         "module_paths": list(record["module_paths"]),
         "layer_indices": list(record["layer_indices"]),
-        "input_shapes": _tensor_entries(record["inputs"]),
+        "input_shapes": inputs,
         "output_shapes": _tensor_entries(record["outputs"]),
-        "dtype": tensors[0]["dtype"],
+        "dtype": (inputs or _tensor_entries(record["outputs"]))[0]["dtype"],
         "params": {
             name: {"shape": meta["shape"], "dtype": meta["dtype"]}
             for name, meta in sorted(record.get("params", {}).items())

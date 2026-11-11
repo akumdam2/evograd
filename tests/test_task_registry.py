@@ -28,12 +28,11 @@ QWEN_LEVEL2 = (
     "qwen3_lm_head_ce",
     "qwen3_swiglu_mlp",
 )
-#: Llama-3-8B's four. A harvested architecture owns its Level-2 identities
-#: rather than borrowing another's, so these are four more tasks and not four
-#: more suites on Qwen3's.
+#: Llama-3.2-1B's three. A harvested architecture owns its Level-2 identities
+#: rather than borrowing another's, so these are more tasks and not more
+#: suites on Qwen3's.
 LLAMA_LEVEL2 = (
-    "llama3_attention",
-    "llama3_qkv_rope",
+    "llama3_attention_block",
     "llama3_residual_rmsnorm",
     "llama3_swiglu_mlp",
 )
@@ -128,7 +127,7 @@ class TestTaskRegistry(unittest.TestCase):
     def test_contains_every_executable_task_exactly_once(self):
         self.assertEqual(len(TASKS), len(set(TASKS)))
         self.assertEqual(len(TASKS), len(PRIMITIVES) + len(MODEL_LEVEL2))
-        self.assertEqual(len(TASKS), 59)
+        self.assertEqual(len(TASKS), 58)
 
     def test_contains_the_qwen_level_two_tasks(self):
         for name in QWEN_LEVEL2:
@@ -161,10 +160,10 @@ class TestTaskRegistry(unittest.TestCase):
         self.assertNotIn("olmoe_router", TASKS)
 
     def test_the_two_models_share_no_level_two_task(self):
-        """Each architecture's four boundaries are its own.
+        """Each architecture's boundaries are its own.
 
-        Three of Llama-3's four compute the same mathematics as Qwen3's, and
-        the implementation is shared. The *task* is not: a report row, a
+        Llama's MLP and residual boundaries compute the same mathematics as
+        Qwen3's, and the implementation is shared. The *task* is not: a report row, a
         candidate program and a calibration file all key off the name, so one
         key serving two models' widths would make each of them ambiguous.
         """

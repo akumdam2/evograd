@@ -1,10 +1,10 @@
 """Tier 3 for Llama-3.2-1B: replace an operator inside the real model.
 
-Four sites in the live ``LlamaForCausalLM`` can be swapped without touching the
+Three sites in the live ``LlamaForCausalLM`` can be swapped without touching the
 call site, the model state, the parameter names, or the training loop.
 Correctness is judged by the verification package's Gates 1/2/3.
 
-    sites.py      the four adapters, and what "production" spells at each
+    sites.py      the three adapters, and what "production" spells at each
     workload.py   building the canonical step, feeding it, its loss
     training.py   the synthetic train/validation batch streams
 

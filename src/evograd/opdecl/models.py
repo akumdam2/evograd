@@ -172,6 +172,7 @@ class ModelConfig:
         Projections, any per-head norms, the rotary embedding, causal
         grouped-query SDPA and the output projection: the union of
         :meth:`qkv_norm_rope_dims` and :meth:`causal_gqa_attention_dims`.
+        The widths are the projection prefix's: ``o_proj`` is ``[H, QO]``.
         """
         return {
             "B": batch,

@@ -36,11 +36,11 @@ WORKLOAD = "llama_3_2_1b"
 #: Llama-3's attention has no per-head query/key RMSNorm, so ``rmsnorm`` feeds
 #: only the residual fusion here where in Qwen3 it also feeds the QKV boundary.
 COMPOSES_INTO = {
-    "linear_no_bias": ("llama3_qkv_rope", "llama3_attention", "llama3_swiglu_mlp"),
+    "linear_no_bias": ("llama3_attention_block", "llama3_swiglu_mlp"),
     "rmsnorm": ("llama3_residual_rmsnorm",),
-    "rope": ("llama3_qkv_rope",),
+    "rope": ("llama3_attention_block",),
     "swiglu": ("llama3_swiglu_mlp",),
-    "causal_gqa_attention": ("llama3_attention",),
+    "causal_gqa_attention": ("llama3_attention_block",),
     "cross_entropy": (),
 }
 

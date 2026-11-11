@@ -15,6 +15,9 @@ q/k norms; ``q_proj`` and ``o_proj`` share one linear configuration.
   the call's output cotangent. Gradients are cloned in the hook (strides kept).
 * Input gradients recorded by hooks are model-level totals, so they are not
   stored; the gates recompute each payload's local VJP from the reference.
+* The attention block (``llama3_attention_block``) is the ``LlamaAttention``
+  module: its ``hidden_states``, the four projection weights and one row of
+  the shared rotary tables in, its output and that output's cotangent out.
 * Residual fusion sites (``llama3_residual_rmsnorm``): 16 within-layer, 15
   cross-layer and the final norm's sum, 32 in all. The final sum has no
   consumer; its cotangent is supplied as zeros and recorded as such.
@@ -146,8 +149,7 @@ class LiveCapture:
             out = original_sdpa(query, key, value, *args, **kwargs)
             record = {"q": query.detach(), "k": key.detach(), "v": value.detach(), "o": out.detach(),
                       "attn_mask_is_none": kwargs.get("attn_mask", args[0] if args else None) is None}
-            for name, tensor in (("dq", query), ("dk", key), ("dv", value), ("do", out)):
-                capture._grad(record, name, tensor)
+            capture._grad(record, "do", out)
             capture.sdpa.append(record)
             return out
 
@@ -291,22 +293,18 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
                    {"target": "labels as ForCausalLMLoss passes them (already shifted once)",
                     "ignored_rows": int((r["target"] == -100).sum())})
 
-    for layer, r in enumerate(capture.attn):
-        attn, sdpa = modules[r["path"]], capture.sdpa[layer]
-        yield emit("llama3_qkv_rope", 2,
-                   {"path": f"model.layers.{layer}.self_attn#qkv_rope", "layer": layer,
-                    "role": "qkv_rope", "kind": "boundary:LlamaAttention[:3]"},
+    for r in capture.attn:
+        attn, layer = modules[r["path"]], layer_index(r["path"])
+        if not capture.sdpa[layer]["attn_mask_is_none"]:
+            raise ValueError("an attention call with an explicit mask is outside the declared case")
+        yield emit("llama3_attention_block", 2,
+                   {"path": f"{r['path']}#attention_block", "layer": layer,
+                    "role": "attention_block", "kind": "boundary:LlamaAttention"},
                    {"x": r["x"], "q_weight": attn.q_proj.weight, "k_weight": attn.k_proj.weight,
-                    "v_weight": attn.v_proj.weight, "cos": shared_row(r["cos"]),
-                    "sin": shared_row(r["sin"])},
-                   {"dq": sdpa["dq"], "dk": sdpa["dk"], "dv": sdpa["dv"]},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"]},
-                   {"cotangents": "SDPA input gradients (head-major views, as the model delivers them)"})
-        yield emit("llama3_attention", 2,
-                   {"path": f"model.layers.{layer}.self_attn#attention", "layer": layer,
-                    "role": "attention", "kind": "boundary:sdpa+o_proj"},
-                   {"q": sdpa["q"], "k": sdpa["k"], "v": sdpa["v"], "o_weight": attn.o_proj.weight},
-                   {"dout": r["dy"]}, {"out": r["y"]})
+                    "v_weight": attn.v_proj.weight, "o_weight": attn.o_proj.weight,
+                    "cos": shared_row(r["cos"]), "sin": shared_row(r["sin"])},
+                   {"dout": r["dy"]}, {"out": r["y"]},
+                   {"cos_sin": "first row of the model's [B, T, D] table (rows verified identical)"})
 
     for r in capture.mlp:
         mlp, layer = modules[r["path"]], layer_index(r["path"])

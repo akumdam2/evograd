@@ -198,21 +198,20 @@ class TestLlamaOwnershipSplit(unittest.TestCase):
             ]
             self.assertEqual(offenders, [], f"{path}: {offenders}")
 
-    def test_the_benchmark_side_keeps_capture_and_artifact(self):
-        for relative in ("levels/level1/manifest.py",
-                         "levels/level2/manifest.py",
-                         "layer/artifact.py",
-                         "layer/capture.py",
-                         "layer/prepare.py"):
+    def test_the_benchmark_side_keeps_its_manifests(self):
+        """The payloads come from the real-payload capture; the synthetic
+        layer-artifact capture is gone."""
+        for relative in ("levels/level1/manifest.py", "levels/level2/manifest.py"):
             with self.subTest(module=relative):
                 self.assertTrue((self.LLAMA_BENCH / relative).is_file())
+        self.assertEqual(list((self.LLAMA_BENCH / "layer").glob("*.py")), [])
 
-    def test_each_site_package_owns_its_contract_reference_and_capture(self):
-        """Four site packages, as Qwen3 has, rather than four flat modules."""
+    def test_each_site_package_owns_its_contract_and_reference(self):
+        """One site package per site rather than flat modules."""
         from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest
 
         for site in manifest.SITES:
-            for part in ("__init__.py", "task.py", "reference.py", "capture.py"):
+            for part in ("__init__.py", "task.py", "reference.py"):
                 with self.subTest(site=site, part=part):
                     self.assertTrue(
                         (self.LLAMA_BENCH / "levels" / "level2" / site / part).is_file(),

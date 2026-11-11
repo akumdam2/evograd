@@ -270,21 +270,43 @@ class NormBackwardStatements(unittest.TestCase):
         self.assertIn("dh = r * (g - xhat * mean(g * xhat, -1))", text)
         self.assertIn("dt*cos - rotate_half(dt*sin)", text)
 
-    def test_llama3_qkv_rope(self):
+    def test_llama3_attention_block(self):
         B, T, H, HQ, HK, D = 2, 5, 12, 4, 2, 8
+        g = HQ // HK
         x = _randn(B, T, H)
-        wq, wk, wv = _randn(HQ * D, H), _randn(HK * D, H), _randn(HK * D, H)
+        # Projections at their initialized scale: the declared forward takes the
+        # scores and softmax in float32, and unit-scale weights would make the
+        # scores large enough for that rounding to exceed the tolerance.
+        wq, wk, wv = (_randn(n * D, H) * H**-0.5 for n in (HQ, HK, HK))
+        wo = _randn(H, HQ * D) * (HQ * D) ** -0.5
         cos, sin = _rope_tables(T, D)
-        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv, "cos": cos, "sin": sin}
-        up = _upstream("llama3_qkv_rope", inputs)
-        flat = lambda d, heads: d.transpose(1, 2).reshape(B, T, heads * D)  # noqa: E731
-        dq_flat = flat(_unrotate(up["dq"], cos, sin), HQ)
-        dk_flat = flat(_unrotate(up["dk"], cos, sin), HK)
-        dv_flat = flat(up["dv"], HK)
+        inputs = {"x": x, "q_weight": wq, "k_weight": wk, "v_weight": wv, "o_weight": wo,
+                  "cos": cos, "sin": sin}
+        up = _upstream("llama3_attention_block", inputs)
+        dout = up["dout"]
+        heads = lambda t, n: t.view(B, T, n, D).transpose(1, 2)  # noqa: E731
+        rot = lambda t: t * cos.unsqueeze(1) + _rotate_half(t) * sin.unsqueeze(1)  # noqa: E731
+        q, k, v = rot(heads(x @ wq.T, HQ)), rot(heads(x @ wk.T, HK)), heads(x @ wv.T, HK)
+        ke, ve = k.repeat_interleave(g, 1), v.repeat_interleave(g, 1)
+        future = ~torch.ones(T, T, dtype=torch.bool).tril()
+        P = torch.softmax((q @ ke.transpose(-2, -1) / D**0.5).masked_fill(future, float("-inf")), -1)
+        merged = (P @ ve).transpose(1, 2).reshape(B, T, HQ * D)
+        dattn = (dout @ wo).view(B, T, HQ, D).transpose(1, 2)
+        dP = dattn @ ve.transpose(-2, -1)
+        dS = P * (dP - (dP * P).sum(-1, keepdim=True))
+        group = lambda t: t.view(B, HK, g, T, D).sum(2)  # noqa: E731
+        dq_rot = dS @ ke / D**0.5
+        dk_rot = group(dS.transpose(-2, -1) @ q / D**0.5)
+        dv = group(P.transpose(-2, -1) @ dattn)
+        flat = lambda d, n: d.transpose(1, 2).reshape(B, T, n * D)  # noqa: E731
+        dq_flat = flat(_unrotate(dq_rot, cos, sin), HQ)
+        dk_flat = flat(_unrotate(dk_rot, cos, sin), HK)
+        dv_flat = flat(dv, HK)
         outer = lambda d: torch.einsum("bto,bth->oh", d, x)  # noqa: E731
-        self.assertGrads("llama3_qkv_rope", inputs, up, {
+        self.assertGrads("llama3_attention_block", inputs, up, {
             "dx": dq_flat @ wq + dk_flat @ wk + dv_flat @ wv,
-            "dq_weight": outer(dq_flat), "dk_weight": outer(dk_flat), "dv_weight": outer(dv_flat)})
+            "dq_weight": outer(dq_flat), "dk_weight": outer(dk_flat), "dv_weight": outer(dv_flat),
+            "do_weight": torch.einsum("bth,bto->ho", dout, merged)})
 
     def test_olmoe_qkv_norm_rope(self):
         B, T, H, HQ, HK, D = 2, 5, 12, 4, 2, 8

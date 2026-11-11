@@ -24,19 +24,12 @@ Level-1 mapping is the shared decoder one unchanged: every role Llama presents
 HuggingFace spelling already in it. Llama has no ``q_norm``/``k_norm``, and
 those entries simply never match.
 
-:data:`TASK_SOURCES` carries all four Level-2 boundaries. A Level-2 entry names
-a *declared operator*, and all four now exist: ``llama3_qkv_rope`` was added
-because ``qwen3_qkv_norm_rope`` bakes in the per-head normalization Llama does
-not have, and the other three declarations are dimension-parameterized and
-shared with Qwen3 -- their ``qwen3_`` prefix records which workload first
-harvested them, not which model runs them.
-
-Note the one structural difference the extraction has to survive: Llama's
-projection task has **no** ``q_norm``/``k_norm`` supporting configurations,
-because there is nothing to observe. A shared entry with those roles would find
-no match and fail the extraction rather than producing a smaller snapshot, which
-is why the two workloads state their task sources separately instead of sharing
-one table.
+:data:`TASK_SOURCES` carries the three Level-2 boundaries, each keyed by this
+model's own declared task. Llama's attention block has **no** ``q_norm``/
+``k_norm`` supporting configurations, because there is nothing to observe; a
+shared entry with those roles would find no match and fail the extraction
+rather than producing a smaller snapshot, which is why the two workloads state
+their task sources separately instead of sharing one table.
 """
 
 from __future__ import annotations
@@ -83,10 +76,8 @@ SNAPSHOT_PATH = Path(__file__).with_name("snapshot.json")
 LEVEL1_SOURCES: dict[str, dict[str, Any]] = DECODER_LEVEL1
 
 #: Level-2 tasks the snapshot carries, keyed by *this model's* task
-#: identities. Three of the four boundaries compute the same mathematics
-#: Qwen3-0.6B does, but a snapshot records what one captured step observed, so
-#: it is keyed by the task those observations belong to and never by another
-#: model's.
+#: identities. A snapshot records what one captured step observed, so it is
+#: keyed by the task those observations belong to and never by another model's.
 TASK_SOURCES: dict[str, dict[str, Any]] = {
     "llama3_swiglu_mlp": {
         "task": "mlp",
@@ -111,40 +102,24 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
         },
         "derived": "fusion_sites",
     },
-    # The projection task's primary configuration is the RoPE application: it is
-    # the last step of the boundary and its two outputs *are* q and k, in the
-    # exact layout the next task receives them. v never passes through RoPE, so
-    # its observed shape and stride are sourced from where it is consumed -- the
-    # SDPA call -- rather than invented.
+    # The attention block's primary configuration is the `LlamaAttention` module
+    # itself, so its frequency is the module's calls per step (one per layer).
+    # The decoder layer passes `hidden_states=` by keyword, so the record's
+    # input is its keyword tensor. The module's inner calls are supporting
+    # configurations; there is no `q_norm`/`k_norm` to observe.
     #
-    # Two supporting roles fewer than Qwen3's: there is no `q_norm` and no
-    # `k_norm` to observe, which is exactly the difference that made
-    # `llama3_qkv_rope` a separate declaration.
-    "llama3_qkv_rope": {
-        "task": "rope_apply",
-        "roles": ["apply_rotary_pos_emb"],
+    # `q_proj` and `o_proj` are both 2048 -> 2048, so the harvest deduplicates
+    # them into one configuration and `q_projection` and `output_projection`
+    # resolve to the same record. They really are the same shape.
+    "llama3_attention_block": {
+        "task": "attention",
+        "roles": ["self_attn"],
         "supporting_tasks": {
             "q_projection": {"task": "linear", "roles": ["q_proj"]},
             "kv_projection": {"task": "linear", "roles": ["k_proj", "v_proj"]},
-            "consumer": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
-            "enclosing_attention": {"task": "attention", "roles": ["self_attn"]},
-        },
-    },
-    # The attention task's primary configuration is the SDPA call itself; the
-    # output projection is the second half of the same boundary and is carried
-    # as a supporting configuration rather than a separate task.
-    #
-    # Here `q_proj` and `o_proj` are both 2048 -> 2048, so the harvest
-    # deduplicates them into one configuration and this role and the projection
-    # task's `q_projection` resolve to the same record. That is correct rather
-    # than a collision: they really are the same shape, and both components
-    # re-derive it.
-    "llama3_attention": {
-        "task": "sdpa",
-        "roles": ["scaled_dot_product_attention"],
-        "supporting_tasks": {
+            "rope": {"task": "rope_apply", "roles": ["apply_rotary_pos_emb"]},
+            "sdpa": {"task": "sdpa", "roles": ["scaled_dot_product_attention"]},
             "output_projection": {"task": "linear", "roles": ["o_proj"]},
-            "enclosing_attention": {"task": "attention", "roles": ["self_attn"]},
         },
     },
 }

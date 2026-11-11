@@ -1,11 +1,11 @@
 """Drop-in replacement sites inside a real ``LlamaForCausalLM``.
 
-Four places in the model where a kernel can be swapped, and the machinery that
+Three places in the model where a kernel can be swapped, and the machinery that
 puts one there without the call site, the state dict, the parameters, or the
 training loop noticing:
 
-    qkv_rope          projections, then RoPE
-    attention         causal GQA SDPA, then the output projection
+    attention_block   the whole LlamaAttention module: projections, RoPE,
+                      causal GQA SDPA, the output projection
     swiglu_mlp        the gated MLP block
     residual_rmsnorm  a residual add immediately followed by an RMSNorm
 
@@ -34,15 +34,13 @@ changes another.
 **Two differences from the Qwen3 registry, and neither is cosmetic.**
 
 *No per-head query/key normalization.* ``LlamaAttention`` projects, reshapes,
-transposes and rotates; there is no ``q_norm``/``k_norm``. The site is therefore
-``qkv_rope`` against the ``llama3_qkv_rope`` declaration, with four active
-arguments rather than six, and the two site names deliberately differ so that
-neither registry's identity control, baseline discovery or report can reach the
-other's sites.
+transposes and rotates; there is no ``q_norm``/``k_norm``. The attention site is
+gated against ``llama3_attention_block``, whose arguments are the module's
+input, its four projection weights and the rotary tables.
 
 *No sliding window.* ``LlamaAttention.forward`` does not pass ``sliding_window``
 to the attention interface and the module has no such attribute, so
-:func:`production_attention` must not invent one. Passing Qwen3's spelling here
+:func:`production_attention_block` must not invent one. Passing Qwen3's spelling here
 would raise on a model that has never had the attribute -- which is the good
 case -- or silently select a different attention kernel, which is not.
 """
@@ -57,37 +55,16 @@ import torch
 
 from evograd.evaluation.tier3.patch import ModulePatch, PatchProvenance, Site, SiteRegistry
 
-#: The four site names. They are the ``--sites`` spellings and the report keys.
-#: ``qkv_rope``, not Qwen3's ``qkv_norm_rope``: a different operator with a
-#: different argument list, and a name collision would let a Qwen3 kernel set be
-#: restricted onto a Llama model without complaint.
-SITE_QKV = "qkv_rope"
-SITE_ATTENTION = "attention"
+#: The three site names. They are the ``--sites`` spellings and the report keys.
+SITE_ATTENTION = "attention_block"
 SITE_MLP = "swiglu_mlp"
 SITE_RESIDUAL = "residual_rmsnorm"
 
-#: Which sites share one installed adapter. Patching any member of a group
-#: installs that group's adapter, and the adapter runs *every* member's boundary
-#: on the same call -- the unpatched ones through their production spelling.
-#: ``qkv_rope`` and ``attention`` are one LlamaAttention adapter with two
-#: switches, so patching either makes both live. Anything reading counts has to
-#: know that, and this is the one place it is written down.
-ADAPTER_GROUPS: tuple[tuple[str, ...], ...] = (
-    (SITE_QKV, SITE_ATTENTION),
-    (SITE_MLP,),
-    (SITE_RESIDUAL,),
-)
-
-#: Site -> the operator declaration that site is gated against.
+#: Site -> the operator declaration that site is gated against. Each
+#: architecture owns its own keys, so a report row, a candidate program and a
+#: calibration file are never ambiguous about whose widths produced them.
 SITE_OPS: dict[str, str] = {
-    SITE_QKV: "llama3_qkv_rope",
-    # Structurally the same boundary Qwen3 declares -- causal GQA SDPA followed
-    # by o_proj -- at Llama's dims. The mathematics is shared (one
-    # implementation, in benchmark.topdown.common.level2_references); the task
-    # is not. Each architecture owns its own key, so a report row, a candidate
-    # program and a calibration file are never ambiguous about whose widths
-    # produced them.
-    SITE_ATTENTION: "llama3_attention",
+    SITE_ATTENTION: "llama3_attention_block",
     SITE_MLP: "llama3_swiglu_mlp",
     SITE_RESIDUAL: "llama3_residual_rmsnorm",
 }
@@ -96,25 +73,6 @@ SITE_OPS: dict[str, str] = {
 #: **Empty until a harvest has been run**, which is why :func:`_observed`
 #: tolerates its absence rather than failing the registry build.
 OBSERVED_SUITE = "llama_3_2_1b_observed"
-
-
-def live_sites(requested) -> tuple[str, ...]:
-    """Every site that becomes a live boundary when ``requested`` is patched.
-
-    A superset of ``requested``: the sites that merely come along because they
-    share an adapter with something that was asked for.
-    """
-    wanted = set(requested)
-    live: set[str] = set()
-    for group in ADAPTER_GROUPS:
-        if wanted.intersection(group):
-            live.update(group)
-    return tuple(sorted(live))
-
-
-def supporting_sites(requested) -> tuple[str, ...]:
-    """The live sites that were carried along rather than asked for."""
-    return tuple(sorted(set(live_sites(requested)) - set(requested)))
 
 
 #: Attribute prefix for everything an adapter attaches to a live module. Plain
@@ -198,18 +156,20 @@ class ResidualCarrier:
 # ── the production spellings, as the model calls them ────────────────────────
 
 
-def production_qkv_rope(module, hidden_states, cos, sin):
-    """Exactly ``LlamaAttention.forward``'s first six lines, on ``module``.
+def production_attention_block(module, hidden_states, cos, sin, attention_mask, **kwargs):
+    """Exactly ``LlamaAttention.forward`` without a cache, on ``module``.
 
     Not a re-derivation: the same submodule calls in the same order, so
-    replacing the structure changes no arithmetic. ``apply_rotary_pos_emb`` is
-    imported from the installed Transformers rather than reimplemented.
-
-    No ``q_norm``/``k_norm``. That absence is the whole difference between this
-    boundary and Qwen3's, and it is why a shared adapter would have to branch on
-    an architecture rather than on a site.
+    replacing the structure changes no arithmetic. ``apply_rotary_pos_emb`` and
+    the attention interface are the installed Transformers' own. No
+    ``q_norm``/``k_norm``, and no ``sliding_window``: ``LlamaAttention`` has no
+    such attribute and does not pass one.
     """
-    from transformers.models.llama.modeling_llama import apply_rotary_pos_emb
+    from transformers.models.llama.modeling_llama import (
+        ALL_ATTENTION_FUNCTIONS,
+        apply_rotary_pos_emb,
+        eager_attention_forward,
+    )
 
     input_shape = hidden_states.shape[:-1]
     hidden_shape = (*input_shape, -1, module.head_dim)
@@ -217,29 +177,15 @@ def production_qkv_rope(module, hidden_states, cos, sin):
     key_states = module.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
     value_states = module.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-    return query_states, key_states, value_states
-
-
-def production_attention(module, query, key, value, attention_mask, input_shape, **kwargs):
-    """Exactly ``LlamaAttention.forward``'s attention interface and output projection.
-
-    Note what is *not* forwarded: ``sliding_window``. ``LlamaAttention`` has no
-    such attribute and does not pass one, so reproducing Qwen3's call here would
-    be a different call, not the same one written twice.
-    """
-    from transformers.models.llama.modeling_llama import (
-        ALL_ATTENTION_FUNCTIONS,
-        eager_attention_forward,
-    )
 
     attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
         module.config._attn_implementation, eager_attention_forward
     )
     attn_output, attn_weights = attention_interface(
         module,
-        query,
-        key,
-        value,
+        query_states,
+        key_states,
+        value_states,
         attention_mask,
         dropout=0.0 if not module.training else module.attention_dropout,
         scaling=module.scaling,
@@ -286,13 +232,11 @@ def _observed(op_name: str):
 
 
 def build_registry() -> SiteRegistry:
-    """Llama-3's four sites, with any calibrated shapes attached to preflight."""
+    """Llama-3's three sites, with any calibrated shapes attached to preflight."""
     return SiteRegistry(
         name="llama_3_2_1b",
         sites=(
-            Site(SITE_QKV, SITE_OPS[SITE_QKV], production_qkv_rope,
-                 preflight=_observed(SITE_OPS[SITE_QKV])),
-            Site(SITE_ATTENTION, SITE_OPS[SITE_ATTENTION], production_attention,
+            Site(SITE_ATTENTION, SITE_OPS[SITE_ATTENTION], production_attention_block,
                  preflight=_observed(SITE_OPS[SITE_ATTENTION])),
             Site(SITE_MLP, SITE_OPS[SITE_MLP], production_swiglu_mlp,
                  preflight=_observed(SITE_OPS[SITE_MLP])),
@@ -439,76 +383,52 @@ def _tap(state, site: str, inputs: dict, outputs, key=_UNSET, emitted=None):
     return outputs
 
 
-# ── the composite attention adapter ──────────────────────────────────────────
+# ── the attention adapter ────────────────────────────────────────────────────
 
 
 def _attention_forward(self, hidden_states, position_embeddings=None,
                        attention_mask=None, past_key_values=None, **kwargs):
-    """One adapter, two independently selectable sites, one module replaced.
+    """The attention block site on one ``LlamaAttention``.
 
     The external signature is the installed Transformers 5.16.1 one and the
     return is its ``(attn_output, attn_weights)`` pair, so ``LlamaDecoderLayer``
     calls this exactly as it called the original.
     """
     state = getattr(self, _TAG + "state")
-    counters = state["counters"]
     if past_key_values is not None:
         raise NotImplementedError(
             "the Llama-3 tier-3 attention adapter is a training-step boundary; "
             "cache-enabled execution is not supported"
         )
     cos, sin = position_embeddings
-    input_shape = hidden_states.shape[:-1]
-
-    qkv_kernel = state["kernels"].get(SITE_QKV)
-    counters.hit(SITE_QKV)
-    qkv_inputs = {
+    kernel = state["kernels"].get(SITE_ATTENTION)
+    state["counters"].hit(SITE_ATTENTION)
+    inputs = {
         "x": hidden_states, "q_weight": self.q_proj.weight,
         "k_weight": self.k_proj.weight, "v_weight": self.v_proj.weight,
-        "cos": cos, "sin": sin,
+        "o_weight": self.o_proj.weight, "cos": cos, "sin": sin,
     }
-    qkv_inputs, qkv_emitted = _probe_inputs(state, qkv_inputs, ("x",))
-    if qkv_kernel is None or _is_production(qkv_kernel, SITE_QKV):
-        query, key, value = _tap(
-            state, SITE_QKV, qkv_inputs,
-            production_qkv_rope(self, qkv_inputs["x"], cos, sin),
-            emitted=qkv_emitted,
-        )
-    else:
-        # The declared contract's cos/sin are [1, T, D]: one row of positions,
-        # broadcast over the batch. The model's are [B, T, D] with identical
-        # rows -- `position_ids` has no padding here -- so taking the first row
-        # is exact rather than an approximation, and it is checked once.
-        qkv_inputs["cos"] = _shared_positions(state, cos)
-        qkv_inputs["sin"] = _shared_positions(state, sin)
-        query, key, value = _tap(state, SITE_QKV, qkv_inputs, qkv_kernel(
-            qkv_inputs["x"],
-            self.q_proj.weight, self.k_proj.weight, self.v_proj.weight,
-            qkv_inputs["cos"], qkv_inputs["sin"],
-        ), emitted=qkv_emitted)
-
-    attn_kernel = state["kernels"].get(SITE_ATTENTION)
-    counters.hit(SITE_ATTENTION)
-    attn_inputs = {"q": query, "k": key, "v": value, "o_weight": self.o_proj.weight}
-    attn_inputs, attn_emitted = _probe_inputs(state, attn_inputs, ("q", "k", "v"))
-    if attn_kernel is None or _is_production(attn_kernel, SITE_ATTENTION):
-        out, weights = production_attention(
-            self, attn_inputs["q"], attn_inputs["k"], attn_inputs["v"],
-            attention_mask, input_shape, **kwargs
-        )
-        return _tap(state, SITE_ATTENTION, attn_inputs, out,
-                    emitted=attn_emitted), weights
+    inputs, emitted = _probe_inputs(state, inputs, ("x",))
+    if kernel is None or _is_production(kernel, SITE_ATTENTION):
+        out, weights = production_attention_block(
+            self, inputs["x"], cos, sin, attention_mask, **kwargs)
+        return _tap(state, SITE_ATTENTION, inputs, out, emitted=emitted), weights
     if attention_mask is not None:
         raise NotImplementedError(
             "the attention declaration covers the mask-free causal branch "
             "(attn_mask=None, is_causal=True), which is what the canonical "
             "workload takes; this call supplied an explicit attention mask"
         )
-    # The three outputs of the first site feed the second directly: no detach,
-    # no recomputation, no contiguous() the contract does not ask for.
-    return _tap(state, SITE_ATTENTION, attn_inputs,
-                attn_kernel(attn_inputs["q"], attn_inputs["k"], attn_inputs["v"],
-                            self.o_proj.weight), emitted=attn_emitted), None
+    # The declared contract's cos/sin are [1, T, D]: one row of positions,
+    # broadcast over the batch. The model's are [B, T, D] with identical rows
+    # -- `position_ids` has no padding here -- so taking the first row is exact
+    # rather than an approximation, and it is checked once.
+    inputs["cos"] = _shared_positions(state, cos)
+    inputs["sin"] = _shared_positions(state, sin)
+    return _tap(state, SITE_ATTENTION, inputs, kernel(
+        inputs["x"], self.q_proj.weight, self.k_proj.weight, self.v_proj.weight,
+        self.o_proj.weight, inputs["cos"], inputs["sin"],
+    ), emitted=emitted), None
 
 
 def _shared_positions(state, table: torch.Tensor) -> torch.Tensor:
@@ -524,7 +444,7 @@ def _shared_positions(state, table: torch.Tensor) -> torch.Tensor:
         if not bool(torch.equal(table[0], table[1])):
             raise NotImplementedError(
                 "the rotary tables differ across the batch, so the declared "
-                "[1, T, D] cos/sin cannot represent them; llama3_qkv_rope is "
+                "[1, T, D] cos/sin cannot represent them; llama3_attention_block is "
                 "declared for the unpadded canonical workload"
             )
         state["positions_checked"] = True
@@ -726,7 +646,6 @@ def expected_counts(layers: int) -> dict[str, int]:
     difference between ``2 * layers`` and ``2 * layers + 1``.
     """
     return {
-        SITE_QKV: layers,
         SITE_ATTENTION: layers,
         SITE_MLP: layers,
         SITE_RESIDUAL: 2 * layers,
@@ -762,16 +681,13 @@ def patch_model(model, kernels, counters: SiteCounters | None = None,
         )
     paths: dict[str, tuple[str, ...]] = {}
 
-    attention_group = next(g for g in ADAPTER_GROUPS if SITE_QKV in g)
-    attention_sites = [s for s in attention_group if s in selected]
-    if attention_sites:
+    if SITE_ATTENTION in selected:
         touched = []
         for index, layer in enumerate(model.model.layers):
             install_attention_adapter(layer.self_attn, selected, counters, index)
             touched.append(f"model.layers.{index}.self_attn")
-        _require(len(touched), layers, attention_sites, "LlamaAttention")
-        for site in attention_sites:
-            paths[site] = tuple(touched)
+        _require(len(touched), layers, [SITE_ATTENTION], "LlamaAttention")
+        paths[SITE_ATTENTION] = tuple(touched)
 
     if SITE_MLP in selected:
         touched = []
@@ -816,8 +732,7 @@ def module_patches() -> tuple[ModulePatch, ...]:
         return lambda module: type(module).__name__ == kind
 
     return (
-        ModulePatch(SITE_QKV, _named("LlamaAttention"), lambda o, k: o,
-                    sites=(SITE_ATTENTION,)),
+        ModulePatch(SITE_ATTENTION, _named("LlamaAttention"), lambda o, k: o),
         ModulePatch(SITE_MLP, _named("LlamaMLP"), lambda o, k: o),
         ModulePatch(SITE_RESIDUAL, _named("LlamaDecoderLayer"), lambda o, k: o),
     )

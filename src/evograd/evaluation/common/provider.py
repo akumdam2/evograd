@@ -297,7 +297,7 @@ def torch_compile_provider(
 
     # The *runtime* spelling, because that is what `pytorch_autograd_provider`
     # above is timed through. Compiling `op.forward` instead would put the two
-    # baselines on different functions -- for `llama3_attention`, a compiled
+    # baselines on different functions -- for `llama3_attention_block`, a compiled
     # score-matrix implementation against eager SDPA -- and the compiled row
     # would describe the declaration rather than what a compiler can do with
     # the model's own code.

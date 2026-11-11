@@ -16,10 +16,8 @@ llama3_2_1b/
 ├── declaration.py       L3 (whole-model) facts shared by top-down tools
 ├── levels/
 │   ├── level3/          model spec, build, smoke, and report
-│   ├── level2/          QKV, attention, SwiGLU, residual/RMSNorm boundaries
+│   ├── level2/          attention block, SwiGLU, residual/RMSNorm boundaries
 │   └── level1/          primitive-to-composite mapping
-├── layer/               captured decoder-layer artifact (the L2 sites' real
-│                        invocations; not a level)
 └── harvest/             observation, manifest, and snapshot extraction
 ```
 
@@ -30,23 +28,21 @@ The legacy `llama3_decoder_layer` direct-block task that used to sit under
 `ops/level3` is gone. It was not deleted *because of* this workload and it did
 not survive into it: the two coexisted for a while — the ownership refactor
 removed it on `main` while this workload was being developed on a branch — and
-the branch's own decoder-layer material is the capture and replay under
-`layer/`, not that declaration. Nothing here inherits from it.
+nothing here inherits from it.
 
 ## Canonical workload
 
-- L2: `llama3_qkv_rope`, `llama3_attention`, `llama3_swiglu_mlp` and
-  `llama3_residual_rmsnorm` model boundaries. 32 layers → **160 invocations**.
-  Each Level-2 identity is this model's own: an architecture does not borrow
-  another's task key, even where the mathematics is the same.
+- L2: `llama3_attention_block` (the whole `LlamaAttention` module),
+  `llama3_swiglu_mlp` and `llama3_residual_rmsnorm` model boundaries. 16 layers
+  → 16 + 16 + 32 = **64 invocations** per step. Each Level-2 identity is this
+  model's own: an architecture does not borrow another's task key, even where
+  the mathematics is the same.
 - L1: the primitive mapping for those boundaries, bound as this model's own
   observed suites onto the shared primitive contracts. **The harvest has not
   been run**, so every one of those suites is presently empty and no primitive
   declaration is changed by them; they appear the moment the snapshot is
   tracked, with no edit here and none in any primitive.
 - L3: the whole training step (`levels/level3/`).
-- `layer/`: representative decoder-layer capture, on the same footing as
-  Qwen3's — a data source for L2, not a level.
 
 Benchmark Level describes integration scope. T1/T2/T3 are evaluation execution
 contexts; `fast`/`fair` are measurement modes.
@@ -72,9 +68,8 @@ checkpoint on the first WikiText-2 TRAIN batch of data order 101, built by
 (`CUBLAS_WORKSPACE_CONFIG=:4096:8`). The snapshot records that run (`run`), and
 a capture refuses a snapshot that does not record its own run. `--synthetic`
 harvests the random-weight, synthetic-token canonical spec instead (debug
-overrides apply to it); the layer capture replays that step and reads such a
-harvest, until the tracked snapshot is regenerated from the real run (see
-"Regenerating the snapshots" in `src/evograd/verification/README.md`).
+overrides apply to it). See "Regenerating the snapshots" in
+`src/evograd/verification/README.md`.
 
 The smoke entry point takes no subcommand: `--out` and the override flags go
 directly to `python -m evograd.benchmark.topdown.llama3_2_1b`.
@@ -91,9 +86,6 @@ In the order they unblock each other:
    Llama-3-8B in BF16 is ~16 GiB of weights and ~16 GiB of gradients before
    activations. The Level-3 step takes no optimizer step, so it fits an
    80–120 GiB card; `--layers 4` shrinks it for a smoke.
-
-2. The layer capture (`layer16.pt`). Every level-2 derivation consumes it and
-   refuses by name rather than substituting synthetic tensors.
 
 ## Real text: the pinned checkpoint on WikiText-2
 

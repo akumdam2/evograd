@@ -66,7 +66,7 @@ def compile_forward(op: OpDecl, mode: str | None, dynamic: bool | None,
     equivalent a production user would run -- falling back to ``op.forward``
     where a declaration names none.
 
-    Which one a baseline compiles is not a detail. ``llama3_attention``
+    Which one a baseline compiles is not a detail. ``llama3_attention_block``
     declares a forward that materializes a ``[B, HQ, T, T]`` score matrix and a
     runtime forward that calls SDPA; compiling the first produces a baseline
     roughly nine times slower than eager, and every speedup measured against it
