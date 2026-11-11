@@ -200,21 +200,29 @@ class ForcedRouting(unittest.TestCase):
         self.assertEqual(self.scope.identity()["routing"], self.R.RULE)
         self.assertIn("forced_outputs", self.scope.reference_parts())
 
-    def test_the_loss_compared_is_tier3s_with_the_load_balancing_term(self):
+    def test_the_backward_is_tier3s_loss_with_the_load_balancing_term(self):
+        """The logits are judged; the loss, load-balancing term included, only
+        seeds the backward, so the gradients compared are ``workload.loss``'s."""
         from evograd.verification import gate2, gate3
 
         ex = gate2.execute(self.scope, self.native, self.sample)
         self.assertIsNone(ex.error, ex.error)
-        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:loss"})
+        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:logits"})
         batch = self.workload.batch_for(seed=self.sample.seed)
         model = self.build()
         out = model(input_ids=batch[0], labels=batch[1], use_cache=False)
-        loss = ex.results["out:loss"]
-        self.assertTrue(torch.equal(loss, self.workload.loss(self.build(), batch)))
+        self.assertTrue(torch.equal(ex.results["out:logits"], out.logits.detach()))
+        self.assertTrue(torch.equal(out.loss, self.workload.loss(self.build(), batch)))
         total, count = gate3.next_token_nll(out.logits, batch[1])
         aux = model.config.router_aux_loss_coef * float(out.aux_loss.detach())
         self.assertGreater(aux, 0.0)
-        self.assertAlmostEqual(float(loss) - float(total.detach() / count), aux, places=5)
+        self.assertAlmostEqual(float(out.loss) - float(total.detach() / count), aux, places=5)
+        out.loss.backward()
+        params = dict(model.named_parameters())
+        grads = {k: v for k, v in ex.results.items() if k.startswith("grad:")}
+        self.assertTrue(grads)
+        for name, grad in grads.items():
+            self.assertTrue(torch.equal(grad, params[name.split(":", 1)[1]].grad), name)
 
 
 @unittest.skipUnless(HAVE_TRANSFORMERS, "transformers is not installed")

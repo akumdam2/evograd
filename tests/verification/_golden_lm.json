@@ -121,13 +121,13 @@
  },
  "model_scope": {
   "llama_3_2_1b": {
-   "contract_digest": "e5e042652304078b156677f2736aca7bcfe40a02386014245ba9caf67410e9e9",
+   "contract_digest": "9a33022e0c4112b89a35a320b9bc5b417498d2abc39359fa237428023a198aa0",
    "control_measurements": [
     {
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "native_repeat"
     },
@@ -292,10 +292,10 @@
      "source": "native_repeat"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.429723467374758e-07,
+     "Emax": 1.3060759189891837e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -460,10 +460,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.2613220457154046e-07,
+     "Emax": 6.530379594945918e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -628,10 +628,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.341124536320482e-07,
+     "Emax": 1.3060759189891837e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -796,10 +796,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.2507962811458061e-07,
+     "Emax": 6.530379594945918e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -967,7 +967,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "trusted_compile"
     },
@@ -1135,7 +1135,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
     },
@@ -1300,10 +1300,10 @@
      "source": "native_repeat"
     },
     {
-     "E2": 1.948106343229064e-07,
-     "Emax": 1.948106343229064e-07,
+     "E2": 1.300466443267864e-07,
+     "Emax": 1.3150625999002832e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -1468,10 +1468,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.3373182280529033e-07,
+     "Emax": 9.862969499252124e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -1636,10 +1636,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.948106343229064e-07,
-     "Emax": 1.948106343229064e-07,
+     "E2": 1.1970461490921313e-07,
+     "Emax": 6.575312999501416e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -1804,10 +1804,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 1.948106343229064e-07,
-     "Emax": 1.948106343229064e-07,
+     "E2": 1.3601274533618663e-07,
+     "Emax": 1.3150625999002832e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -1975,7 +1975,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "trusted_compile"
     },
@@ -2141,10 +2141,13 @@
     }
    ],
    "identity": {
+    "backward_only": [
+     "loss"
+    ],
     "bridge": "tier3.TrainingWorkload.loss",
     "loss": "workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss as the model returns it (the HF causal-LM loss plus any auxiliary term the model adds)",
     "outputs": [
-     "loss"
+     "logits"
     ],
     "scope": "model",
     "site_references": {
@@ -2228,7 +2231,7 @@
      "workload_id": "llama-3.2-1b.train.bs1.seq32.fp32.cpu.sdpa.fc7f97b1"
     }
    },
-   "results_digest": "6308540c9ead3cd3956931676da643cdee154ea97cbe5f73665f7cec6e128db9",
+   "results_digest": "50c17f089cde9d851d64768288cd3eef28a5de356032626361c8d89f7e056863",
    "sample_fingerprint": "ca7f5b2505ee90d61f30ac2e3d4a6837e4c41500bec0c1cdfd14432e28865442",
    "thresholds": {
     "grad:model.embed_tokens.weight": {
@@ -2991,7 +2994,7 @@
       ]
      }
     },
-    "out:loss": {
+    "out:logits": {
      "E2": 2e-05,
      "Emax": 0.002,
      "components": {
@@ -3000,7 +3003,7 @@
        "floor": 1e-05,
        "gamma": 2.0,
        "native_repeat": 0.0,
-       "rounding_perturbation": 1.948106343229064e-07,
+       "rounding_perturbation": 1.429723467374758e-07,
        "trusted_compile": 0.0
       },
       "Emax": {
@@ -3008,7 +3011,7 @@
        "floor": 0.001,
        "gamma": 2.0,
        "native_repeat": 0.0,
-       "rounding_perturbation": 1.948106343229064e-07,
+       "rounding_perturbation": 1.3150625999002832e-06,
        "trusted_compile": 0.0
       }
      },
@@ -3032,13 +3035,13 @@
    }
   },
   "qwen3_0_6b": {
-   "contract_digest": "8bdbe6b90e087f524ab36cac807de9e6eb52d900a7c8171ca38e3c14a6982530",
+   "contract_digest": "6b65d1ff1156959a0cfcfde0df411f1889a4a1265b069fa3b1c0913a50b9005a",
    "control_measurements": [
     {
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "native_repeat"
     },
@@ -3235,10 +3238,10 @@
      "source": "native_repeat"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.4375196319428196e-07,
+     "Emax": 6.510852660407523e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -3435,10 +3438,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.421053267069738e-07,
+     "Emax": 6.510852660407523e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -3635,10 +3638,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.432176852406526e-07,
+     "Emax": 9.766278990611284e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -3835,10 +3838,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.4232844805637688e-07,
+     "Emax": 9.766278990611284e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "rounding_perturbation"
     },
@@ -4038,7 +4041,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed1",
      "source": "trusted_compile"
     },
@@ -4238,7 +4241,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "native_repeat"
     },
@@ -4435,10 +4438,10 @@
      "source": "native_repeat"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.6126201700907642e-07,
+     "Emax": 1.324669857857358e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -4635,10 +4638,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.6311371833587895e-07,
+     "Emax": 1.324669857857358e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -4835,10 +4838,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.5968269566395842e-07,
+     "Emax": 1.324669857857358e-06,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -5035,10 +5038,10 @@
      "source": "rounding_perturbation"
     },
     {
-     "E2": 0.0,
-     "Emax": 0.0,
+     "E2": 1.612275545601565e-07,
+     "Emax": 9.935023933930186e-07,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "rounding_perturbation"
     },
@@ -5238,7 +5241,7 @@
      "E2": 0.0,
      "Emax": 0.0,
      "kind": "output",
-     "result": "out:loss",
+     "result": "out:logits",
      "sample_id": "golden/seed2",
      "source": "trusted_compile"
     },
@@ -5436,10 +5439,13 @@
     }
    ],
    "identity": {
+    "backward_only": [
+     "loss"
+    ],
     "bridge": "tier3.TrainingWorkload.loss",
     "loss": "workload.loss: model(input_ids=input_ids, labels=labels, use_cache=False).loss as the model returns it (the HF causal-LM loss plus any auxiliary term the model adds)",
     "outputs": [
-     "loss"
+     "logits"
     ],
     "scope": "model",
     "site_references": {
@@ -5534,7 +5540,7 @@
      "workload_id": "qwen3-0.6b.train.bs1.seq16.fp32.cpu.sdpa.17481814"
     }
    },
-   "results_digest": "d119f5835211f179bc199bdda943324abdc617fc526d6609497884039e51acd3",
+   "results_digest": "b80e2becdfaf9df67956771ed79b5002aa1ab5500282ec5e342f9c3951058035",
    "sample_fingerprint": "f58bcf0fc6cdb59ae651c062be0dda4a38dac388e9b0498e3fb814026c160d13",
    "thresholds": {
     "grad:model.embed_tokens.weight": {
@@ -6449,7 +6455,7 @@
       ]
      }
     },
-    "out:loss": {
+    "out:logits": {
      "E2": 2e-05,
      "Emax": 0.002,
      "components": {
@@ -6458,7 +6464,7 @@
        "floor": 1e-05,
        "gamma": 2.0,
        "native_repeat": 0.0,
-       "rounding_perturbation": 0.0,
+       "rounding_perturbation": 1.6311371833587895e-07,
        "trusted_compile": 0.0
       },
       "Emax": {
@@ -6466,7 +6472,7 @@
        "floor": 0.001,
        "gamma": 2.0,
        "native_repeat": 0.0,
-       "rounding_perturbation": 0.0,
+       "rounding_perturbation": 1.324669857857358e-06,
        "trusted_compile": 0.0
       }
      },

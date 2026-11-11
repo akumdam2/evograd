@@ -19,6 +19,8 @@ class ScopeBase:
     #: Autocast dtype name, or ``None`` for none. Part of the policy binding.
     autocast_dtype = None
     training = True
+    #: Outputs that seed the backward without being judged (see ``ScopeAdapter``).
+    backward_only = ()
 
     def numerics_context(self):
         if self.autocast_dtype is None:

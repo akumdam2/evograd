@@ -6,11 +6,12 @@ A :class:`~evograd.verification.integrations.base.Model` names one of these:
   ``(input_ids, labels)``; the step is ``workload.loss``,
   ``model(input_ids, labels=labels, use_cache=False).loss``, with any auxiliary
   term the model adds (OLMoE's router load-balancing loss). Gate 2 model scope
-  calls the model the same way and compares that loss and every parameter
-  gradient (``WorkloadModelScope``); Gate 3 trains on that loss with weight 1
-  (``gate3.workload_training``). Logits are compared by neither: a site fusing
-  the LM head with the cross-entropy never materializes them. Capture records
-  and keys are what the Qwen3 and Qwen3.5 integrations have always produced.
+  calls the model the same way, backpropagates that loss and compares the
+  logits and every parameter gradient (``WorkloadModelScope``; under a site
+  fusing the LM head with the cross-entropy, which returns no logits, the LM
+  head's input and the loss instead); Gate 3 trains on that loss with weight 1
+  (``gate3.workload_training``). Capture records and keys are what the Qwen3
+  and Qwen3.5 integrations have always produced.
 * :class:`PrimaryOutput` -- any other workload with ``primary_output(model,
   batch) -> (loss, primary)``: classification logits, a diffusion prediction,
   a click logit. Batches are dicts of tensors; Gate 2 model scope compares
@@ -93,10 +94,12 @@ class NextTokenLM:
     def data_recipe(self, workload) -> dict[str, Any]:
         return {"batch_size": workload.batch_size, "seq_len": workload.seq_len}
 
-    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None):
+    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None,
+                    patch_set=()):
         from evograd.verification.gate2.adapters.model import WorkloadModelScope
 
-        return WorkloadModelScope(workload, native_sites=native_sites, replaced=replaced)
+        return WorkloadModelScope(workload, native_sites=native_sites, replaced=replaced,
+                                  patch_set=patch_set)
 
     def training(self, workload, *, train_data, optimizer):
         from evograd.verification import gate3
@@ -137,7 +140,8 @@ class PrimaryOutput:
     def data_recipe(self, workload) -> dict[str, Any]:
         return dict(workload.data_recipe())
 
-    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None):
+    def model_scope(self, workload, native_sites: Mapping[str, Callable], replaced=None,
+                    patch_set=()):
         from evograd.verification.gate2.adapters.model import ObjectiveModelScope
 
         return ObjectiveModelScope(workload, native_sites=native_sites, replaced=replaced)

@@ -311,8 +311,10 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
 
 
 def model_scope(model, workload, deployment=None):
-    """The whole model, every site's native being its model reference. A
-    deployment whose candidates take only some of a site's configurations
+    """The whole model, every site's native being its model reference, for
+    ``deployment``'s patch set (which sites it replaces decides what a language
+    model's scope compares: logits, or the LM head's input under a fused head).
+    A deployment whose candidates take only some of a site's configurations
     (:func:`by_configuration`) is recorded in the scope, whose controls then
     replace exactly those calls."""
     from evograd.opdecl.oracle import resolve_runtime_forward
@@ -322,11 +324,12 @@ def model_scope(model, workload, deployment=None):
     registry = workload.site_registry
     natives = {site: resolve_runtime_forward(model.reference_op(registry.require(site).op))
                for site in registry.names}
+    patch_set = deployment.patch_set if deployment is not None else ()
     replaced = dict((deployment.identity if deployment is not None else {}).get("configurations") or {})
     if not replaced:
-        return objective_of(model).model_scope(workload, natives)
+        return objective_of(model).model_scope(workload, natives, patch_set=patch_set)
     cases = {c.case_id: c for c in observed_cases(model)}
-    return objective_of(model).model_scope(workload, natives, replaced={
+    return objective_of(model).model_scope(workload, natives, patch_set=patch_set, replaced={
         site: tuple(cases[cid].workload for cid in ids) for site, ids in replaced.items()})
 
 

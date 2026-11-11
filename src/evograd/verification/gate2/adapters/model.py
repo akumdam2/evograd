@@ -9,11 +9,18 @@ of a next-token language model (Qwen3-0.6B, Llama-3.2-1B, Qwen3.5-4B,
 OLMoE-1B-7B): the workload builds the model (``build_patched``) and the batch
 (``batch_for(seed=...)``); this adapter installs each replaced site's callable
 through a ``KernelSet`` and calls the model as ``workload.loss`` does,
-``model(input_ids=..., labels=labels, use_cache=False)``. Its one output is the
-``.loss`` the model returns -- the scalar the tier-3 step differentiates, with
-any auxiliary term the model adds (OLMoE's 0.01 router load-balancing loss) --
-and every parameter gradient is compared beside it. Logits are not an output:
-a site that fuses the LM head with the cross-entropy never materializes them.
+``model(input_ids=..., labels=labels, use_cache=False)``. The backward is the
+``.loss`` it returns, seeded with 1 -- the scalar the tier-3 step
+differentiates, with any auxiliary term the model adds (OLMoE's 0.01 router
+load-balancing loss) -- so the parameter gradients compared are the ones
+training applies. The forward is judged on the logits, which determine the
+next-token loss; the loss only seeds the backward and is not a result (an
+auxiliary term reaches the verdict through its gradients).
+
+A patch set that replaces :data:`LM_HEAD_LOSS_SITE`, the LM head fused with the
+cross-entropy, never materializes logits. There the forward is judged on the
+LM head's input (the decoder's last hidden state, after the final norm) and on
+the loss the site returns, beside every parameter gradient.
 The old model gates (envelope, KL, global gradient, protocol 4) are not used.
 
 Model scope uses the ``matched_inputs`` sample protocol: a policy is calibrated
@@ -26,7 +33,7 @@ define; OLMoE adds it in a subclass (``integrations.olmoe_1b_7b.routing``).
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 import torch
 
@@ -36,6 +43,10 @@ from evograd.verification.common.execution import (WORKLOAD_LM_LOSS, Deployment,
 from evograd.verification.gate2.adapters.base import ScopeBase, seeded_samples
 from evograd.verification.gate2.adapters.module import ModuleScope
 from evograd.verification.gate2.runner import OutputStructureError
+
+#: The site every LM integration names for the LM head fused with the
+#: cross-entropy (Qwen3-0.6B's ``lm_head_ce``): it returns the loss and no logits.
+LM_HEAD_LOSS_SITE = "lm_head_ce"
 
 
 def model_scope(*, name: str, factory: Callable[[Mapping[str, Callable]], torch.nn.Module],
@@ -79,7 +90,7 @@ class WorkloadModelScope(ScopeBase):
     scope = "model"
 
     def __init__(self, workload: Any, *, native_sites: Mapping[str, Callable] | None = None,
-                 replaced: Mapping[str, Any] | None = None):
+                 replaced: Mapping[str, Any] | None = None, patch_set: Iterable[str] = ()):
         self.workload = workload
         spec = getattr(workload, "spec", None)
         self.device = str(getattr(spec, "device", "cpu"))
@@ -90,11 +101,17 @@ class WorkloadModelScope(ScopeBase):
         #: where it takes only some of the site's calls; see :meth:`control_site`.
         self._replaced = {site: tuple(ws) for site, ws in (replaced or {}).items()}
         self._expected: dict[str, int] = {}
+        #: Whether the patch set fuses the LM head with the loss (no logits).
+        self.fused_head = LM_HEAD_LOSS_SITE in tuple(patch_set)
+        self.output_names = ("lm_head_input", "loss") if self.fused_head else ("logits",)
+        self.backward_only = () if self.fused_head else ("loss",)
+        self._head_input: torch.Tensor | None = None
 
     def identity(self) -> dict[str, Any]:
         return {"scope": self.scope, "bridge": "tier3.TrainingWorkload.loss",
                 "workload": dict(self.workload.describe()),
-                "outputs": ["loss"], "loss": WORKLOAD_LM_LOSS,
+                "outputs": list(self.output_names), "backward_only": list(self.backward_only),
+                "loss": WORKLOAD_LM_LOSS,
                 "site_references": self.site_references(), **self.replaced_identity()}
 
     def replaced_identity(self) -> dict[str, Any]:
@@ -173,11 +190,20 @@ class WorkloadModelScope(ScopeBase):
         for site, fn in deployment.sites.items():
             kernels = patch(kernels, site, hooks.wrap(site, fn), source=KernelSource(
                 site, self.registry.require(site).op, None, f"verification:{deployment.name}"))
+        if LM_HEAD_LOSS_SITE in deployment.sites and not self.fused_head:
+            raise ValueError(f"{deployment.name} replaces {LM_HEAD_LOSS_SITE!r}, which returns "
+                             "no logits; build the scope with that patch set")
         model, _provenance = self.workload.build_patched(kernels)
         last = getattr(self.workload, "last_build", None)
         expected = dict(getattr(last, "expected", {}) or {})
         self._expected = {site: int(expected.get(site, 0)) for site in deployment.sites}
+        if self.fused_head:
+            self._head_input = None
+            model.get_decoder().register_forward_hook(self._keep_head_input)
         return model.train(self.training)
+
+    def _keep_head_input(self, _module, _args, output) -> None:
+        self._head_input = output.last_hidden_state
 
     def expected_invocations(self, deployment: Deployment) -> dict[str, int]:
         return dict(self._expected) if deployment.sites else {}
@@ -188,11 +214,12 @@ class WorkloadModelScope(ScopeBase):
         return Invocation(kwargs={"input_ids": input_ids, "labels": labels, "use_cache": False})
 
     def output_specs(self, invocation: Invocation) -> tuple[C.ResultSpec, ...]:
-        return (C.ResultSpec("out:loss", C.OUTPUT),)
+        return tuple(C.ResultSpec(f"out:{name}", C.OUTPUT) for name in self.output_names)
 
     def structure(self, result: Any) -> Any:
-        """The model's return without its logits, which a site fusing the LM head
-        with the loss does not produce; every other field must be the native one's."""
+        """The model's return without its logits: they are an output when the head
+        is not fused, and a fused head does not return them (native does); every
+        other field must be the native one's."""
         tree = super().structure(result)
         if isinstance(tree, dict):
             tree.pop("logits", None)
@@ -202,7 +229,15 @@ class WorkloadModelScope(ScopeBase):
         loss = getattr(result, "loss", None)
         if not (torch.is_tensor(loss) and loss.dim() == 0):
             raise OutputStructureError("the model returned no scalar loss")
-        return {"loss": loss}
+        if self.fused_head:
+            head_input, self._head_input = self._head_input, None
+            if not torch.is_tensor(head_input):
+                raise OutputStructureError("the decoder produced no last hidden state")
+            return {"lm_head_input": head_input, "loss": loss}
+        logits = getattr(result, "logits", None)
+        if not torch.is_tensor(logits):
+            raise OutputStructureError("the model returned no logits")
+        return {"logits": logits, "loss": loss}
 
     def cotangents(self, outputs: Mapping[str, Any], invocation: Invocation,
                    sample: Sample) -> dict[str, torch.Tensor]:
@@ -247,6 +282,7 @@ class ObjectiveModelScope(WorkloadModelScope):
                  replaced: Mapping[str, Any] | None = None):
         super().__init__(workload, native_sites=native_sites, replaced=replaced)
         self.primary = str(workload.primary_output_name)
+        self.backward_only = ()         # the loss is a result here, beside the primary output
 
     def identity(self) -> dict[str, Any]:
         return {"scope": self.scope, "bridge": "tier3.TrainingWorkload.primary_output",

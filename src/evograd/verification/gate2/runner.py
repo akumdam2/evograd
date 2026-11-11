@@ -97,6 +97,9 @@ class ScopeAdapter(Protocol):
 
     scope: str
     device: str
+    #: Outputs that only seed the backward (a cotangent names them) and are not
+    #: results: never recorded, never judged.
+    backward_only: tuple[str, ...]
 
     def identity(self) -> Mapping[str, Any]: ...
     def numerics(self) -> Mapping[str, Any]: ...
@@ -213,7 +216,8 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             ex.structure = adapter.structure(result)
             # Judged as the forward produced them: the backward may legitimately
             # reuse an output buffer nothing reads any more.
-            produced_outputs = isolate(_detach_tree(outputs))
+            produced_outputs = isolate(_detach_tree(
+                {n: v for n, v in outputs.items() if n not in adapter.backward_only}))
             stage = "backward"
             seeds = isolate(dict(adapter.cotangents(outputs, invocation, sample)))
             seed_before = snapshot(seeds, metadata_only=tuple(

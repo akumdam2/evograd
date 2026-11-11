@@ -70,8 +70,9 @@ def force(model, route: dict[str, torch.Tensor]) -> list:
 class ForcedRoutingScope(WorkloadModelScope):
     """The model scope, with every run of a sample on the native run's routing."""
 
-    def __init__(self, workload: Any, *, native_sites=None, replaced=None):
-        super().__init__(workload, native_sites=native_sites, replaced=replaced)
+    def __init__(self, workload: Any, *, native_sites=None, replaced=None, patch_set=()):
+        super().__init__(workload, native_sites=native_sites, replaced=replaced,
+                         patch_set=patch_set)
         self._routes: dict[int, dict[str, torch.Tensor]] = {}
 
     def identity(self) -> dict[str, Any]:
@@ -114,5 +115,6 @@ class ForcedRoutingScope(WorkloadModelScope):
 class ForcedRoutingLM(NextTokenLM):
     """The causal-LM objective, with model Gate 2 on fixed routing."""
 
-    def model_scope(self, workload, native_sites, replaced=None):
-        return ForcedRoutingScope(workload, native_sites=native_sites, replaced=replaced)
+    def model_scope(self, workload, native_sites, replaced=None, patch_set=()):
+        return ForcedRoutingScope(workload, native_sites=native_sites, replaced=replaced,
+                                  patch_set=patch_set)

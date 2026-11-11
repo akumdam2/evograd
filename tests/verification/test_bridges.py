@@ -3,7 +3,9 @@
 * ``WorkloadModelScope`` over the Qwen3-0.6B and Llama-3.2-1B workloads,
   shrunk with ``arch_overrides`` (random initialization, no download);
 * Gate 3 over the Llama workload with its own ``SyntheticBatches``;
-* both gates judge ``workload.loss``, the scalar Tier 3 differentiates.
+* both gates differentiate ``workload.loss``, the scalar Tier 3 differentiates;
+  model Gate 2 judges the logits (the LM head's input and the loss under a
+  fused LM head) and every parameter gradient.
 
 Real-size models, bf16 and GPUs are not exercised here.
 """
@@ -20,7 +22,7 @@ from torch import nn
 from evograd.verification import gate2, gate3
 from evograd.verification.common.execution import Deployment, Sample, candidate
 from evograd.verification.common.reports import FAILED, PASSED
-from evograd.verification.gate2.adapters.model import WorkloadModelScope
+from evograd.verification.gate2.adapters.model import LM_HEAD_LOSS_SITE, WorkloadModelScope
 from evograd.verification.gate2.calibration import calibrate
 
 warnings.filterwarnings("ignore")
@@ -89,7 +91,7 @@ class TestScopes(unittest.TestCase):
 @needs_transformers
 class TestWorkloadModelBridge(unittest.TestCase):
     def check(self, workload, site, op_name, prefix, calls=ARCH["num_hidden_layers"]):
-        scope = WorkloadModelScope(workload)
+        scope = WorkloadModelScope(workload, patch_set=(site,))
         fixed = samples(f"{prefix}/fixed", [1, 2])
         cal = calibrate(scope, patch_set=(site,), samples=fixed, compile_backend=FAST)
         self.assertEqual(cal.status, "calibrated", cal.to_dict())
@@ -100,10 +102,11 @@ class TestWorkloadModelBridge(unittest.TestCase):
         bad = gate2.verify_integration(scope, candidate("off", {site: bound_eager(op_name, 1.01)}),
                                        policy=cal.policy, samples=fixed)
         self.assertEqual(bad.status, FAILED)
-        # The loss is the one output; a 1% fault inside a random tiny model
-        # barely moves it, and the parameter gradients carry it.
+        # The logits are the forward's one result, or the head's input and the
+        # loss when the site is the fused head; the gradients carry the fault too.
         outputs = {r.name for c in bad.cases for r in c.results if r.name.startswith("out:")}
-        self.assertEqual(outputs, {"out:loss"})
+        self.assertEqual(outputs, {"out:lm_head_input", "out:loss"} if site == LM_HEAD_LOSS_SITE
+                         else {"out:logits"})
         failed = {r.name for c in bad.cases for r in c.results if r.status == FAILED}
         self.assertTrue(any(name.startswith("grad:") for name in failed))
 
@@ -154,9 +157,10 @@ class TestWorkloadModelBridge(unittest.TestCase):
         self.check(workload, "attention_block", "qwen3_attention_block", "qwen3ab")
         self.check(workload, "lm_head_ce", "qwen3_lm_head_ce", "qwen3ce", calls=1)
 
-    def test_the_loss_and_gradients_are_workload_loss_bit_for_bit(self):
-        """Model Gate 2 calls the model as ``workload.loss`` does (labels in, no
-        logits out), so what it compares is what a tier-3 step differentiates."""
+    def test_logits_and_the_gradients_of_workload_loss_bit_for_bit(self):
+        """Model Gate 2 calls the model as ``workload.loss`` does (labels in) and
+        backpropagates that loss without judging it: the logits are the forward's
+        result, the gradients are those a tier-3 step applies."""
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
         from evograd.verification.common.execution import SiteHooks
         from evograd.verification.common.tensors import isolated_rng
@@ -167,18 +171,56 @@ class TestWorkloadModelBridge(unittest.TestCase):
         sample = Sample("qwen3/seed1", 1)
         ex = gate2.execute(scope, Deployment.native(), sample)
         self.assertIsNone(ex.error, ex.error)
-        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:loss"})
+        self.assertEqual({k for k in ex.results if k.startswith("out:")}, {"out:logits"})
         self.assertIn("labels", scope.invocation(sample, None).kwargs)
         with isolated_rng(sample.seed, "cpu"):
             model = scope.build(Deployment.native(), sample, SiteHooks())
-        loss = workload.loss(model, workload.batch_for(seed=sample.seed))
-        loss.backward()
-        self.assertTrue(torch.equal(ex.results["out:loss"], loss.detach()))
+        input_ids, labels = batch = workload.batch_for(seed=sample.seed)
+        with torch.no_grad():
+            logits = model(input_ids=input_ids, labels=labels, use_cache=False).logits
+        self.assertTrue(torch.equal(ex.results["out:logits"], logits))
+        workload.loss(model, batch).backward()
         grads = {k: v for k, v in ex.results.items() if k.startswith("grad:")}
         self.assertTrue(grads)
         params = dict(model.named_parameters())
         for name, grad in grads.items():
             self.assertTrue(torch.equal(grad, params[name.split(":", 1)[1]].grad), name)
+
+    def test_a_fused_head_is_judged_on_its_input_and_loss(self):
+        """Under the fused LM head no deployment has logits: the scope built for
+        that patch set compares the head's input (the decoder's last hidden
+        state) and the loss; one built without it refuses the deployment."""
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.sites import SITE_LM_HEAD_CE
+        from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload
+        from evograd.verification.common.execution import SiteHooks
+        from evograd.verification.common.tensors import isolated_rng
+        from evograd.verification.integrations.gates import model_scope
+        from evograd.verification.integrations.qwen3_0_6b import MODEL
+
+        self.assertEqual(SITE_LM_HEAD_CE, LM_HEAD_LOSS_SITE)
+        workload = Qwen3Workload(device="cpu", dtype="float32", batch_size=1, seq_len=16,
+                                 arch_overrides={**ARCH, "num_key_value_heads": 2})
+        fused = candidate("c", {LM_HEAD_LOSS_SITE: bound_eager("qwen3_lm_head_ce")})
+        self.assertTrue(model_scope(MODEL, workload, fused).fused_head)
+        self.assertFalse(model_scope(MODEL, workload, candidate(
+            "m", {"swiglu_mlp": bound_eager("qwen3_swiglu_mlp")})).fused_head)
+        scope = WorkloadModelScope(workload, patch_set=(LM_HEAD_LOSS_SITE,))
+        sample = Sample("qwen3/seed1", 1)
+        native, cand = (gate2.execute(scope, d, sample) for d in (Deployment.native(), fused))
+        for ex in (native, cand):
+            self.assertIsNone(ex.error, ex.error)
+            self.assertEqual({k for k in ex.results if k.startswith("out:")},
+                             {"out:lm_head_input", "out:loss"})
+        with isolated_rng(sample.seed, "cpu"):
+            model = scope.build(Deployment.native(), sample, SiteHooks())
+        input_ids, labels = workload.batch_for(seed=sample.seed)
+        with torch.no_grad():
+            hidden = model.model(input_ids=input_ids, use_cache=False).last_hidden_state
+        self.assertTrue(torch.equal(native.results["out:lm_head_input"], hidden))
+        self.assertTrue(torch.equal(cand.results["out:lm_head_input"], hidden))
+        refused = gate2.execute(WorkloadModelScope(workload), fused, sample)
+        self.assertEqual(refused.error_stage, "build")
+        self.assertIn("returns no logits", refused.error)
 
 
 @needs_transformers

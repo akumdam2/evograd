@@ -140,9 +140,17 @@ The sample protocol depends on scope:
   tensor kept within one rounding (`E2` at most the unit roundoff), run under
   four fixed seeds (11, 22, 33, 44) and taken at its largest. Where compile
   reproduces the native site bit for bit, it is what a correct reimplementation
-  that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj,
-  measured while model Gate 2 still compared the logits: logits `E2` 4-5%,
-  against 0 from compile).
+  that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj:
+  logits `E2` 4-5%, against 0 from compile).
+
+At model scope a language model is called as `workload.loss` calls it, and
+that loss, seeded with 1, is the backward: the parameter gradients compared are
+the ones training applies. The forward is judged on the logits, which determine
+the next-token loss; the loss only seeds the backward (`backward_only`) and is
+not a result. Under `lm_head_ce`, the LM head fused with the loss, no deployment
+has logits, so the LM head's input (the decoder's last hidden state) and the
+loss are compared instead. Other models compare their primary output and their
+loss. Every parameter gradient is compared in each case.
 
 Policies bind scope, reference, environment, numerical configuration, patch set,
 samples and result contracts. Candidate errors never set the budget. Missing or
