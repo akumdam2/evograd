@@ -30,7 +30,7 @@ Architecture JSON and default benchmark JSON are shipped under each model's
 benchmark spec (`spec.canonical`) uses random weights; the harvest and the
 verification workload load the pinned checkpoint and refuse to run until its
 weights, processor and real-data pool are cached. Runtime model internals
-require `transformers>=4.57` (tested on 4.57.6 and 5.16.1).
+require `transformers>=5` (tested on 5.16.1).
 
 Pinned configuration sources:
 

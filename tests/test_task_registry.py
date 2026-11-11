@@ -20,7 +20,7 @@ from evograd.benchmark.topdown.llama3_2_1b.levels.level2 import manifest as llam
 from evograd.benchmark.topdown.qwen3_0_6b.levels.level2 import manifest
 from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest as qwen3_5_manifest
 from evograd.ops import PRIMITIVES, get_primitive
-from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 QWEN_LEVEL2 = (
     "fused_add_rms_norm",
@@ -289,12 +289,20 @@ class TestQwenLevelTwoInvariance(unittest.TestCase):
                     TASKS[task].forward,
                 )
 
-    @unittest.skipUnless(qwen3_snapshot_current(), QWEN3_SNAPSHOT_STALE)
+    @unittest.skipUnless(snapshot_is_current("qwen3_0_6b"), STALE_SNAPSHOT)
     def test_the_manifest_reads_frequency_from_the_snapshot(self):
         for site in manifest.SITES:
             with self.subTest(site=site):
                 self.assertGreater(manifest.frequency(site), 0)
-                self.assertTrue(manifest.module_paths(site))
+                if site == manifest.SITE_LM_HEAD_CE:
+                    # Anchored on the loss function, which no module path names;
+                    # the LM head GEMM is a supporting record.
+                    self.assertEqual(manifest.module_paths(site), ())
+                    self.assertEqual(
+                        manifest.snapshot_entry(site)["supporting"]["lm_head"]["roles"],
+                        ["lm_head"])
+                else:
+                    self.assertTrue(manifest.module_paths(site))
 
     def test_the_manifest_names_the_canonical_workload(self):
         self.assertEqual(

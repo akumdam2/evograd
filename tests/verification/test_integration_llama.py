@@ -18,6 +18,8 @@ from pathlib import Path
 
 import torch
 
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
+
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -76,19 +78,6 @@ def linear_pair(scale: float):
                                  backward_from_saved=backward_from_saved)
 
 
-def _snapshot_is_current() -> bool:
-    """Whether the tracked snapshot carries exactly the Level-2 tasks the code declares.
-
-    The tracked file predates the merged attention block (it still lists
-    ``llama3_qkv_rope`` and ``llama3_attention``) until the real-run harvest
-    regenerates it on a GPU.
-    """
-    from evograd.benchmark.topdown import load_snapshot
-    from evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot import TASK_SOURCES
-
-    return set(load_snapshot("llama_3_2_1b")["tasks"]) == set(TASK_SOURCES)
-
-
 class RealCaseTable(unittest.TestCase):
     def test_the_snapshot_sources_are_the_level2_case_list(self):
         """What the next harvest writes: one entry per declared Level-2 task, each
@@ -106,13 +95,11 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(manifest.FREQUENCY,
                          {"attention_block": 16, "swiglu_mlp": 16, "residual_rmsnorm": 32})
 
+    @unittest.skipUnless(snapshot_is_current("llama_3_2_1b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.llama3_2_1b import MODEL
 
-        if not _snapshot_is_current():
-            self.skipTest("the tracked snapshot predates the merged attention block; "
-                          "regenerate it from the real-run harvest (GPU)")
         cases = {c.case_id: c for c in observed_cases(MODEL)}
         self.assertEqual(sum(c.level == 1 for c in cases.values()), 11)
         self.assertEqual(sum(c.level == 2 for c in cases.values()), 3)

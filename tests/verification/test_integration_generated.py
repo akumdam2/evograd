@@ -259,6 +259,34 @@ class TinyDiT(_Tiny, unittest.TestCase):
                 self.assertEqual(out == "candidate", record["case_id"] == block.case_id)
         self.assertEqual(len(seen), block.frequency)
 
+    def test_a_residual_candidate_keeps_its_calls_whatever_layout_it_returns(self):
+        # Its summed is the next call's x. Returned contiguous rather than
+        # channel-first, the later block calls still reach the candidate: only
+        # shift and scale tell the final layer's call apart, and it still runs
+        # the reference.
+        from evograd.evaluation.tier3.patch import KernelSet, patch
+        from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.gates import by_configuration
+
+        block = next(c for c in self.cases if c.case_id.endswith("/blocks.residual"))
+        reference = resolve_runtime_forward(self.MODEL.reference_op(block.task))
+        seen = []
+
+        def candidate(*args):
+            seen.append(args[0].is_contiguous())
+            modulated, summed = reference(*args)
+            return modulated, summed.contiguous()
+
+        with tracked(self.snapshot):
+            workload = GeneratedWorkload(self.spec)
+            site = by_configuration(self.MODEL, workload.site_registry, "dit_adaln_residual",
+                                    [(block, candidate)])
+            model = workload.build(patch(KernelSet(registry=workload.site_registry),
+                                         "dit_adaln_residual", site))
+        workload.loss(model, workload.batch_for(seed=1)).backward()
+        self.assertEqual(seen, [False] + [True] * (block.frequency - 1))
+
     def test_adaln_zero_initial_state_leaves_gated_cotangents_zero(self):
         # adaLN-Zero: every block's gates and the final layer start at zero, so at
         # the initial state no gradient reaches the blocks or the conditioning

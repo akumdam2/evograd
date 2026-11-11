@@ -32,7 +32,10 @@ block's MLP input) and after the MLP (its input is the next block's attention
 input, or for the last block the final layer's). That is 23 calls of one
 configuration (`blocks.residual`) and one of another (`final_residual`): the
 final layer's shift and scale are halves of a `[B, 2H]` projection, row stride
-2H instead of 6H. The first block's attention input, the LayerNorm and
+2H instead of 6H. Those two strides are all a call is routed by between the
+two (`verification/common/dispatch.py`): a candidate's `summed` is the next
+call's `x`, and whatever layout it returns, its later calls stay its own. The
+first block's attention input, the LayerNorm and
 modulation of the patch embedding, has no residual add before it and is not
 part of any case. Level 1 binds observed `linear` and `spatial_conv2d` calls;
 the diffusion loss remains outside the operator pool.

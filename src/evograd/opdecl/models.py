@@ -148,31 +148,13 @@ class ModelConfig:
             "total": attention_sites + mlp_sites_into_next_layer + final_mlp_site_into_model_norm,
         }
 
-    def qkv_norm_rope_dims(self, *, batch: int, seq: int) -> dict[str, int]:
-        """The projection-plus-normalize-plus-rotate prefix of attention.
-
-        Everything ``causal_gqa_attention_dims`` receives already prepared. The
-        two are complementary halves of one module, and share ``QO`` -- the
-        query fan-out -- which is where they meet.
-        """
-        return {
-            "B": batch,
-            "T": seq,
-            "H": self.hidden,
-            "HQ": self.n_heads,
-            "HK": self.n_kv_heads,
-            "D": self.head_dim,
-            "QO": self.q_out,
-            "KVO": self.kv_out,
-        }
-
     def attention_block_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """The whole self-attention module, ``x [B, T, H] -> out [B, T, H]``.
 
         Projections, any per-head norms, the rotary embedding, causal
-        grouped-query SDPA and the output projection: the union of
-        :meth:`qkv_norm_rope_dims` and :meth:`causal_gqa_attention_dims`.
-        The widths are the projection prefix's: ``o_proj`` is ``[H, QO]``.
+        grouped-query SDPA and the output projection. ``QO`` is the query
+        fan-out ``n_heads * head_dim``, the output projection's input width
+        (``o_proj`` is ``[H, QO]``), which for Qwen3 is not ``hidden``.
         """
         return {
             "B": batch,
@@ -183,26 +165,6 @@ class ModelConfig:
             "D": self.head_dim,
             "QO": self.q_out,
             "KVO": self.kv_out,
-        }
-
-    def causal_gqa_attention_dims(self, *, batch: int, seq: int) -> dict[str, int]:
-        """Causal grouped-query SDPA plus the output projection.
-
-        The boundary an observed training step actually presents: the
-        projections and the rotary embedding happen *before* it and the residual
-        add after, so ``q``, ``k`` and ``v`` arrive already split into heads and
-        already rotated. ``QO`` is the query fan-out ``n_heads * head_dim``,
-        which is the output projection's input width and, for Qwen3, is not
-        ``hidden``.
-        """
-        return {
-            "B": batch,
-            "T": seq,
-            "HQ": self.n_heads,
-            "HK": self.n_kv_heads,
-            "D": self.head_dim,
-            "QO": self.q_out,
-            "H": self.hidden,
         }
 
     def attn_qkv_dims(self, *, tokens: int) -> dict[str, int]:
@@ -234,7 +196,7 @@ class ModelConfig:
     def causal_gqa_sdpa_dims(self, *, batch: int, seq: int) -> dict[str, int]:
         """Causal grouped-query attention alone, without the output projection.
 
-        The Level-1 primitive inside ``causal_gqa_attention_dims``: q, k and v
+        The Level-1 primitive inside :meth:`attention_block_dims`: q, k and v
         in, one attention output out. ``o_proj`` is a separate GEMM and stays in
         the Level-2 task.
         """

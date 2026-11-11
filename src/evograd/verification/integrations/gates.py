@@ -365,7 +365,8 @@ def by_configuration(model, registry, site, calls):
     candidate as it is. A site observed at several -- MegaFold's LayerNorm+Linear
     at 23 -- sends each call by its configuration to the candidate for it, and
     every other call to the site's model reference: a candidate replaces its own
-    case's calls and nothing else.
+    case's calls and nothing else, whatever layout its outputs hand to later
+    calls (:func:`dispatch.by_configuration`).
     """
     configurations = registry.require(site).preflight or ()
     if len(configurations) <= 1:
@@ -388,7 +389,8 @@ def by_configuration(model, registry, site, calls):
         if key in routes:
             raise ValueError(f"two candidates for {case.case_id}'s configuration at {site}")
         routes[key] = call
-    return dispatch.by_configuration(op, routes, resolve_runtime_forward(model.reference_op(op.name)))
+    return dispatch.by_configuration(op, observed, routes,
+                                     resolve_runtime_forward(model.reference_op(op.name)))
 
 
 def deployment_for(model, level2, workload):

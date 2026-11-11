@@ -156,6 +156,8 @@ def capture_for(model_name: str):
 
 def invocations(capture: GeneratedCapture, model, cases: Sequence[Case]) -> Iterator[dict[str, Any]]:
     """Every recorded L1 call and L2 site call of one step, in its case's task ABI."""
+    import torch
+
     from evograd.benchmark.topdown.common.harvest_roles import role_of
 
     def call(path, kind):
@@ -183,8 +185,6 @@ def invocations(capture: GeneratedCapture, model, cases: Sequence[Case]) -> Iter
     for r in capture.bags:
         yield invocation(cases, "embedding_bag", 1, call(unique(r["path"]), "module:nn.EmbeddingBag"),
                          r["args"], {"dout": r["dout"]}, {"out": r["out"]})
-    import torch
-
     for r in capture.sites:
         absent = [g for g in r["grads"] if g not in r["dout"]]
         outs = dict(zip(r["grads"], r["out"].values()))

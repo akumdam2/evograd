@@ -23,7 +23,7 @@ import tempfile
 REPO = Path(__file__).resolve().parents[1]
 MODELS = ("qwen3_0_6b", "qwen3_5_4b", "llama_3_2_1b", "qwen2_vl_2b",
           "convnextv2_tiny", "dit_s_2", "torchrec_dlrm", "olmoe_1b_7b")
-CASE_COUNTS = dict(zip(MODELS, (8, 15, 8, 6, 8, 3, 2, 8)))
+CASE_COUNTS = dict(zip(MODELS, (8, 14, 7, 6, 8, 3, 2, 7)))
 AGENTS = ("openevolve", "gepa", "kernelagent", "codex", "claude_code", "geak",
           "evograd", "seed")
 GROUP_AGENTS = ("openevolve", "gepa", "codex")

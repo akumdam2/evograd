@@ -9,7 +9,8 @@ case's recorded strides, else contiguous).
 
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping
+from itertools import combinations
+from typing import Any, Callable, Collection, Mapping
 
 import torch
 
@@ -33,15 +34,39 @@ def configuration(op, workload) -> tuple:
     return tuple(key)
 
 
-def by_configuration(op, routes: Mapping[tuple, Callable], other: Callable) -> Callable:
+def _strided(observed: Collection[tuple]) -> frozenset[int]:
+    """The shaped arguments (by position) whose strides tell apart two observed
+    configurations that agree in every shape and dtype."""
+    return frozenset(i for a, b in combinations(observed, 2)
+                     if all(x[:2] == y[:2] for x, y in zip(a, b))
+                     for i, (x, y) in enumerate(zip(a, b)) if x[2] != y[2])
+
+
+def by_configuration(op, observed: Collection[tuple], routes: Mapping[tuple, Callable],
+                     other: Callable) -> Callable:
     """A site callable sending each call of a configuration in ``routes`` to its
-    callable, and every other call to ``other``."""
+    callable, and every other call to ``other``.
+
+    ``observed`` holds every configuration the site was observed at. A call is
+    routed by each shaped argument's shape and dtype, and by the strides of only
+    those arguments whose strides tell observed configurations apart (DiT's last
+    residual add differs from the others only in its shift and scale, halves of
+    the final layer's projection). Any other stride is a candidate's to choose:
+    DiT's ``summed`` is the next residual call's ``x``, so routing on it would
+    send a candidate's later calls to ``other`` whenever it returns another layout.
+    """
     names, keyed = [a.name for a in op.args], [a.name for a in shaped(op)]
-    routes = dict(routes)
+    strided = _strided(observed)
+
+    def key(entries) -> tuple:
+        return tuple((shape, dtype, stride if i in strided else None)
+                     for i, (shape, dtype, stride) in enumerate(entries))
+
+    routes = {key(k): call for k, call in routes.items()}
 
     def dispatch(*args: Any, **kwargs: Any):
         values = {**dict(zip(names, args)), **kwargs}
-        key = tuple((tuple(v.shape), v.dtype, tuple(v.stride())) for v in map(values.get, keyed))
-        return routes.get(key, other)(*args, **kwargs)
+        return routes.get(key((tuple(v.shape), v.dtype, tuple(v.stride()))
+                              for v in map(values.get, keyed)), other)(*args, **kwargs)
 
     return dispatch

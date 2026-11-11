@@ -6,20 +6,20 @@ describe how an implementation is executed.
 | Level | Scope | Example |
 | --- | --- | --- |
 | L1 | Primitive operator | RMSNorm, linear projection, RoPE |
-| L2 | Composite operator | QKV + normalization + RoPE, SwiGLU MLP |
+| L2 | Composite operator | Attention block, SwiGLU MLP |
 | L3 | Whole model | Model forward, loss, backward and optimizer step |
 
 L3 is measured by Tier 3 (`evograd evaluate <model> ...`): loss, backward,
-AdamW and gradient reset. The decoder layer a model's
-L2 sites take their real invocations from is a data source
-(`topdown/<model>/layer`), not a level.
+AdamW and gradient reset. An L2 site's real invocations come from the
+verification capture of a whole training step; that capture is a data source,
+not a level.
 
 ## Cases and ownership
 
 - `evograd.ops` owns reusable primitive contracts, references and input
   generators.
-- `benchmark/topdown/<model>` owns model configurations, harvested cases and
-  captured layers. Current families are Qwen3-0.6B, Llama-3.2-1B and MegaFold.
+- `benchmark/topdown/<model>` owns model configurations and harvested cases.
+  Current families are Qwen3-0.6B, Llama-3.2-1B and MegaFold.
 - Qwen3.5-4B (`benchmark/topdown/qwen3_5_4b`, text model): L3 at B1 x T2048 on one
   GH200 (24 Gated DeltaNet + 8 gated attention layers, dense MLP), six
   L2 sites and ten bound L1 primitives; every case is judged on the training
@@ -27,14 +27,15 @@ L2 sites take their real invocations from is a data source
   `docs/QWEN3_5_4B.md`.
 - OLMoE-1B-7B (`benchmark/topdown/olmoe_1b_7b`): L3 at B2 x T2048 with
   grouped-GEMM experts (16 layers of multi-head attention and 64 routed SwiGLU
-  experts, 8 active), four L2 sites and six bound L1 primitives; L2 invocations come from layer 8, captured or config-derived.
+  experts, 8 active), three L2 sites and six bound L1 primitives; every case is judged
+  on the training calls the verification capture records.
   No GPU session yet and no L3 gate; see `docs/OLMOE_1B_7B.md`.
 - `evograd.evaluation` owns execution, numerical checks, calibration and timing.
 
-Qwen and Llama each declare their own four L2 tasks. Attention with output
-projection, SwiGLU MLP and residual RMSNorm share reference computations but
-have different model dimensions. Qwen's QKV task additionally includes Q/K
-normalization.
+Qwen and Llama each declare their own L2 tasks: the attention block (the
+whole attention module), SwiGLU MLP and residual RMSNorm, plus Qwen's LM head
+with the loss. They share reference computations but have different model
+dimensions; Qwen's attention block additionally includes Q/K normalization.
 
 The L3 workloads (`evaluation/tier3/workloads`) build the whole model and
 install providers at their declared sites on every layer; they are not

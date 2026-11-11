@@ -145,6 +145,7 @@ op = declare_op(
     coverage=_BENCHMARK,
     benchmark=_BENCHMARK,
     benchmark_suites={"qwen3_0_6b_observed": _BENCHMARK},
-    memory_inputs=("x", "q_weight", "k_weight", "v_weight", "o_weight", "cos", "sin"),
+    memory_inputs=("x", "q_weight", "k_weight", "v_weight", "o_weight", "q_norm_weight",
+                   "k_norm_weight", "cos", "sin"),
     make_inputs=make_qwen3_attention_block_inputs,
 )

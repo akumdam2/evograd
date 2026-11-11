@@ -246,11 +246,10 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
     },
     "qwen3_5_residual_rmsnorm": {
         # One configuration holds every residual-width norm: each layer's
-        # post-attention and input norms and model.norm.
+        # post-attention and input norms and model.norm. Its sum feeds the MLP,
+        # the next layer's mixer or the LM head.
         "task": "rms_norm", "roles": ["input_layernorm", "norm", "post_attention_layernorm"],
-        "supporting_tasks": {
-            "consumer": {"task": "mlp", "roles": ["mlp"]},
-        },
+        "supporting_tasks": {},
     },
     "qwen3_5_swiglu_mlp": {
         "task": "mlp", "roles": ["mlp"],

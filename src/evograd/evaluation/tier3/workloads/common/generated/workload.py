@@ -55,8 +55,10 @@ def _cases(spec, site):
         if cases:
             return cases
         raise ValueError(f"{site}: matching snapshot has no matching configuration")
+    # The model passes its head count as the attention boundary's scalar.
+    free = {"heads": a["num_heads"]} if site == "dit_attention" else {}
     return (Workload(dims=dims, dtype=spec.dtype,
-                     provenance=Provenance(model=spec.model, component=site,
+                     provenance=Provenance(model=spec.model, component=site, free=free,
                                            source="specification",
                                            note="Configuration-derived preflight, not a measured suite")),)
 

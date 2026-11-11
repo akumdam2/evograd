@@ -41,10 +41,12 @@ _BENCHMARK = _model_workloads(
 
 
 def make_llama3_attention_block_inputs(torch, op, workload, device="cuda"):
-    """Inputs at a real step's magnitudes, with real rotary tables.
+    """Inputs at a real step's magnitudes, with valid rotary tables.
 
     ``cos``/``sin`` come from Llama-3's inverse-frequency schedule (``rope_theta``
-    500000) rather than random draws: a random pair is not a rotation.
+    500000) rather than random draws: a random pair is not a rotation. The
+    model's ``llama3`` frequency scaling is not applied; real payloads carry the
+    model's own tables.
     """
     dims = workload.dims
     dtype = getattr(torch, workload.dtype)

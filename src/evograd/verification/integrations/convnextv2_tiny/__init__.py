@@ -3,7 +3,8 @@
 Pinned pretrained ``facebook/convnextv2-tiny-1k-224`` and a frozen pool of every
 Imagenette training image through its image processor; capture and model
 reference are shared with Qwen2-VL (:mod:`..vision`, :mod:`..vision_model`).
-The four ``convnext_mlp`` stage sites are one task at four configurations.
+The four ``convnext_mlp`` and the four ``dwconv_layernorm`` stage sites are two
+tasks at four configurations each.
 
     python -m evograd.verification.integrations convnextv2_tiny {capture,fidelity,verify} ...
 """

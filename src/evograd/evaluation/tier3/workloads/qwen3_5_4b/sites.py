@@ -222,24 +222,17 @@ def _is_production(kernel, site: str) -> bool:
 
 # ── registries ───────────────────────────────────────────────────────────────
 
-_REGISTRIES: dict[str | None, SiteRegistry] = {}
+_REGISTRY: list[SiteRegistry] = []
 
 
-def qwen3_5_sites(kind: str | None = None) -> SiteRegistry:
-    """The six sites (``kind=None``), or one layer kind's subset.
-
-    The observed shapes are checked at real size by the gates, not here.
-    """
-    if kind is not None and kind not in SITES_BY_BLOCK:
-        raise ValueError(f"unknown block kind {kind!r}; known: {sorted(SITES_BY_BLOCK)}")
-    if kind not in _REGISTRIES:
-        sites = SITES if kind is None else SITES_BY_BLOCK[kind]
-        name = WORKLOAD if kind is None else f"{WORKLOAD}.{kind}"
-        _REGISTRIES[kind] = SiteRegistry(
-            name=name,
-            sites=tuple(Site(site, SITE_TASKS[site], PRODUCTION[site]) for site in sites),
-        )
-    return _REGISTRIES[kind]
+def qwen3_5_sites() -> SiteRegistry:
+    """The six sites. The observed shapes are checked at real size by the gates, not here."""
+    if not _REGISTRY:
+        _REGISTRY.append(SiteRegistry(
+            name=WORKLOAD,
+            sites=tuple(Site(site, SITE_TASKS[site], PRODUCTION[site]) for site in SITES),
+        ))
+    return _REGISTRY[0]
 
 
 def structural_identity_kernels(registry: SiteRegistry | None = None):

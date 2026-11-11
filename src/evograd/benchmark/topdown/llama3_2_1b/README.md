@@ -1,4 +1,4 @@
-# Llama-3-8B top-down benchmark
+# Llama-3.2-1B top-down benchmark
 
 The second top-down workload, and the one that made the first one's machinery
 generic. Its stable name is `llama3_2_1b`; the public model key — the
@@ -38,10 +38,8 @@ nothing here inherits from it.
   model's own: an architecture does not borrow another's task key, even where
   the mathematics is the same.
 - L1: the primitive mapping for those boundaries, bound as this model's own
-  observed suites onto the shared primitive contracts. **The harvest has not
-  been run**, so every one of those suites is presently empty and no primitive
-  declaration is changed by them; they appear the moment the snapshot is
-  tracked, with no edit here and none in any primitive.
+  observed suites onto the shared primitive contracts. The suites come from
+  the tracked snapshot, with no edit here and none in any primitive.
 - L3: the whole training step (`levels/level3/`).
 
 Benchmark Level describes integration scope. T1/T2/T3 are evaluation execution
@@ -73,19 +71,6 @@ overrides apply to it). See "Regenerating the snapshots" in
 
 The smoke entry point takes no subcommand: `--out` and the override flags go
 directly to `python -m evograd.benchmark.topdown.llama3_2_1b`.
-
-## Not present, because each must be derived from a run
-
-In the order they unblock each other:
-
-1. `harvest/snapshot.json`. Until it is tracked, `load_snapshot("llama_3_2_1b")`
-   refuses with the commands to produce one, and no declaration carries a
-   `llama_3_2_1b_observed` suite — the hooks are wired and inert, so the suites
-   appear when the file lands, with no edit to any operator.
-
-   Llama-3-8B in BF16 is ~16 GiB of weights and ~16 GiB of gradients before
-   activations. The Level-3 step takes no optimizer step, so it fits an
-   80–120 GiB card; `--layers 4` shrinks it for a smoke.
 
 ## Real text: the pinned checkpoint on WikiText-2
 

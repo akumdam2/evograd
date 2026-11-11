@@ -21,9 +21,9 @@ import sys
 import time
 
 SHARED = Path("/work/hdd/bcjw/wzhan/ADBench")
-CASE_COUNTS = {"qwen3_0_6b": 8, "qwen3_5_4b": 15, "llama_3_2_1b": 8,
+CASE_COUNTS = {"qwen3_0_6b": 8, "qwen3_5_4b": 14, "llama_3_2_1b": 7,
                "qwen2_vl_2b": 6, "convnextv2_tiny": 8, "dit_s_2": 3,
-               "torchrec_dlrm": 2, "olmoe_1b_7b": 8}
+               "torchrec_dlrm": 2, "olmoe_1b_7b": 7}
 MODELS = tuple(CASE_COUNTS)
 AGENTS = ("openevolve", "gepa", "geak", "codex")
 SMOKE_CASES = ("rmsnorm/rmsnorm", "qwen3_swiglu_mlp/swiglu_mlp")

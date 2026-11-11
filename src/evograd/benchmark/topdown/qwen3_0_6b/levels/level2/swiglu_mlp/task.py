@@ -3,9 +3,9 @@
 The first task in this repository whose shape was **observed** rather than
 chosen. Every dimension comes from one canonical Qwen3-0.6B training step:
 batch 2, sequence 2048, BF16, SDPA, ``use_cache=False``. That step was harvested
-into a manifest, one decoder layer was captured and verified to replay
-standalone, and the ``Qwen3MLP`` invocation inside that replay is what this
-declaration describes.
+into a manifest, and the ``Qwen3MLP`` invocation it records is what this
+declaration describes; the real-run capture records every one of its calls, and
+the model reference replays each of them.
 
 The provenance is therefore checkable twice over, in two independent ways:
 
@@ -49,7 +49,7 @@ PROVENANCE_CHAIN = (
     f"harvest manifest {_SNAPSHOT['manifest_hash']}",
     f"{_SNAPSHOT['representative_layer']['module_path']} "
     f"(event ordinal {_SNAPSHOT['representative_layer']['event_ordinal']})",
-    "verified standalone Qwen3DecoderLayer replay",
+    "real-run capture, every call replayed by the model reference",
     f"Qwen3MLP invocation, harvested configuration {HARVEST['config_id']}",
     "qwen3_swiglu_mlp",
 )

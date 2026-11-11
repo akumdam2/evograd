@@ -11,19 +11,15 @@ import unittest
 from evograd.verification.gate2.adapters.operator import OperatorScope
 from evograd.verification.integrations import PACKAGES, load
 from evograd.verification.integrations.base import observed_cases
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 
 class TestObservedCaseScope(unittest.TestCase):
     def test_every_reference_op_declares_its_parameter_split(self):
-        from evograd.benchmark import TASKS
-        from evograd.benchmark.topdown import load_snapshot
-
         for name in sorted(PACKAGES):
-            stale = sorted(set(load_snapshot(name)["tasks"]) - set(TASKS))
-            if stale:
+            if not snapshot_is_current(name):
                 with self.subTest(model=name):
-                    self.skipTest(f"the tracked snapshot lists tasks no longer declared "
-                                  f"({stale}); the GPU harvest regenerates it")
+                    self.skipTest(STALE_SNAPSHOT)
                 continue
             model = load(name)
             for case in observed_cases(model):

@@ -314,6 +314,10 @@ def invocations(capture: LiveCapture, model, cases: Sequence[Case]) -> Iterator[
 
     for r in capture.attn:
         attn, layer = modules[r["path"]], layer_index(r["path"])
+        # The block is declared mask-free (is_causal) with one eps for both norms.
+        if not (capture.sdpa[layer]["attn_mask_is_none"]
+                and attn.q_norm.variance_epsilon == attn.k_norm.variance_epsilon):
+            raise ValueError(f"layer {layer}: the attention call is outside the declared case")
         yield emit("olmoe_attention_block", 2,
                    {"path": f"model.layers.{layer}.self_attn#attention_block", "layer": layer,
                     "role": "attention_block", "kind": "boundary:OlmoeAttention"},

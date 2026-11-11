@@ -657,6 +657,17 @@ def _causal_lm_forward(self, input_ids=None, attention_mask=None, position_ids=N
         raise NotImplementedError("qwen3_lm_head_ce is declared on every position (logits_to_keep=0)")
     if kwargs.pop("return_dict", None) is False:
         raise NotImplementedError("the LM-head adapter returns a CausalLMOutputWithPast")
+    kernel = state["kernels"].get(SITE_LM_HEAD_CE)
+    production = kernel is None or _is_production(kernel, SITE_LM_HEAD_CE)
+    if not production:
+        if labels is None:
+            raise NotImplementedError(
+                "a qwen3_lm_head_ce candidate computes the loss and no logits; this call "
+                "passed no labels, so it would return nothing the caller asked for"
+            )
+        refused = sorted(set(kwargs) & set(_LOSS_KWARGS))
+        if refused:
+            raise NotImplementedError(f"qwen3_lm_head_ce is declared without {refused}")
     outputs = self.model(
         input_ids=input_ids,
         attention_mask=attention_mask,
@@ -667,23 +678,14 @@ def _causal_lm_forward(self, input_ids=None, attention_mask=None, position_ids=N
         **kwargs,
     )
     hidden_states = outputs.last_hidden_state[:, slice(-logits_to_keep, None), :]
-    kernel = state["kernels"].get(SITE_LM_HEAD_CE)
     state["counters"].hit(SITE_LM_HEAD_CE)
-    if kernel is None or _is_production(kernel, SITE_LM_HEAD_CE):
+    if production:
         inputs = {"x": hidden_states, "weight": self.lm_head.weight, "labels": labels}
         inputs, emitted = _probe_inputs(state, inputs, ("x",))
         logits, loss = _tap(state, SITE_LM_HEAD_CE, inputs,
                             production_lm_head_ce(self, inputs["x"], labels, **kwargs),
                             key=None, emitted=emitted)
     else:
-        if labels is None:
-            raise NotImplementedError(
-                "a qwen3_lm_head_ce candidate computes the loss and no logits; this call "
-                "passed no labels, so it would return nothing the caller asked for"
-            )
-        refused = sorted(set(kwargs) & set(_LOSS_KWARGS))
-        if refused:
-            raise NotImplementedError(f"qwen3_lm_head_ce is declared without {refused}")
         target = F.pad(labels, (0, 1), value=-100)[..., 1:].contiguous().view(-1)
         inputs = {"x": hidden_states.reshape(-1, hidden_states.shape[-1]),
                   "weight": self.lm_head.weight, "target": target}

@@ -34,7 +34,7 @@ from evograd.adbench_tools.score import compare  # noqa: E402
 from evograd.adbench_tools.statement import system_message  # noqa: E402
 from evograd.adbench_tools.task import build_task, load, reference_closure  # noqa: E402
 from tests._small_cases import SMALL
-from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -268,12 +268,6 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None,
         return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
 
 
-#: Qwen3's Level-2 cases are the tracked snapshot's, which names the Level-2
-#: tasks of its last harvest; these run once it is regenerated.
-needs_current_qwen3_snapshot = pytest.mark.skipif(not qwen3_snapshot_current(),
-                                                  reason=QWEN3_SNAPSHOT_STALE)
-
-
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     """The pack `evograd evaluate` judges: the case's configuration and the
     model's own reference computation, both read from the verification side."""
@@ -404,19 +398,12 @@ def test_the_evaluator_judges_correctness_only_by_the_packs_rule(tmp_path, monke
     assert seen == [spec]
 
 
-def _llama_case_table_is_current() -> bool:
-    from tests.verification.test_integration_llama import _snapshot_is_current
-
-    return _snapshot_is_current()
-
-
 #: Scalars the recorded training calls pass (payload corpora of 2026-10-21) where
 #: the task's declared default is another model's or the generic grid's.
 MODEL_SCALARS = (
     pytest.param("llama_3_2_1b", "llama3_residual_rmsnorm/residual_rmsnorm", {"eps": 1e-5},
-                 marks=pytest.mark.skipif(not _llama_case_table_is_current(),
-                                          reason="the tracked Llama snapshot predates the merged "
-                                                 "attention block; regenerate it (GPU harvest)")),
+                 marks=pytest.mark.skipif(not snapshot_is_current("llama_3_2_1b"),
+                                          reason=STALE_SNAPSHOT)),
     ("qwen3_0_6b", "rmsnorm/rmsnorm", {"eps": 1e-6}),
     ("qwen2_vl_2b", "layernorm/model.visual.blocks.norm1", {"eps": 1e-6}),
     ("qwen2_vl_2b", "rmsnorm/model.language_model.layers.input_layernorm", {"eps": 1e-6}),
@@ -486,24 +473,18 @@ REACHED = (
      ("vendor_gemm", "vendor_sdpa")),
     ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "matmul", ("vendor_gemm",)),
     ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "_grouped_mm", ("vendor_gemm",)),
-    pytest.param("qwen3_0_6b", "qwen3_attention_block/attention_block",
-                 "scaled_dot_product_attention", ("vendor_gemm", "vendor_sdpa"),
-                 marks=needs_current_qwen3_snapshot),
-    pytest.param("qwen3_0_6b", "qwen3_lm_head_ce/flce", "linear", ("vendor_gemm",),
-                 marks=needs_current_qwen3_snapshot),
+    ("qwen3_0_6b", "qwen3_attention_block/attention_block", "scaled_dot_product_attention",
+     ("vendor_gemm", "vendor_sdpa")),
+    ("qwen3_0_6b", "qwen3_lm_head_ce/flce", "linear", ("vendor_gemm",)),
 )
 
 
 @pytest.mark.parametrize("model,case_id,reached,granted", REACHED)
 def test_the_auto_grant_follows_what_one_reference_call_reaches(model, case_id, reached, granted):
     from evograd.adbench_tools.task import observed_calls, observed_case, resolve_library
-    from evograd.benchmark import TASKS
-    from evograd.benchmark.topdown import load_snapshot
 
-    stale = sorted(set(load_snapshot(model)["tasks"]) - set(TASKS))
-    if stale:
-        pytest.skip(f"{model}'s tracked snapshot lists tasks no longer declared ({stale}); "
-                    "the GPU harvest regenerates it")
+    if not snapshot_is_current(model):
+        pytest.skip(STALE_SNAPSHOT)
     model_obj, case = observed_case(model, case_id)
     calls = observed_calls(model_obj.reference_op(case.task), case.workload, device="meta")
     assert reached in calls

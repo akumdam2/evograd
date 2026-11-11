@@ -21,7 +21,7 @@ from pathlib import Path
 
 import torch
 
-from tests.qwen3 import QWEN3_SNAPSHOT_STALE, qwen3_snapshot_current
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
 
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -230,7 +230,7 @@ class LevelTwoReferencesAreTheModulesArithmetic(unittest.TestCase):
 
 
 class RealCaseTable(unittest.TestCase):
-    @unittest.skipUnless(qwen3_snapshot_current(), QWEN3_SNAPSHOT_STALE)
+    @unittest.skipUnless(snapshot_is_current("qwen3_0_6b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import TASK_SOURCES
         from evograd.verification.integrations.base import observed_cases
@@ -381,6 +381,8 @@ class RealRunHarvest(unittest.TestCase):
                          [f"model.layers.{i}.self_attn" for i in range(LAYERS)])
         self.assertEqual(sorted(tasks["qwen3_lm_head_ce"]["supporting"]),
                          ["flat_cross_entropy", "lm_head"])
+        # Anchored on the loss function: no module path.
+        self.assertEqual(tasks["qwen3_lm_head_ce"]["module_paths"], [])
 
     def test_the_tracked_snapshot_without_a_run_still_loads(self):
         from evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot import READABLE_SCHEMAS, load

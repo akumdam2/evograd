@@ -360,11 +360,11 @@ class CandidatesTakeTheirOwnConfiguration(unittest.TestCase):
         self.assertEqual(call(*self.args(self.workloads[0])), "candidate")
         other = self.args(self.workloads[1])
         self.assertTrue(torch.equal(call(*other), megafold_layernorm_linear_forward(*other)))
+        # A layout the case does not record (another candidate's output, say) is
+        # still its call: shapes tell these configurations apart, strides need not.
         x, *rest = self.args(self.workloads[0])
-        transposed = torch.randn(x.shape[1], x.shape[0]).T  # a layout the case does not record
-        self.assertTrue(torch.equal(call(transposed, *rest),
-                                    megafold_layernorm_linear_forward(transposed, *rest)))
-        self.assertEqual(len(seen), 1)
+        self.assertEqual(call(torch.randn(x.shape[1], x.shape[0]).T, *rest), "candidate")
+        self.assertEqual(len(seen), 2)
 
     def test_a_site_with_one_configuration_holds_its_candidate_as_is(self):
         candidate = lambda *a: "candidate"  # noqa: E731

@@ -300,8 +300,6 @@ python -m evograd.benchmark.topdown.llama3_2_1b.harvest.harvest --out $H
 python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --validate
 python -m evograd.benchmark.topdown.llama3_2_1b.harvest.snapshot --harvest $H --write
 # olmoe_1b_7b, --mem=64g (14 GB of BF16 weights are read on the host), EVOGRAD_HF_CACHE=$V/hf_cache
-# (its --validate also reports the L2 task list: olmoe_attention_block replaces
-# olmoe_qkv_norm_rope + olmoe_attention, and olmoe_residual_rmsnorm counts 32 calls, not 16)
 H=results/benchmark/topdown/olmoe_1b_7b/harvest.json
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.harvest --out $H
 python -m evograd.benchmark.topdown.olmoe_1b_7b.harvest.snapshot --harvest $H --validate
@@ -313,13 +311,23 @@ python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --v
 python -m evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot --harvest $H --write
 ```
 
-Qwen3-0.6B's `TASK_SOURCES` changed after its snapshot was written:
-`qwen3_attention_block` (the whole attention module, 28 calls) and
-`qwen3_lm_head_ce` (the LM head with the loss, 1 call) replace
-`qwen3_qkv_norm_rope` and `qwen3_attention`. Its `--validate` therefore also
-differs in those four `tasks` entries; `qwen3_swiglu_mlp`, `fused_add_rms_norm`
-and every `level1` case must not move. Until the snapshot is written, the two
-old entries are no cases and the two new tasks have none.
+Each language model's `TASK_SOURCES` changed after its snapshot was written, so
+its `--validate` also differs in these Level-2 `tasks` entries:
+
+- Qwen3-0.6B: `qwen3_attention_block` (the whole attention module, 28 calls)
+  and `qwen3_lm_head_ce` (the LM head with the loss, 1 call) replace
+  `qwen3_qkv_norm_rope` and `qwen3_attention`.
+- Llama-3.2-1B: `llama3_attention_block` (16 calls) replaces `llama3_qkv_rope`
+  and `llama3_attention`.
+- OLMoE-1B-7B: `olmoe_attention_block` (16 calls) replaces `olmoe_qkv_norm_rope`
+  and `olmoe_attention`; `olmoe_residual_rmsnorm` counts 32 calls, not 16.
+- Qwen3.5-4B: `qwen3_5_attention_block` (8 calls) replaces
+  `qwen3_5_qkv_norm_partial_rope` and `qwen3_5_gated_attention`;
+  `qwen3_5_residual_rmsnorm` counts 64 calls, not 32.
+
+The other Level-2 entries and every `level1` case must not move. Until a
+snapshot is written, its removed entries are no cases and its new tasks have
+none.
 
 The vision and generated models write the snapshot in the harvest, all at
 `--mem=32g` (Qwen2-VL: 64g if it runs out) with `EVOGRAD_HF_CACHE=$V/hf_cache`. They read their real-data
@@ -336,15 +344,22 @@ for m in convnextv2_tiny qwen2_vl_2b dit_s_2 torchrec_dlrm; do
 done
 ```
 
-Their cases must not move either; per snapshot, against the committed one:
+Their cases must not move either; per snapshot, against the committed one. The
+check compares the Level-2 tasks both snapshots hold: Qwen2-VL adds
+`vision_attention`, `vision_residual_layernorm`, `text_attention_block` and
+`text_residual_rmsnorm`, ConvNeXt V2 `dwconv_layernorm`, and DiT
+`dit_attention` and `dit_adaln_residual` (its `blocks.residual` at 23 calls and
+`final_residual` at 1).
 
 ```bash
 python -c 'import json, subprocess, sys
 cases = lambda s: {k: {t: [(c["config_id"], c["frequency"], c["dims"]) for c in e["configurations"]]
                        for t, e in s[k].items()} for k in ("level1", "tasks")}
 p = sys.argv[1]
-print(cases(json.loads(subprocess.check_output(["git", "show", "HEAD:" + p])))
-      == cases(json.load(open(p))))' src/evograd/benchmark/topdown/convnextv2_tiny/harvest/snapshot.json
+old, new = (cases(json.loads(subprocess.check_output(["git", "show", "HEAD:" + p]))),
+            cases(json.load(open(p))))
+new["tasks"] = {t: e for t, e in new["tasks"].items() if t in old["tasks"]}
+print(old == new)' src/evograd/benchmark/topdown/convnextv2_tiny/harvest/snapshot.json
 ```
 
 Then commit the eight `snapshot.json` files and update what pins the old
@@ -352,12 +367,9 @@ identity: `tests/test_task_registry.py` (the Qwen3 manifest's workload id),
 `tests/qwen3/test_level2_swiglu_mlp.py` (`PROVENANCE_CHAIN`: workload id and
 manifest hash), `tests/llama3/test_real_text.py` (the canonical workload id
 equals the snapshot's), and the old revision in each language model's
-`READABLE_SCHEMAS`. After that, the representative-layer tools that compare a
-`--synthetic` layer artifact with the tracked snapshot's workload id and
-manifest hash (`<model>/layer/artifact.py` `load_canonical`,
-`levels/level2/*/capture.py`, `layer/capture.py`) refuse it, and the random
-canonical Tier-3 vision and generated workloads fall back to specification
-preflight cases (their workload id is no longer the snapshot's). Corpora
+`READABLE_SCHEMAS`. After that, the random canonical Tier-3 vision and
+generated workloads fall back to specification preflight cases (their workload
+id is no longer the snapshot's). Corpora
 captured before keep the old `snapshot_hash` and still verify; new captures
 refuse until the snapshots are regenerated.
 

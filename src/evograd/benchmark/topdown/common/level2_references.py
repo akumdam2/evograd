@@ -102,7 +102,7 @@ def attention_projection_forward_production(
         attn_mask=None,
         dropout_p=0.0,
         is_causal=True,
-        scale=1.0 / math.sqrt(q.shape[-1]),
+        scale=q.shape[-1] ** -0.5,  # the module's ``scaling``, spelled as it is
         enable_gqa=True,
     )
     return _merge_and_project(attn, o_weight)

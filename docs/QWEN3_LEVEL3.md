@@ -31,7 +31,8 @@ python -m evograd.benchmark.topdown.qwen3_0_6b.harvest.snapshot \
 ```
 
 Regenerate the snapshot this way whenever `harvest/snapshot.py`'s `TASK_SOURCES`
-change; until then a capture refuses it and the case list is the old one.
+change; until then a capture refuses it, and the case list is the old one
+without its removed tasks.
 
 ## Whole-model evaluation (Level 3)
 

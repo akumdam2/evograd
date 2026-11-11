@@ -54,9 +54,8 @@ SEMANTICS = {
         "affine parameters (eps 1e-6) * (1 + scale[:, None]) + shift[:, None]; returns "
         "(modulated, summed) IN THAT ORDER. x is the residual stream (the model lays it out "
         "channel-first, strides [T*H, 1, T]); gate, shift and scale are column slices of the "
-        "modulation output, so their row stride is that output's width. Return summed with "
-        "x's strides, as the model's add lays it out: it is the next call's x, and a call at "
-        "a layout its case does not record runs the model reference instead"),
+        "modulation output, so their row stride is that output's width. summed is the next "
+        "call's x; the model's add gives it x's strides"),
     "dlrm_interaction": "Dense vector and strict triangular pairwise dot products",
 }
 BACKWARD = {

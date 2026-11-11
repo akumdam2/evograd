@@ -281,13 +281,13 @@ Model names and planned case counts:
 | Model | Cases |
 |---|---:|
 | qwen3_0_6b | 8 |
-| qwen3_5_4b | 15 |
-| llama_3_2_1b | 8 |
+| qwen3_5_4b | 14 |
+| llama_3_2_1b | 7 |
 | qwen2_vl_2b | 6 |
 | convnextv2_tiny | 8 |
 | dit_s_2 | 3 |
 | torchrec_dlrm | 2 |
-| olmoe_1b_7b | 8 |
+| olmoe_1b_7b | 7 |
 
 The case roster comes from the shared task packs and is checked against the
 plan's counts (and `cases`/`case_ids` in the shared index when present). The

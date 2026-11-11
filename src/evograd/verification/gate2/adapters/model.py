@@ -119,7 +119,8 @@ class WorkloadModelScope(ScopeBase):
 
         op = get_task(self.registry.require(site).op)
         return dispatch.by_configuration(
-            op, {dispatch.configuration(op, w): call for w in self._replaced[site]},
+            op, {dispatch.configuration(op, w) for w in self.registry.require(site).preflight},
+            {dispatch.configuration(op, w): call for w in self._replaced[site]},
             self.native_site(site))
 
     def site_references(self) -> dict[str, Any]:

@@ -208,7 +208,7 @@ def bindings(model):
             yield Binding("vision_mlp", path, module, module, module, pack)
         elif kind == "VisionAttention":
 
-            def pack(args, kwargs, m=module):
+            def pack(args, kwargs, m=module, path=path):
                 _sdpa(m)
                 cu_seqlens = kwargs["cu_seqlens"] if "cu_seqlens" in kwargs else args[1]
                 if cu_seqlens.numel() != 2:
@@ -221,7 +221,7 @@ def bindings(model):
             yield Binding("vision_attention", path, module, module, module, pack)
         elif kind == "Qwen2VLAttention":
 
-            def pack(args, kwargs, m=module):
+            def pack(args, kwargs, m=module, path=path):
                 _sdpa(m)
                 mask = kwargs.get("attention_mask")
                 if not (torch.is_tensor(mask) and mask.dtype == torch.bool):

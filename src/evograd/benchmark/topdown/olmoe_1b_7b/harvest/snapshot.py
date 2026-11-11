@@ -138,12 +138,11 @@ TASK_SOURCES: dict[str, dict[str, Any]] = {
             "enclosing": _MOE,
         },
     },
-    # The three norms a residual add feeds are one configuration: one case.
+    # The three norms a residual add feeds are one configuration: one case. Its
+    # sum feeds the experts, the next layer's attention or the LM head.
     "olmoe_residual_rmsnorm": {
         "task": "rms_norm", "roles": ["input_layernorm", "norm", "post_attention_layernorm"],
-        "supporting_tasks": {
-            "consumer": _MOE,
-        },
+        "supporting_tasks": {},
     },
 }
 

@@ -13,8 +13,8 @@ execution and correctness checks belong to
 | L2 | composite | A boundary composed from multiple adjacent primitives |
 | L3 | whole-model workload | A complete model-training workload |
 
-The decoder layer a model's L2 sites take their real invocations from is a
-data source (`topdown/<model>/layer`), not a level.
+An L2 site's real invocations come from the verification capture of a whole
+training step; that capture is a data source, not a level.
 
 A Level is the integration scope of an optimization, not the strength of a
 measurement. An L2 task may be evaluated in T1, T2, or T3; Level and Tier are

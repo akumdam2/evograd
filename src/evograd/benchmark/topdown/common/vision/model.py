@@ -78,8 +78,9 @@ def build_model(spec):
     from packaging.version import Version
 
     version = Version(transformers.__version__)
-    if version < Version("4.57.0"):
-        raise RuntimeError("Vision workloads require transformers>=4.57 (tested: 4.57.6, 5.16.1)")
+    if version < Version("5.0"):
+        # The Level-2 bindings read the 5.x keyword layout and ``rope_parameters``.
+        raise RuntimeError("Vision workloads require transformers>=5 (tested: 5.16.1)")
     if spec.model == "convnextv2_tiny":
         config_cls = transformers.ConvNextV2Config
         model_cls = transformers.ConvNextV2ForImageClassification

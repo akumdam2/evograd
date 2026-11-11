@@ -20,6 +20,8 @@ from pathlib import Path
 
 import torch
 
+from tests._snapshots import STALE_SNAPSHOT, snapshot_is_current
+
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -87,22 +89,8 @@ def tiny_cases(dtype: str = "bfloat16"):
                       freq) for task, slug, dims, dtype, freq in rows)
 
 
-def snapshot_is_current() -> bool:
-    """Whether the tracked snapshot holds the Level-2 tasks the code declares; it
-    predates them until the GPU harvest regenerates it."""
-    from evograd.benchmark.topdown import load_snapshot
-    from evograd.benchmark.topdown.qwen3_5_4b.harvest.snapshot import TASK_SOURCES
-
-    return set(load_snapshot("qwen3_5_4b")["tasks"]) == set(TASK_SOURCES)
-
-
-STALE_SNAPSHOT = ("the tracked Qwen3.5 snapshot predates its Level-2 tasks "
-                  "(qwen3_5_attention_block, the 64-call residual fusion); regenerate it on a "
-                  "GPU node")
-
-
 class RealCaseTable(unittest.TestCase):
-    @unittest.skipUnless(snapshot_is_current(), STALE_SNAPSHOT)
+    @unittest.skipUnless(snapshot_is_current("qwen3_5_4b"), STALE_SNAPSHOT)
     def test_observed_cases_follow_registry_and_snapshot(self):
         from evograd.benchmark.topdown.qwen3_5_4b.levels.level2 import manifest
         from evograd.verification.integrations.base import observed_cases
@@ -128,7 +116,7 @@ class RealCaseTable(unittest.TestCase):
         self.assertEqual(MODEL.gate3_optimizer, {"warmup_steps": 100, "clip_grad_norm": 1.0,
                                                  "lr": 3e-5})
 
-    @unittest.skipUnless(snapshot_is_current(), STALE_SNAPSHOT)
+    @unittest.skipUnless(snapshot_is_current("qwen3_5_4b"), STALE_SNAPSHOT)
     def test_every_case_task_is_redeclared_under_the_contract(self):
         from evograd.verification.integrations.base import observed_cases
         from evograd.verification.integrations.qwen3_5_4b import MODEL, reference

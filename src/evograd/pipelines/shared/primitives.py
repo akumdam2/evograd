@@ -4,9 +4,9 @@ The default search space for a generated pair is Triton and nothing else, which
 is the right default: an operator that quietly calls ``F.linear`` has not been
 evolved, it has been wrapped. But "no PyTorch at all" is a different rule from
 "nothing untrusted", and for a Level-2 operator built around dense projections
-the two disagree. `qwen3_qkv_norm_rope`'s measured loss to Inductor is entirely
-in hand-written GEMMs: 859 of 1050 device microseconds in three matmuls that
-cuBLAS does in 165. Forbidding cuBLAS there does not make the search harder, it
+the two disagree. The former `qwen3_qkv_norm_rope`'s measured loss to Inductor
+was entirely in hand-written GEMMs: 859 of 1050 device microseconds in three
+matmuls that cuBLAS does in 165. Forbidding cuBLAS there does not make the search harder, it
 makes the objective unreachable.
 
 So a primitive is *opted into by name*, per run, and nothing is relaxed for any

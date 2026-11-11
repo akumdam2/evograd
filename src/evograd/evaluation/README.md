@@ -158,13 +158,11 @@ Read the case's provenance, not just its suite name.
 | --- | --- | --- |
 | T1 | Seeded task recipe: activations, weights, layouts and an external gradient for each output | Oracle and candidate on identical values |
 | Formal T2 (`evograd evaluate`) | The verification corpus's recorded calls of the case in one training step: arguments, weights and output gradients | Candidate and every baseline on copies of the same calls; correctness is the gates' |
-| L2 real invocation (captured layer) | Saved layer weights, actual model arguments and incoming output gradients | Native layer replay; the capture also stores original outputs and gradients |
-| L2 real invocation (config-derived layer) | Seeded layer, inputs and external gradients | Native layer on that case |
 | Whole model | Checkpoint or seeded weights; real-text or synthetic token IDs and labels | The LM loss as `workload.loss` returns it (with any auxiliary term); backward supplies the intermediate and parameter gradients |
 
-Capture hooks save detached CPU copies from a full-model forward/backward.
-The replay verifies artifact identity. A historical capture need not use the
-same weights or data as a later whole-model training experiment.
+Capture hooks save detached CPU copies from a full-model forward/backward. A
+historical capture need not use the same weights or data as a later
+whole-model training experiment.
 
 ### Qwen/Llama L2 boundaries and canonical shapes
 
@@ -181,15 +179,16 @@ The current matrix uses BF16, `B=2`, `T=2048` and `rows=B*T=4096`.
 
 | L2 site | Inputs and weights | Outputs |
 | --- | --- | --- |
-| QKV + RoPE | `x[B,T,H]`, `Wq[QO,H]`, `Wk,Wv[KVO,H]`, rotary tables `[1,T,D]`; Qwen adds Q/K norm weights `[D]` | `q[B,HQ,T,D]`, `k,v[B,HK,T,D]` |
-| Attention + output projection | Q/K/V above, `Wo[H,QO]` | `[B,T,H]` |
+| Attention block | `x[B,T,H]`, `Wq[QO,H]`, `Wk,Wv[KVO,H]`, `Wo[H,QO]`, rotary tables `[1,T,D]`; Qwen adds Q/K norm weights `[D]` | `[B,T,H]` |
 | SwiGLU MLP | `x[B,T,H]`, gate/up weights `[I,H]`, down weight `[H,I]` | `[B,T,H]` |
 | Residual + RMSNorm | `x,r[rows,H]`, weight `[H]`, epsilon | Normalized output and residual sum, both `[rows,H]` |
+| LM head + cross entropy (Qwen) | `x[rows,H]`, tied head `[V,H]`, shifted labels `[rows]` | Mean loss |
 
-Q/K/V are head-major views of token-major tensors. Attention begins after QKV
-projection and RoPE; those operations belong to the QKV site. Each site runs
-once per decoder layer, but full-model residual fusion also covers cross-layer/final
-norm boundaries: 56 calls for Qwen and 32 for Llama.
+The attention block is the whole attention module: projections, any Q/K
+norms, RoPE, causal grouped-query SDPA and the output projection. It and the
+MLP run once per decoder layer, the LM head with the loss once per step, and
+full-model residual fusion also covers cross-layer/final norm boundaries: 56
+calls for Qwen and 32 for Llama.
 
 Sources: [model dimensions](../opdecl/models.py),
 [Qwen sites](../benchmark/topdown/qwen3_0_6b/levels/level2/manifest.py),
@@ -199,7 +198,7 @@ The generic Llama-3-8B operator grids are a different workload.
 ### Qwen3.5-4B L2 boundaries and canonical shapes
 
 The hybrid linear-attention model: 32 layers (24 Gated DeltaNet, 8 gated full
-attention), BF16, `B=1`, `T=2048`. Its seven L2 sites, their contracts and
+attention), BF16, `B=1`, `T=2048`. Its six L2 sites, their contracts and
 calibrated tolerances are described in [docs/QWEN3_5_4B.md](../../../docs/QWEN3_5_4B.md)
 and [the package README](../benchmark/topdown/qwen3_5_4b/README.md).
 
