@@ -172,6 +172,9 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
         self._rejects("_mm = getattr(torch, 'matmul')\nreturn _mm(x, w), (x,)", "getattr")
         self._rejects("_f = __import__('torch.nn.functional')\nreturn x, (x,)", "__import__")
         self._rejects("import importlib\nreturn x, (x,)", "importlib")
+        self._rejects("import builtins\nreturn builtins.getattr(torch, 'mm')(x, w), (x,)",
+                      "builtins")
+        self._rejects("return eval('torch.mm')(x, w), (x,)", "eval()")
         self._rejects("_m = x.matmul\nreturn _m(w), (x,)", "matmul")
 
     def test_triton_dot_is_the_kernels_own_arithmetic_and_stays_allowed(self):
@@ -242,6 +245,39 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
                 ("from torch.linalg import multi_dot\nreturn multi_dot([x, w]), (x,)",
                  "torch.linalg.multi_dot")):
             self._rejects(body, needle)
+
+    def test_a_torch_alias_is_judged_by_the_path_it_stands_for(self):
+        # A rename of a torch namespace, by import or by assignment, reaches what
+        # the namespace reaches; ``from torch import *`` is rejected outright.
+        for body, needle in (
+                ("from torch import *\nreturn conv2d(x, w), (x,)", "from torch import *"),
+                ("from torch import *\nreturn embedding_bag(x, w), (x,)", "from torch import *"),
+                ("from torch import linalg\nreturn linalg.multi_dot([x, w]), (x,)",
+                 "linalg.multi_dot (torch.linalg.multi_dot)"),
+                ("import torch.linalg as la\nreturn la.vecdot(x, w), (x,)",
+                 "la.vecdot (torch.linalg.vecdot)"),
+                ("import torch as t\nreturn t.conv2d(x, w), (x,)", "t.conv2d (torch.conv2d)"),
+                ("import torch as t\nreturn t.ops.aten.convolution(x, w), (x,)",
+                 "(torch.ops.aten.convolution)"),
+                ("T = torch\nreturn T.nn.grad.conv2d_input(x.shape, w, x), (x,)",
+                 "(torch.nn.grad.conv2d_input)"),
+                # Every later use of a from-imported name, and an alias of an alias
+                # met before the alias it stands on, or rebound to an innocent path.
+                ("from torch import conv2d as c\nreturn c(x, w), (x,)", "c (torch.conv2d)"),
+                ("U = T\nT = torch\nreturn U.conv2d(x, w), (x,)", "U.conv2d (torch.conv2d)"),
+                ("T = torch.float16\nT = torch\nreturn T.func.grad(x), (x,)",
+                 "T.func.grad (torch.func.grad)")):
+            self._rejects(body, needle)
+
+    def test_a_dtype_or_ordinary_torch_alias_stays_allowed(self):
+        body = """
+        X = torch.bfloat16
+        DT: torch.dtype = torch.float32
+        la = torch.linalg
+        y = x.to(X).to(DT) + la.vector_norm(x)
+        return y, (x, X)
+        """
+        self.assertFalse(check_source(_with_body(body), allowed=())["uses_trusted_primitives"])
 
     def test_the_archived_dit_cudnn_program_is_rejected(self):
         # OpenEvolve's dit_s_2 spatial_conv2d candidate of 2026-10-28, scored

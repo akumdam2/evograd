@@ -361,8 +361,12 @@ def build_task(
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
     # Before the pack exists: a trace or calibration that fails leaves no half-written pack.
-    calls = observed_calls(base, workload, device=device)
+    # Only ``auto`` reads the trace: another policy never depends on the reference running.
+    calls = observed_calls(base, workload, device=device) if library == "auto" else ()
     allowed, library_reason = resolve_library(library, calls)
+    library_policy = {"requested": library, "decision": library_reason}
+    if library == "auto":
+        library_policy["observed_calls"] = sorted(set(calls) & (_CONTRACTIONS | _ATTENTION))
     search = _search_correctness(model_obj, observed, corpus, device=device,
                                  state=Path(state) if state else None)
     root.mkdir(parents=True, exist_ok=True)
@@ -398,8 +402,7 @@ def build_task(
         "gate1_tolerances": _gate1_tolerances(scoped, workload),
         "search_correctness": search,
         "allowed_primitives": list(allowed),
-        "library_policy": {"requested": library, "decision": library_reason,
-                           "observed_calls": sorted(set(calls) & (_CONTRACTIONS | _ATTENTION))},
+        "library_policy": library_policy,
         "scoring": scoring,
         "performance_baseline": baseline,
         "evograd": _evograd_revision(),

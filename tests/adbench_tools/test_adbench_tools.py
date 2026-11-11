@@ -243,7 +243,7 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
-def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None):
+def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None, **build):
     """A model case's pack without a GPU: a tiny real corpus holds its calibration calls
     (placeholders unless ``payloads`` gives them at the case's interface); only the
     operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
@@ -264,7 +264,7 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None)
 
     with mock.patch.object(gates, "operator_calibration", calibration), \
             mock.patch.object(base, "configure", lambda: None):
-        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest)
+        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
 
 
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
@@ -484,6 +484,18 @@ def test_the_auto_grant_follows_what_one_reference_call_reaches(model, case_id, 
     assert resolve_library("auto", calls)[0] == granted
 
 
+def test_only_the_auto_policy_traces_the_reference(tmp_path, monkeypatch):
+    """A requested grant never depends on the reference running anywhere."""
+    from evograd.adbench_tools import task as task_module
+
+    monkeypatch.setattr(task_module, "observed_calls",
+                        lambda *a, **k: pytest.fail("the reference was traced"))
+    task = payload_rule_task(tmp_path / "task", SMALL_MODEL, SMALL_CASE, library="none")
+    assert task.allowed_primitives == ()
+    assert task.spec["library_policy"] == {"requested": "none",
+                                           "decision": "requested: no library primitives"}
+
+
 def test_a_reference_that_needs_values_is_traced_on_the_build_device(monkeypatch):
     import evograd.opdecl.oracle  # noqa: F401 - the module, not the function it exports
     from evograd.adbench_tools.task import observed_calls, observed_case
@@ -507,8 +519,18 @@ def test_the_statement_states_the_rules_and_what_acceptance_judges(small_task):
     rules = small_task.statement.split("## 3.")[1].split("## 4.")[0]
     for text in ("conv1d/2d/3d", "embedding", "batch_norm", "loss", "lstm", "torch.nn,",
                  "torch.func", "torch.utils.cpp_extension", "`torch._*`, at any depth",
-                 "`from torch.X import Y` counts as `torch.X.Y`", "ctypes", "__matmul__", "`@=`"):
+                 "`from torch.X import Y` counts as `torch.X.Y`",
+                 "after `import torch.X as Y`", "`Y = torch.X`, `Y.Z` counts as `torch.X.Z`",
+                 "`from torch import *`", "ctypes", "importlib", "builtins", "`getattr`",
+                 "`__import__`", "`eval`", "`exec`", "__matmul__", "`@=`"):
         assert text in rules, text
+    # Pipeline A's prompt states the same rules, from the same tables.
+    from evograd.pipelines.a_atenir_llm.prompts import render_pair_rules
+    from evograd.pipelines.shared.primitives import describe_rules
+
+    assert describe_rules("Every line of your module") in rules
+    shared = describe_rules("Every line inside the block")
+    assert shared in render_pair_rules(small_task.op(), small_task.allowed_primitives)
     # Acceptance (Gate 1, operator Gate 2) judges every payload of both splits --
     # all four orders, the search calls included -- and calibrates the envelope on them.
     assert PAYLOAD_SPLITS == ("calibration", "acceptance") and len(MODEL_ORDERS) == 4

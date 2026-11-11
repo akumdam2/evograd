@@ -84,7 +84,7 @@ def gated_mlp_forward_model_dtype(
 reference_forward = gated_mlp_forward_model_dtype
 ```
 
-Fixed configuration: B=2, T=2048, H=1024, I=3072, dtype bfloat16, one CUDA device.
+Fixed configuration: B=2, H=1024, I=3072, T=2048, dtype bfloat16, one CUDA device.
 
 - `x`: [B, T, H] = [2, 2048, 1024], bfloat16 (active, receives gradient `dx`)
 - `gate_weight`: [I, H] = [3072, 1024], bfloat16 (active, receives gradient `dgate_weight`)
@@ -93,19 +93,21 @@ Fixed configuration: B=2, T=2048, H=1024, I=3072, dtype bfloat16, one CUDA devic
 - output `out`: [B, T, H] = [2, 2048, 1024], bfloat16 (upstream gradient `dout`)
 
 Acceptance compares every output and gradient with the reference, element by
-element in float64, on real recorded training calls held out from you:
+element in float64, on real recorded training calls whose values you are not given:
 `|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
 `atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
-dtype (below); `envelope` is 2x the largest elementwise deviation of
-`torch.compile` from the reference on that result, measured on other recorded
-calls. So each element may be off by the dtype default or by up to 2x
-torch.compile's own error, whichever is larger.
+dtype (below); `envelope` is 4x the larger of the largest elementwise
+deviation of `torch.compile` from the reference on that result, measured on the
+same recorded calls, and one unit in the last place of the reference's largest
+magnitude. So each element may be off by the dtype default or by up to 4x
+torch.compile's own error or 4 ulps of the largest value, whichever is
+larger.
 
-- `out` (bfloat16): atol=1e-05, rtol=0.016
-- `dx` (bfloat16): atol=1e-05, rtol=0.016
+- `ddown_weight` (bfloat16): atol=1e-05, rtol=0.016
 - `dgate_weight` (bfloat16): atol=1e-05, rtol=0.016
 - `dup_weight` (bfloat16): atol=1e-05, rtol=0.016
-- `ddown_weight` (bfloat16): atol=1e-05, rtol=0.016
+- `dx` (bfloat16): atol=1e-05, rtol=0.016
+- `out` (bfloat16): atol=1e-05, rtol=0.016
 
 ## 3. Deliverable and rules
 
@@ -130,12 +132,18 @@ def qwen3_swiglu_mlp_backward_from_saved(dout, saved_tensors):
 - The harness wires autograd and the deployment entry from the declaration.
   Do not write a `torch.autograd.Function` or an `nn.Module`, and do not define
   these reserved names: `ARTIFACT_CONTRACT`, `DEPLOYMENT_ENTRY`, `Qwen3SwigluMlpFunction`, `Qwen3SwigluMlpModule`, `_vendor_sdpa_deterministic`, `qwen3_swiglu_mlp_deployment`, `vendor_gemm`, `vendor_sdpa_backward`, `vendor_sdpa_forward`.
-- Every line of your module is checked statically. Rejected:
-  - calls `torch.<name>` for: addbmm, addmm, baddbmm, batch_norm, bmm, chain_matmul, compile, dot, einsum, group_norm, inner, kron, layer_norm, log_softmax, matmul, matrix_power, mm, outer, rms_norm, scaled_dot_product_attention, softmax, tensordot;
-  - any private `torch._*` entry point, and anything under torch._C, torch._VF, torch._dynamo, torch._ops, torch.autograd, torch.fx, torch.jit, torch.nn.attention, torch.nn.functional, torch.ops;
-  - imports of or calls into: F, evograd, functional, liger_kernel, transformers;
-  - methods `.<name>()` on any object for: addmm, backward, baddbmm, bmm, einsum, linear, log_softmax, matmul, mm, softmax;
-  - the `@` operator.
+- Every line of your module is checked statically.
+  Rejected, whether called, read or imported, and under any name bound to it
+  (`from torch.X import Y` counts as `torch.X.Y`; after `import torch.X as Y`
+  or `Y = torch.X`, `Y.Z` counts as `torch.X.Z`):
+  - `torch.<name>` for: addbmm, addmm, addmv, addmv_, addr, baddbmm, bmm, cdist, chain_matmul, compile, dot, dsmm, einsum, ger, hsmm, hspmm, inner, kl_div, kron, matmul, matrix_power, mm, multi_dot, mv, outer, saddmm, sampled_addmm, smm, spmm, sspaddmm, tensordot, vdot, vecdot;
+  - any `torch.*` name containing, in any case: attention, batch_norm, cross_entropy, embedding, gemm, group_norm, instance_norm, layer_norm, linear, loss, rms_norm, softmax;
+  - any `torch.*` convolution or recurrent entry point: conv1d/2d/3d, conv_tbc, conv_transpose*, *convolution*; lstm, gru, rnn_tanh, rnn_relu (and their cells);
+  - anything under a private torch module or name (`torch._*`, at any depth), and anything under torch.autograd, torch.compiler, torch.export, torch.func, torch.fx, torch.jit, torch.nn, torch.ops, torch.sparse, torch.utils.checkpoint, torch.utils.cpp_extension;
+  - imports of or calls into: F, builtins, cffi, ctypes, evograd, functional, importlib, liger_kernel, transformers;
+  - calls to the builtins `__import__`, `eval`, `exec`, `getattr`, `globals`, `vars`;
+  - methods `.<name>()` on any object, `torch` included, and these names imported from any module, for: __imatmul__, __matmul__, __rmatmul__, addbmm, addbmm_, addmm, addmm_, addmv, addmv_, addr, addr_, backward, baddbmm, baddbmm_, bmm, einsum, ger, imatmul, inner, kron, linear, log_softmax, matmul, matrix_power, mm, mv, outer, rmatmul, smm, softmax, sspaddmm, vdot;
+  - the `@` and `@=` operators, and `from torch import *` (or from any torch module).
 - Library primitives this task grants:
   - `vendor_gemm`: 2-D row-major GEMM through cuBLAS (torch.mm), no autograd. The harness defines it outside your module; call it by name, do not define or import it.
   - It is the only way to reach a vendor contraction or fused attention: every other contraction must be written in Triton (`tl.dot`).
@@ -145,7 +153,7 @@ def qwen3_swiglu_mlp_backward_from_saved(dout, saved_tensors):
 
 The same evaluator scores every agent. A candidate that fails the static
 rules, the import, any output or gradient check, or a run at the timed shape
-scores as incorrect. A correct candidate is timed at the configuration above
+scores as incorrect. Its correctness check during search applies the acceptance rule of section 2 to 6 recorded training calls (the first, middle and last call of this operator in each of two training steps). Acceptance then judges every recorded call of this operator in all four training steps, these calls included; the envelope is measured on those same calls. A correct candidate is timed at the configuration above
 against the `pytorch_autograd` baseline: forward, backward from
 saved state, and the forward+backward step, with saved-tensor bytes reported
 relative to input bytes. `combined_score` is evograd's `speed_memory`

@@ -40,20 +40,6 @@ def system_message(task: "AgentTask") -> str:
     return config["prompt"]["system_message"].strip() + "\n"
 
 
-def static_rules() -> dict[str, list[str]]:
-    """The constructs ``check_source`` rejects, read from its own tables."""
-    from evograd.pipelines.shared import primitives
-
-    return {
-        "torch_calls": sorted(primitives._TORCH_DENIED),
-        "torch_families": sorted(primitives._DENIED_TORCH_FAMILIES),
-        "torch_patterns": list(primitives._DENIED_TORCH_PATTERNS),
-        "torch_prefixes": sorted(".".join(("torch", *p)) for p in primitives._DENIED_TORCH_PREFIXES),
-        "roots": sorted(primitives._DENIED_ROOTS),
-        "methods": sorted(primitives._DENIED_METHODS),
-    }
-
-
 def reserved_names(task: "AgentTask") -> list[str]:
     """Names the harness defines around the agent's module."""
     from evograd.pipelines.shared.artifact import ArtifactContract
@@ -117,9 +103,10 @@ def _search_text(spec: dict) -> str:
 
 
 def render_statement(task: "AgentTask") -> str:
+    from evograd.pipelines.shared.primitives import describe_rules
+
     spec = task.spec
     abi = spec["abi"]
-    rules = static_rules()
     workload = spec["workload"]
     dims = ", ".join(f"{k}={v}" for k, v in workload["dims"].items())
     tolerances = _tolerance_text(spec["gate1_tolerances"])
@@ -191,17 +178,7 @@ module level:
 - The harness wires autograd and the deployment entry from the declaration.
   Do not write a `torch.autograd.Function` or an `nn.Module`, and do not define
   these reserved names: {reserved}.
-- Every line of your module is checked statically. Rejected, whether called,
-  read or imported (`from torch.X import Y` counts as `torch.X.Y`):
-  - `torch.<name>` for: {', '.join(rules['torch_calls'])};
-  - any `torch.*` name containing, in any case: {', '.join(rules['torch_families'])};
-  - any `torch.*` convolution or recurrent entry point: {'; '.join(rules['torch_patterns'])};
-  - anything under a private torch module or name (`torch._*`, at any depth), and
-    anything under {', '.join(rules['torch_prefixes'])};
-  - imports of or calls into: {', '.join(rules['roots'])};
-  - methods `.<name>()` on any object, `torch` included, and these names imported
-    from any module, for: {', '.join(rules['methods'])};
-  - the `@` and `@=` operators.
+{describe_rules('Every line of your module')}
 - Library primitives this task grants:
 {library}
 
