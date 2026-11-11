@@ -122,6 +122,28 @@ def _serialize_graph(gm: Any) -> dict[str, Any]:
 _IDENTITIES = frozenset({"aten.alias.default", "aten.clone.default", "aten.detach.default"})
 
 
+#: Allocations, whose value is whatever the fresh storage holds.
+_UNINITIALIZED = frozenset({"empty", "empty_like", "empty_strided", "empty_permuted",
+                            "new_empty", "new_empty_strided"})
+
+
+def _deterministic(target: Any) -> bool:
+    """Whether two calls of ``target`` on the same inputs give the same value:
+    ``getitem``, or a functional ATen op that is not an allocation and is not
+    tagged random (``rand_like``, ``native_dropout``, ``bernoulli``) or bitwise
+    nondeterministic."""
+    import operator
+
+    import torch
+
+    if target is operator.getitem:
+        return True
+    return (isinstance(target, torch._ops.OpOverload) and not target._schema.is_mutable
+            and target._schema.name.split("::")[-1] not in _UNINITIALIZED
+            and not {torch.Tag.nondeterministic_seeded,
+                     torch.Tag.nondeterministic_bitwise} & set(target.tags))
+
+
 def _same_call(semantic: dict[str, Any], origin: Any, by_name: dict[str, Any]) -> bool:
     """Whether the compiler's call ``origin`` passes what ``semantic`` passes.
 
@@ -153,7 +175,8 @@ def _same_call(semantic: dict[str, Any], origin: Any, by_name: dict[str, Any]) -
         return target, canonical(args, from_compiler), canonical(kwargs or {}, from_compiler)
 
     def repeated(node):
-        if node is None or node.op != "call_function":
+        # Only a call that gives the same value each time repeats another.
+        if node is None or node.op != "call_function" or not _deterministic(node.target):
             return None
         key = call(str(node.target), [_encode_arg(a) for a in node.args],
                    {k: _encode_arg(v) for k, v in node.kwargs.items()}, True)

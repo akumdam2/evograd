@@ -87,6 +87,16 @@ class TestCompilerRewrites(unittest.TestCase):
         mm.replace_input_with(repeat, other)
         self.assertFalse(_same_call(by_name[mm.name], mm, by_name))
 
+    def test_a_recreated_random_call_is_a_new_value(self):
+        # Two draws of the same random op on the same inputs differ.
+        gm, by_name, mm = self._call(lambda x, w: torch.mm(torch.rand_like(x), w),
+                                     torch.randn(2, 3), torch.randn(3, 4))
+        rand = mm.args[0]
+        with gm.graph.inserting_before(mm):
+            redraw = gm.graph.call_function(rand.target, rand.args, rand.kwargs)
+        mm.replace_input_with(rand, redraw)
+        self.assertFalse(_same_call(by_name[mm.name], mm, by_name))
+
 
 class TestSavedActivationLayout(unittest.TestCase):
     @unittest.skipUnless(shutil.which("g++"), "Inductor's CPU backend needs a C++ compiler")
