@@ -97,7 +97,8 @@ RULES = (
     "share per step, forward+backward ms per call (l1_timing.json, GH200, order 303) x calls "
     "per step; a single-configuration task searches its one case. The others: "
     "not_time_max_config. A configuration's timing is the l1_timing.json row of its task, dims "
-    "and dtype (its case id breaks a tie between layouts).",
+    "and dtype (its case id breaks a tie between layouts); a row under another case id stands "
+    "for it only when that id is no longer observed (a renamed case).",
     "L1: a time-max configuration identical to another model's (same task, dims, dtype, layout, "
     "strides and free sizes) is searched once, in the model that calls it most per step; the "
     "others are identical_config_of that case (of = model:case_id) and are evaluated with its "
@@ -131,9 +132,9 @@ NOTES = (
     "names, a configuration to a row by its dims.",
     "An L2 share is report.json's per-call optimizable time x this configuration's calls per "
     "step / the eager step. report.json's row must have measured these calls and (a corpus "
-    "row) these dims and dtype; only RESCALED in write_search_set.py may differ in calls "
-    "(olmoe and qwen3_5 residual_rmsnorm, 16->32 and 32->64; the tasks measured as synthetic "
-    "blocks).",
+    "row, or the corpus rows a merged row sums) these dims and dtype; only RESCALED in "
+    "write_search_set.py may differ in calls (olmoe and qwen3_5 residual_rmsnorm, 16->32 and "
+    "32->64; the tasks measured as synthetic blocks).",
     "No gate settings and no corpus paths: the gates read the model integrations, a task "
     "pack binds its corpus.",
 )
@@ -169,10 +170,12 @@ def timing_index(l1: dict) -> tuple[dict, dict]:
     return by_content, {(r["model"], r["case"]): r for r in l1["rows"]}
 
 
-def timed_l1(model: str, case, timing: tuple[dict, dict]) -> dict:
+def timed_l1(model: str, case, timing: tuple[dict, dict], observed: set[str]) -> dict:
     """The l1_timing.json row that timed ``case``: the one of its task, dims and dtype,
-    so a renamed case id still resolves; the id breaks a tie between configurations
-    that differ only in layout, and must not name another configuration's row."""
+    so a renamed case id still resolves, but only to a row whose case id is no longer
+    among ``observed`` (the model's case ids): a still-observed configuration's timing
+    is never reused. The id breaks a tie between configurations that differ only in
+    layout, and must not name another configuration's row."""
     by_content, by_id = timing
     w = case.workload
     hits = by_content.get(_content(model, case.task, w.dims, w.dtype), [])
@@ -193,6 +196,10 @@ def timed_l1(model: str, case, timing: tuple[dict, dict]) -> dict:
     if named is not None and named is not found:
         raise SystemExit(f"{where}: {L1_TIMING.name} timed its configuration as {found['case']} "
                          f"and its case id as {named['dims']} {named['dtype']}; re-time both")
+    if found["case"] != case.case_id and found["case"] in observed:
+        raise SystemExit(f"{where}: its task, dims and dtype were timed only as {found['case']}, "
+                         f"still an observed case of {model}; time it (l1_timing.py) before "
+                         "regenerating")
     if found.get("ms") is None:
         raise SystemExit(f"{where}: {L1_TIMING.name} row {found['case']} has no ms; time it again")
     return found
@@ -208,6 +215,7 @@ def _by_task(cases):
 def level1(model: str, cases, timing: tuple[dict, dict]) -> tuple[dict, dict]:
     """Rows of ``model``'s L1 cases and ``{task: time-max case}``."""
     rows, mains = {}, {}
+    observed = {c.case_id for c in cases}
     for task, group in _by_task(cases).items():
         if task in VENDOR:
             rows.update({c.case_id: row(False, "vendor", calls=c.frequency) for c in group})
@@ -217,7 +225,7 @@ def level1(model: str, cases, timing: tuple[dict, dict]) -> tuple[dict, dict]:
             rows[case.case_id] = row(True, calls=case.frequency)
             mains[task] = case
             continue
-        timed = {c.case_id: timed_l1(model, c, timing) for c in group}
+        timed = {c.case_id: timed_l1(model, c, timing, observed) for c in group}
         best = max(group, key=lambda c: timed[c.case_id]["ms"] * c.frequency)
         mains[task] = best
         for case in group:
@@ -255,10 +263,31 @@ def report_rows(report: dict) -> dict:
     return {(r["model"], r["task"], r["config"]): r for r in report["rows"]}
 
 
+def merged_dims(model: str, found: dict, rows: dict, where: str) -> tuple[dict, str]:
+    """A merged row's dims and dtype: those of the corpus rows it sums (its config
+    names their tasks, ``a+b``), which must measure its calls and agree on shared dims."""
+    dims, dtypes = {}, set()
+    for part in found["config"].split("+"):
+        hits = [r for (m, t, _), r in rows.items() if (m, t) == (model, part)]
+        if len(hits) != 1 or hits[0]["kind"] != "corpus" or hits[0].get("dims") is None:
+            raise SystemExit(f"{where}: {found['task']} {found['config']} in {L2_REPORT.name} "
+                             f"sums {part!r}: {len(hits)} rows of it, not one corpus row with dims")
+        (part_row,) = hits
+        clash = {k for k, v in part_row["dims"].items() if dims.get(k, v) != v}
+        if clash or part_row["calls"] != found["calls"]:
+            raise SystemExit(f"{where}: the rows {found['config']} sums disagree ({part} "
+                             f"{part_row['calls']} calls, {part_row['dims']}); measure it again")
+        dims.update(part_row["dims"])
+        dtypes.add(part_row["dtype"])
+    if len(dtypes) != 1:
+        raise SystemExit(f"{where}: the rows {found['config']} sums ran {sorted(dtypes)}")
+    return dims, dtypes.pop()
+
+
 def measured_l2(model: str, case, rows: dict) -> dict:
     """The report.json row that measured ``case``, and how much it says. The row must
     have measured the snapshot's calls (outside :data:`RESCALED`) and, where it records
-    them, its dims and dtype."""
+    them (a merged row: the corpus rows it sums), its dims and dtype."""
     task, config = case.task, case.case_id
     dims, dtype = dict(case.workload.dims), str(case.workload.dtype)
     where = f"{model} {case.case_id}"
@@ -274,8 +303,10 @@ def measured_l2(model: str, case, rows: dict) -> dict:
         raise SystemExit(f"{where}: no measurement in {L2_REPORT.name} "
                          f"(looked for task {task!r}, config {config!r}); measure it (l2_share/) "
                          "or map it in MEASURED_AS before regenerating")
-    if found.get("dims") is not None and (found["dims"], found["dtype"]) != (dims, dtype):
-        raise SystemExit(f"{where}: {L2_REPORT.name} measured {found['dims']} {found['dtype']}, "
+    measured = (merged_dims(model, found, rows, where) if found["kind"] == "merged"
+                else (found.get("dims"), found.get("dtype")))
+    if measured[0] is not None and measured != (dims, dtype):
+        raise SystemExit(f"{where}: {L2_REPORT.name} measured {measured[0]} {measured[1]}, "
                          f"the snapshot has {dims} {dtype}; measure it again (l2_share/)")
     if found["calls"] != case.frequency:
         allowed = RESCALED.get(case.task, ())

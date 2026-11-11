@@ -3,7 +3,7 @@
  "generated_by": "scripts/adbench_selection/write_search_set.py",
  "rules": [
   "L1: linear, linear_no_bias and causal_gqa_attention are vendor primitives (GEMM, SDPA); their cases are not searched (vendor).",
-  "L1: per (model, task) the searched configuration is the one with the largest eager time share per step, forward+backward ms per call (l1_timing.json, GH200, order 303) x calls per step; a single-configuration task searches its one case. The others: not_time_max_config. A configuration's timing is the l1_timing.json row of its task, dims and dtype (its case id breaks a tie between layouts).",
+  "L1: per (model, task) the searched configuration is the one with the largest eager time share per step, forward+backward ms per call (l1_timing.json, GH200, order 303) x calls per step; a single-configuration task searches its one case. The others: not_time_max_config. A configuration's timing is the l1_timing.json row of its task, dims and dtype (its case id breaks a tie between layouts); a row under another case id stands for it only when that id is no longer observed (a renamed case).",
   "L1: a time-max configuration identical to another model's (same task, dims, dtype, layout, strides and free sizes) is searched once, in the model that calls it most per step; the others are identical_config_of that case (of = model:case_id) and are evaluated with its submission on their own payloads.",
   "L2: megafold_layernorm_linear is removed (2026-11-10).",
   "L2: a megafold_evoattention configuration inside triangle attention (module paths containing tri_attn) whose containing triangle_attention case is searched is nested_in it (L2-3: the two searches would install one inside the other; of = that case's id, the note names any other searched container); one whose containers are not searched is a configuration of the task like the others.",
@@ -15,7 +15,7 @@
  "notes": [
   "MegaFold AdaLN (megafold_adaptive_layernorm in l2_share/report.json) is not a task: deferred 2026-11-10.",
   "report.json measured the merged attention blocks as the sum of the two tasks each replaces (rows attention_block, gated_attention_block) and the tasks added since as synthetic blocks; MEASURED_AS in write_search_set.py maps them by meaning to the task names, a configuration to a row by its dims.",
-  "An L2 share is report.json's per-call optimizable time x this configuration's calls per step / the eager step. report.json's row must have measured these calls and (a corpus row) these dims and dtype; only RESCALED in write_search_set.py may differ in calls (olmoe and qwen3_5 residual_rmsnorm, 16->32 and 32->64; the tasks measured as synthetic blocks).",
+  "An L2 share is report.json's per-call optimizable time x this configuration's calls per step / the eager step. report.json's row must have measured these calls and (a corpus row, or the corpus rows a merged row sums) these dims and dtype; only RESCALED in write_search_set.py may differ in calls (olmoe and qwen3_5 residual_rmsnorm, 16->32 and 32->64; the tasks measured as synthetic blocks).",
   "No gate settings and no corpus paths: the gates read the model integrations, a task pack binds its corpus."
  ],
  "inputs": {
@@ -31,7 +31,7 @@
  },
  "models": {
   "qwen3_0_6b": {
-   "snapshot_hash": "e456ae5a9eedae4ffa4ac560097e22b6778581df1ba7de1a0b859cbe7275bb12",
+   "snapshot_hash": "23e9a04e62c1b2177474f3404580ad41f3e0425ee8b56bee13dd7584d9624a78",
    "cases": {
     "linear_no_bias/mlp_up": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 56}},
     "linear_no_bias/attn_kv_proj": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 56}},
@@ -48,11 +48,13 @@
     "causal_gqa_attention/causal_gqa_sdpa": {"level": 1, "task": "causal_gqa_attention", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 28}},
     "cross_entropy/logits": {"level": 1, "task": "cross_entropy", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 1}},
     "qwen3_swiglu_mlp/swiglu_mlp": {"level": 2, "task": "qwen3_swiglu_mlp", "searched": true, "reason": null, "of": null, "note": "the swiglu_mlp shape-generalisation ablation group", "evidence": {"wall_ms": 0.9802, "calls": 28, "wall_x_calls": 27.4454, "optimizable_share_pct": 3.0276, "measured_as": "corpus: qwen3_swiglu_mlp qwen3_swiglu_mlp/swiglu_mlp"}},
-    "fused_add_rms_norm/residual_rmsnorm": {"level": 2, "task": "fused_add_rms_norm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.5605, "calls": 56, "wall_x_calls": 31.3905, "optimizable_share_pct": 12.1494, "measured_as": "corpus: fused_add_rms_norm fused_add_rms_norm/residual_rmsnorm"}}
+    "fused_add_rms_norm/residual_rmsnorm": {"level": 2, "task": "fused_add_rms_norm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.5605, "calls": 56, "wall_x_calls": 31.3905, "optimizable_share_pct": 12.1494, "measured_as": "corpus: fused_add_rms_norm fused_add_rms_norm/residual_rmsnorm"}},
+    "qwen3_attention_block/attention_block": {"level": 2, "task": "qwen3_attention_block", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 3.6125, "calls": 28, "wall_x_calls": 101.1503, "optimizable_share_pct": 41.2435, "measured_as": "merged: attention_block qwen3_qkv_norm_rope+qwen3_attention"}},
+    "qwen3_lm_head_ce/flce": {"level": 2, "task": "qwen3_lm_head_ce", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 15.8763, "calls": 1, "wall_x_calls": 15.8763, "optimizable_share_pct": 9.9406, "measured_as": "synthetic: lm_head_cross_entropy x[4096,1024] V151936"}}
    }
   },
   "qwen3_5_4b": {
-   "snapshot_hash": "ef15afd698eadca5519ff726484d12a7755554c4ae7b4a0919bfc29c4570f075",
+   "snapshot_hash": "af2703351621fc7013183aa7286e42d97e4e32e62d74822937b2b8d81225812f",
    "cases": {
     "linear_no_bias/mlp_up": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 64}},
     "linear_no_bias/gdn_in_ba": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 48}},
@@ -77,12 +79,13 @@
     "qwen3_5_gdn_in_proj/gdn_in_proj": {"level": 2, "task": "qwen3_5_gdn_in_proj", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 2.2511, "calls": 24, "wall_x_calls": 54.0273, "optimizable_share_pct": 4.1416, "measured_as": "corpus: qwen3_5_gdn_in_proj qwen3_5_gdn_in_proj/gdn_in_proj"}},
     "qwen3_5_gated_delta_rule/gated_delta_rule": {"level": 2, "task": "qwen3_5_gated_delta_rule", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 94.4705, "calls": 24, "wall_x_calls": 2267.2927, "optimizable_share_pct": 64.4038, "measured_as": "corpus: qwen3_5_gated_delta_rule qwen3_5_gated_delta_rule/gated_delta_rule"}},
     "qwen3_5_gdn_norm_out/gdn_norm_out": {"level": 2, "task": "qwen3_5_gdn_norm_out", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 1.1577, "calls": 24, "wall_x_calls": 27.7847, "optimizable_share_pct": 2.5394, "measured_as": "corpus: qwen3_5_gdn_norm_out qwen3_5_gdn_norm_out/gdn_norm_out"}},
-    "qwen3_5_residual_rmsnorm/residual_rmsnorm": {"level": 2, "task": "qwen3_5_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.5554, "calls": 32, "wall_x_calls": 17.7725, "optimizable_share_pct": 1.3374, "measured_as": "corpus: qwen3_5_residual_rmsnorm qwen3_5_residual_rmsnorm/residual_rmsnorm"}},
+    "qwen3_5_attention_block/attention_block": {"level": 2, "task": "qwen3_5_attention_block", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 4.4894, "calls": 8, "wall_x_calls": 35.915, "optimizable_share_pct": 1.5733, "measured_as": "merged: gated_attention_block qwen3_5_qkv_norm_partial_rope+qwen3_5_gated_attention"}},
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm": {"level": 2, "task": "qwen3_5_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.5554, "calls": 64, "wall_x_calls": 35.5451, "optimizable_share_pct": 2.6749, "measured_as": "corpus: qwen3_5_residual_rmsnorm qwen3_5_residual_rmsnorm/residual_rmsnorm"}},
     "qwen3_5_swiglu_mlp/swiglu_mlp": {"level": 2, "task": "qwen3_5_swiglu_mlp", "searched": true, "reason": null, "of": null, "note": "exception: the swiglu_mlp shape-generalisation ablation group; optimizable share 0.71% < 1%", "evidence": {"wall_ms": 1.4376, "calls": 32, "wall_x_calls": 46.0032, "optimizable_share_pct": 0.7115, "measured_as": "corpus: qwen3_5_swiglu_mlp qwen3_5_swiglu_mlp/swiglu_mlp"}}
    }
   },
   "llama_3_2_1b": {
-   "snapshot_hash": "c6a83a69c0c23f08582d0d921520adb1e902ca3a1ecf59c2dbac0b735d593425",
+   "snapshot_hash": "afdcc43b9abd940ea0fa9b0ac30818ace2800fd7af50255d4c4efee7b66b398c",
    "cases": {
     "causal_gqa_attention/causal_gqa_sdpa": {"level": 1, "task": "causal_gqa_attention", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 16}},
     "cross_entropy/logits": {"level": 1, "task": "cross_entropy", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 1}},
@@ -95,12 +98,13 @@
     "rope/rope": {"level": 1, "task": "rope", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"ms": 0.3546, "calls": 16, "ms_x_calls": 5.674}},
     "rope/rope_kv": {"level": 1, "task": "rope", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.3503, "calls": 16, "ms_x_calls": 5.6054}},
     "swiglu/mlp_activation": {"level": 1, "task": "swiglu", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 16}},
+    "llama3_attention_block/attention_block": {"level": 2, "task": "llama3_attention_block", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 2.6882, "calls": 16, "wall_x_calls": 43.0116, "optimizable_share_pct": 8.7097, "measured_as": "merged: attention_block llama3_qkv_rope+llama3_attention"}},
     "llama3_residual_rmsnorm/residual_rmsnorm": {"level": 2, "task": "llama3_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.5651, "calls": 32, "wall_x_calls": 18.0818, "optimizable_share_pct": 13.2134, "measured_as": "corpus: llama3_residual_rmsnorm llama3_residual_rmsnorm/residual_rmsnorm"}},
     "llama3_swiglu_mlp/swiglu_mlp": {"level": 2, "task": "llama3_swiglu_mlp", "searched": true, "reason": null, "of": null, "note": "the swiglu_mlp shape-generalisation ablation group", "evidence": {"wall_ms": 2.3052, "calls": 16, "wall_x_calls": 36.884, "optimizable_share_pct": 4.0252, "measured_as": "corpus: llama3_swiglu_mlp llama3_swiglu_mlp/swiglu_mlp"}}
    }
   },
   "torchrec_dlrm": {
-   "snapshot_hash": "d5c575c9f4f736d66e1213e48e2c768654a2b88d7da3075474a2231d3876b1a7",
+   "snapshot_hash": "b30603c16fa4adc01ca0bf9c840d15c30a2c8a4c284961f8cfb752ea95c06ee8",
    "cases": {
     "linear/dense_layers": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
     "linear/dense_layers_2": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 2}},
@@ -113,7 +117,7 @@
    }
   },
   "dit_s_2": {
-   "snapshot_hash": "6ba59f3d77743e2c249b72c397d3bc496e169633c043bf87ccea538ce0d5259c",
+   "snapshot_hash": "60601ddbebd946a5c53980dfc5010c2c5c576b97c2a6f9835e4b5c12e6af4c17",
    "cases": {
     "spatial_conv2d/patch": {"level": 1, "task": "spatial_conv2d", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 1}},
     "linear/t_embedder": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
@@ -126,11 +130,14 @@
     "linear/final_mod": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
     "linear/final_linear": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
     "dit_s_2_dit_modulation/blocks.modulation": {"level": 2, "task": "dit_s_2_dit_modulation", "searched": false, "reason": "optimizable_share_below_1pct", "of": null, "note": null, "evidence": {"wall_ms": 0.4975, "calls": 12, "wall_x_calls": 5.9704, "optimizable_share_pct": 0.0369, "measured_as": "corpus: dit_s_2_dit_modulation dit_s_2_dit_modulation/blocks.modulation"}},
+    "dit_s_2_dit_attention/blocks.attention": {"level": 2, "task": "dit_s_2_dit_attention", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 9.8974, "calls": 12, "wall_x_calls": 118.7689, "optimizable_share_pct": 5.9509, "measured_as": "synthetic: dit_attention x[256,256,384] fp32"}},
+    "dit_s_2_dit_adaln_residual/blocks.residual": {"level": 2, "task": "dit_s_2_dit_adaln_residual", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 1.2151, "calls": 23, "wall_x_calls": 27.9481, "optimizable_share_pct": 9.366, "measured_as": "synthetic: dit_adaln_residual x[256,256,384] fp32"}},
+    "dit_s_2_dit_adaln_residual/final_residual": {"level": 2, "task": "dit_s_2_dit_adaln_residual", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 1.2151, "calls": 1, "wall_x_calls": 1.2151, "optimizable_share_pct": 0.4072, "measured_as": "synthetic: dit_adaln_residual x[256,256,384] fp32"}},
     "dit_s_2_dit_mlp/blocks.mlp": {"level": 2, "task": "dit_s_2_dit_mlp", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 11.0671, "calls": 12, "wall_x_calls": 132.8053, "optimizable_share_pct": 3.2068, "measured_as": "corpus: dit_s_2_dit_mlp dit_s_2_dit_mlp/blocks.mlp"}}
    }
   },
   "convnextv2_tiny": {
-   "snapshot_hash": "34fa58022dfae2250bc3e5ada75f3b789ae5e9ae0e2a2dca007fe24b1717a4cd",
+   "snapshot_hash": "8401f6a20cba26b427bd66f314417dcfafadbf3248e8458fc070864f56bc87fc",
    "cases": {
     "spatial_conv2d/convnextv2.embeddings.patch_embeddings": {"level": 1, "task": "spatial_conv2d", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.6147, "calls": 1, "ms_x_calls": 0.6147}},
     "spatial_conv2d/convnextv2.encoder.stages.0.layers.dwconv": {"level": 1, "task": "spatial_conv2d", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.4448, "calls": 3, "ms_x_calls": 1.3343}},
@@ -163,6 +170,10 @@
     "grn/convnextv2.encoder.stages.1.layers.grn": {"level": 1, "task": "grn", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.8442, "calls": 3, "ms_x_calls": 2.5325}},
     "grn/convnextv2.encoder.stages.2.layers.grn": {"level": 1, "task": "grn", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.498, "calls": 9, "ms_x_calls": 4.4819}},
     "grn/convnextv2.encoder.stages.3.layers.grn": {"level": 1, "task": "grn", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"ms": 0.4289, "calls": 3, "ms_x_calls": 1.2868}},
+    "convnextv2_tiny_dwconv_layernorm/convnextv2.encoder.stages.0.layers": {"level": 2, "task": "convnextv2_tiny_dwconv_layernorm", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 0.6833, "calls": 3, "wall_x_calls": 2.0498, "optimizable_share_pct": 8.6629, "measured_as": "synthetic: dwconv_layernorm C96 56x56"}},
+    "convnextv2_tiny_dwconv_layernorm/convnextv2.encoder.stages.1.layers": {"level": 2, "task": "convnextv2_tiny_dwconv_layernorm", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 0.474, "calls": 3, "wall_x_calls": 1.4221, "optimizable_share_pct": 5.1335, "measured_as": "synthetic: dwconv_layernorm C192 28x28"}},
+    "convnextv2_tiny_dwconv_layernorm/convnextv2.encoder.stages.2.layers": {"level": 2, "task": "convnextv2_tiny_dwconv_layernorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.3621, "calls": 9, "wall_x_calls": 3.259, "optimizable_share_pct": 6.5142, "measured_as": "synthetic: dwconv_layernorm C384 14x14"}},
+    "convnextv2_tiny_dwconv_layernorm/convnextv2.encoder.stages.3.layers": {"level": 2, "task": "convnextv2_tiny_dwconv_layernorm", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 0.3565, "calls": 3, "wall_x_calls": 1.0696, "optimizable_share_pct": 1.4219, "measured_as": "synthetic: dwconv_layernorm C768 7x7"}},
     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {"level": 2, "task": "convnextv2_tiny_convnext_mlp", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 2.0962, "calls": 3, "wall_x_calls": 6.2887, "optimizable_share_pct": 23.4266, "measured_as": "corpus: convnextv2_tiny_convnext_mlp convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers"}},
     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {"level": 2, "task": "convnextv2_tiny_convnext_mlp", "searched": false, "reason": "not_time_max_config", "of": null, "note": null, "evidence": {"wall_ms": 1.4055, "calls": 3, "wall_x_calls": 4.2166, "optimizable_share_pct": 12.6132, "measured_as": "corpus: convnextv2_tiny_convnext_mlp convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers"}},
     "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {"level": 2, "task": "convnextv2_tiny_convnext_mlp", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 1.2284, "calls": 9, "wall_x_calls": 11.056, "optimizable_share_pct": 17.6583, "measured_as": "corpus: convnextv2_tiny_convnext_mlp convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers"}},
@@ -170,7 +181,7 @@
    }
   },
   "qwen2_vl_2b": {
-   "snapshot_hash": "e06bdfbcf8dcfd35486431873e0e72b987dfd91bedaec50cc0abc19d5fd98b31",
+   "snapshot_hash": "3513382fa879a4f3d90d101591d8e67a604cced4481b7d6ef165a4997ce8c63b",
    "cases": {
     "layernorm/model.visual.blocks.norm1": {"level": 1, "task": "layernorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 65}},
     "linear/model.visual.blocks.attn.qkv": {"level": 1, "task": "linear", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 32}},
@@ -188,12 +199,16 @@
     "linear_no_bias/model.language_model.layers.mlp.gate_proj": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 56}},
     "linear_no_bias/model.language_model.layers.mlp.down_proj": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 28}},
     "linear_no_bias/lm_head": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
+    "qwen2_vl_2b_vision_attention/model.visual.blocks.attn": {"level": 2, "task": "qwen2_vl_2b_vision_attention", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 1.6446, "calls": 32, "wall_x_calls": 52.6275, "optimizable_share_pct": 5.5911, "measured_as": "synthetic: vision_attention x[256,1280] bf16"}},
+    "qwen2_vl_2b_vision_residual_layernorm/model.visual.blocks.norm2": {"level": 2, "task": "qwen2_vl_2b_vision_residual_layernorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.2389, "calls": 64, "wall_x_calls": 15.2924, "optimizable_share_pct": 1.5677, "measured_as": "synthetic: vision_residual_layernorm [256,1280] bf16"}},
     "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {"level": 2, "task": "qwen2_vl_2b_vision_mlp", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.8722, "calls": 32, "wall_x_calls": 27.9091, "optimizable_share_pct": 1.5259, "measured_as": "corpus: qwen2_vl_2b_vision_mlp qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp"}},
+    "qwen2_vl_2b_text_attention_block/model.language_model.layers.self_attn": {"level": 2, "task": "qwen2_vl_2b_text_attention_block", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 2.255, "calls": 28, "wall_x_calls": 63.1402, "optimizable_share_pct": 6.2859, "measured_as": "synthetic: text_attention_block x[1,512,1536] bf16"}},
+    "qwen2_vl_2b_text_residual_rmsnorm/model.language_model.layers.post_attention_layernorm": {"level": 2, "task": "qwen2_vl_2b_text_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.4789, "calls": 56, "wall_x_calls": 26.8191, "optimizable_share_pct": 6.4165, "measured_as": "synthetic: residual_rmsnorm_text [512,1536] bf16"}},
     "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {"level": 2, "task": "qwen2_vl_2b_text_mlp", "searched": true, "reason": null, "of": null, "note": "the swiglu_mlp shape-generalisation ablation group", "evidence": {"wall_ms": 0.9915, "calls": 28, "wall_x_calls": 27.7626, "optimizable_share_pct": 1.6008, "measured_as": "corpus: qwen2_vl_2b_text_mlp qwen2_vl_2b_text_mlp/model.language_model.layers.mlp"}}
    }
   },
   "olmoe_1b_7b": {
-   "snapshot_hash": "2056051c692cbdd16dce9ecf192075abe9aad54b26f5b65a6dde6c1be3e3c7f3",
+   "snapshot_hash": "cb6a831bebe39e0d3aea0fa6276cd4415091a7b89e037ffe65020bbe113357e0",
    "cases": {
     "linear_no_bias/attn_kv_proj": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 64}},
     "linear_no_bias/lm_head": {"level": 1, "task": "linear_no_bias", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 1}},
@@ -203,8 +218,9 @@
     "causal_gqa_attention/causal_gqa_sdpa": {"level": 1, "task": "causal_gqa_attention", "searched": false, "reason": "vendor", "of": null, "note": null, "evidence": {"calls": 16}},
     "swiglu/moe_activation": {"level": 1, "task": "swiglu", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 16}},
     "cross_entropy/logits": {"level": 1, "task": "cross_entropy", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"calls": 1}},
+    "olmoe_attention_block/attention_block": {"level": 2, "task": "olmoe_attention_block", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 3.5393, "calls": 16, "wall_x_calls": 56.6282, "optimizable_share_pct": 13.5118, "measured_as": "merged: attention_block olmoe_qkv_norm_rope+olmoe_attention"}},
     "olmoe_moe_experts/moe_experts": {"level": 2, "task": "olmoe_moe_experts", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 6.3194, "calls": 16, "wall_x_calls": 101.1108, "optimizable_share_pct": 23.964, "measured_as": "corpus: olmoe_moe_experts olmoe_moe_experts/moe_experts"}},
-    "olmoe_residual_rmsnorm/residual_rmsnorm": {"level": 2, "task": "olmoe_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.575, "calls": 16, "wall_x_calls": 9.2001, "optimizable_share_pct": 3.5516, "measured_as": "corpus: olmoe_residual_rmsnorm olmoe_residual_rmsnorm/residual_rmsnorm"}}
+    "olmoe_residual_rmsnorm/residual_rmsnorm": {"level": 2, "task": "olmoe_residual_rmsnorm", "searched": true, "reason": null, "of": null, "note": null, "evidence": {"wall_ms": 0.575, "calls": 32, "wall_x_calls": 18.4003, "optimizable_share_pct": 7.1031, "measured_as": "corpus: olmoe_residual_rmsnorm olmoe_residual_rmsnorm/residual_rmsnorm"}}
    }
   },
   "megafold": {

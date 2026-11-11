@@ -181,6 +181,41 @@ def test_evoattention_searches_the_diffusion_token_transformer_and_nests_only_in
     assert confidence["reason"] == "not_time_max_config"
 
 
+def test_the_level2_tasks_added_with_the_regenerated_snapshots():
+    """Searched at their time-max configuration; the qkv and attention tasks they
+    replace are gone."""
+    searched = {(name, case["task"]): cid for name, cid, case in _cases()
+                if case["level"] == 2 and case["searched"]}
+    for model, task in (("qwen3_0_6b", "qwen3_attention_block"), ("qwen3_0_6b", "qwen3_lm_head_ce"),
+                        ("llama_3_2_1b", "llama3_attention_block"),
+                        ("olmoe_1b_7b", "olmoe_attention_block"),
+                        ("olmoe_1b_7b", "olmoe_residual_rmsnorm"),
+                        ("qwen3_5_4b", "qwen3_5_attention_block"),
+                        ("qwen3_5_4b", "qwen3_5_residual_rmsnorm"),
+                        ("qwen2_vl_2b", "qwen2_vl_2b_vision_attention"),
+                        ("qwen2_vl_2b", "qwen2_vl_2b_vision_residual_layernorm"),
+                        ("qwen2_vl_2b", "qwen2_vl_2b_text_attention_block"),
+                        ("qwen2_vl_2b", "qwen2_vl_2b_text_residual_rmsnorm"),
+                        ("convnextv2_tiny", "convnextv2_tiny_dwconv_layernorm"),
+                        ("dit_s_2", "dit_s_2_dit_attention"), ("dit_s_2", "dit_s_2_dit_adaln_residual")):
+        assert (model, task) in searched, (model, task)
+    assert searched["convnextv2_tiny", "convnextv2_tiny_dwconv_layernorm"].endswith("stages.2.layers")
+    assert searched["dit_s_2", "dit_s_2_dit_adaln_residual"].endswith("/blocks.residual")
+    (final,) = [c for cid, c in _task("dit_s_2", "dit_s_2_dit_adaln_residual").items()
+                if cid.endswith("/final_residual")]
+    assert final["reason"] == "not_time_max_config"
+    calls = {(model, task): c["evidence"]["calls"]
+             for model, task in (("olmoe_1b_7b", "olmoe_residual_rmsnorm"),
+                                 ("qwen3_5_4b", "qwen3_5_residual_rmsnorm"))
+             for c in _task(model, task).values()}
+    assert calls == {("olmoe_1b_7b", "olmoe_residual_rmsnorm"): 32,
+                     ("qwen3_5_4b", "qwen3_5_residual_rmsnorm"): 64}
+    replaced = {"qwen3_qkv_norm_rope", "qwen3_attention", "llama3_qkv_rope", "llama3_attention",
+                "olmoe_qkv_norm_rope", "olmoe_attention", "qwen3_5_qkv_norm_partial_rope",
+                "qwen3_5_gated_attention"}
+    assert not [(name, cid) for name, cid, case in _cases() if case["task"] in replaced]
+
+
 # ── the generator refuses a measurement that does not match ──────────────────
 
 
@@ -195,19 +230,21 @@ def test_l1_timing_is_found_by_content_with_the_case_id_as_a_cross_check():
             {"model": "m", "task": "u", "case": "u/a", "dims": {"n": 1}, "dtype": "float32", "ms": 1.0},
             {"model": "m", "task": "u", "case": "u/b", "dims": {"n": 1}, "dtype": "float32", "ms": 2.0}]
     timing = writer.timing_index({"rows": rows})
-    assert writer.timed_l1("m", _case("t/a", "t", {"n": 1}), timing)["ms"] == 1.0
+    assert writer.timed_l1("m", _case("t/a", "t", {"n": 1}), timing, {"t/a"})["ms"] == 1.0
     # A harvest that renames the id but keeps the configuration still resolves.
     renamed, _ = writer.level1("m", [_case("t/x", "t", {"n": 1}, frequency=4),
                                      _case("t/y", "t", {"n": 2})], timing)
     assert renamed["t/x"]["evidence"]["timed_as"] == "t/a" and renamed["t/x"]["searched"]
     # Two layouts of one content: the case id decides.
-    assert writer.timed_l1("m", _case("u/b", "u", {"n": 1}, "float32"), timing)["ms"] == 2.0
+    assert writer.timed_l1("m", _case("u/b", "u", {"n": 1}, "float32"), timing, {"u/b"})["ms"] == 2.0
     for case, match in ((_case("t/a", "t", {"n": 3}), "no eager timing.*its case id was timed"),
                         (_case("t/a", "t", {"n": 1}, "float32"), "no eager timing"),
                         (_case("t/b", "t", {"n": 1}), "re-time both"),
-                        (_case("u/x", "u", {"n": 1}, "float32"), "none its case id")):
+                        (_case("u/x", "u", {"n": 1}, "float32"), "none its case id"),
+                        # A new layout of a still-observed configuration never takes its timing.
+                        (_case("t/x", "t", {"n": 1}), "timed only as t/a, still an observed case")):
         with pytest.raises(SystemExit, match=match):
-            writer.timed_l1("m", case, timing)
+            writer.timed_l1("m", case, timing, {"t/a", "t/b", "u/a", "u/b", case.case_id})
 
 
 def test_l2_measurements_must_match_calls_and_dims():
@@ -243,6 +280,26 @@ def test_l2_measurements_must_match_calls_and_dims():
     with pytest.raises(SystemExit, match="no measurement"):
         writer.measured_l2("dit_s_2", _case(
             "dit_s_2_dit_adaln_residual/final", "dit_s_2_dit_adaln_residual", dims, "bfloat16"), synthetic)
+    # A merged block has the dims and dtype of the corpus rows it sums.
+    qkv = {"model": "olmoe_1b_7b", "task": "olmoe_qkv_norm_rope", "config": "q", "kind": "corpus",
+           "calls": 16, "dims": {"T": 8, "H": 4, "D": 2}, "dtype": "bfloat16", "wall_ms": 1.0,
+           "share_pct": 1.0}
+    attention = {**qkv, "task": "olmoe_attention", "config": "a", "dims": {"T": 8, "D": 2}}
+    merged = {**qkv, "task": "attention_block", "config": "olmoe_qkv_norm_rope+olmoe_attention",
+              "kind": "merged", "share_pct": 2.0}
+    block = ("olmoe_attention_block/attention_block", "olmoe_attention_block")
+    rows = writer.report_rows({"rows": [qkv, attention, merged]})
+    assert writer.measured_l2("olmoe_1b_7b", _case(*block, qkv["dims"], frequency=16), rows)[
+        "optimizable_share_pct"] == 2.0
+    with pytest.raises(SystemExit, match="the snapshot has"):
+        writer.measured_l2("olmoe_1b_7b", _case(*block, {**qkv["dims"], "H": 5}, frequency=16), rows)
+    for part in ({**attention, "dims": {"T": 8, "D": 3}}, {**attention, "calls": 8}):
+        with pytest.raises(SystemExit, match="sums disagree"):
+            writer.measured_l2("olmoe_1b_7b", _case(*block, qkv["dims"], frequency=16),
+                               writer.report_rows({"rows": [qkv, part, merged]}))
+    with pytest.raises(SystemExit, match="not one corpus row"):
+        writer.measured_l2("olmoe_1b_7b", _case(*block, qkv["dims"], frequency=16),
+                           writer.report_rows({"rows": [qkv, merged]}))
 
 
 # ── the reader ───────────────────────────────────────────────────────────────
