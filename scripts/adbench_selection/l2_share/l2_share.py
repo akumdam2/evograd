@@ -14,7 +14,10 @@ Rows come in two kinds:
 Pass "time": wall time of one forward+backward call (CUDA events, median of --iters).
 Pass "profile" (run in a separate process, after "time", because the profiler's CUPTI state
 disturbs later timing): kernel time of one call, split into library kernels (GEMM, SDPA:
-the vendor primitives a candidate may call) and the rest.
+the vendor primitives a candidate may call) and the rest, and every kernel's time ("kernels").
+Since 2026-11-11 convolution kernels are library too (the vendor_conv primitive): report.py
+classifies the stored per-kernel times with is_library below; the lib_ms and nonlib_ms of the
+rows are this run's split, with convolutions then optimizable.
 
 Rows append to a JSONL file; a row already present is skipped, so an interrupted run resumes.
 
@@ -38,15 +41,17 @@ CORPORA = {"megafold": "/work/hdd/bcjw/akumdam/af3_revamp/corpus/manifest.json"}
 ORDER = 303
 SKIP_L2 = {"megafold_layernorm_linear"}  # removed from the benchmark on 2026-11-10
 
-# Library kernels: GEMM (cuBLAS/cuBLASLt/CUTLASS) and SDPA (flash, memory-efficient, cuDNN).
-# Convolutions are not a granted primitive, so a cuDNN conv kernel counts as optimizable.
+# Library kernels, the vendor primitives a candidate may call: GEMM (cuBLAS/cuBLASLt/CUTLASS),
+# SDPA (flash, memory-efficient, cuDNN) and convolution (cuDNN and PyTorch's depthwise
+# kernels, vendor_conv). Until 2026-11-11 convolutions were not a granted primitive and the
+# CONV names were excluded from the library (the run's lib_ms and nonlib_ms).
 LIB = re.compile(r"gemm|gemv|xmma|cutlass|nvjet|cublas|splitk|flash|fmha|sdpa|efficient_attention", re.I)
 CONV = re.compile(r"convolution|conv[123_]?d|cudnn.*conv|fprop|dgrad|wgrad|depthwise|winograd|implicit_?gemm",
                   re.I)
 
 
 def is_library(name: str) -> bool:
-    return bool(LIB.search(name)) and not CONV.search(name)
+    return bool(LIB.search(name) or CONV.search(name))
 
 
 def corpus_path(model: str) -> str:

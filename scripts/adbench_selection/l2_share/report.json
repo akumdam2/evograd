@@ -1,22 +1,6 @@
 {
  "threshold_pct": 1.0,
  "steps": {
-  "megafold": {
-   "ms": 8340.0,
-   "regime": "T3 (eager launches)",
-   "src": "docs/AF3.md T3 reference line, 2026-11-06"
-  },
-  "torchrec_dlrm": {
-   "ms": 5.861839698627591,
-   "regime": "T3-G (graph replay)",
-   "src": "measured gh096",
-   "t3_ms": 7.618405390530825
-  },
-  "olmoe_1b_7b": {
-   "ms": 259.0437113074586,
-   "regime": "T3 (eager launches)",
-   "src": "measured gh096"
-  },
   "convnextv2_tiny": {
    "ms": 21.929811197333038,
    "regime": "T3-G (graph replay)",
@@ -29,17 +13,33 @@
    "src": "measured gh096",
    "t3_ms": 290.5507666990161
   },
-  "qwen3_0_6b": {
-   "ms": 102.50171259976923,
-   "regime": "T3-G (graph replay)",
-   "src": "measured gh096",
-   "t3_ms": 136.96647270116955
-  },
   "llama_3_2_1b": {
    "ms": 111.07505508698523,
    "regime": "T3-G (graph replay)",
    "src": "measured gh096",
    "t3_ms": 112.49888490419835
+  },
+  "megafold": {
+   "ms": 8340.0,
+   "regime": "T3 (eager launches)",
+   "src": "docs/AF3.md T3 reference line, 2026-11-06"
+  },
+  "olmoe_1b_7b": {
+   "ms": 259.0437113074586,
+   "regime": "T3 (eager launches)",
+   "src": "measured gh096"
+  },
+  "qwen2_vl_2b": {
+   "ms": 66.8842249084264,
+   "regime": "T3-G (graph replay)",
+   "src": "measured gh096",
+   "t3_ms": 210.8379774959758
+  },
+  "qwen3_0_6b": {
+   "ms": 102.50171259976923,
+   "regime": "T3-G (graph replay)",
+   "src": "measured gh096",
+   "t3_ms": 136.96647270116955
   },
   "qwen3_5_4b": {
    "ms": 727.5462903082371,
@@ -47,11 +47,11 @@
    "src": "measured gh096",
    "t3_ms": 2802.1797530003823
   },
-  "qwen2_vl_2b": {
-   "ms": 66.8842249084264,
+  "torchrec_dlrm": {
+   "ms": 5.861839698627591,
    "regime": "T3-G (graph replay)",
    "src": "measured gh096",
-   "t3_ms": 210.8379774959758
+   "t3_ms": 7.618405390530825
   }
  },
  "rows": [
@@ -197,10 +197,10 @@
    "dtype": null,
    "wall_ms": 0.474047988653183,
    "kernel_ms": 0.3752583333333335,
-   "lib_ms": 0,
-   "opt_ms": 0.3752583333333335,
+   "lib_ms": 0.16647799999999993,
+   "opt_ms": 0.2087803333333336,
    "time_share_ms": 1.422143965959549,
-   "share_pct": 5.133537128385812,
+   "share_pct": 2.856116700522129,
    "nested": false,
    "step": {
     "ms": 21.929811197333038,
@@ -224,10 +224,10 @@
    "dtype": null,
    "wall_ms": 0.36211198568344116,
    "kernel_ms": 0.15872899999999993,
-   "lib_ms": 0,
-   "opt_ms": 0.15872899999999993,
+   "lib_ms": 0.08913966666666664,
+   "opt_ms": 0.06958933333333328,
    "time_share_ms": 3.2590078711509705,
-   "share_pct": 6.514242129789662,
+   "share_pct": 2.855947980419305,
    "nested": false,
    "step": {
     "ms": 21.929811197333038,
@@ -251,10 +251,10 @@
    "dtype": null,
    "wall_ms": 0.35654398798942566,
    "kernel_ms": 0.10394266666666672,
-   "lib_ms": 0,
-   "opt_ms": 0.10394266666666672,
+   "lib_ms": 0.06610900000000006,
+   "opt_ms": 0.03783366666666667,
    "time_share_ms": 1.069631963968277,
-   "share_pct": 1.4219365465304263,
+   "share_pct": 0.5175648754048702,
    "nested": false,
    "step": {
     "ms": 21.929811197333038,
@@ -266,7 +266,7 @@
    "selected": false,
    "n_configs": 4,
    "pending": false,
-   "verdict": "keep"
+   "verdict": "drop"
   },
   {
    "model": "convnextv2_tiny",
@@ -278,10 +278,10 @@
    "dtype": null,
    "wall_ms": 0.6832640171051025,
    "kernel_ms": 0.633254333333333,
-   "lib_ms": 0,
-   "opt_ms": 0.633254333333333,
+   "lib_ms": 0.31945866666666684,
+   "opt_ms": 0.3137956666666662,
    "time_share_ms": 2.0497920513153076,
-   "share_pct": 8.6629245592002,
+   "share_pct": 4.292727335994958,
    "nested": false,
    "step": {
     "ms": 21.929811197333038,
@@ -1900,10 +1900,10 @@
    "dtype": "bfloat16",
    "wall_ms": 2.251136064529419,
    "kernel_ms": 1.8380923333333363,
-   "lib_ms": 0.5825973333333333,
-   "opt_ms": 1.255495000000003,
+   "lib_ms": 1.0367183333333339,
+   "opt_ms": 0.8013740000000025,
    "time_share_ms": 54.027265548706055,
-   "share_pct": 4.141575649741021,
+   "share_pct": 2.643539834675219,
    "nested": false,
    "step": {
     "ms": 727.5462903082371,
