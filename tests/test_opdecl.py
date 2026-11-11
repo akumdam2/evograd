@@ -81,6 +81,8 @@ class TestDerivedNaming(unittest.TestCase):
                 ],
                 2: [
                     "convnextv2_tiny_convnext_mlp",
+                    "dit_s_2_dit_adaln_residual",
+                    "dit_s_2_dit_attention",
                     "dit_s_2_dit_mlp",
                     "dit_s_2_dit_modulation",
                     # Qwen3-0.6B's residual fusion, under the generic key it

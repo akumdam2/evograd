@@ -1,15 +1,19 @@
 """DiT-S/2 and DLRM real-payload capture, on tiny generated models on CPU.
 
 The cases come from the harvest's own snapshot grouping of the tiny model (one
-role per configuration). Instrumentation does not change the step (loss,
-primary output, every gradient), every call maps to exactly one case,
-payloads round-trip in each task's ABI, each task's forward reproduces every
-live output bit for bit, and Gate 1 and operator Gate 2 judge a linear
-candidate on the recorded payloads.
+role per configuration), read the way the task declarations read a tracked
+snapshot. Instrumentation does not change the step (loss, primary output,
+every gradient), every call maps to exactly one case, payloads round-trip in
+each task's ABI, each task's forward reproduces every live output bit for bit,
+DiT's residual cotangents are the gradients from outside each call, and Gate 1
+and operator Gate 2 judge a linear candidate on the recorded payloads. The
+tier-3 workload installs every DiT site at its calls per step and routes the
+two residual configurations apart.
 """
 
 from __future__ import annotations
 
+import contextlib
 import tempfile
 import unittest
 import warnings
@@ -43,7 +47,26 @@ def linear_pair(scale: float):
                                  backward_from_saved=backward_from_saved)
 
 
+@contextlib.contextmanager
+def tracked(payload):
+    """``payload`` as the tracked snapshot of its model, wherever one is read."""
+    from unittest import mock
+
+    patches = [mock.patch(f"{where}.{name}", value)
+               for where in ("evograd.benchmark.topdown",
+                             "evograd.benchmark.topdown.common.generated.contracts")
+               for name, value in (("has_snapshot", lambda model: True),
+                                   ("load_snapshot", lambda model: payload))]
+    with contextlib.ExitStack() as stack:
+        for patch in patches:
+            stack.enter_context(patch)
+        yield
+
+
 def tiny_cases(spec):
+    """The tiny model's cases: Level-2 workloads as its declarations read them
+    (recorded strides and static parameters), with their module paths."""
+    from evograd.benchmark.topdown.common.generated.contracts import observed
     from evograd.benchmark.topdown.common.generated.harvest import collect, snapshot
     from evograd.benchmark import get_task
     from evograd.opdecl.activity import Workload
@@ -53,15 +76,39 @@ def tiny_cases(spec):
     cases = []
     for key, level in (("level1", 1), ("tasks", 2)):
         for task, entry in payload[key].items():
-            for c in entry["configurations"]:
-                cases.append(Case(f"{task}/{c['provenance']['component']}", task, level,
-                                  Workload(dims=c["dims"], dtype=c["dtype"]), c["frequency"]))
+            with tracked(payload):
+                workloads = (observed(spec.model, task) if level == 2 else
+                             [Workload(dims=c["dims"], dtype=c["dtype"]) for c in entry["configurations"]])
+            for c, w in zip(entry["configurations"], workloads):
+                cases.append(Case(f"{task}/{c['provenance']['component']}", task, level, w,
+                                  c["frequency"], tuple(c["module_paths"])))
                 assert get_task(task)
-    return tuple(cases)
+    return tuple(cases), payload
+
+
+def warm_start(spec, path, steps=3):
+    """``path``: the tiny model's state after ``steps`` AdamW updates from its
+    initialization, in the warm-start format (adaLN-Zero gates no longer zero)."""
+    from evograd.evaluation.tier3.patch import KernelSet
+    from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
+    from evograd.verification import gate3
+
+    cold = GeneratedWorkload(spec)
+    model = cold.build(KernelSet(registry=cold.site_registry))
+    optimizer = gate3.adamw(lr=1e-2).build(model)
+    for step in range(steps):
+        optimizer.zero_grad(set_to_none=True)
+        cold.loss(model, cold.batch_for(seed=step)).backward()
+        optimizer.step()
+    torch.save({"schema": "evograd-generated-init-state/1", "model": spec.model,
+                "recipe": {"steps": steps}, "state_dict": model.state_dict()}, path)
+    return str(path)
 
 
 class _Tiny:
     name = ""
+    #: Whether the model starts from a few updates past its initialization.
+    warm = False
 
     @classmethod
     def setUpClass(cls):
@@ -74,15 +121,17 @@ class _Tiny:
 
         cls.MODEL = load(cls.name)
         spec = canonical(cls.name).replace(device="cpu", **TINY[cls.name])
-        cls.workload = GeneratedWorkload(spec)
-        cls.cases = tiny_cases(spec)
+        cls.spec = spec
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.workload = GeneratedWorkload(spec, init_checkpoint=(
+            warm_start(spec, Path(cls.tmp.name) / "warm.pt") if cls.warm else None))
+        cls.cases, cls.snapshot = tiny_cases(spec)
         objective = cls.MODEL.objective.bind(cls.workload)
         primary = objective.primary
         batch = cls.workload.batch_for(seed=1)
         plain = Q.build_model(cls.workload)
         cls.plain = step_record(plain, *objective.capture_step(plain, batch), primary)
-        cls.tmp = tempfile.TemporaryDirectory()
-        writer = CorpusWriter(Path(cls.tmp.name))
+        writer = CorpusWriter(Path(cls.tmp.name) / "corpus")
         for order, seed in ((101, 1), (303, 2)):
             model = Q.build_model(cls.workload)
             recorder = cls.MODEL.live_capture(model).install()
@@ -166,8 +215,49 @@ class TinyDiT(_Tiny, unittest.TestCase):
     judged_linear = "linear/final_linear"
 
     def test_level2_sites_are_recorded_per_block(self):
+        # Per block one modulation, attention and MLP and two residual adds. The
+        # first block's attention input has no residual add before it; the last
+        # block's MLP residual feeds the final layer, whose shift and scale are
+        # halves of a [B, 2H] projection (row stride 2H, not 6H): its own case.
+        depth = self.spec.arch["depth"]
         level2 = {c.case_id: c.frequency for c in self.cases if c.level == 2}
-        self.assertEqual(sorted(level2.values()), [2, 2])
+        self.assertEqual(level2, {"dit_s_2_dit_modulation/blocks.modulation": depth,
+                                  "dit_s_2_dit_attention/blocks.attention": depth,
+                                  "dit_s_2_dit_adaln_residual/blocks.residual": 2 * depth - 1,
+                                  "dit_s_2_dit_adaln_residual/final_residual": 1,
+                                  "dit_s_2_dit_mlp/blocks.mlp": depth})
+        h = self.spec.arch["hidden_size"]
+        strides = {c.case_id.split("/")[1]: dict(c.workload.provenance.strides)
+                   for c in self.cases if c.task == "dit_s_2_dit_adaln_residual"}
+        self.assertEqual({k: (v["shift"], v["scale"], v["gate"]) for k, v in strides.items()},
+                         {"blocks.residual": ((6 * h, 1),) * 3,
+                          "final_residual": ((2 * h, 1), (2 * h, 1), (6 * h, 1))})
+        # The residual stream keeps the patch embedding's channel-first layout.
+        tokens = (self.spec.arch["input_size"] // self.spec.arch["patch_size"]) ** 2
+        self.assertEqual({v["x"] for v in strides.values()}, {(tokens * h, 1, tokens)})
+        attention = next(c for c in self.cases if c.task == "dit_s_2_dit_attention")
+        self.assertEqual(attention.workload.provenance.free, {"heads": self.spec.arch["num_heads"]})
+
+    def test_a_residual_candidate_takes_only_its_configuration(self):
+        # With the workload's own snapshot the residual site has both observed
+        # configurations, told apart by their strides; a candidate for the block
+        # case gets those calls and the final layer's call runs the reference.
+        from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
+        from evograd.verification.integrations.gates import by_configuration
+
+        with tracked(self.snapshot):
+            registry = GeneratedWorkload(self.spec).site_registry
+        self.assertEqual(len(registry.require("dit_adaln_residual").preflight), 2)
+        block = next(c for c in self.cases if c.case_id.endswith("/blocks.residual"))
+        seen = []
+        site = by_configuration(self.MODEL, registry, "dit_adaln_residual",
+                                [(block, lambda *args: seen.append(args) or "candidate")])
+        op = self.MODEL.reference_op(block.task)
+        for record in self.corpus.payloads():
+            if record["task"] == block.task and record["batch"]["order"] == 101:
+                out = site(*[self.corpus.load(record, device="cpu")[a.name] for a in op.args])
+                self.assertEqual(out == "candidate", record["case_id"] == block.case_id)
+        self.assertEqual(len(seen), block.frequency)
 
     def test_adaln_zero_initial_state_leaves_gated_cotangents_zero(self):
         # adaLN-Zero: every block's gates and the final layer start at zero, so at
@@ -179,8 +269,55 @@ class TinyDiT(_Tiny, unittest.TestCase):
         self.assertEqual(nonzero, {"linear/final_linear"})
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TinyWarmDiT(_Tiny, unittest.TestCase):
+    """DiT a few updates past adaLN-Zero, where its blocks' cotangents are not zero."""
+
+    name = "dit_s_2"
+    warm = True
+    judged_linear = "linear/final_linear"
+
+    def test_residual_cotangents_are_the_gradient_from_outside_each_call(self):
+        # Each residual call's x is the previous call's summed, so the model
+        # reference's dx at a call is the previous call's recorded dsummed; the
+        # last call's sum has no consumer and records zeros.
+        from evograd.opdecl.oracle import oracle
+
+        op = self.MODEL.reference_op("dit_s_2_dit_adaln_residual")
+        calls = sorted((r for r in self.corpus.payloads() if r["task"] == op.name
+                        and r["batch"]["order"] == 101), key=lambda r: r["call"]["index_in_step"])
+        self.assertEqual(len(calls), 2 * self.spec.arch["depth"])
+        values = [self.corpus.load(r, device="cpu") for r in calls]
+        for before, after in zip(values, values[1:]):
+            _, grads = oracle(op, after, (after["dmodulated"], after["dsummed"]))
+            self.assertTrue(torch.equal(grads["dx"], before["dsummed"]))
+            self.assertTrue(bool(before["dsummed"].abs().sum() > 0))
+        self.assertEqual(calls[-1]["case_id"], "dit_s_2_dit_adaln_residual/final_residual")
+        self.assertEqual(calls[-1]["notes"]["absent_cotangents"], ["dsummed"])
+        self.assertFalse(bool(values[-1]["dsummed"].any()))
+
+    def test_tier3_installs_every_site_at_its_calls_per_step(self):
+        from evograd.evaluation.tier3.patch import KernelSet, patch
+        from evograd.evaluation.tier3.workloads.common.generated.workload import DIT_SITES
+
+        calls = {site: 0 for site in DIT_SITES}
+
+        def counted(site, fn):
+            def call(*args):
+                calls[site] += 1
+                return fn(*args)
+            return call
+
+        kernels = KernelSet(registry=self.workload.site_registry)
+        for site, fn in DIT_SITES.items():
+            kernels = patch(kernels, site, counted(site, fn))
+        model = self.workload.build(kernels)
+        batch = self.workload.batch_for(seed=1)
+        self.workload.loss(model, batch).backward()
+        self.assertEqual(calls, self.workload.expected_site_calls())
+        native = self.workload.build(KernelSet(registry=self.workload.site_registry))
+        self.workload.loss(native, batch).backward()
+        for (name, a), b in zip(model.named_parameters(), native.parameters()):
+            self.assertTrue(torch.equal(a.grad, b.grad), name)
 
 
 class WarmStart(unittest.TestCase):
@@ -191,23 +328,14 @@ class WarmStart(unittest.TestCase):
         from evograd.benchmark.topdown.common.generated.spec import canonical
         from evograd.evaluation.tier3.patch import KernelSet
         from evograd.evaluation.tier3.workloads.common.generated.workload import GeneratedWorkload
-        from evograd.verification import gate3
 
         spec = canonical("dit_s_2").replace(device="cpu", **TINY["dit_s_2"])
-        cold = GeneratedWorkload(spec)
-        model = cold.build(KernelSet(registry=cold.site_registry))
-        optimizer = gate3.adamw(lr=1e-2).build(model)
-        for step in range(3):
-            optimizer.zero_grad(set_to_none=True)
-            cold.loss(model, cold.batch_for(seed=step)).backward()
-            optimizer.step()
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "warm.pt"
-            torch.save({"schema": "evograd-generated-init-state/1", "model": "dit_s_2",
-                        "recipe": {"steps": 3}, "state_dict": model.state_dict()}, path)
-            warm = GeneratedWorkload(spec, init_checkpoint=str(path))
+            path = warm_start(spec, Path(tmp) / "warm.pt")
+            model = torch.load(path, weights_only=False)["state_dict"]
+            warm = GeneratedWorkload(spec, init_checkpoint=path)
             again = warm.build(KernelSet(registry=warm.site_registry))
-            for (name, a), b in zip(model.state_dict().items(), again.state_dict().values()):
+            for (name, a), b in zip(model.items(), again.state_dict().values()):
                 self.assertTrue(torch.equal(a, b), name)
             identity = warm.describe()["init_checkpoint"]
             self.assertEqual(identity["recipe"], {"steps": 3})
@@ -215,3 +343,7 @@ class WarmStart(unittest.TestCase):
             again.zero_grad(set_to_none=True)
             warm.loss(again, warm.batch_for(seed=9)).backward()
             self.assertTrue(bool(again.blocks[0].fc1.weight.grad.abs().sum() > 0))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -9,7 +9,8 @@ from evograd.evaluation.tier3.compile_baseline import (
 
 from evograd.benchmark.topdown.common.generated.spec import GeneratedSpec, canonical
 from evograd.benchmark.topdown.common.generated.model import (
-    build_model, make_inputs, forward_loss, dit_mlp, dit_modulation, dlrm_interaction,
+    build_model, make_inputs, forward_loss, dit_adaln_residual, dit_attention, dit_mlp,
+    dit_modulation, dlrm_interaction,
 )
 from evograd.ops.level1.embedding_bag.reference import forward as embedding_bag
 from evograd.evaluation.tier3.patch import Site, SiteRegistry, PatchProvenance
@@ -28,29 +29,32 @@ def structural_identity_kernels(registry):
 
 
 def _cases(spec, site):
+    """The site's observed configurations when the snapshot is this workload's
+    (with their recorded strides: ``dit_adaln_residual``'s two configurations
+    differ only in them), else one configuration-derived preflight."""
     from evograd.benchmark.topdown import has_snapshot, load_snapshot
+    from evograd.benchmark.topdown.common.generated.contracts import observed
     a = spec.arch
+    tokens = (a["input_size"] // a["patch_size"]) ** 2 if spec.model == "dit_s_2" else None
     if site == "dit_modulation":
         dims = dict(B=spec.batch_size, H=a["hidden_size"], J=6*a["hidden_size"])
     elif site == "dit_mlp":
-        dims = dict(B=spec.batch_size, T=(a["input_size"] // a["patch_size"]) ** 2,
-                    H=a["hidden_size"], I=a["hidden_size"] * a["mlp_ratio"])
+        dims = dict(B=spec.batch_size, T=tokens, H=a["hidden_size"],
+                    I=a["hidden_size"] * a["mlp_ratio"])
+    elif site == "dit_attention":
+        dims = dict(B=spec.batch_size, T=tokens, H=a["hidden_size"], Q=3 * a["hidden_size"])
+    elif site == "dit_adaln_residual":
+        dims = dict(B=spec.batch_size, T=tokens, H=a["hidden_size"])
     elif site == "dlrm_interaction":
         s, d = a["num_sparse_features"], a["embedding_dim"]
         dims = dict(B=spec.batch_size, S=s, D=d, O=d + s * (s + 1) // 2)
     else:
         raise ValueError("embedding_bag uses multiple table configurations")
-    name = spec.model + "_" + site
-    if has_snapshot(spec.model):
-        snap = load_snapshot(spec.model)
-        if snap["workload_id"] == spec.workload_id:
-            cases = tuple(Workload(dims=c["dims"], dtype=c["dtype"],
-                                   provenance=Provenance(model=spec.model, component=site,
-                                                         source="execution", note=c["config_id"]))
-                          for c in snap["tasks"][name]["configurations"] if c["dims"] == dims)
-            if cases:
-                return cases
-            raise ValueError(f"{site}: matching snapshot has no matching configuration")
+    if has_snapshot(spec.model) and load_snapshot(spec.model)["workload_id"] == spec.workload_id:
+        cases = tuple(w for w in observed(spec.model, spec.model + "_" + site) if w.dims == dims)
+        if cases:
+            return cases
+        raise ValueError(f"{site}: matching snapshot has no matching configuration")
     return (Workload(dims=dims, dtype=spec.dtype,
                      provenance=Provenance(model=spec.model, component=site,
                                            source="specification",
@@ -83,6 +87,13 @@ def _bag_cases(spec):
                  for dims in dimensions.values())
 
 
+#: DiT's sites, their defaults and the block attribute each one replaces.
+DIT_SITES = {"dit_modulation": dit_modulation, "dit_attention": dit_attention,
+             "dit_adaln_residual": dit_adaln_residual, "dit_mlp": dit_mlp}
+DIT_ATTRIBUTES = {"dit_modulation": "mod_fn", "dit_attention": "attn_fn",
+                  "dit_adaln_residual": "residual_fn", "dit_mlp": "mlp_fn"}
+
+
 @dataclass
 class GeneratedWorkload:
     spec: GeneratedSpec
@@ -106,10 +117,8 @@ class GeneratedWorkload:
         self.name = self.spec.workload_id
         self.unit_name = "latents" if self.spec.model == "dit_s_2" else "examples"
         if self.spec.model == "dit_s_2":
-            sites = (Site("dit_modulation", "dit_s_2_dit_modulation", dit_modulation,
-                          _cases(self.spec, "dit_modulation")),
-                     Site("dit_mlp", "dit_s_2_dit_mlp", dit_mlp,
-                          _cases(self.spec, "dit_mlp")))
+            sites = tuple(Site(name, "dit_s_2_" + name, fn, _cases(self.spec, name))
+                          for name, fn in DIT_SITES.items())
         else:
             sites = (Site("embedding_bag", "embedding_bag", embedding_bag,
                           _bag_cases(self.spec)),
@@ -147,13 +156,9 @@ class GeneratedWorkload:
         paths = {}
         for site in kernels.patched:
             fn = kernels.kernel_for(site)
-            if site == "dit_mlp":
+            if site in DIT_SITES:
                 for i, block in enumerate(model.blocks):
-                    block.mlp_fn = fn
-                    paths.setdefault(site, []).append(f"blocks.{i}")
-            elif site == "dit_modulation":
-                for i, block in enumerate(model.blocks):
-                    block.mod_fn = fn
+                    setattr(block, DIT_ATTRIBUTES[site], fn)
                     paths.setdefault(site, []).append(f"blocks.{i}")
             elif site == "dlrm_interaction":
                 model.interaction_fn = fn
@@ -226,7 +231,10 @@ class GeneratedWorkload:
 
     def expected_site_calls(self):
         if self.spec.model == "dit_s_2":
-            return {"dit_modulation": self.spec.arch["depth"], "dit_mlp": self.spec.arch["depth"]}
+            depth = self.spec.arch["depth"]
+            # Two residual adds per block: after the attention and after the MLP.
+            return {"dit_modulation": depth, "dit_attention": depth, "dit_adaln_residual": 2 * depth,
+                    "dit_mlp": depth}
         return {"embedding_bag": self.spec.arch["num_sparse_features"], "dlrm_interaction": 1}
 
     def data_recipe(self):
