@@ -254,7 +254,10 @@ def vendor_grouped_mm(a, b, offs=None):
 
     Each operand's last two dimensions must be row- or column-major with a
     16-byte-aligned leading stride (a ``.transpose(-2, -1)`` view qualifies);
-    the kernel refuses anything else. ``no_grad``: the pair differentiates itself.
+    the kernel refuses anything else. On the GPU, groups that run along a 2-D
+    operand's contiguous dimension must each span a multiple of 16 bytes, or the
+    kernel fails a device-side assert: for ``K`` grouped, pass ``a`` column-major
+    and ``b`` row-major. ``no_grad``: the pair differentiates itself.
     """
     if a.dtype != torch.bfloat16 or b.dtype != torch.bfloat16:
         raise ValueError(f"vendor_grouped_mm takes bfloat16 operands; got {a.dtype} and {b.dtype}")

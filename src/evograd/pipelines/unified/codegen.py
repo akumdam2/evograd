@@ -180,6 +180,18 @@ def _external_wrapper(side: str, node: dict) -> tuple[str, str, dict]:
         shape, dtype = tuple(node["output_shape"]), node["output_dtype"]
         source = (prefix + f"        out = torch.empty({shape!r}, device=arg0.device, dtype={dtype})\n"
                   + f"        {callee}({', '.join(args)}, out=out)\n        return out\n")
+    elif kernel == "extern_kernels._grouped_mm":
+        # Groups that advance along a 2-D operand's contiguous dimension must start
+        # 16 bytes apart, which the kernel asserts on the device (the offsets are data).
+        # The compiler hands it views grouped along their strided dimension; the seed's
+        # copies are row-major, so lay a 2-D operand out that way again.
+        a, b = args[:2]
+        source = prefix + (
+            f"        if {a}.dim() == 2 and {b}.dim() == 2:\n"
+            f"            {a}, {b} = {a}.t().contiguous().t(), {b}.contiguous()\n"
+            f"        elif {a}.dim() == 2:\n            {a} = {a}.contiguous()\n"
+            f"        elif {b}.dim() == 2:\n            {b} = {b}.t().contiguous().t()\n"
+            f"        return {callee}({', '.join([*args, *kwargs])})\n")
     else:
         source = prefix + f"        return {callee}({', '.join([*args, *kwargs])})\n"
     metadata = {"side": side, "node_name": node["name"], "target": target,

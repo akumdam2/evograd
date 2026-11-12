@@ -544,6 +544,44 @@ class TestSeedLowerings(unittest.TestCase):
         self.assertIn('return _unified_extern_kernels._grouped_mm(arg0, arg1, arg2)',
                       _external_wrapper('forward', grouped)[0])
 
+    def test_grouped_gemm_operands_are_grouped_along_their_strided_dimension(self):
+        # OLMoE's weight gradient groups tokens along the contraction: from the seed's
+        # row-major copy the GPU kernel asserts unless every group is a multiple of 8 rows.
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        node = {'name': 'gmm', 'external_kernel': 'extern_kernels._grouped_mm',
+                'target': 'aten._grouped_mm.default',
+                'positional_args': [{'kind': 'node', 'name': n} for n in ('a', 'b', 'offs')]}
+        source, _, metadata = _external_wrapper('backward', node)
+        seen = []
+
+        def grouped_mm(a, b, offs):
+            seen.append((a.stride(), b.stride()))
+            return torch._grouped_mm(a, b, offs=offs)
+
+        namespace = {'torch': torch, '_unified_extern_kernels': SimpleNamespace(_grouped_mm=grouped_mm)}
+        exec(source, namespace)
+        wrapper = namespace[metadata['wrapper']]
+        devices = ['cpu'] + (['cuda'] if torch.cuda.is_available() else [])
+        for device in devices:
+            g = torch.Generator().manual_seed(0)
+            rand = lambda *shape: torch.randint(-2, 3, shape, generator=g).to(torch.bfloat16).to(device)
+            offs = torch.tensor([3, 3, 24], dtype=torch.int32, device=device)  # 3, 0, 21 rows
+            groups = ((0, 3), (3, 3), (3, 24))
+            dy, x, w, c = rand(8, 24), rand(24, 16), rand(3, 16, 8), rand(3, 8, 16)
+            with self.subTest(device=device):
+                seen.clear()
+                out = wrapper(dy, x, offs)  # contraction grouped
+                for i, (lo, hi) in enumerate(groups):
+                    torch.testing.assert_close(out[i], dy[:, lo:hi] @ x[lo:hi], rtol=0, atol=0)
+                out = wrapper(x, w, offs)  # rows grouped
+                for i, (lo, hi) in enumerate(groups):
+                    torch.testing.assert_close(out[lo:hi], x[lo:hi] @ w[i], rtol=0, atol=0)
+                wrapper(c, rand(16, 24), torch.tensor([8, 8, 24], dtype=torch.int32,
+                                                      device=device))  # columns grouped
+                self.assertEqual(seen, [((1, 8), (16, 1)), ((16, 1), (128, 8, 1)),
+                                        ((128, 16, 1), (1, 16))])
+
     def test_float32_attention_is_preserved_with_its_state_unpinned(self):
         # DiT's float32 attention: memory-efficient attention, as vendor_sdpa runs it.
         from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
