@@ -73,6 +73,7 @@ from typing import Any, Callable
 
 import torch
 import torch._inductor.config
+import torch.utils.checkpoint
 import torch.nn.functional as F
 from torch import nn
 
@@ -1119,13 +1120,19 @@ class MegaFoldWorkload:
         random.seed(seed)
         inputs = {key: value.clone() if key in WRITTEN_INPUTS and torch.is_tensor(value) else value
                   for key, value in batch.items() if key != "seed"}
-        return model(
-            **inputs,
-            num_recycling_steps=self.num_recycling_steps,
-            call_confidence_head=(self.include_confidence_head if call_confidence_head is None
-                                  else call_confidence_head),
-            dtype=_trainer_autocast_dtype(),
-        )
+        # A checkpointed region's recompute runs to its end. PyTorch's default stops it
+        # once the region's saved tensors are back, which is inside a site's module or
+        # before it depending on what that implementation saved, so a site would be
+        # called a different number of times for each implementation of it. Running to
+        # the end left the 384-residue step's time unchanged (13.33 s both ways).
+        with torch.utils.checkpoint.set_checkpoint_early_stop(False):
+            return model(
+                **inputs,
+                num_recycling_steps=self.num_recycling_steps,
+                call_confidence_head=(self.include_confidence_head if call_confidence_head is None
+                                      else call_confidence_head),
+                dtype=_trainer_autocast_dtype(),
+            )
 
     #: What :meth:`primary_output` returns beside the loss.
     primary_output_name = "distogram_logits"

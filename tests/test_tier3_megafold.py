@@ -539,6 +539,36 @@ class TestTheSiteGroups(unittest.TestCase):
         self.assertEqual(sorted(calls), sorted(self.sites.names))
         self.assertTrue(all(count > 0 for count in calls.values()), calls)
 
+    def test_patched_sites_run_as_often_as_their_modules(self):
+        # The count is taken on the eager modules; patched kernels save different
+        # tensors, and a checkpoint recompute that stops once the saved tensors are back
+        # reached the msa_pair and transition kernels where it stopped short of the eager
+        # modules' ends. These seven are the searched Level-2 sites patched together.
+        from evograd.evaluation.tier3.patch import KernelSet, KernelSource, patch
+        from evograd.opdecl.oracle import resolve_runtime_forward
+        from evograd.verification.integrations.megafold.reference import reference_op
+
+        sites = ("msa_pair_weighted_averaging", "pair_bias_attention", "transition_block",
+                 "triangle_attention_ending", "triangle_attention_starting",
+                 "triangle_multiplication_incoming", "triangle_multiplication_outgoing")
+        calls = dict.fromkeys(sites, 0)
+
+        def counted(site, fn):
+            def call(*args, **kwargs):
+                calls[site] += 1
+                return fn(*args, **kwargs)
+            return call
+
+        kernels = KernelSet(registry=self.sites)
+        for site in sites:
+            op = reference_op(self.sites.require(site).op)
+            kernels = patch(kernels, site, counted(site, resolve_runtime_forward(op)),
+                            source=KernelSource(site, op.name, None, "test"))
+        model, _provenance = self.workload.build_patched(kernels)
+        self.workload.loss(model.train(), self.workload.batch_for(seed=0)).backward()
+        expected = self.workload.expected_site_calls()
+        self.assertEqual(calls, {site: expected[site] for site in sites})
+
 
 @needs_megafold
 class TestTheProvidersAgree(unittest.TestCase):
