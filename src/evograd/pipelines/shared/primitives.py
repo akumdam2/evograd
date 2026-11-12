@@ -36,14 +36,15 @@ from typing import Any
 
 #: Library entry points rooted at ``torch``, by exact name: contractions
 #: (vector, distance and sparse ones included), ``kl_div`` (a loss without the
-#: word) and ``torch.compile``. Denied inside the evolvable region always;
-#: permitted inside a trusted primitive's own fixed body when it declares them.
+#: word), ``torch.compile`` and ``torch.vmap`` (``torch.func.vmap``: mapped over a
+#: granted 2-D GEMM it runs a batched one). Denied inside the evolvable region; a
+#: trusted primitive's fixed body is outside it.
 _TORCH_DENIED = frozenset({
     "matmul", "mm", "bmm", "addmm", "baddbmm", "addbmm", "einsum", "tensordot",
     "dot", "inner", "outer", "chain_matmul", "matrix_power", "kron",
     "mv", "addmv", "addmv_", "addr", "ger", "vdot", "cdist", "multi_dot", "vecdot",
     "smm", "spmm", "hspmm", "dsmm", "hsmm", "saddmm", "sspaddmm", "sampled_addmm",
-    "kl_div", "compile",
+    "kl_div", "compile", "vmap",
 })
 
 #: Library families denied wherever they appear in a ``torch`` name, in any
@@ -68,9 +69,10 @@ _DENIED_TORCH_PATTERNS = {
 
 #: Namespaces no generated pair math may reach into at all. ``ctypes`` and
 #: ``cffi`` would load a compiled library that calls cuBLAS or cuDNN directly;
-#: ``importlib`` and ``builtins`` would import or look up a name unseen.
+#: ``importlib`` and ``builtins`` would import or look up a name unseen;
+#: ``functorch`` re-exports ``torch`` (``functorch.torch.bmm``) and ``vmap``.
 _DENIED_ROOTS = frozenset({"F", "functional", "transformers", "evograd", "liger_kernel",
-                           "ctypes", "cffi", "importlib", "builtins", "sys"})
+                           "ctypes", "cffi", "importlib", "builtins", "sys", "functorch"})
 
 #: Denied whatever the receiver is (``torch`` included): the method and
 #: operator-module spellings of a contraction, ``x.mv(v)``, ``x.__matmul__(w)``,
@@ -83,6 +85,7 @@ _DENIED_METHODS = frozenset({
     "mv", "addmv", "addmv_", "addbmm", "addbmm_", "addmm_", "baddbmm_", "addr", "addr_",
     "ger", "outer", "inner", "kron", "vdot", "matrix_power", "smm", "sspaddmm",
     "__matmul__", "__rmatmul__", "__imatmul__", "imatmul", "rmatmul",
+    "_grouped_mm", "grouped_mm",
 })
 
 #: Namespaces under ``torch`` that are denied whole: module wrappers
@@ -116,8 +119,6 @@ class TrustedPrimitive:
     name: str
     symbols: tuple[str, ...]
     source: str
-    #: torch leaves this primitive's own body is allowed to call.
-    uses: tuple[str, ...]
     summary: str
     #: The ATen calls the unified frontend preserves (its external regions'
     #: targets) that this primitive gives every agent: a seed may keep one only
@@ -154,6 +155,43 @@ def vendor_gemm(a, b):
         )
     with torch.no_grad():
         return torch.mm(a, b)
+'''
+
+
+VENDOR_ADDMM_SOURCE = '''
+
+# ── trusted primitive: vendor_addmm ──────────────────────────────────────────
+# Fixed, outside the evolve block, and checked byte-for-byte against
+# evograd.pipelines.shared.primitives. Evolution may call it; it may not
+# change it.
+
+def vendor_addmm(bias, a, b):
+    """``bias + a @ b`` in one vendor GEMM (cuBLAS via ``torch.addmm``), the bias
+    added in the GEMM's epilogue.
+
+    ``a`` is ``[M, K]``, ``b`` ``[K, N]`` and ``bias`` ``[N]`` (added to every
+    row) or ``[M, N]``: the argument order of ``torch.addmm``, which is how
+    Inductor keeps a linear layer with a bias. Two dimensions only, as in
+    ``vendor_gemm``; a ``.t()`` argument stays a metadata-only view.
+
+    ``no_grad`` is not an optimisation: the pair differentiates itself, and a
+    graph built here would be a second, hidden derivative.
+    """
+    if a.dim() != 2 or b.dim() != 2:
+        raise ValueError(
+            f"vendor_addmm is 2-D; got {tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    if a.shape[1] != b.shape[0]:
+        raise ValueError(
+            f"vendor_addmm shape mismatch: {tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    if tuple(bias.shape) not in ((b.shape[1],), (a.shape[0], b.shape[1])):
+        raise ValueError(
+            f"vendor_addmm bias {tuple(bias.shape)} is neither [N] nor [M, N] for "
+            f"{tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    with torch.no_grad():
+        return torch.addmm(bias, a, b)
 '''
 
 
@@ -374,15 +412,22 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         name="vendor_gemm",
         symbols=("vendor_gemm",),
         source=VENDOR_GEMM_SOURCE,
-        uses=("mm",),
         summary="2-D row-major GEMM through cuBLAS (torch.mm), no autograd",
-        preserves=("aten.mm.default", "aten.addmm.default"),
+        preserves=("aten.mm.default",),
+    ),
+    "vendor_addmm": TrustedPrimitive(
+        name="vendor_addmm",
+        symbols=("vendor_addmm",),
+        source=VENDOR_ADDMM_SOURCE,
+        summary=("2-D GEMM plus a bias in one cuBLAS call (torch.addmm: vendor_addmm(bias, a, "
+                 "b) = bias + a @ b, a [M, K], b [K, N], bias [N] added to every row or "
+                 "[M, N]), no autograd"),
+        preserves=("aten.addmm.default",),
     ),
     "vendor_bmm": TrustedPrimitive(
         name="vendor_bmm",
         symbols=("vendor_bmm",),
         source=VENDOR_BMM_SOURCE,
-        uses=("bmm",),
         summary=("3-D batched GEMM through cuBLAS (torch.bmm: [B, M, K] @ [B, K, N] -> "
                  "[B, M, N], the same B on both sides, no broadcasting), no autograd"),
         preserves=("aten.bmm.default",),
@@ -391,7 +436,6 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         name="vendor_grouped_mm",
         symbols=("vendor_grouped_mm",),
         source=VENDOR_GROUPED_MM_SOURCE,
-        uses=("_grouped_mm",),
         summary=("grouped GEMM through the vendor kernel (torch._grouped_mm) on bfloat16 "
                  "operands whose last two dimensions are row- or column-major with "
                  "16-byte-aligned strides: vendor_grouped_mm(a, b, offs), offs a 1-D int32 "
@@ -406,12 +450,6 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         name="vendor_sdpa",
         symbols=("_vendor_sdpa_backend", "vendor_sdpa_forward", "vendor_sdpa_backward"),
         source=VENDOR_SDPA_SOURCE,
-        uses=("_scaled_dot_product_cudnn_attention",
-              "_scaled_dot_product_cudnn_attention_backward",
-              "_scaled_dot_product_flash_attention",
-              "_scaled_dot_product_flash_attention_backward",
-              "_scaled_dot_product_efficient_attention",
-              "_scaled_dot_product_efficient_attention_backward"),
         summary=("fused (causal or full, grouped-query) attention through the vendor kernel "
                  "eager runs (half precision: cuDNN, flash under deterministic algorithms; "
                  "float32: memory-efficient attention), as an explicit forward/backward pair, "
@@ -424,7 +462,6 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         name="vendor_conv",
         symbols=("_vendor_conv_args", "vendor_conv_forward", "vendor_conv_backward"),
         source=VENDOR_CONV_SOURCE,
-        uses=("convolution", "convolution_backward"),
         summary=("conv1d/conv2d (stride, zero padding, groups; no bias, no dilation) through "
                  "the kernel eager runs (cuDNN, or PyTorch's depthwise kernels where its "
                  "dispatcher prefers them), as a forward and a backward giving the input and "

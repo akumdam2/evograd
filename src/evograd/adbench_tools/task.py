@@ -44,7 +44,7 @@ LIBRARY_POLICIES = ("auto", "none", *(",".join(names) for n in range(1, len(REGI
                                       for names in combinations(sorted(REGISTRY), n)))
 
 #: Torch functions that the unified frontend leaves to a vendor library
-#: (Inductor's extern mm/addmm, and bmm/_grouped_mm, which also grant their own
+#: (Inductor's extern mm, and addmm/bmm/_grouped_mm, which also grant their own
 #: primitive below). ``auto`` grants the trusted GEMM primitive when one call of
 #: the reference reaches one of them, so an agent writing from scratch has the
 #: library access evograd's seed preserves.
@@ -59,23 +59,28 @@ _CONVOLUTIONS = frozenset({"conv1d", "conv2d"})
 #: Fused attention, which Inductor likewise leaves to a library (cuDNN) and the
 #: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference reaches it.
 _ATTENTION = frozenset({"scaled_dot_product_attention"})
-#: Batched GEMMs, read at the ATen level (:func:`observed_calls`) because the
-#: torch function alone does not decide them: Inductor hands ``aten.bmm`` (and
-#: ``aten.baddbmm``) to cuBLAS and the frontend preserves it, a batch of one
-#: included (its capture runs no joint-graph pass, so no bmm-to-mm rewrite).
-#: ``torch.bmm`` reaches it, as do ``matmul``/``@`` when PyTorch does not fold
-#: it into one 2-D GEMM (both operands batched, say) and ``einsum`` with a
-#: summed index; ``auto`` grants ``vendor_bmm``.
-_BATCHED_GEMMS = frozenset({"aten.bmm", "aten.baddbmm"})
-#: A mixture of experts' grouped GEMM (``torch._grouped_mm``, which
-#: ``F.grouped_mm`` calls), which Inductor keeps as an extern kernel; ``auto``
-#: grants ``vendor_grouped_mm``.
-_GROUPED_GEMMS = frozenset({"aten._grouped_mm"})
-#: ``auto``: each primitive, the calls that grant it, and what they are.
-_AUTO_GRANTS = (("vendor_bmm", _BATCHED_GEMMS, "a batched GEMM"),
+
+
+def _aten_calls(primitive: str) -> frozenset[str]:
+    """The ATen calls (as :func:`observed_calls` names them) the unified frontend
+    preserves and ``primitive`` runs: read at the ATen level because the torch
+    function alone does not decide them."""
+    return frozenset(target.removesuffix(".default") for target in REGISTRY[primitive].preserves)
+
+
+#: ``auto``: each primitive, the calls that grant it, and what they are. At the
+#: ATen level: a linear layer with a bias is ``aten.addmm``; ``torch.bmm`` is
+#: ``aten.bmm``, as are ``matmul``/``@`` when PyTorch does not fold them into one
+#: 2-D GEMM (both operands batched, say) and ``einsum`` with a summed index --
+#: Inductor hands it to cuBLAS and the frontend preserves it, a batch of one
+#: included (its capture runs no joint-graph pass, so no bmm-to-mm rewrite);
+#: ``torch._grouped_mm`` (``F.grouped_mm``, a mixture of experts) is
+#: ``aten._grouped_mm``.
+_AUTO_GRANTS = (("vendor_addmm", _aten_calls("vendor_addmm"), "a GEMM with a bias"),
+                ("vendor_bmm", _aten_calls("vendor_bmm"), "a batched GEMM"),
                 ("vendor_conv", _CONVOLUTIONS, "a convolution"),
                 ("vendor_gemm", _CONTRACTIONS, "a contraction"),
-                ("vendor_grouped_mm", _GROUPED_GEMMS, "a grouped GEMM"),
+                ("vendor_grouped_mm", _aten_calls("vendor_grouped_mm"), "a grouped GEMM"),
                 ("vendor_sdpa", _ATTENTION, "fused attention"))
 #: Every call ``auto`` reads, as the pack records them.
 _GRANTING_CALLS = frozenset().union(*(calls for _, calls, _ in _AUTO_GRANTS))

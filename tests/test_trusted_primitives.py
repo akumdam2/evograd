@@ -19,6 +19,7 @@ from torch.utils._python_dispatch import TorchDispatchMode
 
 from evograd.pipelines.shared.primitives import (
     REGISTRY,
+    VENDOR_ADDMM_SOURCE,
     VENDOR_BMM_SOURCE,
     VENDOR_CONV_SOURCE,
     VENDOR_GEMM_SOURCE,
@@ -151,6 +152,17 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
                       "torch.nn.functional.grouped_mm")
         self._rejects("return torch.ops.aten._grouped_mm(x, w, x), (x,)", "torch.ops")
         self._rejects("return torch.ops.aten.bmm(x, w), (x,)", "torch.ops")
+
+    def test_mapping_a_granted_gemm_over_a_batch_is_a_batched_gemm(self):
+        # torch.vmap(vendor_gemm) runs aten.bmm under the 2-D grant alone; functorch
+        # re-exports torch (functorch.torch._grouped_mm) and vmap.
+        self._rejects("return torch.vmap(vendor_gemm)(x, w), (x,)", "torch.vmap")
+        self._rejects("from torch import vmap\nreturn vmap(vendor_gemm)(x, w), (x,)", "vmap")
+        self._rejects("import functorch\nreturn functorch.vmap(vendor_gemm)(x, w), (x,)",
+                      "functorch")
+        self._rejects("import functorch\nreturn functorch.torch._grouped_mm(x, w), (x,)",
+                      "functorch")
+        self._rejects("return x._grouped_mm(w), (x,)", "_grouped_mm")
 
     def test_the_matmul_operator_is_the_same_violation_as_the_function(self):
         self._rejects("return x @ w, (x,)", "'@'")
@@ -584,6 +596,48 @@ class TestVendorBmmCapability(unittest.TestCase):
                 self.bmm(torch.randn(*a), torch.randn(*b))
 
 
+class TestVendorAddmmCapability(unittest.TestCase):
+    """The GEMM-with-bias grant: torch.addmm's argument order, 2-D, a [N] or [M, N] bias."""
+
+    PAIR = "y = vendor_addmm(b, x, w.t())\nreturn y, (x, w)"
+
+    def setUp(self):
+        self.addmm = _exec_primitive(VENDOR_ADDMM_SOURCE)["vendor_addmm"]
+
+    def test_the_call_is_accepted_with_the_grant_and_rejected_without(self):
+        used = check_source(_with_body(self.PAIR, trusted=VENDOR_ADDMM_SOURCE),
+                            allowed=("vendor_addmm",))
+        self.assertEqual(used["primitive_call_sites"], {"vendor_addmm": 1})
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(_with_body(self.PAIR, trusted=VENDOR_GEMM_SOURCE), allowed=("vendor_gemm",))
+        self.assertIn("did not grant", str(caught.exception))
+        forged = VENDOR_ADDMM_SOURCE.replace("torch.addmm(bias, a, b)", "torch.addmm(bias, a, b) * 1")
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(_with_body(self.PAIR, trusted=forged), allowed=("vendor_addmm",))
+        self.assertIn("not the trusted one", str(caught.exception))
+
+    def test_it_is_torch_addmm_without_a_graph(self):
+        a = torch.randn(4, 5, dtype=torch.float64, requires_grad=True)
+        w = torch.randn(6, 5, dtype=torch.float64, requires_grad=True)
+        for bias in (torch.randn(6, dtype=torch.float64), torch.randn(4, 6, dtype=torch.float64)):
+            with self.subTest(bias=tuple(bias.shape)):
+                meta = (bias.to("meta"), a.to("meta"), w.to("meta").t())
+                with _Recorded() as recorded:
+                    out = self.addmm(*meta)
+                self.assertEqual((recorded.ops, tuple(out.shape)), (["addmm"], (4, 6)))
+                out = self.addmm(bias, a, w.t())
+                self.assertIsNone(out.grad_fn)
+                torch.testing.assert_close(out, torch.addmm(bias, a, w.t()).detach(), rtol=0, atol=0)
+
+    def test_it_refuses_what_a_linear_bias_is_not(self):
+        for bias, a, b in (((6,), (2, 4, 5), (5, 6)),   # 3-D: the caller folds the rows
+                           ((6,), (4, 5), (4, 6)),      # contraction mismatch
+                           ((4,), (4, 5), (5, 6)),      # a bias of the wrong side
+                           ((1, 6), (4, 5), (5, 6))):   # broadcast rows: give [N]
+            with self.subTest(bias=bias, a=a, b=b), self.assertRaises(ValueError):
+                self.addmm(torch.randn(*bias), torch.randn(*a), torch.randn(*b))
+
+
 class TestVendorGroupedMmCapability(unittest.TestCase):
     """The grouped GEMM grant: torch._grouped_mm's four layouts and its offset rule."""
 
@@ -681,8 +735,12 @@ class TestPreservedCallsNeedTheGrant(unittest.TestCase):
         with self.assertRaises(PrimitiveViolation):
             check_preserved(gated_delta_rule, allowed=("vendor_gemm",))
         check_preserved(gated_delta_rule, allowed=("vendor_bmm", "vendor_gemm"))
-        # The 2-D GEMMs and their bias form are vendor_gemm's, attention vendor_sdpa's.
-        check_preserved(["aten.mm.default", "aten.addmm.default"], allowed=("vendor_gemm",))
+        # A 2-D GEMM is vendor_gemm's; with its bias in the epilogue, vendor_addmm's.
+        linear = ["aten.addmm.default", "aten.mm.default"]
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_preserved(linear, allowed=("vendor_gemm",))
+        self.assertIn("['vendor_addmm']", str(caught.exception))
+        check_preserved(linear, allowed=("vendor_addmm", "vendor_gemm"))
         attention = ["aten._scaled_dot_product_cudnn_attention.default",
                      "aten._scaled_dot_product_cudnn_attention_backward.default"]
         check_preserved(attention, allowed=("vendor_sdpa",))

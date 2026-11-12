@@ -115,8 +115,10 @@ two is what the frontend contributes.
   on the meta device first, active inputs requiring grad as in the frontend's
   capture), reaches, however deeply the reference delegates: `vendor_gemm` for
   a matrix multiplication (`linear`, `matmul`/`@`, `mm`, `bmm`, `addmm`,
-  `baddbmm`, `einsum`, `_grouped_mm`); `vendor_bmm` (`torch.bmm`, 3-D) when the
-  call decomposes into `aten.bmm` or `aten.baddbmm` (`torch.bmm`, a `matmul`/`@`
+  `baddbmm`, `einsum`, `_grouped_mm`); `vendor_addmm` (`torch.addmm`, a 2-D GEMM
+  with its bias added in the GEMM's epilogue) when the call decomposes into
+  `aten.addmm` (a linear layer with a bias); `vendor_bmm` (`torch.bmm`, 3-D) when the
+  call decomposes into `aten.bmm` (`torch.bmm`, a `matmul`/`@`
   whose operands do not fold into one 2-D GEMM, an `einsum` with a summed index;
   the math decomposition inside fused attention does not count);
   `vendor_grouped_mm` (`torch._grouped_mm`, bfloat16, int32 group offsets) for

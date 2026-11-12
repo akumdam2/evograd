@@ -519,8 +519,9 @@ def test_auto_library_follows_what_the_frontend_preserves(small_task):
     with pytest.raises(ValueError):
         resolve_library("vendor_blas", [])
     # The pack records what the trace of its reference reached.
-    assert small_task.spec["library_policy"]["observed_calls"] == ["linear"]
-    assert small_task.allowed_primitives == ("vendor_gemm",)
+    # The ATen call the bias form becomes is recorded too: it grants vendor_addmm.
+    assert small_task.spec["library_policy"]["observed_calls"] == ["aten.addmm", "linear"]
+    assert small_task.allowed_primitives == ("vendor_addmm", "vendor_gemm")
 
 
 #: Cases whose contraction the reference reaches only through code ``reference.py``
@@ -557,7 +558,7 @@ REACHED = (
     ("dit_s_2", "spatial_conv2d/patch", "conv2d", ("vendor_conv",)),
     # float32 attention (eager runs memory-efficient attention): vendor_sdpa covers it.
     ("dit_s_2", "dit_s_2_dit_attention/blocks.attention", "scaled_dot_product_attention",
-     ("vendor_gemm", "vendor_sdpa")),
+     ("vendor_addmm", "vendor_gemm", "vendor_sdpa")),
 )
 
 
@@ -593,7 +594,9 @@ def _reached_by(monkeypatch, forward):
      ("vendor_gemm",)),
     # einsum contracts through bmm, batch of one included; the frontend keeps it.
     ("einsum", lambda x, w, b: torch.einsum("bi,ji->bj", x, w) + b, ("vendor_bmm", "vendor_gemm")),
-    ("linear", lambda x, w, b: torch.nn.functional.linear(x, w, b), ("vendor_gemm",)),
+    # A linear layer with a bias is aten.addmm, kept with its bias in the GEMM.
+    ("linear", lambda x, w, b: torch.nn.functional.linear(x, w, b), ("vendor_addmm", "vendor_gemm")),
+    ("linear without a bias", lambda x, w, b: torch.nn.functional.linear(x, w) + b, ("vendor_gemm",)),
     ("fused attention", lambda x, w, b: torch.nn.functional.scaled_dot_product_attention(
         x.view(1, 1, 32, 13), w.view(1, 1, 512, 13), w.view(1, 1, 512, 13)).view(32, 13)[:, :1] + b,
      ("vendor_sdpa",)),
