@@ -242,6 +242,12 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
     return {"policy": policy_identity(op), "results": results, "envelope_gamma": ENVELOPE_GAMMA}
 
 
+class CalibrationFailed(RuntimeError):
+    """A case's operator Gate 2 calibration gave no policy, so its pack is not written:
+    search feedback without the compile envelope would judge by another rule than
+    the evaluation's."""
+
+
 def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
                         device: str, state: Path | None) -> dict[str, Any]:
     """What the evaluator judges a model case's candidates by, frozen in the pack:
@@ -266,6 +272,10 @@ def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
     configure()
     scope, calibration = operator_calibration(model_obj, observed, opened, device=device,
                                               state=state)
+    if calibration.policy is None:
+        reasons = "; ".join(f"{f.code}: {f.message}" for f in calibration.findings)
+        raise CalibrationFailed(f"{observed.case_id}: operator Gate 2 calibration is "
+                                f"{calibration.status} ({reasons or 'no policy'})")
     return {"rule": SEARCH_RULE, "case_id": observed.case_id, "selection": SEARCH_SELECTION,
             "corpus": {"manifest": str(manifest), "corpus_id": opened.corpus_id,
                        "sha256": opened.sha256},

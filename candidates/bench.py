@@ -91,29 +91,42 @@ def selected_cases(args) -> list[str]:
 
 
 def cmd_tasks(args) -> int:
+    """Build the missing packs; fail (after building the others) when a case has no
+    operator Gate 2 calibration, built now or kept from before."""
     from evograd.adbench_tools.evaluate import search_rule
-    from evograd.adbench_tools.task import build_task, load
+    from evograd.adbench_tools.task import CalibrationFailed, build_task, load
 
     cases = model_cases(args.model)
     selected = selected_cases(args)
     unknown = sorted(set(selected) - set(cases))
     if unknown:
         raise SystemExit(f"{args.model} has no cases {unknown}; known: {sorted(cases)}")
+    failed = []
     for cid, directory in task_dirs(args.root, selected).items():
         if (directory / "task.json").is_file():
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
                 raise SystemExit(f"{directory} holds {task.task_id}, not {args.model} {cid}")
+            if task.spec.get("search_correctness", {}).get("calibrated") is False:
+                failed.append(f"{cid}: the kept pack {directory} has no operator Gate 2 "
+                              "calibration; move it away and build it again")
+                continue
             print(f"kept {task.task_id}: {directory} (search correctness {search_rule(task)})")
             continue
-        task = build_task(directory, model=args.model, case_id=cid, library=args.library,
-                          corpus=args.corpus, state=args.state)
+        try:
+            task = build_task(directory, model=args.model, case_id=cid, library=args.library,
+                              corpus=args.corpus, state=args.state)
+        except CalibrationFailed as exc:
+            failed.append(str(exc))
+            print(f"FAILED {cid}: {exc}", flush=True)
+            continue
         print(f"built {task.task_id}: {directory} (L{task.spec['level']}, "
               f"primitives {list(task.allowed_primitives)}, "
               f"search correctness {task.spec['search_correctness']['rule']})")
-        if task.spec["search_correctness"].get("calibrated") is False:
-            print(f"  WARNING: no operator Gate 2 calibration for {cid}: search feedback has no "
-                  "compile envelope (assert_close's rule alone)", flush=True)
+    if failed:
+        print(f"{len(failed)} of {len(selected)} packs have no operator Gate 2 calibration:",
+              *failed, sep="\n  ", file=sys.stderr, flush=True)
+        return 1
     return 0
 
 

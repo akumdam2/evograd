@@ -284,7 +284,10 @@ def replace_at(roots: dict[str, Any], path: str, new: Any) -> dict[str, Any]:
         raise ValueError(f"{path}: cannot index a {type(value).__name__}")
 
     out = dict(roots)
-    out[root] = put(roots[root], steps)
+    try:
+        out[root] = put(roots[root], steps)
+    finally:
+        del put  # a recursive closure holds itself (and ``new``) until collected
     return out
 
 

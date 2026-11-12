@@ -60,7 +60,6 @@ Rules this module enforces:
 
 from __future__ import annotations
 
-import gc
 import itertools
 import json
 import math
@@ -917,7 +916,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             measurements.extend(got)
             result.findings.extend(problems)
             del moved
-            gc.collect()  # one whole model at a time besides the reference
         ctl = execute(adapter, control, sample, record_boundaries=boundaries)
         executions.append(ctl.execution_id)
         identity["executions"]["compile"] = ctl.execution_id
@@ -945,8 +943,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                              for d in identity["control_results_digests"]["native_repeats"])
         del reference
         ctl.results = {}
-        if adapter.scope == "model":
-            gc.collect()  # a run's model is held in reference cycles until the cyclic collector runs
         again = execute(adapter, control, sample, record_boundaries=boundaries)
         executions.append(again.execution_id)
         identity["executions"]["compile_repeat"] = again.execution_id
@@ -979,8 +975,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             kinds[sid].update(bkinds)
             result.findings.extend(problems)
         del ctl
-        if adapter.scope == "model":
-            gc.collect()  # else each sample's runs stay on the GPU (Qwen3.5-4B: ~7.5 GiB per sample)
     seen = [d for d in input_digests.values() if d is not None]
     if len(seen) != len(set(seen)):
         result.findings.append(missing("duplicate_samples",

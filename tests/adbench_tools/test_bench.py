@@ -112,3 +112,33 @@ def test_evaluate_reuses_the_source_submission_and_records_a_search_failure(
     with pytest.raises(SystemExit, match="no finished run"):
         evaluate()
     assert evaluate("--case-id", "t/1")[0] == {"t/1": str(own)}
+
+
+def test_tasks_fails_on_a_case_without_an_operator_gate2_calibration(bench, tmp_path, monkeypatch,
+                                                                     capsys):
+    # A failed calibration is reported with its reason after the other packs are built,
+    # and a pack kept from before without one is refused as well.
+    built = []
+
+    def build_task(directory, *, model, case_id, library, corpus, state):
+        if case_id == "u/1":
+            raise task_module.CalibrationFailed("u/1: operator Gate 2 calibration is incomplete "
+                                                "(insufficient_calibration: out of memory)")
+        built.append(case_id)
+        return SimpleNamespace(task_id=case_id, allowed_primitives=(),
+                               spec={"level": 1, "search_correctness": {"rule": "gate1"}})
+
+    monkeypatch.setattr(task_module, "build_task", build_task)
+    monkeypatch.setattr(bench, "model_cases", lambda model: dict.fromkeys(CASES))
+    assert bench.main(["tasks", "--model", "a", "--searched", "--root", str(tmp_path)]) == 1
+    assert built == ["t/1"]
+    assert "insufficient_calibration: out of memory" in capsys.readouterr().err
+
+    kept = bench.task_dirs(bench.root_for("a", str(tmp_path)), ["t/1"])["t/1"]
+    kept.mkdir(parents=True)
+    (kept / "task.json").write_text("{}")
+    monkeypatch.setattr(task_module, "load", lambda directory: SimpleNamespace(
+        task_id="t/1", spec={"case_id": "t/1", "model": "a",
+                             "search_correctness": {"calibrated": False}}))
+    assert bench.main(["tasks", "--model", "a", "--case-id", "t/1", "--root", str(tmp_path)]) == 1
+    assert "has no operator Gate 2 calibration" in capsys.readouterr().err
