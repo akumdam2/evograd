@@ -22,6 +22,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import tempfile
 import unittest
 import warnings
@@ -306,6 +307,22 @@ class BenchmarkCapture(unittest.TestCase):
                     mock.patch.object(gates, "verify", lambda *a, **k: verdict), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(cli.main(self.model, argv), code)
+
+    def test_verify_runs_with_expandable_segments_unless_told_otherwise(self):
+        from evograd.verification.integrations import cli, gates
+        from evograd.verification.integrations.base import CUDA_ALLOC_CONF
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        verdict = {"candidates": {"t/1": {"accepted": True}}, "combination": None}
+        for preset, expected in ((None, CUDA_ALLOC_CONF), ("max_split_size_mb:512", "max_split_size_mb:512")):
+            env = {} if preset is None else {"PYTORCH_CUDA_ALLOC_CONF": preset}
+            with self.subTest(preset=preset), mock.patch.dict(os.environ, env), \
+                    mock.patch.object(gates, "verify", lambda *a, **k: verdict), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                if preset is None:
+                    os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+                cli.main(self.model, argv)
+                self.assertEqual(os.environ["PYTORCH_CUDA_ALLOC_CONF"], expected)
 
 
 class OldRuleCorpus(unittest.TestCase):

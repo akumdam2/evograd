@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -535,6 +536,7 @@ def _environment() -> dict[str, Any]:
 
     return {"torch": torch.__version__, "cuda": torch.version.cuda,
             "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+            "cuda_alloc_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
             "evograd": provenance()}
 
 
@@ -838,7 +840,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     import time
 
     from evograd.verification.integrations import PACKAGES, load
+    from evograd.verification.integrations.base import default_allocator
 
+    default_allocator()
     parser = argparse.ArgumentParser(prog="evograd evaluate")
     parser.add_argument("model", help=f"one of {sorted(PACKAGES)}")
     parser.add_argument("--corpus", required=True, help="the model's real-payload corpus manifest")

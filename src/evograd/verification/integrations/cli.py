@@ -66,8 +66,10 @@ def main(model, argv=None) -> int:
         print(json.dumps({k: report[k] for k in ("corpus_id", "payloads", "by_task", "layouts_ok",
                                                  "outputs_bitwise")}))
         return 0 if report["layouts_ok"] and report["outputs_bitwise"] else 2
+    from .base import default_allocator
     from .gates import verify
 
+    default_allocator()
     candidates = dict(item.split("=", 1) for item in args.candidate)
     import dataclasses
 
