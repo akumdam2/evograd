@@ -36,6 +36,8 @@ class UnifiedCapture:
 
 # This is a rendering capability list, not the L/R partition rule. A node is
 # external only when the actual compiler IR below selects that exact kernel.
+# Each target is one a trusted primitive runs (``TrustedPrimitive.preserves``):
+# a seed keeps it only when its task pack grants that primitive to every agent.
 _SUPPORTED_EXTERNALS = {
     "extern_kernels.mm": "aten.mm.default",
     "extern_kernels.bmm": "aten.bmm.default",

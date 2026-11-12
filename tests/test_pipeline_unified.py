@@ -1504,5 +1504,83 @@ class SeedVerificationHasTheDevice(unittest.TestCase):
             S.synthesize_unified_seed(config)
         self.assertEqual(seen, [True])
 
+
+class SeedKeepsOnlyGrantedLibraryCalls(unittest.TestCase):
+    """A unified seed keeps a vendor call fixed only when its pack grants every agent the
+    primitive that runs it (``check_preserved``); otherwise it is refused before lowering."""
+
+    def _synthesize(self, regions, allowed):
+        from unittest import mock
+
+        from evograd.adbench_tools import TASK_SCHEMA
+        from evograd.pipelines.unified import synthesize as S
+        from evograd.pipelines.unified.capture import ExternalRegion
+
+        pack = Path(tempfile.mkdtemp())
+        (pack / "task.json").write_text(json.dumps({"schema": TASK_SCHEMA,
+                                                    "allowed_primitives": list(allowed)}))
+        captured = SimpleNamespace(
+            joint_graph={"nodes": []}, forward_graph={"nodes": []}, backward_graph={"nodes": []},
+            external_regions=tuple(ExternalRegion(side, f"n{i}", target, kernel, f"buf{i}")
+                                   for i, (side, target, kernel) in enumerate(regions)),
+            pair=SimpleNamespace(forward_source="", backward_source="", device="cuda:0",
+                                 baked_scalars={}, saved=(), backward_arg_spec=(), grad_indices=()))
+        lowered = []
+        op = SimpleNamespace(name="op", declaration=None, forward="m:f", validate=lambda: None)
+        config = S.UnifiedSeedConfig(op=op, workload=SimpleNamespace(dims={}, dtype="bfloat16"),
+                                     output_dir=Path(tempfile.mkdtemp()) / "seed", pack=pack)
+        with mock.patch("evograd.pipelines.unified.capture.capture_unified_pair",
+                        lambda *a, **k: captured), \
+                mock.patch("evograd.pipelines.unified.codegen.generate_unified_seed",
+                           lambda *a: lowered.append(True) or ""), \
+                mock.patch("evograd.pipelines.shared.primitives.check_source"), \
+                mock.patch.object(S, "select_workload"), mock.patch.object(S, "scoped_op"), \
+                mock.patch.object(S, "build_contract", return_value={}), \
+                mock.patch.object(S, "validate_source"), \
+                mock.patch.object(S, "verify_candidate", return_value={}), \
+                mock.patch.object(S, "report_passed", return_value=False), \
+                mock.patch.object(S, "_write_declaration"), \
+                mock.patch("torch.cuda.is_available", return_value=True), \
+                mock.patch("torch.cuda.get_device_name", return_value="gpu"), \
+                mock.patch("torch.cuda.empty_cache"):
+            S.synthesize_unified_seed(config)
+        failure = config.output_dir / "failure.json"
+        return (json.loads(failure.read_text()) if failure.exists() else None), bool(lowered)
+
+    #: OLMoE moe_experts' preserved calls: two grouped GEMMs forward, four backward.
+    GROUPED = [("forward", "aten._grouped_mm.default", "extern_kernels._grouped_mm")] * 2 + \
+              [("backward", "aten._grouped_mm.default", "extern_kernels._grouped_mm")] * 4
+    #: DLRM's interaction: torch.bmm forward, its two gradients.
+    BATCHED = [("forward", "aten.bmm.default", "extern_kernels.bmm")] + \
+              [("backward", "aten.bmm.default", "extern_kernels.bmm")] * 2
+
+    def test_a_grouped_gemm_needs_vendor_grouped_mm(self):
+        failure, lowered = self._synthesize(self.GROUPED, ["vendor_gemm"])
+        self.assertEqual(failure["phase"], "grant")
+        self.assertIn("vendor_grouped_mm", failure["error"])
+        self.assertFalse(lowered)
+        failure, lowered = self._synthesize(self.GROUPED, ["vendor_gemm", "vendor_grouped_mm"])
+        self.assertIsNone(failure)
+        self.assertTrue(lowered)
+
+    def test_a_batched_gemm_needs_vendor_bmm(self):
+        failure, _ = self._synthesize(self.BATCHED, ["vendor_gemm"])
+        self.assertEqual(failure["phase"], "grant")
+        self.assertIn("vendor_bmm", failure["error"])
+        failure, lowered = self._synthesize(self.BATCHED, ["vendor_bmm", "vendor_gemm"])
+        self.assertIsNone(failure)
+        self.assertTrue(lowered)
+
+    def test_a_2d_gemm_and_attention_need_their_own_grants(self):
+        attention = [("forward", "aten.mm.default", "extern_kernels.mm"),
+                     ("forward", "aten._scaled_dot_product_cudnn_attention.default",
+                      "torch.ops.aten._scaled_dot_product_cudnn_attention.default")]
+        self.assertEqual(self._synthesize(attention, ["vendor_gemm", "vendor_sdpa"])[0], None)
+        self.assertEqual(self._synthesize(attention, ["vendor_gemm"])[0]["phase"], "grant")
+        self.assertEqual(self._synthesize(attention, [])[0]["phase"], "grant")
+        # Nothing preserved, nothing to grant.
+        self.assertIsNone(self._synthesize([], [])[0])
+
+
 if __name__ == '__main__':
     unittest.main()
