@@ -129,9 +129,10 @@ Status: not run (recorded 2026-11-11). The selection treats a task that is one
 vendor library call as inventory only (reason `vendor`): GEMM (`linear`,
 `linear_no_bias`), SDPA (`causal_gqa_attention`) and, since 2026-11-11, cuDNN
 convolution (`spatial_conv2d`). The same kernels are granted to candidates
-inside larger cases (`vendor_gemm`, `vendor_sdpa`, `vendor_conv`). The reason
-given is that an agent rarely writes a faster kernel than the vendor's. That
-claim needs a measurement before the paper relies on it:
+inside larger cases (`vendor_gemm`, `vendor_bmm`, `vendor_grouped_mm`,
+`vendor_sdpa`, `vendor_conv`). The reason given is that an agent rarely writes
+a faster kernel than the vendor's. That claim needs a measurement before the
+paper relies on it:
 
 - Cases: each family's time-max configuration in each model where it occurs,
   at least Qwen3-0.6B `linear_no_bias` (attention projections), DiT-S/2

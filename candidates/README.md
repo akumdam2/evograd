@@ -115,8 +115,10 @@ rerun with `evaluate`; renaming old `tier1` results to `tier2` is not a migratio
    GEMMs, convolutions and fused attention in vendor library calls. So
    `--library auto` (the default) grants the trusted primitive for each that
    one call of the reference reaches: `vendor_gemm` (cuBLAS) for a
-   contraction, `vendor_conv` (cuDNN) for a convolution, `vendor_sdpa` for
-   fused attention.
+   contraction, `vendor_bmm` (cuBLAS) for a batched GEMM (`aten.bmm`),
+   `vendor_grouped_mm` for a grouped GEMM (`aten._grouped_mm`),
+   `vendor_conv` (cuDNN) for a convolution, `vendor_sdpa` for fused attention.
+   evograd's own seed may keep only library calls the pack grants.
 4. **Same judge.** In-loop scores and feedback come from
    `evograd.evolve.evaluator_entry`, the evaluator `evograd evolve` uses, with
    the environment it sets.
