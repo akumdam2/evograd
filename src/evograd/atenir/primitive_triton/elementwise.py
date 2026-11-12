@@ -400,6 +400,26 @@ if HAS_TRITON:
         tl.store(out_ptr + offs, libdevice.floor(a), mask=mask)
 
     @triton.jit
+    def _div_rounded_int_kernel(a_ptr, b_ptr, out_ptr, divisor, N, SCALAR: tl.constexpr,
+                                FLOOR: tl.constexpr, BLOCK: tl.constexpr):
+        """Integer a / b rounded toward zero, or with FLOOR toward -inf (C's
+        quotient less one where the remainder's sign differs from b's), exact
+        in the integer dtype as ATen's div_trunc/div_floor_integer."""
+        pid = tl.program_id(0)
+        offs = pid * BLOCK + tl.arange(0, BLOCK)
+        mask = offs < N
+        a = tl.load(a_ptr + offs, mask=mask, other=0)
+        if SCALAR:
+            b = tl.zeros_like(a) + divisor
+        else:
+            b = tl.load(b_ptr + offs, mask=mask, other=1)
+        quotient = a // b
+        if FLOOR:
+            remainder = a % b
+            quotient = tl.where((remainder != 0) & ((remainder < 0) != (b < 0)), quotient - 1, quotient)
+        tl.store(out_ptr + offs, quotient, mask=mask)
+
+    @triton.jit
     def _trunc_kernel(a_ptr, out_ptr, N, BLOCK: tl.constexpr):
         pid = tl.program_id(0)
         offs = pid * BLOCK + tl.arange(0, BLOCK)
@@ -1176,6 +1196,33 @@ def ceil_(a: torch.Tensor) -> torch.Tensor:
 
 def floor_(a: torch.Tensor) -> torch.Tensor:
     return _unary_f32(_floor_kernel, a)
+
+
+def div_rounded(a: torch.Tensor, b, rounding_mode: str) -> torch.Tensor:
+    """``aten.div(a, b, rounding_mode)`` for 'trunc' and 'floor', ``b`` a tensor
+    or a scalar. Integer operands divide exactly in their promoted integer dtype
+    (OLMoE's expert ids // 8); floating ones round the true quotient."""
+    if rounding_mode not in ("trunc", "floor"):
+        raise ValueError(f"div rounding_mode must be 'trunc' or 'floor', not {rounding_mode!r}")
+    dtype = torch.result_type(a, b)
+    if dtype.is_floating_point or dtype.is_complex:
+        quotient = div_tt(a, b) if torch.is_tensor(b) else div_scalar(a, b)
+        return trunc_(quotient) if rounding_mode == "trunc" else floor_(quotient)
+    if dtype == torch.bool:
+        raise RuntimeError('"div_trunc/floor" is not implemented for Bool')
+    scalar = not torch.is_tensor(b)
+    if scalar:
+        if int(b) == 0:
+            raise ZeroDivisionError("integer division by zero")
+        a, divisor = a.to(dtype).contiguous(), int(b)
+        b = a  # not read: the kernel divides by the scalar
+    else:
+        a, b = _binary_inputs(a, b)
+        divisor = 1
+    out = torch.empty_like(a)
+    _div_rounded_int_kernel[_grid(a.numel())](a, b, out, divisor, N=a.numel(), SCALAR=scalar,
+                                              FLOOR=rounding_mode == "floor", BLOCK=_BLOCK)
+    return out
 
 
 def trunc_(a: torch.Tensor) -> torch.Tensor:

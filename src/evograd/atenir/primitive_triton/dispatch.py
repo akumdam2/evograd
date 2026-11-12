@@ -436,24 +436,19 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         # rounding_mode is a str in scalar_args; numeric scalar comes first for Scalar variants
         rounding_mode = next((v for v in scalar_args if isinstance(v, str)), None)
         numeric = [v for v in scalar_args if not isinstance(v, str) and v is not None]
-        if rounding_mode == "trunc":
+        if rounding_mode in ("trunc", "floor"):
+            # The divisor keeps its type: an integer tensor // an int stays integer.
             if n_tensors >= 2:
-                return lambda a, b: elementwise.trunc_(elementwise.div_tt(a, b))
-            s = float(numeric[0]) if numeric else 1.0
+                def _div_rounded_tt(a, b):
+                    return elementwise.div_rounded(a, b, rounding_mode)
 
-            def _div_trunc_s(a):
-                return elementwise.trunc_(elementwise.div_scalar(a, s))
+                return _div_rounded_tt
+            s = numeric[0] if numeric else 1
 
-            return _div_trunc_s
-        if rounding_mode == "floor":
-            if n_tensors >= 2:
-                return lambda a, b: elementwise.floor_(elementwise.div_tt(a, b))
-            s = float(numeric[0]) if numeric else 1.0
+            def _div_rounded_s(a):
+                return elementwise.div_rounded(a, s, rounding_mode)
 
-            def _div_floor_s(a):
-                return elementwise.floor_(elementwise.div_scalar(a, s))
-
-            return _div_floor_s
+            return _div_rounded_s
         if n_tensors >= 2:
             return elementwise.div_tt
         s = numeric[0] if numeric else 1

@@ -576,6 +576,17 @@ class TestSeedLowerings(unittest.TestCase):
         for library_call in ('torch.cat', 'index_put_(', 'tl.atomic', '.contiguous()', '.clone()'):
             self.assertNotIn(library_call, library[library.index('def _offset_of('):])
 
+    def test_integer_floor_division_keeps_an_integer_divisor(self):
+        # OLMoE's sorted expert ids // 8 (div.Tensor_mode, rounding_mode='floor').
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+
+        ids = torch.randint(0, 64, (16,))
+        for mode in ('floor', 'trunc'):
+            kernel = make_kernel(_node(lambda i: torch.div(i, 8, rounding_mode=mode), ids,
+                                       target='aten.div.Tensor_mode'))
+            self.assertEqual(_nonlocals(kernel), {'s': 8, 'rounding_mode': mode})
+            self.assertIsInstance(_nonlocals(kernel)['s'], int)
+
     def test_strided_storage_zero_padding_flip_and_copy(self):
         # Qwen3.5's gated delta rule pads by zero, flips a chunk axis, and copies
         # into fresh strided storage; the copy is of the source, not the storage.
@@ -688,8 +699,9 @@ print(json.dumps(result))
 #: aten.cat, aten.index.Tensor and aten.index_put against ATen's CPU kernels,
 #: the CUDA index_put orders against an emulation, and the exact configurations
 #: of the seeds that reached them (DLRM's interaction, Qwen2-VL's and DiT's
-#: attention backward, Qwen3.5's gated-delta in_proj backward).
-_INTERPRETED_INDEXING = r"""
+#: attention backward, Qwen3.5's gated-delta in_proj backward); integer
+#: division under div's rounding modes (OLMoE's expert ids // 8).
+_INTERPRETED_LOWERINGS = r"""
 import json
 import sys
 import tests._triton_interpreter  # noqa: F401  (the interpreter as compiled Triton)
@@ -837,6 +849,23 @@ if part == 'general':
                 serial = aten_put(base, [index], values, True)
                 result[f'cuda_{order}_{dtype}'] = same(mine, expected) and not torch.equal(mine, serial)
 
+elif part == 'integer_div':
+    from evograd.atenir.primitive_triton import elementwise as ew
+    ew.libdevice = tests._triton_interpreter.libdevice  # the float path's floor/trunc
+    a = torch.randint(-1000, 1000, (3000,))
+    b = torch.randint(-9, 10, (3000,))
+    b[b == 0] = 3
+    for mode in ('floor', 'trunc'):
+        for name, divisor in (('scalar', 8), ('negative', -7), ('tensor', b), ('row', b[:1])):
+            result[f'{mode}_{name}'] = same(ew.div_rounded(a, divisor, mode), torch.div(a, divisor, rounding_mode=mode))
+        result[f'{mode}_int32'] = same(ew.div_rounded(a.int(), 5, mode), torch.div(a.int(), 5, rounding_mode=mode))
+        result[f'{mode}_float'] = same(ew.div_rounded(a.float(), 8, mode), torch.div(a.float(), 8, rounding_mode=mode))
+    try:
+        ew.div_rounded(a, 0, 'floor')
+        result['refuses_zero'] = False
+    except ZeroDivisionError:
+        result['refuses_zero'] = True
+
 elif part == 'dlrm':
     # DLRM interaction (B=32, 26 sparse + 1 dense features, D=64): its cats, the
     # index of the upper triangle of the [32, 27, 27] bmm and its backward.
@@ -887,8 +916,8 @@ elif part == 'gdn_in_proj':
 print(json.dumps(result))
 """
 
-#: The parts of _INTERPRETED_INDEXING; DiT's [768, 6, 256, 64] cat takes ~3 minutes.
-_INDEXING_PARTS = ('general', 'dlrm', 'qwen2_vl', 'gdn_in_proj', 'dit')
+#: The parts of _INTERPRETED_LOWERINGS; DiT's [768, 6, 256, 64] cat takes ~3 minutes.
+_LOWERING_PARTS = ('general', 'integer_div', 'dlrm', 'qwen2_vl', 'gdn_in_proj', 'dit')
 
 
 class TestHandwrittenKernelsInterpreted(unittest.TestCase):
@@ -902,13 +931,13 @@ class TestHandwrittenKernelsInterpreted(unittest.TestCase):
         result = json.loads(run.stdout.strip().splitlines()[-1])
         self.assertTrue(result and all(result.values()), result)
 
-    def test_cat_index_and_index_put_match_aten_bit_for_bit(self):
+    def test_cat_indexing_and_integer_division_match_aten_bit_for_bit(self):
         import subprocess
 
         environment = {**os.environ, 'TRITON_INTERPRET': '1'}
-        for part in _INDEXING_PARTS:
+        for part in _LOWERING_PARTS:
             with self.subTest(part=part):
-                run = subprocess.run([sys.executable, '-c', _INTERPRETED_INDEXING, part], env=environment,
+                run = subprocess.run([sys.executable, '-c', _INTERPRETED_LOWERINGS, part], env=environment,
                                      capture_output=True, text=True, timeout=900)
                 self.assertEqual(run.returncode, 0, run.stderr[-3000:])
                 result = json.loads(run.stdout.strip().splitlines()[-1])
@@ -917,10 +946,11 @@ class TestHandwrittenKernelsInterpreted(unittest.TestCase):
 
 class TestHandwrittenKernelsCompileForHopper(unittest.TestCase):
     """The interpreter runs code the Triton compiler rejects (a constexpr tuple
-    indexed by a computed dim, a constexpr reassigned): compile the cat and
-    indexing kernels for sm_90 without a GPU (frontend, MLIR and ptxas)."""
+    indexed by a computed dim, a constexpr reassigned): compile the cat,
+    indexing and integer division kernels for sm_90 without a GPU (frontend,
+    MLIR and ptxas)."""
 
-    def test_cat_and_indexing_kernels_compile_for_sm90(self):
+    def test_cat_indexing_and_division_kernels_compile_for_sm90(self):
         import triton
         import triton.language as tl
         from triton.backends.compiler import GPUTarget
@@ -949,6 +979,13 @@ class TestHandwrittenKernelsCompileForHopper(unittest.TestCase):
                       {'SHAPE': (3, 351), 'INDEX_STRIDES': (0, 1), 'FIRST': first, 'BLOCK': 1024})
         build(sg._index_gather_kernel, {'SRC': '*fp32', 'OFFSETS': '*i64', 'OUT': '*fp32', 'N': 'i32'},
               {'SHAPE': (32, 351), 'SRC_STRIDES': (729, 0), 'POSITION_STRIDES': (0, 1), 'BLOCK': 1024})
+        from evograd.atenir.primitive_triton import elementwise
+
+        for dtype, scalar, floor in (('i64', True, True), ('i64', False, True), ('i32', True, False)):
+            with self.subTest(divide=(dtype, scalar, floor)):
+                build(elementwise._div_rounded_int_kernel, {'a_ptr': f'*{dtype}', 'b_ptr': f'*{dtype}',
+                                                            'out_ptr': f'*{dtype}', 'divisor': 'i32', 'N': 'i32'},
+                      {'SCALAR': scalar, 'FLOOR': floor, 'BLOCK': 1024})
         for dtype in ('fp32', 'bf16'):
             for accumulate, order, block in ((True, 0, 1024), (True, 1, 1024), (True, 2, 32), (False, 0, 1024)):
                 with self.subTest(dtype=dtype, accumulate=accumulate, order=order):
@@ -1031,6 +1068,17 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
             with self.subTest(n=keys.numel(), descending=descending):
                 self.assertTrue(torch.equal(values, expected.values))
                 self.assertTrue(torch.equal(order, expected.indices))
+
+    def test_integer_division_matches_cuda_aten(self):
+        from evograd.atenir.primitive_triton.elementwise import div_rounded
+
+        ids = torch.sort(torch.randint(0, 64, (32768,), device='cuda')).indices  # OLMoE's sorted ids
+        signed = torch.randint(-1000, 1000, (4096,), device='cuda')
+        divisors = torch.randint(1, 9, (4096,), device='cuda') * (torch.randint(0, 2, (4096,), device='cuda') * 2 - 1)
+        for mode in ('floor', 'trunc'):
+            for a, b in ((ids, 8), (signed, -7), (signed, divisors)):
+                with self.subTest(mode=mode, tensor_divisor=torch.is_tensor(b)):
+                    self.assertTrue(torch.equal(div_rounded(a, b, mode), torch.div(a, b, rounding_mode=mode)))
 
     def test_cat_index_and_index_put_match_cuda_aten_bit_for_bit(self):
         from evograd.atenir.primitive_triton import scatter_gather as sg
