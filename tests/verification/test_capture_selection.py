@@ -223,7 +223,8 @@ class BenchmarkCapture(unittest.TestCase):
         from evograd.verification.integrations import gates
 
         def calibration(model, case, corpus, **_):
-            return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=None)
+            policy = SimpleNamespace(gamma=4.0, thresholds={})  # a calibration with no envelope
+            return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=policy)
 
         with mock.patch.object(gates, "operator_calibration", calibration):
             return build_task(self.root / "packs" / case_id.replace("/", "__"), model="qwen3_0_6b",
