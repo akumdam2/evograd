@@ -134,7 +134,7 @@ class Evaluate(unittest.TestCase):
         cls.tmp.cleanup()
 
     def evaluate(self, program, out, *, timer=fixed_timer(1.5), intervals=faster_than_eager,
-                 rules=False, graph=replayed):
+                 rules=False, graph=replayed, **options):
         """The toy pair is a bare module, not an artifact: the static rules are
         off unless a test asks for them."""
         from evograd.evaluation.protocol import evaluate
@@ -145,7 +145,23 @@ class Evaluate(unittest.TestCase):
             return evaluate(self.model, {self.T.CASE_ID: self.programs[program]}, self.manifest,
                             out, state=Path(self.tmp.name) / "state", device="cpu",
                             compile_backend=FAST, log=lambda *a: None, tier3_options=TIER3,
-                            time_tier2=timer, isolate_tier3=False, rules=rules)
+                            time_tier2=timer, isolate_tier3=False, rules=rules, **options)
+
+    def test_an_operator_level_evaluation_stops_after_tier2(self):
+        from evograd.evaluation.protocol import OPERATOR_LEVEL
+
+        out = Path(self.tmp.name) / "operator_level"
+        result = self.evaluate("good", out, operator_level=True)
+        case = result["cases"][self.T.CASE_ID]
+        self.assertEqual((case["gate1_payloads"], case["gate2_operator"]), ("passed", "passed"))
+        self.assertNotIn("gate2_model", case)
+        self.assertTrue(case["accepted"] and case["executable"], case)
+        self.assertEqual(case["tier2"]["eager"]["speedup"], 1.5)
+        self.assertNotIn("tier3_single_site", case)
+        self.assertEqual(result["tier3"], {"not_run": OPERATOR_LEVEL})
+        self.assertEqual(result["settings"]["operator_level"], OPERATOR_LEVEL)
+        self.assertFalse((out / "tier3").exists() or (out / "gate2_model").exists())
+        self.assertEqual(result["summary"]["level2"]["coverage"], 1.0)
 
     def test_an_accepted_candidate_is_timed_combined_and_counted(self):
         out = Path(self.tmp.name) / "good"

@@ -89,6 +89,15 @@ TIER2_INPUTS = {"source": "real_training_payload", "split": "acceptance",
 #: graph (T3-G, ``runner.measure_cuda_graph``), beside the eager step (T3).
 TIER3_OPTIONS = {"warmup": 3, "steps": 10, "blocks": 10, "loss_steps": 5,
                  "learning_rate": 1e-4, "seed": 0, "cuda_graph": True}
+#: What an ``operator_level`` evaluation leaves out (:func:`evaluate`).
+OPERATOR_LEVEL = ("operator level only: model Gate 2, Gate 3, Tier 3 and the combination are "
+                  "left for a later run; Level-2 cases are accepted on Gate 1 and operator Gate 2")
+
+
+class _OperatorLevel(Exception):
+    """Ends an ``operator_level`` evaluation after Tier 2."""
+
+
 COMBINATION_RULE = ("every accepted Level-2 candidate whose single-site Tier 3 speedup over eager, "
                     "both replayed from a CUDA graph (T3-G), has a 95% bootstrap interval with its "
                     "lower bound above 1; for a model whose eager step cannot be captured, the "
@@ -552,8 +561,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              tier3_options: Mapping[str, Any] = TIER3_OPTIONS,
              time_tier2: Callable | None = None, isolate_tier3: bool = True,
              rules: bool = True, check_imports: bool = True,
-             grants: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
+             grants: Mapping[str, Sequence[str]] | None = None,
+             operator_level: bool = False) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
+
+    ``operator_level`` stops after Tier 2: the static rules, Gate 1, operator
+    Gate 2 and Tier 2 run, while the model gates, Tier 3 and the combination are
+    left for a later run (MegaFold's need a 192 GiB host); a Level-2 case is then
+    accepted on its operator-level gates, and the result says so.
 
     ``time_tier2(op, module, inputs)`` replaces :func:`time_case` (a CPU test
     has no CUDA events to time with); ``isolate_tier3=False`` runs the Tier 3
@@ -574,6 +589,10 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
     unloadable = unimportable({cid: path for cid, path in candidates.items() if cid in observed}
                               ) if check_imports else {}
     candidates = {cid: path for cid, path in candidates.items() if cid not in unloadable}
+    if operator_level:
+        import dataclasses
+
+        model = dataclasses.replace(model, model_gates=False)
     run = open_run(model, candidates, corpus_path, out, state=state, device=device,
                    compile_backend=compile_backend, log=log, deadline_min=deadline_min)
     # A submission's top-level code must not change the frozen verification settings.
@@ -583,7 +602,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         "environment": _environment(), "reference": REFERENCE,
         "settings": {"verification": verification_settings, "calibration_reuse": reuse_settings(), "tier2": dict(tier2_options),
                      "tier2_inputs": dict(TIER2_INPUTS),
-                     "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE},
+                     "tier3": dict(tier3_options), "combination_rule": COMBINATION_RULE,
+                     **({"operator_level": OPERATOR_LEVEL} if operator_level else {})},
         "cases": {c.case_id: {"task": c.task, "level": c.level, "family": get_task(c.task).family,
                               "frequency": c.frequency,
                               "recorded": (c.calls_recorded if run.corpus.records_case(c.case_id)
@@ -648,6 +668,10 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
             result["cases"][case_id].update(timed)
             log(case_id, "tier2", {k: v.get("speedup", v.get("error")) for k, v in
                                    (timed.get("tier2") or {}).items()} or timed.get("error"))
+
+        if operator_level:
+            result["tier3"] = {"not_run": OPERATOR_LEVEL}
+            raise _OperatorLevel
 
         # 3. Tier 3, each executable Level-2 candidate alone.
         level2 = [cid for cid in sorted(run.modules)
@@ -720,6 +744,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         log("suspended:", stop, "-- rerun the same command to continue")
         _write(run.out / "evaluation.json", result)
         return result
+    except _OperatorLevel:
+        pass
     result["summary"] = summarize([result])
     _write(run.out / "evaluation.json", result)
     return result
@@ -869,6 +895,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--deadline-min", type=float, default=None,
                         help="stop after this many minutes at the next stage boundary or Gate 3 "
                              "checkpoint; exit 3; rerun the same command to continue")
+    parser.add_argument("--operator-level", action="store_true",
+                        help="stop after Tier 2: no model gates, Tier 3 or combination")
     parser.add_argument("--tier3-blocks", type=int, default=TIER3_OPTIONS["blocks"],
                         help="timed blocks per Tier 3 provider; more narrow the interval the "
                              "combination rule reads")
@@ -887,7 +915,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = evaluate(model, dict(item.split("=", 1) for item in args.candidate), args.corpus,
                           args.out, state=args.state, log=log, deadline_min=args.deadline_min,
                           tier3_options={**TIER3_OPTIONS, "blocks": args.tier3_blocks},
-                          grants=grants)
+                          grants=grants, operator_level=args.operator_level)
     if result.get("suspended"):
         print(json.dumps({"suspended": result["suspended"]}))
         return 3

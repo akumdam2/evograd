@@ -122,6 +122,35 @@ class TestCompilerRewrites(unittest.TestCase):
                         _external_regions("forward", lowering, _serialize_graph(gm))
 
 
+class TestDecompositions(unittest.TestCase):
+    def test_glu_reaches_the_seed_as_operations_it_lowers(self):
+        # MegaFold's triangle multiplication gates by glu, which Inductor keeps whole and
+        # the seed has no lowering for: the capture decomposes it (and its backward).
+        from evograd.pipelines.unified import capture as unified
+
+        class Recorded(Exception):
+            pass
+
+        table = {}
+
+        def record(op, workload, **options):
+            table.update(options["decompositions"])
+            raise Recorded
+
+        with patch.object(unified, "capture_inductor_pair", record), self.assertRaises(Recorded):
+            unified.capture_unified_pair(get_task("rmsnorm"), SMALL["rmsnorm"][0], device="cpu")
+
+        def glu(x, dy):
+            y = torch.nn.functional.glu(x, -1)
+            return y, torch.autograd.grad(y, x, dy)[0]
+
+        gm = make_fx(glu, decomposition_table=table)(torch.randn(4, 8, requires_grad=True),
+                                                     torch.randn(4, 4))
+        targets = {n.target for n in gm.graph.nodes if n.op == "call_function"}
+        self.assertFalse({torch.ops.aten.glu.default, torch.ops.aten.glu_backward.default} & targets)
+        self.assertIn(torch.ops.aten.sigmoid.default, targets)
+
+
 class TestSavedActivationLayout(unittest.TestCase):
     @unittest.skipUnless(shutil.which("g++"), "Inductor's CPU backend needs a C++ compiler")
     def test_the_backward_takes_a_saved_activation_the_forward_padded(self):

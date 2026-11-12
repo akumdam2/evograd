@@ -35,6 +35,8 @@ def main(model, argv=None) -> int:
                    help="pipeline check (each case's reference as its candidate): model gates "
                         "once, on the combination of every Level-2 case its own Gate 1 and "
                         "operator Gate 2 pass; never for an agent's candidates")
+    p.add_argument("--operator-level", action="store_true",
+                   help="Gate 1 and operator Gate 2 only; the model gates are left for a later run")
     from evograd.verification.reuse import add_arguments as add_reuse_arguments
 
     add_reuse_arguments(p)
@@ -91,7 +93,8 @@ def main(model, argv=None) -> int:
 
     with calibration_reuse(options(args), log=log):
         verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
-                         deadline_min=args.deadline_min, combined=args.combined)
+                         deadline_min=args.deadline_min, combined=args.combined,
+                         operator_level=args.operator_level)
     if verdict.get("suspended"):
         print(json.dumps({"suspended": verdict["suspended"]}))
         return 3

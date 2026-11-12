@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -15,6 +16,8 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
+#: subprocess.run before a test replaces it for an agent's own processes.
+real_run = subprocess.run
 UPSTREAM = "https://example.invalid/v1"
 
 
@@ -235,6 +238,8 @@ def test_geak_counts_anthropic_requests_without_a_cap_and_passes_effort(
     def run(command, **kwargs):
         if command[0] == "nvidia-smi":
             return SimpleNamespace(stdout="NVIDIA GH200\n")
+        if command[0] == "git":  # the run ledger records the evograd commit
+            return real_run(command, **kwargs)
         proxy = metered.instances[-1]
         assert (proxy.api, proxy.limit, proxy.api_key) == ("anthropic", None, "test-anthropic-key")
         env = kwargs["env"]
@@ -288,6 +293,8 @@ def test_geak_codex_uses_openai_proxy_and_workflow_result(
     def run(command, **kwargs):
         if command[0] == "nvidia-smi":
             return SimpleNamespace(stdout="NVIDIA GH200")
+        if command[0] == "git":  # the run ledger records the evograd commit
+            return real_run(command, **kwargs)
         proxy = metered.instances[-1]
         assert (proxy.api, proxy.limit, proxy.api_key) == ("openai", None, "test-upstream-key")
         assert command[0] == "node" and command[command.index("--agent") + 1] == "codex"

@@ -308,9 +308,12 @@ def capture_unified_pair(
     decompositions[torch.ops.aten.var_mean.correction] = primitive_decompositions[
         torch.ops.aten.var_mean.correction
     ]
+    # glu too: Inductor keeps it whole (MegaFold's triangle multiplication gates by it),
+    # and its core decomposition is slices, sigmoid and mul, which the seed lowers.
     for target in (
         torch.ops.aten.native_layer_norm.default,
         torch.ops.aten.native_layer_norm_backward.default,
+        torch.ops.aten.glu.default,
     ):
         if target in primitive_decompositions:
             decompositions.setdefault(target, primitive_decompositions[target])
