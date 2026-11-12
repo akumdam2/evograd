@@ -580,14 +580,7 @@ _EFFICIENT_NODE = {
 #: CPU, against ATen's CPU kernels and the CUDA backward's summation order.
 _INTERPRETED_KERNELS = r"""
 import json
-import triton.runtime.interpreter as interpreter
-_patch = interpreter._patch_lang_tensor
-def _patched(tensor, scope):
-    # NumPy 2 refuses int() of the interpreter's one-element scalars, which a
-    # data-dependent loop bound needs.
-    _patch(tensor, scope)
-    scope.set_attr(tensor, '__index__', lambda self: int(self.handle.data.reshape(-1)[0]))
-interpreter._patch_lang_tensor = _patched
+import tests._triton_interpreter  # the interpreter as compiled Triton: int() of scalars, bf16 rounding
 import torch
 import torch.nn.functional as F
 from evograd.atenir.primitive_triton import scatter_gather as sg
