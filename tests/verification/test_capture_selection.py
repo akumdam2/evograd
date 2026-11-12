@@ -22,6 +22,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import tempfile
 import unittest
 import warnings
@@ -295,6 +296,49 @@ class BenchmarkCapture(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 cli.main(self.model, ["capture", "--out", "x", "--cases", "some"])
         self.assertEqual(calls, ["benchmark", "all"])
+
+    def test_verify_fails_when_its_combination_is_not_accepted(self):
+        from evograd.verification.integrations import cli, gates
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        for combination, code in ((None, 0), ({"accepted": True}, 0), ({"accepted": False}, 1)):
+            verdict = {"candidates": {"t/1": {"accepted": True}}, "combination": combination}
+            with self.subTest(combination=combination), \
+                    mock.patch.object(gates, "verify", lambda *a, **k: verdict), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(self.model, argv), code)
+
+    def test_verify_takes_the_native_reuse_options(self):
+        from evograd.verification import reuse
+        from evograd.verification.integrations import cli, gates
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        seen = []
+
+        def verify(*args, **kwargs):
+            seen.append(reuse.settings()["share_gate3_native"])
+            return {"candidates": {"t/1": {"accepted": True}}, "combination": None}
+
+        with mock.patch.object(gates, "verify", verify), contextlib.redirect_stdout(io.StringIO()):
+            cli.main(self.model, argv)
+            cli.main(self.model, argv + ["--share-gate3-native"])
+        self.assertEqual(seen, [False, True])
+
+    def test_verify_runs_with_expandable_segments_unless_told_otherwise(self):
+        from evograd.verification.integrations import cli, gates
+        from evograd.verification.integrations.base import CUDA_ALLOC_CONF
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        verdict = {"candidates": {"t/1": {"accepted": True}}, "combination": None}
+        for preset, expected in ((None, CUDA_ALLOC_CONF), ("max_split_size_mb:512", "max_split_size_mb:512")):
+            env = {} if preset is None else {"PYTORCH_CUDA_ALLOC_CONF": preset}
+            with self.subTest(preset=preset), mock.patch.dict(os.environ, env), \
+                    mock.patch.object(gates, "verify", lambda *a, **k: verdict), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                if preset is None:
+                    os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+                cli.main(self.model, argv)
+                self.assertEqual(os.environ["PYTORCH_CUDA_ALLOC_CONF"], expected)
 
 
 class OldRuleCorpus(unittest.TestCase):

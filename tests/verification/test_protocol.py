@@ -171,6 +171,12 @@ class Evaluate(unittest.TestCase):
         self.assertEqual((combination["gate2_model"], combination["gate3"]), ("passed", "passed"))
         self.assertTrue(combination["accepted"])
         self.assertTrue(combination["tier3"]["ok"], combination["tier3"])
+        # One candidate alone is its single site: nothing of it is run again.
+        self.assertEqual(combination["reused_from"], f"single_site:{self.T.CASE_ID}")
+        self.assertEqual(combination["tier3_reused_from"], f"single_site:{self.T.CASE_ID}")
+        self.assertEqual(combination["tier3"], case["tier3_single_site"])
+        self.assertFalse((out / "combination" / "gate2_model.json").exists())
+        self.assertFalse((out / "tier3" / "combination.json").exists())
         summary = result["summary"]
         self.assertEqual(summary["level2"]["coverage"], 1.0)
         self.assertAlmostEqual(summary["level2"]["speedup"]["eager"]["geomean"], 1.5)

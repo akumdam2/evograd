@@ -135,6 +135,19 @@ def objective_of(model: Model):
     return model.objective if model.objective is not None else NextTokenLM()
 
 
+#: The CUDA allocator evaluation runs with unless the caller set one: whole-model
+#: gate runs fragment memory (OLMoE's combination calibration ran out with 13.7 GiB
+#: free in fragments, 2026-11-11). Baselines and candidates of one evaluation share
+#: it, and its environment records it.
+CUDA_ALLOC_CONF = "expandable_segments:True"
+
+
+def default_allocator() -> None:
+    """:data:`CUDA_ALLOC_CONF`, unless ``PYTORCH_CUDA_ALLOC_CONF`` is set; call it
+    before the process allocates on the GPU (child processes inherit it)."""
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", CUDA_ALLOC_CONF)
+
+
 def configure() -> dict[str, Any]:
     import torch
 

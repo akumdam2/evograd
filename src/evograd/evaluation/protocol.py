@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -535,8 +536,12 @@ def _cached(path: Path, key: Mapping[str, Any], compute: Callable[[], Any], dead
 def _environment() -> dict[str, Any]:
     import torch
 
+    from evograd.provenance import provenance
+
     return {"torch": torch.__version__, "cuda": torch.version.cuda,
-            "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None}
+            "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+            "cuda_alloc_conf": os.environ.get("PYTORCH_CUDA_ALLOC_CONF"),
+            "evograd": provenance()}
 
 
 def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,
@@ -681,9 +686,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         # 4. The combination: its gates, then its training step.
         chosen = [cid for cid in level2 if _positive(result["cases"][cid], execution)]
         configure()
-        combination = verify_combination(run, chosen)
+        combination = verify_combination(run, chosen, single=result["cases"])
         result["settings"]["timing"] = timing_mode()
-        if chosen:
+        if len(chosen) == 1:
+            # One candidate alone is its single site: its Tier 3 measurement stands.
+            timed = {"rows": {"combination": single["rows"][chosen[0]],
+                              "torch_compile": _tier3_row(single["report"], "torch_compile")}}
+            combination["tier3_reused_from"] = f"single_site:{chosen[0]}"
+        elif chosen:
             key = {"baseline": baseline_key, "programs": {cid: run.programs[cid] for cid in chosen},
                    "options": dict(tier3_options), "environment": result["environment"],
                    "isolated": isolate_tier3}
@@ -696,6 +706,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                 return {"report": report, "rows": rows}
 
             timed = _cached(run.out / "tier3" / "combination.json", key, combined, run.deadline)
+        if chosen:
             combination["tier3"] = timed["rows"]["combination"]
             if "torch_compile" in timed["rows"]:
                 compiled, own = timed["rows"]["torch_compile"], timed["rows"]["combination"]
@@ -841,7 +852,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     import time
 
     from evograd.verification.integrations import PACKAGES, load
+    from evograd.verification.integrations.base import default_allocator
 
+    default_allocator()
     parser = argparse.ArgumentParser(prog="evograd evaluate")
     parser.add_argument("model", help=f"one of {sorted(PACKAGES)}")
     parser.add_argument("--corpus", required=True, help="the model's real-payload corpus manifest")

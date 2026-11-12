@@ -277,9 +277,14 @@ def cmd_evaluate(args) -> int:
         "model": args.model, "agent": args.agent, "reused_from": reused,
         "candidates": {cid: str(path) for cid, path in sorted(chosen.items())},
         "search_failures": failures}, indent=2) + "\n", encoding="utf-8")
+    from evograd.verification.reuse import FLAGS
+
+    # Native controls and references run once per model and samples, shared by every
+    # case (each comparison still checks the shared run's identity and content).
     command = [sys.executable, "-m", "evograd.evaluation.protocol", args.model,
                "--corpus", str(args.corpus), "--out", str(out), "--state", str(args.root / "state"),
-               "--tier3-blocks", str(args.tier3_blocks)]
+               "--tier3-blocks", str(args.tier3_blocks),
+               *(f"--{flag.replace('_', '-')}" for flag in FLAGS)]
     if args.deadline_min is not None:
         command += ["--deadline-min", str(args.deadline_min)]
     from evograd.adbench_tools.task import load

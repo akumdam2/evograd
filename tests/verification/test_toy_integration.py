@@ -112,6 +112,8 @@ class ToyIntegration(unittest.TestCase):
         self.assertEqual(good["combination"]["gate2_model"], "passed")
         self.assertEqual(good["combination"]["gate3"], "passed")
         self.assertTrue(good["combination"]["accepted"])
+        # Deployed alone, the one accepted candidate is its single site: reused, not rerun.
+        self.assertEqual(good["combination"]["reused_from"], f"single_site:{self.T.CASE_ID}")
         with mock.patch("evograd.verification.integrations.gates.judge_training") as training:
             bad = self.verify(1.05, root / "bad")
         training.assert_not_called()
@@ -134,6 +136,28 @@ class ToyIntegration(unittest.TestCase):
         self.assertEqual(entry["gate3"], "failed")
         self.assertFalse(entry["accepted"])
         self.assertEqual(verdict["combination"]["cases"], [])
+
+    def test_a_pipeline_check_runs_the_model_gates_once_on_the_combination(self):
+        out = Path(self.tmp.name) / "combined"
+        verdict = self.verify(1.0, out, combined=True)
+        entry = verdict["candidates"][self.T.CASE_ID]
+        self.assertEqual((entry["gate1_payloads"], entry["gate2_operator"]), ("passed", "passed"))
+        self.assertEqual((entry["gate2_model"], entry["gate3"]), ("on_combination",) * 2)
+        self.assertEqual(verdict["model_gates"], "on_combination")
+        combination = verdict["combination"]
+        self.assertEqual(combination["cases"], [self.T.CASE_ID])
+        self.assertEqual((combination["gate2_model"], combination["gate3"]), ("passed", "passed"))
+        self.assertNotIn("reused_from", combination)
+        self.assertTrue(combination["accepted"] and entry["accepted"])
+        self.assertFalse((out / "gate2_model").exists() or (out / "gate3_single_site").exists())
+        # A combination the model gates refuse refuses its cases.
+        failed = mock.Mock(status="failed")
+        failed.to_dict.return_value = {"status": "failed"}
+        with mock.patch("evograd.verification.integrations.gates.judge_training",
+                        return_value={"gate3": failed}):
+            verdict = self.verify(1.0, Path(self.tmp.name) / "combined_fault", combined=True)
+        self.assertFalse(verdict["combination"]["accepted"])
+        self.assertFalse(verdict["candidates"][self.T.CASE_ID]["accepted"])
 
     def test_finished_single_site_training_is_reused_on_rerun(self):
         out = Path(self.tmp.name) / "reused_training"
@@ -169,10 +193,8 @@ class ToyIntegration(unittest.TestCase):
         self.assertNotIn("suspended", second)
         self.assertEqual(second["candidates"], unbroken["candidates"])
         self.assertEqual(second["combination"], unbroken["combination"])
-        resumed = json.loads((out / "combination" / "gate3_candidate.json").read_text())
-        straight = json.loads((root / "unbroken" / "combination" / "gate3_candidate.json").read_text())
-        self.assertEqual([s["objective"] for s in resumed["train_steps"]],
-                         [s["objective"] for s in straight["train_steps"]])
+        # The one-case combination reuses its single site, so Gate 3 ran only there.
+        self.assertFalse((out / "combination" / "gate3_candidate.json").exists())
         resumed = json.loads((out / single_site / "gate3_candidate.json").read_text())
         straight = json.loads((root / "unbroken" / single_site / "gate3_candidate.json").read_text())
         self.assertEqual([s["objective"] for s in resumed["train_steps"]],

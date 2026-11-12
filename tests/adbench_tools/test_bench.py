@@ -101,6 +101,9 @@ def test_evaluate_reuses_the_source_submission_and_records_a_search_failure(
                        if flag == "--grant")
         assert granted == {cid: {"t/1": "vendor_gemm", "v/1": "vendor_bmm,vendor_gemm"}[cid]
                            for cid in candidates}
+        # Native controls are shared across the model's cases.
+        assert {"--share-gate3-native", "--share-gate2-calibration-native",
+                "--share-gate2-verification-reference"} <= set(command)
         return candidates, selection
 
     own = _record(tmp_path, "a", "t/1", True).with_name("submission.py")
