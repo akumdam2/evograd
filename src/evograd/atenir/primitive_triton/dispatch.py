@@ -317,25 +317,16 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _view_rt
 
-    if has_shape_list and "aten.index_put" in target:
-        accumulate = bool(scalar_args[-1]) if scalar_args else False
+    if has_shape_list and target == "aten.index_put.default":
+        accumulate = bool(_option(node, 3, "accumulate", False))
 
         def _index_put(base, indices, values):
-            return scatter_gather.advanced_index_put_dim0(
-                base,
-                indices,
-                values,
-                accumulate=accumulate,
-            )
+            return scatter_gather.advanced_index_put(base, indices, values, accumulate)
 
         return _index_put
 
-    if has_shape_list and "aten.index.Tensor" in target:
-
-        def _index(input, indices):
-            return scatter_gather.advanced_index_dim0(input, indices)
-
-        return _index
+    if has_shape_list and target == "aten.index.Tensor":
+        return scatter_gather.advanced_index
 
     if has_shape_list and "aten.split_with_sizes" in target:
         dim = int(scalar_args[-1]) if scalar_args else 0
@@ -356,11 +347,11 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _full
 
-    if has_shape_list and "aten.cat" in target:
-        dim = int(scalar_args[-1]) if scalar_args else 0
+    if has_shape_list and target == "aten.cat.default":
+        dim = int(_option(node, 1, "dim", 0))
 
         def _cat(tensors):
-            return scatter_gather.cat2(tensors, dim)
+            return scatter_gather.cat(tensors, dim)
 
         return _cat
 

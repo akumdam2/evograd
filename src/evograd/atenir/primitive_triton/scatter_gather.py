@@ -4,6 +4,9 @@ Generic flattened-coordinate kernels cover arbitrary ranks and axes.
 
 gather(input, dim, index)      -- indexed read
 scatter_add(self, dim, index, src) -- indexed atomic accumulate into clone of self
+cat(tensors, dim)              -- aten.cat, any number of strided inputs
+advanced_index(input, indices) -- aten.index.Tensor, any number of index tensors
+advanced_index_put(...)        -- aten.index_put, deterministic, in ATen's summation order
 """
 
 from __future__ import annotations
@@ -152,47 +155,170 @@ if HAS_TRITON:
         tl.atomic_add(out_ptr + idx * C + offs, val, mask=mask)
 
     @triton.jit
-    def _advanced_index_dim0_kernel(
-        input_ptr,
-        index_ptr,
-        out_ptr,
-        TAIL,
-        N,
-        BLOCK: tl.constexpr,
-    ):
-        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-        mask = offs < N
-        index_offset = offs // TAIL
-        tail_offset = offs % TAIL
-        row = tl.load(index_ptr + index_offset, mask=mask, other=0).to(tl.int64)
-        value = tl.load(
-            input_ptr + row * TAIL + tail_offset,
-            mask=mask,
-            other=0.0,
-        )
-        tl.store(out_ptr + offs, value, mask=mask)
+    def _offset_of(linear, SHAPE: tl.constexpr, STRIDES: tl.constexpr):
+        """The offset, under STRIDES, of the element at row-major position
+        ``linear`` of SHAPE (scalar or block)."""
+        rest = linear.to(tl.int64)
+        offset = rest * 0
+        for dim in tl.static_range(len(SHAPE) - 1, -1, -1):
+            offset += (rest % SHAPE[dim]) * STRIDES[dim]
+            rest = rest // SHAPE[dim]
+        return offset
 
     @triton.jit
-    def _advanced_index_put_dim0_kernel(
-        out_ptr,
-        index_ptr,
-        values_ptr,
-        TAIL,
-        N,
-        ACCUMULATE: tl.constexpr,
-        BLOCK: tl.constexpr,
-    ):
-        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-        mask = offs < N
-        index_offset = offs // TAIL
-        tail_offset = offs % TAIL
-        row = tl.load(index_ptr + index_offset, mask=mask, other=0).to(tl.int64)
-        value = tl.load(values_ptr + offs, mask=mask, other=0.0)
-        target = out_ptr + row * TAIL + tail_offset
-        if ACCUMULATE:
-            tl.atomic_add(target, value, mask=mask)
-        else:
-            tl.store(target, value, mask=mask)
+    def _copy_into_kernel(SRC, DST, N, DST_OFFSET, SHAPE: tl.constexpr,
+                          SRC_STRIDES: tl.constexpr, DST_STRIDES: tl.constexpr,
+                          BLOCK: tl.constexpr):
+        """DST[DST_OFFSET + ...] = SRC, both strided, element for element in
+        DST's dtype (a cast where the dtypes differ)."""
+        linear = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
+        mask = linear < N
+        value = tl.load(SRC + _offset_of(linear, SHAPE, SRC_STRIDES), mask)
+        tl.store(DST + DST_OFFSET + _offset_of(linear, SHAPE, DST_STRIDES),
+                 value.to(DST.dtype.element_ty), mask)
+
+    @triton.jit
+    def _index_offsets_kernel(INDEX, OFFSETS, N, SIZE, STRIDE, SHAPE: tl.constexpr,
+                              INDEX_STRIDES: tl.constexpr, FIRST: tl.constexpr,
+                              BLOCK: tl.constexpr):
+        """OFFSETS[b] += the index at position b of the broadcast index shape
+        SHAPE, wrapped once if negative, times STRIDE. An index out of range
+        asserts (under debug) and marks the position -1 for good."""
+        position = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
+        mask = position < N
+        index = tl.load(INDEX + _offset_of(position, SHAPE, INDEX_STRIDES), mask, other=0)
+        index = index.to(tl.int64)
+        valid = (index >= -SIZE) & (index < SIZE)
+        tl.device_assert((~mask) | valid, 'index out of bounds')
+        offset = tl.where(index < 0, index + SIZE, index) * STRIDE
+        if not FIRST:
+            earlier = tl.load(OFFSETS + position, mask, other=0)
+            valid = valid & (earlier >= 0)
+            offset += earlier
+        tl.store(OFFSETS + position, tl.where(valid, offset, -1), mask)
+
+    @triton.jit
+    def _index_gather_kernel(SRC, OFFSETS, OUT, N, SHAPE: tl.constexpr,
+                             SRC_STRIDES: tl.constexpr, POSITION_STRIDES: tl.constexpr,
+                             BLOCK: tl.constexpr):
+        """OUT (contiguous, of SHAPE) at o = SRC at o's plain coordinates (their
+        strides in SRC_STRIDES, 0 on the index dims) plus the offset of o's index
+        position (its row-major strides over the index dims in POSITION_STRIDES)."""
+        linear = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
+        mask = linear < N
+        offset = tl.load(OFFSETS + _offset_of(linear, SHAPE, POSITION_STRIDES), mask, other=-1)
+        source = _offset_of(linear, SHAPE, SRC_STRIDES) + offset
+        tl.store(OUT + linear, tl.load(SRC + source, mask & (offset >= 0), other=0), mask)
+
+    @triton.jit
+    def _index_put_hits(KEYS, start, N, key, BLOCK_N: tl.constexpr):
+        """The index positions start + [0, BLOCK_N) and which of them name ``key``."""
+        peers = start + tl.arange(0, BLOCK_N)
+        return peers, (peers < N) & (tl.load(KEYS + peers, peers < N, other=-1) == key)
+
+    @triton.jit
+    def _halve_lanes(lanes, WIDTH: tl.constexpr, BLOCK: tl.constexpr):
+        """[2 * WIDTH, BLOCK] -> [WIDTH, BLOCK]: lane l plus lane l + WIDTH, a
+        warp's shuffle-down step."""
+        low, high = tl.split(tl.permute(tl.reshape(lanes, (2, WIDTH, BLOCK)), (1, 2, 0)))
+        return low + high
+
+    @triton.jit
+    def _index_put_value(VALUES, outer, j, mask, SHAPE: tl.constexpr,
+                         POSITION_STRIDES: tl.constexpr, OPMATH: tl.constexpr):
+        """Index position j's values over one block of plain coordinates."""
+        position = _offset_of(j, SHAPE, POSITION_STRIDES)
+        return tl.load(VALUES + outer + position, mask, other=0).to(OPMATH)
+
+    @triton.jit
+    def _index_put_kernel(OUT, VALUES, KEYS, N, M, OUTER_SHAPE: tl.constexpr,
+                          OUT_STRIDES: tl.constexpr, VALUE_STRIDES: tl.constexpr,
+                          SHAPE: tl.constexpr, POSITION_STRIDES: tl.constexpr,
+                          ACCUMULATE: tl.constexpr, ORDER: tl.constexpr,
+                          OPMATH: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK: tl.constexpr):
+        """One target's update over one block of its M plain coordinates, made
+        by the first of the N index positions naming it (KEYS: each position's
+        target offset in OUT, -1 if out of range), its values in position order.
+
+        Without ACCUMULATE the last position's value is written. With it, ORDER
+        is the summation order of ATen's sort-based CUDA index_put (a stable
+        sort: position order within a target) or of its serial CPU kernel:
+        0  each value added to the target in turn, rounded to the target's
+           dtype each time (CUDA with more than 32 plain elements per index
+           position, and CPU);
+        1  the values summed in OPMATH from a zero, the sum then added to the
+           target (CUDA with 2 to 32 plain elements per index position);
+        2  as 1, except that a target named n >= 32 times splits its first
+           32 * (n // 32) values across 32 lanes (value i to lane i % 32), each
+           lane summed from a zero, the lanes reduced by halving (lane l plus
+           lane l + 16, then l + 8, ...), the remaining values added after
+           (CUDA with one plain element per index position)."""
+        b = tl.program_id(0)
+        outer = tl.program_id(1).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
+        mask = outer < M
+        key = tl.load(KEYS + b)
+        earlier = 0
+        for start in range(0, b, BLOCK_N):
+            peers, hit = _index_put_hits(KEYS, start, b, key, BLOCK_N)
+            earlier += tl.sum(hit.to(tl.int32))
+        if (key >= 0) & (earlier == 0):
+            target = OUT + key + _offset_of(outer, OUTER_SHAPE, OUT_STRIDES)
+            values = _offset_of(outer, OUTER_SHAPE, VALUE_STRIDES)
+            if ACCUMULATE:
+                base = tl.load(target, mask, other=0).to(OPMATH)
+                total = tl.zeros((BLOCK,), OPMATH)
+                laned = 0
+                if ORDER == 2:
+                    count = 0
+                    for start in range(b, N, BLOCK_N):
+                        peers, hit = _index_put_hits(KEYS, start, N, key, BLOCK_N)
+                        count += tl.sum(hit.to(tl.int32))
+                    laned = (count // 32) * 32
+                    lane = tl.arange(0, 32)
+                    lanes = tl.zeros((32, BLOCK), OPMATH)
+                    seen = 0
+                    for start in range(b, N, BLOCK_N):
+                        peers, hit = _index_put_hits(KEYS, start, N, key, BLOCK_N)
+                        hit = hit & (seen + tl.cumsum(hit.to(tl.int32), 0) <= laned)
+                        for _ in range(tl.sum(hit.to(tl.int32))):
+                            j = tl.min(tl.where(hit, peers, N))
+                            hit = hit & (peers != j)
+                            value = _index_put_value(VALUES, values, j, mask, SHAPE,
+                                                     POSITION_STRIDES, OPMATH)
+                            lanes = tl.where(lane[:, None] == seen % 32,
+                                             lanes + value[None, :], lanes)
+                            seen += 1
+                    lanes = _halve_lanes(lanes, 16, BLOCK)
+                    lanes = _halve_lanes(lanes, 8, BLOCK)
+                    lanes = _halve_lanes(lanes, 4, BLOCK)
+                    lanes = _halve_lanes(lanes, 2, BLOCK)
+                    total = tl.reshape(_halve_lanes(lanes, 1, BLOCK), (BLOCK,))
+                running = base
+                seen = 0
+                for start in range(b, N, BLOCK_N):
+                    peers, found = _index_put_hits(KEYS, start, N, key, BLOCK_N)
+                    hit = found & (seen + tl.cumsum(found.to(tl.int32), 0) > laned)
+                    seen += tl.sum(found.to(tl.int32))
+                    for _ in range(tl.sum(hit.to(tl.int32))):
+                        j = tl.min(tl.where(hit, peers, N))
+                        hit = hit & (peers != j)
+                        value = _index_put_value(VALUES, values, j, mask, SHAPE,
+                                                 POSITION_STRIDES, OPMATH)
+                        if ORDER == 0:
+                            running = (running + value).to(OUT.dtype.element_ty).to(OPMATH)
+                        else:
+                            total += value
+                if ORDER == 0:
+                    tl.store(target, running.to(OUT.dtype.element_ty), mask)
+                else:
+                    tl.store(target, (base + total).to(OUT.dtype.element_ty), mask)
+            else:
+                last = b
+                for start in range(b, N, BLOCK_N):
+                    peers, hit = _index_put_hits(KEYS, start, N, key, BLOCK_N)
+                    last = tl.maximum(last, tl.max(tl.where(hit, peers, -1)))
+                position = _offset_of(last, SHAPE, POSITION_STRIDES)
+                tl.store(target, tl.load(VALUES + values + position, mask), mask)
 
     @triton.jit
     def _embedding_bag_sum_kernel(WEIGHT, INDICES, OFFSETS, OUT, OFFSET2BAG, BAG_SIZE,
@@ -274,41 +400,6 @@ if HAS_TRITON:
     def _fill_kernel(out_ptr, value, N, BLOCK: tl.constexpr):
         offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
         mask = offs < N
-        tl.store(out_ptr + offs, value, mask=mask)
-
-    @triton.jit
-    def _cat2_kernel(
-        a_ptr,
-        b_ptr,
-        out_ptr,
-        A_AXIS,
-        B_AXIS,
-        INNER,
-        N,
-        BLOCK: tl.constexpr,
-    ):
-        offs = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-        mask = offs < N
-        out_axis = A_AXIS + B_AXIS
-        inner_offset = offs % INNER
-        axis_offset = (offs // INNER) % out_axis
-        outer_offset = offs // (INNER * out_axis)
-        from_a = axis_offset < A_AXIS
-        a_offset = (
-            outer_offset * A_AXIS * INNER
-            + axis_offset * INNER
-            + inner_offset
-        )
-        b_offset = (
-            outer_offset * B_AXIS * INNER
-            + (axis_offset - A_AXIS) * INNER
-            + inner_offset
-        )
-        value = tl.where(
-            from_a,
-            tl.load(a_ptr + a_offset, mask=mask & from_a, other=0.0),
-            tl.load(b_ptr + b_offset, mask=mask & ~from_a, other=0.0),
-        )
         tl.store(out_ptr + offs, value, mask=mask)
 
 
@@ -415,63 +506,156 @@ def select_scatter(base: torch.Tensor, src: torch.Tensor, dim: int, index: int):
     return slice_scatter(base, src.unsqueeze(axis), axis, selected, selected + 1, 1)
 
 
-def advanced_index_dim0(input: torch.Tensor, indices) -> torch.Tensor:
-    """Implement ``aten.index.Tensor(input, (index,))`` for dim-0 indexing."""
-    if not isinstance(indices, (tuple, list)) or len(indices) != 1:
-        raise ValueError("only one dim-0 advanced index tensor is supported")
-    index = indices[0]
-    if not torch.is_tensor(index):
-        raise TypeError("advanced index must be a tensor")
-    input, index = input.contiguous(), index.contiguous()
-    tail_shape = tuple(input.shape[1:])
-    tail = input.numel() // input.shape[0]
-    output = torch.empty(
-        (*index.shape, *tail_shape),
-        device=input.device,
-        dtype=input.dtype,
-    )
-    block = 256
-    _advanced_index_dim0_kernel[(triton.cdiv(output.numel(), block),)](
-        input,
-        index,
-        output,
-        tail,
-        output.numel(),
-        BLOCK=block,
-    )
+def _row_major_strides(shape) -> list[int]:
+    strides, step = [], 1
+    for size in reversed(list(shape)):
+        strides.append(step)
+        step *= int(size)
+    return strides[::-1]
+
+
+def _broadcast_strides(t: torch.Tensor, shape) -> tuple[int, ...]:
+    """``t``'s element strides read as broadcast to ``shape`` (0 on new or
+    expanded dims), as ``t.expand(shape)`` would have them."""
+    lead = len(shape) - t.ndim
+    if lead < 0:
+        raise ValueError(f'shape mismatch: {tuple(t.shape)} cannot be broadcast to {tuple(shape)}')
+    strides = []
+    for dim, size in enumerate(shape):
+        if dim < lead or (t.shape[dim - lead] == 1 and size != 1):
+            strides.append(0)
+        elif t.shape[dim - lead] == size:
+            strides.append(t.stride(dim - lead))
+        else:
+            raise ValueError(f'shape mismatch: {tuple(t.shape)} cannot be broadcast to {tuple(shape)}')
+    return tuple(strides)
+
+
+def _index_plan(self_t: torch.Tensor, indices):
+    """ATen's advanced-indexing layout: the indexed dims, the index tensors'
+    broadcast shape, and the plain dims placed before and after it in the
+    result (all after it when the indexed dims are not adjacent)."""
+    if not isinstance(indices, (tuple, list)):
+        raise TypeError('advanced indices must be a list of tensors or None')
+    if len(indices) > self_t.ndim:
+        raise IndexError(f'too many indices for tensor of dimension {self_t.ndim} (got {len(indices)})')
+    dims = [dim for dim, index in enumerate(indices) if index is not None]
+    if not dims:
+        raise NotImplementedError('advanced indexing without an index tensor')
+    for dim in dims:
+        index = indices[dim]
+        if not torch.is_tensor(index):
+            raise TypeError('advanced index must be a tensor')
+        if index.dtype not in (torch.int64, torch.int32):
+            # A bool or uint8 mask selects a data-dependent number of elements.
+            raise NotImplementedError(f'handwritten advanced indexing takes int64 or int32 '
+                                      f'indices, not {index.dtype}')
+        if index.device != self_t.device:
+            raise ValueError('index and input must share a device')
+    shape = tuple(torch.broadcast_shapes(*(indices[dim].shape for dim in dims)))
+    plain = [dim for dim in range(self_t.ndim) if dim not in dims]
+    if dims == list(range(dims[0], dims[-1] + 1)):
+        before = [dim for dim in plain if dim < dims[0]]
+        after = [dim for dim in plain if dim > dims[-1]]
+    else:
+        before, after = [], plain
+    return dims, shape, before, after
+
+
+def _index_offsets(indices, dims, shape, sizes, strides, device):
+    """Each broadcast index position's element offset under ``strides`` of the
+    indexed dims (-1 where an index is out of range), and how many positions."""
+    count = 1
+    for size in shape:
+        count *= size
+    offsets = torch.empty(shape, device=device, dtype=torch.int64)
+    if count:
+        for first, dim in enumerate(dims):
+            index = indices[dim]
+            _index_offsets_kernel[(triton.cdiv(count, 1024),)](
+                index, offsets, count, sizes[dim], strides[dim], SHAPE=shape,
+                INDEX_STRIDES=_broadcast_strides(index, shape), FIRST=first == 0, BLOCK=1024,
+            )
+    return offsets, count
+
+
+def advanced_index(input: torch.Tensor, indices) -> torch.Tensor:
+    """``aten.index.Tensor(input, indices)``: any number of int64/int32 index
+    tensors (broadcast together, negative indices wrapped) on any dims, None for
+    a dim taken whole, any input strides; a contiguous result laid out as ATen's
+    (the index shape in place of adjacent indexed dims, else in front)."""
+    dims, shape, before, after = _index_plan(input, indices)
+    offsets, count = _index_offsets(indices, dims, shape, input.shape, input.stride(), input.device)
+    rank = len(shape)
+    out_shape = (*(input.shape[d] for d in before), *shape, *(input.shape[d] for d in after))
+    source = (*(input.stride(d) for d in before), *([0] * rank), *(input.stride(d) for d in after))
+    position = (*([0] * len(before)), *_row_major_strides(shape), *([0] * len(after)))
+    output = torch.empty(out_shape, device=input.device, dtype=input.dtype)
+    if output.numel():
+        _index_gather_kernel[(triton.cdiv(output.numel(), 1024),)](
+            input, offsets, output, output.numel(), SHAPE=out_shape, SRC_STRIDES=source,
+            POSITION_STRIDES=position, BLOCK=1024,
+        )
     return output
 
 
-def advanced_index_put_dim0(
-    base: torch.Tensor,
-    indices,
-    values: torch.Tensor,
-    *,
-    accumulate: bool,
-) -> torch.Tensor:
-    """Implement dim-0 ``aten.index_put`` with optional atomic accumulation."""
-    if not isinstance(indices, (tuple, list)) or len(indices) != 1:
-        raise ValueError("only one dim-0 advanced index tensor is supported")
-    index = indices[0]
-    base, index, values = (
-        base.contiguous(),
-        index.contiguous(),
-        values.contiguous(),
-    )
-    tail = base.numel() // base.shape[0]
-    expected = index.numel() * tail
-    if values.numel() != expected:
-        raise ValueError("index_put values do not match indexed output shape")
-    output = base.clone()
-    block = 256
-    _advanced_index_put_dim0_kernel[(triton.cdiv(expected, block),)](
-        output,
-        index,
-        values,
-        tail,
-        expected,
-        ACCUMULATE=bool(accumulate),
-        BLOCK=block,
+#: index_put's summation orders (see _index_put_kernel).
+_INDEX_PUT_IN_TURN, _INDEX_PUT_FROM_ZERO, _INDEX_PUT_LANES = 0, 1, 2
+
+
+def _index_put_order(device: torch.device, slice_size: int) -> int:
+    """How ATen's ``index_put(accumulate=True)`` on ``device`` sums a target's
+    values, given the plain elements per index position: CUDA's sort-based
+    kernels by slice size (indexing_backward_kernel, _small_stride, _stride_1),
+    CPU's serial kernel in turn."""
+    if device.type != 'cuda' or slice_size > 32:
+        return _INDEX_PUT_IN_TURN
+    return _INDEX_PUT_FROM_ZERO if slice_size > 1 else _INDEX_PUT_LANES
+
+
+def advanced_index_put(base: torch.Tensor, indices, values: torch.Tensor,
+                       accumulate: bool = False) -> torch.Tensor:
+    """``aten.index_put(base, indices, values, accumulate)``, deterministically
+    and without atomics: :func:`advanced_index`'s indexing, ``values`` broadcast
+    to its result. A target named more than once takes the last value, or with
+    ``accumulate`` the sum of its values in the order ATen's kernel on that
+    device adds them: the sort-based CUDA kernel (whose rounding depends on the
+    plain elements per index position) or the serial CPU one."""
+    dims, shape, before, after = _index_plan(base, indices)
+    if values.dtype != base.dtype or values.device != base.device:
+        raise ValueError('index_put values must match the destination dtype and device')
+    if accumulate and not base.is_floating_point():
+        raise NotImplementedError(f'handwritten index_put accumulates floating types, not {base.dtype}')
+    output = torch.empty_like(base)
+    if base.numel():
+        _copy_into_kernel[(triton.cdiv(base.numel(), 1024),)](
+            base, output, base.numel(), 0, SHAPE=tuple(base.shape), SRC_STRIDES=tuple(base.stride()),
+            DST_STRIDES=tuple(output.stride()), BLOCK=1024,
+        )
+    keys, count = _index_offsets(indices, dims, shape, base.shape, output.stride(), base.device)
+    outer = before + after
+    rank = len(before)
+    result = (*(base.shape[d] for d in before), *shape, *(base.shape[d] for d in after))
+    value_strides = _broadcast_strides(values, result)
+    plain = 1
+    for dim in outer:
+        plain *= base.shape[dim]
+    if not count or not plain:
+        return output
+    slice_size = 1
+    for dim in after:
+        slice_size *= base.shape[dim]
+    order = _index_put_order(output.device, slice_size)
+    # The 32 lanes of the last order are kept per plain element.
+    block = min(_next_pow2(plain), 128 if order == _INDEX_PUT_LANES else 1024)
+    opmath = {torch.float16: tl.float32, torch.bfloat16: tl.float32,
+              torch.float32: tl.float32, torch.float64: tl.float64}.get(base.dtype, tl.float32)
+    _index_put_kernel[(count, triton.cdiv(plain, block))](
+        output, values, keys, count, plain, OUTER_SHAPE=tuple(base.shape[d] for d in outer),
+        OUT_STRIDES=tuple(output.stride(d) for d in outer),
+        VALUE_STRIDES=value_strides[:rank] + value_strides[rank + len(shape):],
+        SHAPE=shape, POSITION_STRIDES=value_strides[rank:rank + len(shape)],
+        ACCUMULATE=bool(accumulate), ORDER=order, OPMATH=opmath, BLOCK_N=256, BLOCK=block,
     )
     return output
 
@@ -497,34 +681,41 @@ def split_with_sizes(a: torch.Tensor, sizes, dim: int):
     return tuple(torch.split(a, tuple(int(size) for size in sizes), dim=int(dim)))
 
 
-def cat2(tensors, dim: int):
-    if not isinstance(tensors, (tuple, list)) or len(tensors) != 2:
-        raise ValueError("cat2 supports exactly two tensors")
-    a, b = tensors[0].contiguous(), tensors[1].contiguous()
-    actual_dim = int(dim) % a.ndim
-    if a.ndim != b.ndim or any(
-        a.shape[index] != b.shape[index]
-        for index in range(a.ndim)
-        if index != actual_dim
-    ):
-        raise ValueError("cat2 inputs must match outside the concatenated dim")
-    output_shape = list(a.shape)
-    output_shape[actual_dim] += b.shape[actual_dim]
-    output = torch.empty(output_shape, device=a.device, dtype=a.dtype)
-    inner = 1
-    for size in a.shape[actual_dim + 1 :]:
-        inner *= size
-    block = 256
-    _cat2_kernel[(triton.cdiv(output.numel(), block),)](
-        a,
-        b,
-        output,
-        a.shape[actual_dim],
-        b.shape[actual_dim],
-        inner,
-        output.numel(),
-        BLOCK=block,
-    )
+def cat(tensors, dim: int = 0):
+    """``aten.cat(tensors, dim)``: any number of tensors of any strides along any
+    dim, their dtypes promoted, 1-D empty tensors skipped as ATen skips them; a
+    contiguous result, one strided copy per input."""
+    tensors = list(tensors)
+    if not tensors:
+        raise ValueError('torch.cat(): expected a non-empty list of Tensors')
+    if any(t.ndim == 0 for t in tensors):
+        raise ValueError('zero-dimensional tensor cannot be concatenated')
+    kept = [t for t in tensors if not (t.ndim == 1 and t.numel() == 0)]
+    first = kept[0] if kept else tensors[0]
+    if not -first.ndim <= int(dim) < first.ndim:
+        raise IndexError(f'torch.cat(): dimension {dim} out of range')
+    axis = int(dim) % first.ndim
+    for t in kept:
+        if t.ndim != first.ndim or any(t.shape[d] != first.shape[d]
+                                       for d in range(first.ndim) if d != axis):
+            raise ValueError('torch.cat(): tensors must match outside the concatenated dim')
+        if t.device != first.device:
+            raise ValueError('torch.cat(): tensors must share a device')
+    dtype = tensors[0].dtype
+    for t in tensors[1:]:
+        dtype = torch.promote_types(dtype, t.dtype)
+    shape = list(first.shape) if kept else [0]
+    if kept:
+        shape[axis] = sum(t.shape[axis] for t in kept)
+    output = torch.empty(shape, device=first.device, dtype=dtype)
+    start = 0
+    for t in kept:
+        if t.numel():
+            _copy_into_kernel[(triton.cdiv(t.numel(), 1024),)](
+                t, output, t.numel(), start * output.stride(axis), SHAPE=tuple(t.shape),
+                SRC_STRIDES=tuple(t.stride()), DST_STRIDES=tuple(output.stride()), BLOCK=1024,
+            )
+        start += t.shape[axis]
     return output
 
 

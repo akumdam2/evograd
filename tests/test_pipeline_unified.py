@@ -545,6 +545,37 @@ class TestSeedLowerings(unittest.TestCase):
         # logsumexp (on the GPU) and the rng state, which this backend keeps on the host.
         self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1': False, 'g2': True, 'g3': True})
 
+    def test_cat_of_any_arity_and_multi_tensor_indexing_render_handwritten(self):
+        # DiT's and Qwen2-VL's attention backward cat three tensors, DLRM's
+        # interaction indexes [B, 27, 27] with two index tensors (and puts back).
+        import ast
+
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import _audit_primitive_library, _semantic_expr
+
+        a, b, c = torch.randn(2, 3), torch.randn(2, 1), torch.randn(2, 4)
+        i, j = torch.tensor([0, 1, 2]), torch.tensor([1, 2, 2])
+        z, v = torch.randn(2, 3, 3), torch.randn(2, 3)
+        nodes = {
+            'cat': _node(lambda a, b, c: torch.cat([a, b, c], 1), a, b, c, target='aten.cat.default'),
+            'index': _node(lambda z, i, j: z[:, i, j], z, i, j, target='aten.index.Tensor'),
+            'index_put': _node(lambda z, i, j, v: torch.ops.aten.index_put(z, [None, i, j], v, True),
+                               z, i, j, v, target='aten.index_put.default'),
+        }
+        self.assertEqual(_nonlocals(make_kernel(nodes['cat']))['dim'], 1)
+        self.assertIs(_nonlocals(make_kernel(nodes['index_put']))['accumulate'], True)
+        builder = _ProgramBuilder()
+        expressions = {name: _semantic_expr(builder, node) for name, node in nodes.items()}
+        self.assertEqual(expressions['index'], 'advanced_index(t_z_1, (None, t_i_1, t_j_1))')
+        library = builder.render_kernel_library()
+        _audit_primitive_library(ast.parse(library))
+        for helper in ('def cat(', 'def advanced_index(', 'def advanced_index_put(',
+                       'def _copy_into_kernel(', 'def _index_put_kernel(', 'def _index_put_order('):
+            self.assertIn(helper, library)
+        for library_call in ('torch.cat', 'index_put_(', 'tl.atomic', '.contiguous()', '.clone()'):
+            self.assertNotIn(library_call, library[library.index('def _offset_of('):])
+
     def test_strided_storage_zero_padding_flip_and_copy(self):
         # Qwen3.5's gated delta rule pads by zero, flips a chunk axis, and copies
         # into fresh strided storage; the copy is of the source, not the storage.
@@ -653,6 +684,213 @@ print(json.dumps(result))
 """
 
 
+#: Runs in a child process with TRITON_INTERPRET=1, one part per process:
+#: aten.cat, aten.index.Tensor and aten.index_put against ATen's CPU kernels,
+#: the CUDA index_put orders against an emulation, and the exact configurations
+#: of the seeds that reached them (DLRM's interaction, Qwen2-VL's and DiT's
+#: attention backward, Qwen3.5's gated-delta in_proj backward).
+_INTERPRETED_INDEXING = r"""
+import json
+import sys
+import tests._triton_interpreter  # noqa: F401  (the interpreter as compiled Triton)
+import torch
+from unittest.mock import patch
+from evograd.atenir.primitive_triton import scatter_gather as sg
+
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)  # ATen's serial CPU index_put
+part = sys.argv[1]
+result = {}
+aten_index = torch.ops.aten.index.Tensor
+aten_put = torch.ops.aten.index_put.default
+real_order = sg._index_put_order
+cuda = lambda device, slice_size: real_order(torch.device('cuda'), slice_size)
+
+
+def same(a, b):
+    return a.dtype == b.dtype and a.shape == b.shape and torch.equal(a, b)
+
+
+def strided(shape, strides, dtype=torch.float32):
+    storage = torch.randn(sum((s - 1) * t for s, t in zip(shape, strides)) + 1).to(dtype)
+    return storage.as_strided(shape, strides)
+
+
+if part == 'general':
+    # cat: three or more inputs, any dim, strides, dtype promotion, ATen's skipped empties.
+    a, b, c = torch.randn(4, 3, 5), torch.randn(5, 2, 4).permute(2, 1, 0), torch.randn(4, 1, 5)
+    result['cat_dim1'] = same(sg.cat([a, b, c], 1), torch.cat([a, b, c], 1))
+    result['cat_negative_dim'] = same(sg.cat([a, a, a, a], -1), torch.cat([a, a, a, a], -1))
+    result['cat_dim0_views'] = same(sg.cat([a[1:], a[:2], a[::2]], 0), torch.cat([a[1:], a[:2], a[::2]], 0))
+    ints, floats = torch.randint(-5, 5, (3, 2)), torch.randn(3, 4)
+    result['cat_promotes'] = same(sg.cat([ints, floats], 1), torch.cat([ints, floats], 1))
+    half = torch.randn(2, 3).bfloat16()
+    result['cat_bf16_fp32'] = same(sg.cat([half, floats[:2, :3]], 0), torch.cat([half, floats[:2, :3]], 0))
+    flags = torch.rand(6) > 0.5
+    result['cat_bool'] = same(sg.cat([flags, flags[:2]]), torch.cat([flags, flags[:2]]))
+    empty = torch.empty(0)
+    result['cat_skips_1d_empty'] = same(sg.cat([empty, a, empty, c], 1), torch.cat([empty, a, empty, c], 1))
+    result['cat_zero_width'] = same(sg.cat([a[:, :0], c], 1), torch.cat([a[:, :0], c], 1))
+    result['cat_single'] = same(sg.cat([b], 2), torch.cat([b], 2))
+    try:
+        sg.cat([torch.tensor(1.0), torch.tensor(2.0)])
+        result['cat_refuses_0d'] = False
+    except ValueError:
+        result['cat_refuses_0d'] = True
+    try:
+        sg.cat([a, torch.randn(4, 3, 6)], 1)
+        result['cat_refuses_mismatch'] = False
+    except ValueError:
+        result['cat_refuses_mismatch'] = True
+
+    # index: several index tensors, adjacent or not, broadcast, negative, int32, None dims.
+    x = torch.randn(4, 5, 6, 7)
+    i, j = torch.randint(-5, 5, (3, 2)), torch.randint(0, 6, (2,))
+    cases = {
+        'one': [torch.randint(-4, 4, (9,))],
+        'adjacent': [None, i, j],
+        'adjacent_trailing': [None, None, torch.randint(0, 6, (5,)), torch.randint(-7, 7, (5,))],
+        'apart': [torch.randint(0, 4, (2, 3)), None, torch.randint(0, 6, (3,))],
+        'apart_three': [torch.randint(0, 4, (5,)), None, torch.randint(0, 6, (5,)), torch.randint(0, 7, (1,))],
+        'broadcast': [None, torch.arange(5)[:, None], torch.arange(6)[None, :]],
+        'int32': [None, i.to(torch.int32), j.to(torch.int32)],
+        'all_dims': [torch.randint(0, 4, (8,)), torch.randint(0, 5, (8,)), torch.randint(0, 6, (8,)),
+                     torch.randint(0, 7, (8,))],
+        'empty_index': [None, torch.empty(0, dtype=torch.int64)],
+    }
+    for name, indices in cases.items():
+        result['index_' + name] = same(sg.advanced_index(x, indices), aten_index(x, indices))
+    result['index_strided_input'] = same(sg.advanced_index(x.transpose(1, 3), [None, i, j]),
+                                         aten_index(x.transpose(1, 3), [None, i, j]))
+    result['index_bf16'] = same(sg.advanced_index(x.bfloat16(), [None, i, j]), aten_index(x.bfloat16(), [None, i, j]))
+    try:
+        sg.advanced_index(x, [x > 0])
+        result['index_refuses_mask'] = False
+    except NotImplementedError:
+        result['index_refuses_mask'] = True
+
+    # index_put, against ATen's serial CPU kernel: duplicates in position order.
+    for name, indices in cases.items():
+        shape = aten_index(x, indices).shape
+        values = torch.randn(shape) * 100
+        for accumulate in (True, False):
+            key = f'put_{name}_{"acc" if accumulate else "set"}'
+            result[key] = same(sg.advanced_index_put(x, indices, values, accumulate),
+                               aten_put(x, indices, values, accumulate))
+    repeated = [torch.randint(0, 3, (200,))]
+    for dtype in (torch.float32, torch.bfloat16, torch.float16, torch.float64):
+        base, values = (torch.randn(3, 4) * 10).to(dtype), (torch.randn(200, 4) * 10).to(dtype)
+        result[f'put_duplicates_{dtype}'] = same(sg.advanced_index_put(base, repeated, values, True),
+                                                 aten_put(base, repeated, values, True))
+        result[f'put_last_wins_{dtype}'] = same(sg.advanced_index_put(base, repeated, values, False),
+                                                aten_put(base, repeated, values, False))
+    base = torch.randn(4, 5, 6, 7)
+    for name, values in (('scalar', torch.tensor(2.5)), ('row', torch.randn(7)), ('column', torch.randn(3, 2, 1))):
+        indices = [None, i, j]
+        result['put_broadcast_' + name] = same(sg.advanced_index_put(base, indices, values, True),
+                                               aten_put(base, indices, values, True))
+    values = torch.randn(6, 3, 2, 4, 7)
+    result['put_strided_base'] = same(sg.advanced_index_put(base.transpose(0, 2), [None, i], values, True),
+                                      aten_put(base.transpose(0, 2), [None, i], values, True))
+    for name, call in (('int_accumulate', lambda: sg.advanced_index_put(torch.zeros(3, dtype=torch.int64), [torch.tensor([0])], torch.tensor([1]), True)),
+                       ('dtype_mismatch', lambda: sg.advanced_index_put(torch.zeros(3), [torch.tensor([0])], torch.tensor([1.0], dtype=torch.float64), True))):
+        try:
+            call()
+            result['put_refuses_' + name] = False
+        except (NotImplementedError, ValueError):
+            result['put_refuses_' + name] = True
+
+    # The CUDA kernels' orders, emulated here: a target's values from a zero
+    # (2..32 plain elements), 32 lanes then the rest (one plain element).
+    def emulate(base, index, values, order):
+        out = base.clone()
+        acc = torch.float32 if base.dtype in (torch.float16, torch.bfloat16) else base.dtype
+        for target in index.unique().tolist():
+            rows = [values[p].to(acc) for p in range(index.numel()) if index[p] == target]
+            if order == 'from_zero':
+                total = torch.zeros_like(rows[0])
+                for row in rows:
+                    total = total + row
+            else:
+                laned = len(rows) // 32 * 32
+                lanes = [torch.zeros_like(rows[0]) for _ in range(32)]
+                for k in range(laned):
+                    lanes[k % 32] = lanes[k % 32] + rows[k]
+                width = 16
+                while width:
+                    lanes = [lanes[k] + lanes[k + width] for k in range(width)]
+                    width //= 2
+                total = lanes[0]
+                for row in rows[laned:]:
+                    total = total + row
+            out[target] = (base[target].to(acc) + total).to(base.dtype)
+        return out
+    with patch.object(sg, '_index_put_order', cuda):
+        for dtype in (torch.float32, torch.bfloat16):
+            index = torch.cat([torch.full((70,), 1), torch.randint(0, 4, (60,)), torch.full((33,), 3)])
+            index = index[torch.randperm(index.numel())]
+            for order, width in (('from_zero', 8), ('lanes', 1)):
+                base = (torch.randn(4, width) * 1e3).to(dtype)
+                values = (torch.randn(index.numel(), width) * torch.logspace(-3, 3, index.numel())[:, None]).to(dtype)
+                mine = sg.advanced_index_put(base, [index], values, True)
+                expected = emulate(base, index, values, order)
+                serial = aten_put(base, [index], values, True)
+                result[f'cuda_{order}_{dtype}'] = same(mine, expected) and not torch.equal(mine, serial)
+
+elif part == 'dlrm':
+    # DLRM interaction (B=32, 26 sparse + 1 dense features, D=64): its cats, the
+    # index of the upper triangle of the [32, 27, 27] bmm and its backward.
+    dense, sparse = torch.randn(32, 64), torch.randn(32, 26, 64)
+    unsqueezed = dense.unsqueeze(1)
+    result['cat_features'] = same(sg.cat([unsqueezed, sparse], 1), torch.cat([unsqueezed, sparse], 1))
+    li, lj = torch.triu_indices(27, 27, 1)
+    result['cat_indices'] = same(sg.cat([li.clone(), lj.clone()]), torch.cat([li, lj]))
+    z = torch.randn(32, 27, 27)
+    flat = aten_index(z, [None, li, lj])
+    result['index'] = same(sg.advanced_index(z, [None, li, lj]), flat)
+    result['cat_out'] = same(sg.cat([dense, flat], 1), torch.cat([dense, flat], 1))
+    tangent = torch.randn(32, 415)
+    upstream = tangent[:, 64:415]   # the backward's slice: strides (415, 1)
+    zeros = torch.zeros(32, 27, 27)
+    result['index_put'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True),
+                               aten_put(zeros, [None, li, lj], upstream, True))
+    reference = z.clone().requires_grad_(True)
+    reference[:, li, lj].backward(upstream)
+    result['index_backward'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True), reference.grad)
+    with patch.object(sg, '_index_put_order', cuda):
+        # On CUDA the [32, 27, 27] put has one plain element per index position.
+        assert real_order(torch.device('cuda'), 1) == sg._INDEX_PUT_LANES
+        result['index_put_cuda_order'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True),
+                                              reference.grad)
+
+elif part == 'qwen2_vl':
+    # Qwen2-VL vision attention (T=256, 16 heads, D=80): rotate_half's cats and
+    # the backward's q/k/v cat in bfloat16.
+    half, sliced = strided((256, 16, 40), (640, 40, 1)), strided((256, 16, 40), (1280, 80, 1))
+    result['rotate_half'] = same(sg.cat([half, sliced], -1), torch.cat([half, sliced], -1))
+    parts = [torch.randn(256, 16, 80).bfloat16() for _ in range(3)]
+    result['qkv_backward'] = same(sg.cat(parts), torch.cat(parts))
+
+elif part == 'dit':
+    # DiT-S/2 attention (B=256, 6 heads, T=256, D=64): the backward's cat of the
+    # three float32 attention gradients, each laid out [B, T, H, D].
+    parts = [strided((256, 6, 256, 64), (98304, 64, 384, 1)) for _ in range(3)]
+    result['qkv_backward'] = same(sg.cat(parts), torch.cat(parts))
+
+elif part == 'gdn_in_proj':
+    # Qwen3.5 gated-delta in_proj (T=2048): the backward's cat along dim 2 of two
+    # [1, 2048, 2048] gradients and a transposed [1, 2048, 4096] one, bfloat16.
+    parts = [strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+             strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+             strided((1, 2048, 4096), (16777216, 1, 2048), torch.bfloat16)]
+    result['in_proj_backward'] = same(sg.cat(parts, 2), torch.cat(parts, 2))
+print(json.dumps(result))
+"""
+
+#: The parts of _INTERPRETED_INDEXING; DiT's [768, 6, 256, 64] cat takes ~3 minutes.
+_INDEXING_PARTS = ('general', 'dlrm', 'qwen2_vl', 'gdn_in_proj', 'dit')
+
+
 class TestHandwrittenKernelsInterpreted(unittest.TestCase):
     def test_new_kernels_match_aten_bit_for_bit(self):
         import subprocess
@@ -663,6 +901,62 @@ class TestHandwrittenKernelsInterpreted(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr[-3000:])
         result = json.loads(run.stdout.strip().splitlines()[-1])
         self.assertTrue(result and all(result.values()), result)
+
+    def test_cat_index_and_index_put_match_aten_bit_for_bit(self):
+        import subprocess
+
+        environment = {**os.environ, 'TRITON_INTERPRET': '1'}
+        for part in _INDEXING_PARTS:
+            with self.subTest(part=part):
+                run = subprocess.run([sys.executable, '-c', _INTERPRETED_INDEXING, part], env=environment,
+                                     capture_output=True, text=True, timeout=900)
+                self.assertEqual(run.returncode, 0, run.stderr[-3000:])
+                result = json.loads(run.stdout.strip().splitlines()[-1])
+                self.assertTrue(result and all(result.values()), {k: v for k, v in result.items() if not v})
+
+
+class TestHandwrittenKernelsCompileForHopper(unittest.TestCase):
+    """The interpreter runs code the Triton compiler rejects (a constexpr tuple
+    indexed by a computed dim, a constexpr reassigned): compile the cat and
+    indexing kernels for sm_90 without a GPU (frontend, MLIR and ptxas)."""
+
+    def test_cat_and_indexing_kernels_compile_for_sm90(self):
+        import triton
+        import triton.language as tl
+        from triton.backends.compiler import GPUTarget
+        from triton.compiler import ASTSource
+
+        from evograd.atenir.primitive_triton import scatter_gather as sg
+
+        if os.environ.get('TRITON_INTERPRET') == '1':
+            self.skipTest('kernels are interpreted in this process')
+        target = GPUTarget('cuda', 90, 32)
+
+        def build(kernel, signature, constexprs):
+            signature = {**signature, **{name: 'constexpr' for name in constexprs}}
+            triton.compile(ASTSource(kernel, signature, constexprs), target=target)
+
+        for source, destination in (('fp32', 'fp32'), ('bf16', 'bf16'), ('i64', 'fp32'), ('i1', 'i1')):
+            with self.subTest(copy=(source, destination)):
+                build(sg._copy_into_kernel, {'SRC': f'*{source}', 'DST': f'*{destination}', 'N': 'i64',
+                                             'DST_OFFSET': 'i64'},
+                      {'SHAPE': (256, 6, 256, 64), 'SRC_STRIDES': (98304, 64, 384, 1),
+                       'DST_STRIDES': (98304, 16384, 64, 1), 'BLOCK': 1024})
+        for index, first in (('i64', True), ('i32', False)):
+            with self.subTest(offsets=index):
+                build(sg._index_offsets_kernel, {'INDEX': f'*{index}', 'OFFSETS': '*i64', 'N': 'i32',
+                                                 'SIZE': 'i32', 'STRIDE': 'i32'},
+                      {'SHAPE': (3, 351), 'INDEX_STRIDES': (0, 1), 'FIRST': first, 'BLOCK': 1024})
+        build(sg._index_gather_kernel, {'SRC': '*fp32', 'OFFSETS': '*i64', 'OUT': '*fp32', 'N': 'i32'},
+              {'SHAPE': (32, 351), 'SRC_STRIDES': (729, 0), 'POSITION_STRIDES': (0, 1), 'BLOCK': 1024})
+        for dtype in ('fp32', 'bf16'):
+            for accumulate, order, block in ((True, 0, 1024), (True, 1, 1024), (True, 2, 32), (False, 0, 1024)):
+                with self.subTest(dtype=dtype, accumulate=accumulate, order=order):
+                    build(sg._index_put_kernel, {'OUT': f'*{dtype}', 'VALUES': f'*{dtype}', 'KEYS': '*i64',
+                                                 'N': 'i32', 'M': 'i32'},
+                          {'OUTER_SHAPE': (32,), 'OUT_STRIDES': (729,), 'VALUE_STRIDES': (415,),
+                           'SHAPE': (351,), 'POSITION_STRIDES': (1,), 'ACCUMULATE': accumulate,
+                           'ORDER': order, 'OPMATH': tl.float32, 'BLOCK_N': 256, 'BLOCK': block})
 
 
 @unittest.skipUnless(torch.cuda.is_available(), 'CUDA required')
@@ -737,6 +1031,66 @@ class TestSeedLoweringsOnCuda(unittest.TestCase):
             with self.subTest(n=keys.numel(), descending=descending):
                 self.assertTrue(torch.equal(values, expected.values))
                 self.assertTrue(torch.equal(order, expected.indices))
+
+    def test_cat_index_and_index_put_match_cuda_aten_bit_for_bit(self):
+        from evograd.atenir.primitive_triton import scatter_gather as sg
+
+        torch.manual_seed(0)
+
+        def strided(shape, strides, dtype=torch.float32):
+            size = sum((n - 1) * t for n, t in zip(shape, strides)) + 1
+            return torch.randn(size, device='cuda').to(dtype).as_strided(shape, strides)
+
+        # The cats of the four seeds that reached them.
+        cats = {
+            'dit_backward': ([strided((256, 6, 256, 64), (98304, 64, 384, 1)) for _ in range(3)], 0),
+            'gdn_in_proj_backward': ([strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+                                      strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+                                      strided((1, 2048, 4096), (16777216, 1, 2048), torch.bfloat16)], 2),
+            'qwen2_vl_backward': ([torch.randn(256, 16, 80, device='cuda').bfloat16() for _ in range(3)], 0),
+            'qwen2_vl_rotate_half': ([strided((256, 16, 40), (640, 40, 1)),
+                                      strided((256, 16, 40), (1280, 80, 1))], -1),
+            'dlrm_features': ([torch.randn(32, 1, 64, device='cuda'), torch.randn(32, 26, 64, device='cuda')], 1),
+        }
+        for name, (tensors, dim) in cats.items():
+            with self.subTest(cat=name):
+                self.assertTrue(torch.equal(sg.cat(tensors, dim), torch.cat(tensors, dim)))
+        # DLRM's interaction: the upper triangle of [32, 27, 27], and its gradient.
+        z, upstream = torch.randn(32, 27, 27, device='cuda'), torch.randn(32, 415, device='cuda')[:, 64:]
+        li, lj = torch.triu_indices(27, 27, 1, device='cuda')
+        reference = z.clone().requires_grad_(True)
+        flat = reference[:, li, lj]
+        flat.backward(upstream)
+        self.assertTrue(torch.equal(sg.advanced_index(z, [None, li, lj]), flat.detach()))
+        zeros = torch.zeros(32, 27, 27, device='cuda')
+        self.assertTrue(torch.equal(sg.advanced_index_put(zeros, [None, li, lj], upstream, True), reference.grad))
+        # Repeated targets in each of the CUDA kernel's three orders (1, 8 and 64
+        # plain elements per index position), in front of and behind other dims.
+        index = torch.cat([torch.full((70,), 1), torch.randint(0, 4, (60,)), torch.full((33,), 3)]).cuda()
+        index = index[torch.randperm(index.numel(), device='cuda')]
+        scale = torch.logspace(-3, 3, index.numel(), device='cuda')
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                for dtype in (torch.float32, torch.bfloat16):
+                    for width in (1, 8, 64):
+                        cases = {
+                            'front': (torch.randn(4, width, device='cuda') * 1e3, [index],
+                                      torch.randn(index.numel(), width, device='cuda') * scale[:, None]),
+                            'behind': (torch.randn(3, 4, width, device='cuda') * 1e3, [None, index],
+                                       torch.randn(3, index.numel(), width, device='cuda') * scale[:, None]),
+                        }
+                        for where, (base, indices, values) in cases.items():
+                            base, values = base.to(dtype), values.to(dtype)
+                            for accumulate in (True, False) if deterministic else (True,):
+                                expected = torch.ops.aten.index_put(base, indices, values, accumulate)
+                                mine = sg.advanced_index_put(base, indices, values, accumulate)
+                                with self.subTest(deterministic=deterministic, dtype=dtype, width=width,
+                                                  where=where, accumulate=accumulate):
+                                    self.assertTrue(torch.equal(mine, expected))
+            finally:
+                torch.use_deterministic_algorithms(False)
+
 
 def matrix_square_ref(a, offset, b):
     """Keep a nondifferentiable tensor between active inputs in the ABI."""
