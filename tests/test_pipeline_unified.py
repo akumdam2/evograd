@@ -125,6 +125,28 @@ class TestPreservedRegions(unittest.TestCase):
                 self.assertEqual(failure['error_type'], 'PrimitiveViolation')
                 self.assertIn('unified pipeline preservation', failure['error_message'])
 
+    def test_the_kept_library_calls_must_be_within_the_runs_grant(self):
+        from evograd.evolve.evaluator import _primitive_usage
+        from evograd.pipelines.unified.contract import CONTRACT_ENV
+
+        source = _CONTRACT_SOURCE.replace("{'wrapper': '_external_mm'}",
+                                          "{'wrapper': '_external_mm', 'target': 'aten.mm.default'}")
+        module = SimpleNamespace(ARTIFACT_CONTRACT={'allowed_primitives': []})
+        with tempfile.TemporaryDirectory(prefix='evograd-unified-contract-') as directory:
+            program = Path(directory) / 'candidate.py'
+            manifest = Path(directory) / 'contract.json'
+            program.write_text(source, encoding='utf-8')
+            manifest.write_text(json.dumps(build_contract(source)), encoding='utf-8')
+            for ceiling, refused in (('vendor_gemm', False), ('vendor_sdpa', True), ('', True)):
+                env = {CONTRACT_ENV: str(manifest), 'EVOGRAD_ALLOWED_PRIMITIVES': ceiling}
+                with self.subTest(ceiling=ceiling), patch.dict(os.environ, env, clear=True):
+                    usage, failure = _primitive_usage(str(program), module)
+                    if refused:
+                        self.assertIsNone(usage)
+                        self.assertIn("['vendor_gemm']", failure['error_message'])
+                    else:
+                        self.assertIsNone(failure)
+
 
 class TestSemanticCapture(unittest.TestCase):
     def test_reduction_parameters_and_transposed_strides_survive_serialization(self):

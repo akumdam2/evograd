@@ -24,6 +24,7 @@ A's seed synthesis. Evolution's native iteration limit is what synthesis left.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -60,6 +61,13 @@ def pipeline_seed(task, ledger, args) -> Path | None:
     # file alone does not mean the seed passed.
     if status != 0 or not seed.is_file():
         return None
+    # Pinned as a unified seed is: the code outside its block is the harness's, so the
+    # seed is submitted as it is only with this contract (adbench_tools.evaluate.check_unified).
+    from evograd.pipelines.unified.contract import CONTRACT_FILE, build_contract
+
+    (seed.parent / CONTRACT_FILE).write_text(
+        json.dumps(build_contract(seed.read_text(encoding="utf-8")), indent=2, sort_keys=True)
+        + "\n", encoding="utf-8")
     ledger.log_evaluation({"kind": "seed_acceptance", "origin": args.frontend, "correct": True,
                            "program": str(seed)})
     return seed
@@ -106,7 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     iterations = args.budget - seed_requests
     extra.update({"seed": str(seed), "seed_requests": seed_requests, "iterations": iterations})
     if iterations < 1:
-        return _common.finish(args, task, ledger, seed, **extra)
+        return _common.finish(args, task, ledger, seed, contract=seed.parent / CONTRACT_FILE,
+                              **extra)
     evolve_dir = ledger.root / "evolve"
     best = evolve_dir / "evolved_best_program.py"
     contract = evolve_dir / CONTRACT_FILE

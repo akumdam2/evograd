@@ -799,3 +799,38 @@ def test_a_coding_agent_session_leaves_nothing_running(coding_agents, tmp_path):
         time.sleep(0.1)
     else:
         pytest.fail(f"the agent's background process {pid} survived the session")
+
+
+def test_a_deployment_artifact_is_used_as_it_is_only_with_its_unified_contract(small_task, tmp_path):
+    # The static rules read only the evolve block: a module with its own deployment
+    # entry may keep code outside it only as the unified seed lineage its contract pins,
+    # and only library calls its pack grants (small_task: a linear layer, vendor_addmm).
+    from evograd.pipelines.unified.contract import build_contract
+
+    source = ("import torch\n"
+              "UNIFIED_EXTERNAL_REGIONS = [{'wrapper': '_kept', 'target': 'aten.addmm.default'}]\n"
+              "def _kept(bias, x, w):\n    return torch.addmm(bias, x, w)\n"
+              "# EVOLVE-BLOCK-START\n"
+              "def pair(bias, x, w):\n    return _kept(bias, x, w)\n"
+              "# EVOLVE-BLOCK-END\n"
+              "DEPLOYMENT_ENTRY = pair\n")
+
+    def contract_of(text, name):
+        path = tmp_path / name
+        path.write_text(json.dumps(build_contract(text)))
+        return path
+
+    contract = contract_of(source, "contract.json")
+    for repackage in (False, True):
+        with pytest.raises(PackagingError, match="unified contract"):
+            prepare_program(small_task, source, tmp_path / "p", origin="t", repackage=repackage)
+        kept = prepare_program(small_task, source, tmp_path / "p", origin="t", repackage=repackage,
+                               contract=contract)
+        assert kept.read_text() == source
+    outside = source.replace("return torch.addmm(bias, x, w)", "return torch.mm(x, w)")
+    with pytest.raises(PackagingError, match="fixed library/deployment code was changed"):
+        prepare_program(small_task, outside, tmp_path / "p", origin="t", contract=contract)
+    batched = source.replace("aten.addmm.default", "aten.bmm.default")
+    with pytest.raises(PackagingError, match=r"\['vendor_bmm'\]"):
+        prepare_program(small_task, batched, tmp_path / "p", origin="t",
+                        contract=contract_of(batched, "batched.json"))

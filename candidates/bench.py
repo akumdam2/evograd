@@ -128,6 +128,7 @@ def submit(task, run_dir: Path, agent: str) -> dict:
     records whether it tried.
     """
     from evograd.adbench_tools.evaluate import fixed_code_intact, prepare_program
+    from evograd.pipelines.unified.contract import CONTRACT_FILE
 
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     record = {"agent": agent, "task_id": task.task_id, "case_id": task.spec["case_id"],
@@ -139,9 +140,15 @@ def submit(task, run_dir: Path, agent: str) -> dict:
     else:
         source = Path(best).read_text(encoding="utf-8")
         record["fixed_code_intact"] = fixed_code_intact(task, source)
+        # evograd's unified-seed lineage is taken as it is only with the contract
+        # that pins it: next to the program, else the run's evolve or seed one.
+        contract = next((path for path in (Path(best).parent / CONTRACT_FILE,
+                                           run_dir / "evolve" / CONTRACT_FILE,
+                                           run_dir / "seed" / CONTRACT_FILE)
+                         if path.is_file()), None)
         try:
             packaged = prepare_program(task, source, run_dir / "final", origin=agent,
-                                       repackage=True)
+                                       repackage=True, contract=contract)
         except ValueError as exc:  # PackagingError: the module is not a pair
             record.update({"submission": None, "packaging_error": str(exc)})
         else:
@@ -262,8 +269,15 @@ def cmd_evaluate(args) -> int:
                "--tier3-blocks", str(args.tier3_blocks)]
     if args.deadline_min is not None:
         command += ["--deadline-min", str(args.deadline_min)]
+    from evograd.adbench_tools.task import load
+
     for cid, path in sorted(chosen.items()):
-        command += ["--candidate", f"{cid}={path}"]
+        # The grant of the pack the submission was searched on (the source model's
+        # for an identical configuration): the protocol refuses a module declaring more.
+        model, source_cid = reused[cid].split(":", 1) if cid in reused else (args.model, cid)
+        pack = task_dirs(root_for(model, args.base), [source_cid])[source_cid]
+        command += ["--candidate", f"{cid}={path}",
+                    "--grant", f"{cid}={','.join(load(pack).allowed_primitives)}"]
     env = {**os.environ, "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
            "PYTHONPATH": os.pathsep.join([str(REPO / "src"),
                                           os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}

@@ -83,6 +83,10 @@ def test_evaluate_reuses_the_source_submission_and_records_a_search_failure(
     monkeypatch.setattr(bench.subprocess, "run",
                         lambda command, **kwargs: launched.append(command) or
                         SimpleNamespace(returncode=0))
+    # Each candidate is judged under the grant of the pack it was searched on.
+    grants = {("a", "t__1"): ("vendor_gemm",), ("b", "v__9"): ("vendor_bmm", "vendor_gemm")}
+    monkeypatch.setattr(task_module, "load", lambda pack: SimpleNamespace(
+        allowed_primitives=grants[(Path(pack).parent.parent.name, Path(pack).name)]))
 
     def evaluate(*extra):
         launched.clear()
@@ -93,6 +97,10 @@ def test_evaluate_reuses_the_source_submission_and_records_a_search_failure(
                           if flag == "--candidate")
         selection = json.loads((tmp_path / "a" / "evaluation" / "seed" / "selection.json").read_text())
         assert selection["candidates"] == candidates
+        granted = dict(command[i + 1].split("=", 1) for i, flag in enumerate(command)
+                       if flag == "--grant")
+        assert granted == {cid: {"t/1": "vendor_gemm", "v/1": "vendor_bmm,vendor_gemm"}[cid]
+                           for cid in candidates}
         return candidates, selection
 
     own = _record(tmp_path, "a", "t/1", True).with_name("submission.py")
