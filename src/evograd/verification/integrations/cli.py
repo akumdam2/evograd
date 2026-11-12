@@ -31,6 +31,13 @@ def main(model, argv=None) -> int:
     p.add_argument("--corpus", required=True)
     p.add_argument("--out", required=True)
     p = sub.add_parser("verify", help="run the gates on candidate artifacts")
+    p.add_argument("--combined", action="store_true",
+                   help="pipeline check (each case's reference as its candidate): model gates "
+                        "once, on the combination of every Level-2 case its own Gate 1 and "
+                        "operator Gate 2 pass; never for an agent's candidates")
+    from evograd.verification.reuse import add_arguments as add_reuse_arguments
+
+    add_reuse_arguments(p)
     p.add_argument("--corpus", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--candidate", action="append", required=True, metavar="CASE_ID=PROGRAM.py")
@@ -80,8 +87,11 @@ def main(model, argv=None) -> int:
         model = dataclasses.replace(model, gate3_accumulation=args.gate3_accumulation)
     if args.gate3_steps is not None:
         model = dataclasses.replace(model, gate3_steps=args.gate3_steps)
-    verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
-                     deadline_min=args.deadline_min)
+    from evograd.verification.reuse import calibration_reuse, options
+
+    with calibration_reuse(options(args), log=log):
+        verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
+                         deadline_min=args.deadline_min, combined=args.combined)
     if verdict.get("suspended"):
         print(json.dumps({"suspended": verdict["suspended"]}))
         return 3

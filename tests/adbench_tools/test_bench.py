@@ -93,6 +93,9 @@ def test_evaluate_reuses_the_source_submission_and_records_a_search_failure(
                           if flag == "--candidate")
         selection = json.loads((tmp_path / "a" / "evaluation" / "seed" / "selection.json").read_text())
         assert selection["candidates"] == candidates
+        # Native controls are shared across the model's cases.
+        assert {"--share-gate3-native", "--share-gate2-calibration-native",
+                "--share-gate2-verification-reference"} <= set(command)
         return candidates, selection
 
     own = _record(tmp_path, "a", "t/1", True).with_name("submission.py")

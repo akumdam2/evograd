@@ -680,9 +680,14 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         # 4. The combination: its gates, then its training step.
         chosen = [cid for cid in level2 if _positive(result["cases"][cid], execution)]
         configure()
-        combination = verify_combination(run, chosen)
+        combination = verify_combination(run, chosen, single=result["cases"])
         result["settings"]["timing"] = timing_mode()
-        if chosen:
+        if len(chosen) == 1:
+            # One candidate alone is its single site: its Tier 3 measurement stands.
+            timed = {"rows": {"combination": single["rows"][chosen[0]],
+                              "torch_compile": _tier3_row(single["report"], "torch_compile")}}
+            combination["tier3_reused_from"] = f"single_site:{chosen[0]}"
+        elif chosen:
             key = {"baseline": baseline_key, "programs": {cid: run.programs[cid] for cid in chosen},
                    "options": dict(tier3_options), "environment": result["environment"],
                    "isolated": isolate_tier3}
@@ -695,6 +700,7 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
                 return {"report": report, "rows": rows}
 
             timed = _cached(run.out / "tier3" / "combination.json", key, combined, run.deadline)
+        if chosen:
             combination["tier3"] = timed["rows"]["combination"]
             if "torch_compile" in timed["rows"]:
                 compiled, own = timed["rows"]["torch_compile"], timed["rows"]["combination"]

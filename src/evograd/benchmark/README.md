@@ -123,6 +123,34 @@ measurement of its task, dims and dtype, or (outside the call-count changes
 `l2_share/`, which read its payloads, so from a corpus captured with `--cases
 all`), commit the result beside the script, then regenerate.
 
+### Evaluating, and checking the evaluation pipeline
+
+`candidates/bench.py evaluate` runs `evograd evaluate` on an agent's
+submissions, each case judged on its own (an agent's candidates are never
+judged only together: a combination's budgets are looser and a failure would
+not name its case). Two results are computed once and reused, and the report
+says where:
+
+- Native controls and references (model Gate 2 calibration and verification
+  references, Gate 3's native training runs) run once per model and samples
+  and are shared by every case (`--share-gate3-native`,
+  `--share-gate2-calibration-native`, `--share-gate2-verification-reference`,
+  which `bench.py evaluate` passes); every comparison still checks the shared
+  run's identity and content (`verification/reuse.py`).
+- A combination of one accepted Level-2 candidate is that candidate's single
+  site (the same deployment, programs and judges): its model Gate 2, Gate 3
+  and Tier 3 results stand for the combination's (`reused_from`,
+  `tier3_reused_from`).
+
+Checking the pipeline itself (each case's model reference as its candidate,
+x1.0, which every gate must accept) takes one run per model rather than one
+per case: `python -m evograd.verification.integrations.<model> verify
+--combined` with every case's reference. Each case still gets Gate 1 and
+operator Gate 2 on its own recorded calls (the check at its boundary); the
+model gates (model Gate 2, Gate 3) run once, on the combination of every
+Level-2 case those pass, and decide those cases. Fault controls (x1.01 and
+up) stay per case, since they must say which case a gate caught.
+
 ### TODO: evidence for the vendor rule
 
 Status: not run (recorded 2026-11-11). The selection treats a task that is one

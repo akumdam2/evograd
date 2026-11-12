@@ -84,6 +84,8 @@ GATE2_MODEL_BOUNDARIES = False
 TRAIN_ORDER, TRAIN_SEED = 707, 0
 #: Gate 3's status for a model it does not apply to (``Model.gate3_applies``).
 NOT_APPLICABLE = "not_applicable"
+#: A Level-2 case's model gates in a pipeline check (:func:`verify`'s ``combined``).
+ON_COMBINATION = "on_combination"
 GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
 #: Gate 3 runs save their state this often (and at the deadline).
@@ -669,9 +671,11 @@ def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) ->
     return statuses
 
 
-def verify_cases(run: Run) -> dict[str, Any]:
+def verify_cases(run: Run, *, single_site: bool = True) -> dict[str, Any]:
     """Gate 1 and operator Gate 2 for every candidate; Level 2 also needs its
-    single-site model Gate 2 and, after those pass, Gate 3."""
+    single-site model Gate 2 and, after those pass, Gate 3 -- unless
+    ``single_site`` is false, when the model gates run on the combination only
+    (:func:`verify`'s ``combined``)."""
     from evograd.opdecl.oracle import reference_identity
 
     model = run.model
@@ -689,7 +693,9 @@ def verify_cases(run: Run) -> dict[str, Any]:
                                compile_backend=run.compile_backend, state=run.state))
         entry = {"program": run.paths[case_id], "program_sha256": run.programs[case_id],
                  "level": case.level, **statuses}
-        if case.level == 2 and model.model_gates:
+        if case.level == 2 and model.model_gates and not single_site:
+            entry["gate2_model"] = entry["gate3"] = ON_COMBINATION
+        elif case.level == 2 and model.model_gates:
             deployment = deployment_for(model, [(case, module)], run.workload)
             key = {"programs": {case_id: run.programs[case_id]},
                    "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
@@ -732,9 +738,14 @@ def accepted(model, entry: Mapping[str, Any]) -> bool:
     return all(g == "passed" for g in gates)
 
 
-def verify_combination(run: Run, case_ids) -> dict[str, Any]:
+def verify_combination(run: Run, case_ids, single: Mapping[str, Mapping[str, Any]] | None = None
+                       ) -> dict[str, Any]:
     """Model Gate 2 and Gate 3 (where it applies) of the given accepted Level-2
-    candidates deployed together."""
+    candidates deployed together.
+
+    One accepted candidate deployed alone is its single site (the same
+    deployment, programs and judges), so its single-site verdicts in ``single``
+    (by case id) stand for the combination's, and the result says so."""
     model = run.model
     case_ids = sorted(case_ids)
     if not model.model_gates:
@@ -746,6 +757,14 @@ def verify_combination(run: Run, case_ids) -> dict[str, Any]:
     level2 = [(run.cases[cid], run.modules[cid]) for cid in case_ids]
     out = run.out / "combination"
     deployment = deployment_for(model, level2, run.workload)
+    if len(case_ids) == 1 and (single or {}).get(case_ids[0], {}).get("accepted"):
+        statuses = {name: status for name, status in single[case_ids[0]].items()
+                    if name.startswith(("gate2_model", "gate3"))}
+        result = {"cases": case_ids, "patch_set": list(deployment.patch_set), **statuses,
+                  "accepted": _combination_accepted(model, statuses),
+                  "reused_from": f"single_site:{case_ids[0]}"}
+        run.log("combination", result)
+        return result
     key = {"programs": {cid: run.programs[cid] for cid in case_ids},
            "patch_set": list(deployment.patch_set), "compile_backend": run.compile_backend,
            "model": model.name, "workload": model.workload_config,
@@ -763,19 +782,30 @@ def verify_combination(run: Run, case_ids) -> dict[str, Any]:
     else:
         statuses["gate3"] = NOT_APPLICABLE
     result = {"cases": case_ids, "patch_set": list(deployment.patch_set), **statuses,
-              "accepted": statuses.get("gate2_model") == "passed"
-                          and statuses.get("gate3") == ("passed" if model.gate3_applies else NOT_APPLICABLE)}
+              "accepted": _combination_accepted(model, statuses)}
     run.log("combination", result)
     return result
+
+
+def _combination_accepted(model, statuses: Mapping[str, Any]) -> bool:
+    return (statuses.get("gate2_model") == "passed"
+            and statuses.get("gate3") == ("passed" if model.gate3_applies else NOT_APPLICABLE))
 
 
 def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,
            controls: str | Path | None = None, state: str | Path | None = None,
            device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
-           deadline_min: float | None = None) -> dict[str, Any]:
+           deadline_min: float | None = None, combined: bool = False) -> dict[str, Any]:
     """Every gate that applies to each candidate, then the combination of every
     accepted Level-2 candidate (a diagnostic, not the benchmark's Level-3
     selection); writes ``DIR/verdict.json``.
+
+    ``combined`` is for checking the pipeline with every case's model reference
+    as its candidate (x1.0), which every gate must accept: each case still gets
+    Gate 1 and operator Gate 2 on its own calls, but the model gates run once,
+    on the combination of every Level-2 case those pass, and decide those
+    cases' acceptance. Never for an agent's candidates: a combination's
+    budgets are looser and its failure names no case.
 
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
     what does not depend on the candidate -- Gate 3 control runs and Gate 2
@@ -795,10 +825,18 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
                    deadline_min=deadline_min)
     verdict: dict[str, Any] = {"execution": settings, "candidates": {}, "combination": None}
     try:
-        verdict.update(verify_cases(run))
-        chosen = [cid for cid, entry in verdict["candidates"].items()
-                  if entry["level"] == 2 and entry["accepted"]]
-        verdict["combination"] = verify_combination(run, chosen)
+        verdict.update(verify_cases(run, single_site=not combined))
+        level2 = {cid: entry for cid, entry in verdict["candidates"].items() if entry["level"] == 2}
+        if combined:
+            verdict["model_gates"] = ON_COMBINATION
+            chosen = [cid for cid, entry in level2.items()
+                      if (entry["gate1_payloads"], entry["gate2_operator"]) == ("passed", "passed")]
+            verdict["combination"] = verify_combination(run, chosen)
+            for cid in chosen:
+                level2[cid]["accepted"] = verdict["combination"]["accepted"]
+        else:
+            chosen = [cid for cid, entry in level2.items() if entry["accepted"]]
+            verdict["combination"] = verify_combination(run, chosen, single=verdict["candidates"])
     except Suspended as stop:
         verdict["suspended"] = str(stop)
         log("suspended:", stop, "-- rerun the same command to continue")

@@ -308,6 +308,22 @@ class BenchmarkCapture(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(cli.main(self.model, argv), code)
 
+    def test_verify_takes_the_native_reuse_options(self):
+        from evograd.verification import reuse
+        from evograd.verification.integrations import cli, gates
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        seen = []
+
+        def verify(*args, **kwargs):
+            seen.append(reuse.settings()["share_gate3_native"])
+            return {"candidates": {"t/1": {"accepted": True}}, "combination": None}
+
+        with mock.patch.object(gates, "verify", verify), contextlib.redirect_stdout(io.StringIO()):
+            cli.main(self.model, argv)
+            cli.main(self.model, argv + ["--share-gate3-native"])
+        self.assertEqual(seen, [False, True])
+
     def test_verify_runs_with_expandable_segments_unless_told_otherwise(self):
         from evograd.verification.integrations import cli, gates
         from evograd.verification.integrations.base import CUDA_ALLOC_CONF
