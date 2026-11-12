@@ -713,6 +713,33 @@ class TestVendorGroupedMmCapability(unittest.TestCase):
                 self.grouped(*args)
 
 
+@unittest.skipUnless(torch.cuda.is_available(), "the GPU kernel needs CUDA")
+class TestVendorGroupedMmOnCuda(TestVendorGroupedMmCapability):
+    """The same four layouts and offsets on the GPU kernel (CUTLASS on Hopper)."""
+
+    def setUp(self):
+        super().setUp()
+        on_cpu = self.int_bf16
+        self.int_bf16 = lambda *shape: on_cpu(*shape).cuda()
+        self.offs = self.offs.cuda()
+
+
+@unittest.skipUnless(torch.cuda.is_available(), "cuBLAS needs CUDA")
+class TestVendorBmmAndAddmmOnCuda(unittest.TestCase):
+    def test_they_are_torch_bmm_and_torch_addmm(self):
+        bmm = _exec_primitive(VENDOR_BMM_SOURCE)["vendor_bmm"]
+        addmm = _exec_primitive(VENDOR_ADDMM_SOURCE)["vendor_addmm"]
+        g = torch.Generator(device="cuda").manual_seed(0)
+        for dtype in (torch.bfloat16, torch.float32):
+            with self.subTest(dtype=dtype):
+                rand = lambda *shape: torch.randn(*shape, device="cuda", dtype=dtype, generator=g)
+                a, b = rand(3, 64, 32), rand(3, 48, 32).transpose(1, 2)
+                torch.testing.assert_close(bmm(a, b), torch.bmm(a, b), rtol=0, atol=0)
+                x, w, bias = rand(64, 32), rand(48, 32), rand(48)
+                torch.testing.assert_close(addmm(bias, x, w.t()), torch.addmm(bias, x, w.t()),
+                                           rtol=0, atol=0)
+
+
 class TestPreservedCallsNeedTheGrant(unittest.TestCase):
     """A unified seed may keep a vendor call fixed only when every agent may call it."""
 
