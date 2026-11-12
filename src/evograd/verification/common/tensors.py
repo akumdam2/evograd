@@ -77,7 +77,13 @@ def isolate(tree: Any) -> Any:
             return {k: walk(v) for k, v in value.items()}
         return value
 
-    return walk(tree)
+    try:
+        return walk(tree)
+    finally:
+        # ``walk`` refers to itself through its closure; break that cycle so the
+        # memo and its copies go when the caller drops them, not when the cyclic
+        # collector next runs (device memory does not trigger it).
+        del walk
 
 
 def tensors_in(tree: Any, prefix: str = "") -> Iterator[tuple[str, torch.Tensor]]:

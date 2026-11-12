@@ -113,6 +113,28 @@ class TestIsolation(unittest.TestCase):
         self.assertEqual(float(out["view"][1, 0]), -1.0)
         self.assertEqual(float(view[1, 0]), 7.0)     # ...and nothing leaks to the source
 
+    def test_copies_and_replaced_leaves_go_with_their_last_reference(self):
+        # Reference counting alone must free them: the cyclic collector runs on
+        # counts of Python objects, which multi-GiB payload copies do not move.
+        import gc
+        import weakref
+
+        from evograd.verification.common.execution import replace_at
+
+        gc.collect()
+        gc.disable()
+        self.addCleanup(gc.enable)
+        x = torch.randn(8, 4)
+        out = T.isolate({"a": (x, x[1:]), "b": [x.t()]})
+        copy = weakref.ref(out["a"][0])
+        del out
+        self.assertIsNone(copy())
+        leaf = torch.randn(3, requires_grad=True)
+        placed = weakref.ref(leaf)
+        roots = replace_at({"args": ((1, 2),)}, "args[0][1]", leaf)
+        del leaf, roots
+        self.assertIsNone(placed())
+
     def test_mutation_detection_and_allowed_overwrite(self):
         values = {"x": torch.ones(3), "dy": torch.ones(3)}
         before = T.snapshot(values, metadata_only=("dy",))
