@@ -260,7 +260,8 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None,
                              case_id=case_id, task=case_id.split("/")[0])
 
     def calibration(model_obj, case, corpus, **_):
-        return SimpleNamespace(op=model_obj.reference_op(case.task)), SimpleNamespace(policy=None)
+        policy = SimpleNamespace(gamma=4.0, thresholds={})  # a calibration with no envelope
+        return SimpleNamespace(op=model_obj.reference_op(case.task)), SimpleNamespace(policy=policy)
 
     with mock.patch.object(gates, "operator_calibration", calibration), \
             mock.patch.object(base, "configure", lambda: None):
@@ -357,6 +358,17 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
     monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
     assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
+    # No policy, no pack: the failure says why and nothing is written.
+    from evograd.adbench_tools.task import CalibrationFailed
+
+    failure = SimpleNamespace(code="insufficient_calibration", message="out of memory")
+    monkeypatch.setattr(gates, "operator_calibration", lambda model, case, corpus, **options: (
+        SimpleNamespace(op=model.reference_op(case.task)),
+        SimpleNamespace(policy=None, status="incomplete", findings=[failure])))
+    with pytest.raises(CalibrationFailed, match="incomplete .insufficient_calibration: out of memory"):
+        build_task(tmp_path / "uncalibrated", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
+                   corpus=manifest, state=tmp_path / "state")
+    assert not (tmp_path / "uncalibrated" / "task.json").exists()
     # A pack judged by the declaration's tolerances -- an operator pack, or a model pack
     # built before that rule was removed -- is refused, never judged, and still loads.
     from evograd.adbench_tools.evaluate import search_rule
