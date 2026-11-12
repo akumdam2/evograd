@@ -84,5 +84,11 @@ def main(model, argv=None) -> int:
         print(json.dumps({"suspended": verdict["suspended"]}))
         return 3
     print(json.dumps({case: entry["accepted"] for case, entry in verdict["candidates"].items()}))
-    return 0 if all(entry["accepted"] for entry in verdict["candidates"].values()) else 1
+    combination = verdict.get("combination")
+    if combination is not None:
+        print(json.dumps({"combination": combination["accepted"]}))
+    # A combination that is not accepted fails the run as a candidate does (an OLMoE
+    # combination out of memory exited 0, 2026-11-11).
+    accepted = [entry["accepted"] for entry in verdict["candidates"].values()]
+    return 0 if all(accepted) and (combination is None or combination["accepted"]) else 1
 

@@ -20,6 +20,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from evograd.provenance import provenance
+
 RUN_FILE = "run.json"
 EVALUATIONS_FILE = "evaluations.jsonl"
 LLM_FILE = "llm.jsonl"
@@ -65,6 +67,7 @@ class RunLedger:
                 "task_dir": str(task.root),
                 "statement_sha256": task.spec.get("statement_sha256"),
                 "config": config or {},
+                "evograd": provenance(),
                 "started": _now(),
                 "started_unix": time.time(),
                 "status": "running",

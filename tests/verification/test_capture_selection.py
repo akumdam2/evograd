@@ -296,6 +296,17 @@ class BenchmarkCapture(unittest.TestCase):
                 cli.main(self.model, ["capture", "--out", "x", "--cases", "some"])
         self.assertEqual(calls, ["benchmark", "all"])
 
+    def test_verify_fails_when_its_combination_is_not_accepted(self):
+        from evograd.verification.integrations import cli, gates
+
+        argv = ["verify", "--corpus", "c.json", "--out", "o", "--candidate", "t/1=p.py"]
+        for combination, code in ((None, 0), ({"accepted": True}, 0), ({"accepted": False}, 1)):
+            verdict = {"candidates": {"t/1": {"accepted": True}}, "combination": combination}
+            with self.subTest(combination=combination), \
+                    mock.patch.object(gates, "verify", lambda *a, **k: verdict), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(self.model, argv), code)
+
 
 class OldRuleCorpus(unittest.TestCase):
     """A corpus whose identity lists every case it recorded and no ``case_selection``

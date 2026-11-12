@@ -531,8 +531,11 @@ def _cached(path: Path, key: Mapping[str, Any], compute: Callable[[], Any], dead
 def _environment() -> dict[str, Any]:
     import torch
 
+    from evograd.provenance import provenance
+
     return {"torch": torch.__version__, "cuda": torch.version.cuda,
-            "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None}
+            "gpu_name": torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+            "evograd": provenance()}
 
 
 def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,

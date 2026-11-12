@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
 from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
@@ -30,6 +29,7 @@ from typing import Any
 from evograd.adbench_tools import TASK_SCHEMA
 from evograd.opdecl.importing import reference_closure
 from evograd.pipelines.shared.primitives import REGISTRY
+from evograd.provenance import revision
 
 TASK_FILE = "task.json"
 DECLARATION_FILE = "declaration.py"
@@ -274,19 +274,6 @@ def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
             "calibrated": calibration.policy is not None}
 
 
-def _evograd_revision() -> dict[str, Any]:
-    root = Path(__file__).resolve().parents[3]
-    try:
-        commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
-                                capture_output=True, text=True, timeout=10).stdout.strip()
-        dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain",
-                                     "--untracked-files=no"],
-                                    capture_output=True, text=True, timeout=10).stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        commit, dirty = "", None
-    return {"commit": commit or None, "dirty": dirty}
-
-
 # ── a model's observed case ──────────────────────────────────────────────────
 
 
@@ -412,7 +399,7 @@ def build_task(
         "library_policy": library_policy,
         "scoring": scoring,
         "performance_baseline": baseline,
-        "evograd": _evograd_revision(),
+        "evograd": revision(),
     }
     (root / TASK_FILE).write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n",
                                   encoding="utf-8")
