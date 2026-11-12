@@ -10,10 +10,13 @@ exercise arithmetic and binding; they are not calibration evidence.
 
 from __future__ import annotations
 
+import gc
 import json
 import math
+import types
 import unittest
 import warnings
+import weakref
 
 import torch
 
@@ -28,7 +31,7 @@ from evograd.verification.common.reports import (
     STRICT,
     continue_after,
 )
-from evograd.verification.common.tensors import module_state_digest, relative_error
+from evograd.verification.common.tensors import module_state_digest, relative_error, tensors_in
 from evograd.verification.gate2.adapters.operator import OperatorScope
 from evograd.verification.gate2.calibration import (
     DEFAULT_FLOORS,
@@ -645,6 +648,137 @@ class TestBoundaries(unittest.TestCase):
         misrouted = self.verify(F.norm_misrouted)
         self.assertIn("boundary:norm#0/grad_in:args[1]", failing(misrouted))
         self.assertNotIn("boundary:norm#0/grad_in:args[0]", failing(misrouted))
+
+
+def _alive(refs):
+    """The objects behind ``refs`` that are still alive, described."""
+    out = []
+    for ref in refs:
+        obj = ref()
+        if obj is not None:
+            out.append(f"{type(obj).__name__}{tuple(obj.shape) if torch.is_tensor(obj) else ''}")
+    return out
+
+
+class _WatchedOperator(OperatorScope):
+    """The operator scope, watching by weak reference every module it builds, the
+    module's inputs and its output."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.watched = []
+
+    def build(self, deployment, sample, hooks):
+        module = super().build(deployment, sample, hooks)
+        watched = self.watched
+        watched.append(weakref.ref(module))
+
+        def inputs(_module, args):
+            watched.extend(weakref.ref(a) for a in args)
+
+        def output(_module, _args, out):
+            watched.append(weakref.ref(out))
+
+        module.register_forward_pre_hook(inputs)
+        module.register_forward_hook(output)
+        return module
+
+
+def _watching(fn, watched):
+    """``fn`` as a site, watching its arguments, the tensors they view (a module's own
+    parameters aside) and its output."""
+    def site(*args):
+        for t in args:
+            watched.append(weakref.ref(t))
+            if t._base is not None and not isinstance(t._base, torch.nn.Parameter):
+                watched.append(weakref.ref(t._base))
+        out = fn(*args)
+        watched.append(weakref.ref(out))
+        return out
+    return site
+
+
+class _CyclicModels:
+    """Toy models that hold themselves in a reference cycle, as a tier-3 workload's
+    patched layers do (``forward`` bound to the instance); the factory keeps the last
+    one it built, as a workload keeps its last build. ``stale`` describes every
+    earlier model still alive when a model starts its forward."""
+
+    __verification_identity__ = {"factory": "tests: cyclic toy models, the last one kept"}
+
+    def __init__(self):
+        self.watched, self.stale, self.last = [], [], None
+
+    def __call__(self, sites):
+        model = F.ToyModel(sites)
+        model.forward = types.MethodType(F.ToyModel.forward, model)
+        watched, stale = self.watched, self.stale
+
+        def check(module, _args):
+            stale.extend(_alive([r for r in watched if r() is not module]))
+
+        model.register_forward_pre_hook(check)
+        watched.append(weakref.ref(model))
+        self.last = model
+        return model
+
+
+class TestReleasedRuns(unittest.TestCase):
+    """What a run allocates is freed once nothing refers to it, with the cyclic
+    collector's automatic runs disabled: they are triggered by counts of Python
+    objects, not by memory, and an operator calibration on MegaFold payloads ran a
+    95 GiB GPU out of memory on its fourth sample waiting for them (2026-11-11)."""
+
+    def setUp(self):
+        gc.collect()
+        gc.disable()
+        self.addCleanup(gc.enable)
+
+    def test_a_dropped_execution_leaves_nothing_alive(self):
+        scope = _WatchedOperator(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
+        sample = scope.samples([1])[0]
+        control, _graphs = gate2.compile_control(scope, ("operator",), backend=FAST)
+        runs = ((Deployment.native(), False),
+                (candidate("c", {"operator": _watching(F.scale_shift_runtime, scope.watched)}),
+                 True),
+                (control, True))
+        for deployment, record in runs:
+            ex = gate2.execute(scope, deployment, sample, record_boundaries=record)
+            self.assertIsNone(ex.error, ex.error)
+            kept = [ex.results] + [[c.inputs, c.outputs, c.upstream, c.emitted]
+                                   for c in ex.boundaries]
+            scope.watched.extend(weakref.ref(t) for _, t in tensors_in(kept))
+            del ex, kept
+            self.assertEqual(_alive(scope.watched), [], deployment.name)
+
+    def test_operator_calibration_and_judging_leave_nothing_alive(self):
+        scope = _WatchedOperator(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
+        fixed = scope.samples([1, 2])
+        result = calibrate(scope, patch_set=("operator",), samples=fixed, compile_backend=FAST)
+        self.assertEqual(result.status, "calibrated", result.to_dict())
+        self.assertEqual(_alive(scope.watched), [])
+        report = gate2.verify_integration(
+            scope, candidate("c", {"operator": _watching(F.scale_shift_runtime, scope.watched)}),
+            policy=result.policy, samples=fixed)
+        self.assertEqual(report.status, PASSED, codes(report))
+        self.assertEqual(_alive(scope.watched), [])
+
+    def test_model_scope_frees_each_model_before_the_next_one_runs(self):
+        models = _CyclicModels()
+        scope = F.toy_module_scope(factory=models)
+        fixed = samples("mem", [1, 2])
+        result = calibrate(scope, patch_set=("norm",), samples=fixed, compile_backend=FAST,
+                           boundaries=True)
+        self.assertEqual(result.status, "calibrated", result.to_dict())
+        # The boundary replays (run_callable) run the candidate's site on their own copies.
+        replayed = []
+        report = gate2.verify_integration(
+            scope, candidate("c", {"norm": _watching(F.norm_site, replayed)}),
+            policy=result.policy, samples=fixed)
+        self.assertEqual(report.status, PASSED, codes(report))
+        self.assertEqual(models.stale, [])
+        self.assertEqual(_alive(models.watched), ["ToyModel"])     # the factory's last build
+        self.assertEqual(_alive(replayed), [])
 
 
 class TestDeclaredScopes(unittest.TestCase):

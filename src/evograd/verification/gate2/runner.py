@@ -34,6 +34,7 @@ replaced site, judged by the same comparator against matching thresholds.
 from __future__ import annotations
 
 import contextlib
+import functools
 import gc
 import time
 import traceback
@@ -169,12 +170,37 @@ class Execution:
                 "seconds": self.seconds}
 
 
+def _collects_after(run: Callable) -> Callable:
+    """``run``, then the cyclic garbage collector once ``run``'s frame is gone.
+
+    A run leaves memory in reference cycles, which reference counting never
+    frees: :func:`isolate` keeps every copy it made (its recursive helper refers
+    to itself through its closure), ``replace_at`` the tensor it placed (the
+    differentiable leaf), and a tier-3 workload's patched layers hold themselves
+    (``forward`` bound to the instance) once the workload drops that model. The
+    collector runs when counts of Python objects cross its thresholds, which
+    device memory does not move: operator calibration on MegaFold payloads
+    (4.4 GiB inputs) left ~13 GiB per execution and ran out of a 95 GiB GPU on its
+    fourth sample (2026-11-11). ``isolate`` and the adapters stay as they are -- a
+    policy's reference identity fingerprints them -- and every run collects after
+    itself instead, in calibration and in judging, at both scopes.
+    """
+    @functools.wraps(run)
+    def collected(*args, **kwargs):
+        out = run(*args, **kwargs)
+        gc.collect()
+        return out
+    return collected
+
+
+@_collects_after
 def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             record_boundaries: bool = False) -> Execution:
     """Build, run forward + backward once, collect every named result.
 
     The sample's seed governs all randomness inside, and the caller's RNG is
-    restored afterwards. Nothing is judged here.
+    restored afterwards. Nothing is judged here. What the run leaves in reference
+    cycles is freed before it returns (see :func:`_collects_after`).
     """
     ex = Execution(deployment, sample)
     hooks = SiteHooks(record=record_boundaries)
@@ -183,6 +209,10 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
     try:
         with isolated_rng(sample.seed, adapter.device):
             module = adapter.build(deployment, sample, hooks)
+            # Building can drop the previous run's model (a workload keeps its last
+            # build) and copies the module does not keep; free them before this run
+            # allocates its forward and backward.
+            gc.collect()
             ex.expected = dict(adapter.expected_invocations(deployment))
             ex.parameter_groups = C.parameter_groups(module)
             params = dict(module.named_parameters())
@@ -474,13 +504,15 @@ def side_findings(ex: Execution, out: list[Finding], *, reference: bool) -> None
 # ── boundaries ───────────────────────────────────────────────────────────────
 
 
+@_collects_after
 def run_callable(fn: Callable, inputs: tuple[tuple[Any, ...], dict[str, Any]],
                  grad_paths: Sequence[str], cotangents: Mapping[str, torch.Tensor],
                  forward_context: Callable[[], Any] | None = None) -> dict[str, Any]:
     """``fn`` once on isolated copies of a recorded call: outputs and VJP by path.
 
     ``forward_context`` wraps the forward only (the scope's autocast), exactly
-    as :func:`execute` does; the backward runs outside it, as in the scope.
+    as :func:`execute` does; the backward runs outside it, as in the scope. Like
+    :func:`execute`, it frees what it leaves in reference cycles before returning.
     """
     args, kwargs = isolate(inputs)
     roots: dict[str, Any] = {"args": tuple(args), "kwargs": dict(kwargs)}
@@ -725,11 +757,8 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
         report.cases.append(case)
         # The previous sample's executions hold its results (for a whole model,
         # every parameter gradient); release them before running the next one.
-        # A run's model sits in reference cycles that only the cyclic collector
-        # frees (Qwen3.5-4B: ~7.5 GiB of GPU memory per sample, 2026-11-02).
+        # (Each run has freed its own reference cycles already: see execute.)
         reference = cand = None
-        if adapter.scope == "model":
-            gc.collect()
         from evograd.verification.reuse import native_execution
         reference = native_execution(adapter, sample, slot="verification", execute=execute)
         case.evidence["reference"] = reference.evidence()
