@@ -119,6 +119,10 @@ class TrustedPrimitive:
     #: torch leaves this primitive's own body is allowed to call.
     uses: tuple[str, ...]
     summary: str
+    #: The ATen calls the unified frontend preserves (its external regions'
+    #: targets) that this primitive gives every agent: a seed may keep one only
+    #: when the pack grants this primitive (:func:`check_preserved`).
+    preserves: tuple[str, ...]
 
 
 VENDOR_GEMM_SOURCE = '''
@@ -150,6 +154,87 @@ def vendor_gemm(a, b):
         )
     with torch.no_grad():
         return torch.mm(a, b)
+'''
+
+
+VENDOR_BMM_SOURCE = '''
+
+# ── trusted primitive: vendor_bmm ────────────────────────────────────────────
+# Fixed, outside the evolve block, and checked byte-for-byte against
+# evograd.pipelines.shared.primitives. Evolution may call it; it may not
+# change it.
+
+def vendor_bmm(a, b):
+    """Batched GEMM through the vendor library (cuBLAS via ``torch.bmm``).
+
+    ``a`` is ``[B, M, K]`` and ``b`` ``[B, K, N]`` with the same ``B``; the
+    result is ``[B, M, N]``, ``out[i] = a[i] @ b[i]``. Three dimensions and
+    no broadcasting, so the caller owns every reshape (fold extra batch
+    dimensions into ``B``) and expand. A ``.transpose(1, 2)`` argument stays a
+    metadata-only view -- cuBLAS consumes the transposed layout directly.
+
+    ``no_grad`` is not an optimisation: the pair differentiates itself, and a
+    graph built here would be a second, hidden derivative.
+    """
+    if a.dim() != 3 or b.dim() != 3:
+        raise ValueError(
+            f"vendor_bmm is 3-D; got {tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    if a.shape[0] != b.shape[0] or a.shape[2] != b.shape[1]:
+        raise ValueError(
+            f"vendor_bmm shape mismatch: {tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    with torch.no_grad():
+        return torch.bmm(a, b)
+'''
+
+
+VENDOR_GROUPED_MM_SOURCE = '''
+
+# ── trusted primitive: vendor_grouped_mm ─────────────────────────────────────
+# Fixed, outside the evolve block, and checked byte-for-byte against
+# evograd.pipelines.shared.primitives. Evolution may call it; it may not
+# change it. The grouped GEMM a mixture of experts runs (torch._grouped_mm,
+# CUTLASS on Hopper), as Inductor keeps it.
+
+def vendor_grouped_mm(a, b, offs=None):
+    """Grouped GEMM through the vendor kernel (``torch._grouped_mm``).
+
+    bfloat16 operands, each 2-D or 3-D; ``a``'s last dimension contracts with
+    ``b``'s second-to-last. A 2-D operand is cut into groups along its jagged
+    dimension by ``offs``, a 1-D int32 tensor of cumulative group ends: group
+    ``g`` spans ``offs[g - 1]:offs[g]`` (the first starts at 0), empty groups
+    allowed; what lies past ``offs[-1]`` is ignored, and the part of the
+    result it would give is unspecified.
+
+    - ``a [M, K] @ b [G, K, N] -> [M, N]``: the rows of group ``g`` times
+      ``b[g]``, ``G`` entries in ``offs`` (an expert forward or input gradient);
+    - ``a [M, K] @ b [K, N] -> [G, M, N]``: ``K`` grouped, ``out[g]`` is group
+      ``g``'s slice of ``a``'s columns times its rows of ``b`` (a weight gradient);
+    - ``a [G, M, K] @ b [K, N] -> [M, N]``: ``b``'s columns grouped, each times ``a[g]``;
+    - ``a [G, M, K] @ b [G, K, N] -> [G, M, N]``: batched, ``offs`` is ``None``.
+
+    Each operand's last two dimensions must be row- or column-major with a
+    16-byte-aligned leading stride (a ``.transpose(-2, -1)`` view qualifies);
+    the kernel refuses anything else. ``no_grad``: the pair differentiates itself.
+    """
+    if a.dtype != torch.bfloat16 or b.dtype != torch.bfloat16:
+        raise ValueError(f"vendor_grouped_mm takes bfloat16 operands; got {a.dtype} and {b.dtype}")
+    if a.dim() not in (2, 3) or b.dim() not in (2, 3) or a.shape[-1] != b.shape[-2]:
+        raise ValueError(
+            f"vendor_grouped_mm shape mismatch: {tuple(a.shape)} @ {tuple(b.shape)}"
+        )
+    if a.dim() == 3 and b.dim() == 3:
+        if offs is not None or a.shape[0] != b.shape[0]:
+            raise ValueError("vendor_grouped_mm: 3-D @ 3-D is batched; it takes no offs and "
+                             f"the same group count on both sides, got {tuple(a.shape)} @ "
+                             f"{tuple(b.shape)}")
+    elif (offs is None or offs.dim() != 1 or offs.dtype != torch.int32
+          or (3 in (a.dim(), b.dim()) and offs.shape[0] != (a if a.dim() == 3 else b).shape[0])):
+        raise ValueError("vendor_grouped_mm: a 2-D operand needs offs, a 1-D int32 tensor with "
+                         "one entry per group (the 3-D operand's first dimension)")
+    with torch.no_grad():
+        return torch._grouped_mm(a, b, offs=offs)
 '''
 
 
@@ -291,6 +376,31 @@ REGISTRY: dict[str, TrustedPrimitive] = {
         source=VENDOR_GEMM_SOURCE,
         uses=("mm",),
         summary="2-D row-major GEMM through cuBLAS (torch.mm), no autograd",
+        preserves=("aten.mm.default", "aten.addmm.default"),
+    ),
+    "vendor_bmm": TrustedPrimitive(
+        name="vendor_bmm",
+        symbols=("vendor_bmm",),
+        source=VENDOR_BMM_SOURCE,
+        uses=("bmm",),
+        summary=("3-D batched GEMM through cuBLAS (torch.bmm: [B, M, K] @ [B, K, N] -> "
+                 "[B, M, N], the same B on both sides, no broadcasting), no autograd"),
+        preserves=("aten.bmm.default",),
+    ),
+    "vendor_grouped_mm": TrustedPrimitive(
+        name="vendor_grouped_mm",
+        symbols=("vendor_grouped_mm",),
+        source=VENDOR_GROUPED_MM_SOURCE,
+        uses=("_grouped_mm",),
+        summary=("grouped GEMM through the vendor kernel (torch._grouped_mm) on bfloat16 "
+                 "operands whose last two dimensions are row- or column-major with "
+                 "16-byte-aligned strides: vendor_grouped_mm(a, b, offs), offs a 1-D int32 "
+                 "tensor of cumulative group ends along each 2-D operand's grouped dimension; "
+                 "[M, K] @ [G, K, N] -> [M, N] (row groups: a mixture of experts' forward and "
+                 "input gradient), [M, K] @ [K, N] -> [G, M, N] (K groups: its weight "
+                 "gradient), [G, M, K] @ [K, N] -> [M, N] (column groups), [G, M, K] @ "
+                 "[G, K, N] -> [G, M, N] (offs=None); no autograd"),
+        preserves=("aten._grouped_mm.default",),
     ),
     "vendor_sdpa": TrustedPrimitive(
         name="vendor_sdpa",
@@ -306,6 +416,9 @@ REGISTRY: dict[str, TrustedPrimitive] = {
                  "eager runs (half precision: cuDNN, flash under deterministic algorithms; "
                  "float32: memory-efficient attention), as an explicit forward/backward pair, "
                  "no autograd"),
+        preserves=tuple(f"aten._scaled_dot_product_{backend}_attention{phase}.default"
+                        for backend in ("cudnn", "flash", "efficient")
+                        for phase in ("", "_backward")),
     ),
     "vendor_conv": TrustedPrimitive(
         name="vendor_conv",
@@ -316,6 +429,7 @@ REGISTRY: dict[str, TrustedPrimitive] = {
                  "the kernel eager runs (cuDNN, or PyTorch's depthwise kernels where its "
                  "dispatcher prefers them), as a forward and a backward giving the input and "
                  "weight gradients, no autograd"),
+        preserves=("aten.convolution.default", "aten.convolution_backward.default"),
     ),
 }
 
@@ -349,6 +463,28 @@ def catalogue(allowed) -> list[dict[str, str]]:
          "summary": REGISTRY[name].summary}
         for name in normalize(allowed)
     ]
+
+
+def check_preserved(targets, *, allowed=()) -> None:
+    """Refuse a library call a seed keeps outside the evolve block without the grant.
+
+    The unified frontend preserves what Inductor hands to a vendor library as
+    fixed calls (its external regions, by ATen ``targets``); every agent of
+    the pack reaches the same kernels only through the granted primitives. So
+    each preserved call must be one a granted primitive runs
+    (``TrustedPrimitive.preserves``), or the seed would use a library kernel
+    no other agent may call.
+    """
+    allowed = normalize(allowed)
+    covered = {target for name in allowed for target in REGISTRY[name].preserves}
+    missing = sorted(set(targets) - covered)
+    if missing:
+        needed = sorted({spec.name for spec in REGISTRY.values()
+                         if set(spec.preserves) & set(missing)})
+        raise PrimitiveViolation(
+            f"the seed preserves {missing}, which the grant {list(allowed)} does not cover; "
+            f"the pack must grant {needed}"
+        )
 
 
 #: What a prompt says a grant reaches (TASK.md and the evolve system message).

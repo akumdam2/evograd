@@ -1,4 +1,4 @@
-"""The controlled vendor capabilities (GEMM, convolution, attention): granted by name, enforced on the AST.
+"""The controlled vendor capabilities (GEMMs, convolution, attention): granted by name, enforced on the AST.
 
 Two things are being defended here. One is that an operator which did not ask
 for a primitive cannot reach it -- the grant is per run, not a global loosening.
@@ -19,12 +19,15 @@ from torch.utils._python_dispatch import TorchDispatchMode
 
 from evograd.pipelines.shared.primitives import (
     REGISTRY,
+    VENDOR_BMM_SOURCE,
     VENDOR_CONV_SOURCE,
     VENDOR_GEMM_SOURCE,
+    VENDOR_GROUPED_MM_SOURCE,
     VENDOR_SDPA_SOURCE,
     PrimitiveViolation,
     _denied_torch_path,
     catalogue,
+    check_preserved,
     check_source,
     normalize,
     render_primitive_layer,
@@ -126,7 +129,7 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
     def _rejects(self, body: str, needle: str):
         # Rejected with each capability and without one: a grant is extra fixed
         # functions, never permission for the operation they happen to perform.
-        for allowed in ((), ("vendor_gemm",), ("vendor_conv",), ("vendor_sdpa",)):
+        for allowed in ((), *((name,) for name in REGISTRY)):
             trusted = render_primitive_layer(allowed)
             with self.assertRaises(PrimitiveViolation, msg=f"{body} @ {allowed}") as c:
                 check_source(_with_body(body, trusted=trusted), allowed=allowed)
@@ -137,6 +140,17 @@ class TestForbiddenStaysForbidden(unittest.TestCase):
         self._rejects("return torch.mm(x, w), (x,)", "torch.mm")
         self._rejects("return torch.einsum('ij,jk->ik', x, w), (x,)", "torch.einsum")
         self._rejects("return torch.bmm(x, w), (x,)", "torch.bmm")
+
+    def test_batched_and_grouped_gemm_spellings(self):
+        # vendor_bmm and vendor_grouped_mm are the only routes to these kernels.
+        self._rejects("return x.bmm(w), (x,)", ".bmm")
+        self._rejects("return torch.baddbmm(x, x, w), (x,)", "torch.baddbmm")
+        self._rejects("return torch._grouped_mm(x, w, offs=x), (x,)", "torch._grouped_mm")
+        self._rejects("return F.grouped_mm(x, w, offs=x), (x,)", "F.grouped_mm")
+        self._rejects("return torch.nn.functional.grouped_mm(x, w, offs=x), (x,)",
+                      "torch.nn.functional.grouped_mm")
+        self._rejects("return torch.ops.aten._grouped_mm(x, w, x), (x,)", "torch.ops")
+        self._rejects("return torch.ops.aten.bmm(x, w), (x,)", "torch.ops")
 
     def test_the_matmul_operator_is_the_same_violation_as_the_function(self):
         self._rejects("return x @ w, (x,)", "'@'")
@@ -525,6 +539,158 @@ class TestVendorConvCapability(unittest.TestCase):
             self.forward(torch.randn(1, 2, 8, 8), torch.randn(2, 2, 1, 1), stride=(1, 1, 1))
 
 
+class TestVendorBmmCapability(unittest.TestCase):
+    """The batched GEMM grant: opt in by name; torch.bmm semantics, nothing else."""
+
+    PAIR = "y = vendor_bmm(x, w.transpose(1, 2))\nreturn y, (x, w)"
+
+    def setUp(self):
+        self.bmm = _exec_primitive(VENDOR_BMM_SOURCE)["vendor_bmm"]
+
+    def test_the_call_is_accepted_with_the_grant_and_rejected_without(self):
+        used = check_source(_with_body(self.PAIR, trusted=VENDOR_BMM_SOURCE),
+                            allowed=("vendor_bmm",))
+        self.assertEqual(used["primitive_call_sites"], {"vendor_bmm": 1})
+        with self.assertRaises(PrimitiveViolation):
+            check_source(_with_body(self.PAIR), allowed=())
+        # The 2-D GEMM grant is not the batched one.
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(_with_body(self.PAIR, trusted=VENDOR_GEMM_SOURCE), allowed=("vendor_gemm",))
+        self.assertIn("did not grant", str(caught.exception))
+
+    def test_a_lookalike_body_is_not_the_trusted_one(self):
+        forged = VENDOR_BMM_SOURCE.replace("torch.bmm(a, b)", "torch.bmm(a, b) * 1")
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_source(_with_body(self.PAIR, trusted=forged), allowed=("vendor_bmm",))
+        self.assertIn("not the trusted one", str(caught.exception))
+
+    def test_it_is_torch_bmm_without_a_graph(self):
+        a = torch.randn(3, 4, 5, dtype=torch.float64, requires_grad=True)
+        w = torch.randn(3, 6, 5, dtype=torch.float64, requires_grad=True)
+        meta = (a.to("meta"), w.to("meta").transpose(1, 2))
+        with _Recorded() as recorded:
+            out = self.bmm(*meta)
+        self.assertEqual((recorded.ops, tuple(out.shape)), (["bmm"], (3, 4, 6)))
+        out = self.bmm(a, w.transpose(1, 2))  # a transposed operand stays a view
+        self.assertIsNone(out.grad_fn)
+        torch.testing.assert_close(out, torch.bmm(a, w.transpose(1, 2)).detach(), rtol=0, atol=0)
+
+    def test_it_refuses_what_torch_bmm_is_not(self):
+        for a, b in (((4, 5), (5, 6)),            # 2-D: vendor_gemm's
+                     ((2, 3, 4, 5), (2, 3, 5, 6)),  # 4-D: the caller folds the batch
+                     ((1, 4, 5), (3, 5, 6)),      # no broadcasting
+                     ((3, 4, 5), (3, 4, 6))):     # contraction mismatch
+            with self.subTest(a=a, b=b), self.assertRaises(ValueError):
+                self.bmm(torch.randn(*a), torch.randn(*b))
+
+
+class TestVendorGroupedMmCapability(unittest.TestCase):
+    """The grouped GEMM grant: torch._grouped_mm's four layouts and its offset rule."""
+
+    PAIR = "y = vendor_grouped_mm(x, w, offs)\nreturn y, (x, w)"
+
+    def setUp(self):
+        self.grouped = _exec_primitive(VENDOR_GROUPED_MM_SOURCE)["vendor_grouped_mm"]
+        g = torch.Generator().manual_seed(0)
+        # Small integers: every product and sum is exact in bfloat16 and float32,
+        # so the grouped kernel and a per-group loop agree bit for bit.
+        self.int_bf16 = lambda *shape: torch.randint(-2, 3, shape, generator=g).to(torch.bfloat16)
+        # Cumulative ends of groups of 8, 0 (empty) and 16 rows: offs[-1] = 24.
+        self.offs = torch.tensor([8, 8, 24], dtype=torch.int32)
+        self.groups = ((0, 8), (8, 8), (8, 24))
+
+    def test_the_call_is_accepted_with_the_grant_and_rejected_without(self):
+        used = check_source(_with_body(self.PAIR, trusted=VENDOR_GROUPED_MM_SOURCE),
+                            allowed=("vendor_grouped_mm",))
+        self.assertEqual(used["primitive_call_sites"], {"vendor_grouped_mm": 1})
+        for allowed in ((), ("vendor_gemm",), ("vendor_bmm",)):
+            with self.subTest(allowed=allowed), self.assertRaises(PrimitiveViolation):
+                check_source(_with_body(self.PAIR, trusted=render_primitive_layer(allowed)),
+                             allowed=allowed)
+
+    def test_rows_grouped_as_a_mixture_of_experts_forward(self):
+        x, w = self.int_bf16(32, 16), self.int_bf16(3, 24, 16).transpose(-2, -1)  # [G, K, N] view
+        out = self.grouped(x, w, self.offs)
+        self.assertEqual(tuple(out.shape), (32, 24))
+        for g, (lo, hi) in enumerate(self.groups):
+            torch.testing.assert_close(out[lo:hi], x[lo:hi] @ w[g], rtol=0, atol=0)
+        # Rows past offs[-1] (24..31) are not computed: nothing is asserted of them.
+
+    def test_the_contraction_grouped_as_a_weight_gradient(self):
+        dy, x = self.int_bf16(8, 24), self.int_bf16(24, 16)  # [N, M_total], [M_total, K]
+        out = self.grouped(dy, x, self.offs)
+        self.assertEqual(tuple(out.shape), (3, 8, 16))
+        for g, (lo, hi) in enumerate(self.groups):
+            torch.testing.assert_close(out[g], dy[:, lo:hi] @ x[lo:hi], rtol=0, atol=0)
+
+    def test_columns_grouped_and_batched(self):
+        a, b = self.int_bf16(3, 8, 16), self.int_bf16(16, 24)
+        out = self.grouped(a, b, self.offs)
+        self.assertEqual(tuple(out.shape), (8, 24))
+        for g, (lo, hi) in enumerate(self.groups):
+            torch.testing.assert_close(out[:, lo:hi], a[g] @ b[:, lo:hi], rtol=0, atol=0)
+        c = self.int_bf16(3, 16, 8)
+        torch.testing.assert_close(self.grouped(a, c), torch.bmm(a, c), rtol=0, atol=0)
+
+    def test_it_builds_no_graph_and_reaches_the_grouped_kernel(self):
+        x = self.int_bf16(32, 16).requires_grad_(True)
+        w = self.int_bf16(3, 16, 24).requires_grad_(True)
+        self.assertIsNone(self.grouped(x, w, self.offs).grad_fn)
+        meta = (x.to("meta"), w.to("meta"), self.offs.to("meta"))
+        with _Recorded() as recorded:
+            self.grouped(*meta)
+        self.assertEqual(recorded.ops, ["_grouped_mm"])
+
+    def test_it_refuses_what_the_kernel_does_not_take(self):
+        x, w, offs = self.int_bf16(32, 16), self.int_bf16(3, 16, 24), self.offs
+        refused = {
+            "float32 operands": (x.float(), w.float(), offs),
+            "no offs with a 2-D operand": (x, w, None),
+            "int64 offs": (x, w, offs.long()),
+            "an offs entry per group": (x, w, offs[:2]),
+            "a 2-D offs": (x, w, offs[None]),
+            "contraction mismatch": (x, self.int_bf16(3, 8, 24), offs),
+            "4-D operand": (x, w[None], offs),
+            "offs for a batched product": (self.int_bf16(3, 8, 16), w, offs),
+            "group count mismatch": (self.int_bf16(2, 8, 16), w, None),
+        }
+        for reason, args in refused.items():
+            with self.subTest(reason), self.assertRaises(ValueError):
+                self.grouped(*args)
+
+
+class TestPreservedCallsNeedTheGrant(unittest.TestCase):
+    """A unified seed may keep a vendor call fixed only when every agent may call it."""
+
+    def test_every_extern_the_frontend_preserves_is_run_by_exactly_one_primitive(self):
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+
+        for target in sorted(set(_SUPPORTED_EXTERNALS.values())):
+            with self.subTest(target=target):
+                self.assertEqual(len([s for s in REGISTRY.values() if target in s.preserves]), 1)
+        covered = {t for spec in REGISTRY.values() for t in spec.preserves}
+        self.assertEqual(covered, set(_SUPPORTED_EXTERNALS.values()))
+
+    def test_a_preserved_call_is_accepted_only_under_its_grant(self):
+        olmoe = ["aten._grouped_mm.default"] * 6
+        with self.assertRaises(PrimitiveViolation) as caught:
+            check_preserved(olmoe, allowed=("vendor_gemm",))
+        self.assertIn("['vendor_grouped_mm']", str(caught.exception))
+        check_preserved(olmoe, allowed=("vendor_gemm", "vendor_grouped_mm"))
+        gated_delta_rule = ["aten.bmm.default"] * 484
+        with self.assertRaises(PrimitiveViolation):
+            check_preserved(gated_delta_rule, allowed=("vendor_gemm",))
+        check_preserved(gated_delta_rule, allowed=("vendor_bmm", "vendor_gemm"))
+        # The 2-D GEMMs and their bias form are vendor_gemm's, attention vendor_sdpa's.
+        check_preserved(["aten.mm.default", "aten.addmm.default"], allowed=("vendor_gemm",))
+        attention = ["aten._scaled_dot_product_cudnn_attention.default",
+                     "aten._scaled_dot_product_cudnn_attention_backward.default"]
+        check_preserved(attention, allowed=("vendor_sdpa",))
+        with self.assertRaises(PrimitiveViolation):
+            check_preserved(attention + ["aten.mm.default"], allowed=("vendor_sdpa",))
+        check_preserved([], allowed=())
+
+
 class TestExistingArtifactsAreUnaffected(unittest.TestCase):
     def test_a_pure_triton_artifact_validates_with_no_capability(self):
         usage = check_source(PURE_TRITON, allowed=())
@@ -690,6 +856,8 @@ class TestRegistryShape(unittest.TestCase):
             for symbol in spec.symbols:
                 self.assertIn(f"def {symbol}(", spec.source)
             self.assertTrue(spec.summary)
+            self.assertTrue(spec.preserves)
+            self.assertIn(f"# ── trusted primitive: {name} ", spec.source)
 
 
 if __name__ == "__main__":
