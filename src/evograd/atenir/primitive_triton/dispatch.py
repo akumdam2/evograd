@@ -108,6 +108,15 @@ def _keyword(node, name, default=None):
                  if entry.get("keyword") == name), default)
 
 
+def _option(node, index, name, default):
+    """An argument by position or keyword: a constant's value, a graph value's entry."""
+    positional = _positional_entries(node)
+    entry = positional[index] if index < len(positional) else node.get("kwargs_ordered", {}).get(name)
+    if entry is None:
+        return default
+    return entry if entry["kind"] in {"node", "sym_node", "shape_list"} else _decode_argument(entry, {})
+
+
 def _positional_entries(node):
     return node.get("positional_args", [entry for entry in node.get("args_ordered", ())
                                         if "keyword" not in entry])
@@ -308,25 +317,16 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _view_rt
 
-    if has_shape_list and "aten.index_put" in target:
-        accumulate = bool(scalar_args[-1]) if scalar_args else False
+    if has_shape_list and target == "aten.index_put.default":
+        accumulate = bool(_option(node, 3, "accumulate", False))
 
         def _index_put(base, indices, values):
-            return scatter_gather.advanced_index_put_dim0(
-                base,
-                indices,
-                values,
-                accumulate=accumulate,
-            )
+            return scatter_gather.advanced_index_put(base, indices, values, accumulate)
 
         return _index_put
 
-    if has_shape_list and "aten.index.Tensor" in target:
-
-        def _index(input, indices):
-            return scatter_gather.advanced_index_dim0(input, indices)
-
-        return _index
+    if has_shape_list and target == "aten.index.Tensor":
+        return scatter_gather.advanced_index
 
     if has_shape_list and "aten.split_with_sizes" in target:
         dim = int(scalar_args[-1]) if scalar_args else 0
@@ -347,11 +347,11 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
         return _full
 
-    if has_shape_list and "aten.cat" in target:
-        dim = int(scalar_args[-1]) if scalar_args else 0
+    if has_shape_list and target == "aten.cat.default":
+        dim = int(_option(node, 1, "dim", 0))
 
         def _cat(tensors):
-            return scatter_gather.cat2(tensors, dim)
+            return scatter_gather.cat(tensors, dim)
 
         return _cat
 
@@ -436,24 +436,19 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         # rounding_mode is a str in scalar_args; numeric scalar comes first for Scalar variants
         rounding_mode = next((v for v in scalar_args if isinstance(v, str)), None)
         numeric = [v for v in scalar_args if not isinstance(v, str) and v is not None]
-        if rounding_mode == "trunc":
+        if rounding_mode in ("trunc", "floor"):
+            # The divisor keeps its type: an integer tensor // an int stays integer.
             if n_tensors >= 2:
-                return lambda a, b: elementwise.trunc_(elementwise.div_tt(a, b))
-            s = float(numeric[0]) if numeric else 1.0
+                def _div_rounded_tt(a, b):
+                    return elementwise.div_rounded(a, b, rounding_mode)
 
-            def _div_trunc_s(a):
-                return elementwise.trunc_(elementwise.div_scalar(a, s))
+                return _div_rounded_tt
+            s = numeric[0] if numeric else 1
 
-            return _div_trunc_s
-        if rounding_mode == "floor":
-            if n_tensors >= 2:
-                return lambda a, b: elementwise.floor_(elementwise.div_tt(a, b))
-            s = float(numeric[0]) if numeric else 1.0
+            def _div_rounded_s(a):
+                return elementwise.div_rounded(a, s, rounding_mode)
 
-            def _div_floor_s(a):
-                return elementwise.floor_(elementwise.div_scalar(a, s))
-
-            return _div_floor_s
+            return _div_rounded_s
         if n_tensors >= 2:
             return elementwise.div_tt
         s = numeric[0] if numeric else 1
@@ -798,6 +793,13 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
         positional = _positional_entries(node)
         dim = _keyword(node, "dim", positional[1]["value"] if len(positional) > 1 else -1)
         descending = _keyword(node, "descending", positional[2]["value"] if len(positional) > 2 else False)
+        keys = (node.get("input_nodes") or [{}])[0].get("dtype", "")
+        if keys and not keys.startswith(("torch.float", "torch.bfloat")):
+            # Integer keys: a stable counting sort, which any tie order permits.
+            def _integer_sort(a):
+                return reduction.integer_sort(a, dim, descending)
+
+            return _integer_sort
         return reduction.make_sort_kernel(dim, descending, stable=_keyword(node, "stable", False))
 
     # ── Category 3: new reductions ────────────────────────────────────────────
@@ -837,7 +839,7 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
 
     if "aten.cumsum" in target:
         dim_arg = int(dims[0]) if dims else (int(scalar_args[0]) if scalar_args else 0)
-        return reduction.make_cumsum_kernel(dim_arg)
+        return reduction.make_cumsum_kernel(dim_arg, dtype=_keyword(node, "dtype"))
 
     # ── allocation op with positional-only args ────────────────────────────────
 
@@ -907,6 +909,16 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return src.to(dtype=dst.dtype, device=dst.device).contiguous()
 
         return _copy_
+
+    if target == "aten.copy.default":
+        # copy(self, src): src's values, in self's shape, dtype and device, in
+        # fresh storage (never src itself).
+        def _copy(dst, src):
+            out = torch.empty(dst.shape, dtype=dst.dtype, device=dst.device)
+            out.copy_(src)
+            return out
+
+        return _copy
 
     if "aten.clone" in target or "aten.copy" in target or "aten.contiguous" in target:
         return lambda a: a.contiguous().clone()
@@ -1046,6 +1058,38 @@ def make_kernel(node: dict) -> Callable:  # noqa: C901 (complex but intentionall
             return scatter_gather.gather(self_t, dim, index)
 
         return gather_kernel
+
+    if target == "aten._embedding_bag.default":
+        # Sum mode only: no per-sample weights, padding index or trailing offset.
+        if [_option(node, i, name, default) for i, (name, default) in enumerate(
+                (("scale_grad_by_freq", False), ("mode", 0), ("sparse", False),
+                 ("per_sample_weights", None), ("include_last_offset", False),
+                 ("padding_idx", -1)), start=3)] != [False, 0, False, None, False, -1]:
+            return _generic_fallback(target, node)
+        return scatter_gather.embedding_bag_sum
+
+    if target == "aten._embedding_bag_backward.default":
+        num_weights = _option(node, 6, "num_weights", None)
+        if [_option(node, i, name, default) for i, (name, default) in enumerate(
+                (("scale_grad_by_freq", False), ("mode", 0), ("sparse", False),
+                 ("per_sample_weights", None), ("padding_idx", -1)), start=7)] != [False, 0, False, None, -1]:
+            return _generic_fallback(target, node)
+
+        def _embedding_bag_backward(grad, indices, offsets, offset2bag, bag_size, max_indices):
+            return scatter_gather.embedding_bag_sum_backward(grad, indices, offset2bag, num_weights)
+
+        return _embedding_bag_backward
+
+    if target == "aten.histc.default":
+        bins, low, high = (_option(node, i, name, default) for i, (name, default) in enumerate(
+            (("bins", 100), ("min", 0), ("max", 0)), start=1))
+        if not low < high:  # an empty range means the data's own min and max
+            return _generic_fallback(target, node)
+
+        def _histc(a):
+            return scatter_gather.histc(a, bins, low, high)
+
+        return _histc
 
     # ── misc ──────────────────────────────────────────────────────────────────
 

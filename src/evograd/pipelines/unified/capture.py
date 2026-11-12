@@ -54,7 +54,36 @@ _SUPPORTED_EXTERNALS = {
         "aten._scaled_dot_product_flash_attention.default",
     "torch.ops.aten._scaled_dot_product_flash_attention_backward.default":
         "aten._scaled_dot_product_flash_attention_backward.default",
+    # float32, which neither cuDNN nor flash takes: memory-efficient attention in
+    # every mode, as vendor_sdpa runs it (for float32 only: _FLOAT32_EXTERNALS).
+    "torch.ops.aten._scaled_dot_product_efficient_attention.default":
+        "aten._scaled_dot_product_efficient_attention.default",
+    "torch.ops.aten._scaled_dot_product_efficient_attention_backward.default":
+        "aten._scaled_dot_product_efficient_attention_backward.default",
+    # A mixture of experts' grouped GEMM (cuBLAS/CUTLASS), forward and backward.
+    "extern_kernels._grouped_mm": "aten._grouped_mm.default",
 }
+
+#: Externs preserved for float32 operands only. Half-precision attention that
+#: the dispatcher hands to memory-efficient attention (a masked one, say) is
+#: not what vendor_sdpa runs, so it is not pinned to that backend.
+_FLOAT32_EXTERNALS = frozenset({
+    "torch.ops.aten._scaled_dot_product_efficient_attention.default",
+    "torch.ops.aten._scaled_dot_product_efficient_attention_backward.default",
+})
+
+# Compiler fallbacks to ATen's own CUDA kernels, not to a vendor library: the
+# seed implements their semantics itself, so they stay in the evolvable region
+# and the code generator must lower them (or refuse the seed).
+_SEED_LOWERED_FALLBACKS = frozenset({
+    "torch.ops.aten._embedding_bag.default",
+    "torch.ops.aten._embedding_bag_backward.default",
+    # Inductor's GPU backend generates the scan itself; its CPU backend (the
+    # seed generator's CPU dry run) falls back to ATen.
+    "torch.ops.aten.cumsum.default",
+    "torch.ops.aten.histc.default",
+    "torch.ops.aten.sort.stable",
+})
 
 
 def _encode_arg(value: Any) -> dict[str, Any]:
@@ -99,6 +128,79 @@ def _serialize_graph(gm: Any) -> dict[str, Any]:
     return graph
 
 
+#: Calls whose result is their first argument's value.
+_IDENTITIES = frozenset({"aten.alias.default", "aten.clone.default", "aten.detach.default"})
+
+
+#: Allocations, whose value is whatever the fresh storage holds.
+_UNINITIALIZED = frozenset({"empty", "empty_like", "empty_strided", "empty_permuted",
+                            "new_empty", "new_empty_strided"})
+
+
+def _deterministic(target: Any) -> bool:
+    """Whether two calls of ``target`` on the same inputs give the same value:
+    ``getitem``, or a functional ATen op that is not an allocation and is not
+    tagged random (``rand_like``, ``native_dropout``, ``bernoulli``) or bitwise
+    nondeterministic."""
+    import operator
+
+    import torch
+
+    if target is operator.getitem:
+        return True
+    return (isinstance(target, torch._ops.OpOverload) and not target._schema.is_mutable
+            and target._schema.name.split("::")[-1] not in _UNINITIALIZED
+            and not {torch.Tag.nondeterministic_seeded,
+                     torch.Tag.nondeterministic_bitwise} & set(target.tags))
+
+
+def _same_call(semantic: dict[str, Any], origin: Any, by_name: dict[str, Any]) -> bool:
+    """Whether the compiler's call ``origin`` passes what ``semantic`` passes.
+
+    Post-grad passes may drop a value-preserving node (``remove_noop_ops``
+    removes an alias or a clone) or re-create one the graph already has (the
+    same target on the same inputs, under a new name). Arguments are compared
+    by the value they name: identities resolved, a re-created node matched to
+    the semantic node it repeats.
+    """
+    compiler = {node.name: node for node in origin.graph.nodes}
+
+    def canonical(entry, from_compiler):
+        if isinstance(entry, list):
+            return [canonical(item, from_compiler) for item in entry]
+        if not isinstance(entry, dict):
+            return entry
+        if entry.get("kind") != "node":
+            return {key: canonical(item, from_compiler) for key, item in entry.items()}
+        name = entry["name"]
+        if from_compiler and name not in by_name:
+            name = repeated(compiler.get(name)) or name
+        node = by_name.get(name)
+        while node is not None and node.get("target") in _IDENTITIES:
+            name = node["positional_args"][0]["name"]
+            node = by_name.get(name)
+        return {**entry, "name": name}
+
+    def call(target, args, kwargs, from_compiler):
+        return target, canonical(args, from_compiler), canonical(kwargs or {}, from_compiler)
+
+    def repeated(node):
+        # Only a call that gives the same value each time repeats another.
+        if node is None or node.op != "call_function" or not _deterministic(node.target):
+            return None
+        key = call(str(node.target), [_encode_arg(a) for a in node.args],
+                   {k: _encode_arg(v) for k, v in node.kwargs.items()}, True)
+        same = [n["name"] for n in by_name.values() if n.get("op") == "call_function"
+                and call(n.get("target"), n.get("positional_args"), n.get("kwargs_ordered"),
+                         False) == key]
+        return same[0] if len(same) == 1 else None
+
+    return (call(semantic["target"], semantic.get("positional_args"),
+                 semantic.get("kwargs_ordered"), False)
+            == call(semantic["target"], [_encode_arg(a) for a in origin.args],
+                    {k: _encode_arg(v) for k, v in origin.kwargs.items()}, True))
+
+
 def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[ExternalRegion]:
     from torch._inductor import ir
 
@@ -123,6 +225,8 @@ def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[E
             continue
         seen_buffers.add(id(buffer))
         kernel = getattr(buffer, "python_kernel_name", None)
+        if kernel in _SEED_LOWERED_FALLBACKS:
+            continue
         target = _SUPPORTED_EXTERNALS.get(kernel)
         if target is None:
             raise NotImplementedError(
@@ -140,14 +244,17 @@ def _external_regions(side: str, lowering: Any, graph: dict[str, Any]) -> list[E
             semantic is None
             or semantic.get("target") != target
             or str(getattr(origin, "target", "")) != target
-            or semantic.get("positional_args") != [_encode_arg(a) for a in origin.args]
-            or semantic.get("kwargs_ordered")
-            != {k: _encode_arg(v) for k, v in origin.kwargs.items()}
+            or not _same_call(semantic, origin, by_name)
         ):
             raise NotImplementedError(
                 f"Unified pipeline cannot map {side} {kernel} ({name!r}) back to an "
                 "unchanged semantic ATen call; compiler fusion/rewriting needs "
                 "an explicit region mapping"
+            )
+        if kernel in _FLOAT32_EXTERNALS and semantic["input_nodes"][0]["dtype"] != "torch.float32":
+            raise NotImplementedError(
+                f"Unified pipeline preserves {kernel} for float32 operands only, not "
+                f"{semantic['input_nodes'][0]['dtype']}"
             )
         if name in seen_nodes:
             raise NotImplementedError(

@@ -248,7 +248,10 @@ def capture_inductor_pair(
     import torch._inductor.config as inductor_config
     from functorch.compile import aot_function, min_cut_rematerialization_partition
     from torch._inductor.compile_fx import compile_fx_inner
+    from torch._guards import detect_fake_mode
     from torch._inductor.decomposition import select_decomp_table
+    from torch._subclasses.fake_tensor import FakeTensorMode
+    from torch.fx.experimental.symbolic_shapes import ShapeEnv
 
     from evograd.opdecl.importing import resolve_callable
     from evograd.opdecl.inputs import as_output_tuple, make_case_inputs, upstream_grad_values
@@ -314,9 +317,17 @@ def capture_inductor_pair(
             graph_observer("joint", gm)
         return min_cut_rematerialization_partition(gm, joint_inputs, **kwargs)
 
+    # Inductor may lay out a saved activation its own way (stride padding,
+    # layout optimization). torch.compile hands the forward's actual output
+    # strides to the backward's compile through a TracingContext; without one
+    # the backward is compiled for the traced strides and rejects the saved
+    # tensor at run time. Run the capture the way compile_fx runs aot_autograd.
+    fake_mode = detect_fake_mode(tensors) or FakeTensorMode(
+        shape_env=ShapeEnv() if dynamic else None)
     # A warm FX-graph cache skips codegen entirely, so there would be no module
     # to record. Force a real compile for the duration of the capture.
-    with inductor_config.patch(force_disable_caches=True):
+    with inductor_config.patch(force_disable_caches=True), \
+            torch._guards.tracing(torch._guards.TracingContext(fake_mode)):
         with _record_generated_modules(sources, modules, slot, lowering_observer):
             compiled = aot_function(
                 traced,

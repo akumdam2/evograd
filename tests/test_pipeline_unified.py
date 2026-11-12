@@ -208,7 +208,7 @@ class TestPreservedAttention(unittest.TestCase):
              'positional_args': [{'kind': 'node', 'name': 'q'}, {'kind': 'node', 'name': 'q'}]},
             {'op': 'output', 'name': 'output', 'args': [['out', 'lse', 'q', 'other']]},
         ]}
-        self.assertEqual(_sdpa_state_outputs(graph, 1), {'lse'})
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'lse': False})
 
     def test_a_flash_capture_renders_on_the_same_helpers_in_cudnn_order(self):
         from evograd.pipelines.unified.codegen import UNIFIED_SDPA_SOURCE, _sdpa_call
@@ -396,6 +396,748 @@ class TestFixedConfiguration(unittest.TestCase):
             self.assertEqual(selected.coverage, (workload,))
             self.assertNotIn('benchmark_workloads', build.call_args.kwargs)
             self.assertEqual(selected.make_inputs, op.make_inputs)
+
+
+def _rendered(fn, *inputs):
+    """``fn``'s ATen graph as the unified seed renders it: each node's expression,
+    and the graph's outputs computed from them on CPU (layout and host nodes only)."""
+    from torch.fx.experimental.proxy_tensor import make_fx
+
+    from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder, _pyname
+    from evograd.pipelines.unified.capture import _serialize_graph
+    from evograd.pipelines.unified.codegen import _outputs, _semantic_expr
+
+    graph = _serialize_graph(make_fx(fn)(*inputs))
+    builder, values, expressions = _ProgramBuilder(), {}, {}
+    placeholders = [n['name'] for n in graph['nodes'] if n['op'] == 'placeholder']
+    values.update({_pyname(name): value for name, value in zip(placeholders, inputs)})
+    for node in graph['nodes']:
+        if node['op'] == 'call_function':
+            expressions[node['target']] = expression = _semantic_expr(builder, node)
+            try:
+                values[_pyname(node['name'])] = eval(expression, {'torch': torch}, values)
+            except (NameError, NotImplementedError):  # a Triton kernel's (CUDA-only) result
+                pass
+    return expressions, [values.get(_pyname(name)) for name in _outputs(graph)]
+
+
+def _node(fn, *inputs, target):
+    from torch.fx.experimental.proxy_tensor import make_fx
+
+    from evograd.pipelines.unified.capture import _serialize_graph
+
+    graph = _serialize_graph(make_fx(fn)(*inputs))
+    return next(n for n in graph['nodes'] if n.get('target') == target)
+
+
+def _nonlocals(kernel):
+    import inspect
+
+    return inspect.getclosurevars(kernel).nonlocals
+
+
+class TestSeedLowerings(unittest.TestCase):
+    """Semantic nodes the new benchmark cases reach, rendered without a GPU."""
+
+    def test_unbind_and_split_with_sizes_render_as_views(self):
+        # qkv.unbind(0) in Qwen2-VL's vision attention and DLRM's interaction;
+        # in_proj splits in Qwen3.5's gated delta net.
+        x = torch.randn(3, 4, 5)
+        expressions, outputs = _rendered(lambda x: [*x.unbind(1), *torch.split(x, [1, 4], 2)], x)
+        self.assertEqual(expressions['aten.unbind.int'], 't_x_1.unbind(1)')
+        self.assertEqual(expressions['aten.split_with_sizes.default'], 't_x_1.split([1, 4], 2)')
+        for got, want in zip(outputs, [*x.unbind(1), *torch.split(x, [1, 4], 2)], strict=True):
+            self.assertTrue(torch.equal(got, want))
+
+    def test_embedding_bag_sum_dispatches_to_handwritten_kernels(self):
+        # DLRM's embedding tables: Inductor falls back to ATen, the seed lowers it.
+        from evograd.atenir.primitive_triton import scatter_gather
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.capture import _SEED_LOWERED_FALLBACKS
+
+        self.assertLessEqual({'torch.ops.aten._embedding_bag.default',
+                              'torch.ops.aten._embedding_bag_backward.default'},
+                             _SEED_LOWERED_FALLBACKS)
+        weight, indices, offsets = torch.randn(9, 4), torch.tensor([1, 2, 1]), torch.tensor([0, 2])
+        bag = _node(torch.ops.aten._embedding_bag, weight, indices, offsets,
+                    target='aten._embedding_bag.default')
+        self.assertIs(make_kernel(bag), scatter_gather.embedding_bag_sum)
+        mean = _node(lambda w, i, o: torch.ops.aten._embedding_bag(w, i, o, False, 1),
+                     weight, indices, offsets, target='aten._embedding_bag.default')
+        self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(mean)))
+
+    def test_an_integer_sort_lowers_to_the_handwritten_counting_sort(self):
+        # OLMoE sorts its 32768 int64 expert ids (sort.default); sort.stable by keyword.
+        import ast
+
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import _audit_primitive_library, _semantic_expr
+
+        keys = torch.randint(0, 5, (6, 4))
+        for fn, options in ((lambda k: torch.sort(k), {'dim': -1, 'descending': False}),
+                            (lambda k: torch.sort(k, dim=0, descending=True, stable=True),
+                             {'dim': 0, 'descending': True})):
+            node = _node(fn, keys, target=('aten.sort.stable' if options['dim'] == 0
+                                           else 'aten.sort.default'))
+            kernel = make_kernel(node)
+            self.assertEqual(_nonlocals(kernel), options)
+            builder = _ProgramBuilder()
+            expression = _semantic_expr(builder, node)
+            library = builder.render_kernel_library()
+            _audit_primitive_library(ast.parse(library))
+            self.assertIn('def integer_sort(', library)
+            self.assertNotIn('torch.sort', expression + library)
+        floats = make_kernel(_node(lambda a: torch.sort(a, dim=0, descending=True), torch.randn(8),
+                                   target='aten.sort.default'))
+        self.assertEqual(floats.__name__, 'triton_sort')
+
+    def test_moe_routing_counts_offsets_and_inverse_permutation(self):
+        # OLMoE: histc of the sorted ids, an int32 cumsum of the counts (the
+        # grouped GEMM's offsets) and fresh storage for the inverse permutation.
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+
+        histc = make_kernel(_node(lambda x: torch.histc(x, 64, 0, 63), torch.rand(8),
+                                  target='aten.histc.default'))
+        self.assertEqual({k: _nonlocals(histc)[k] for k in ('bins', 'low', 'high')},
+                         {'bins': 64, 'low': 0, 'high': 63})
+        data_range = _node(lambda x: torch.histc(x, 8), torch.rand(8), target='aten.histc.default')
+        self.assertTrue(_ProgramBuilder()._is_generic_fallback(make_kernel(data_range)))
+        cumsum = make_kernel(_node(lambda c: torch.cumsum(c, 0, dtype=torch.int32),
+                                   torch.zeros(4, dtype=torch.int32), target='aten.cumsum.default'))
+        self.assertEqual(_nonlocals(cumsum)['_dtype'], torch.int32)
+        _, (empty,) = _rendered(lambda x: [torch.empty([5], dtype=torch.int64)], torch.randn(2))
+        self.assertEqual((empty.shape, empty.dtype), ((5,), torch.int64))
+
+    def test_grouped_gemm_is_preserved(self):
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        self.assertEqual(_SUPPORTED_EXTERNALS['extern_kernels._grouped_mm'], 'aten._grouped_mm.default')
+        grouped = {'name': 'gmm', 'external_kernel': 'extern_kernels._grouped_mm',
+                   'target': 'aten._grouped_mm.default',
+                   'positional_args': [{'kind': 'node', 'name': n} for n in ('x', 'w', 'offs')]}
+        self.assertIn('return _unified_extern_kernels._grouped_mm(arg0, arg1, arg2)',
+                      _external_wrapper('forward', grouped)[0])
+
+    def test_float32_attention_is_preserved_with_its_state_unpinned(self):
+        # DiT's float32 attention: memory-efficient attention, as vendor_sdpa runs it.
+        from evograd.pipelines.unified.capture import _SUPPORTED_EXTERNALS
+        from evograd.pipelines.unified.codegen import _external_wrapper, _sdpa_state_outputs
+
+        forward = 'torch.ops.aten._scaled_dot_product_efficient_attention.default'
+        backward = 'torch.ops.aten._scaled_dot_product_efficient_attention_backward.default'
+        self.assertEqual(_SUPPORTED_EXTERNALS[backward],
+                         'aten._scaled_dot_product_efficient_attention_backward.default')
+        source, _, _ = _external_wrapper('forward', _EFFICIENT_NODE)
+        self.assertIn('return torch.ops.aten._scaled_dot_product_efficient_attention.default('
+                      'arg0, arg1, arg2, None, True)', source)
+        getitem = '<built-in function getitem>'
+        graph = {'nodes': [
+            {'op': 'call_function', 'name': 'attn', 'external_kernel': forward},
+            *({'op': 'call_function', 'name': f'g{i}', 'target': getitem,
+               'positional_args': [{'kind': 'node', 'name': 'attn'}, {'kind': 'scalar', 'value': i}]}
+              for i in range(4)),
+            {'op': 'output', 'name': 'output', 'args': [['g0', 'g1', 'g2', 'g3']]},
+        ]}
+        # logsumexp (on the GPU) and the rng state, which this backend keeps on the host.
+        self.assertEqual(_sdpa_state_outputs(graph, 1), {'g1': False, 'g2': True, 'g3': True})
+
+    def test_cat_of_any_arity_and_multi_tensor_indexing_render_handwritten(self):
+        # DiT's and Qwen2-VL's attention backward cat three tensors, DLRM's
+        # interaction indexes [B, 27, 27] with two index tensors (and puts back).
+        import ast
+
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import _audit_primitive_library, _semantic_expr
+
+        a, b, c = torch.randn(2, 3), torch.randn(2, 1), torch.randn(2, 4)
+        i, j = torch.tensor([0, 1, 2]), torch.tensor([1, 2, 2])
+        z, v = torch.randn(2, 3, 3), torch.randn(2, 3)
+        nodes = {
+            'cat': _node(lambda a, b, c: torch.cat([a, b, c], 1), a, b, c, target='aten.cat.default'),
+            'index': _node(lambda z, i, j: z[:, i, j], z, i, j, target='aten.index.Tensor'),
+            'index_put': _node(lambda z, i, j, v: torch.ops.aten.index_put(z, [None, i, j], v, True),
+                               z, i, j, v, target='aten.index_put.default'),
+        }
+        self.assertEqual(_nonlocals(make_kernel(nodes['cat']))['dim'], 1)
+        self.assertIs(_nonlocals(make_kernel(nodes['index_put']))['accumulate'], True)
+        builder = _ProgramBuilder()
+        expressions = {name: _semantic_expr(builder, node) for name, node in nodes.items()}
+        self.assertEqual(expressions['index'], 'advanced_index(t_z_1, (None, t_i_1, t_j_1))')
+        library = builder.render_kernel_library()
+        _audit_primitive_library(ast.parse(library))
+        for helper in ('def cat(', 'def advanced_index(', 'def advanced_index_put(',
+                       'def _copy_into_kernel(', 'def _index_put_kernel(', 'def _index_put_order('):
+            self.assertIn(helper, library)
+        for library_call in ('torch.cat', 'index_put_(', 'tl.atomic', '.contiguous()', '.clone()'):
+            self.assertNotIn(library_call, library[library.index('def _offset_of('):])
+
+    def test_integer_floor_division_keeps_an_integer_divisor(self):
+        # OLMoE's sorted expert ids // 8 (div.Tensor_mode, rounding_mode='floor').
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+
+        ids = torch.randint(0, 64, (16,))
+        for mode in ('floor', 'trunc'):
+            kernel = make_kernel(_node(lambda i: torch.div(i, 8, rounding_mode=mode), ids,
+                                       target='aten.div.Tensor_mode'))
+            self.assertEqual(_nonlocals(kernel), {'s': 8, 'rounding_mode': mode})
+            self.assertIsInstance(_nonlocals(kernel)['s'], int)
+
+    def test_strided_storage_zero_padding_flip_and_copy(self):
+        # Qwen3.5's gated delta rule pads by zero, flips a chunk axis, and copies
+        # into fresh strided storage; the copy is of the source, not the storage.
+        from evograd.atenir.primitive_triton.dispatch import make_kernel
+        from evograd.pipelines.b_dispatch.program_codegen import _ProgramBuilder
+        from evograd.pipelines.unified.codegen import UnsupportedSemanticNode, _semantic_expr
+
+        x = torch.randn(2, 3)
+        _, (strided, padded) = _rendered(
+            lambda x: [x.new_empty_strided((3, 2), (1, 3)), torch.constant_pad_nd(x, [0, 0, 0, 0])], x)
+        self.assertEqual((strided.shape, strided.stride(), strided.dtype), ((3, 2), (1, 3), x.dtype))
+        self.assertIs(padded, x)
+        flipped = _node(lambda x: torch.ops.prims.rev(x, [1]), x, target='prims.rev.default')
+        self.assertEqual(_semantic_expr(_ProgramBuilder(), flipped), 'flip_copy(t_x_1, [1])')
+        padding = _node(lambda x: torch.constant_pad_nd(x, [1, 0]), x,
+                        target='aten.constant_pad_nd.default')
+        with self.assertRaisesRegex(UnsupportedSemanticNode, 'nonzero padding'):
+            _semantic_expr(_ProgramBuilder(), padding)
+        dst, src = torch.empty(2, 3, dtype=torch.float64), torch.randn(3)
+        copy = make_kernel(_node(torch.ops.aten.copy, dst, src, target='aten.copy.default'))
+        self.assertTrue(torch.equal(copy(dst, src), src.to(torch.float64).expand(2, 3)))
+
+
+_EFFICIENT_NODE = {
+    'name': 'attn', 'external_kernel': 'torch.ops.aten._scaled_dot_product_efficient_attention.default',
+    'target': 'aten._scaled_dot_product_efficient_attention.default',
+    'positional_args': [{'kind': 'node', 'name': n} for n in 'qkv']
+    + [{'kind': 'scalar', 'value': None}, {'kind': 'scalar', 'value': True}],
+}
+
+
+#: Runs in a child process with TRITON_INTERPRET=1: the handwritten kernels on
+#: CPU, against ATen's CPU kernels and the CUDA backward's summation order.
+_INTERPRETED_KERNELS = r"""
+import json
+import tests._triton_interpreter  # the interpreter as compiled Triton: int() of scalars, bf16 rounding
+import torch
+import torch.nn.functional as F
+from evograd.atenir.primitive_triton import scatter_gather as sg
+
+torch.manual_seed(0)
+result = {}
+weight, indices = torch.randn(50, 70), torch.randint(0, 50, (23,))
+offsets, grad = torch.tensor([0, 3, 3, 10, 15, 22]), torch.randn(6, 70)
+out, offset2bag, bag_size, max_indices = sg.embedding_bag_sum(weight, indices, offsets)
+result['forward'] = torch.equal(out, F.embedding_bag(indices, weight, offsets, mode='sum'))
+result['bags'] = (offset2bag.tolist() == [0] * 3 + [2] * 7 + [3] * 5 + [4] * 7 + [5]
+                  and bag_size.tolist() == [3, 0, 7, 5, 7, 1] and max_indices.numel() == 0)
+reference = weight.clone().requires_grad_(True)
+F.embedding_bag(indices, reference, offsets, mode='sum').backward(grad)
+result['backward'] = torch.equal(sg.embedding_bag_sum_backward(grad, indices, offset2bag, 50),
+                                 reference.grad)
+# 24 positions of row 7: the CUDA backward sums runs of ten, then the runs.
+indices = torch.full((25,), 7)
+indices[3] = 2
+offsets, grad = torch.arange(0, 25, 5), torch.randn(5, 70) * 1e3
+_, offset2bag, _, _ = sg.embedding_bag_sum(weight, indices, offsets)
+dweight = sg.embedding_bag_sum_backward(grad, indices, offset2bag, 50)
+rows = [grad[int(offset2bag[k])] for k in range(25) if int(indices[k]) == 7]
+runs, flat = torch.zeros(70), torch.zeros(70)
+for start in range(0, len(rows), 10):
+    run = torch.zeros(70)
+    for row in rows[start:start + 10]:
+        run = run + row
+    runs = runs + run
+for row in rows:
+    flat = flat + row
+result['cuda_order'] = (torch.equal(dweight[7], runs) and not torch.equal(runs, flat)
+                        and torch.equal(dweight[2], grad[0]) and int(dweight.abs().sum(1).gt(0).sum()) == 2)
+ids = torch.randint(0, 66, (1000,))
+result['histc_int'] = torch.equal(sg.histc(ids.to(torch.int32), 64, 0, 63),
+                                  torch.histc(ids.float(), 64, 0, 63).to(torch.int32))
+values = torch.randn(4000) * 3
+result['histc_float'] = torch.equal(sg.histc(values, 37, -2.5, 4.0), torch.histc(values, 37, -2.5, 4.0))
+from evograd.pipelines.b_dispatch.layout_kernels import flip_copy
+a = torch.randn(3, 4, 5)
+result['flip'] = all(torch.equal(flip_copy(t, dims), torch.flip(t, dims))
+                     for t in (a, a.transpose(0, 2)) for dims in ([0], [2], [0, 2], [1, 2, 0]))
+from evograd.atenir.primitive_triton.reduction import integer_sort
+def stable_sort(name, keys, dim=-1, descending=False):
+    values, order = integer_sort(keys, dim, descending)
+    expected = torch.sort(keys, dim=dim, descending=descending, stable=True)
+    result['sort_' + name] = (torch.equal(values, expected.values) and values.dtype == keys.dtype
+                              and torch.equal(order, expected.indices) and order.dtype == torch.int64)
+# OLMoE's 32768 expert ids; then ties, presorted runs and ragged blocks (256 keys each).
+stable_sort('olmoe', torch.randint(0, 64, (32768,)))
+stable_sort('duplicates', torch.randint(-2, 3, (2500,)))
+stable_sort('all_equal', torch.full((1500,), 7))
+stable_sort('sorted', torch.arange(-300, 1700))
+stable_sort('reversed', torch.arange(1700, -300, -1))
+stable_sort('descending', torch.randint(0, 9, (2049,)), descending=True)
+stable_sort('int32', torch.randint(0, 40, (777,), dtype=torch.int32))
+stable_sort('int8', torch.randint(-128, 128, (300,), dtype=torch.int8), descending=True)
+stable_sort('bool', torch.rand(500) > 0.5)
+stable_sort('rows', torch.randint(0, 9, (5, 70)))
+stable_sort('dim0', torch.randint(0, 9, (70, 3)), dim=0, descending=True)
+stable_sort('single', torch.tensor([4]))
+stable_sort('empty', torch.empty(0, dtype=torch.int64))
+for name, keys in (('wide_range', torch.tensor([0, 4096])), ('float_keys', torch.randn(4))):
+    try:
+        integer_sort(keys)
+        result['refuses_' + name] = False
+    except NotImplementedError:
+        result['refuses_' + name] = True
+print(json.dumps(result))
+"""
+
+
+#: Runs in a child process with TRITON_INTERPRET=1, one part per process:
+#: aten.cat, aten.index.Tensor and aten.index_put against ATen's CPU kernels,
+#: the CUDA index_put orders against an emulation, and the exact configurations
+#: of the seeds that reached them (DLRM's interaction, Qwen2-VL's and DiT's
+#: attention backward, Qwen3.5's gated-delta in_proj backward); integer
+#: division under div's rounding modes (OLMoE's expert ids // 8).
+_INTERPRETED_LOWERINGS = r"""
+import json
+import sys
+import tests._triton_interpreter  # noqa: F401  (the interpreter as compiled Triton)
+import torch
+from unittest.mock import patch
+from evograd.atenir.primitive_triton import scatter_gather as sg
+
+torch.manual_seed(0)
+torch.use_deterministic_algorithms(True)  # ATen's serial CPU index_put
+part = sys.argv[1]
+result = {}
+aten_index = torch.ops.aten.index.Tensor
+aten_put = torch.ops.aten.index_put.default
+real_order = sg._index_put_order
+cuda = lambda device, slice_size: real_order(torch.device('cuda'), slice_size)
+
+
+def same(a, b):
+    return a.dtype == b.dtype and a.shape == b.shape and torch.equal(a, b)
+
+
+def strided(shape, strides, dtype=torch.float32):
+    storage = torch.randn(sum((s - 1) * t for s, t in zip(shape, strides)) + 1).to(dtype)
+    return storage.as_strided(shape, strides)
+
+
+if part == 'general':
+    # cat: three or more inputs, any dim, strides, dtype promotion, ATen's skipped empties.
+    a, b, c = torch.randn(4, 3, 5), torch.randn(5, 2, 4).permute(2, 1, 0), torch.randn(4, 1, 5)
+    result['cat_dim1'] = same(sg.cat([a, b, c], 1), torch.cat([a, b, c], 1))
+    result['cat_negative_dim'] = same(sg.cat([a, a, a, a], -1), torch.cat([a, a, a, a], -1))
+    result['cat_dim0_views'] = same(sg.cat([a[1:], a[:2], a[::2]], 0), torch.cat([a[1:], a[:2], a[::2]], 0))
+    ints, floats = torch.randint(-5, 5, (3, 2)), torch.randn(3, 4)
+    result['cat_promotes'] = same(sg.cat([ints, floats], 1), torch.cat([ints, floats], 1))
+    half = torch.randn(2, 3).bfloat16()
+    result['cat_bf16_fp32'] = same(sg.cat([half, floats[:2, :3]], 0), torch.cat([half, floats[:2, :3]], 0))
+    flags = torch.rand(6) > 0.5
+    result['cat_bool'] = same(sg.cat([flags, flags[:2]]), torch.cat([flags, flags[:2]]))
+    empty = torch.empty(0)
+    result['cat_skips_1d_empty'] = same(sg.cat([empty, a, empty, c], 1), torch.cat([empty, a, empty, c], 1))
+    result['cat_zero_width'] = same(sg.cat([a[:, :0], c], 1), torch.cat([a[:, :0], c], 1))
+    result['cat_single'] = same(sg.cat([b], 2), torch.cat([b], 2))
+    try:
+        sg.cat([torch.tensor(1.0), torch.tensor(2.0)])
+        result['cat_refuses_0d'] = False
+    except ValueError:
+        result['cat_refuses_0d'] = True
+    try:
+        sg.cat([a, torch.randn(4, 3, 6)], 1)
+        result['cat_refuses_mismatch'] = False
+    except ValueError:
+        result['cat_refuses_mismatch'] = True
+
+    # index: several index tensors, adjacent or not, broadcast, negative, int32, None dims.
+    x = torch.randn(4, 5, 6, 7)
+    i, j = torch.randint(-5, 5, (3, 2)), torch.randint(0, 6, (2,))
+    cases = {
+        'one': [torch.randint(-4, 4, (9,))],
+        'adjacent': [None, i, j],
+        'adjacent_trailing': [None, None, torch.randint(0, 6, (5,)), torch.randint(-7, 7, (5,))],
+        'apart': [torch.randint(0, 4, (2, 3)), None, torch.randint(0, 6, (3,))],
+        'apart_three': [torch.randint(0, 4, (5,)), None, torch.randint(0, 6, (5,)), torch.randint(0, 7, (1,))],
+        'broadcast': [None, torch.arange(5)[:, None], torch.arange(6)[None, :]],
+        'int32': [None, i.to(torch.int32), j.to(torch.int32)],
+        'all_dims': [torch.randint(0, 4, (8,)), torch.randint(0, 5, (8,)), torch.randint(0, 6, (8,)),
+                     torch.randint(0, 7, (8,))],
+        'empty_index': [None, torch.empty(0, dtype=torch.int64)],
+    }
+    for name, indices in cases.items():
+        result['index_' + name] = same(sg.advanced_index(x, indices), aten_index(x, indices))
+    result['index_strided_input'] = same(sg.advanced_index(x.transpose(1, 3), [None, i, j]),
+                                         aten_index(x.transpose(1, 3), [None, i, j]))
+    result['index_bf16'] = same(sg.advanced_index(x.bfloat16(), [None, i, j]), aten_index(x.bfloat16(), [None, i, j]))
+    try:
+        sg.advanced_index(x, [x > 0])
+        result['index_refuses_mask'] = False
+    except NotImplementedError:
+        result['index_refuses_mask'] = True
+
+    # index_put, against ATen's serial CPU kernel: duplicates in position order.
+    for name, indices in cases.items():
+        shape = aten_index(x, indices).shape
+        values = torch.randn(shape) * 100
+        for accumulate in (True, False):
+            key = f'put_{name}_{"acc" if accumulate else "set"}'
+            result[key] = same(sg.advanced_index_put(x, indices, values, accumulate),
+                               aten_put(x, indices, values, accumulate))
+    repeated = [torch.randint(0, 3, (200,))]
+    for dtype in (torch.float32, torch.bfloat16, torch.float16, torch.float64):
+        base, values = (torch.randn(3, 4) * 10).to(dtype), (torch.randn(200, 4) * 10).to(dtype)
+        result[f'put_duplicates_{dtype}'] = same(sg.advanced_index_put(base, repeated, values, True),
+                                                 aten_put(base, repeated, values, True))
+        result[f'put_last_wins_{dtype}'] = same(sg.advanced_index_put(base, repeated, values, False),
+                                                aten_put(base, repeated, values, False))
+    base = torch.randn(4, 5, 6, 7)
+    for name, values in (('scalar', torch.tensor(2.5)), ('row', torch.randn(7)), ('column', torch.randn(3, 2, 1))):
+        indices = [None, i, j]
+        result['put_broadcast_' + name] = same(sg.advanced_index_put(base, indices, values, True),
+                                               aten_put(base, indices, values, True))
+    values = torch.randn(6, 3, 2, 4, 7)
+    result['put_strided_base'] = same(sg.advanced_index_put(base.transpose(0, 2), [None, i], values, True),
+                                      aten_put(base.transpose(0, 2), [None, i], values, True))
+    for name, call in (('int_accumulate', lambda: sg.advanced_index_put(torch.zeros(3, dtype=torch.int64), [torch.tensor([0])], torch.tensor([1]), True)),
+                       ('dtype_mismatch', lambda: sg.advanced_index_put(torch.zeros(3), [torch.tensor([0])], torch.tensor([1.0], dtype=torch.float64), True))):
+        try:
+            call()
+            result['put_refuses_' + name] = False
+        except (NotImplementedError, ValueError):
+            result['put_refuses_' + name] = True
+
+    # The CUDA kernels' orders, emulated here: a target's values from a zero
+    # (2..32 plain elements), 32 lanes then the rest (one plain element).
+    def emulate(base, index, values, order):
+        out = base.clone()
+        acc = torch.float32 if base.dtype in (torch.float16, torch.bfloat16) else base.dtype
+        for target in index.unique().tolist():
+            rows = [values[p].to(acc) for p in range(index.numel()) if index[p] == target]
+            if order == 'from_zero':
+                total = torch.zeros_like(rows[0])
+                for row in rows:
+                    total = total + row
+            else:
+                laned = len(rows) // 32 * 32
+                lanes = [torch.zeros_like(rows[0]) for _ in range(32)]
+                for k in range(laned):
+                    lanes[k % 32] = lanes[k % 32] + rows[k]
+                width = 16
+                while width:
+                    lanes = [lanes[k] + lanes[k + width] for k in range(width)]
+                    width //= 2
+                total = lanes[0]
+                for row in rows[laned:]:
+                    total = total + row
+            out[target] = (base[target].to(acc) + total).to(base.dtype)
+        return out
+    with patch.object(sg, '_index_put_order', cuda):
+        for dtype in (torch.float32, torch.bfloat16):
+            index = torch.cat([torch.full((70,), 1), torch.randint(0, 4, (60,)), torch.full((33,), 3)])
+            index = index[torch.randperm(index.numel())]
+            for order, width in (('from_zero', 8), ('lanes', 1)):
+                base = (torch.randn(4, width) * 1e3).to(dtype)
+                values = (torch.randn(index.numel(), width) * torch.logspace(-3, 3, index.numel())[:, None]).to(dtype)
+                mine = sg.advanced_index_put(base, [index], values, True)
+                expected = emulate(base, index, values, order)
+                serial = aten_put(base, [index], values, True)
+                result[f'cuda_{order}_{dtype}'] = same(mine, expected) and not torch.equal(mine, serial)
+
+elif part == 'integer_div':
+    from evograd.atenir.primitive_triton import elementwise as ew
+    ew.libdevice = tests._triton_interpreter.libdevice  # the float path's floor/trunc
+    a = torch.randint(-1000, 1000, (3000,))
+    b = torch.randint(-9, 10, (3000,))
+    b[b == 0] = 3
+    for mode in ('floor', 'trunc'):
+        for name, divisor in (('scalar', 8), ('negative', -7), ('tensor', b), ('row', b[:1])):
+            result[f'{mode}_{name}'] = same(ew.div_rounded(a, divisor, mode), torch.div(a, divisor, rounding_mode=mode))
+        result[f'{mode}_int32'] = same(ew.div_rounded(a.int(), 5, mode), torch.div(a.int(), 5, rounding_mode=mode))
+        result[f'{mode}_float'] = same(ew.div_rounded(a.float(), 8, mode), torch.div(a.float(), 8, rounding_mode=mode))
+    try:
+        ew.div_rounded(a, 0, 'floor')
+        result['refuses_zero'] = False
+    except ZeroDivisionError:
+        result['refuses_zero'] = True
+
+elif part == 'dlrm':
+    # DLRM interaction (B=32, 26 sparse + 1 dense features, D=64): its cats, the
+    # index of the upper triangle of the [32, 27, 27] bmm and its backward.
+    dense, sparse = torch.randn(32, 64), torch.randn(32, 26, 64)
+    unsqueezed = dense.unsqueeze(1)
+    result['cat_features'] = same(sg.cat([unsqueezed, sparse], 1), torch.cat([unsqueezed, sparse], 1))
+    li, lj = torch.triu_indices(27, 27, 1)
+    result['cat_indices'] = same(sg.cat([li.clone(), lj.clone()]), torch.cat([li, lj]))
+    z = torch.randn(32, 27, 27)
+    flat = aten_index(z, [None, li, lj])
+    result['index'] = same(sg.advanced_index(z, [None, li, lj]), flat)
+    result['cat_out'] = same(sg.cat([dense, flat], 1), torch.cat([dense, flat], 1))
+    tangent = torch.randn(32, 415)
+    upstream = tangent[:, 64:415]   # the backward's slice: strides (415, 1)
+    zeros = torch.zeros(32, 27, 27)
+    result['index_put'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True),
+                               aten_put(zeros, [None, li, lj], upstream, True))
+    reference = z.clone().requires_grad_(True)
+    reference[:, li, lj].backward(upstream)
+    result['index_backward'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True), reference.grad)
+    with patch.object(sg, '_index_put_order', cuda):
+        # On CUDA the [32, 27, 27] put has one plain element per index position.
+        assert real_order(torch.device('cuda'), 1) == sg._INDEX_PUT_LANES
+        result['index_put_cuda_order'] = same(sg.advanced_index_put(zeros, [None, li, lj], upstream, True),
+                                              reference.grad)
+
+elif part == 'qwen2_vl':
+    # Qwen2-VL vision attention (T=256, 16 heads, D=80): rotate_half's cats and
+    # the backward's q/k/v cat in bfloat16.
+    half, sliced = strided((256, 16, 40), (640, 40, 1)), strided((256, 16, 40), (1280, 80, 1))
+    result['rotate_half'] = same(sg.cat([half, sliced], -1), torch.cat([half, sliced], -1))
+    parts = [torch.randn(256, 16, 80).bfloat16() for _ in range(3)]
+    result['qkv_backward'] = same(sg.cat(parts), torch.cat(parts))
+
+elif part == 'dit':
+    # DiT-S/2 attention (B=256, 6 heads, T=256, D=64): the backward's cat of the
+    # three float32 attention gradients, each laid out [B, T, H, D].
+    parts = [strided((256, 6, 256, 64), (98304, 64, 384, 1)) for _ in range(3)]
+    result['qkv_backward'] = same(sg.cat(parts), torch.cat(parts))
+
+elif part == 'gdn_in_proj':
+    # Qwen3.5 gated-delta in_proj (T=2048): the backward's cat along dim 2 of two
+    # [1, 2048, 2048] gradients and a transposed [1, 2048, 4096] one, bfloat16.
+    parts = [strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+             strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+             strided((1, 2048, 4096), (16777216, 1, 2048), torch.bfloat16)]
+    result['in_proj_backward'] = same(sg.cat(parts, 2), torch.cat(parts, 2))
+print(json.dumps(result))
+"""
+
+#: The parts of _INTERPRETED_LOWERINGS; DiT's [768, 6, 256, 64] cat takes ~3 minutes.
+_LOWERING_PARTS = ('general', 'integer_div', 'dlrm', 'qwen2_vl', 'gdn_in_proj', 'dit')
+
+
+class TestHandwrittenKernelsInterpreted(unittest.TestCase):
+    def test_new_kernels_match_aten_bit_for_bit(self):
+        import subprocess
+
+        environment = {**os.environ, 'TRITON_INTERPRET': '1'}
+        run = subprocess.run([sys.executable, '-c', _INTERPRETED_KERNELS], env=environment,
+                             capture_output=True, text=True, timeout=900)
+        self.assertEqual(run.returncode, 0, run.stderr[-3000:])
+        result = json.loads(run.stdout.strip().splitlines()[-1])
+        self.assertTrue(result and all(result.values()), result)
+
+    def test_cat_indexing_and_integer_division_match_aten_bit_for_bit(self):
+        import subprocess
+
+        environment = {**os.environ, 'TRITON_INTERPRET': '1'}
+        for part in _LOWERING_PARTS:
+            with self.subTest(part=part):
+                run = subprocess.run([sys.executable, '-c', _INTERPRETED_LOWERINGS, part], env=environment,
+                                     capture_output=True, text=True, timeout=900)
+                self.assertEqual(run.returncode, 0, run.stderr[-3000:])
+                result = json.loads(run.stdout.strip().splitlines()[-1])
+                self.assertTrue(result and all(result.values()), {k: v for k, v in result.items() if not v})
+
+
+class TestHandwrittenKernelsCompileForHopper(unittest.TestCase):
+    """The interpreter runs code the Triton compiler rejects (a constexpr tuple
+    indexed by a computed dim, a constexpr reassigned): compile the cat,
+    indexing and integer division kernels for sm_90 without a GPU (frontend,
+    MLIR and ptxas)."""
+
+    def test_cat_indexing_and_division_kernels_compile_for_sm90(self):
+        import triton
+        import triton.language as tl
+        from triton.backends.compiler import GPUTarget
+        from triton.compiler import ASTSource
+
+        from evograd.atenir.primitive_triton import scatter_gather as sg
+
+        if os.environ.get('TRITON_INTERPRET') == '1':
+            self.skipTest('kernels are interpreted in this process')
+        target = GPUTarget('cuda', 90, 32)
+
+        def build(kernel, signature, constexprs):
+            signature = {**signature, **{name: 'constexpr' for name in constexprs}}
+            triton.compile(ASTSource(kernel, signature, constexprs), target=target)
+
+        for source, destination in (('fp32', 'fp32'), ('bf16', 'bf16'), ('i64', 'fp32'), ('i1', 'i1')):
+            with self.subTest(copy=(source, destination)):
+                build(sg._copy_into_kernel, {'SRC': f'*{source}', 'DST': f'*{destination}', 'N': 'i64',
+                                             'DST_OFFSET': 'i64'},
+                      {'SHAPE': (256, 6, 256, 64), 'SRC_STRIDES': (98304, 64, 384, 1),
+                       'DST_STRIDES': (98304, 16384, 64, 1), 'BLOCK': 1024})
+        for index, first in (('i64', True), ('i32', False)):
+            with self.subTest(offsets=index):
+                build(sg._index_offsets_kernel, {'INDEX': f'*{index}', 'OFFSETS': '*i64', 'N': 'i32',
+                                                 'SIZE': 'i32', 'STRIDE': 'i32'},
+                      {'SHAPE': (3, 351), 'INDEX_STRIDES': (0, 1), 'FIRST': first, 'BLOCK': 1024})
+        build(sg._index_gather_kernel, {'SRC': '*fp32', 'OFFSETS': '*i64', 'OUT': '*fp32', 'N': 'i32'},
+              {'SHAPE': (32, 351), 'SRC_STRIDES': (729, 0), 'POSITION_STRIDES': (0, 1), 'BLOCK': 1024})
+        from evograd.atenir.primitive_triton import elementwise
+
+        for dtype, scalar, floor in (('i64', True, True), ('i64', False, True), ('i32', True, False)):
+            with self.subTest(divide=(dtype, scalar, floor)):
+                build(elementwise._div_rounded_int_kernel, {'a_ptr': f'*{dtype}', 'b_ptr': f'*{dtype}',
+                                                            'out_ptr': f'*{dtype}', 'divisor': 'i32', 'N': 'i32'},
+                      {'SCALAR': scalar, 'FLOOR': floor, 'BLOCK': 1024})
+        for dtype in ('fp32', 'bf16'):
+            for accumulate, order, block in ((True, 0, 1024), (True, 1, 1024), (True, 2, 32), (False, 0, 1024)):
+                with self.subTest(dtype=dtype, accumulate=accumulate, order=order):
+                    build(sg._index_put_kernel, {'OUT': f'*{dtype}', 'VALUES': f'*{dtype}', 'KEYS': '*i64',
+                                                 'N': 'i32', 'M': 'i32'},
+                          {'OUTER_SHAPE': (32,), 'OUT_STRIDES': (729,), 'VALUE_STRIDES': (415,),
+                           'SHAPE': (351,), 'POSITION_STRIDES': (1,), 'ACCUMULATE': accumulate,
+                           'ORDER': order, 'OPMATH': tl.float32, 'BLOCK_N': 256, 'BLOCK': block})
+
+
+@unittest.skipUnless(torch.cuda.is_available(), 'CUDA required')
+class TestSeedLoweringsOnCuda(unittest.TestCase):
+    """The new handwritten kernels and preserved calls against CUDA ATen."""
+
+    def test_embedding_bag_matches_cuda_aten_bit_for_bit(self):
+        import torch.nn.functional as F
+
+        from evograd.atenir.primitive_triton import scatter_gather
+
+        torch.manual_seed(0)
+        weight = torch.randn(1000, 64, device='cuda')
+        indices = torch.cat([torch.full((37,), 5), torch.randint(0, 1000, (91,))]).cuda()
+        offsets = torch.arange(0, 128, 4, device='cuda')
+        grad = torch.randn(32, 64, device='cuda')
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                reference = weight.clone().requires_grad_(True)
+                out = F.embedding_bag(indices, reference, offsets, mode='sum')
+                out.backward(grad)
+                mine, offset2bag, _, _ = scatter_gather.embedding_bag_sum(weight, indices, offsets)
+                dweight = scatter_gather.embedding_bag_sum_backward(grad, indices, offset2bag, 1000)
+            finally:
+                torch.use_deterministic_algorithms(False)
+            with self.subTest(deterministic=deterministic):
+                self.assertTrue(torch.equal(mine, out.detach()))
+                self.assertTrue(torch.equal(dweight, reference.grad))
+
+    def test_histc_matches_cuda_aten_on_integer_ids(self):
+        from evograd.atenir.primitive_triton import scatter_gather
+
+        ids = torch.randint(0, 66, (32768,), device='cuda', dtype=torch.int32)
+        self.assertTrue(torch.equal(scatter_gather.histc(ids, 64, 0, 63), torch.histc(ids, 64, 0, 63)))
+
+    def test_preserved_float32_attention_is_what_eager_runs(self):
+        from evograd.pipelines.unified.codegen import _external_wrapper
+
+        source, _, metadata = _external_wrapper('forward', _EFFICIENT_NODE)
+        namespace = {'torch': torch}
+        exec(source, namespace)
+        q, k, v = (torch.randn(2, 6, 256, 64, device='cuda') for _ in range(3))
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                out = namespace[metadata['wrapper']](q, k, v)[0]
+                eager = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+            finally:
+                torch.use_deterministic_algorithms(False)
+            with self.subTest(deterministic=deterministic):
+                self.assertTrue(torch.equal(out, eager))
+
+    def test_flip_copy_matches_torch_flip(self):
+        from evograd.pipelines.b_dispatch.layout_kernels import flip_copy
+
+        a = torch.randn(2, 32, 64, device='cuda')
+        self.assertTrue(torch.equal(flip_copy(a, [2]), torch.flip(a, [2])))
+
+    def test_integer_sort_matches_cuda_stable_sort_bit_for_bit(self):
+        from evograd.atenir.primitive_triton.reduction import integer_sort
+
+        torch.manual_seed(0)
+        for keys, dim, descending in (
+                (torch.randint(0, 64, (32768,), device='cuda'), -1, False),  # OLMoE's expert ids
+                (torch.randint(-3, 4, (32768,), device='cuda'), -1, True),
+                (torch.full((5000,), 3, device='cuda', dtype=torch.int32), -1, False),
+                (torch.arange(3000, 0, -1, device='cuda'), -1, False),
+                (torch.randint(0, 9, (70, 33), device='cuda'), 0, False)):
+            values, order = integer_sort(keys, dim, descending)
+            expected = torch.sort(keys, dim=dim, descending=descending, stable=True)
+            with self.subTest(n=keys.numel(), descending=descending):
+                self.assertTrue(torch.equal(values, expected.values))
+                self.assertTrue(torch.equal(order, expected.indices))
+
+    def test_integer_division_matches_cuda_aten(self):
+        from evograd.atenir.primitive_triton.elementwise import div_rounded
+
+        ids = torch.sort(torch.randint(0, 64, (32768,), device='cuda')).indices  # OLMoE's sorted ids
+        signed = torch.randint(-1000, 1000, (4096,), device='cuda')
+        divisors = torch.randint(1, 9, (4096,), device='cuda') * (torch.randint(0, 2, (4096,), device='cuda') * 2 - 1)
+        for mode in ('floor', 'trunc'):
+            for a, b in ((ids, 8), (signed, -7), (signed, divisors)):
+                with self.subTest(mode=mode, tensor_divisor=torch.is_tensor(b)):
+                    self.assertTrue(torch.equal(div_rounded(a, b, mode), torch.div(a, b, rounding_mode=mode)))
+
+    def test_cat_index_and_index_put_match_cuda_aten_bit_for_bit(self):
+        from evograd.atenir.primitive_triton import scatter_gather as sg
+
+        torch.manual_seed(0)
+
+        def strided(shape, strides, dtype=torch.float32):
+            size = sum((n - 1) * t for n, t in zip(shape, strides)) + 1
+            return torch.randn(size, device='cuda').to(dtype).as_strided(shape, strides)
+
+        # The cats of the four seeds that reached them.
+        cats = {
+            'dit_backward': ([strided((256, 6, 256, 64), (98304, 64, 384, 1)) for _ in range(3)], 0),
+            'gdn_in_proj_backward': ([strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+                                      strided((1, 2048, 2048), (4194304, 2048, 1), torch.bfloat16),
+                                      strided((1, 2048, 4096), (16777216, 1, 2048), torch.bfloat16)], 2),
+            'qwen2_vl_backward': ([torch.randn(256, 16, 80, device='cuda').bfloat16() for _ in range(3)], 0),
+            'qwen2_vl_rotate_half': ([strided((256, 16, 40), (640, 40, 1)),
+                                      strided((256, 16, 40), (1280, 80, 1))], -1),
+            'dlrm_features': ([torch.randn(32, 1, 64, device='cuda'), torch.randn(32, 26, 64, device='cuda')], 1),
+        }
+        for name, (tensors, dim) in cats.items():
+            with self.subTest(cat=name):
+                self.assertTrue(torch.equal(sg.cat(tensors, dim), torch.cat(tensors, dim)))
+        # DLRM's interaction: the upper triangle of [32, 27, 27], and its gradient.
+        z, upstream = torch.randn(32, 27, 27, device='cuda'), torch.randn(32, 415, device='cuda')[:, 64:]
+        li, lj = torch.triu_indices(27, 27, 1, device='cuda')
+        reference = z.clone().requires_grad_(True)
+        flat = reference[:, li, lj]
+        flat.backward(upstream)
+        self.assertTrue(torch.equal(sg.advanced_index(z, [None, li, lj]), flat.detach()))
+        zeros = torch.zeros(32, 27, 27, device='cuda')
+        self.assertTrue(torch.equal(sg.advanced_index_put(zeros, [None, li, lj], upstream, True), reference.grad))
+        # Repeated targets in each of the CUDA kernel's three orders (1, 8 and 64
+        # plain elements per index position), in front of and behind other dims.
+        index = torch.cat([torch.full((70,), 1), torch.randint(0, 4, (60,)), torch.full((33,), 3)]).cuda()
+        index = index[torch.randperm(index.numel(), device='cuda')]
+        scale = torch.logspace(-3, 3, index.numel(), device='cuda')
+        for deterministic in (False, True):
+            torch.use_deterministic_algorithms(deterministic)
+            try:
+                for dtype in (torch.float32, torch.bfloat16):
+                    for width in (1, 8, 64):
+                        cases = {
+                            'front': (torch.randn(4, width, device='cuda') * 1e3, [index],
+                                      torch.randn(index.numel(), width, device='cuda') * scale[:, None]),
+                            'behind': (torch.randn(3, 4, width, device='cuda') * 1e3, [None, index],
+                                       torch.randn(3, index.numel(), width, device='cuda') * scale[:, None]),
+                        }
+                        for where, (base, indices, values) in cases.items():
+                            base, values = base.to(dtype), values.to(dtype)
+                            for accumulate in (True, False) if deterministic else (True,):
+                                expected = torch.ops.aten.index_put(base, indices, values, accumulate)
+                                mine = sg.advanced_index_put(base, indices, values, accumulate)
+                                with self.subTest(deterministic=deterministic, dtype=dtype, width=width,
+                                                  where=where, accumulate=accumulate):
+                                    self.assertTrue(torch.equal(mine, expected))
+            finally:
+                torch.use_deterministic_algorithms(False)
 
 
 def matrix_square_ref(a, offset, b):

@@ -232,10 +232,24 @@ def _semantic_expr(builder: _ProgramBuilder, node: dict) -> str:
         dim0, dim1 = int(ordered[1]["value"]), int(ordered[2]["value"])
         dims[dim0], dims[dim1] = dims[dim1], dims[dim0]
         return f"permute_copy({args[0]}, {tuple(dims)!r})"
-    if operation in {"squeeze", "unsqueeze"}:
+    if operation in {"squeeze", "unsqueeze", "unbind"}:
         return f"{args[0]}.{operation}({', '.join(args[1:])})"
-    if operation == "split":
+    if operation in {"split", "split_with_sizes"}:
         return f"{args[0]}.split({', '.join(args[1:])})"
+    if target == "prims.rev.default":
+        return f"flip_copy({args[0]}, {args[1]})"
+    if operation == "constant_pad_nd":
+        pads = node["positional_args"][1]["items"]
+        if any(item.get("kind") != "scalar" or item["value"] != 0 for item in pads):
+            raise UnsupportedSemanticNode(f"{target} with nonzero padding")
+        return args[0]
+    # Fresh storage, which the graph then fills (an index_put of a permutation, a copy).
+    if operation == "empty":
+        device = node.get("kwargs_ordered", {}).get("device", {}).get("value", "cuda")
+        return f"torch.empty({args[0]}, dtype={node['output_dtype']}, device={device!r})"
+    if operation == "new_empty_strided":
+        return (f"torch.empty_strided({args[1]}, {args[2]}, dtype={node['output_dtype']}, "
+                f"device={args[0]}.device)")
     if operation == "select_scatter":
         from evograd.atenir.primitive_triton.scatter_gather import select_scatter
 
@@ -321,22 +335,34 @@ def _audit_primitive_library(tree: ast.AST) -> None:
                 raise UnsupportedSemanticNode(f"hidden tensor math in primitive library: {node.func.attr}")
 
 
-def _sdpa_state_outputs(forward_graph: dict, n_outputs: int) -> set[str]:
-    """Forward outputs (saved state) that a preserved attention kernel produced.
+#: Preserved attention forwards whose logsumexp and rng state the backward takes back.
+_ATTENTION_STATE = frozenset({*_SDPA_FORWARD,
+                              "torch.ops.aten._scaled_dot_product_efficient_attention.default"})
+#: The results of those forwards that may live on the host: memory-efficient
+#: attention's philox seed and offset (CPU tensors unless dropout runs under
+#: CUDA graph capture).
+_HOST_STATE = {"torch.ops.aten._scaled_dot_product_efficient_attention.default": {2, 3}}
+
+
+def _sdpa_state_outputs(forward_graph: dict, n_outputs: int) -> dict[str, bool]:
+    """Forward outputs (saved state) that a preserved attention kernel produced,
+    each mapped to whether it may live on the host.
 
     Its logsumexp and rng state are the backend's own and go straight back into
     the backend's backward; their layout differs between cuDNN and flash, so the
     seed's configuration guards must not pin them to the captured backend's.
     """
     nodes = {n["name"]: n for n in forward_graph["nodes"] if "name" in n}
-    state: set[str] = set()
+    state: dict[str, bool] = {}
     for value in _outputs(forward_graph)[n_outputs:]:
         node = nodes.get(value) if isinstance(value, str) else None
+        index = None
         while node is not None and "getitem" in str(node.get("target", "")):
-            source = (node.get("positional_args") or node.get("args_ordered") or [{}])[0]
+            source, *rest = node.get("positional_args") or node.get("args_ordered") or [{}]
+            index = rest[0].get("value") if rest else None
             node = nodes.get(source.get("name")) if source.get("kind") in {"node", "sym_node"} else None
-        if node is not None and node.get("external_kernel") in _SDPA_FORWARD:
-            state.add(value)
+        if node is not None and node.get("external_kernel") in _ATTENTION_STATE:
+            state[value] = index in _HOST_STATE.get(node["external_kernel"], ())
     return state
 
 
@@ -395,6 +421,13 @@ def _pair_source(op: OpDecl, workload: Workload, captured: Any) -> str:
     backward_guards = []
     for (kind, index), node in zip(pair.backward_arg_spec, bwd_placeholders):
         value = f"saved_tensors[{index}]" if kind == "s" else upstream_names[index]
+        if kind == "s" and backend_state.get(saved_names[index]):
+            # memory-efficient attention's host-side rng state.
+            backward_guards.extend([
+                f"    if not isinstance({value}, torch.Tensor):",
+                "        raise ValueError('unified backward requires tensors')",
+            ])
+            continue
         backward_guards.extend([
             f"    if not isinstance({value}, torch.Tensor) or not {value}.is_cuda:",
             "        raise ValueError('unified backward requires CUDA tensors')",

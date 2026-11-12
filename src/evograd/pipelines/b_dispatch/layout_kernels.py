@@ -130,6 +130,22 @@ def clone_copy(a):
     return strided_copy(a, list(a.shape), list(a.stride()))
 
 
+def flip_copy(a, dims):
+    """Contiguous flip: equivalent to torch.flip(a, dims) (prims.rev).
+
+    Gathers from the last element along each flipped dim with that dim's
+    stride negated.
+    """
+    if not a.is_contiguous():
+        a = clone_copy(a)
+    if a.numel() == 0:
+        return clone_copy(a)
+    dims = {int(d) % a.ndim for d in dims}
+    start = sum((a.shape[d] - 1) * a.stride(d) for d in dims)
+    strides = [-a.stride(d) if d in dims else a.stride(d) for d in range(a.ndim)]
+    return strided_copy(a.reshape(-1)[start:], list(a.shape), strides)
+
+
 # EMBED-END
 
 
