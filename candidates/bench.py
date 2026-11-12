@@ -287,6 +287,8 @@ def cmd_evaluate(args) -> int:
                *(f"--{flag.replace('_', '-')}" for flag in FLAGS)]
     if args.deadline_min is not None:
         command += ["--deadline-min", str(args.deadline_min)]
+    if args.operator_level:
+        command += ["--operator-level"]
     from evograd.adbench_tools.task import load
 
     for cid, path in sorted(chosen.items()):
@@ -457,6 +459,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--case-id", nargs="*", default=None)
     p.add_argument("--deadline-min", type=float, default=None)
     p.add_argument("--tier3-blocks", type=int, default=10)
+    p.add_argument("--operator-level", action="store_true",
+                   help="stop after Tier 2 (no model gates, Tier 3 or combination; MegaFold's "
+                        "need a 192 GiB host)")
     p.set_defaults(run=cmd_evaluate)
 
     p = sub.add_parser("summarize", help="per-level table over agents")

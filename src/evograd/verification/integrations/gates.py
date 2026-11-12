@@ -795,7 +795,8 @@ def _combination_accepted(model, statuses: Mapping[str, Any]) -> bool:
 def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: str | Path, *,
            controls: str | Path | None = None, state: str | Path | None = None,
            device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
-           deadline_min: float | None = None, combined: bool = False) -> dict[str, Any]:
+           deadline_min: float | None = None, combined: bool = False,
+           operator_level: bool = False) -> dict[str, Any]:
     """Every gate that applies to each candidate, then the combination of every
     accepted Level-2 candidate (a diagnostic, not the benchmark's Level-3
     selection); writes ``DIR/verdict.json``.
@@ -806,6 +807,10 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     on the combination of every Level-2 case those pass, and decide those
     cases' acceptance. Never for an agent's candidates: a combination's
     budgets are looser and its failure names no case.
+
+    ``operator_level`` runs Gate 1 and operator Gate 2 only, as
+    ``evograd evaluate --operator-level`` does: the model gates and the
+    combination are left for a later run.
 
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
     what does not depend on the candidate -- Gate 3 control runs and Gate 2
@@ -819,6 +824,11 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     """
     from .base import configure
 
+    if operator_level:
+        import dataclasses
+
+        from evograd.evaluation.protocol import OPERATOR_LEVEL
+        model = dataclasses.replace(model, model_gates=False)
     settings = configure()
     run = open_run(model, candidates, corpus_path, out, controls=controls, state=state,
                    device=device, compile_backend=compile_backend, log=log,
@@ -834,6 +844,8 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
             verdict["combination"] = verify_combination(run, chosen)
             for cid in chosen:
                 level2[cid]["accepted"] = verdict["combination"]["accepted"]
+        elif operator_level:
+            verdict["operator_level"] = OPERATOR_LEVEL
         else:
             chosen = [cid for cid, entry in level2.items() if entry["accepted"]]
             verdict["combination"] = verify_combination(run, chosen, single=verdict["candidates"])

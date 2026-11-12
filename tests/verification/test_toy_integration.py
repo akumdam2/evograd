@@ -159,6 +159,17 @@ class ToyIntegration(unittest.TestCase):
         self.assertFalse(verdict["combination"]["accepted"])
         self.assertFalse(verdict["candidates"][self.T.CASE_ID]["accepted"])
 
+    def test_operator_level_verification_leaves_the_model_gates_out(self):
+        out = Path(self.tmp.name) / "operator_level"
+        verdict = self.verify(1.0, out, operator_level=True)
+        entry = verdict["candidates"][self.T.CASE_ID]
+        self.assertEqual((entry["gate1_payloads"], entry["gate2_operator"]), ("passed", "passed"))
+        self.assertNotIn("gate2_model", entry)
+        self.assertTrue(entry["accepted"])
+        self.assertIsNone(verdict["combination"])
+        self.assertIn("operator level", verdict["operator_level"])
+        self.assertFalse((out / "gate2_model").exists() or (out / "combination").exists())
+
     def test_finished_single_site_training_is_reused_on_rerun(self):
         out = Path(self.tmp.name) / "reused_training"
         first = self.verify(1.0, out)
