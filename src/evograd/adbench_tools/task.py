@@ -44,9 +44,10 @@ LIBRARY_POLICIES = ("auto", "none", *(",".join(names) for n in range(1, len(REGI
                                       for names in combinations(sorted(REGISTRY), n)))
 
 #: Torch functions that the unified frontend leaves to a vendor library
-#: (Inductor's extern mm/bmm/addmm). ``auto`` grants the trusted GEMM primitive
-#: when one call of the reference reaches one of them, so an agent writing from
-#: scratch has the library access evograd's seed preserves.
+#: (Inductor's extern mm, and addmm/bmm/_grouped_mm, which also grant their own
+#: primitive below). ``auto`` grants the trusted GEMM primitive when one call of
+#: the reference reaches one of them, so an agent writing from scratch has the
+#: library access evograd's seed preserves.
 _CONTRACTIONS = frozenset({
     "linear", "matmul", "mm", "bmm", "addmm", "baddbmm", "einsum", "_grouped_mm",
     "grouped_mm", "tensordot",
@@ -58,10 +59,31 @@ _CONVOLUTIONS = frozenset({"conv1d", "conv2d"})
 #: Fused attention, which Inductor likewise leaves to a library (cuDNN) and the
 #: frontend preserves; ``auto`` grants ``vendor_sdpa`` when the reference reaches it.
 _ATTENTION = frozenset({"scaled_dot_product_attention"})
-#: ``auto``: each primitive, the torch functions that grant it, and what they are.
-_AUTO_GRANTS = (("vendor_conv", _CONVOLUTIONS, "a convolution"),
+
+
+def _aten_calls(primitive: str) -> frozenset[str]:
+    """The ATen calls (as :func:`observed_calls` names them) the unified frontend
+    preserves and ``primitive`` runs: read at the ATen level because the torch
+    function alone does not decide them."""
+    return frozenset(target.removesuffix(".default") for target in REGISTRY[primitive].preserves)
+
+
+#: ``auto``: each primitive, the calls that grant it, and what they are. At the
+#: ATen level: a linear layer with a bias is ``aten.addmm``; ``torch.bmm`` is
+#: ``aten.bmm``, as are ``matmul``/``@`` when PyTorch does not fold them into one
+#: 2-D GEMM (both operands batched, say) and ``einsum`` with a summed index --
+#: Inductor hands it to cuBLAS and the frontend preserves it, a batch of one
+#: included (its capture runs no joint-graph pass, so no bmm-to-mm rewrite);
+#: ``torch._grouped_mm`` (``F.grouped_mm``, a mixture of experts) is
+#: ``aten._grouped_mm``.
+_AUTO_GRANTS = (("vendor_addmm", _aten_calls("vendor_addmm"), "a GEMM with a bias"),
+                ("vendor_bmm", _aten_calls("vendor_bmm"), "a batched GEMM"),
+                ("vendor_conv", _CONVOLUTIONS, "a convolution"),
                 ("vendor_gemm", _CONTRACTIONS, "a contraction"),
+                ("vendor_grouped_mm", _aten_calls("vendor_grouped_mm"), "a grouped GEMM"),
                 ("vendor_sdpa", _ATTENTION, "fused attention"))
+#: Every call ``auto`` reads, as the pack records them.
+_GRANTING_CALLS = frozenset().union(*(calls for _, calls, _ in _AUTO_GRANTS))
 
 
 @dataclass(frozen=True)
@@ -121,16 +143,24 @@ def load(root: str | Path) -> AgentTask:
 def observed_calls(op, workload, *, device: str) -> list[str]:
     """The torch functions one call of ``op``'s reference reaches at ``workload``,
     however deeply it delegates (shared helpers, Hugging Face modules,
-    ``transformers.integrations``).
+    ``transformers.integrations``), and the operators they decompose into
+    (``aten.bmm``).
 
-    Recorded at the function level (a ``TorchFunctionMode``), where ``@`` is
-    ``matmul`` and fused attention is ``scaled_dot_product_attention`` on every
-    device; the ATen level would see attention on the meta device as its math
-    decomposition. Run on the meta device, and on ``device`` when the reference
-    needs values.
+    Functions are recorded at the function level (a ``TorchFunctionMode``),
+    where ``@`` is ``matmul`` and fused attention is
+    ``scaled_dot_product_attention`` on every device. The ATen calls (a
+    ``TorchDispatchMode``) are what the unified frontend's capture lowers, and
+    they alone tell whether a ``matmul`` or an ``einsum`` becomes a batched GEMM.
+    So the inputs are the capture's: every tensor argument cloned and each
+    active one requiring grad (``matmul`` folds a batched operand into one 2-D
+    GEMM when the other requires grad). The ATen calls inside fused attention
+    are not recorded: the frontend preserves the fused kernel, while on the
+    meta device they are its math decomposition (``bmm``). Run on the meta
+    device, and on ``device`` when the reference needs values.
     """
     import torch
     from torch.overrides import TorchFunctionMode
+    from torch.utils._python_dispatch import TorchDispatchMode
 
     from evograd.opdecl.inputs import make_case_inputs
     from evograd.opdecl.oracle import resolve_forward
@@ -139,17 +169,36 @@ def observed_calls(op, workload, *, device: str) -> list[str]:
         def __init__(self):
             super().__init__()
             self.names: set[str] = set()
+            self.attention = 0  # depth of fused-attention calls in progress
 
         def __torch_function__(self, func, types, args=(), kwargs=None):
-            self.names.add(getattr(func, "__name__", str(func)))
+            name = getattr(func, "__name__", str(func))
+            self.names.add(name)
+            self.attention += name in _ATTENTION
+            try:
+                return func(*args, **(kwargs or {}))
+            finally:
+                self.attention -= name in _ATTENTION
+
+    class Lowered(TorchDispatchMode):
+        def __init__(self, reached: Reached):
+            super().__init__()
+            self.reached = reached
+
+        def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+            if not self.reached.attention:
+                self.reached.names.add(str(func.overloadpacket))  # "aten.bmm"
             return func(*args, **(kwargs or {}))
 
     forward = resolve_forward(op)
+    active = {a.name for a in op.active_args()}
     for where in dict.fromkeys(("meta", device)):
         reached = Reached()
         try:
-            values = make_case_inputs(op, workload, device=where)
-            with reached:
+            values = {name: (value.detach().clone().requires_grad_(name in active)
+                             if isinstance(value, torch.Tensor) else value)
+                      for name, value in make_case_inputs(op, workload, device=where).items()}
+            with Lowered(reached), reached:
                 forward(*(values.get(a.name, getattr(a, "default", None)) for a in op.args))
             return sorted(reached.names)
         except Exception:
@@ -159,7 +208,7 @@ def observed_calls(op, workload, *, device: str) -> list[str]:
 
 def resolve_library(policy: str, calls) -> tuple[tuple[str, ...], str]:
     """The primitives ``policy`` grants. ``auto`` reads ``calls``, the torch
-    functions one call of the reference reaches (:func:`observed_calls`)."""
+    functions and ATen calls one call of the reference reaches (:func:`observed_calls`)."""
     if policy not in LIBRARY_POLICIES:
         raise ValueError(f"library policy must be one of {LIBRARY_POLICIES}, got {policy!r}")
     if policy == "none":
@@ -382,8 +431,7 @@ def build_task(
     allowed, library_reason = resolve_library(library, calls)
     library_policy = {"requested": library, "decision": library_reason}
     if library == "auto":
-        library_policy["observed_calls"] = sorted(
-            set(calls) & (_CONTRACTIONS | _CONVOLUTIONS | _ATTENTION))
+        library_policy["observed_calls"] = sorted(set(calls) & _GRANTING_CALLS)
     search = _search_correctness(model_obj, observed, corpus, device=device,
                                  state=Path(state) if state else None)
     root.mkdir(parents=True, exist_ok=True)

@@ -500,13 +500,22 @@ def test_a_pipeline_seed_counts_only_when_its_pipeline_exits_zero(
     def run(command, **kwargs):
         assert command[3:5] == ["seed", "d"] and "--static-shapes" in command
         published.parent.mkdir(parents=True)
-        published.write_text("# D publishes its seed before the static rules and the oracle\n")
+        # D publishes its seed before the static rules and the oracle.
+        published.write_text("# EVOLVE-BLOCK-START\ndef pair(x):\n    return x\n"
+                             "# EVOLVE-BLOCK-END\nDEPLOYMENT_ENTRY = pair\n")
         return SimpleNamespace(returncode=returncode)
 
     monkeypatch.setattr(driver.subprocess, "run", run)
     seed = driver.pipeline_seed(task, ledger, SimpleNamespace(frontend="d"))
     assert seed == (published if returncode == 0 else None)
     assert len(events) == (1 if returncode == 0 else 0)
+    # An accepted seed is pinned as a unified one is, so it can be submitted as it is.
+    contract = published.parent / "unified_contract.json"
+    assert contract.is_file() == (returncode == 0)
+    if returncode == 0:
+        from evograd.pipelines.unified.contract import load_contract, validate_source
+
+        validate_source(published.read_text(), load_contract(contract))
 
 
 @pytest.mark.parametrize("agent", ["gepa", "claude_code"])

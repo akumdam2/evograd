@@ -131,20 +131,20 @@ def qwen3_swiglu_mlp_backward_from_saved(dout, saved_tensors):
   shape inspection, views and launches in plain PyTorch are fine.
 - The harness wires autograd and the deployment entry from the declaration.
   Do not write a `torch.autograd.Function` or an `nn.Module`, and do not define
-  these reserved names: `ARTIFACT_CONTRACT`, `DEPLOYMENT_ENTRY`, `Qwen3SwigluMlpFunction`, `Qwen3SwigluMlpModule`, `_vendor_conv_args`, `_vendor_sdpa_backend`, `qwen3_swiglu_mlp_deployment`, `vendor_conv_backward`, `vendor_conv_forward`, `vendor_gemm`, `vendor_sdpa_backward`, `vendor_sdpa_forward`.
+  these reserved names: `ARTIFACT_CONTRACT`, `DEPLOYMENT_ENTRY`, `Qwen3SwigluMlpFunction`, `Qwen3SwigluMlpModule`, `_vendor_conv_args`, `_vendor_sdpa_backend`, `qwen3_swiglu_mlp_deployment`, `vendor_addmm`, `vendor_bmm`, `vendor_conv_backward`, `vendor_conv_forward`, `vendor_gemm`, `vendor_grouped_mm`, `vendor_sdpa_backward`, `vendor_sdpa_forward`.
 - Every line of your module is checked statically.
   Rejected whatever is granted (a granted library primitive is the only route to
   the vendor GEMM, convolution and attention kernels below), whether called, read
   or imported, and under any name bound to it
   (`from torch.X import Y` counts as `torch.X.Y`; after `import torch.X as Y`
   or `Y = torch.X`, `Y.Z` counts as `torch.X.Z`):
-  - `torch.<name>` for: addbmm, addmm, addmv, addmv_, addr, baddbmm, bmm, cdist, chain_matmul, compile, dot, dsmm, einsum, ger, hsmm, hspmm, inner, kl_div, kron, matmul, matrix_power, mm, multi_dot, mv, outer, saddmm, sampled_addmm, smm, spmm, sspaddmm, tensordot, vdot, vecdot;
+  - `torch.<name>` for: addbmm, addmm, addmv, addmv_, addr, baddbmm, bmm, cdist, chain_matmul, compile, dot, dsmm, einsum, ger, hsmm, hspmm, inner, kl_div, kron, matmul, matrix_power, mm, multi_dot, mv, outer, saddmm, sampled_addmm, smm, spmm, sspaddmm, tensordot, vdot, vecdot, vmap;
   - any `torch.*` name containing, in any case: attention, batch_norm, cross_entropy, embedding, gemm, group_norm, instance_norm, layer_norm, linear, loss, rms_norm, softmax;
   - any `torch.*` convolution or recurrent entry point: conv1d/2d/3d, conv_tbc, conv_transpose*, *convolution*; lstm, gru, rnn_tanh, rnn_relu (and their cells);
   - anything under a private torch module or name (`torch._*`, at any depth), and anything under torch.autograd, torch.compiler, torch.export, torch.func, torch.fx, torch.jit, torch.nn, torch.ops, torch.sparse, torch.utils.checkpoint, torch.utils.cpp_extension;
-  - imports of or calls into: F, builtins, cffi, ctypes, evograd, functional, importlib, liger_kernel, transformers;
+  - imports of or calls into: F, builtins, cffi, ctypes, evograd, functional, functorch, importlib, liger_kernel, sys, transformers;
   - calls to the builtins `__import__`, `eval`, `exec`, `getattr`, `globals`, `vars`;
-  - methods `.<name>()` on any object, `torch` included, and these names imported from any module, for: __imatmul__, __matmul__, __rmatmul__, addbmm, addbmm_, addmm, addmm_, addmv, addmv_, addr, addr_, backward, baddbmm, baddbmm_, bmm, einsum, ger, imatmul, inner, kron, linear, log_softmax, matmul, matrix_power, mm, mv, outer, rmatmul, smm, softmax, sspaddmm, vdot;
+  - methods `.<name>()` on any object, `torch` included, and these names imported from any module, for: __imatmul__, __matmul__, __rmatmul__, _grouped_mm, addbmm, addbmm_, addmm, addmm_, addmv, addmv_, addr, addr_, backward, baddbmm, baddbmm_, bmm, einsum, ger, grouped_mm, imatmul, inner, kron, linear, log_softmax, matmul, matrix_power, mm, mv, outer, rmatmul, smm, softmax, sspaddmm, vdot;
   - the `@` and `@=` operators, and `from torch import *` (or from any torch module);
   - `torch` or any torch module used as a value (passed, returned, unpacked or put in a container): a torch module may only be the receiver of an attribute, as in `torch.empty_like(x)`, or bound to a plain name (`la = torch.linalg`); dtypes such as `torch.bfloat16` are values and stay allowed.
 - Library primitives this task grants:

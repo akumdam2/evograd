@@ -117,11 +117,12 @@ def timing_mode() -> dict[str, Any]:
 # ── static rules ─────────────────────────────────────────────────────────────
 
 
-def check_rules(op, module, path: str | Path) -> str | None:
+def check_rules(op, module, path: str | Path, granted: Sequence[str] | None = None) -> str | None:
     """The static rules on a submission's source; the violation, or ``None``.
 
     The granted primitives are the ones the artifact's own ``ARTIFACT_CONTRACT``
-    records, as every later consumer of the artifact reads them. A direct
+    records, as every later consumer of the artifact reads them; ``granted``,
+    when given, is its task pack's grant, which the artifact may not exceed. A direct
     deployment artifact also gets the deployment-layer checks
     (:func:`~evograd.pipelines.shared.artifact.validate_artifact`); a bare pair
     only its evolve block. A module without an ``EVOLVE-BLOCK`` is a violation:
@@ -139,6 +140,9 @@ def check_rules(op, module, path: str | Path) -> str | None:
     allowed = normalize((declared or {}).get("allowed_primitives", ())
                         if isinstance(declared, dict) else ())
     try:
+        if granted is not None and (excess := sorted(set(allowed) - set(normalize(granted)))):
+            raise PrimitiveViolation(f"the artifact declares {excess}, which its pack does not "
+                                     "grant")
         if deployment_entry(module) is not None:
             validate_artifact(op, module, source=source, allowed_primitives=allowed)
         else:
@@ -542,7 +546,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
              tier2_options: Mapping[str, Any] = TIER2_OPTIONS,
              tier3_options: Mapping[str, Any] = TIER3_OPTIONS,
              time_tier2: Callable | None = None, isolate_tier3: bool = True,
-             rules: bool = True, check_imports: bool = True) -> dict[str, Any]:
+             rules: bool = True, check_imports: bool = True,
+             grants: Mapping[str, Sequence[str]] | None = None) -> dict[str, Any]:
     """The whole protocol for one model; writes ``DIR/evaluation.json``.
 
     ``time_tier2(op, module, inputs)`` replaces :func:`time_case` (a CPU test
@@ -593,7 +598,8 @@ def evaluate(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
         # 0. Static rules: a violating submission is neither verified nor timed.
         for case_id in sorted(run.modules) if rules else ():
             violation = check_rules(model.reference_op(run.cases[case_id].task),
-                                    run.modules[case_id], run.paths[case_id])
+                                    run.modules[case_id], run.paths[case_id],
+                                    None if grants is None else grants.get(case_id, ()))
             if violation is None:
                 continue
             result["cases"][case_id].update({
@@ -841,6 +847,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--corpus", required=True, help="the model's real-payload corpus manifest")
     parser.add_argument("--out", required=True)
     parser.add_argument("--candidate", action="append", required=True, metavar="CASE_ID=PROGRAM.py")
+    parser.add_argument("--grant", action="append", default=None, metavar="CASE_ID=PRIMITIVE,...",
+                        help="a case's task-pack grant, which its candidate may not exceed "
+                             "(given for one case, required for every case)")
     parser.add_argument("--state", default=None,
                         help="candidate-independent results to reuse: Gate 3 control runs and "
                              "Gate 2 calibrations (default DIR/controls)")
@@ -858,10 +867,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     def log(*parts):
         print(time.strftime("%H:%M:%S"), *parts, flush=True)
 
+    grants = None if args.grant is None else {
+        cid: [name for name in names.split(",") if name]
+        for cid, names in (item.split("=", 1) for item in args.grant)}
     with calibration_reuse(options(args), log=log):
         result = evaluate(model, dict(item.split("=", 1) for item in args.candidate), args.corpus,
                           args.out, state=args.state, log=log, deadline_min=args.deadline_min,
-                          tier3_options={**TIER3_OPTIONS, "blocks": args.tier3_blocks})
+                          tier3_options={**TIER3_OPTIONS, "blocks": args.tier3_blocks},
+                          grants=grants)
     if result.get("suspended"):
         print(json.dumps({"suspended": result["suspended"]}))
         return 3

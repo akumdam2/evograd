@@ -177,11 +177,13 @@ def _run_child(module: str, program: Path, env: dict[str, str], timeout: int,
 
 
 def prepare_program(task: AgentTask, source: str, directory: Path, *,
-                    origin: str, repackage: bool = False) -> Path:
+                    origin: str, repackage: bool = False, contract: str | Path | None = None
+                    ) -> Path:
     """Package ``source`` and write it.
 
     A bare agent module is packaged. An evograd artifact (one with its own
-    deployment entry, e.g. evograd's unified seed lineage) is used as it is.
+    deployment entry: evograd's unified seed lineage) is used as it is only
+    with the unified ``contract`` that pins it (:func:`check_unified`).
     An adbench-tools artifact is used as it is in the loop, and with
     ``repackage=True`` rebuilt from its block body, so nothing outside the
     block survives from the agent's side.
@@ -191,6 +193,7 @@ def prepare_program(task: AgentTask, source: str, directory: Path, *,
     if HEADER_MARK in source:
         text = package(task, unpackage(source), origin=origin) if repackage else source
     elif f"\n{DEPLOYMENT_ENTRY_ATTR} = " in source:
+        check_unified(task, source, contract)
         text = source
     else:
         text = package(task, source, origin=origin)
@@ -200,6 +203,32 @@ def prepare_program(task: AgentTask, source: str, directory: Path, *,
     path = directory / f"{stamp}_{digest}.py"
     path.write_text(text, encoding="utf-8")
     return path
+
+
+def check_unified(task: AgentTask, source: str, contract: str | Path | None) -> None:
+    """Refuse a deployment artifact that is not the unified seed lineage ``contract`` pins.
+
+    The static rules read only the evolve block, so the code outside it must be
+    the contract's (its fixed library and deployment code, its preserved call
+    sites), and every library call it keeps must be one the pack grants
+    (:func:`~evograd.pipelines.shared.primitives.check_preserved`). Anything
+    else is submitted as a bare module and packaged.
+    """
+    from evograd.pipelines.shared.primitives import PrimitiveViolation, check_preserved
+    from evograd.pipelines.unified.contract import load_contract, validate_source
+
+    if contract is None:
+        raise PackagingError("a module with its own deployment entry is used as it is only "
+                             "with the unified contract that pins it; submit the bare pair "
+                             "module instead")
+    try:
+        pinned = load_contract(contract)
+        validate_source(source, pinned)
+        check_preserved([region["target"] for region in pinned["external_regions"]],
+                        allowed=task.allowed_primitives)
+    except (OSError, KeyError, TypeError, ValueError, PrimitiveViolation) as exc:
+        raise PackagingError(f"the deployment artifact is not the one its unified contract "
+                             f"pins under this pack's grant: {exc}") from exc
 
 
 def fixed_code_intact(task: AgentTask, source: str) -> bool | None:
@@ -234,7 +263,7 @@ def evaluate_source(
     ledger = RunLedger(run_dir) if run_dir and (Path(run_dir) / "run.json").is_file() else None
     programs = Path(run_dir) / "programs" if run_dir else task.root / ".cache" / "programs"
     try:
-        program = prepare_program(task, source, programs, origin=origin)
+        program = prepare_program(task, source, programs, origin=origin, contract=contract)
     except PackagingError as exc:
         record = EvalRecord(kind, {"combined_score": FAILED, "correct": 0.0},
                             {"failure": {"error_type": "PackagingError",

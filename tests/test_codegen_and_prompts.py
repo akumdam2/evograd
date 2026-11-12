@@ -441,6 +441,9 @@ class TestPipelineASynthesis(unittest.TestCase):
                 spec.loader.exec_module(module)
                 self.assertEqual(module.ARTIFACT_CONTRACT["allowed_primitives"], list(grant))
                 self.assertIsNone(check_rules(op, module, path))
+                self.assertIsNone(check_rules(op, module, path, granted=grant))
+                if grant:  # a module may not declare what its pack does not grant
+                    self.assertIn("does not grant", check_rules(op, module, path, granted=()))
                 self.assertIn("Autograd-pair rules", (out / "autograd_pair_plan_prompt.md").read_text())
 
     def test_model_code_outside_the_block_is_rejected(self):

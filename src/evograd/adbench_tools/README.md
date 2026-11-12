@@ -107,19 +107,31 @@ two is what the frontend contributes.
   user, so a filesystem or process search could still find it. Whether they
   edited `evaluate.py` is recorded. Claude Code runs on a Claude model.
 - **Library access.** evograd's frontend preserves what Inductor hands to a
-  vendor library: matrix multiplications (cuBLAS), convolutions (cuDNN) and
-  fused attention (SDPA). So with `--library auto` (the default), every agent
-  may call the trusted primitive for what one call of the reference, traced at
-  the case's configuration (a `TorchFunctionMode`, on the meta device first),
-  reaches, however deeply the reference delegates: `vendor_gemm` for a matrix
-  multiplication (`linear`, `matmul`/`@`, `mm`, `bmm`, `addmm`, `baddbmm`,
-  `einsum`, `_grouped_mm`), the `vendor_conv_forward` / `vendor_conv_backward`
-  pair for `conv1d` or `conv2d`, and the `vendor_sdpa_forward` /
-  `vendor_sdpa_backward` pair for `scaled_dot_product_attention`. Each runs the
-  kernel eager runs for its inputs: cuDNN attention in training and flash under
-  deterministic algorithms for half precision, memory-efficient attention for
-  float32; the convolution eager's dispatcher picks (cuDNN, or PyTorch's own
-  depthwise kernels). The grant is the only library route: the static rules
+  vendor library: matrix multiplications, batched and grouped ones included
+  (cuBLAS, CUTLASS), convolutions (cuDNN) and fused attention (SDPA). So with
+  `--library auto` (the default), every agent may call the trusted primitive
+  for what one call of the reference, traced at the case's configuration (a
+  `TorchFunctionMode` and, below it, a `TorchDispatchMode` for the ATen calls,
+  on the meta device first, active inputs requiring grad as in the frontend's
+  capture), reaches, however deeply the reference delegates: `vendor_gemm` for
+  a matrix multiplication (`linear`, `matmul`/`@`, `mm`, `bmm`, `addmm`,
+  `baddbmm`, `einsum`, `_grouped_mm`); `vendor_addmm` (`torch.addmm`, a 2-D GEMM
+  with its bias added in the GEMM's epilogue) when the call decomposes into
+  `aten.addmm` (a linear layer with a bias); `vendor_bmm` (`torch.bmm`, 3-D) when the
+  call decomposes into `aten.bmm` (`torch.bmm`, a `matmul`/`@`
+  whose operands do not fold into one 2-D GEMM, an `einsum` with a summed index;
+  the math decomposition inside fused attention does not count);
+  `vendor_grouped_mm` (`torch._grouped_mm`, bfloat16, int32 group offsets) for
+  `aten._grouped_mm`, a mixture of experts' grouped GEMM; the
+  `vendor_conv_forward` / `vendor_conv_backward` pair for `conv1d` or `conv2d`;
+  and the `vendor_sdpa_forward` / `vendor_sdpa_backward` pair for
+  `scaled_dot_product_attention`. Each runs the kernel eager runs for its
+  inputs: cuDNN attention in training and flash under deterministic algorithms
+  for half precision, memory-efficient attention for float32; the convolution
+  eager's dispatcher picks (cuDNN, or PyTorch's own depthwise kernels). evograd's
+  unified seed is refused when it would keep a library call no granted primitive
+  runs (`check_preserved`), so it never uses a kernel the other agents may not
+  call. The grant is the only library route: the static rules
   deny the torch-level library entry points (convolutions included,
   normalizations, embeddings, losses, recurrent layers, `torch.nn`,
   `torch.func`, C++ extensions, private torch modules), so every other
@@ -364,7 +376,7 @@ needs a GPU; `--state` keeps or reuses that calibration.
 | `reference.py` | The forward reference as a self-contained file, ending in `reference_forward = <fn>` | `reference_closure`: starts from the declared forward, copies in every evograd helper and constant it uses, and turns library names into imports. Checked bit-identical to the declared forward for all 63 operators |
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
-| `adbench_primitives.py` | The granted primitives (`vendor_gemm`, `vendor_conv_*`, `vendor_sdpa_*`) so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
+| `adbench_primitives.py` | The granted primitives (`vendor_gemm`, `vendor_bmm`, `vendor_grouped_mm`, `vendor_conv_*`, `vendor_sdpa_*`) so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
 | `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives and why (`library_policy`; under `auto`, also the library calls one traced reference call reached), scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama_3_2_1b.llama3_swiglu_mlp.swiglu_mlp` (model, then the case id).

@@ -65,7 +65,7 @@ def score(task_dir: str | Path, program: str | Path, *, run_dir: str | Path,
     result["fixed_code_intact"] = fixed_code_intact(task, source)
     try:
         packaged = prepare_program(task, source, run_dir / "final", origin=agent,
-                                   repackage=True)
+                                   repackage=True, contract=contract)
     except ValueError as exc:
         result.update({"accepted": False, "correct": False, "combined_score": None,
                        "failure": {"stage": "packaging", "error": str(exc)}})

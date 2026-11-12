@@ -150,8 +150,10 @@ the primitive kernels, surrounding computation and saved tensors can evolve.
 Keep the contract beside the seed when moving artifacts.
 
 Unified supports single and structured tensor outputs, and preserves compiler-selected
-`mm`, `bmm`, `addmm`, convolution and convolution-backward regions. Unknown/ambiguous external mappings, unresolved
-compiler choices, and unsupported primitive lowerings fail explicitly.
+`mm`, `addmm`, `bmm`, `_grouped_mm`, convolution, convolution-backward and fused-attention
+regions. Unknown/ambiguous external mappings, unresolved compiler choices, unsupported
+primitive lowerings, and a preserved library call the pack does not grant (failure phase
+`grant`: each must be one a granted trusted primitive runs) fail explicitly.
 Host allocations, layout handling and dtype conversions reuse existing helpers.
 Run `python -m unittest tests.test_pipeline_unified -v` on a CUDA node for the
 compiler-to-seed acceptance tests.

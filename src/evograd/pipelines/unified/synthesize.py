@@ -107,7 +107,8 @@ def synthesize_unified_seed(config: UnifiedSeedConfig) -> int:
 
     There is no LLM, repair search or timing objective in seed synthesis.
     Unsupported lowering fails with diagnostics instead of adopting Inductor's
-    Triton or silently substituting eager math.
+    Triton or silently substituting eager math, and so does a preserved library
+    call that no primitive the pack grants runs (``check_preserved``).
     """
     from evograd.pipelines.unified.capture import capture_unified_pair
     from evograd.pipelines.unified.codegen import generate_unified_seed
@@ -157,6 +158,14 @@ def synthesize_unified_seed(config: UnifiedSeedConfig) -> int:
             "grad_indices": captured.pair.grad_indices,
         }
         _write_json(root / "partition.json", manifest)
+        # Every library call the seed keeps fixed must be one the pack grants every
+        # agent through a trusted primitive.
+        phase = "grant"
+        from evograd.adbench_tools.task import load as load_pack
+        from evograd.pipelines.shared.primitives import check_preserved
+
+        check_preserved([region.target for region in captured.external_regions],
+                        allowed=load_pack(config.pack).allowed_primitives if config.pack else ())
         phase = "lowering"
         print(f"[unified] Lower ATen primitives; preserve {len(captured.external_regions)} external regions")
         source = generate_unified_seed(config.op, config.workload, captured)

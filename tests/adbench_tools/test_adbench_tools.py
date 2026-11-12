@@ -157,6 +157,56 @@ def test_the_standalone_primitive_import_is_replaced(small_task):
     assert artifact.index("from __future__ import annotations") < artifact.index("import torch")
 
 
+#: The linear pair again, its GEMMs as batched ones of batch 1 (vendor_bmm).
+BATCHED = '''
+import torch
+
+
+def linear_forward_with_saved(x, weight, bias):
+    return vendor_bmm(x[None], weight.t()[None])[0] + bias, (x, weight)
+
+
+def linear_backward_from_saved(dy, saved_tensors):
+    x, weight = saved_tensors
+    return vendor_gemm(dy, weight), vendor_bmm(dy.t()[None], x[None])[0], dy.sum(0)
+'''
+
+
+def test_a_granted_batched_gemm_is_packaged_stated_and_shipped(small_task):
+    """Every agent's route to a grant: packaging, the static rules, TASK.md, adbench_primitives."""
+    from evograd.adbench_tools.artifact import render_primitives_module
+    from evograd.adbench_tools.statement import render_statement
+    from evograd.adbench_tools.task import AgentTask
+    from evograd.pipelines.shared.primitives import (
+        REGISTRY,
+        PrimitiveViolation,
+        VENDOR_BMM_SOURCE,
+        check_source,
+    )
+
+    granted = AgentTask(root=small_task.root,
+                        spec={**small_task.spec, "allowed_primitives": ["vendor_bmm", "vendor_gemm"]})
+    artifact = package(granted, "from adbench_primitives import vendor_bmm, vendor_gemm\n" + BATCHED)
+    assert VENDOR_BMM_SOURCE in artifact
+    usage = check_source(artifact, allowed=granted.allowed_primitives)
+    assert usage["primitive_call_sites"] == {"vendor_gemm": 1, "vendor_bmm": 2}
+    # The pack that grants only vendor_gemm refuses the same module, however it is spelled.
+    with pytest.raises(PrimitiveViolation, match="did not grant"):
+        check_source(package(small_task, BATCHED), allowed=small_task.allowed_primitives)
+    with pytest.raises(PackagingError, match="only"):
+        package(small_task, "from adbench_primitives import vendor_bmm\n" + BATCHED)
+    with pytest.raises(PackagingError, match="reserves"):
+        package(small_task, BATCHED + "\ndef vendor_grouped_mm(a, b, offs=None):\n    return a\n")
+    # TASK.md says what the primitive does; the shipped module defines it, runnable standalone.
+    statement = render_statement(granted)
+    assert REGISTRY["vendor_bmm"].summary in statement
+    assert "`from adbench_primitives import vendor_bmm, vendor_gemm`" in statement
+    namespace: dict = {}
+    exec(compile(render_primitives_module(granted), "adbench_primitives", "exec"), namespace)
+    out = namespace["vendor_bmm"](torch.randn(2, 3, 4), torch.randn(2, 4, 5))
+    assert out.shape == (2, 3, 5)
+
+
 def test_code_outside_the_block_never_reaches_the_final_measurement(small_task, tmp_path):
     artifact = package(small_task, LINEAR, origin="openevolve")
     assert fixed_code_intact(small_task, artifact) is True
@@ -459,7 +509,13 @@ def test_auto_library_follows_what_the_frontend_preserves(small_task):
     from evograd.adbench_tools.task import resolve_library
 
     assert resolve_library("auto", ["linear", "view"])[0] == ("vendor_gemm",)
-    assert resolve_library("auto", ["_grouped_mm"])[0] == ("vendor_gemm",)
+    # Batched and grouped GEMMs are read at the ATen level, each with its own primitive
+    # (the contraction keeps vendor_gemm, as before).
+    assert resolve_library("auto", ["matmul", "aten.mm"])[0] == ("vendor_gemm",)
+    assert resolve_library("auto", ["matmul", "aten.bmm"])[0] == ("vendor_bmm", "vendor_gemm")
+    assert resolve_library("auto", ["einsum", "aten.bmm"])[0] == ("vendor_bmm", "vendor_gemm")
+    assert resolve_library("auto", ["_grouped_mm", "aten._grouped_mm"])[0] == (
+        "vendor_gemm", "vendor_grouped_mm")
     # A convolution is cuDNN's (Inductor's extern convolution), not a GEMM.
     assert resolve_library("auto", ["conv2d"])[0] == ("vendor_conv",)
     assert resolve_library("auto", ["conv1d", "linear", "silu"])[0] == ("vendor_conv", "vendor_gemm")
@@ -469,26 +525,40 @@ def test_auto_library_follows_what_the_frontend_preserves(small_task):
     assert resolve_library("auto", ["mul", "rsqrt"])[0] == ()
     assert resolve_library("vendor_gemm,vendor_sdpa", [])[0] == ("vendor_gemm", "vendor_sdpa")
     assert resolve_library("vendor_conv", ["linear"])[0] == ("vendor_conv",)
+    assert resolve_library("vendor_bmm,vendor_grouped_mm", ["linear"])[0] == (
+        "vendor_bmm", "vendor_grouped_mm")
     assert resolve_library("none", ["linear", "scaled_dot_product_attention"])[0] == ()
     with pytest.raises(ValueError):
         resolve_library("vendor_blas", [])
     # The pack records what the trace of its reference reached.
-    assert small_task.spec["library_policy"]["observed_calls"] == ["linear"]
-    assert small_task.allowed_primitives == ("vendor_gemm",)
+    # The ATen call the bias form becomes is recorded too: it grants vendor_addmm.
+    assert small_task.spec["library_policy"]["observed_calls"] == ["aten.addmm", "linear"]
+    assert small_task.allowed_primitives == ("vendor_addmm", "vendor_gemm")
 
 
 #: Cases whose contraction the reference reaches only through code ``reference.py``
 #: imports (a shared helper, a Hugging Face function, ``transformers.integrations``):
 #: a scan of the reference source granted them nothing. Fused attention stays
-#: ``scaled_dot_product_attention`` at the function level (ATen on the meta device
-#: would see its math decomposition, ``bmm``).
+#: ``scaled_dot_product_attention`` at the function level, and the ATen calls inside
+#: it are not recorded (on the meta device they are its math decomposition, ``bmm``).
 REACHED = (
     ("qwen3_5_4b", "qwen3_5_attention_block/attention_block", "scaled_dot_product_attention",
      ("vendor_gemm", "vendor_sdpa")),
-    ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "matmul", ("vendor_gemm",)),
-    ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "_grouped_mm", ("vendor_gemm",)),
+    # Batched matmuls (4-D @ 4-D), torch.bmm, a grouped GEMM: the seeds preserve
+    # aten.bmm and aten._grouped_mm there.
+    ("qwen3_5_4b", "qwen3_5_gated_delta_rule/gated_delta_rule", "aten.bmm",
+     ("vendor_bmm", "vendor_gemm")),
+    ("torchrec_dlrm", "torchrec_dlrm_dlrm_interaction/interaction", "aten.bmm",
+     ("vendor_bmm", "vendor_gemm")),
+    ("olmoe_1b_7b", "olmoe_moe_experts/moe_experts", "aten._grouped_mm",
+     ("vendor_gemm", "vendor_grouped_mm")),
+    # Attention blocks: the math decomposition of fused attention (bmm) is not recorded.
     ("qwen3_0_6b", "qwen3_attention_block/attention_block", "scaled_dot_product_attention",
      ("vendor_gemm", "vendor_sdpa")),
+    ("llama_3_2_1b", "llama3_attention_block/attention_block", "scaled_dot_product_attention",
+     ("vendor_gemm", "vendor_sdpa")),
+    ("qwen3_0_6b", "rope/rope", "aten.mul", ()),
+    ("llama_3_2_1b", "rope/rope", "aten.mul", ()),
     ("qwen3_0_6b", "qwen3_lm_head_ce/flce", "linear", ("vendor_gemm",)),
     # Convolutions: the L1 primitives and the L2 cases that contain one.
     ("qwen3_5_4b", "causal_conv1d/gdn_conv1d", "conv1d", ("vendor_conv",)),
@@ -500,7 +570,7 @@ REACHED = (
     ("dit_s_2", "spatial_conv2d/patch", "conv2d", ("vendor_conv",)),
     # float32 attention (eager runs memory-efficient attention): vendor_sdpa covers it.
     ("dit_s_2", "dit_s_2_dit_attention/blocks.attention", "scaled_dot_product_attention",
-     ("vendor_gemm", "vendor_sdpa")),
+     ("vendor_addmm", "vendor_gemm", "vendor_sdpa")),
 )
 
 
@@ -512,6 +582,43 @@ def test_the_auto_grant_follows_what_one_reference_call_reaches(model, case_id, 
     calls = observed_calls(model_obj.reference_op(case.task), case.workload, device="meta")
     assert reached in calls
     assert resolve_library("auto", calls)[0] == granted
+
+
+def _reached_by(monkeypatch, forward):
+    """The calls one ``forward(x, weight, bias)`` reaches at :data:`SMALL_CASE`'s
+    configuration (x [32, 13], weight [512, 13], bias [512], all active)."""
+    import evograd.opdecl.oracle  # noqa: F401 - the module, not the function it exports
+    from evograd.adbench_tools.task import observed_calls, observed_case
+
+    monkeypatch.setattr(sys.modules["evograd.opdecl.oracle"], "resolve_forward", lambda op: forward)
+    model_obj, case = observed_case(SMALL_MODEL, SMALL_CASE)
+    return observed_calls(model_obj.reference_op(case.task), case.workload, device="cpu")
+
+
+@pytest.mark.parametrize("name, forward, granted", [
+    ("torch.bmm", lambda x, w, b: torch.bmm(x[None], w.t()[None])[0] + b,
+     ("vendor_bmm", "vendor_gemm")),
+    ("batched @", lambda x, w, b: (x.view(2, 16, 13) @ w.t().expand(2, 13, 512)).flatten(0, 1),
+     ("vendor_bmm", "vendor_gemm")),
+    # A 3-D operand folds into one 2-D GEMM against a weight that requires grad, as in
+    # the frontend's capture: no batched GEMM, though without grad it would be one.
+    ("folded @", lambda x, w, b: (x.view(16, 2, 13).transpose(0, 1) @ w.t()).flatten(0, 1),
+     ("vendor_gemm",)),
+    # einsum contracts through bmm, batch of one included; the frontend keeps it.
+    ("einsum", lambda x, w, b: torch.einsum("bi,ji->bj", x, w) + b, ("vendor_bmm", "vendor_gemm")),
+    # A linear layer with a bias is aten.addmm, kept with its bias in the GEMM.
+    ("linear", lambda x, w, b: torch.nn.functional.linear(x, w, b), ("vendor_addmm", "vendor_gemm")),
+    ("linear without a bias", lambda x, w, b: torch.nn.functional.linear(x, w) + b, ("vendor_gemm",)),
+    ("fused attention", lambda x, w, b: torch.nn.functional.scaled_dot_product_attention(
+        x.view(1, 1, 32, 13), w.view(1, 1, 512, 13), w.view(1, 1, 512, 13)).view(32, 13)[:, :1] + b,
+     ("vendor_sdpa",)),
+])
+def test_a_batched_gemm_is_granted_where_the_reference_decomposes_into_one(
+        monkeypatch, name, forward, granted):
+    from evograd.adbench_tools.task import resolve_library
+
+    calls = _reached_by(monkeypatch, forward)
+    assert resolve_library("auto", calls)[0] == granted, (name, calls)
 
 
 def test_only_the_auto_policy_traces_the_reference(tmp_path, monkeypatch):
@@ -704,3 +811,38 @@ def test_a_coding_agent_session_leaves_nothing_running(coding_agents, tmp_path):
         time.sleep(0.1)
     else:
         pytest.fail(f"the agent's background process {pid} survived the session")
+
+
+def test_a_deployment_artifact_is_used_as_it_is_only_with_its_unified_contract(small_task, tmp_path):
+    # The static rules read only the evolve block: a module with its own deployment
+    # entry may keep code outside it only as the unified seed lineage its contract pins,
+    # and only library calls its pack grants (small_task: a linear layer, vendor_addmm).
+    from evograd.pipelines.unified.contract import build_contract
+
+    source = ("import torch\n"
+              "UNIFIED_EXTERNAL_REGIONS = [{'wrapper': '_kept', 'target': 'aten.addmm.default'}]\n"
+              "def _kept(bias, x, w):\n    return torch.addmm(bias, x, w)\n"
+              "# EVOLVE-BLOCK-START\n"
+              "def pair(bias, x, w):\n    return _kept(bias, x, w)\n"
+              "# EVOLVE-BLOCK-END\n"
+              "DEPLOYMENT_ENTRY = pair\n")
+
+    def contract_of(text, name):
+        path = tmp_path / name
+        path.write_text(json.dumps(build_contract(text)))
+        return path
+
+    contract = contract_of(source, "contract.json")
+    for repackage in (False, True):
+        with pytest.raises(PackagingError, match="unified contract"):
+            prepare_program(small_task, source, tmp_path / "p", origin="t", repackage=repackage)
+        kept = prepare_program(small_task, source, tmp_path / "p", origin="t", repackage=repackage,
+                               contract=contract)
+        assert kept.read_text() == source
+    outside = source.replace("return torch.addmm(bias, x, w)", "return torch.mm(x, w)")
+    with pytest.raises(PackagingError, match="fixed library/deployment code was changed"):
+        prepare_program(small_task, outside, tmp_path / "p", origin="t", contract=contract)
+    batched = source.replace("aten.addmm.default", "aten.bmm.default")
+    with pytest.raises(PackagingError, match=r"\['vendor_bmm'\]"):
+        prepare_program(small_task, batched, tmp_path / "p", origin="t",
+                        contract=contract_of(batched, "batched.json"))

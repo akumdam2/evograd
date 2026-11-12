@@ -233,6 +233,7 @@ def _primitive_usage(program_path: str, module):
     """
     from evograd.pipelines.shared.primitives import (
         PrimitiveViolation,
+        check_preserved,
         check_source,
         normalize,
     )
@@ -257,10 +258,18 @@ def _primitive_usage(program_path: str, module):
 
         if contract_path := os.environ.get(CONTRACT_ENV):
             try:
-                validate_source(pathlib.Path(program_path).read_text(encoding="utf-8"),
-                                load_contract(contract_path))
+                contract = load_contract(contract_path)
+                validate_source(pathlib.Path(program_path).read_text(encoding="utf-8"), contract)
             except (ValueError, KeyError, OSError) as exc:
                 raise PrimitiveViolation(f"unified pipeline preservation: {exc}") from exc
+            if ceiling is not None:
+                # The library calls kept outside the block, under the run's grant: a
+                # seed made under another pack's grant is not this run's.
+                try:
+                    targets = [region["target"] for region in contract["external_regions"]]
+                except (KeyError, TypeError) as exc:
+                    raise PrimitiveViolation(f"unified pipeline preservation: {exc!r}") from exc
+                check_preserved(targets, allowed=permitted)
             usage["unified_fixed_code_valid"] = True
     except PrimitiveViolation as exc:
         return None, {"error_type": "PrimitiveViolation", "error_message": str(exc)}
