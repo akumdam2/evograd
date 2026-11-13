@@ -74,9 +74,9 @@ def synthetic_entry(kind, limit, gamma=2.0, *, term):
     entry = {"kind": kind, "components": {}}
     for metric in ("E2", "Emax"):
         entry[metric] = limit[metric]
-        entry["components"][metric] = {"native_repeat": limit[metric] / gamma,
-                                       "trusted_compile": 0.0, "floor": floor[metric],
-                                       "gamma": gamma, "binding": "native_repeat", term: 0.0}
+        entry["components"][metric] = {"trusted_compile": limit[metric] / gamma,
+                                       "floor": floor[metric],
+                                       "gamma": gamma, "binding": "trusted_compile", term: 0.0}
     return entry
 
 
@@ -400,9 +400,8 @@ class TestCalibrationArithmetic(unittest.TestCase):
         return ControlMeasurement(source, sample, result, kind, e2, emax)
 
     def test_formula_gamma_and_floors(self):
-        ms = [self.m("native_repeat", "out:a", 1e-4, 5e-3), self.m("native_repeat", "out:a", 2e-4, 1e-3, "s2"),
-              self.m("trusted_compile", "out:a", 3e-4, 1e-4),
-              self.m("native_repeat", "grad:b", 0.0, 0.0, kind=C.PARAM_GRAD),
+        ms = [self.m("trusted_compile", "out:a", 3e-4, 1e-4),
+              self.m("trusted_compile", "out:a", 2e-4, 5e-3, "s2"),
               self.m("trusted_compile", "grad:b", 0.0, 0.0, kind=C.PARAM_GRAD)]
         t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "grad:b": C.PARAM_GRAD}, gamma=2.0)
         self.assertAlmostEqual(t["out:a"]["E2"], 2 * 3e-4)
@@ -446,8 +445,7 @@ class TestCalibrationArithmetic(unittest.TestCase):
         self.assertEqual(hits, 0)
 
     def test_rounding_term_binds_where_compile_is_bitwise(self):
-        ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0),
-              self.m("native_repeat", "out:b", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
+        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
         rounding = {"out:a": {"E2": 2.0 ** -8, "Emax": 0.04}, "out:b": {"E2": 2.0 ** -8, "Emax": 0.04}}
         t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT}, rounding=rounding)
         self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (2 * 2.0 ** -8, 2 * 0.04))
@@ -470,7 +468,7 @@ class TestCalibrationArithmetic(unittest.TestCase):
                 _check_entry("swapped", entry, 2.0, SYNTHETIC_FLOORS, term=term)
 
     def test_rounding_perturbation_term_is_required_at_model_scope_only(self):
-        ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0),
+        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0),
               self.m("rounding_perturbation", "out:a", 0.03, 5.0),
               self.m("rounding_perturbation", "out:a", 0.04, 4.0, "s2")]
         t = derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=4.0, perturbed=True)
@@ -479,17 +477,16 @@ class TestCalibrationArithmetic(unittest.TestCase):
         with self.assertRaises(CalibrationError):                  # not an operator-scope term
             derive_thresholds(ms, results={"out:a": C.OUTPUT})
         with self.assertRaises(CalibrationError):                  # nor optional at model scope
-            derive_thresholds(ms[:2], results={"out:a": C.OUTPUT}, perturbed=True)
+            derive_thresholds(ms[:1], results={"out:a": C.OUTPUT}, perturbed=True)
 
     def test_thresholds_are_per_tensor(self):
-        ms = [self.m("native_repeat", "out:a", 0.5, 0.5), self.m("trusted_compile", "out:a", 0.5, 0.5),
-              self.m("native_repeat", "out:b", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.0, 0.0)]
+        ms = [self.m("trusted_compile", "out:a", 0.5, 0.5), self.m("trusted_compile", "out:b", 0.0, 0.0)]
         t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT})
         self.assertEqual(t["out:a"]["E2"], 1.0)
         self.assertEqual(t["out:b"]["E2"], 2 * DEFAULT_FLOORS["output"]["E2"])
 
     def test_invalid_gamma_and_floors(self):
-        ms = [self.m("native_repeat", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:a", 0.0, 0.0)]
+        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0)]
         for gamma in (-1.0, 0.5, float("nan"), float("inf"), True, "2"):
             with self.assertRaises(CalibrationError, msg=repr(gamma)):
                 derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=gamma)
@@ -501,21 +498,36 @@ class TestCalibrationArithmetic(unittest.TestCase):
     def test_candidate_measurements_cannot_calibrate(self):
         with self.assertRaises(CalibrationError):
             ControlMeasurement("candidate", "s", "out:a", C.OUTPUT, 0.0, 0.0)
+        with self.assertRaises(CalibrationError):        # a native repeat must be bitwise, not a budget
+            ControlMeasurement("native_repeat", "s", "out:a", C.OUTPUT, 0.0, 0.0)
         check = gate2.judge(C.ResultSpec("out:a", C.OUTPUT), torch.ones(2), torch.ones(2), None)
         with self.assertRaises(TypeError):
             derive_thresholds([check], results={"out:a": C.OUTPUT})
 
     def test_missing_control_evidence_is_an_error_not_a_fallback(self):
         with self.assertRaises(CalibrationError):
-            derive_thresholds([self.m("native_repeat", "out:a", 0.0, 0.0)],
-                              results={"out:a": C.OUTPUT})
+            derive_thresholds([], results={"out:a": C.OUTPUT})
         with self.assertRaises(CalibrationError):
-            derive_thresholds([self.m("native_repeat", "out:x", 0.0, 0.0),
-                               self.m("trusted_compile", "out:x", 0.0, 0.0)],
+            derive_thresholds([self.m("trusted_compile", "out:x", 0.0, 0.0)],
                               results={"out:a": C.OUTPUT})
 
 
 class TestControls(unittest.TestCase):
+    def test_a_native_that_does_not_repeat_gives_no_policy(self):
+        calls = [0]
+
+        def drifting(x, w):          # differs on every call: not reproducible bit for bit
+            calls[0] += 1
+            return F.norm_site(x, w) * (1.0 + 1e-3 * calls[0])
+
+        scope = F.toy_module_scope()
+        scope.native_sites = {**scope.native_sites, "norm": drifting}
+        result = calibrate(scope, patch_set=("norm",), samples=samples("ctl", [1]),
+                           compile_backend=FAST)
+        self.assertIsNone(result.policy)
+        self.assertTrue(any(f.code == "control_disqualified" and "native reference" in f.message
+                            for f in result.findings), [f.to_dict() for f in result.findings])
+
     def test_failed_or_unavailable_compile_control_gives_no_policy(self):
         def breaks_graph(x, w):
             torch._dynamo.graph_break()

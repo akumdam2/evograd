@@ -4,9 +4,14 @@ One sample protocol at both scopes, ``matched_inputs``, recorded in the policy
 (:data:`SAMPLE_PROTOCOLS`). For every required result ``z`` and metric
 ``m in {E2, Emax}``, pooled over the calibration samples ``x``::
 
-    T[z, m] = gamma * max( max_x max_r E_m(native repeat_r[x], native[x]),
-                           max_x E_m(trusted compile[x], native[x]),
+    T[z, m] = gamma * max( max_x E_m(trusted compile[x], native[x]),
                            floor[z, m], scope term[z, m] )
+
+The native reference must reproduce itself bit for bit on every sample (a
+second native run per sample, :func:`calibrate`), so its repeat adds nothing
+to a threshold; a native that does not repeat leaves the case uncalibrated.
+Under verify's deterministic settings no native ever differed from its repeat
+(every policy of the P8 audit, 2026-11-13).
 
 At operator scope the samples are recorded calls, and each call site ``c``
 (the payload's ``call``, one layer's instance of the site) gets its own table,
@@ -101,10 +106,11 @@ from evograd.verification.gate2.runner import (
     run_callable,
 )
 
-#: /6: matched inputs at both scopes, with each calibration sample's content
+#: /7: matched inputs at both scopes, with each calibration sample's content
 #: identity; at operator scope one threshold table per call site
-#: (``call_thresholds``). /5 and older policies are never reinterpreted.
-SCHEMA = "evograd-verification-gate2-policy/6"
+#: (``call_thresholds``); no native-repeat term. /6 and older policies are never
+#: reinterpreted.
+SCHEMA = "evograd-verification-gate2-policy/7"
 
 #: The sample protocol of each scope; the policy records it.
 MATCHED = "matched_inputs"
@@ -138,12 +144,13 @@ ROUNDING_PROBABILITY = 1.0 / 3.0
 ROUNDING_SEEDS = (11, 22, 33, 44)
 
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = ("gate2-calibration/6: matched inputs at both scopes; operator rounding "
-                         "floor and thresholds per call site, model rounding perturbation")
+CALIBRATION_PROCEDURE = ("gate2-calibration/7: matched inputs at both scopes; operator rounding "
+                         "floor and thresholds per call site, model rounding perturbation; native "
+                         "must repeat bit for bit")
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 ROUNDING_PERTURBATION = "rounding_perturbation"
-CONTROL_SOURCES = (NATIVE_REPEAT, TRUSTED_COMPILE, ROUNDING_PERTURBATION)
+CONTROL_SOURCES = (TRUSTED_COMPILE, ROUNDING_PERTURBATION)
 
 
 class CalibrationError(ValueError):
@@ -243,7 +250,7 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
     """Per-tensor thresholds from trusted control measurements.
 
     ``results`` maps every result that needs a threshold to its kind. Each
-    needs at least one native-repeat and one trusted-compile measurement, and
+    needs at least one trusted-compile measurement, and
     with ``perturbed`` (model scope) one rounding-perturbation measurement; a
     result with any missing is an error, never a fallback. Measurements for
     names outside ``results`` are refused rather than pooled. ``rounding``
@@ -254,7 +261,7 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
     if rounding is not None and set(rounding) != set(results):
         raise CalibrationError(f"rounding floors for {sorted(set(rounding) ^ set(results))} do not "
                                "match the calibrated results")
-    sources = (NATIVE_REPEAT, TRUSTED_COMPILE) + ((ROUNDING_PERTURBATION,) if perturbed else ())
+    sources = (TRUSTED_COMPILE,) + ((ROUNDING_PERTURBATION,) if perturbed else ())
     by_result: dict[str, dict[str, list[ControlMeasurement]]] = {
         name: {s: [] for s in CONTROL_SOURCES} for name in results}
     for m in measurements:
@@ -277,8 +284,7 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
         floor = floors[family_of(kind)]
         entry: dict[str, Any] = {"kind": kind, "components": {}}
         for metric in METRICS:
-            terms = {"native_repeat": max(getattr(m, metric) for m in groups[NATIVE_REPEAT]),
-                     "trusted_compile": max(getattr(m, metric) for m in groups[TRUSTED_COMPILE]),
+            terms = {"trusted_compile": max(getattr(m, metric) for m in groups[TRUSTED_COMPILE]),
                      "floor": floor[metric]}
             if rounding is not None:
                 terms["rounding"] = float(rounding[name][metric])
@@ -372,8 +378,7 @@ REQUIRED_FIELDS = ("scope", "sample_protocol", "adapter", "numerics", "environme
                    "sample_identities", "calibration_executions", "weights", "gamma", "floors",
                    "epsilon", "boundaries", "formula", "thresholds", "policy_hash")
 
-_CONTROL_TERMS = ("T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
-                  "max_x E_m(compile[x], native[x]), floor[z,m], ")
+_CONTROL_TERMS = "T[z,m] = gamma * max(max_x E_m(compile[x], native[x]), floor[z,m], "
 FORMULAS = {
     "operator": _CONTROL_TERMS + "max_x rounding_m(native[x][z])), per call site c over the "
                 "calibrated samples x of c, judged on those samples; rounding: E2 = unit roundoff "
@@ -433,7 +438,7 @@ def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mappi
     if not isinstance(entry, Mapping):
         raise CalibrationError(f"{name}: malformed threshold entry")
     floor = floors[family_of(entry.get("kind"))]
-    terms = ("native_repeat", "trusted_compile", "floor", term)
+    terms = ("trusted_compile", "floor", term)
     for metric in METRICS:
         parts = (entry.get("components") or {}).get(metric) or {}
         foreign = set(SCOPE_TERMS.values()) - {term}
@@ -762,7 +767,12 @@ def _boundary_measurements(adapter: ScopeAdapter, control: Deployment, execution
             problems.append(missing("control_failed", f"boundary {call.key}: {exc}"))
             continue
         contract = boundary_contract(call, native)
-        for source, other in ((NATIVE_REPEAT, native_again), (TRUSTED_COMPILE, compiled),
+        repeat, _ = C.match_results(contract, native_again, native)
+        if any(not torch.equal(p.candidate, p.reference) for p in repeat):
+            problems.append(missing("control_disqualified", f"boundary {call.key}: the native "
+                                    "site did not reproduce itself bit for bit", subject=call.key))
+            continue
+        for source, other in ((TRUSTED_COMPILE, compiled),
                               *((ROUNDING_PERTURBATION, m) for m in moved)):
             pairs, presence = C.match_results(contract, other, native)
             if presence:
@@ -812,9 +822,10 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     """Derive and freeze a Gate 2 policy for ``patch_set`` on this adapter.
 
     Per calibration sample: one native reference, ``native_repeats - 1``
-    further independent native runs, and one ``torch.compile`` control at the
-    replaced sites (run twice; the second must reproduce the first bit for
-    bit), every one on the reference's exact content. With
+    further independent native runs, which must reproduce it bit for bit, and
+    one ``torch.compile`` control at the replaced sites (run twice; the second
+    must reproduce the first bit for bit), every one on the reference's exact
+    content. With
     ``boundaries=True`` every call recorded at a replaced site under the
     compile control gets its own thresholds too, from the native site
     implementation run twice and the compiled one, on the call's own inputs
@@ -944,10 +955,11 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             identity["executions"]["native_repeats"].append(again.execution_id)
             identity["control_results_digests"]["native_repeats"].append(again.results_digest)
             result.findings.extend(_same_content(reference, again, NATIVE_REPEAT))
-            got, problems = _qualify(contract, reference, again, NATIVE_REPEAT)
-            measurements.extend(got)
-            result.findings.extend(problems)
-            del again  # its evidence and scalar measurements have been recorded
+            if again.error:
+                result.findings.append(missing("control_failed", f"a native repeat failed at "
+                                               f"{again.error_stage}", subject=sid,
+                                               trace=again.error))
+            del again  # its evidence and digest have been recorded
         for seed in rounding_seeds if perturbed else ():
             moved = execute(adapter, rounding_control(adapter, patch_set, seed), sample)
             executions.append(moved.execution_id)
@@ -966,9 +978,9 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         got, problems = _qualify(contract, reference, ctl, TRUSTED_COMPILE)
         measurements.extend(got)
         result.findings.extend(problems)
-        # The compile term has no repeat of its own in the budget, so the
-        # control must reproduce itself bit for bit. A native repeat that is
-        # not bitwise is kept in the budget and recorded here. The repeat runs
+        # Neither control has a repeat term in the budget, so each must
+        # reproduce itself bit for bit: the native repeats above, the compile
+        # control's repeat here. The compile repeat runs
         # under the same boundary recording as the first run: recording hands
         # the site identity views of its inputs, and a run without it makes
         # Dynamo recompile; in a process that has compiled another site the
@@ -982,6 +994,10 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         # non-bitwise compile control (2026-11-02).
         native_bitwise = all(d == reference.results_digest
                              for d in identity["control_results_digests"]["native_repeats"])
+        if not native_bitwise:
+            result.findings.append(missing("control_disqualified",
+                                           "the native reference did not reproduce its own "
+                                           "results bit for bit", subject=sid))
         del reference
         ctl.results = {}
         again = execute(adapter, control, sample, record_boundaries=boundaries)

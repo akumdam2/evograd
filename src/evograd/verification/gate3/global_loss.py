@@ -8,12 +8,16 @@ For a fixed workload (one exact batch sequence and training seed), with
     R    = sqrt(sum_t d[t]^2 / N)
     M    = max_t |d[t]|
 
-Calibration computes R and M for every trusted control trajectory -- each
-native repeat against its native, each compile control against its native --
-and freezes, per metric,
+Calibration computes R and M for every compile control trajectory against its
+native and freezes, per metric,
 
-    T_R = gamma * max(max_c R_repeat[c], max_c R_compile[c], floor_R)
-    T_M = gamma * max(max_c M_repeat[c], max_c M_compile[c], floor_M)
+    T_R = gamma * max(max_c R_compile[c], floor_R)
+    T_M = gamma * max(max_c M_compile[c], floor_M)
+
+Each control's native repeat must reproduce its native bit for bit, or there
+is no policy: it adds nothing to the budget. Under verify's deterministic
+settings no native repeat ever differed (every Gate 3 policy of the P8 audit,
+2026-11-13).
 
 A test passes the loss check only if ``R <= T_R`` AND ``M <= T_M`` (equality
 passes). There is no window, mean-of-losses difference, permitted violation
@@ -39,14 +43,15 @@ from evograd.verification.common.reports import Finding, failure, jsonable, miss
 from evograd.verification.gate3.policy import SAFETY_FACTOR_GAMMA, TrainingControl, _hash, _json, _payload
 from evograd.verification.gate3.stepwise import objectives, run_digest, step_binding
 
-SCHEMA = "evograd-verification-gate3-global-loss-policy/1"
-SHARED_SCHEMA = "evograd-verification-gate3-global-loss-policy/2"
+#: /3 (shared native /4): no native-repeat term; the repeat must be bitwise.
+SCHEMA = "evograd-verification-gate3-global-loss-policy/3"
+SHARED_SCHEMA = "evograd-verification-gate3-global-loss-policy/4"
 NATIVE_REUSE = "model-training-native/1"
 VERDICT = "evograd-verification-gate3-global-loss/1"
 METRICS = ("rms", "max_abs")
 FORMULA = ("d[t] = objective_test[t] - objective_reference[t]; R = sqrt(sum_t d[t]^2 / N); "
-           "M = max_t |d[t]|; T_m = gamma * max(max_c m(native_b, native_a), "
-           "max_c m(compile, native_a), floor_m) for m in (R, M); pass iff R <= T_R and M <= T_M")
+           "M = max_t |d[t]|; T_m = gamma * max(max_c m(compile, native_a), floor_m) for m in "
+           "(R, M), native_b == native_a bit for bit; pass iff R <= T_R and M <= T_M")
 REQUIRED = ("schema", "metrics", "steps", "binding", "calibration_runs", "controls", "gamma",
             "floors", "thresholds", "formula", "policy_hash")
 
@@ -126,7 +131,7 @@ class GlobalLossPolicy:
         for control in controls:
             if not control.get("compile_identity"):
                 raise ValueError("compile control identity missing")
-            for source in ("native_repeat", "trusted_compile"):
+            for source in ("trusted_compile",):
                 entry = control.get(source)
                 if not isinstance(entry, dict):
                     raise ValueError(f"missing {source} metrics")
@@ -226,22 +231,19 @@ def calibrate_global_loss(controls: Sequence[TrainingControl], *, floor_rms: flo
             if len(set(digests)) != 3:
                 raise ValueError("a calibration execution was supplied twice")
             runs.append({"native_a": digests[0], "native_b": digests[1], "compile": digests[2]})
-            repeat = loss_metrics(series["native_b"], series["native_a"])
+            if series["native_b"] != series["native_a"]:
+                raise ValueError("the native repeat did not reproduce its native bit for bit")
             compiled = loss_metrics(series["compile"], series["native_a"])
-            if repeat["overflow"] or compiled["overflow"]:
+            if compiled["overflow"]:
                 raise ValueError("a control difference overflowed")
             evidence.append({"compile_identity": deployment["identity"],
-                             "native_repeat_bitwise": series["native_b"] == series["native_a"],
-                             "native_repeat": {m: repeat[m] for m in METRICS}
-                             | {"max_abs_step": repeat["max_abs_step"]},
                              "trusted_compile": {m: compiled[m] for m in METRICS}
                              | {"max_abs_step": compiled["max_abs_step"]}})
         flat = [d for row in runs for d in row.values()]
         if len(set(flat)) != len(flat):
             raise ValueError("calibration groups share an execution")
         floors = {"rms": float(floor_rms), "max_abs": float(floor_max)}
-        thresholds = {m: gamma * max(floors[m], *(e[s][m] for e in evidence
-                                                   for s in ("native_repeat", "trusted_compile")))
+        thresholds = {m: gamma * max(floors[m], *(e["trusted_compile"][m] for e in evidence))
                       for m in METRICS}
         data = {"schema": SHARED_SCHEMA if share_native else SCHEMA, "metrics": list(METRICS), "steps": steps, "binding": binding,
                 "calibration_runs": runs, "controls": evidence, "gamma": gamma,

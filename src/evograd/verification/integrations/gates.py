@@ -9,13 +9,14 @@ against the model reference (``Model.reference_op``):
 
 * Gate 1 -- the pair on every real payload of the case (:data:`PAYLOAD_SPLITS`,
   data orders 101/202/303/404).
-* Gate 2, operator scope -- thresholds from native repeats, ``torch.compile``
-  and the rounding floor on the same payloads, judged on fresh executions of
-  them through the artifact's deployment entry.
+* Gate 2, operator scope -- thresholds from ``torch.compile`` and the rounding
+  floor on the same payloads, per call site (the native must repeat bit for
+  bit), judged on fresh executions of them through the artifact's deployment
+  entry.
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
-  native repeats, compile and the rounding perturbation at the same site, with
+  compile and the rounding perturbation at the same site, with
   :data:`GATE2_MODEL_GAMMA` or the model's own ``Model.gate2_model_gamma`` (a
   whole model judges a thousand propagated reductions per batch, the operator
   scope a handful of results); coverage and input/parameter side effects

@@ -114,13 +114,14 @@ epsilon = 1e-30
 Each required result must satisfy both frozen limits. Calibration runs at least
 two native executions and one identified `torch.compile` control, run twice.
 Controls must execute valid, finite results with the required structure, state
-and replacement coverage; the compiler backend must actually be invoked, and the
-compile control must reproduce itself bit for bit. The native-repeat term stays
-in the budget; whether the native repeats were bitwise is recorded per sample
-(`repeatability`).
+and replacement coverage; the compiler backend must actually be invoked, and
+both the native reference and the compile control must reproduce themselves bit
+for bit (recorded per sample as `repeatability`). A repeat therefore adds
+nothing to the budget: under the deterministic settings no native ever differed
+from its repeat (P8 audit, 2026-11-13), and one that does leaves no policy.
 
 ```text
-T = gamma * max(native-repeat error, compile-native error, floor)
+T = gamma * max(compile-native error, floor, scope term)
 ```
 
 The sample protocol depends on scope:
@@ -212,7 +213,7 @@ Gate 2 (gamma 2) both use every payload of the case, orders 101/202/303/404
 fresh executions of the same ones. The corpus split into calibration (101/202)
 and acceptance (303/404) only keeps 303/404 out of the search's feedback.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
-four batches (native repeats, compile and the rounding perturbation) with
+four batches (compile and the rounding perturbation) with
 gamma 4, on the whole model's outputs and parameter gradients
 plus coverage and side effects. Per-call boundary replay is off at model scope
 (`GATE2_MODEL_BOUNDARIES`): the local checks of each call belong to operator Gate 2.
@@ -402,8 +403,8 @@ For one fixed batch sequence and training configuration:
 d[t] = objective_candidate[t] - objective_native[t]
 R = sqrt(mean(d[t] ** 2))
 M = max(abs(d[t]))
-T_R = gamma * max(R_native_repeat, R_compile_native, floor_R)
-T_M = gamma * max(M_native_repeat, M_compile_native, floor_M)
+T_R = gamma * max(R_compile_native, floor_R)
+T_M = gamma * max(M_compile_native, floor_M)
 PASS loss iff R <= T_R and M <= T_M
 ```
 
@@ -427,9 +428,9 @@ This core checks finite losses, complete step records, and that every replaced
 site runs in every step (a site that did not run leaves the loss native). It
 does not scan parameters, gradients and optimizer-state tensors for finiteness;
 a non-finite gradient reaches the next step's loss through the optimizer update.
-Applications can add such checks through `on_step`. Calibration records whether
-the native repeat was bitwise (`native_repeat_bitwise`). Deterministic settings
-remain application responsibilities.
+Applications can add such checks through `on_step`. Calibration refuses a
+native repeat (`native_b`) that does not reproduce `native_a` bit for bit.
+Deterministic settings remain application responsibilities.
 
 Historical window and stepwise policies remain available through separate
 schemas for compatibility. `verify_training` dispatches by schema; it never

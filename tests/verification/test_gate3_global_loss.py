@@ -61,10 +61,10 @@ class TestGlobalPolicy(unittest.TestCase):
             self.assertAlmostEqual(self.policy.thresholds[m], self.T[m])
         data = self.policy.to_dict()
         self.assertEqual(data["controls"][0]["trusted_compile"]["max_abs_step"], 2)
-        self.assertEqual(data["controls"][0]["native_repeat"]["rms"], 0.0)
-        self.assertTrue(data["controls"][0]["native_repeat_bitwise"])
-        noisy = calibrate(native_b=[2.0, 2.0, 2.001, 2.0]).policy.to_dict()
-        self.assertFalse(noisy["controls"][0]["native_repeat_bitwise"])
+        self.assertNotIn("native_repeat", data["controls"][0])     # bitwise, so no budget term
+        noisy = calibrate(native_b=[2.0, 2.0, 2.001, 2.0])         # a repeat that drifts: no policy
+        self.assertIsNone(noisy.policy)
+        self.assertIn("bit for bit", noisy.findings[0].message)
 
     def test_sign_cancellation_does_not_hide_error(self):
         # Mean loss difference is zero, but R = .03 > T_R = .02.
@@ -111,10 +111,10 @@ class TestGlobalPolicy(unittest.TestCase):
     def test_control_metrics_per_trajectory_then_max(self):
         g1 = gate3.TrainingControl(record(BASE, run="a1"), record(BASE, run="b1"),
                                    record([2.0, 2.0, 2.0, 2.04], role="control", run="c1"))
-        g2 = gate3.TrainingControl(record(BASE, run="a2"), record([2.01] * N, run="b2"),
-                                   record(BASE, role="control", run="c2"))
+        g2 = gate3.TrainingControl(record(BASE, run="a2"), record(BASE, run="b2"),
+                                   record([2.01] * N, role="control", run="c2"))
         cal = gate3.calibrate_global_loss([g1, g2], floor_rms=1e-4, floor_max=1e-4, gamma=2.0)
-        # R: max(.02 [c1], .01 [b2]) -> .04; M: max(.04 [c1], .01 [b2]) -> .08
+        # R: max(.02 [c1], .01 [c2]) -> .04; M: max(.04 [c1], .01 [c2]) -> .08
         self.assertAlmostEqual(cal.policy.thresholds["rms"], 0.04)
         self.assertAlmostEqual(cal.policy.thresholds["max_abs"], 0.08)
 
