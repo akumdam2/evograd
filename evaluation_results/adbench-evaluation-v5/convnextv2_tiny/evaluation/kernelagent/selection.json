@@ -1,0 +1,53 @@
+{
+  "model": "convnextv2_tiny",
+  "agent": "kernelagent",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/convnextv2_tiny/convnextv2_tiny_20261021/manifest.json",
+  "selected_cases": [
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers",
+    "gelu/convnextv2.encoder.stages.0.layers.act",
+    "grn/convnextv2.encoder.stages.0.layers.grn",
+    "layernorm/convnextv2.embeddings.layernorm",
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings"
+  ],
+  "candidates": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.0.layers.py",
+      "sha256": "d4f94385b1ae445b73dd98815b2c5afb94452ff2763fc7fc503d8f6456ac3674"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.1.layers.py",
+      "sha256": "a0c06a6aa54eaead0b507b5c557d782e212f3b954d201bdc5f48ed4433ecdf1e"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.2.layers.py",
+      "sha256": "d165fdab587c0e760360d448c8ae25e02b2ec46bad70839b78ceca63e1dab441"
+    },
+    "gelu/convnextv2.encoder.stages.0.layers.act": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/gelu__convnextv2.encoder.stages.0.layers.act.py",
+      "sha256": "6eefb85a1f81922a059a256c380d3e1661cd447e350ff09cb53721abc35c984d"
+    },
+    "grn/convnextv2.encoder.stages.0.layers.grn": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/grn__convnextv2.encoder.stages.0.layers.grn.py",
+      "sha256": "4c20a206b1b289fd9bd170e96c74145c2532ab3147e7f646808d421c30146ef5"
+    },
+    "layernorm/convnextv2.embeddings.layernorm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/layernorm__convnextv2.embeddings.layernorm.py",
+      "sha256": "56af57f2c7560c1d715b8ee972ecc1044a120965702649918075d068bb79a751"
+    },
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/convnextv2_tiny/spatial_conv2d__convnextv2.embeddings.patch_embeddings.py",
+      "sha256": "e8a75a25005cb66e8b3bb6460a7f1777ccf7aca28b7abb73fcbe4e81b79034f7"
+    }
+  },
+  "search_failures": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: compile errors, numerics"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+}

@@ -1,0 +1,51 @@
+{
+  "model": "olmoe_1b_7b",
+  "agent": "openevolve",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/olmoe_1b_7b/olmoe_1b_7b_20261021/manifest.json",
+  "selected_cases": [
+    "cross_entropy/logits",
+    "olmoe_attention/attention",
+    "olmoe_moe_experts/moe_experts",
+    "olmoe_qkv_norm_rope/qkv_norm_rope",
+    "olmoe_residual_rmsnorm/residual_rmsnorm",
+    "rmsnorm/residual_norm",
+    "rope/rope",
+    "swiglu/moe_activation"
+  ],
+  "candidates": {
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/cross_entropy__logits.py",
+      "sha256": "82db480a12d2a583dfc17198c6318852087a8ea0ca3124325cfbbf0b076a560b"
+    },
+    "olmoe_attention/attention": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/olmoe_attention__attention.py",
+      "sha256": "b858f5017fb9ded3944211033f09361b26eff1b30497618004571e75b31b2517"
+    },
+    "olmoe_moe_experts/moe_experts": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/olmoe_moe_experts__moe_experts.py",
+      "sha256": "2fbd95a425ea1f0f6a4f13120f1e9a86b44dc9b4e831a2163b7e0fa934190c87"
+    },
+    "olmoe_qkv_norm_rope/qkv_norm_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/olmoe_qkv_norm_rope__qkv_norm_rope.py",
+      "sha256": "2c849b7ff4cf46cd0f9a196061b30b1aa34235c9a05e47ac528206b221b2e8a6"
+    },
+    "olmoe_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/olmoe_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "cbaabe52f77bd5c393f6a5b081b6357381ad61ec7b9194d406bd896090d2abaf"
+    },
+    "rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/rmsnorm__residual_norm.py",
+      "sha256": "7155b8f2b0b68ab7da99dc3b923c34848cf270743d9e226e2b059ef6615a77a4"
+    },
+    "rope/rope": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/rope__rope.py",
+      "sha256": "ae2df1abfa4bdb370e0246176c5290c4928676b15e7eb2e8c9d124ad8f43471f"
+    },
+    "swiglu/moe_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/olmoe_1b_7b/swiglu__moe_activation.py",
+      "sha256": "af0db45a6775a26acdcd3b80654797a27abbb9f68d59784b897b109e75f56b10"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+}

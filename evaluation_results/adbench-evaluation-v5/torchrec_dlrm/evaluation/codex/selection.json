@@ -1,0 +1,21 @@
+{
+  "model": "torchrec_dlrm",
+  "agent": "codex",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/torchrec_dlrm/torchrec_dlrm_20261021/manifest.json",
+  "selected_cases": [
+    "embedding_bag/tables",
+    "torchrec_dlrm_dlrm_interaction/interaction"
+  ],
+  "candidates": {
+    "embedding_bag/tables": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/torchrec_dlrm/embedding_bag__tables.py",
+      "sha256": "15b161e37c25ed931e9e3d805a9c6fb0bb4f33dd1d0724cfb8af1c5ea1522120"
+    },
+    "torchrec_dlrm_dlrm_interaction/interaction": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+      "sha256": "347dba3031d0927cb7d90649ef5bf50952f7f72c258af1f1513d073501cd025d"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+}

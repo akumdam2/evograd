@@ -1,0 +1,86 @@
+{
+  "model": "qwen3_5_4b",
+  "agent": "gepa",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+  "selected_cases": [
+    "causal_conv1d/gdn_conv1d",
+    "cross_entropy/logits",
+    "gated_rmsnorm/gdn_gated_norm",
+    "gdn_gating/gdn_gating",
+    "gemma_rmsnorm/residual_norm",
+    "l2norm/gdn_qk_l2norm",
+    "partial_rope/partial_rope",
+    "qwen3_5_gated_attention/gated_attention",
+    "qwen3_5_gated_delta_rule/gated_delta_rule",
+    "qwen3_5_gdn_in_proj/gdn_in_proj",
+    "qwen3_5_gdn_norm_out/gdn_norm_out",
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+    "qwen3_5_swiglu_mlp/swiglu_mlp",
+    "swiglu/mlp_activation"
+  ],
+  "candidates": {
+    "causal_conv1d/gdn_conv1d": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+      "sha256": "e7a6ebf26751d3c4a39e6d03bc9d0598c2f67bad3452d22c498f8c43fca8541b"
+    },
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/cross_entropy__logits.py",
+      "sha256": "85f08e2f74b748cdaea4c918be9f15223bbb1e1eccafb74c16eb8735edc13740"
+    },
+    "gated_rmsnorm/gdn_gated_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+      "sha256": "fe5118b8ea64b2757b1d7cc41997b36bdc9db66f6e6530f49f8a9d8d87e7bc48"
+    },
+    "gdn_gating/gdn_gating": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gdn_gating__gdn_gating.py",
+      "sha256": "843b483b603557a81848261d521bae0c6c8c0220557a4bb0b3ac92da5d2b97bd"
+    },
+    "gemma_rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+      "sha256": "cf94daf1880776cb2a057d36a318ec90ba24324a46008872f447e86d9151d155"
+    },
+    "l2norm/gdn_qk_l2norm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+      "sha256": "9a575935e1827a003538499324ffae184db3da936206ee1b0ac0fe6875d1eaf7"
+    },
+    "partial_rope/partial_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/partial_rope__partial_rope.py",
+      "sha256": "60695a35707eaaccd8c7f303fd052d2f8a1a34fa5be845152952638c52b70597"
+    },
+    "qwen3_5_gated_attention/gated_attention": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gated_attention__gated_attention.py",
+      "sha256": "ed4975fd2fff6cace9108e0bc41fa51a9f0f2232edb5738c8da7821372800063"
+    },
+    "qwen3_5_gated_delta_rule/gated_delta_rule": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gated_delta_rule__gated_delta_rule.py",
+      "sha256": "44d37800f4603b12f656eff882080b0eece56315d93ee75d81db79b2693952aa"
+    },
+    "qwen3_5_gdn_in_proj/gdn_in_proj": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gdn_in_proj__gdn_in_proj.py",
+      "sha256": "4fef047a5a89ac9b55b981516352a34a2d30fed3e36ade1eff5b48171922de56"
+    },
+    "qwen3_5_gdn_norm_out/gdn_norm_out": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+      "sha256": "ed753b59daae7fab81c80a72c47388d99ae114a08a7bda6155c59373b5e46b1e"
+    },
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_qkv_norm_partial_rope__qkv_norm_partial_rope.py",
+      "sha256": "d5bd0271f3d6359160db3af94ab6361682cce01f870b8ed39138f58238f41f24"
+    },
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "ff097284733e3360a93bd1332035b3fde40d99e2439b6273168cbce1598c5ad8"
+    },
+    "qwen3_5_swiglu_mlp/swiglu_mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+      "sha256": "a81d585ae941ae9828cbdaf8e6c8a04e74c48502d600bb0ddccfcecad6d9e2dd"
+    },
+    "swiglu/mlp_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/swiglu__mlp_activation.py",
+      "sha256": "ae182ab8a06ac050f0da01b42129a7751e58eedb8bafc6c7d19db92a16aab365"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+}

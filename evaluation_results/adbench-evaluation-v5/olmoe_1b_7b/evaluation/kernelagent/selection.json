@@ -1,0 +1,53 @@
+{
+  "model": "olmoe_1b_7b",
+  "agent": "kernelagent",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/olmoe_1b_7b/olmoe_1b_7b_20261021/manifest.json",
+  "selected_cases": [
+    "cross_entropy/logits",
+    "olmoe_attention/attention",
+    "olmoe_moe_experts/moe_experts",
+    "olmoe_qkv_norm_rope/qkv_norm_rope",
+    "olmoe_residual_rmsnorm/residual_rmsnorm",
+    "rmsnorm/residual_norm",
+    "rope/rope",
+    "swiglu/moe_activation"
+  ],
+  "candidates": {
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/cross_entropy__logits.py",
+      "sha256": "a1b88277a5479bdce01c47686957426f16d0df6ed735997a3dd218512e74938d"
+    },
+    "olmoe_attention/attention": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/olmoe_attention__attention.py",
+      "sha256": "e682c8b3abd318c47a7bb267544bb18713a387753ec51927cabed1b916be447c"
+    },
+    "olmoe_moe_experts/moe_experts": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/olmoe_moe_experts__moe_experts.py",
+      "sha256": "cabf8c0b9612a9237e2f720c11d228572dc560838a4a3ed1b6ab4d2171f21674"
+    },
+    "olmoe_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/olmoe_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "031ec354e5bfc0916e0015a500bc05db2c41ad1e6777455ddd2f5bbf42bdc932"
+    },
+    "rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/rmsnorm__residual_norm.py",
+      "sha256": "0747070ffa1d83aa0582c94c42a712dddf6a19b3dbd918ce76a4a6b614163541"
+    },
+    "rope/rope": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/rope__rope.py",
+      "sha256": "0575a5d8e16e6fa81eef77546474de4ebe894e79b7019c3e782a79e094499293"
+    },
+    "swiglu/moe_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/olmoe_1b_7b/swiglu__moe_activation.py",
+      "sha256": "78139a586882bedce174c60f6dc8a4d75d7bf25d073f3b9fbdc04534c39153a4"
+    }
+  },
+  "search_failures": {
+    "olmoe_qkv_norm_rope/qkv_norm_rope": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: 8 gradients for 6, illegal memory access, numerics, dtypes"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+}

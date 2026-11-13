@@ -1,0 +1,53 @@
+{
+  "model": "llama_3_2_1b",
+  "agent": "kernelagent",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/llama_3_2_1b/llama_3_2_1b_20261021/manifest.json",
+  "selected_cases": [
+    "cross_entropy/logits",
+    "llama3_attention/causal_gqa_attention",
+    "llama3_qkv_rope/qkv_norm_rope",
+    "llama3_residual_rmsnorm/residual_rmsnorm",
+    "llama3_swiglu_mlp/swiglu_mlp",
+    "rmsnorm/rmsnorm",
+    "rope/rope",
+    "swiglu/mlp_activation"
+  ],
+  "candidates": {
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/cross_entropy__logits.py",
+      "sha256": "c8f87a5855f8459722ece0e8ba30d0d9ea52da6fcd01f1035500bc90c171a00d"
+    },
+    "llama3_attention/causal_gqa_attention": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+      "sha256": "1425d2320d33e2fce62fce318e5c705375d34a236a5bd7024a4ead830a799bb8"
+    },
+    "llama3_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "4ac416376e93d54d19cc17247d0e0fe62d065a9f9a79a5a2167203fcb46648f4"
+    },
+    "llama3_swiglu_mlp/swiglu_mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+      "sha256": "d1a275f052816cf16fe8522be1611f5569a5cdc19780d484146912590fca2823"
+    },
+    "rmsnorm/rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/rmsnorm__rmsnorm.py",
+      "sha256": "91f345c33e57f9affb5c6157bbece1ec3c2092b95433db95cccc5390100c63a7"
+    },
+    "rope/rope": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/rope__rope.py",
+      "sha256": "96899195ff06c89d8c1bbea8c04b10f66720a2f95ee3c3a8ae7ec5fbe5dc40dc"
+    },
+    "swiglu/mlp_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/swiglu__mlp_activation.py",
+      "sha256": "f7050d9b06761ca55c3253b1bc64aa6962fa2af283641020e54a3d52e9daa487"
+    }
+  },
+  "search_failures": {
+    "llama3_qkv_rope/qkv_norm_rope": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: compile errors, 6 gradients for 4, transposed output shapes"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+}

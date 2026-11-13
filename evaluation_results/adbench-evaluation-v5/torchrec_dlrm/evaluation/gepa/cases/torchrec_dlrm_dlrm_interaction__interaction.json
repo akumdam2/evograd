@@ -1,0 +1,3057 @@
+{
+ "stage_key": {
+  "case": "torchrec_dlrm_dlrm_interaction/interaction",
+  "program_sha256": "79684f977b5fb045993e3d69caea343466d63a8df0f4bb35283147543e5b8439",
+  "corpus": {
+   "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+   "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.benchmark.topdown.common.generated.model:dlrm_interaction",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/torchrec_dlrm/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor",
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "verification_implementation": {
+   "gates": "bdefaaf8281272bc9a230cfab87915580871d45b71b9f18897066024b603b098",
+   "calibration": "9ff727443df478c761967dce16c17c8356353269e632dd71d3b7771dd5bad362",
+   "comparison": "a7053f2ee7bbc034a11ec344b08b5cc172adcb08a687e6b2195c2826ee2e16af",
+   "metrics": "851c4c87bb40d01d2e1f8f6e8899c88da15242827da8e77025de64b5568b4677",
+   "contracts": "281ee24ce574273ea256c37792d9814036c0d2b2729e3678cee6675fe87e79e7"
+  },
+  "verification_environment": {
+   "python": "3.12.13",
+   "machine": "aarch64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA GH200 120GB",
+   "compute_capability": "9.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  }
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "passed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "torchrec_dlrm_dlrm_interaction",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_1557420647295694008",
+    "source_hash": "2681d6211b8883cfaff1212bdb0dbb36461245f70a5afaa3388462aae9cf9848"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.benchmark.topdown.common.generated.model:dlrm_interaction",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/torchrec_dlrm/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:ddense": 0.0,
+    "grad_in:dsparse": 0.0,
+    "out:out": 0.0
+   },
+   "cases": [
+    "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn"
+   ]
+  },
+  "case_counts": {
+   "passed": 4,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 13280,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 2048,
+       "max_abs_err": 1.1641532182693481e-10,
+       "max_rel_err": 3.496995550973903e-05,
+       "headroom": 1.16408469805204e-05,
+       "worst_index": [
+        14,
+        46
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dsparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 53248,
+       "max_abs_err": 1.7462298274040222e-10,
+       "max_rel_err": 0.004423483801474504,
+       "headroom": 1.7460925859962017e-05,
+       "worst_index": [
+        16,
+        5,
+        10
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 4.656612873077393e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 4.656612873077393e-10,
+       "rounding_floor": 4.656612873077393e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1728,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "S": 26,
+      "D": 64,
+      "O": 415
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+       "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 68,
+        "sha256": "72dc885a9d4ba2b31cf18fe9144d2cd57cd1040ec5c03e41ebba846c2bf7e9fd"
+       }
+      },
+      "payload_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "case": "torchrec_dlrm_dlrm_interaction/interaction",
+      "batch": {
+       "order": 101,
+       "sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5"
+      },
+      "call": {
+       "index_in_step": 33,
+       "kind": "site:interaction_fn",
+       "layer": null,
+       "path": "interaction_fn",
+       "role": "interaction_fn"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 13280,
+        "numel": 13280,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:ddense",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dsparse",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 13280,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 2048,
+       "max_abs_err": 1.1641532182693481e-10,
+       "max_rel_err": 8.242748239070347e-05,
+       "headroom": 1.1640855462468123e-05,
+       "worst_index": [
+        12,
+        26
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dsparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 53248,
+       "max_abs_err": 2.3283064365386963e-10,
+       "max_rel_err": 0.001086172881663719,
+       "headroom": 2.3281118031225164e-05,
+       "worst_index": [
+        22,
+        11,
+        1
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 4.656612873077393e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 4.656612873077393e-10,
+       "rounding_floor": 4.656612873077393e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1728,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "S": 26,
+      "D": 64,
+      "O": 415
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+       "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 68,
+        "sha256": "72dc885a9d4ba2b31cf18fe9144d2cd57cd1040ec5c03e41ebba846c2bf7e9fd"
+       }
+      },
+      "payload_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "case": "torchrec_dlrm_dlrm_interaction/interaction",
+      "batch": {
+       "order": 202,
+       "sha256": "1bee7df97e0287e90f63327ceb9574802d1f0c9ee5107a3e372a46599295c5f5"
+      },
+      "call": {
+       "index_in_step": 33,
+       "kind": "site:interaction_fn",
+       "layer": null,
+       "path": "interaction_fn",
+       "role": "interaction_fn"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 13280,
+        "numel": 13280,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:ddense",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dsparse",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 13280,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 2048,
+       "max_abs_err": 1.1641532182693481e-10,
+       "max_rel_err": 7.122535345210169e-05,
+       "headroom": 1.1640842156366948e-05,
+       "worst_index": [
+        25,
+        33
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dsparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 53248,
+       "max_abs_err": 1.7462298274040222e-10,
+       "max_rel_err": 0.0010168199615634421,
+       "headroom": 1.746108064557088e-05,
+       "worst_index": [
+        9,
+        7,
+        37
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1728,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "S": 26,
+      "D": 64,
+      "O": 415
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+       "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 68,
+        "sha256": "17d08ebe4ea590083da43bdf061f5a50ad289db6d25828e61a41dbeb5fa9a750"
+       }
+      },
+      "payload_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "case": "torchrec_dlrm_dlrm_interaction/interaction",
+      "batch": {
+       "order": 303,
+       "sha256": "7679e76e8717b76ce57b7af28284e77254a9ab8d295c17b06dd475a76676146c"
+      },
+      "call": {
+       "index_in_step": 33,
+       "kind": "site:interaction_fn",
+       "layer": null,
+       "path": "interaction_fn",
+       "role": "interaction_fn"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 13280,
+        "numel": 13280,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:ddense",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dsparse",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 13280,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 1.52587890625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 1.52587890625e-05,
+       "rounding_floor": 1.52587890625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:ddense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 2048,
+       "max_abs_err": 1.1641532182693481e-10,
+       "max_rel_err": 0.00028767284267156067,
+       "headroom": 1.1640783883292597e-05,
+       "worst_index": [
+        19,
+        40
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dsparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 53248,
+       "max_abs_err": 2.3283064365386963e-10,
+       "max_rel_err": 0.0010128120564445453,
+       "headroom": 2.3281527926437737e-05,
+       "worst_index": [
+        11,
+        7,
+        38
+       ],
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "abs_floor": 2.3283064365386963e-10
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 1.3e-06,
+       "envelope": 2.3283064365386963e-10,
+       "rounding_floor": 2.3283064365386963e-10
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1728,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "S": 26,
+      "D": 64,
+      "O": 415
+     },
+     "dtype": "float32",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+       "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 68,
+        "sha256": "17d08ebe4ea590083da43bdf061f5a50ad289db6d25828e61a41dbeb5fa9a750"
+       }
+      },
+      "payload_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "case": "torchrec_dlrm_dlrm_interaction/interaction",
+      "batch": {
+       "order": 404,
+       "sha256": "6ccb7094dc89102858c187f28805e78794355d9be7a727e196987f84f39fc2a7"
+      },
+      "call": {
+       "index_in_step": 33,
+       "kind": "site:interaction_fn",
+       "layer": null,
+       "path": "interaction_fn",
+       "role": "interaction_fn"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 13280,
+        "numel": 13280,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:ddense",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32"
+       },
+       {
+        "name": "grad_in:dsparse",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "cdc904c21b6ba0a8f9815bc71fde937d73d771db82db272b724c702dfab74ea1",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/state/native_reuse_v1/1-1-1/gate2/operator/51574adf12944d8c/matched_inputs_v5/all/torchrec_dlrm_dlrm_interaction__interaction.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "torchrec_dlrm_dlrm_interaction",
+    "forward": "evograd.benchmark.topdown.common.generated.model:dlrm_interaction",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.benchmark.topdown.common.generated.model:dlrm_interaction",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/torchrec_dlrm/1",
+     "source": null
+    },
+    "parameter_args": [],
+    "dims": {
+     "B": 32,
+     "S": 26,
+     "D": 64,
+     "O": 415
+    },
+    "dtype": "float32",
+    "inputs": "real_training_payload",
+    "case_id": "torchrec_dlrm_dlrm_interaction/interaction",
+    "corpus": {
+     "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+     "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "float32"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_1557420647295694008"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+     "seed": 101000033,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "split": "calibration",
+      "batch_order": 101,
+      "batch_sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5",
+      "call": "interaction_fn"
+     }
+    },
+    {
+     "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+     "seed": 202000033,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "split": "calibration",
+      "batch_order": 202,
+      "batch_sha256": "1bee7df97e0287e90f63327ceb9574802d1f0c9ee5107a3e372a46599295c5f5",
+      "call": "interaction_fn"
+     }
+    },
+    {
+     "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+     "seed": 303000033,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "7679e76e8717b76ce57b7af28284e77254a9ab8d295c17b06dd475a76676146c",
+      "call": "interaction_fn"
+     }
+    },
+    {
+     "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+     "seed": 404000033,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "6ccb7094dc89102858c187f28805e78794355d9be7a727e196987f84f39fc2a7",
+      "call": "interaction_fn"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "cdc904c21b6ba0a8f9815bc71fde937d73d771db82db272b724c702dfab74ea1",
+    "schema": "evograd-verification-gate2-policy/5",
+    "boundaries": false,
+    "sample_protocol": "matched_inputs",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "680b2d8c691f2fdb17041c7725fec9958fa5bea1e5c37494216a85c661a5b8d9",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 4,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 806.9035225043584,
+       "ref_rms": 7.002007536084717,
+       "elements": 13280,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 9.134135295444773e-08,
+       "Emax": 6.192544797919744e-07,
+       "diff_l2": 7.770937254754407e-10,
+       "diff_max": 1.1641532182693481e-10,
+       "ref_l2": 0.00850757844437645,
+       "ref_rms": 0.0001879927002967215,
+       "elements": 2048,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:sparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.11117113218893e-08,
+       "Emax": 1.0026907952999686e-06,
+       "diff_l2": 3.2596396248092774e-09,
+       "diff_max": 1.7462298274040222e-10,
+       "ref_l2": 0.04018704046168498,
+       "ref_rms": 0.0001741543689828741,
+       "elements": 53248,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "seed": 101000033,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5",
+       "call": "interaction_fn"
+      }
+     },
+     "reference": {
+      "execution_id": "310b9453e60c4291a8f49ccc20bed09e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 101000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "c2b38ab5a38314937ae71f01dd69ad9fe38a38d19b77d0f0650ffcd414b3b05b",
+      "sample_identity": {
+       "fingerprint": "64a911799aaa2eda3b0be852626d4bb2c777b2dfd7e9db84f5336ccef9d90aa7",
+       "components": {
+        "seed": 101000033,
+        "inputs": "17639aa9327e073bef009b8ffe14784beb6c470e541ba47f13d024b2bc411064",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cae83f76ab67a01a31041735e3cb53fabf3816aa36c27ed8f825b59143e492c8",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "9ce4b54efdba512c4c6e598b52d106a3e80c32d1a01ec5d31dc0ed18bed0d541",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "56a9f523da7f5d5b3dcac5e18f5c88afcea5feae4e1404d1471e8cb7c0838524",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "eb2ab85f6f5092d9d00758181229f11625eb816759579076f99367239fad1e60",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "1ffb3959c25173b9d76e0f55c8bb87c80bec192a7bb8b081a27ef602cfb0309b",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.005355251021683216
+     },
+     "candidate": {
+      "execution_id": "76d48e328f694cc2badfcb40e4374ced",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1557420647295694008"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 101000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "418aae604c766c23681633a9f29cd262840796d11a59c4f0386df797210358e5",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "c2b38ab5a38314937ae71f01dd69ad9fe38a38d19b77d0f0650ffcd414b3b05b",
+      "sample_identity": {
+       "fingerprint": "64a911799aaa2eda3b0be852626d4bb2c777b2dfd7e9db84f5336ccef9d90aa7",
+       "components": {
+        "seed": 101000033,
+        "inputs": "17639aa9327e073bef009b8ffe14784beb6c470e541ba47f13d024b2bc411064",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "cae83f76ab67a01a31041735e3cb53fabf3816aa36c27ed8f825b59143e492c8",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "9ce4b54efdba512c4c6e598b52d106a3e80c32d1a01ec5d31dc0ed18bed0d541",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "56a9f523da7f5d5b3dcac5e18f5c88afcea5feae4e1404d1471e8cb7c0838524",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "eb2ab85f6f5092d9d00758181229f11625eb816759579076f99367239fad1e60",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "6a77be2fae07076bdfeb0bd8241e0f1ddbaf09524ea17660aa610a926239618c",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.002947986125946045
+     },
+     "contract_digest": "02e0208cd8c35e227e50458d97f8471ddd682bcbd8b275aac22ffbf055e7b4ed",
+     "matched_sample": {
+      "calibrated_fingerprint": "64a911799aaa2eda3b0be852626d4bb2c777b2dfd7e9db84f5336ccef9d90aa7",
+      "reference_fingerprint": "64a911799aaa2eda3b0be852626d4bb2c777b2dfd7e9db84f5336ccef9d90aa7",
+      "candidate_fingerprint": "64a911799aaa2eda3b0be852626d4bb2c777b2dfd7e9db84f5336ccef9d90aa7",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 798.4019670117938,
+       "ref_rms": 6.928234211310244,
+       "elements": 13280,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 9.167692532056528e-08,
+       "Emax": 6.199822075573381e-07,
+       "diff_l2": 7.790331392439726e-10,
+       "diff_max": 1.1641532182693481e-10,
+       "ref_l2": 0.008497592349655483,
+       "ref_rms": 0.00018777203669376,
+       "elements": 2048,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:sparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.073374132716669e-08,
+       "Emax": 1.2612050274148069e-06,
+       "diff_l2": 3.4392296359779736e-09,
+       "diff_max": 2.3283064365386963e-10,
+       "ref_l2": 0.04259965634493248,
+       "ref_rms": 0.0001846096697942295,
+       "elements": 53248,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "seed": 202000033,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "1bee7df97e0287e90f63327ceb9574802d1f0c9ee5107a3e372a46599295c5f5",
+       "call": "interaction_fn"
+      }
+     },
+     "reference": {
+      "execution_id": "5e510aa3f8c341fb92a277966f58cdb4",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 202000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "1bee7df97e0287e90f63327ceb9574802d1f0c9ee5107a3e372a46599295c5f5",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "a6ddb9714afff41c50aa3d718ffce072b0c2af38f67b5daa41730daec055aa86",
+      "sample_identity": {
+       "fingerprint": "4d1abc4a5f5e3bb5da9033e5de481027342520715a74f88ecab94a8f764bc6d1",
+       "components": {
+        "seed": 202000033,
+        "inputs": "4fa0803c5dd96b981b24f8ef6d1b35885b4cbf20dc0dfbf033fce3f7299cd690",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b0091a065eb17277e55658fcccd9cb7c08468a700b3590dafc97f9a43ca55b58",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f183946c6be325c7e4164abf5b614f9a5e19011d96940e5e9479f7e75d5c08e9",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "1ed935276884893efa32fd4d74e3ed00ab90fe0b9f5ecdcfe31196d9e6d46d80",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0d95873a0f7a6a245b7c3f3f3c4c01b642af712fd9c64e52b0fa01bf2cf792b2",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "9bf95fc0ce8c3c174282b73ae706e8bb69651f8253830a173dff9f2155ca0595",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.004533033352345228
+     },
+     "candidate": {
+      "execution_id": "a6cf1769182944d2857fa42e17e240bb",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1557420647295694008"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 202000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "1bee7df97e0287e90f63327ceb9574802d1f0c9ee5107a3e372a46599295c5f5",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "a6ddb9714afff41c50aa3d718ffce072b0c2af38f67b5daa41730daec055aa86",
+      "sample_identity": {
+       "fingerprint": "4d1abc4a5f5e3bb5da9033e5de481027342520715a74f88ecab94a8f764bc6d1",
+       "components": {
+        "seed": 202000033,
+        "inputs": "4fa0803c5dd96b981b24f8ef6d1b35885b4cbf20dc0dfbf033fce3f7299cd690",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "b0091a065eb17277e55658fcccd9cb7c08468a700b3590dafc97f9a43ca55b58",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "f183946c6be325c7e4164abf5b614f9a5e19011d96940e5e9479f7e75d5c08e9",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "1ed935276884893efa32fd4d74e3ed00ab90fe0b9f5ecdcfe31196d9e6d46d80",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0d95873a0f7a6a245b7c3f3f3c4c01b642af712fd9c64e52b0fa01bf2cf792b2",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "75db33dc1f4e8227a79839a938be8ca82f02997a997f1d3e0f7828979ac3f4a9",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.0031683649867773056
+     },
+     "contract_digest": "02e0208cd8c35e227e50458d97f8471ddd682bcbd8b275aac22ffbf055e7b4ed",
+     "matched_sample": {
+      "calibrated_fingerprint": "4d1abc4a5f5e3bb5da9033e5de481027342520715a74f88ecab94a8f764bc6d1",
+      "reference_fingerprint": "4d1abc4a5f5e3bb5da9033e5de481027342520715a74f88ecab94a8f764bc6d1",
+      "candidate_fingerprint": "4d1abc4a5f5e3bb5da9033e5de481027342520715a74f88ecab94a8f764bc6d1",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 801.4515142555889,
+       "ref_rms": 6.954697043838757,
+       "elements": 13280,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 9.324164509524087e-08,
+       "Emax": 6.050050159120766e-07,
+       "diff_l2": 8.1194398959057e-10,
+       "diff_max": 1.1641532182693481e-10,
+       "ref_l2": 0.008707954356245183,
+       "ref_rms": 0.00019242042423637206,
+       "elements": 2048,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:sparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.043409164927184e-08,
+       "Emax": 9.368823668969899e-07,
+       "diff_l2": 3.459458688345416e-09,
+       "diff_max": 1.7462298274040222e-10,
+       "ref_l2": 0.04300985586348365,
+       "ref_rms": 0.00018638730849291564,
+       "elements": 53248,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "seed": 303000033,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "7679e76e8717b76ce57b7af28284e77254a9ab8d295c17b06dd475a76676146c",
+       "call": "interaction_fn"
+      }
+     },
+     "reference": {
+      "execution_id": "5469f9503bd4464699b57546fd285a0e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 303000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "7679e76e8717b76ce57b7af28284e77254a9ab8d295c17b06dd475a76676146c",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "55c31814884b4d68a4546abc75c6db0e2a76e050de4b74c1ed6a3fb4be9f8df5",
+      "sample_identity": {
+       "fingerprint": "3387af7cae50daad20c54e943dcd203a8c23c584f9af1599f76d94a39c68e541",
+       "components": {
+        "seed": 303000033,
+        "inputs": "fcdcbd89c73e6d28dfd9b9ca79e344ad4e961e040b7a98ef2357c493337600e2",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "45fcf2a57bd04b26352cb3e0624476ac20ac717f7dc93d7f89ca53d1f12bf0c5",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "10fae999aa70ac11b78f25223fcf07a3cf9cee3fe7b7ade8482e0cda8b5b8e15",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "a88c185cac21bc970c5513e102b45606cd7d122062a01dd252de17ebf0945c14",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "fb5079b6018ec995855fcf32473b509ce4ccd10d29fca540786b38a23fc898f6",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "108541c1971c2a2f6656f42c9a21ba27fa1358df6df5dcaa76e4e6dc9ca0eac5",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.004654726013541222
+     },
+     "candidate": {
+      "execution_id": "6c2f79eca4a340d894ee42842623908c",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1557420647295694008"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 303000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "7679e76e8717b76ce57b7af28284e77254a9ab8d295c17b06dd475a76676146c",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "55c31814884b4d68a4546abc75c6db0e2a76e050de4b74c1ed6a3fb4be9f8df5",
+      "sample_identity": {
+       "fingerprint": "3387af7cae50daad20c54e943dcd203a8c23c584f9af1599f76d94a39c68e541",
+       "components": {
+        "seed": 303000033,
+        "inputs": "fcdcbd89c73e6d28dfd9b9ca79e344ad4e961e040b7a98ef2357c493337600e2",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "45fcf2a57bd04b26352cb3e0624476ac20ac717f7dc93d7f89ca53d1f12bf0c5",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "10fae999aa70ac11b78f25223fcf07a3cf9cee3fe7b7ade8482e0cda8b5b8e15",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "a88c185cac21bc970c5513e102b45606cd7d122062a01dd252de17ebf0945c14",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "fb5079b6018ec995855fcf32473b509ce4ccd10d29fca540786b38a23fc898f6",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "447ffb518125861dc63088d11a22880848f22e477470f160085146b2927bdcb3",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.0028815241530537605
+     },
+     "contract_digest": "02e0208cd8c35e227e50458d97f8471ddd682bcbd8b275aac22ffbf055e7b4ed",
+     "matched_sample": {
+      "calibrated_fingerprint": "3387af7cae50daad20c54e943dcd203a8c23c584f9af1599f76d94a39c68e541",
+      "reference_fingerprint": "3387af7cae50daad20c54e943dcd203a8c23c584f9af1599f76d94a39c68e541",
+      "candidate_fingerprint": "3387af7cae50daad20c54e943dcd203a8c23c584f9af1599f76d94a39c68e541",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 812.1771892380309,
+       "ref_rms": 7.047770447240896,
+       "elements": 13280,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 2e-05,
+       "Emax": 0.002
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         415
+        ],
+        "dtype": "float32",
+        "stride": [
+         415,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dense",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.922853647608175e-08,
+       "Emax": 6.182552878626139e-07,
+       "diff_l2": 7.603456216903978e-10,
+       "diff_max": 1.1641532182693481e-10,
+       "ref_l2": 0.008521327948645813,
+       "ref_rms": 0.0001882965242875596,
+       "elements": 2048,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:sparse",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 8.168283298704926e-08,
+       "Emax": 1.2946372120119232e-06,
+       "diff_l2": 3.3898032746339898e-09,
+       "diff_max": 2.3283064365386963e-10,
+       "ref_l2": 0.04149958015255715,
+       "ref_rms": 0.00017984238479600055,
+       "elements": 53248,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0002,
+       "Emax": 0.02
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         26,
+         64
+        ],
+        "dtype": "float32",
+        "stride": [
+         1664,
+         64,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+      "seed": 404000033,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "6ccb7094dc89102858c187f28805e78794355d9be7a727e196987f84f39fc2a7",
+       "call": "interaction_fn"
+      }
+     },
+     "reference": {
+      "execution_id": "349be11459824345870aca1a810d56de",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 404000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "6ccb7094dc89102858c187f28805e78794355d9be7a727e196987f84f39fc2a7",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "36d87bf2d591c3ef5b454c50066b409acab47162687084563b7a0531d1ab1dd7",
+      "sample_identity": {
+       "fingerprint": "9794ffb242049d8523fe644108fa54369ba2e299b5a05b2cb118dab46bdb5557",
+       "components": {
+        "seed": 404000033,
+        "inputs": "d367af1253e4aa5b08aded831bfe93337778a42a90d07bc5743f489e65df989b",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "5ba1f3a08eb2a142bd3312ecdf1a8fd53f7dc0fbb067b22a9e689e76f075a2fd",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "ba16cf1803e8bfa107fb3ab6988d59bf159616a4a316d7a1e134f5b5e265d506",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "d00a8ed3a0640749352d85b19c6a8628ea569a042a77a6e7db57ce56b7df62e1",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "547c99dc1bc1b58074aebb83a8e266df401bbb715e65ab371574eb3e327f4c5e",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "fd4132bef0b0b73799bf0b8ff6baf37704cd1146fc72a078f6d760cb839ab36a",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.004463593941181898
+     },
+     "candidate": {
+      "execution_id": "368a0f1569e944b3a7b68f11662763f8",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_1557420647295694008"
+       }
+      },
+      "sample": {
+       "sample_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c/o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+       "seed": 404000033,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/torchrec_dlrm_dlrm_interaction/interaction/interaction_fn",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "6ccb7094dc89102858c187f28805e78794355d9be7a727e196987f84f39fc2a7",
+        "call": "interaction_fn"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "36d87bf2d591c3ef5b454c50066b409acab47162687084563b7a0531d1ab1dd7",
+      "sample_identity": {
+       "fingerprint": "9794ffb242049d8523fe644108fa54369ba2e299b5a05b2cb118dab46bdb5557",
+       "components": {
+        "seed": 404000033,
+        "inputs": "d367af1253e4aa5b08aded831bfe93337778a42a90d07bc5743f489e65df989b",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "5ba1f3a08eb2a142bd3312ecdf1a8fd53f7dc0fbb067b22a9e689e76f075a2fd",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "dense": "args[0]",
+         "sparse": "args[1]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "ba16cf1803e8bfa107fb3ab6988d59bf159616a4a316d7a1e134f5b5e265d506",
+             "shape": [
+              32,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            {
+             "tensor": "d00a8ed3a0640749352d85b19c6a8628ea569a042a77a6e7db57ce56b7df62e1",
+             "shape": [
+              32,
+              26,
+              64
+             ],
+             "dtype": "float32",
+             "stride": [
+              1664,
+              64,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "547c99dc1bc1b58074aebb83a8e266df401bbb715e65ab371574eb3e327f4c5e",
+           "shape": [
+            32,
+            415
+           ],
+           "dtype": "float32",
+           "stride": [
+            415,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "5ec7e8c8146d8592ca936589b0d13d7b02d938b597dccc0a0b1293488dc42823",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.002879924140870571
+     },
+     "contract_digest": "02e0208cd8c35e227e50458d97f8471ddd682bcbd8b275aac22ffbf055e7b4ed",
+     "matched_sample": {
+      "calibrated_fingerprint": "9794ffb242049d8523fe644108fa54369ba2e299b5a05b2cb118dab46bdb5557",
+      "reference_fingerprint": "9794ffb242049d8523fe644108fa54369ba2e299b5a05b2cb118dab46bdb5557",
+      "candidate_fingerprint": "9794ffb242049d8523fe644108fa54369ba2e299b5a05b2cb118dab46bdb5557",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "matched_inputs"
+  }
+ }
+}

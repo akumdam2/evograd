@@ -1,0 +1,51 @@
+{
+  "model": "qwen3_0_6b",
+  "agent": "gepa",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_0_6b/20261021_main/manifest.json",
+  "selected_cases": [
+    "cross_entropy/logits",
+    "fused_add_rms_norm/residual_rmsnorm",
+    "qwen3_attention/causal_gqa_attention",
+    "qwen3_qkv_norm_rope/qkv_norm_rope",
+    "qwen3_swiglu_mlp/swiglu_mlp",
+    "rmsnorm/rmsnorm",
+    "rope/rope",
+    "swiglu/mlp_activation"
+  ],
+  "candidates": {
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/cross_entropy__logits.py",
+      "sha256": "0bd0f0d6e4b0bed6968185875453ba3e78cf1e7065ff5d79e5d30917a9964339"
+    },
+    "fused_add_rms_norm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/fused_add_rms_norm__residual_rmsnorm.py",
+      "sha256": "a5eece3301e8289cb57ff001eac1eea8c0246476a059ff46201a0f09901b2a97"
+    },
+    "qwen3_attention/causal_gqa_attention": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py",
+      "sha256": "370beb70822a8bd332f7f0cac4e3793087c55c68e280a27b11335e35c13651b0"
+    },
+    "qwen3_qkv_norm_rope/qkv_norm_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_qkv_norm_rope__qkv_norm_rope.py",
+      "sha256": "3c40b477aa364213d4c9114974d7978504597c3aa36f1f21ebb83356f65be9f9"
+    },
+    "qwen3_swiglu_mlp/swiglu_mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_swiglu_mlp__swiglu_mlp.py",
+      "sha256": "8fd6698974f3cdf0fbe56b6b39b5f49945fe767558e2d11ebea35f5e01185c16"
+    },
+    "rmsnorm/rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/rmsnorm__rmsnorm.py",
+      "sha256": "38e01819eadbd71a44319c8f231176f8ea5f8dafdf1d1b5665512be1282782cf"
+    },
+    "rope/rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/rope__rope.py",
+      "sha256": "5db6a66296fa8661123e3b6b032c9df80e4cd6acd426a9915f9ca573ae87335e"
+    },
+    "swiglu/mlp_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/swiglu__mlp_activation.py",
+      "sha256": "442f9f5ab0f64751f7a6c81cd7b3d99ea0b3305dedec341c45a27a2435688117"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+}

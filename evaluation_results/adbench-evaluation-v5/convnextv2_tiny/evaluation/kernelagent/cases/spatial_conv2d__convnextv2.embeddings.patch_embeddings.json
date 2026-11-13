@@ -1,0 +1,3649 @@
+{
+ "stage_key": {
+  "case": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+  "program_sha256": "e8a75a25005cb66e8b3bb6460a7f1777ccf7aca28b7abb73fcbe4e81b79034f7",
+  "corpus": {
+   "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+   "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor",
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "verification_implementation": {
+   "gates": "bdefaaf8281272bc9a230cfab87915580871d45b71b9f18897066024b603b098",
+   "calibration": "9ff727443df478c761967dce16c17c8356353269e632dd71d3b7771dd5bad362",
+   "comparison": "a7053f2ee7bbc034a11ec344b08b5cc172adcb08a687e6b2195c2826ee2e16af",
+   "metrics": "851c4c87bb40d01d2e1f8f6e8899c88da15242827da8e77025de64b5568b4677",
+   "contracts": "281ee24ce574273ea256c37792d9814036c0d2b2729e3678cee6675fe87e79e7"
+  },
+  "verification_environment": {
+   "python": "3.12.13",
+   "machine": "aarch64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA GH200 120GB",
+   "compute_capability": "9.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  }
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "passed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "spatial_conv2d",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_5561729308655412693",
+    "source_hash": "5c2e116f3c92e6888903161ad30dd048f9cc73500d3e6690971b86ae9b5857ec"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:dbias": 0.0009765625,
+    "grad_in:dweight": 0.0,
+    "grad_in:dx": 0.0,
+    "out:out": 0.03125
+   },
+   "cases": [
+    "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings"
+   ]
+  },
+  "case_counts": {
+   "passed": 4,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.015625,
+       "max_rel_err": 97656.25,
+       "headroom": 0.125,
+       "worst_index": [
+        0,
+        5,
+        0,
+        41
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.125,
+       "rounding_floor": 0.125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 0.008731149137020111,
+       "headroom": 0.001953125,
+       "worst_index": [
+        17,
+        2,
+        88,
+        88
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4608,
+       "max_abs_err": 9.5367431640625e-07,
+       "max_rel_err": 0.005847953216374269,
+       "headroom": 6.103515625e-05,
+       "worst_index": [
+        35,
+        0,
+        1,
+        1
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.015625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.015625,
+       "rounding_floor": 0.015625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.015625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.015625,
+       "rounding_floor": 0.015625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "C": 3,
+      "Y": 224,
+      "X": 224,
+      "O": 96,
+      "CG": 3,
+      "K": 4,
+      "OY": 56,
+      "OX": 56,
+      "S": 4,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 272,
+        "sha256": "5e91bf6e5121b2e8f409dd780be2edf17392532c4ebcfc0ac91d8d3ab86682fc"
+       }
+      },
+      "payload_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "case": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+      "batch": {
+       "order": 101,
+       "sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.patch_embeddings",
+       "index_in_step": 0,
+       "kind": "module:Conv2d",
+       "layer": null,
+       "path": "convnextv2.embeddings.patch_embeddings",
+       "role": "convnextv2.embeddings.patch_embeddings"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9633792,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.015625,
+       "max_rel_err": 122833.251953125,
+       "headroom": 0.25,
+       "worst_index": [
+        0,
+        5,
+        1,
+        30
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0625,
+       "rounding_floor": 0.0625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 0.0078125,
+       "headroom": 0.015625,
+       "worst_index": [
+        28,
+        0,
+        128,
+        154
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.00048828125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.00048828125,
+       "rounding_floor": 0.00048828125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4608,
+       "max_abs_err": 3.0517578125e-05,
+       "max_rel_err": 0.005847953216374269,
+       "headroom": 0.0009765625,
+       "worst_index": [
+        42,
+        0,
+        3,
+        1
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.03125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.03125,
+       "rounding_floor": 0.03125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "C": 3,
+      "Y": 224,
+      "X": 224,
+      "O": 96,
+      "CG": 3,
+      "K": 4,
+      "OY": 56,
+      "OX": 56,
+      "S": 4,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 272,
+        "sha256": "5e91bf6e5121b2e8f409dd780be2edf17392532c4ebcfc0ac91d8d3ab86682fc"
+       }
+      },
+      "payload_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "case": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+      "batch": {
+       "order": 202,
+       "sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.patch_embeddings",
+       "index_in_step": 0,
+       "kind": "module:Conv2d",
+       "layer": null,
+       "path": "convnextv2.embeddings.patch_embeddings",
+       "role": "convnextv2.embeddings.patch_embeddings"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9633792,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.015625,
+       "max_rel_err": 170898.4375,
+       "headroom": 0.25,
+       "worst_index": [
+        0,
+        5,
+        2,
+        19
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0625,
+       "rounding_floor": 0.0625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 1.9073486328125e-06,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.0078125,
+       "worst_index": [
+        3,
+        2,
+        199,
+        82
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.000244140625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.000244140625,
+       "rounding_floor": 0.000244140625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4608,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0,
+        0,
+        0,
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "C": 3,
+      "Y": 224,
+      "X": 224,
+      "O": 96,
+      "CG": 3,
+      "K": 4,
+      "OY": 56,
+      "OX": 56,
+      "S": 4,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "case": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+      "batch": {
+       "order": 303,
+       "sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.patch_embeddings",
+       "index_in_step": 0,
+       "kind": "module:Conv2d",
+       "layer": null,
+       "path": "convnextv2.embeddings.patch_embeddings",
+       "role": "convnextv2.embeddings.patch_embeddings"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9633792,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 9633792,
+       "max_abs_err": 0.015625,
+       "max_rel_err": 160980.224609375,
+       "headroom": 0.25,
+       "worst_index": [
+        0,
+        5,
+        0,
+        52
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0625,
+       "rounding_floor": 0.0625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4816896,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 0.007751937984496124,
+       "headroom": 0.0078125,
+       "worst_index": [
+        29,
+        1,
+        79,
+        190
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dweight",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 4608,
+       "max_abs_err": 7.62939453125e-06,
+       "max_rel_err": 0.004651162790697674,
+       "headroom": 0.00048828125,
+       "worst_index": [
+        44,
+        2,
+        0,
+        1
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.015625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.015625,
+       "rounding_floor": 0.015625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dbias",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 96,
+       "max_abs_err": 0.0,
+       "max_rel_err": 0.0,
+       "headroom": 0.0,
+       "worst_index": [
+        0
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0078125
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0078125,
+       "rounding_floor": 0.0078125
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "B": 32,
+      "C": 3,
+      "Y": 224,
+      "X": 224,
+      "O": 96,
+      "CG": 3,
+      "K": 4,
+      "OY": 56,
+      "OX": 56,
+      "S": 4,
+      "P": 0,
+      "G": 1
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+       "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 272,
+        "sha256": "d93aff81fec476afb59686cedbe919dac5336e75f95ef008806f3436c063a79b"
+       }
+      },
+      "payload_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "case": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+      "batch": {
+       "order": 404,
+       "sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1"
+      },
+      "call": {
+       "component": "convnextv2.embeddings.patch_embeddings",
+       "index_in_step": 0,
+       "kind": "module:Conv2d",
+       "layer": null,
+       "path": "convnextv2.embeddings.patch_embeddings",
+       "role": "convnextv2.embeddings.patch_embeddings"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 9633792,
+        "numel": 9633792,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dweight",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dbias",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "a2717d94231f95109a31fe77f4e573f6733b807b52e73e7c08b6996fad9ee493",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/u/hding4/adbench-evaluation-v5/convnextv2_tiny/state/native_reuse_v1/1-1-1/gate2/operator/7096a8fa75b2f9a2/matched_inputs_v5/all/spatial_conv2d__convnextv2.embeddings.patch_embeddings.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "spatial_conv2d",
+    "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.ops.level1.spatial_conv2d.reference:forward",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/convnextv2_tiny/1",
+     "source": null
+    },
+    "parameter_args": [
+     "weight",
+     "bias"
+    ],
+    "dims": {
+     "B": 32,
+     "C": 3,
+     "Y": 224,
+     "X": 224,
+     "O": 96,
+     "CG": 3,
+     "K": 4,
+     "OY": 56,
+     "OX": 56,
+     "S": 4,
+     "P": 0,
+     "G": 1
+    },
+    "dtype": "bfloat16",
+    "inputs": "real_training_payload",
+    "case_id": "spatial_conv2d/convnextv2.embeddings.patch_embeddings",
+    "corpus": {
+     "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+     "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_5561729308655412693"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+     "seed": 101000000,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "split": "calibration",
+      "batch_order": 101,
+      "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+      "call": "convnextv2.embeddings.patch_embeddings"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+     "seed": 202000000,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "split": "calibration",
+      "batch_order": 202,
+      "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+      "call": "convnextv2.embeddings.patch_embeddings"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+     "seed": 303000000,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+      "call": "convnextv2.embeddings.patch_embeddings"
+     }
+    },
+    {
+     "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+     "seed": 404000000,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+      "call": "convnextv2.embeddings.patch_embeddings"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "a2717d94231f95109a31fe77f4e573f6733b807b52e73e7c08b6996fad9ee493",
+    "schema": "evograd-verification-gate2-policy/5",
+    "boundaries": false,
+    "sample_protocol": "matched_inputs",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "0f0f97b99f97317ee0477694bb44cb16df69033167907f4048a1a0363464fbad",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 4,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.001454073356709532,
+       "Emax": 0.028763939663857468,
+       "diff_l2": 2.4516394803072195,
+       "diff_max": 0.015625,
+       "ref_l2": 1686.04937914213,
+       "ref_rms": 0.5432148788586552,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.23011151731085974
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 4.847161748406546e-06,
+       "Emax": 0.007616721923558292,
+       "diff_l2": 2.6639933054008782e-06,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 0.5495985988659525,
+       "ref_rms": 0.00025041594690665127,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 5.835419202617211
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.09697868697333e-07,
+       "Emax": 7.332843972928378e-06,
+       "diff_l2": 9.684608464999152e-07,
+       "diff_max": 9.5367431640625e-07,
+       "ref_l2": 8.828438127380506,
+       "ref_rms": 0.13005517639909625,
+       "elements": 4608,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.15932408647491153
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 1.2362056002501893,
+       "ref_rms": 0.12616970574099837,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.1238411384748337
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "seed": 101000000,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+       "call": "convnextv2.embeddings.patch_embeddings"
+      }
+     },
+     "reference": {
+      "execution_id": "d3499a6d57c14e169afdbb6cc8a8dc2a",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 101000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "520da282a622e4b2a36af2c084add45ccd3be672926da9c51bc16232a1c548a3",
+      "sample_identity": {
+       "fingerprint": "6317ed5be323d0c414e2529d6f1f0d68978e0de970e4593e0c96026dd9d06a3d",
+       "components": {
+        "seed": 101000000,
+        "inputs": "3218005b088f46c126b76b6e719293ed77705983b8cb6f67a6ddcd76c4ba2da8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "e2eedc2e0f05f7e56a913c775171683d72d06ea289d324f509448673a1143c48",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "8909d1b6c855df7e54f7e2f663ffd11f1b6bba8877f194a1a438936a7c9441ec",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0cd9b481353c2c771db236e42a55236f8eca26369f519a23f4872028b9e8de49",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "c8ae4ae2e53abc2a542297a84342da01e7b631bf508a703c3c7110152b325128",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.06451154011301696
+     },
+     "candidate": {
+      "execution_id": "fc83fd47d960426bbc74c4191e2667c0",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_5561729308655412693"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 101000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "bcfc826b7390c6e10223b9904a99e46930d38eb1ee3828db3ec2cd474a99dcf3",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "520da282a622e4b2a36af2c084add45ccd3be672926da9c51bc16232a1c548a3",
+      "sample_identity": {
+       "fingerprint": "6317ed5be323d0c414e2529d6f1f0d68978e0de970e4593e0c96026dd9d06a3d",
+       "components": {
+        "seed": 101000000,
+        "inputs": "3218005b088f46c126b76b6e719293ed77705983b8cb6f67a6ddcd76c4ba2da8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "e2eedc2e0f05f7e56a913c775171683d72d06ea289d324f509448673a1143c48",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "8909d1b6c855df7e54f7e2f663ffd11f1b6bba8877f194a1a438936a7c9441ec",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "0cd9b481353c2c771db236e42a55236f8eca26369f519a23f4872028b9e8de49",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "99c54f7739bb10b33d043e7ddbb5639e8befca7c1b3b433816ac53919e77fd70",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.22700554807670414
+     },
+     "contract_digest": "e651138de84b10335fa81452455b3a25723f1fcd7f018aec3aba5d23ecb1622c",
+     "matched_sample": {
+      "calibrated_fingerprint": "6317ed5be323d0c414e2529d6f1f0d68978e0de970e4593e0c96026dd9d06a3d",
+      "reference_fingerprint": "6317ed5be323d0c414e2529d6f1f0d68978e0de970e4593e0c96026dd9d06a3d",
+      "candidate_fingerprint": "6317ed5be323d0c414e2529d6f1f0d68978e0de970e4593e0c96026dd9d06a3d",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0014322874754323697,
+       "Emax": 0.029015053915487827,
+       "diff_l2": 2.3940073039374195,
+       "diff_max": 0.015625,
+       "ref_l2": 1671.4572632946692,
+       "ref_rms": 0.5385135607712793,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.23011151731085974
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 2.3639587125199805e-05,
+       "Emax": 0.03199074506446051,
+       "diff_l2": 1.2373405357003236e-05,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 0.523418843631714,
+       "ref_rms": 0.0002384875536933251,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 5.835419202617211
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 4.4766720911964514e-09,
+       "Emax": 3.0388657851202303e-07,
+       "diff_l2": 5.960464477539063e-08,
+       "diff_max": 5.960464477539063e-08,
+       "ref_l2": 13.314498708226912,
+       "ref_rms": 0.1961410900976412,
+       "elements": 4608,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.15932408647491153
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 1.3189174555834784,
+       "ref_rms": 0.13461144912622577,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.1238411384748337
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "seed": 202000000,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+       "call": "convnextv2.embeddings.patch_embeddings"
+      }
+     },
+     "reference": {
+      "execution_id": "a4bab18ca6a04a139bcc1d1a21946fa3",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 202000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2852de21342e6113d7a0b39cb6188efc4ad8ba93daeb14f49ea67bd3372a1d4f",
+      "sample_identity": {
+       "fingerprint": "3e17ad4db54575426e603aed2db7e911025ab5f31950027357b5871f8ee7c855",
+       "components": {
+        "seed": 202000000,
+        "inputs": "9510f3e0c2b5a6dfe702a7bbbd7c5310fa01fc151eee432b7e2fd25f88dc3238",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "2e9a8f9cf943e262993a49c1b44f13a6692f27f78cd1ceb3134a08e5edf20a6f",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a0d8d06d724bb84e592c9322b29ac2bf247f121f5a067aa94b88f152948f451f",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "d1413d2313ed496cc5c55994b2717f76038c25a73acba47729d89f796843e023",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "b6bbd58fe820567e2dc29035d88c3d18f8a2011fe13a084006efb1fe3b798ad1",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.06389783299528062
+     },
+     "candidate": {
+      "execution_id": "c261fe705476400da24fe993b322155b",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_5561729308655412693"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 202000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "e56863b43bdf5d8333830745dc724bd1517c50cc63b31df342f280595134c866",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "2852de21342e6113d7a0b39cb6188efc4ad8ba93daeb14f49ea67bd3372a1d4f",
+      "sample_identity": {
+       "fingerprint": "3e17ad4db54575426e603aed2db7e911025ab5f31950027357b5871f8ee7c855",
+       "components": {
+        "seed": 202000000,
+        "inputs": "9510f3e0c2b5a6dfe702a7bbbd7c5310fa01fc151eee432b7e2fd25f88dc3238",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "2e9a8f9cf943e262993a49c1b44f13a6692f27f78cd1ceb3134a08e5edf20a6f",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a0d8d06d724bb84e592c9322b29ac2bf247f121f5a067aa94b88f152948f451f",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "d1413d2313ed496cc5c55994b2717f76038c25a73acba47729d89f796843e023",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4dc84a4f81f2692940908903d75e8b7deebb9b615fb29425dfab9090763f857b",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.048462196020409465
+     },
+     "contract_digest": "e651138de84b10335fa81452455b3a25723f1fcd7f018aec3aba5d23ecb1622c",
+     "matched_sample": {
+      "calibrated_fingerprint": "3e17ad4db54575426e603aed2db7e911025ab5f31950027357b5871f8ee7c855",
+      "reference_fingerprint": "3e17ad4db54575426e603aed2db7e911025ab5f31950027357b5871f8ee7c855",
+      "candidate_fingerprint": "3e17ad4db54575426e603aed2db7e911025ab5f31950027357b5871f8ee7c855",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0014948929322626092,
+       "Emax": 0.028412257250313204,
+       "diff_l2": 2.551661195265493,
+       "diff_max": 0.015625,
+       "ref_l2": 1706.9190309190922,
+       "ref_rms": 0.5499387064654202,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.23011151731085974
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 1.8664959717933636e-05,
+       "Emax": 0.018423048964446544,
+       "diff_l2": 4.241107374329434e-06,
+       "diff_max": 1.9073486328125e-06,
+       "ref_l2": 0.22722295887167118,
+       "ref_rms": 0.00010353056307310312,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 5.835419202617211
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 6.379291247987404,
+       "ref_rms": 0.09397583542949765,
+       "elements": 4608,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.15932408647491153
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.8595442344760779,
+       "ref_rms": 0.08772686607573216,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.1238411384748337
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "seed": 303000000,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+       "call": "convnextv2.embeddings.patch_embeddings"
+      }
+     },
+     "reference": {
+      "execution_id": "79f04fdbde624baab1679e8f8fc87f21",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 303000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9e34e34eb47e146659edc4381c3c803507cc25ee2540db2086ab20c27ff33cee",
+      "sample_identity": {
+       "fingerprint": "ae475f075a4ae7ce473bac9f0ec7b11db68e6950c43a22c08436fd5f0411ddb7",
+       "components": {
+        "seed": 303000000,
+        "inputs": "a69bac627809774b0b8fb207becc4e8b2e19e9d4b83a6a953cf63fe924d9d0f8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "03c19883eb87169529056c93109e97b6e49f75f95e3f6cdd2680f17be7ccd86c",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d8cc41d4f1004db92beb7f768ba706a98bb3d45fd99c50397c05d4553703aed3",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "15f15ffe9b83a3a097867ccdc373cb0ccc9c3b11417b71378846b0a51619ab80",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "8014000f5fbe67e7b82174e0522b1c85efb8acb7041961984aab976b853bc66c",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.06381406006403267
+     },
+     "candidate": {
+      "execution_id": "d80357a46a414c9ebf7227db8098bdaa",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_5561729308655412693"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 303000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "6fda843139d074447431e55ed39bd94e7ff317fe46a24010e1407b709ec870f0",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "9e34e34eb47e146659edc4381c3c803507cc25ee2540db2086ab20c27ff33cee",
+      "sample_identity": {
+       "fingerprint": "ae475f075a4ae7ce473bac9f0ec7b11db68e6950c43a22c08436fd5f0411ddb7",
+       "components": {
+        "seed": 303000000,
+        "inputs": "a69bac627809774b0b8fb207becc4e8b2e19e9d4b83a6a953cf63fe924d9d0f8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "03c19883eb87169529056c93109e97b6e49f75f95e3f6cdd2680f17be7ccd86c",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "d8cc41d4f1004db92beb7f768ba706a98bb3d45fd99c50397c05d4553703aed3",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "15f15ffe9b83a3a097867ccdc373cb0ccc9c3b11417b71378846b0a51619ab80",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "a1e13df571d8e801fdb091db42efd2612298322ba110d645a8939788990cc829",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.04845262900926173
+     },
+     "contract_digest": "e651138de84b10335fa81452455b3a25723f1fcd7f018aec3aba5d23ecb1622c",
+     "matched_sample": {
+      "calibrated_fingerprint": "ae475f075a4ae7ce473bac9f0ec7b11db68e6950c43a22c08436fd5f0411ddb7",
+      "reference_fingerprint": "ae475f075a4ae7ce473bac9f0ec7b11db68e6950c43a22c08436fd5f0411ddb7",
+      "candidate_fingerprint": "ae475f075a4ae7ce473bac9f0ec7b11db68e6950c43a22c08436fd5f0411ddb7",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   },
+   {
+    "case_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0014383641051998798,
+       "Emax": 0.02882241327549032,
+       "diff_l2": 2.4202328657547283,
+       "diff_max": 0.015625,
+       "ref_l2": 1682.6287982335355,
+       "ref_rms": 0.5421128290213996,
+       "elements": 9633792,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.23011151731085974
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         96,
+         56,
+         56
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         301056,
+         3136,
+         56,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:x",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 2.4588145814669945e-05,
+       "Emax": 0.04558921252044696,
+       "diff_l2": 9.03103235026691e-06,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 0.36729212598368255,
+       "ref_rms": 0.0001673508733634779,
+       "elements": 4816896,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 5.835419202617211
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         32,
+         3,
+         224,
+         224
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         150528,
+         50176,
+         224,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:weight",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 9.12143834315592e-07,
+       "Emax": 5.5381479746237254e-05,
+       "diff_l2": 8.529922399520072e-06,
+       "diff_max": 7.62939453125e-06,
+       "ref_l2": 9.351510231848819,
+       "ref_rms": 0.13776075623491008,
+       "elements": 4608,
+       "reference_zero": false,
+       "bitwise": false,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.15932408647491153
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96,
+         3,
+         4,
+         4
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         48,
+         16,
+         4,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad:bias",
+      "kind": "param_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "E2": 0.0,
+       "Emax": 0.0,
+       "diff_l2": 0.0,
+       "diff_max": 0.0,
+       "ref_l2": 0.9131408301760779,
+       "ref_rms": 0.09319704571803414,
+       "elements": 96,
+       "reference_zero": false,
+       "bitwise": true,
+       "empty": false
+      },
+      "limits": {
+       "E2": 0.0078125,
+       "Emax": 0.1238411384748337
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         96
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "sample": {
+      "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+      "seed": 404000000,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+       "call": "convnextv2.embeddings.patch_embeddings"
+      }
+     },
+     "reference": {
+      "execution_id": "0a4d9a49539341c69f20efca14611ba3",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 404000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "386f77641cc66ba45245e89e0c46777af5aca5a5f7b0eee4eee63e3a47a93f8f",
+      "sample_identity": {
+       "fingerprint": "46080152c2d551eaaa9e534d242eccb8b231cc03e5bd9fe5f12c9ca88f1f394d",
+       "components": {
+        "seed": 404000000,
+        "inputs": "226f63db404432bca3bbbb1c58c789681eca62979920582cf2e3cfa7eb09ba84",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "71c7bc5d808f867ad05c746ca1bb2b9a11222cac61675dc160d315fb4ae2e585",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "301ddd82132d75aa907a4d7af77187241f2d379e4204ceb2a3d1253b8904858a",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "78697187ab1b00520817e0cdc9e01edaae5cdd1a300f9467679b32f8c3b20b02",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "125bb31100043cbd9d7d34f71025914fb254aa54e988e2f7a3ad8bb6e9ee882d",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.06410384178161621
+     },
+     "candidate": {
+      "execution_id": "c8f34b5efca2477c840e8e591c7a3237",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_5561729308655412693"
+       }
+      },
+      "sample": {
+       "sample_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2/o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+       "seed": 404000000,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/spatial_conv2d/convnextv2.embeddings.patch_embeddings/convnextv2.embeddings.patch_embeddings",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "eb44d557a02ee18109f2781955a4e46e6ef0624cc7df6a27aae30188755d9ec1",
+        "call": "convnextv2.embeddings.patch_embeddings"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "386f77641cc66ba45245e89e0c46777af5aca5a5f7b0eee4eee63e3a47a93f8f",
+      "sample_identity": {
+       "fingerprint": "46080152c2d551eaaa9e534d242eccb8b231cc03e5bd9fe5f12c9ca88f1f394d",
+       "components": {
+        "seed": 404000000,
+        "inputs": "226f63db404432bca3bbbb1c58c789681eca62979920582cf2e3cfa7eb09ba84",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "71c7bc5d808f867ad05c746ca1bb2b9a11222cac61675dc160d315fb4ae2e585",
+        "initial_state": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "301ddd82132d75aa907a4d7af77187241f2d379e4204ceb2a3d1253b8904858a",
+             "shape": [
+              32,
+              3,
+              224,
+              224
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              150528,
+              50176,
+              224,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "78697187ab1b00520817e0cdc9e01edaae5cdd1a300f9467679b32f8c3b20b02",
+           "shape": [
+            32,
+            96,
+            56,
+            56
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            301056,
+            1,
+            5376,
+            96
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7c8eebbccd7e39dec909f81990b643511cc6733a6245dae899163a8853f45ca4",
+      "initial_state_digest": "3a86f261c5b9ee2e78da0d13c22fe722cdce763189723964a8ea81e78f33a267",
+      "error_stage": null,
+      "seconds": 0.048346743918955326
+     },
+     "contract_digest": "e651138de84b10335fa81452455b3a25723f1fcd7f018aec3aba5d23ecb1622c",
+     "matched_sample": {
+      "calibrated_fingerprint": "46080152c2d551eaaa9e534d242eccb8b231cc03e5bd9fe5f12c9ca88f1f394d",
+      "reference_fingerprint": "46080152c2d551eaaa9e534d242eccb8b231cc03e5bd9fe5f12c9ca88f1f394d",
+      "candidate_fingerprint": "46080152c2d551eaaa9e534d242eccb8b231cc03e5bd9fe5f12c9ca88f1f394d",
+      "identical_content": true,
+      "reference_reproduces_calibration": true
+     }
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "matched_inputs"
+  }
+ }
+}

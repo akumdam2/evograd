@@ -1,0 +1,26 @@
+{
+  "model": "dit_s_2",
+  "agent": "kernelagent",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/dit_s_2/dit_s_2_20261021/manifest.json",
+  "selected_cases": [
+    "dit_s_2_dit_mlp/blocks.mlp",
+    "dit_s_2_dit_modulation/blocks.modulation",
+    "spatial_conv2d/patch"
+  ],
+  "candidates": {
+    "dit_s_2_dit_mlp/blocks.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/dit_s_2_dit_mlp__blocks.mlp.py",
+      "sha256": "2ae09ed4d428ba1c689024b7cac32708afabdaef8c3ec08cc8ddd7ba5b6b93ce"
+    },
+    "dit_s_2_dit_modulation/blocks.modulation": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/dit_s_2_dit_modulation__blocks.modulation.py",
+      "sha256": "a889169cfb84d60f70ef62cc5cf3646277ead7edb6b1a31e041da48e543bda09"
+    },
+    "spatial_conv2d/patch": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/spatial_conv2d__patch.py",
+      "sha256": "4fef62566d70b372d1211ad1dcc2b8f8261a18590654b32ec1bea58703e21eda"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+}

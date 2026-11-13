@@ -1,0 +1,576 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "dit_s_2",
+ "agent": "kernelagent",
+ "workload": {
+  "model": "dit_s_2",
+  "device": "cuda",
+  "input_mode": "real",
+  "stream": true,
+  "init_checkpoint": "/work/hdd/bcjw/wzhan/evograd_verification/data/dit_s_2/batches/warm_start.pt"
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA GH200 120GB"
+ },
+ "reference": "eager",
+ "corpus": {
+  "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+  "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "group_execution": "case-major-shared-baselines/2",
+  "weight_cache": true,
+  "compile_backend": "inductor",
+  "payload_loading": "one storage read per case; private device copies per execution",
+  "baseline_scope": "T2: shared per case; T3: shared per model",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "spatial_conv2d/patch": {
+   "task": "spatial_conv2d",
+   "level": 1,
+   "family": "convolution",
+   "frequency": 1,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/spatial_conv2d__patch.py",
+   "program_sha256": "4fef62566d70b372d1211ad1dcc2b8f8261a18590654b32ec1bea58703e21eda",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+     "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/spatial_conv2d/patch/patch"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 1.3074880242347717,
+     "baseline_ms": 1.592527985572815,
+     "speedup": 1.2180057912995932,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.2136148157258424,
+      "high": 1.2192448171122496
+     },
+     "speedup_forward": 0.9838327160160532,
+     "speedup_backward": 1.233350913806444
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 1.3074880242347717,
+     "baseline_ms": 0.7848320007324219,
+     "speedup": 0.6002594182013693,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.599718512850975,
+      "high": 0.601045778265921
+     },
+     "speedup_forward": 1.4643188182493956,
+     "speedup_backward": 0.5623152911991596
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/dit_s_2/shared/tier2/spatial_conv2d__patch.json"
+  },
+  "linear/t_embedder": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "submitted": false
+  },
+  "linear/t_embedder_2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "submitted": false
+  },
+  "linear/blocks.mod": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 12,
+   "submitted": false
+  },
+  "linear/blocks.qkv": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 12,
+   "submitted": false
+  },
+  "linear/blocks.proj": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 12,
+   "submitted": false
+  },
+  "linear/blocks.fc1": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 12,
+   "submitted": false
+  },
+  "linear/blocks.fc2": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 12,
+   "submitted": false
+  },
+  "linear/final_mod": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "submitted": false
+  },
+  "linear/final_linear": {
+   "task": "linear",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "submitted": false
+  },
+  "dit_s_2_dit_modulation/blocks.modulation": {
+   "task": "dit_s_2_dit_modulation",
+   "level": 2,
+   "family": "normalization",
+   "frequency": 12,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/dit_s_2_dit_modulation__blocks.modulation.py",
+   "program_sha256": "a889169cfb84d60f70ef62cc5cf3646277ead7edb6b1a31e041da48e543bda09",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "dit_s_2-real-training-payloads@f009a78c1885f701",
+     "corpus_sha256": "f009a78c1885f70166b3be018d75f585f54578e3d512ccbdb34f7af54c6ff71a",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.0.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.1.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.2.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.3.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.4.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.5.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.6.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.7.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.8.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.9.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.10.mod_fn",
+     "o303/dit_s_2_dit_modulation/blocks.modulation/blocks.11.mod_fn"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 2.608207993209362,
+     "baseline_ms": 5.2301280200481415,
+     "speedup": 2.0052572623292,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.987886600288391,
+      "high": 2.0365506522502272
+     },
+     "speedup_forward": 1.2022617506041628,
+     "speedup_backward": 3.0482262566979523
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 2.608207993209362,
+     "baseline_ms": 7.546800047159195,
+     "speedup": 2.893480913641771,
+     "ci95": {
+      "iterations": 2000,
+      "low": 2.8720201030905286,
+      "high": 2.9206498954007882
+     },
+     "speedup_forward": 2.6601330580039892,
+     "speedup_backward": 3.52216673346468
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/dit_s_2/shared/tier2/dit_s_2_dit_modulation__blocks.modulation.json",
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 289.5419372012839,
+    "peak_memory_bytes": 25362981376,
+    "cpu_bound_fraction": 0.9171152058560513,
+    "dynamo": null,
+    "speedup": 0.9945557722165268,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9936478274723524,
+     "high": 0.9953766684420197
+    },
+    "peak_memory_ratio": 0.9998139921236079
+   }
+  },
+  "dit_s_2_dit_mlp/blocks.mlp": {
+   "task": "dit_s_2_dit_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 12,
+   "submitted": true,
+   "violation": "ArtifactError: dit_s_2_dit_mlp: ['dit_s_2_dit_mlp_forward_with_saved'] only forward to a private _impl twin; the public pair functions must be the implementation",
+   "accepted": false,
+   "executable": false,
+   "program": "/u/hding4/evograd/evolved_programs/kernelagent/dit_s_2/dit_s_2_dit_mlp__blocks.mlp.py",
+   "program_sha256": "2ae09ed4d428ba1c689024b7cac32708afabdaef8c3ec08cc8ddd7ba5b6b93ce"
+  }
+ },
+ "tier3": {
+  "baselines": {
+   "eager": {
+    "ok": true,
+    "step_ms": 287.965604942292,
+    "peak_memory_bytes": 25367699968,
+    "cpu_bound_fraction": 0.9225727837207802,
+    "dynamo": null,
+    "peak_memory_ratio": 1.0
+   },
+   "torch_compile": {
+    "ok": true,
+    "step_ms": 252.95851789414883,
+    "peak_memory_bytes": 22616971264,
+    "cpu_bound_fraction": 0.8808921079888943,
+    "correctness": {
+     "status": "passed",
+     "policy": "torch.testing.assert_close dtype defaults; equal_nan=False",
+     "scope": "whole-model outputs, loss, input and parameter gradients",
+     "samples": [
+      {
+       "seed": 101,
+       "status": "passed",
+       "failures": [],
+       "results_checked": 133
+      },
+      {
+       "seed": 202,
+       "status": "passed",
+       "failures": [],
+       "results_checked": 133
+      },
+      {
+       "seed": 303,
+       "status": "passed",
+       "failures": [],
+       "results_checked": 133
+      },
+      {
+       "seed": 404,
+       "status": "passed",
+       "failures": [],
+       "results_checked": 133
+      }
+     ]
+    },
+    "dynamo": {
+     "graph_breaks": 0,
+     "graph_break_reasons": {},
+     "unique_graphs": 1,
+     "calls_captured": 554
+    },
+    "compile_settings": {
+     "backend": "inductor",
+     "mode": null,
+     "dynamic": false,
+     "fullgraph": false
+    },
+    "speedup": 1.1383906236468067,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1374477524676168,
+     "high": 1.1393790562957784
+    },
+    "peak_memory_ratio": 0.8915657033365304
+   }
+  },
+  "single_site": {
+   "dit_s_2_dit_modulation/blocks.modulation": {
+    "ok": true,
+    "step_ms": 289.5419372012839,
+    "peak_memory_bytes": 25362981376,
+    "cpu_bound_fraction": 0.9171152058560513,
+    "dynamo": null,
+    "speedup": 0.9945557722165268,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9936478274723524,
+     "high": 0.9953766684420197
+    },
+    "peak_memory_ratio": 0.9998139921236079
+   }
+  },
+  "combination": {
+   "cases": [],
+   "accepted": false,
+   "empty": "no Level-2 candidate was selected"
+  }
+ },
+ "shared_measurements": "/u/hding4/adbench-evaluation-v5/dit_s_2/shared",
+ "summary": {
+  "models": [
+   "dit_s_2"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 10,
+    "submitted": 1,
+    "violation": 0,
+    "executable": 1,
+    "gate1": 1,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 1.2180057912995932,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 0.6002594182013693,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 0.1
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 2,
+    "submitted": 2,
+    "violation": 1,
+    "executable": 1,
+    "gate1": 1,
+    "accepted": 1
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 2.0052572623292,
+     "configurations_covered": 1
+    },
+    "torch_compile": {
+     "geomean": 2.893480913641771,
+     "configurations_covered": 1
+    }
+   },
+   "coverage": 0.5,
+   "tier3_single_site": {
+    "dit_s_2": {
+     "dit_s_2_dit_mlp/blocks.mlp": {
+      "task": "dit_s_2_dit_mlp",
+      "submitted": true,
+      "executable": false,
+      "accepted": false,
+      "gate1_payloads": null,
+      "gate2_operator": null,
+      "gate2_model": null,
+      "gate3": null,
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {}
+     },
+     "dit_s_2_dit_modulation/blocks.modulation": {
+      "task": "dit_s_2_dit_modulation",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {
+       "ok": true,
+       "step_ms": 289.5419372012839,
+       "peak_memory_bytes": 25362981376,
+       "cpu_bound_fraction": 0.9171152058560513,
+       "dynamo": null,
+       "speedup": 0.9945557722165268,
+       "ci95": {
+        "iterations": 2000,
+        "low": 0.9936478274723524,
+        "high": 0.9953766684420197
+       },
+       "peak_memory_ratio": 0.9998139921236079
+      }
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "dit_s_2": {
+     "baselines": {
+      "eager": {
+       "ok": true,
+       "step_ms": 287.965604942292,
+       "peak_memory_bytes": 25367699968,
+       "cpu_bound_fraction": 0.9225727837207802,
+       "dynamo": null,
+       "peak_memory_ratio": 1.0
+      },
+      "torch_compile": {
+       "ok": true,
+       "step_ms": 252.95851789414883,
+       "peak_memory_bytes": 22616971264,
+       "cpu_bound_fraction": 0.8808921079888943,
+       "correctness": {
+        "status": "passed",
+        "policy": "torch.testing.assert_close dtype defaults; equal_nan=False",
+        "scope": "whole-model outputs, loss, input and parameter gradients",
+        "samples": [
+         {
+          "seed": 101,
+          "status": "passed",
+          "failures": [],
+          "results_checked": 133
+         },
+         {
+          "seed": 202,
+          "status": "passed",
+          "failures": [],
+          "results_checked": 133
+         },
+         {
+          "seed": 303,
+          "status": "passed",
+          "failures": [],
+          "results_checked": 133
+         },
+         {
+          "seed": 404,
+          "status": "passed",
+          "failures": [],
+          "results_checked": 133
+         }
+        ]
+       },
+       "dynamo": {
+        "graph_breaks": 0,
+        "graph_break_reasons": {},
+        "unique_graphs": 1,
+        "calls_captured": 554
+       },
+       "compile_settings": {
+        "backend": "inductor",
+        "mode": null,
+        "dynamic": false,
+        "fullgraph": false
+       },
+       "speedup": 1.1383906236468067,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.1374477524676168,
+        "high": 1.1393790562957784
+       },
+       "peak_memory_ratio": 0.8915657033365304
+      }
+     },
+     "cases": [],
+     "accepted": false,
+     "gate2_model": null,
+     "gate3": null,
+     "speedup": null,
+     "ci95": null,
+     "speedup_vs_torch_compile": null,
+     "peak_memory_ratio": null,
+     "cpu_bound_fraction": null
+    }
+   },
+   "speedup": {
+    "geomean": null,
+    "models_covered": 0
+   },
+   "coverage": 0.0,
+   "peak_memory_ratio_geomean": null
+  }
+ }
+}

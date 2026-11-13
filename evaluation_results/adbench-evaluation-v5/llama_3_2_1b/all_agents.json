@@ -1,0 +1,231 @@
+{
+  "model": "llama_3_2_1b",
+  "state": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/state",
+  "jobs": [
+    {
+      "selection": {
+        "model": "llama_3_2_1b",
+        "agent": "openevolve",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/llama_3_2_1b/llama_3_2_1b_20261021/manifest.json",
+        "selected_cases": [
+          "cross_entropy/logits",
+          "llama3_attention/causal_gqa_attention",
+          "llama3_qkv_rope/qkv_norm_rope",
+          "llama3_residual_rmsnorm/residual_rmsnorm",
+          "llama3_swiglu_mlp/swiglu_mlp",
+          "rmsnorm/rmsnorm",
+          "rope/rope",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/cross_entropy__logits.py",
+            "sha256": "d35b6f263de7691d0a8249be268e8ae92127b5c86d95595ea1f1f5e38e8bbb5b"
+          },
+          "llama3_attention/causal_gqa_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+            "sha256": "9f89dcfd619f7dbbbd96ddf4c35f56a5a75d4385f53378f417d37032d6789409"
+          },
+          "llama3_qkv_rope/qkv_norm_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/llama3_qkv_rope__qkv_norm_rope.py",
+            "sha256": "fbdfa6ecb7f8573f927c142a9f01894ccf2fdb1626a897542f87fbee8feaf8a9"
+          },
+          "llama3_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "4da21e1f59c9b7cbf2a4ac856fb7b08d23d9e9fca9f5f310b527974022fa575d"
+          },
+          "llama3_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "47e2726213e4fa501424c7b3bd7c3a69be2599e3110fc3c3014c31013286ed0f"
+          },
+          "rmsnorm/rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/rmsnorm__rmsnorm.py",
+            "sha256": "19ba84be3f7a8948657dcf96e54a908376df1e6c7b9db5607ab9f116ccde18cc"
+          },
+          "rope/rope": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/rope__rope.py",
+            "sha256": "871fd4ee06239e3ba0cf80f28081a28dbdd4ae58e54d7070e85584f2fdc88a5a"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/llama_3_2_1b/swiglu__mlp_activation.py",
+            "sha256": "54711788dba3ff5de27c40cf6541184fce5b5fbd5ea4a783549ccccf2c235977"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/evaluation/openevolve"
+    },
+    {
+      "selection": {
+        "model": "llama_3_2_1b",
+        "agent": "gepa",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/llama_3_2_1b/llama_3_2_1b_20261021/manifest.json",
+        "selected_cases": [
+          "cross_entropy/logits",
+          "llama3_attention/causal_gqa_attention",
+          "llama3_qkv_rope/qkv_norm_rope",
+          "llama3_residual_rmsnorm/residual_rmsnorm",
+          "llama3_swiglu_mlp/swiglu_mlp",
+          "rmsnorm/rmsnorm",
+          "rope/rope",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/cross_entropy__logits.py",
+            "sha256": "a28da0b9b07e5e53d9372eb093b4e8f592e599983520f3a32b611295c2b710ac"
+          },
+          "llama3_attention/causal_gqa_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+            "sha256": "b5b29a5e35469cca60677a162e42ca9682e5d67cdf44ab6ece94212bef731b44"
+          },
+          "llama3_qkv_rope/qkv_norm_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/llama3_qkv_rope__qkv_norm_rope.py",
+            "sha256": "edc783f66ad48523f23e12da2ee2e88d051412e5963d0eeca7489b2c9a509a1a"
+          },
+          "llama3_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "2017ac67b4d2789d28b83ba690c2fd902f5a4dbe339ef26e518f99b1ed2a0466"
+          },
+          "llama3_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "e71a180afdac3e4f1ad8ff58f7cf3cdda0f239660490a37aa170ea7970fe26e1"
+          },
+          "rmsnorm/rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/rmsnorm__rmsnorm.py",
+            "sha256": "2f5796920813357101207641781d1298b37846f664f1e812eaea9f77cf8df921"
+          },
+          "rope/rope": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/rope__rope.py",
+            "sha256": "33d9bebf5d262f51c8497f7b833ac79ad921fbf9631d082aacb9b3472537b9ea"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/llama_3_2_1b/swiglu__mlp_activation.py",
+            "sha256": "0def1bccf0433a80758565dc75779ac6300908bd0fd9553c0d73dd304454f2f8"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/evaluation/gepa"
+    },
+    {
+      "selection": {
+        "model": "llama_3_2_1b",
+        "agent": "codex",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/llama_3_2_1b/llama_3_2_1b_20261021/manifest.json",
+        "selected_cases": [
+          "cross_entropy/logits",
+          "llama3_attention/causal_gqa_attention",
+          "llama3_qkv_rope/qkv_norm_rope",
+          "llama3_residual_rmsnorm/residual_rmsnorm",
+          "llama3_swiglu_mlp/swiglu_mlp",
+          "rmsnorm/rmsnorm",
+          "rope/rope",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/cross_entropy__logits.py",
+            "sha256": "1f6431eee8b84dd5be42a0f00d7a0d27031c50f3bddd2823d76a070a8e02ca75"
+          },
+          "llama3_attention/causal_gqa_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+            "sha256": "d0ca6dba9b2fb41206035e5304ebad41579ab296ffee08e4078d24f5a1a06cb8"
+          },
+          "llama3_qkv_rope/qkv_norm_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_qkv_rope__qkv_norm_rope.py",
+            "sha256": "d5816ac12766725230db5e1c70a9cf120132b20ecb6e6e68545738569069d8f5"
+          },
+          "llama3_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "c2c3f9ef79788792af0e02cd88b334c046daffea73b0fd0c0725a2e9c6dbbd68"
+          },
+          "llama3_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "eb4f9122d48454b9b84323002a776b2d9ae24aa701cbb2655f6ae265bf16bb7d"
+          },
+          "rmsnorm/rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/rmsnorm__rmsnorm.py",
+            "sha256": "a1e29410a0d6226563c8f8141633e95e603edfb89937929e29e08af80f7e5486"
+          },
+          "rope/rope": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/rope__rope.py",
+            "sha256": "870931ca269e789efada61afd06c8f309cefb85d7ec805d0e9b59dd8eb91b18c"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/swiglu__mlp_activation.py",
+            "sha256": "2c08c763fb9c8fa9723e7e1b1a71f26a3fbf8106f2e16d038b471c8e7e0f5dc1"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/evaluation/codex"
+    },
+    {
+      "selection": {
+        "model": "llama_3_2_1b",
+        "agent": "kernelagent",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/llama_3_2_1b/llama_3_2_1b_20261021/manifest.json",
+        "selected_cases": [
+          "cross_entropy/logits",
+          "llama3_attention/causal_gqa_attention",
+          "llama3_qkv_rope/qkv_norm_rope",
+          "llama3_residual_rmsnorm/residual_rmsnorm",
+          "llama3_swiglu_mlp/swiglu_mlp",
+          "rmsnorm/rmsnorm",
+          "rope/rope",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/cross_entropy__logits.py",
+            "sha256": "c8f87a5855f8459722ece0e8ba30d0d9ea52da6fcd01f1035500bc90c171a00d"
+          },
+          "llama3_attention/causal_gqa_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+            "sha256": "1425d2320d33e2fce62fce318e5c705375d34a236a5bd7024a4ead830a799bb8"
+          },
+          "llama3_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "4ac416376e93d54d19cc17247d0e0fe62d065a9f9a79a5a2167203fcb46648f4"
+          },
+          "llama3_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "d1a275f052816cf16fe8522be1611f5569a5cdc19780d484146912590fca2823"
+          },
+          "rmsnorm/rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/rmsnorm__rmsnorm.py",
+            "sha256": "91f345c33e57f9affb5c6157bbece1ec3c2092b95433db95cccc5390100c63a7"
+          },
+          "rope/rope": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/rope__rope.py",
+            "sha256": "96899195ff06c89d8c1bbea8c04b10f66720a2f95ee3c3a8ae7ec5fbe5dc40dc"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/llama_3_2_1b/swiglu__mlp_activation.py",
+            "sha256": "f7050d9b06761ca55c3253b1bc64aa6962fa2af283641020e54a3d52e9daa487"
+          }
+        },
+        "search_failures": {
+          "llama3_qkv_rope/qkv_norm_rope": {
+            "status": "generation_failed",
+            "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+            "packaging_error": "kernel errors: compile errors, 6 gradients for 4, transposed output shapes"
+          }
+        },
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/evaluation/kernelagent"
+    }
+  ],
+  "calibration_reuse": {
+    "share_gate3_native": true,
+    "share_gate2_calibration_native": true,
+    "share_gate2_verification_reference": true
+  },
+  "execution": "case-major-shared-baselines/1",
+  "weight_cache": true
+}

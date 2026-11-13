@@ -1,0 +1,53 @@
+{
+  "model": "convnextv2_tiny",
+  "agent": "gepa",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/convnextv2_tiny/convnextv2_tiny_20261021/manifest.json",
+  "selected_cases": [
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers",
+    "gelu/convnextv2.encoder.stages.0.layers.act",
+    "grn/convnextv2.encoder.stages.0.layers.grn",
+    "layernorm/convnextv2.embeddings.layernorm",
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings"
+  ],
+  "candidates": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.0.layers.py",
+      "sha256": "97028193e79612d72f3b8732a8b26809d33b2d0f979acd2708406605508777dc"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.2.layers.py",
+      "sha256": "3543771d126b38798ac5e0064cef0e8e2ce6c60fd4f71d1faabe4b6f3ca80815"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.3.layers.py",
+      "sha256": "06a6003b19ea396b9a80cb4cfaad04ad0a727fab443bf29eea7b31a57a390ead"
+    },
+    "gelu/convnextv2.encoder.stages.0.layers.act": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/gelu__convnextv2.encoder.stages.0.layers.act.py",
+      "sha256": "191369d1da58fbcfa41e57ccc10ee4ed9a9319f4039b1dc8167a6564a2cc0f76"
+    },
+    "grn/convnextv2.encoder.stages.0.layers.grn": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/grn__convnextv2.encoder.stages.0.layers.grn.py",
+      "sha256": "cc77a703c942273d4c418cda973520bafff3c122113f8068842004a52beacdb2"
+    },
+    "layernorm/convnextv2.embeddings.layernorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/layernorm__convnextv2.embeddings.layernorm.py",
+      "sha256": "2edee8503cd4fcde3c3ae5d66abe97ac06f8237ec0362405285b07383f39f607"
+    },
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/convnextv2_tiny/spatial_conv2d__convnextv2.embeddings.patch_embeddings.py",
+      "sha256": "3e356b2c6eae727d4aa00701a126d72e5e123883d54d27b7c17909d830e37e17"
+    }
+  },
+  "search_failures": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+      "status": "completed",
+      "record": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv",
+      "packaging_error": "adbench_primitives may only be imported with a top-level `from ... import <granted names>`"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+}

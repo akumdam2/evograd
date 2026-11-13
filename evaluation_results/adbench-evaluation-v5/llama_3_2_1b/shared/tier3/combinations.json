@@ -1,0 +1,897 @@
+{
+ "protocol": "evograd-tier3-model-v3",
+ "evaluation_tier": 3,
+ "execution_scope": "model",
+ "benchmark_level": 3,
+ "workload": "llama3_next_token",
+ "name": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696",
+ "workload_id": "llama-3.2-1b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.cdad3696",
+ "workload_hash": "cdad36960f933dea",
+ "config_hash": "a698e8394966b427",
+ "model": "Llama-3.2-1B",
+ "layers": 16,
+ "batch": 2,
+ "tokens": 2048,
+ "units_per_step": 4096,
+ "unit_name": "tokens",
+ "dtype": "bfloat16",
+ "attn_implementation": "sdpa",
+ "use_cache": false,
+ "gradient_checkpointing": false,
+ "training": true,
+ "seed": 0,
+ "data_seed": 0,
+ "canonical": false,
+ "config": {
+  "model": "llama_3_2_1b",
+  "batch_size": 2,
+  "seq_len": 2048,
+  "dtype": "bfloat16",
+  "device": "cuda",
+  "attn_implementation": "sdpa",
+  "seed": 0,
+  "data_seed": 0,
+  "arch_overrides": {},
+  "calibration_path": null,
+  "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+  "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+ },
+ "input_checksum": "0ba8f665e6f13551:(2, 2048)",
+ "expected_site_counts": {
+  "qkv_rope": 16,
+  "attention": 16,
+  "swiglu_mlp": 16,
+  "residual_rmsnorm": 32
+ },
+ "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+ "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+ "data_identity": {
+  "dataset": "Salesforce/wikitext",
+  "config": "wikitext-2-raw-v1",
+  "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+  "join": "documents joined with EOS; trailing partial block dropped",
+  "block_len": 2048,
+  "ignore_index": -100,
+  "tokenizer_sha256": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+  "train": {
+   "split": "train",
+   "blocks": 1200,
+   "block_len": 2048,
+   "tokens_total": 2458789,
+   "dropped_tail": 1189,
+   "documents": 23767,
+   "parquet_sha256": "e83889baabc497075506f91975be5fac0d45c5290b6b20582c8cd1e853d0c9f7"
+  },
+  "validation": {
+   "split": "validation",
+   "blocks": 124,
+   "block_len": 2048,
+   "tokens_total": 255186,
+   "dropped_tail": 1234,
+   "documents": 2461,
+   "parquet_sha256": "204929b7ff9d6184953f867dedb860e40aa69c078fc1e54b3baaa8fb28511c4c"
+  },
+  "disjoint": "train and validation are separate parquet files of the published split"
+ },
+ "provider_order": [
+  "eager",
+  "torch_compile",
+  "openevolve::combination",
+  "codex::combination",
+  "gepa::combination"
+ ],
+ "isolation": "one spawned process per provider; shared model baselines",
+ "timing_protocol": {
+  "boundary": "loss.backward() + optimizer step",
+  "step": "loss = workload.loss(model, batch); loss.backward(); opt.step(); opt.zero_grad()",
+  "optimizer": "AdamW",
+  "optimizer_config": {
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  },
+  "weights": "built by the workload from a fixed seed, identical across providers",
+  "batch_data": "seeded; every provider sees the same sequence",
+  "warmup_steps": 3,
+  "timed_steps_per_block": 10,
+  "blocks": 10,
+  "loss_trajectory_steps": 5,
+  "provider_order": "seeded random, recorded; identical settings for every provider",
+  "l2_policy": "never flushed inside a step -- this measures a training step, whose state is as warm as the previous step left it",
+  "loss_trajectory": "fresh batch per step, so agreement is not trivially satisfied",
+  "peak_memory": "measured after the optimizer state exists",
+  "cpu_bound_fraction": "CPU submission-and-blocking fraction: CPU-busy time / total wall time. Near 1.0 means the GPU was not the bottleneck -- submission cost, or blocking on an implicit synchronization such as allocator pressure. Not a dispatch-only measurement"
+ },
+ "verification_policy": {
+  "numerical_enforcement": {
+   "mode": "strict",
+   "rule": "every finding blocks: a numerical mismatch stops the provider before training and timing (historical behaviour)",
+   "note": "a numerical verdict is recorded identically under both modes; the mode decides only whether a numerical mismatch stops the provider before training and timing"
+  },
+  "preflight": "skipped by request (--no-verify): timings are ungated",
+  "model_correctness": "a workload may declare an untimed whole-model gate with its own input sequence, tensor checks, and training trajectory; a failure is recorded failed_at='model_correctness' and is never timed",
+  "loss_scalar_and_finite": "every loss in the trajectory, and the settled steps on either side of the timed blocks, must be a finite scalar; NaN or Inf marks the provider failed. Losses inside the timed blocks are not read: that would force a synchronization per step and destroy the measurement",
+  "loss_trajectory": "diagnostic only -- reported, not gated. A defensible threshold depends on dtype and horizon, so a workload declares one via `loss_delta_threshold` or the trajectory stays an observation behind the correctness and finiteness gates",
+  "loss_delta_threshold": null
+ },
+ "site_registry": {
+  "workload_family": "llama_3_2_1b",
+  "site_ops": {
+   "qkv_rope": "llama3_qkv_rope",
+   "attention": "llama3_attention",
+   "swiglu_mlp": "llama3_swiglu_mlp",
+   "residual_rmsnorm": "llama3_residual_rmsnorm"
+  },
+  "preflight_workloads": {
+   "qkv_rope": 1,
+   "attention": 1,
+   "swiglu_mlp": 1,
+   "residual_rmsnorm": 1
+  }
+ },
+ "environment": {
+  "gpu_name": "NVIDIA GH200 120GB",
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "triton": "3.6.0"
+ },
+ "providers": {
+  "eager": {
+   "ok": true,
+   "provider": "eager",
+   "step_ms": 112.50834753736854,
+   "step_ms_min": 112.07147752866149,
+   "per_block_ms": [
+    112.07147752866149,
+    112.10818365216255,
+    112.81170481815934,
+    112.55090311169624,
+    112.38313531503081,
+    112.57055047899485,
+    112.46579196304083,
+    112.56865607574582,
+    112.32730345800519,
+    113.60030192881823
+   ],
+   "latency": {
+    "count": 10,
+    "median_ms": 112.50834753736854,
+    "min_ms": 112.07147752866149,
+    "q20_ms": 112.28347949683666,
+    "q80_ms": 112.61878134682775
+   },
+   "cpu_bound_fraction": 0.9673578841810964,
+   "cpu_bound_fraction_per_block": [
+    0.9674184603868204,
+    0.9674398604093066,
+    0.967493317011188,
+    0.9672128362908083,
+    0.9673600425035875,
+    0.9674334858121911,
+    0.967103833987354,
+    0.9671996153748214,
+    0.9673557258586052,
+    0.9588984173374143
+   ],
+   "steps": 10,
+   "blocks": 10,
+   "units_per_second": 36406.187537680744,
+   "unit_name": "tokens",
+   "peak_memory_bytes": 20978317312,
+   "losses": [
+    2.5959956645965576,
+    2.719097375869751,
+    2.8308310508728027,
+    3.0048913955688477,
+    2.9872655868530273
+   ],
+   "loss_trajectory_step_ms": [
+    903.0867656692863,
+    110.82373466342688,
+    110.86184717714787,
+    114.15121890604496,
+    111.74358054995537
+   ],
+   "first_timed_batch_step_ms": 112.74498980492353,
+   "patched": [],
+   "patch_provenance": {
+    "method": "module_surgery",
+    "requested_sites": [],
+    "actual_sites": [],
+    "paths": {},
+    "counts": {},
+    "modules_replaced": 0
+   },
+   "dynamo": null,
+   "kernel_sources": [],
+   "verification": {
+    "gate": "skipped",
+    "checked": [],
+    "unverifiable": []
+   },
+   "model_correctness": {
+    "gate": "not_applicable",
+    "ok": true,
+    "skipped": true,
+    "execution_ok": true,
+    "numerical_ok": null,
+    "numerical_status": "unavailable",
+    "numerical_unavailable_at": [
+     "model_gate"
+    ],
+    "evaluation_complete": false,
+    "evaluation_incomplete_because": [
+     "the tier-1 and whole-model gates were skipped (--no-verify)"
+    ],
+    "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+    "findings": []
+   },
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "optimizer": {
+    "name": "AdamW",
+    "learning_rate": 0.0001,
+    "betas": [
+     0.9,
+     0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "amsgrad": false
+   }
+  },
+  "torch_compile": {
+   "ok": false,
+   "provider": "torch_compile",
+   "failed_at": "process",
+   "error": "BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending."
+  },
+  "openevolve::combination": {
+   "ok": true,
+   "provider": "openevolve::combination",
+   "step_ms": 93.85174540802836,
+   "step_ms_min": 93.6216838657856,
+   "per_block_ms": [
+    93.73250277712941,
+    93.86302661150694,
+    93.72872691601515,
+    93.67958279326558,
+    93.91231797635555,
+    93.84046420454979,
+    93.6216838657856,
+    93.95097261294723,
+    93.98132367059588,
+    94.06918017193675
+   ],
+   "latency": {
+    "count": 10,
+    "median_ms": 93.85174540802836,
+    "min_ms": 93.6216838657856,
+    "q20_ms": 93.71889809146523,
+    "q80_ms": 93.95704282447696
+   },
+   "cpu_bound_fraction": 0.949395320861654,
+   "cpu_bound_fraction_per_block": [
+    0.9500545735190311,
+    0.9510036484977921,
+    0.9510041460047385,
+    0.9497052761013856,
+    0.9495904154133261,
+    0.9489409271206056,
+    0.9487049554868444,
+    0.9486333841158103,
+    0.9492002263099819,
+    0.9487780049799828
+   ],
+   "steps": 10,
+   "blocks": 10,
+   "units_per_second": 43643.3012747104,
+   "unit_name": "tokens",
+   "peak_memory_bytes": 18831865856,
+   "losses": [
+    2.5945868492126465,
+    2.7131481170654297,
+    2.8245837688446045,
+    3.004595994949341,
+    3.01265287399292
+   ],
+   "loss_trajectory_step_ms": [
+    1365.3938341885805,
+    94.84516456723213,
+    94.24233622848988,
+    93.20227336138487,
+    95.2223064377904
+   ],
+   "first_timed_batch_step_ms": 93.87905243784189,
+   "patched": [
+    "attention",
+    "qkv_rope",
+    "residual_rmsnorm",
+    "swiglu_mlp"
+   ],
+   "patch_provenance": {
+    "method": "module_surgery",
+    "requested_sites": [
+     "attention",
+     "qkv_rope",
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "actual_sites": [
+     "attention",
+     "qkv_rope",
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "paths": {
+     "qkv_rope": [
+      "model.layers.0.self_attn",
+      "model.layers.1.self_attn",
+      "model.layers.2.self_attn",
+      "model.layers.3.self_attn",
+      "model.layers.4.self_attn",
+      "model.layers.5.self_attn",
+      "model.layers.6.self_attn",
+      "model.layers.7.self_attn",
+      "model.layers.8.self_attn",
+      "model.layers.9.self_attn",
+      "model.layers.10.self_attn",
+      "model.layers.11.self_attn",
+      "model.layers.12.self_attn",
+      "model.layers.13.self_attn",
+      "model.layers.14.self_attn",
+      "model.layers.15.self_attn"
+     ],
+     "attention": [
+      "model.layers.0.self_attn",
+      "model.layers.1.self_attn",
+      "model.layers.2.self_attn",
+      "model.layers.3.self_attn",
+      "model.layers.4.self_attn",
+      "model.layers.5.self_attn",
+      "model.layers.6.self_attn",
+      "model.layers.7.self_attn",
+      "model.layers.8.self_attn",
+      "model.layers.9.self_attn",
+      "model.layers.10.self_attn",
+      "model.layers.11.self_attn",
+      "model.layers.12.self_attn",
+      "model.layers.13.self_attn",
+      "model.layers.14.self_attn",
+      "model.layers.15.self_attn"
+     ],
+     "swiglu_mlp": [
+      "model.layers.0.mlp",
+      "model.layers.1.mlp",
+      "model.layers.2.mlp",
+      "model.layers.3.mlp",
+      "model.layers.4.mlp",
+      "model.layers.5.mlp",
+      "model.layers.6.mlp",
+      "model.layers.7.mlp",
+      "model.layers.8.mlp",
+      "model.layers.9.mlp",
+      "model.layers.10.mlp",
+      "model.layers.11.mlp",
+      "model.layers.12.mlp",
+      "model.layers.13.mlp",
+      "model.layers.14.mlp",
+      "model.layers.15.mlp"
+     ],
+     "residual_rmsnorm": [
+      "model.layers.0",
+      "model.layers.1",
+      "model.layers.2",
+      "model.layers.3",
+      "model.layers.4",
+      "model.layers.5",
+      "model.layers.6",
+      "model.layers.7",
+      "model.layers.8",
+      "model.layers.9",
+      "model.layers.10",
+      "model.layers.11",
+      "model.layers.12",
+      "model.layers.13",
+      "model.layers.14",
+      "model.layers.15",
+      "model.norm"
+     ]
+    },
+    "counts": {
+     "qkv_rope": 16,
+     "attention": 16,
+     "swiglu_mlp": 16,
+     "residual_rmsnorm": 17
+    },
+    "modules_replaced": 65
+   },
+   "dynamo": null,
+   "kernel_sources": [
+    {
+     "site": "attention",
+     "op": "llama3_attention",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "qkv_rope",
+     "op": "llama3_qkv_rope",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "residual_rmsnorm",
+     "op": "llama3_residual_rmsnorm",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "swiglu_mlp",
+     "op": "llama3_swiglu_mlp",
+     "origin": "candidate:verified_deployment"
+    }
+   ],
+   "verification": {
+    "gate": "skipped",
+    "checked": [],
+    "unverifiable": []
+   },
+   "model_correctness": {
+    "gate": "not_applicable",
+    "ok": true,
+    "skipped": true,
+    "execution_ok": true,
+    "numerical_ok": null,
+    "numerical_status": "unavailable",
+    "numerical_unavailable_at": [
+     "model_gate"
+    ],
+    "evaluation_complete": false,
+    "evaluation_incomplete_because": [
+     "the tier-1 and whole-model gates were skipped (--no-verify)"
+    ],
+    "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+    "findings": []
+   },
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "optimizer": {
+    "name": "AdamW",
+    "learning_rate": 0.0001,
+    "betas": [
+     0.9,
+     0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "amsgrad": false
+   }
+  },
+  "codex::combination": {
+   "ok": true,
+   "provider": "codex::combination",
+   "step_ms": 99.99690935947001,
+   "step_ms_min": 99.75839639082551,
+   "per_block_ms": [
+    99.94512377306819,
+    99.75839639082551,
+    100.16126120463014,
+    99.99309992417693,
+    100.09391931816936,
+    99.98086979612708,
+    100.00071879476309,
+    100.01854551956058,
+    99.79790886864066,
+    100.10720519348979
+   ],
+   "latency": {
+    "count": 10,
+    "median_ms": 99.99690935947001,
+    "min_ms": 99.75839639082551,
+    "q20_ms": 99.91568079218268,
+    "q80_ms": 100.09657649323344
+   },
+   "cpu_bound_fraction": 0.9570845066522682,
+   "cpu_bound_fraction_per_block": [
+    0.9567988315771626,
+    0.957620538065423,
+    0.9571063263712495,
+    0.9572275430256829,
+    0.9568459808023776,
+    0.9569601893755975,
+    0.9572569130837404,
+    0.9570626869332868,
+    0.9571756617015467,
+    0.957024765287995
+   ],
+   "steps": 10,
+   "blocks": 10,
+   "units_per_second": 40961.26596548753,
+   "unit_name": "tokens",
+   "peak_memory_bytes": 17758140416,
+   "losses": [
+    2.5957107543945312,
+    2.716844081878662,
+    2.824618339538574,
+    3.006011962890625,
+    3.0186915397644043
+   ],
+   "loss_trajectory_step_ms": [
+    1238.7343542650342,
+    98.96478522568941,
+    99.26883969455957,
+    99.47456046938896,
+    100.15262197703123
+   ],
+   "first_timed_batch_step_ms": 99.74885825067759,
+   "patched": [
+    "residual_rmsnorm",
+    "swiglu_mlp"
+   ],
+   "patch_provenance": {
+    "method": "module_surgery",
+    "requested_sites": [
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "actual_sites": [
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "paths": {
+     "swiglu_mlp": [
+      "model.layers.0.mlp",
+      "model.layers.1.mlp",
+      "model.layers.2.mlp",
+      "model.layers.3.mlp",
+      "model.layers.4.mlp",
+      "model.layers.5.mlp",
+      "model.layers.6.mlp",
+      "model.layers.7.mlp",
+      "model.layers.8.mlp",
+      "model.layers.9.mlp",
+      "model.layers.10.mlp",
+      "model.layers.11.mlp",
+      "model.layers.12.mlp",
+      "model.layers.13.mlp",
+      "model.layers.14.mlp",
+      "model.layers.15.mlp"
+     ],
+     "residual_rmsnorm": [
+      "model.layers.0",
+      "model.layers.1",
+      "model.layers.2",
+      "model.layers.3",
+      "model.layers.4",
+      "model.layers.5",
+      "model.layers.6",
+      "model.layers.7",
+      "model.layers.8",
+      "model.layers.9",
+      "model.layers.10",
+      "model.layers.11",
+      "model.layers.12",
+      "model.layers.13",
+      "model.layers.14",
+      "model.layers.15",
+      "model.norm"
+     ]
+    },
+    "counts": {
+     "swiglu_mlp": 16,
+     "residual_rmsnorm": 17
+    },
+    "modules_replaced": 33
+   },
+   "dynamo": null,
+   "kernel_sources": [
+    {
+     "site": "residual_rmsnorm",
+     "op": "llama3_residual_rmsnorm",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "swiglu_mlp",
+     "op": "llama3_swiglu_mlp",
+     "origin": "candidate:verified_deployment"
+    }
+   ],
+   "verification": {
+    "gate": "skipped",
+    "checked": [],
+    "unverifiable": []
+   },
+   "model_correctness": {
+    "gate": "not_applicable",
+    "ok": true,
+    "skipped": true,
+    "execution_ok": true,
+    "numerical_ok": null,
+    "numerical_status": "unavailable",
+    "numerical_unavailable_at": [
+     "model_gate"
+    ],
+    "evaluation_complete": false,
+    "evaluation_incomplete_because": [
+     "the tier-1 and whole-model gates were skipped (--no-verify)"
+    ],
+    "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+    "findings": []
+   },
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "optimizer": {
+    "name": "AdamW",
+    "learning_rate": 0.0001,
+    "betas": [
+     0.9,
+     0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "amsgrad": false
+   }
+  },
+  "gepa::combination": {
+   "ok": true,
+   "provider": "gepa::combination",
+   "step_ms": 95.38824656046927,
+   "step_ms_min": 95.19710652530193,
+   "per_block_ms": [
+    95.39363523945212,
+    95.38285788148642,
+    95.29265584424138,
+    95.49091225489974,
+    95.43368201702833,
+    95.19710652530193,
+    95.62840573489666,
+    95.25522319599986,
+    95.5393492244184,
+    95.36029221490026
+   ],
+   "latency": {
+    "count": 10,
+    "median_ms": 95.38824656046927,
+    "min_ms": 95.19710652530193,
+    "q20_ms": 95.28516931459308,
+    "q80_ms": 95.50059964880347
+   },
+   "cpu_bound_fraction": 0.9436688642953683,
+   "cpu_bound_fraction_per_block": [
+    0.9425742863685173,
+    0.9443678162145096,
+    0.9432443290317727,
+    0.943559672989542,
+    0.9437186583814562,
+    0.9444044071179359,
+    0.9434705353393734,
+    0.9446001441866408,
+    0.9444798724950078,
+    0.9436190702092805
+   ],
+   "steps": 10,
+   "blocks": 10,
+   "units_per_second": 42940.300799044795,
+   "unit_name": "tokens",
+   "peak_memory_bytes": 17959450624,
+   "losses": [
+    2.5945868492126465,
+    2.713517904281616,
+    2.827907085418701,
+    3.003087282180786,
+    3.0055387020111084
+   ],
+   "loss_trajectory_step_ms": [
+    1210.451285354793,
+    93.52706279605627,
+    97.75503445416689,
+    94.00407318025827,
+    95.48332635313272
+   ],
+   "first_timed_batch_step_ms": 96.23795934021473,
+   "patched": [
+    "attention",
+    "qkv_rope",
+    "residual_rmsnorm",
+    "swiglu_mlp"
+   ],
+   "patch_provenance": {
+    "method": "module_surgery",
+    "requested_sites": [
+     "attention",
+     "qkv_rope",
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "actual_sites": [
+     "attention",
+     "qkv_rope",
+     "residual_rmsnorm",
+     "swiglu_mlp"
+    ],
+    "paths": {
+     "qkv_rope": [
+      "model.layers.0.self_attn",
+      "model.layers.1.self_attn",
+      "model.layers.2.self_attn",
+      "model.layers.3.self_attn",
+      "model.layers.4.self_attn",
+      "model.layers.5.self_attn",
+      "model.layers.6.self_attn",
+      "model.layers.7.self_attn",
+      "model.layers.8.self_attn",
+      "model.layers.9.self_attn",
+      "model.layers.10.self_attn",
+      "model.layers.11.self_attn",
+      "model.layers.12.self_attn",
+      "model.layers.13.self_attn",
+      "model.layers.14.self_attn",
+      "model.layers.15.self_attn"
+     ],
+     "attention": [
+      "model.layers.0.self_attn",
+      "model.layers.1.self_attn",
+      "model.layers.2.self_attn",
+      "model.layers.3.self_attn",
+      "model.layers.4.self_attn",
+      "model.layers.5.self_attn",
+      "model.layers.6.self_attn",
+      "model.layers.7.self_attn",
+      "model.layers.8.self_attn",
+      "model.layers.9.self_attn",
+      "model.layers.10.self_attn",
+      "model.layers.11.self_attn",
+      "model.layers.12.self_attn",
+      "model.layers.13.self_attn",
+      "model.layers.14.self_attn",
+      "model.layers.15.self_attn"
+     ],
+     "swiglu_mlp": [
+      "model.layers.0.mlp",
+      "model.layers.1.mlp",
+      "model.layers.2.mlp",
+      "model.layers.3.mlp",
+      "model.layers.4.mlp",
+      "model.layers.5.mlp",
+      "model.layers.6.mlp",
+      "model.layers.7.mlp",
+      "model.layers.8.mlp",
+      "model.layers.9.mlp",
+      "model.layers.10.mlp",
+      "model.layers.11.mlp",
+      "model.layers.12.mlp",
+      "model.layers.13.mlp",
+      "model.layers.14.mlp",
+      "model.layers.15.mlp"
+     ],
+     "residual_rmsnorm": [
+      "model.layers.0",
+      "model.layers.1",
+      "model.layers.2",
+      "model.layers.3",
+      "model.layers.4",
+      "model.layers.5",
+      "model.layers.6",
+      "model.layers.7",
+      "model.layers.8",
+      "model.layers.9",
+      "model.layers.10",
+      "model.layers.11",
+      "model.layers.12",
+      "model.layers.13",
+      "model.layers.14",
+      "model.layers.15",
+      "model.norm"
+     ]
+    },
+    "counts": {
+     "qkv_rope": 16,
+     "attention": 16,
+     "swiglu_mlp": 16,
+     "residual_rmsnorm": 17
+    },
+    "modules_replaced": 65
+   },
+   "dynamo": null,
+   "kernel_sources": [
+    {
+     "site": "attention",
+     "op": "llama3_attention",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "qkv_rope",
+     "op": "llama3_qkv_rope",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "residual_rmsnorm",
+     "op": "llama3_residual_rmsnorm",
+     "origin": "candidate:verified_deployment"
+    },
+    {
+     "site": "swiglu_mlp",
+     "op": "llama3_swiglu_mlp",
+     "origin": "candidate:verified_deployment"
+    }
+   ],
+   "verification": {
+    "gate": "skipped",
+    "checked": [],
+    "unverifiable": []
+   },
+   "model_correctness": {
+    "gate": "not_applicable",
+    "ok": true,
+    "skipped": true,
+    "execution_ok": true,
+    "numerical_ok": null,
+    "numerical_status": "unavailable",
+    "numerical_unavailable_at": [
+     "model_gate"
+    ],
+    "evaluation_complete": false,
+    "evaluation_incomplete_because": [
+     "the tier-1 and whole-model gates were skipped (--no-verify)"
+    ],
+    "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+    "findings": []
+   },
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "optimizer": {
+    "name": "AdamW",
+    "learning_rate": 0.0001,
+    "betas": [
+     0.9,
+     0.999
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0.01,
+    "amsgrad": false
+   }
+  }
+ },
+ "speedup_intervals": {
+  "reference": "eager",
+  "available": true,
+  "vs_reference": {
+   "codex::combination": {
+    "step_ms_ratio": 1.125118248734291,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1223224385717905,
+     "high": 1.1269426403256504
+    }
+   },
+   "gepa::combination": {
+    "step_ms_ratio": 1.179478097084491,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1766364356581802,
+     "high": 1.1813586762567099
+    }
+   },
+   "openevolve::combination": {
+    "step_ms_ratio": 1.1987880145247063,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.195995978737711,
+     "high": 1.201130337137047
+    }
+   }
+  }
+ },
+ "group_execution": "case-major-shared-baselines/2"
+}

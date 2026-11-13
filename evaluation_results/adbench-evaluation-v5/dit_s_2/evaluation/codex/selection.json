@@ -1,0 +1,28 @@
+{
+  "model": "dit_s_2",
+  "agent": "codex",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/dit_s_2/dit_s_2_20261021/manifest.json",
+  "selected_cases": [
+    "dit_s_2_dit_mlp/blocks.mlp",
+    "dit_s_2_dit_modulation/blocks.modulation",
+    "spatial_conv2d/patch"
+  ],
+  "candidates": {
+    "dit_s_2_dit_mlp/blocks.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/dit_s_2/dit_s_2_dit_mlp__blocks.mlp.py",
+      "sha256": "43ae254467f0927025cd625c8ea023d03b2bbf6d8b6681a7c8107ff522dccd83"
+    },
+    "dit_s_2_dit_modulation/blocks.modulation": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/dit_s_2/dit_s_2_dit_modulation__blocks.modulation.py",
+      "sha256": "54171af837fc881caba8fadad8a4eea9e0dbbf8d0f0ee281eb3fdfb9f28e0a39"
+    }
+  },
+  "search_failures": {
+    "spatial_conv2d/patch": {
+      "status": "exit_1",
+      "record": "/u/hding4/evograd/evolved_programs/codex/manifest.csv",
+      "packaging_error": "Run recorded no submission"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+}

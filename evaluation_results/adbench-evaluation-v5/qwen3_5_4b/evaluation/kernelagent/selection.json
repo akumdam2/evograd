@@ -1,0 +1,91 @@
+{
+  "model": "qwen3_5_4b",
+  "agent": "kernelagent",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+  "selected_cases": [
+    "causal_conv1d/gdn_conv1d",
+    "cross_entropy/logits",
+    "gated_rmsnorm/gdn_gated_norm",
+    "gdn_gating/gdn_gating",
+    "gemma_rmsnorm/residual_norm",
+    "l2norm/gdn_qk_l2norm",
+    "partial_rope/partial_rope",
+    "qwen3_5_gated_attention/gated_attention",
+    "qwen3_5_gated_delta_rule/gated_delta_rule",
+    "qwen3_5_gdn_in_proj/gdn_in_proj",
+    "qwen3_5_gdn_norm_out/gdn_norm_out",
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+    "qwen3_5_swiglu_mlp/swiglu_mlp",
+    "swiglu/mlp_activation"
+  ],
+  "candidates": {
+    "causal_conv1d/gdn_conv1d": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+      "sha256": "c7a3346ba41d46283535fe78ce3e5eb87fb376a80034c9edfa60b716f83072a9"
+    },
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/cross_entropy__logits.py",
+      "sha256": "9b19d100ef2b22f3ea073df03e858531bf67f0f59e2c73749436e247653a168c"
+    },
+    "gated_rmsnorm/gdn_gated_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+      "sha256": "964e9e3fa1a3824c2123224a211e4149079033e56f4c3af041278e902fe5f587"
+    },
+    "gdn_gating/gdn_gating": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gdn_gating__gdn_gating.py",
+      "sha256": "12e17a3a5e91a6b4b91816832887881400f3ce6e8cf671bd799ee546508c15ca"
+    },
+    "gemma_rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+      "sha256": "c4a754bcbc983afb8e4259194aa87198ca06031055716b5825dafcf4ec75106e"
+    },
+    "l2norm/gdn_qk_l2norm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+      "sha256": "526c01b1005e6ec245ba85b2bbb3c6a2d001eb4f5f4bdadde7c577a11cd86f63"
+    },
+    "partial_rope/partial_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/partial_rope__partial_rope.py",
+      "sha256": "c264d6e065958320acd546b7d79e2cde77880ed85a787830de0cbae40717aafc"
+    },
+    "qwen3_5_gdn_norm_out/gdn_norm_out": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+      "sha256": "483f77786705b82a7f0c95912e8b34367a82e564bb13cf579cbc1eb3066051f2"
+    },
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "b13a95fbe03d02546a8f42f9e840b7aa7e2196073a3a99d446eea40b2e509209"
+    },
+    "qwen3_5_swiglu_mlp/swiglu_mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+      "sha256": "cf7e685409b37d40f02d22cf1db83e934142991d5bb9f16cad527a0076b87a29"
+    },
+    "swiglu/mlp_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/swiglu__mlp_activation.py",
+      "sha256": "dee9a4d30666b419db294ee6704f75212e2646a072c4ab02b558868d241ca296"
+    }
+  },
+  "search_failures": {
+    "qwen3_5_gated_attention/gated_attention": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: numerics, assertions, a candidate over the evaluator's 900 s"
+    },
+    "qwen3_5_gated_delta_rule/gated_delta_rule": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: compile errors, numerics, non-finite values"
+    },
+    "qwen3_5_gdn_in_proj/gdn_in_proj": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: compile errors, output shapes, 4 outputs for 6, dtypes"
+    },
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+      "status": "generation_failed",
+      "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+      "packaging_error": "kernel errors: 3 outputs for 4, 8 gradients for 6, numerics"
+    }
+  },
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+}

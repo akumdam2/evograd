@@ -1,0 +1,178 @@
+{
+ "stage_key": {
+  "baseline_implementation": {
+   "revision": "whole-model-baselines/1",
+   "sources": {
+    "/u/hding4/evograd/src/evograd/evaluation/protocol.py": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/compile_baseline.py": "151df0edd311599361237209f4b0b27321e193daeea00ae4b7207fab7fd8a502",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/runner.py": "19689eb12284e95c2a1d5dbcca57a8be1004b2862687b9945b2226733a615220",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/workloads/common/generated/workload.py": "81bb31f0180cd3fa4fdc28ae84f90454ee5fd9a21660ae85fb6cf22ef66dcf81"
+   }
+  },
+  "compile_backend": "inductor",
+  "corpus": {
+   "corpus_id": "torchrec_dlrm-real-training-payloads@51574adf12944d8c",
+   "corpus_sha256": "51574adf12944d8ca0870d96dd0bf819d3451db078214edbc4c8fedab8cdd7ed",
+   "reference": null,
+   "schema": "evograd-real-payload-corpus/1"
+  },
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA GH200 120GB",
+   "torch": "2.11.0+cu128"
+  },
+  "group": "case-major-shared-baselines/2",
+  "implementation": {
+   "group": "b66cfb9486edb1bfb1d8c08dade4a18a3c3abd440756686938039a97a9d43e09",
+   "protocol": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+   "timing": "6adb64cfabcee3b88dc3d97f39318e20daf33340796fbb46033949f40ecf0087"
+  },
+  "model": "torchrec_dlrm",
+  "name": "gepa::combination",
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "torchrec_dlrm_dlrm_interaction/interaction": "79684f977b5fb045993e3d69caea343466d63a8df0f4bb35283147543e5b8439"
+  },
+  "reference": {
+   "contract": "evograd-model-reference/torchrec_dlrm/1",
+   "generated_model_sha256": "e98682b0a9ca6901e3352e9a35aa45c2cb183e25a6ae670c3128a65f829b2b5d"
+  },
+  "workload": {
+   "device": "cuda",
+   "input_mode": "real",
+   "model": "torchrec_dlrm",
+   "stream": true
+  }
+ },
+ "result": {
+  "ok": true,
+  "provider": "gepa::combination",
+  "step_ms": 7.401728071272373,
+  "step_ms_min": 7.37223606556654,
+  "per_block_ms": [
+   7.37223606556654,
+   7.397582568228245,
+   7.384494924917817,
+   7.375490292906761,
+   7.522622495889664,
+   7.430621702224016,
+   7.375797489657998,
+   7.502882182598114,
+   7.454457879066467,
+   7.405873574316502
+  ],
+  "latency": {
+   "count": 10,
+   "median_ms": 7.401728071272373,
+   "min_ms": 7.37223606556654,
+   "q20_ms": 7.375736050307751,
+   "q80_ms": 7.464142739772797
+  },
+  "cpu_bound_fraction": 0.9490259257087186,
+  "cpu_bound_fraction_per_block": [
+   0.9484092933617903,
+   0.9492063659124862,
+   0.9485023097465235,
+   0.9485565863779811,
+   0.9496069901303328,
+   0.9491079371836753,
+   0.9487040563930291,
+   0.9494257709729242,
+   0.9491491815159391,
+   0.9489439142337618
+  ],
+  "steps": 10,
+  "blocks": 10,
+  "units_per_second": 4323.314730272053,
+  "unit_name": "examples",
+  "peak_memory_bytes": 3411414528,
+  "losses": [
+   0.9237588047981262,
+   0.7928167581558228,
+   0.6638531684875488,
+   0.6425787210464478,
+   0.5786564350128174
+  ],
+  "loss_trajectory_step_ms": [
+   454.64516803622246,
+   12.108770664781332,
+   11.579120997339487,
+   11.607761029154062,
+   11.873002164065838
+  ],
+  "first_timed_batch_step_ms": 11.331288143992424,
+  "patched": [
+   "dlrm_interaction"
+  ],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [
+    "dlrm_interaction"
+   ],
+   "actual_sites": [
+    "dlrm_interaction"
+   ],
+   "paths": {
+    "dlrm_interaction": [
+     "interaction"
+    ]
+   },
+   "counts": {
+    "dlrm_interaction": 1
+   },
+   "modules_replaced": 1
+  },
+  "dynamo": null,
+  "kernel_sources": [
+   {
+    "site": "dlrm_interaction",
+    "op": "torchrec_dlrm_dlrm_interaction",
+    "origin": "candidate:verified_deployment"
+   }
+  ],
+  "verification": {
+   "gate": "skipped",
+   "checked": [],
+   "unverifiable": []
+  },
+  "model_correctness": {
+   "gate": "not_applicable",
+   "ok": true,
+   "skipped": true,
+   "execution_ok": true,
+   "numerical_ok": null,
+   "numerical_status": "unavailable",
+   "numerical_unavailable_at": [
+    "model_gate"
+   ],
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+   "findings": []
+  },
+  "evaluation_complete": false,
+  "evaluation_incomplete_because": [
+   "the tier-1 and whole-model gates were skipped (--no-verify)"
+  ],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

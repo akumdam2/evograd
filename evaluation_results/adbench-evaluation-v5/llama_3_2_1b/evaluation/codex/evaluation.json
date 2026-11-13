@@ -1,0 +1,1077 @@
+{
+ "protocol": "evograd-evaluation-v3",
+ "model": "llama_3_2_1b",
+ "agent": "codex",
+ "workload": {
+  "model": "llama_3_2_1b",
+  "device": "cuda",
+  "dtype": "bfloat16",
+  "batch_size": 2,
+  "seq_len": 2048,
+  "seed": 0,
+  "data_seed": 0,
+  "attn_implementation": "sdpa",
+  "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08",
+  "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+ },
+ "environment": {
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu_name": "NVIDIA GH200 120GB"
+ },
+ "reference": "eager",
+ "corpus": {
+  "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+  "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+  "schema": "evograd-real-payload-corpus/1",
+  "reference": null
+ },
+ "settings": {
+  "verification": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  },
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "tier2": {
+   "warmup": 10,
+   "reps": 50,
+   "blocks": 3,
+   "seed": 0
+  },
+  "tier2_inputs": {
+   "source": "real_training_payload",
+   "split": "acceptance",
+   "order": 303,
+   "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+   "speedup": "sum of the baseline's per-call medians over the candidate's"
+  },
+  "tier3": {
+   "warmup": 3,
+   "steps": 10,
+   "blocks": 10,
+   "loss_steps": 5,
+   "learning_rate": 0.0001,
+   "seed": 0
+  },
+  "combination_rule": "every accepted Level-2 candidate whose single-site Tier 3 speedup over eager has a 95% bootstrap interval with its lower bound above 1",
+  "group_execution": "case-major-shared-baselines/2",
+  "weight_cache": true,
+  "compile_backend": "inductor",
+  "payload_loading": "one storage read per case; private device copies per execution",
+  "baseline_scope": "T2: shared per case; T3: shared per model",
+  "timing": {
+   "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+   "deterministic_algorithms": false,
+   "cudnn_deterministic": false,
+   "cudnn_benchmark": false,
+   "matmul_allow_tf32": false,
+   "float32_matmul_precision": "highest",
+   "sdp_flash": true,
+   "sdp_mem_efficient": true,
+   "sdp_cudnn": true,
+   "sdp_math": true,
+   "torch_num_threads": 8
+  }
+ },
+ "cases": {
+  "causal_gqa_attention/causal_gqa_sdpa": {
+   "task": "causal_gqa_attention",
+   "level": 1,
+   "family": "attention",
+   "frequency": 16,
+   "submitted": false
+  },
+  "cross_entropy/logits": {
+   "task": "cross_entropy",
+   "level": 1,
+   "family": "loss",
+   "frequency": 1,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/cross_entropy__logits.py",
+   "program_sha256": "1f6431eee8b84dd5be42a0f00d7a0d27031c50f3bddd2823d76a070a8e02ca75",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "accepted": false,
+   "executable": false,
+   "error": "ValueError: too many values to unpack (expected 1)",
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/cross_entropy/logits/loss_function#fixed_cross_entropy"
+    ]
+   }
+  },
+  "linear_no_bias/mlp_up": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "submitted": false
+  },
+  "linear_no_bias/attn_kv_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "submitted": false
+  },
+  "linear_no_bias/attn_out_proj": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 32,
+   "submitted": false
+  },
+  "linear_no_bias/mlp_down": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 16,
+   "submitted": false
+  },
+  "linear_no_bias/lm_head": {
+   "task": "linear_no_bias",
+   "level": 1,
+   "family": "gemm",
+   "frequency": 1,
+   "submitted": false
+  },
+  "rmsnorm/rmsnorm": {
+   "task": "rmsnorm",
+   "level": 1,
+   "family": "norm",
+   "frequency": 33,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/rmsnorm__rmsnorm.py",
+   "program_sha256": "a1e29410a0d6226563c8f8141633e95e603edfb89937929e29e08af80f7e5486",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/rmsnorm/rmsnorm/model.layers.0.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.0.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.1.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.1.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.2.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.2.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.3.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.3.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.4.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.4.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.5.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.5.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.6.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.6.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.7.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.7.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.8.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.8.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.9.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.9.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.10.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.10.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.11.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.11.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.12.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.12.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.13.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.13.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.14.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.14.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.15.input_layernorm",
+     "o303/rmsnorm/rmsnorm/model.layers.15.post_attention_layernorm",
+     "o303/rmsnorm/rmsnorm/model.norm"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 7.369856007397175,
+     "baseline_ms": 14.111680001020432,
+     "speedup": 1.9147836792003048,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.907231726126483,
+      "high": 1.9292508081603241
+     },
+     "speedup_forward": 8.81839676985417,
+     "speedup_backward": 1.8735603590862664
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 7.369856007397175,
+     "baseline_ms": 11.479983985424042,
+     "speedup": 1.557694475156842,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.5459583363916445,
+      "high": 1.569415579764772
+     },
+     "speedup_forward": 6.128484395103613,
+     "speedup_backward": 1.2453149960470846
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/rmsnorm__rmsnorm.json"
+  },
+  "rope/rope": {
+   "task": "rope",
+   "level": 1,
+   "family": "positional",
+   "frequency": 16,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/rope__rope.py",
+   "program_sha256": "870931ca269e789efada61afd06c8f309cefb85d7ec805d0e9b59dd8eb91b18c",
+   "gate1_payloads": "failed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "failed",
+   "accepted": false,
+   "executable": false,
+   "error": "TypeError: dynamic_func() missing 8 required positional arguments: 'x_s3', 'c_s0', 'c_s1', 'y_s0', 'y_s1', 'y_s2', 'y_s3', and 'half'",
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/rope/rope/model.layers.0.self_attn#rope_q",
+     "o303/rope/rope/model.layers.1.self_attn#rope_q",
+     "o303/rope/rope/model.layers.2.self_attn#rope_q",
+     "o303/rope/rope/model.layers.3.self_attn#rope_q",
+     "o303/rope/rope/model.layers.4.self_attn#rope_q",
+     "o303/rope/rope/model.layers.5.self_attn#rope_q",
+     "o303/rope/rope/model.layers.6.self_attn#rope_q",
+     "o303/rope/rope/model.layers.7.self_attn#rope_q",
+     "o303/rope/rope/model.layers.8.self_attn#rope_q",
+     "o303/rope/rope/model.layers.9.self_attn#rope_q",
+     "o303/rope/rope/model.layers.10.self_attn#rope_q",
+     "o303/rope/rope/model.layers.11.self_attn#rope_q",
+     "o303/rope/rope/model.layers.12.self_attn#rope_q",
+     "o303/rope/rope/model.layers.13.self_attn#rope_q",
+     "o303/rope/rope/model.layers.14.self_attn#rope_q",
+     "o303/rope/rope/model.layers.15.self_attn#rope_q"
+    ]
+   }
+  },
+  "rope/rope_kv": {
+   "task": "rope",
+   "level": 1,
+   "family": "positional",
+   "frequency": 16,
+   "submitted": false
+  },
+  "swiglu/mlp_activation": {
+   "task": "swiglu",
+   "level": 1,
+   "family": "activation",
+   "frequency": 16,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/swiglu__mlp_activation.py",
+   "program_sha256": "2c08c763fb9c8fa9723e7e1b1a71f26a3fbf8106f2e16d038b471c8e7e0f5dc1",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/swiglu/mlp_activation/model.layers.0.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.1.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.2.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.3.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.4.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.5.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.6.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.7.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.8.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.9.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.10.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.11.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.12.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.13.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.14.mlp#act_mul",
+     "o303/swiglu/mlp_activation/model.layers.15.mlp#act_mul"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 2.7642880231142044,
+     "baseline_ms": 10.919184029102325,
+     "speedup": 3.9500891143756216,
+     "ci95": {
+      "iterations": 2000,
+      "low": 3.906706232401501,
+      "high": 3.9882997179100177
+     },
+     "speedup_forward": 4.685485004951073,
+     "speedup_backward": 3.8338429038263793
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 2.7642880231142044,
+     "baseline_ms": 4.552816018462181,
+     "speedup": 1.6470121710881085,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.627275330123146,
+      "high": 1.665813031707111
+     },
+     "speedup_forward": 1.4330826012579656,
+     "speedup_backward": 1.5033475176211437
+    },
+    "megafold": {
+     "error": "ModuleNotFoundError: No module named 'megafold'"
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/swiglu__mlp_activation.json"
+  },
+  "llama3_attention/causal_gqa_attention": {
+   "task": "llama3_attention",
+   "level": 2,
+   "family": "attention",
+   "frequency": 16,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_attention__causal_gqa_attention.py",
+   "program_sha256": "d0ca6dba9b2fb41206035e5304ebad41579ab296ffee08e4078d24f5a1a06cb8",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/llama3_attention/causal_gqa_attention/model.layers.0.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.1.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.2.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.3.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.4.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.5.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.6.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.7.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.8.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.9.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.10.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.11.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.12.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.13.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.14.self_attn#attention",
+     "o303/llama3_attention/causal_gqa_attention/model.layers.15.self_attn#attention"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 10.605680018663406,
+     "baseline_ms": 10.61342391371727,
+     "speedup": 1.0007301648777105,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.9980941338400225,
+      "high": 1.0094210208564331
+     },
+     "speedup_forward": 1.0146835270744075,
+     "speedup_backward": 0.996581411337834
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 10.605680018663406,
+     "baseline_ms": 11.091472029685974,
+     "speedup": 1.0458048904141641,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0434131531083986,
+      "high": 1.0559003308013741
+     },
+     "speedup_forward": 1.4995061995549268,
+     "speedup_backward": 1.1118491823347516
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/llama3_attention__causal_gqa_attention.json",
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 112.4841048847884,
+    "peak_memory_bytes": 20978300928,
+    "cpu_bound_fraction": 0.9674410969072078,
+    "dynamo": null,
+    "speedup": 1.0002155206960572,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9958144779535146,
+     "high": 1.0028019249114457
+    },
+    "peak_memory_ratio": 0.9999992190031376
+   }
+  },
+  "llama3_qkv_rope/qkv_norm_rope": {
+   "task": "llama3_qkv_rope",
+   "level": 2,
+   "family": "attention",
+   "frequency": 16,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_qkv_rope__qkv_norm_rope.py",
+   "program_sha256": "d5816ac12766725230db5e1c70a9cf120132b20ecb6e6e68545738569069d8f5",
+   "gate1_payloads": "failed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3": "skipped",
+   "accepted": false,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.0.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.1.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.2.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.3.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.4.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.5.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.6.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.7.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.8.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.9.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.10.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.11.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.12.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.13.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.14.self_attn#qkv_rope",
+     "o303/llama3_qkv_rope/qkv_norm_rope/model.layers.15.self_attn#qkv_rope"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 15.48884803056717,
+     "baseline_ms": 20.631359815597534,
+     "speedup": 1.3320138318150996,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.326737409980199,
+      "high": 1.3360707683121353
+     },
+     "speedup_forward": 1.4913009794972938,
+     "speedup_backward": 1.3322433004338383
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 15.48884803056717,
+     "baseline_ms": 17.113088071346283,
+     "speedup": 1.104865128612127,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.1003810582736857,
+      "high": 1.1079749508878558
+     },
+     "speedup_forward": 1.272988901955846,
+     "speedup_backward": 1.0468329083200316
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/llama3_qkv_rope__qkv_norm_rope.json",
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 110.35297974012792,
+    "peak_memory_bytes": 20978317312,
+    "cpu_bound_fraction": 0.9628156286442431,
+    "dynamo": null,
+    "speedup": 1.0195315776911174,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0165854331584554,
+     "high": 1.0228931710628226
+    },
+    "peak_memory_ratio": 1.0
+   }
+  },
+  "llama3_residual_rmsnorm/residual_rmsnorm": {
+   "task": "llama3_residual_rmsnorm",
+   "level": 2,
+   "family": "norm",
+   "frequency": 32,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_residual_rmsnorm__residual_rmsnorm.py",
+   "program_sha256": "c2c3f9ef79788792af0e02cd88b334c046daffea73b0fd0c0725a2e9c6dbbd68",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.0#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.0#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.1#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.1#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.2#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.2#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.3#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.3#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.4#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.4#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.5#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.5#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.6#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.6#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.7#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.7#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.8#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.8#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.9#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.9#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.10#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.10#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.11#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.11#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.12#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.12#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.13#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.13#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.14#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.14#residual_mlp_to_next",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.15#residual_post_attention",
+     "o303/llama3_residual_rmsnorm/residual_rmsnorm/model.layers.15#residual_mlp_to_final"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 8.549471989274025,
+     "baseline_ms": 14.519775912165642,
+     "speedup": 1.6983242860356553,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.692835521776912,
+      "high": 1.7098500317947176
+     },
+     "speedup_forward": 5.962563651704329,
+     "speedup_backward": 1.6802415633187642
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 8.549471989274025,
+     "baseline_ms": 12.284688040614128,
+     "speedup": 1.4368943551164588,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.4297254335575091,
+      "high": 1.4462502088573856
+     },
+     "speedup_forward": 4.051315745069278,
+     "speedup_backward": 1.166211404184068
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/llama3_residual_rmsnorm__residual_rmsnorm.json",
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 101.49529441259801,
+    "peak_memory_bytes": 19905624064,
+    "cpu_bound_fraction": 0.9587115279500734,
+    "dynamo": null,
+    "speedup": 1.108508016933281,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.105487445528374,
+     "high": 1.1107238063540505
+    },
+    "peak_memory_ratio": 0.9488665734221496
+   }
+  },
+  "llama3_swiglu_mlp/swiglu_mlp": {
+   "task": "llama3_swiglu_mlp",
+   "level": 2,
+   "family": "mlp",
+   "frequency": 16,
+   "submitted": true,
+   "program": "/u/hding4/evograd/evolved_programs/codex/llama_3_2_1b/llama3_swiglu_mlp__swiglu_mlp.py",
+   "program_sha256": "eb4f9122d48454b9b84323002a776b2d9ae24aa701cbb2655f6ae265bf16bb7d",
+   "gate1_payloads": "passed",
+   "gate2_operator_calibration": "calibrated",
+   "gate2_operator": "passed",
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "executable": true,
+   "tier2_inputs": {
+    "source": "real_training_payload",
+    "split": "acceptance",
+    "order": 303,
+    "calls": "every call of the case the corpus records in that order's training step, in call order: all of them, or the subset the model declares",
+    "speedup": "sum of the baseline's per-call medians over the candidate's",
+    "corpus": {
+     "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+     "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    },
+    "payload_ids": [
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.0.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.1.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.2.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.3.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.4.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.5.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.6.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.7.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.8.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.9.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.10.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.11.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.12.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.13.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.14.mlp#swiglu_mlp",
+     "o303/llama3_swiglu_mlp/swiglu_mlp/model.layers.15.mlp#swiglu_mlp"
+    ]
+   },
+   "tier2": {
+    "eager": {
+     "route": "autograd",
+     "candidate_ms": 36.50878369808197,
+     "baseline_ms": 38.36230397224426,
+     "speedup": 1.0507691598134414,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.0454470746696434,
+      "high": 1.0528289959902697
+     },
+     "speedup_forward": 1.0618622014346875,
+     "speedup_backward": 1.0386039717962015
+    },
+    "torch_compile": {
+     "route": "autograd",
+     "candidate_ms": 36.50878369808197,
+     "baseline_ms": 36.2770721912384,
+     "speedup": 0.9936532668751783,
+     "ci95": {
+      "iterations": 2000,
+      "low": 0.9910865509109013,
+      "high": 0.9982462190776746
+     },
+     "speedup_forward": 1.002973205817631,
+     "speedup_backward": 0.9894287820049374
+    }
+   },
+   "shared_tier2_measurement": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared/tier2/llama3_swiglu_mlp__swiglu_mlp.json",
+   "tier3_single_site": {
+    "ok": true,
+    "step_ms": 110.56718360632658,
+    "peak_memory_bytes": 18831882240,
+    "cpu_bound_fraction": 0.9660503181230844,
+    "dynamo": null,
+    "speedup": 1.0175564201576615,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0149281178639233,
+     "high": 1.0192530900987828
+    },
+    "peak_memory_ratio": 0.8976831630451029
+   }
+  }
+ },
+ "tier3": {
+  "baselines": {
+   "eager": {
+    "ok": true,
+    "step_ms": 112.50834753736854,
+    "peak_memory_bytes": 20978317312,
+    "cpu_bound_fraction": 0.9673578841810964,
+    "dynamo": null,
+    "peak_memory_ratio": 1.0
+   },
+   "torch_compile": {
+    "ok": false,
+    "error": "BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.",
+    "failed_at": "process"
+   }
+  },
+  "single_site": {
+   "llama3_attention/causal_gqa_attention": {
+    "ok": true,
+    "step_ms": 112.4841048847884,
+    "peak_memory_bytes": 20978300928,
+    "cpu_bound_fraction": 0.9674410969072078,
+    "dynamo": null,
+    "speedup": 1.0002155206960572,
+    "ci95": {
+     "iterations": 2000,
+     "low": 0.9958144779535146,
+     "high": 1.0028019249114457
+    },
+    "peak_memory_ratio": 0.9999992190031376
+   },
+   "llama3_qkv_rope/qkv_norm_rope": {
+    "ok": true,
+    "step_ms": 110.35297974012792,
+    "peak_memory_bytes": 20978317312,
+    "cpu_bound_fraction": 0.9628156286442431,
+    "dynamo": null,
+    "speedup": 1.0195315776911174,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0165854331584554,
+     "high": 1.0228931710628226
+    },
+    "peak_memory_ratio": 1.0
+   },
+   "llama3_residual_rmsnorm/residual_rmsnorm": {
+    "ok": true,
+    "step_ms": 101.49529441259801,
+    "peak_memory_bytes": 19905624064,
+    "cpu_bound_fraction": 0.9587115279500734,
+    "dynamo": null,
+    "speedup": 1.108508016933281,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.105487445528374,
+     "high": 1.1107238063540505
+    },
+    "peak_memory_ratio": 0.9488665734221496
+   },
+   "llama3_swiglu_mlp/swiglu_mlp": {
+    "ok": true,
+    "step_ms": 110.56718360632658,
+    "peak_memory_bytes": 18831882240,
+    "cpu_bound_fraction": 0.9660503181230844,
+    "dynamo": null,
+    "speedup": 1.0175564201576615,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.0149281178639233,
+     "high": 1.0192530900987828
+    },
+    "peak_memory_ratio": 0.8976831630451029
+   }
+  },
+  "combination": {
+   "cases": [
+    "llama3_residual_rmsnorm/residual_rmsnorm",
+    "llama3_swiglu_mlp/swiglu_mlp"
+   ],
+   "patch_set": [
+    "residual_rmsnorm",
+    "swiglu_mlp"
+   ],
+   "gate2_model_calibration": "calibrated",
+   "gate2_model": "passed",
+   "gate3_calibration": "calibrated",
+   "gate3": "passed",
+   "accepted": true,
+   "tier3": {
+    "ok": true,
+    "step_ms": 99.99690935947001,
+    "peak_memory_bytes": 17758140416,
+    "cpu_bound_fraction": 0.9570845066522682,
+    "dynamo": null,
+    "speedup": 1.125118248734291,
+    "ci95": {
+     "iterations": 2000,
+     "low": 1.1223224385717905,
+     "high": 1.1269426403256504
+    },
+    "peak_memory_ratio": 0.8464997526680561
+   },
+   "torch_compile_tier3": {
+    "ok": false,
+    "error": "BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.",
+    "failed_at": "process"
+   }
+  }
+ },
+ "shared_measurements": "/u/hding4/adbench-evaluation-v5/llama_3_2_1b/shared",
+ "summary": {
+  "models": [
+   "llama_3_2_1b"
+  ],
+  "level1": {
+   "funnel": {
+    "configurations": 11,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 2,
+    "gate1": 2,
+    "accepted": 2
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 2.7501938418215586,
+     "configurations_covered": 2
+    },
+    "torch_compile": {
+     "geomean": 1.6017308636035026,
+     "configurations_covered": 2
+    }
+   },
+   "coverage": 0.18181818181818182
+  },
+  "level2": {
+   "funnel": {
+    "configurations": 4,
+    "submitted": 4,
+    "violation": 0,
+    "executable": 4,
+    "gate1": 3,
+    "accepted": 3
+   },
+   "speedup": {
+    "eager": {
+     "geomean": 1.2132444394902178,
+     "configurations_covered": 3
+    },
+    "torch_compile": {
+     "geomean": 1.1429751560351256,
+     "configurations_covered": 3
+    }
+   },
+   "coverage": 0.75,
+   "tier3_single_site": {
+    "llama_3_2_1b": {
+     "llama3_attention/causal_gqa_attention": {
+      "task": "llama3_attention",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {
+       "ok": true,
+       "step_ms": 112.4841048847884,
+       "peak_memory_bytes": 20978300928,
+       "cpu_bound_fraction": 0.9674410969072078,
+       "dynamo": null,
+       "speedup": 1.0002155206960572,
+       "ci95": {
+        "iterations": 2000,
+        "low": 0.9958144779535146,
+        "high": 1.0028019249114457
+       },
+       "peak_memory_ratio": 0.9999992190031376
+      }
+     },
+     "llama3_qkv_rope/qkv_norm_rope": {
+      "task": "llama3_qkv_rope",
+      "submitted": true,
+      "executable": true,
+      "accepted": false,
+      "gate1_payloads": "failed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "skipped",
+      "positive": false,
+      "selected_for_combination": false,
+      "tier3": {
+       "ok": true,
+       "step_ms": 110.35297974012792,
+       "peak_memory_bytes": 20978317312,
+       "cpu_bound_fraction": 0.9628156286442431,
+       "dynamo": null,
+       "speedup": 1.0195315776911174,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0165854331584554,
+        "high": 1.0228931710628226
+       },
+       "peak_memory_ratio": 1.0
+      }
+     },
+     "llama3_residual_rmsnorm/residual_rmsnorm": {
+      "task": "llama3_residual_rmsnorm",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 101.49529441259801,
+       "peak_memory_bytes": 19905624064,
+       "cpu_bound_fraction": 0.9587115279500734,
+       "dynamo": null,
+       "speedup": 1.108508016933281,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.105487445528374,
+        "high": 1.1107238063540505
+       },
+       "peak_memory_ratio": 0.9488665734221496
+      }
+     },
+     "llama3_swiglu_mlp/swiglu_mlp": {
+      "task": "llama3_swiglu_mlp",
+      "submitted": true,
+      "executable": true,
+      "accepted": true,
+      "gate1_payloads": "passed",
+      "gate2_operator": "passed",
+      "gate2_model": "passed",
+      "gate3": "passed",
+      "positive": true,
+      "selected_for_combination": true,
+      "tier3": {
+       "ok": true,
+       "step_ms": 110.56718360632658,
+       "peak_memory_bytes": 18831882240,
+       "cpu_bound_fraction": 0.9660503181230844,
+       "dynamo": null,
+       "speedup": 1.0175564201576615,
+       "ci95": {
+        "iterations": 2000,
+        "low": 1.0149281178639233,
+        "high": 1.0192530900987828
+       },
+       "peak_memory_ratio": 0.8976831630451029
+      }
+     }
+    }
+   }
+  },
+  "level3": {
+   "models": {
+    "llama_3_2_1b": {
+     "baselines": {
+      "eager": {
+       "ok": true,
+       "step_ms": 112.50834753736854,
+       "peak_memory_bytes": 20978317312,
+       "cpu_bound_fraction": 0.9673578841810964,
+       "dynamo": null,
+       "peak_memory_ratio": 1.0
+      },
+      "torch_compile": {
+       "ok": false,
+       "error": "BrokenProcessPool: A process in the process pool was terminated abruptly while the future was running or pending.",
+       "failed_at": "process"
+      }
+     },
+     "cases": [
+      "llama3_residual_rmsnorm/residual_rmsnorm",
+      "llama3_swiglu_mlp/swiglu_mlp"
+     ],
+     "accepted": true,
+     "gate2_model": "passed",
+     "gate3": "passed",
+     "speedup": 1.125118248734291,
+     "ci95": {
+      "iterations": 2000,
+      "low": 1.1223224385717905,
+      "high": 1.1269426403256504
+     },
+     "speedup_vs_torch_compile": null,
+     "peak_memory_ratio": 0.8464997526680561,
+     "cpu_bound_fraction": 0.9570845066522682
+    }
+   },
+   "speedup": {
+    "geomean": 1.125118248734291,
+    "models_covered": 1
+   },
+   "coverage": 1.0,
+   "peak_memory_ratio_geomean": 0.8464997526680561
+  }
+ }
+}

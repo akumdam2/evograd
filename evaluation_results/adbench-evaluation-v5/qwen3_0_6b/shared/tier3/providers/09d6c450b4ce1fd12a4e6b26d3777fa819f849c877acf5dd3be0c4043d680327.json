@@ -1,0 +1,213 @@
+{
+ "stage_key": {
+  "baseline_implementation": {
+   "revision": "whole-model-baselines/1",
+   "sources": {
+    "/u/hding4/evograd/src/evograd/evaluation/protocol.py": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/compile_baseline.py": "151df0edd311599361237209f4b0b27321e193daeea00ae4b7207fab7fd8a502",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/runner.py": "19689eb12284e95c2a1d5dbcca57a8be1004b2862687b9945b2226733a615220",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/workloads/qwen3_0_6b/workload.py": "4de96213779e2056b088b598a23016462cf1a8a0f6926bfdb73c1c7290be3c85"
+   }
+  },
+  "compile_backend": "inductor",
+  "corpus": {
+   "corpus_id": "qwen3_0_6b-real-training-payloads@c9ac8d22345c2cc3",
+   "corpus_sha256": "c9ac8d22345c2cc37089dcad010453039b4f190614947d262ed48e6625c54556",
+   "reference": null,
+   "schema": "evograd-real-payload-corpus/1"
+  },
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA GH200 120GB",
+   "torch": "2.11.0+cu128"
+  },
+  "group": "case-major-shared-baselines/2",
+  "implementation": {
+   "group": "b66cfb9486edb1bfb1d8c08dade4a18a3c3abd440756686938039a97a9d43e09",
+   "protocol": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+   "timing": "6adb64cfabcee3b88dc3d97f39318e20daf33340796fbb46033949f40ecf0087"
+  },
+  "model": "qwen3_0_6b",
+  "name": "gepa::fused_add_rms_norm/residual_rmsnorm",
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "fused_add_rms_norm/residual_rmsnorm": "a5eece3301e8289cb57ff001eac1eea8c0246476a059ff46201a0f09901b2a97"
+  },
+  "reference": {
+   "contract": "evograd-model-reference/qwen3_0_6b/2",
+   "modeling_qwen3_sha256": "cbb7f2dc274c2f5592746c0dc6985ca50353efa07376f92cc922b77680a74f69",
+   "transformers": "5.16.1"
+  },
+  "workload": {
+   "attn_implementation": "sdpa",
+   "batch_size": 2,
+   "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+   "data_seed": 0,
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "model": "qwen3_0_6b",
+   "seed": 0,
+   "seq_len": 2048,
+   "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca"
+  }
+ },
+ "result": {
+  "ok": true,
+  "provider": "gepa::fused_add_rms_norm/residual_rmsnorm",
+  "step_ms": 121.04567260248587,
+  "step_ms_min": 120.44582139933482,
+  "per_block_ms": [
+   120.4729886027053,
+   120.89501459849998,
+   121.57472589751706,
+   121.03886640397832,
+   120.70716739399359,
+   121.05247880099341,
+   120.44582139933482,
+   122.48347029089928,
+   123.52616289863363,
+   123.6202497035265
+  ],
+  "latency": {
+   "count": 10,
+   "median_ms": 121.04567260248587,
+   "min_ms": 120.44582139933482,
+   "q20_ms": 120.66033163573593,
+   "q80_ms": 122.69200881244615
+  },
+  "cpu_bound_fraction": 0.9955870888025757,
+  "cpu_bound_fraction_per_block": [
+   0.9955571890841008,
+   0.9955701572363019,
+   0.9955885806451428,
+   0.9955922629446678,
+   0.9955345800748486,
+   0.9955217034280127,
+   0.9955855969600086,
+   0.9960392100688252,
+   0.9956975689304717,
+   0.9956912925004793
+  ],
+  "steps": 10,
+  "blocks": 10,
+  "units_per_second": 33838.467017745184,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 18446704640,
+  "losses": [
+   2.958407402038574,
+   3.336725950241089,
+   3.2465384006500244,
+   3.30047607421875,
+   3.2780535221099854
+  ],
+  "loss_trajectory_step_ms": [
+   1623.778013046831,
+   132.4633719632402,
+   128.4320339327678,
+   129.3823110172525,
+   128.24391189496964
+  ],
+  "first_timed_batch_step_ms": 122.37634102348238,
+  "patched": [
+   "residual_rmsnorm"
+  ],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [
+    "residual_rmsnorm"
+   ],
+   "actual_sites": [
+    "residual_rmsnorm"
+   ],
+   "paths": {
+    "residual_rmsnorm": [
+     "model.layers.0",
+     "model.layers.1",
+     "model.layers.2",
+     "model.layers.3",
+     "model.layers.4",
+     "model.layers.5",
+     "model.layers.6",
+     "model.layers.7",
+     "model.layers.8",
+     "model.layers.9",
+     "model.layers.10",
+     "model.layers.11",
+     "model.layers.12",
+     "model.layers.13",
+     "model.layers.14",
+     "model.layers.15",
+     "model.layers.16",
+     "model.layers.17",
+     "model.layers.18",
+     "model.layers.19",
+     "model.layers.20",
+     "model.layers.21",
+     "model.layers.22",
+     "model.layers.23",
+     "model.layers.24",
+     "model.layers.25",
+     "model.layers.26",
+     "model.layers.27",
+     "model.norm"
+    ]
+   },
+   "counts": {
+    "residual_rmsnorm": 29
+   },
+   "modules_replaced": 29
+  },
+  "dynamo": null,
+  "kernel_sources": [
+   {
+    "site": "residual_rmsnorm",
+    "op": "fused_add_rms_norm",
+    "origin": "candidate:verified_deployment"
+   }
+  ],
+  "verification": {
+   "gate": "skipped",
+   "checked": [],
+   "unverifiable": []
+  },
+  "model_correctness": {
+   "gate": "not_applicable",
+   "ok": true,
+   "skipped": true,
+   "execution_ok": true,
+   "numerical_ok": null,
+   "numerical_status": "unavailable",
+   "numerical_unavailable_at": [
+    "model_gate"
+   ],
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+   "findings": []
+  },
+  "evaluation_complete": false,
+  "evaluation_incomplete_because": [
+   "the tier-1 and whole-model gates were skipped (--no-verify)"
+  ],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

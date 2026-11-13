@@ -1,0 +1,1752 @@
+{
+ "calibration_request": {
+  "procedure": "gate2-calibration/5: matched inputs at both scopes; operator rounding floor, model rounding perturbation",
+  "settings": {
+   "boundaries": false,
+   "compile_backend": "inductor",
+   "compile_fullgraph": true,
+   "compile_options": null,
+   "floors": {
+    "gradient": {
+     "E2": 0.0001,
+     "Emax": 0.01
+    },
+    "output": {
+     "E2": 1e-05,
+     "Emax": 0.001
+    }
+   },
+   "gamma": 2.0,
+   "native_repeats": 2,
+   "patch_set": [
+    "operator"
+   ],
+   "rounding_seeds": [
+    11,
+    22,
+    33,
+    44
+   ],
+   "samples": [
+    {
+     "config": {
+      "batch_order": 101,
+      "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+      "call": "loss_function#fixed_cross_entropy",
+      "inputs": "real_training_payload",
+      "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "split": "calibration"
+     },
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "seed": 101000194
+    },
+    {
+     "config": {
+      "batch_order": 202,
+      "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+      "call": "loss_function#fixed_cross_entropy",
+      "inputs": "real_training_payload",
+      "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "split": "calibration"
+     },
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "seed": 202000194
+    },
+    {
+     "config": {
+      "batch_order": 303,
+      "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+      "call": "loss_function#fixed_cross_entropy",
+      "inputs": "real_training_payload",
+      "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "split": "acceptance"
+     },
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "seed": 303000194
+    },
+    {
+     "config": {
+      "batch_order": 404,
+      "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+      "call": "loss_function#fixed_cross_entropy",
+      "inputs": "real_training_payload",
+      "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "split": "acceptance"
+     },
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "seed": 404000194
+    }
+   ]
+  },
+  "sources": {
+   "calibration": "9ff727443df478c761967dce16c17c8356353269e632dd71d3b7771dd5bad362",
+   "contracts": "281ee24ce574273ea256c37792d9814036c0d2b2729e3678cee6675fe87e79e7",
+   "metrics": "851c4c87bb40d01d2e1f8f6e8899c88da15242827da8e77025de64b5568b4677",
+   "runner": "a7053f2ee7bbc034a11ec344b08b5cc172adcb08a687e6b2195c2826ee2e16af"
+  }
+ },
+ "policy": {
+  "adapter": {
+   "case_id": "cross_entropy/logits",
+   "corpus": {
+    "corpus_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a",
+    "corpus_sha256": "bc2efa943186ff7a33b135b0ad76d2766e5da02325aeb597853b1f2dedfec272",
+    "reference": null,
+    "schema": "evograd-real-payload-corpus/1"
+   },
+   "declaration": null,
+   "dims": {
+    "cols": 50304,
+    "rows": 4096
+   },
+   "dtype": "float32",
+   "forward": "evograd.ops.level1.cross_entropy.forward_ref:cross_entropy_forward_ref",
+   "inputs": "real_training_payload",
+   "op": "cross_entropy",
+   "parameter_args": [],
+   "reference": {
+    "forward": "evograd.ops.level1.cross_entropy.forward_ref:cross_entropy_forward_ref",
+    "kind": "model_reference",
+    "reference_contract": "evograd-model-reference/olmoe_1b_7b/1",
+    "reference_dtype": null,
+    "runtime_forward": null,
+    "source": null
+   },
+   "runtime_forward": null,
+   "scope": "operator"
+  },
+  "boundaries": false,
+  "calibration_executions": [
+   "4a8d126ceec8446384110e72fc15fff6",
+   "6227bfe8d3df462ebf74e04130b1bb0a",
+   "dc8977d55f9644759bddffc45528025e",
+   "cf84f8432b994510afaac06d94f74cb2",
+   "3d833131f9c14007bf41c403e37e44ad",
+   "44b7f04a21b940b0a4f315981cc95d03",
+   "250d570f38ff4e3cb600acf54a9b926f",
+   "5574f7e73c224413b196448513a14059",
+   "7fa07987036e48f1927866231b83e7d9",
+   "78589a1739c5434d8c8d52a6f47ad0c1",
+   "200355c3026f4e3988ef6b365fed4fc0",
+   "6eb9066beb3848bf86b68856f131f5b0",
+   "279d14410db74787bb504ca82e40ad06",
+   "2ed9778e8f254a419252afa50a444dfb",
+   "0e01e13b6e7f44e3915e619f31ed9d33",
+   "db485ce1e91949a48293fb5807f3a2ac"
+  ],
+  "calibration_samples": [
+   {
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "calibration"
+    },
+    "input_digest": "b87046bc09839959055e9b67ad9f15778d1d4c438391d101247fd39e5aad25cb",
+    "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+    "seed": 101000194
+   },
+   {
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "calibration"
+    },
+    "input_digest": "87846f8549aff0673ec847cd9d2413afa79dcf6421f96d042260a299543cdd8a",
+    "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+    "seed": 202000194
+   },
+   {
+    "config": {
+     "batch_order": 303,
+     "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "acceptance"
+    },
+    "input_digest": "06ff06e12ab872269f4433070eb6dc49fc8105da3961eea4b1c413ed5e14935d",
+    "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+    "seed": 303000194
+   },
+   {
+    "config": {
+     "batch_order": 404,
+     "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "acceptance"
+    },
+    "input_digest": "83936c82125750dff4fb550b7d30341db1abe38248f57a77518025fb6d0b9dae",
+    "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+    "seed": 404000194
+   }
+  ],
+  "contract": {
+   "results": [
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "output",
+     "name": "out:loss",
+     "presence": "required",
+     "shape": []
+    },
+    {
+     "aliases": [],
+     "dtype": "float32",
+     "exact": false,
+     "kind": "input_grad",
+     "name": "grad_in:logits",
+     "presence": "required",
+     "shape": [
+      4096,
+      50304
+     ]
+    }
+   ]
+  },
+  "contract_digest": "42e462354f8fa1dde31d7ff7ea47286e8a6408806cf6b47b10e61b48e0617f81",
+  "controls": {
+   "compile": {
+    "identity": {
+     "backend": "inductor",
+     "compiles": "the native implementation of each replaced site",
+     "fullgraph": true,
+     "kind": "torch_compile",
+     "options": {},
+     "torch": "2.11.0+cu128"
+    },
+    "name": "torch_compile[inductor]",
+    "patch_set": [
+     "operator"
+    ],
+    "role": "control"
+   },
+   "compile_graphs": {
+    "operator": 1
+   },
+   "native_repeats": 2
+  },
+  "environment": {
+   "compute_capability": "9.0",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "cudnn_benchmark": false,
+   "cudnn_deterministic": true,
+   "deterministic_algorithms": true,
+   "device_name": "NVIDIA GH200 120GB",
+   "device_type": "cuda",
+   "float32_matmul_precision": "highest",
+   "machine": "aarch64",
+   "python": "3.12.13",
+   "sdpa_backends": {
+    "cudnn": true,
+    "flash": true,
+    "math": true,
+    "mem_efficient": true
+   },
+   "tf32_cudnn": true,
+   "tf32_matmul": false,
+   "torch": "2.11.0+cu128"
+  },
+  "epsilon": 1e-30,
+  "floors": {
+   "gradient": {
+    "E2": 0.0001,
+    "Emax": 0.01
+   },
+   "output": {
+    "E2": 1e-05,
+    "Emax": 0.001
+   }
+  },
+  "formula": "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), max_x E_m(compile[x], native[x]), floor[z,m], max_x rounding_m(native[x][z])), judged on the calibrated samples x; rounding: E2 = unit roundoff of z's dtype, Emax = 2 ulps of max|native[x][z]| / RMS(native[x][z])",
+  "gamma": 2.0,
+  "numerics": {
+   "autocast": null,
+   "device_type": "cuda",
+   "dtype": "float32",
+   "grad_mode": "enabled",
+   "module_mode": "train"
+  },
+  "patch_set": [
+   "operator"
+  ],
+  "policy_hash": "90832587da119e851ac488db762132079d4e182453f8448a016735d67403422c",
+  "reference": {
+   "deployment": {
+    "identity": {
+     "kind": "native_eager"
+    },
+    "name": "native",
+    "patch_set": [],
+    "role": "native"
+   },
+   "implementation": {
+    "adapter": {
+     "digest": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "fingerprint_version": 2,
+     "opaque": [
+      "evograd.verification.common.execution.Deployment.__init__:builtins.function",
+      "evograd.verification.common.execution.Invocation.__init__:builtins.function",
+      "evograd.verification.common.execution.Sample.__init__:builtins.function",
+      "evograd.verification.common.tensors:torch.strided:torch.layout"
+     ],
+     "qualname": "evograd.verification.gate2.adapters.payload.PayloadOperatorScope"
+    },
+    "inputs": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    },
+    "module": {
+     "digest": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.evaluation.tier2.runner.NativeModule"
+    },
+    "runtime_forward": {
+     "digest": "ece684ccbdefae905ef8c12878d268662b016184bb0fad5c157d0e2307e6cf7f",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.ops.level1.cross_entropy.forward_ref.cross_entropy_forward_ref"
+    },
+    "sampling": {
+     "digest": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "fingerprint_version": 2,
+     "opaque": [],
+     "qualname": "evograd.verification.gate2.adapters.payload.load_payload_values"
+    }
+   },
+   "kind": "native_eager"
+  },
+  "sample_identities": {
+   "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+     "differentiable_inputs": {
+      "logits": "args[0]"
+     },
+     "initial_state": "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+     "inputs": "c23ae9f78ff55e9d7ad57df9dacca82c8761dfb71c5ef18505a367a80d5b291c",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 101000194
+    },
+    "config": {
+     "batch_order": 101,
+     "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "84a62d30ba11b6a3d7bd0ced9a89bb91686125875fa5c62d50886e5585a9e490",
+     "native_repeats": [
+      "8e375478d6fda09569621bc0fb5f31171630e7e680a8a040a76b1e04ef39e062"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "loss": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [],
+        "storage_offset": 0,
+        "stride": [],
+        "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           4096,
+           50304
+          ],
+          "storage_offset": 0,
+          "stride": [
+           50304,
+           1
+          ],
+          "tensor": "5cb7be0a2d3fb9ae81975826050caab555c34747c8f1775e5f2817f50af85da8"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "dc8977d55f9644759bddffc45528025e",
+     "compile_repeat": "cf84f8432b994510afaac06d94f74cb2",
+     "native": "4a8d126ceec8446384110e72fc15fff6",
+     "native_repeats": [
+      "6227bfe8d3df462ebf74e04130b1bb0a"
+     ]
+    },
+    "fingerprint": "a5b65aa6370e00fe5b18dc0fed4d7548b999c29f9e0554aa4c24ba8f0c735755",
+    "opaque": [],
+    "reference_results_digest": "8e375478d6fda09569621bc0fb5f31171630e7e680a8a040a76b1e04ef39e062",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 101000194
+   },
+   "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+     "differentiable_inputs": {
+      "logits": "args[0]"
+     },
+     "initial_state": "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+     "inputs": "24bc7610ed01b3ee21f9205d41d5cc36688c224f8c09c2a79458cad0e31d7a62",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 202000194
+    },
+    "config": {
+     "batch_order": 202,
+     "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "calibration"
+    },
+    "control_results_digests": {
+     "compile": "486dc0e2d03e669aea49a17e99962f1e6fc5918f39a5000294f52fc20f272daa",
+     "native_repeats": [
+      "4fd26afa5364b7cef82cf173986694fa8a38408119509ab97bb071c88bc14d00"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "loss": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [],
+        "storage_offset": 0,
+        "stride": [],
+        "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           4096,
+           50304
+          ],
+          "storage_offset": 0,
+          "stride": [
+           50304,
+           1
+          ],
+          "tensor": "39809279b920bd4271d0801f3d9eef0e16b7bab3cd5e28682786c07e75fcd9a8"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "250d570f38ff4e3cb600acf54a9b926f",
+     "compile_repeat": "5574f7e73c224413b196448513a14059",
+     "native": "3d833131f9c14007bf41c403e37e44ad",
+     "native_repeats": [
+      "44b7f04a21b940b0a4f315981cc95d03"
+     ]
+    },
+    "fingerprint": "a8b9034aa5d54ed0e77e0cb796c7428b6df6e4f70373a003c76e99dca0c893c9",
+    "opaque": [],
+    "reference_results_digest": "4fd26afa5364b7cef82cf173986694fa8a38408119509ab97bb071c88bc14d00",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 202000194
+   },
+   "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+     "differentiable_inputs": {
+      "logits": "args[0]"
+     },
+     "initial_state": "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2",
+     "inputs": "58e58a3c6bd48fab4b0980a2ec839d1bc03728a36d855ff0df2eb5040701b6ba",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 303000194
+    },
+    "config": {
+     "batch_order": 303,
+     "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "acceptance"
+    },
+    "control_results_digests": {
+     "compile": "dce9f1f62a096139257397e050bbd4dafa5cb18a294c64594918a19e2682ddf3",
+     "native_repeats": [
+      "1395b468c99a5b1566c31a5e131de47d5dc5d158f958524e3c6f4e956019e0f5"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "loss": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [],
+        "storage_offset": 0,
+        "stride": [],
+        "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           4096,
+           50304
+          ],
+          "storage_offset": 0,
+          "stride": [
+           50304,
+           1
+          ],
+          "tensor": "53ae005a19597774b4e3c911dbdd461cdd3600ff454cf2d6042b420a400ae14e"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "200355c3026f4e3988ef6b365fed4fc0",
+     "compile_repeat": "6eb9066beb3848bf86b68856f131f5b0",
+     "native": "7fa07987036e48f1927866231b83e7d9",
+     "native_repeats": [
+      "78589a1739c5434d8c8d52a6f47ad0c1"
+     ]
+    },
+    "fingerprint": "459f177a1f120f86ca20c3d38637b1c9e3bcff03e89aaaf98a5da579007a8795",
+    "opaque": [],
+    "reference_results_digest": "1395b468c99a5b1566c31a5e131de47d5dc5d158f958524e3c6f4e956019e0f5",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 303000194
+   },
+   "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy": {
+    "components": {
+     "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+     "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+     "differentiable_inputs": {
+      "logits": "args[0]"
+     },
+     "initial_state": "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+     "inputs": "3463fb87be22fcb1d1d9ebb3f9d96f1195fafab18a0a3c1ef13769c81c6e07e6",
+     "module_mode": "train",
+     "mutable_inputs": [],
+     "seed": 404000194
+    },
+    "config": {
+     "batch_order": 404,
+     "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+     "call": "loss_function#fixed_cross_entropy",
+     "inputs": "real_training_payload",
+     "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "split": "acceptance"
+    },
+    "control_results_digests": {
+     "compile": "26dface5e891073fba208c0d403102d673a4aab92884eacf905c58a54f8ec297",
+     "native_repeats": [
+      "b252f15d8581346ec28010185fc1b17bbfb2c4ddf958e8d2f4401b629680f120"
+     ]
+    },
+    "detail": {
+     "context": {
+      "dict": {}
+     },
+     "cotangents": {
+      "dict": {
+       "loss": {
+        "dtype": "float32",
+        "layout": "strided",
+        "shape": [],
+        "storage_offset": 0,
+        "stride": [],
+        "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b"
+       }
+      }
+     },
+     "inputs": {
+      "dict": {
+       "args": {
+        "tuple": [
+         {
+          "dtype": "float32",
+          "layout": "strided",
+          "shape": [
+           4096,
+           50304
+          ],
+          "storage_offset": 0,
+          "stride": [
+           50304,
+           1
+          ],
+          "tensor": "0b7e4d85d9e86291c2f22a528874415f3e641e025f292c6d91d49393ed8d6b33"
+         }
+        ]
+       },
+       "kwargs": {
+        "dict": {}
+       }
+      }
+     }
+    },
+    "executions": {
+     "compile": "0e01e13b6e7f44e3915e619f31ed9d33",
+     "compile_repeat": "db485ce1e91949a48293fb5807f3a2ac",
+     "native": "279d14410db74787bb504ca82e40ad06",
+     "native_repeats": [
+      "2ed9778e8f254a419252afa50a444dfb"
+     ]
+    },
+    "fingerprint": "de38e81ebd7060b7f684c1c34a2e3db65ecdc8e712b8974ca606d4bde99aa1db",
+    "opaque": [],
+    "reference_results_digest": "b252f15d8581346ec28010185fc1b17bbfb2c4ddf958e8d2f4401b629680f120",
+    "repeatability": {
+     "compile_bitwise": true,
+     "native_bitwise": true
+    },
+    "seed": 404000194
+   }
+  },
+  "sample_protocol": "matched_inputs",
+  "schema": "evograd-verification-gate2-policy/5",
+  "scope": "operator",
+  "thresholds": {
+   "grad_in:logits": {
+    "E2": 0.0002,
+    "Emax": 0.02,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 0.0001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "rounding": 5.960464477539063e-08,
+      "trusted_compile": 1.4872591150815656e-07
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.01,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "rounding": 6.780706922726152e-05,
+      "trusted_compile": 0.000219313489531924
+     }
+    },
+    "envelope": 3.765308065339923e-10,
+    "kind": "input_grad",
+    "samples": {
+     "native_repeat": [
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy"
+     ],
+     "rounding_perturbation": [],
+     "trusted_compile": [
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy"
+     ]
+    }
+   },
+   "out:loss": {
+    "E2": 2e-05,
+    "Emax": 0.002,
+    "components": {
+     "E2": {
+      "binding": "floor",
+      "floor": 1e-05,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "rounding": 5.960464477539063e-08,
+      "trusted_compile": 9.481461703854698e-08
+     },
+     "Emax": {
+      "binding": "floor",
+      "floor": 0.001,
+      "gamma": 2.0,
+      "native_repeat": 0.0,
+      "rounding": 1.9286231983284238e-07,
+      "trusted_compile": 9.481461703854698e-08
+     }
+    },
+    "envelope": 4.76837158203125e-07,
+    "kind": "output",
+    "samples": {
+     "native_repeat": [
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy"
+     ],
+     "rounding_perturbation": [],
+     "trusted_compile": [
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy"
+     ]
+    }
+   }
+  },
+  "weights": {
+   "fixed": null,
+   "initial_state_digests": [
+    "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+    "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+    "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+    "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2"
+   ]
+  }
+ },
+ "calibration": {
+  "status": "calibrated",
+  "policy_hash": "90832587da119e851ac488db762132079d4e182453f8448a016735d67403422c",
+  "findings": [],
+  "evidence": {
+   "samples": [
+    {
+     "sample": {
+      "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "seed": 101000194,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+       "call": "loss_function#fixed_cross_entropy"
+      }
+     },
+     "native": {
+      "execution_id": "4a8d126ceec8446384110e72fc15fff6",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 101000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b87046bc09839959055e9b67ad9f15778d1d4c438391d101247fd39e5aad25cb",
+      "sample_identity": {
+       "fingerprint": "a5b65aa6370e00fe5b18dc0fed4d7548b999c29f9e0554aa4c24ba8f0c735755",
+       "components": {
+        "seed": 101000194,
+        "inputs": "c23ae9f78ff55e9d7ad57df9dacca82c8761dfb71c5ef18505a367a80d5b291c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "5cb7be0a2d3fb9ae81975826050caab555c34747c8f1775e5f2817f50af85da8",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "8e375478d6fda09569621bc0fb5f31171630e7e680a8a040a76b1e04ef39e062",
+      "initial_state_digest": "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+      "error_stage": null,
+      "seconds": 3.407904779072851
+     },
+     "control": {
+      "execution_id": "dc8977d55f9644759bddffc45528025e",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 101000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "62186f057b31d6c0947eb0e5480b3255238d7de37ba3c01227220bf7184b84f6",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "b87046bc09839959055e9b67ad9f15778d1d4c438391d101247fd39e5aad25cb",
+      "sample_identity": {
+       "fingerprint": "a5b65aa6370e00fe5b18dc0fed4d7548b999c29f9e0554aa4c24ba8f0c735755",
+       "components": {
+        "seed": 101000194,
+        "inputs": "c23ae9f78ff55e9d7ad57df9dacca82c8761dfb71c5ef18505a367a80d5b291c",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "5cb7be0a2d3fb9ae81975826050caab555c34747c8f1775e5f2817f50af85da8",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "84a62d30ba11b6a3d7bd0ced9a89bb91686125875fa5c62d50886e5585a9e490",
+      "initial_state_digest": "2431590ffa39b46517d104c9317c248862b50bcee7065801ba635df91b46cfd8",
+      "error_stage": null,
+      "seconds": 9.589182998985052
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "seed": 202000194,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+       "call": "loss_function#fixed_cross_entropy"
+      }
+     },
+     "native": {
+      "execution_id": "3d833131f9c14007bf41c403e37e44ad",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 202000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "87846f8549aff0673ec847cd9d2413afa79dcf6421f96d042260a299543cdd8a",
+      "sample_identity": {
+       "fingerprint": "a8b9034aa5d54ed0e77e0cb796c7428b6df6e4f70373a003c76e99dca0c893c9",
+       "components": {
+        "seed": 202000194,
+        "inputs": "24bc7610ed01b3ee21f9205d41d5cc36688c224f8c09c2a79458cad0e31d7a62",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "39809279b920bd4271d0801f3d9eef0e16b7bab3cd5e28682786c07e75fcd9a8",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "4fd26afa5364b7cef82cf173986694fa8a38408119509ab97bb071c88bc14d00",
+      "initial_state_digest": "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+      "error_stage": null,
+      "seconds": 3.011443983996287
+     },
+     "control": {
+      "execution_id": "250d570f38ff4e3cb600acf54a9b926f",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 202000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "119ae0a911b1085cdf7cec042edb5a5d42c736a9be037d14bd824461a162bf36",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "87846f8549aff0673ec847cd9d2413afa79dcf6421f96d042260a299543cdd8a",
+      "sample_identity": {
+       "fingerprint": "a8b9034aa5d54ed0e77e0cb796c7428b6df6e4f70373a003c76e99dca0c893c9",
+       "components": {
+        "seed": 202000194,
+        "inputs": "24bc7610ed01b3ee21f9205d41d5cc36688c224f8c09c2a79458cad0e31d7a62",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "39809279b920bd4271d0801f3d9eef0e16b7bab3cd5e28682786c07e75fcd9a8",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "486dc0e2d03e669aea49a17e99962f1e6fc5918f39a5000294f52fc20f272daa",
+      "initial_state_digest": "a5eb7c5ed5ee79faa3be7074408f97eda365c2eb5fe49a84b25ad978e92ae6df",
+      "error_stage": null,
+      "seconds": 1.3770606280304492
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "seed": 303000194,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+       "call": "loss_function#fixed_cross_entropy"
+      }
+     },
+     "native": {
+      "execution_id": "7fa07987036e48f1927866231b83e7d9",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 303000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "06ff06e12ab872269f4433070eb6dc49fc8105da3961eea4b1c413ed5e14935d",
+      "sample_identity": {
+       "fingerprint": "459f177a1f120f86ca20c3d38637b1c9e3bcff03e89aaaf98a5da579007a8795",
+       "components": {
+        "seed": 303000194,
+        "inputs": "58e58a3c6bd48fab4b0980a2ec839d1bc03728a36d855ff0df2eb5040701b6ba",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "53ae005a19597774b4e3c911dbdd461cdd3600ff454cf2d6042b420a400ae14e",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "1395b468c99a5b1566c31a5e131de47d5dc5d158f958524e3c6f4e956019e0f5",
+      "initial_state_digest": "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2",
+      "error_stage": null,
+      "seconds": 2.885154456133023
+     },
+     "control": {
+      "execution_id": "200355c3026f4e3988ef6b365fed4fc0",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 303000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "45ff3aaf98ecc97ecdd50b0f5e19255820afae3788dfad5fc765b0241594c328",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "06ff06e12ab872269f4433070eb6dc49fc8105da3961eea4b1c413ed5e14935d",
+      "sample_identity": {
+       "fingerprint": "459f177a1f120f86ca20c3d38637b1c9e3bcff03e89aaaf98a5da579007a8795",
+       "components": {
+        "seed": 303000194,
+        "inputs": "58e58a3c6bd48fab4b0980a2ec839d1bc03728a36d855ff0df2eb5040701b6ba",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "53ae005a19597774b4e3c911dbdd461cdd3600ff454cf2d6042b420a400ae14e",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "dce9f1f62a096139257397e050bbd4dafa5cb18a294c64594918a19e2682ddf3",
+      "initial_state_digest": "c5ae9977dea2a8f0b2aff76fe475f447f6c5933a0361dcccf8755e37c80602d2",
+      "error_stage": null,
+      "seconds": 1.4459414610173553
+     }
+    },
+    {
+     "sample": {
+      "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+      "seed": 404000194,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+       "call": "loss_function#fixed_cross_entropy"
+      }
+     },
+     "native": {
+      "execution_id": "279d14410db74787bb504ca82e40ad06",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 404000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "83936c82125750dff4fb550b7d30341db1abe38248f57a77518025fb6d0b9dae",
+      "sample_identity": {
+       "fingerprint": "de38e81ebd7060b7f684c1c34a2e3db65ecdc8e712b8974ca606d4bde99aa1db",
+       "components": {
+        "seed": 404000194,
+        "inputs": "3463fb87be22fcb1d1d9ebb3f9d96f1195fafab18a0a3c1ef13769c81c6e07e6",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "0b7e4d85d9e86291c2f22a528874415f3e641e025f292c6d91d49393ed8d6b33",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "b252f15d8581346ec28010185fc1b17bbfb2c4ddf958e8d2f4401b629680f120",
+      "initial_state_digest": "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+      "error_stage": null,
+      "seconds": 2.9501232348848134
+     },
+     "control": {
+      "execution_id": "0e01e13b6e7f44e3915e619f31ed9d33",
+      "deployment": {
+       "name": "torch_compile[inductor]",
+       "role": "control",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "kind": "torch_compile",
+        "backend": "inductor",
+        "fullgraph": true,
+        "options": {},
+        "torch": "2.11.0+cu128",
+        "compiles": "the native implementation of each replaced site"
+       }
+      },
+      "sample": {
+       "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+       "seed": 404000194,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "48383613d7a4f07c64a3fa23df2ba0d2cf0020db234878e34c19379d2191fd53",
+        "call": "loss_function#fixed_cross_entropy"
+       }
+      },
+      "site_calls": {
+       "operator": 1
+      },
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "83936c82125750dff4fb550b7d30341db1abe38248f57a77518025fb6d0b9dae",
+      "sample_identity": {
+       "fingerprint": "de38e81ebd7060b7f684c1c34a2e3db65ecdc8e712b8974ca606d4bde99aa1db",
+       "components": {
+        "seed": 404000194,
+        "inputs": "3463fb87be22fcb1d1d9ebb3f9d96f1195fafab18a0a3c1ef13769c81c6e07e6",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "logits": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "0b7e4d85d9e86291c2f22a528874415f3e641e025f292c6d91d49393ed8d6b33",
+             "shape": [
+              4096,
+              50304
+             ],
+             "dtype": "float32",
+             "stride": [
+              50304,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "26dface5e891073fba208c0d403102d673a4aab92884eacf905c58a54f8ec297",
+      "initial_state_digest": "8718a596457097f42f54864b2c324dcb517f65eeb4e274f62b14ba720a3340bc",
+      "error_stage": null,
+      "seconds": 1.4421650189906359
+     }
+    }
+   ],
+   "compile_graphs": {
+    "operator": 1
+   },
+   "sample_protocol": "matched_inputs",
+   "measurements": 16,
+   "control_measurements": [
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 9.19881199182888e-08,
+     "Emax": 9.19881199182888e-08
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o101/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 1.4230821383352916e-07,
+     "Emax": 0.0001974554991352133
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o202/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 1.4588707514825564e-07,
+     "Emax": 0.0001893277775694408
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 9.481461703854698e-08,
+     "Emax": 9.481461703854698e-08
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o303/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 1.4872591150815656e-07,
+     "Emax": 0.000219313489531924
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "native_repeat",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "out:loss",
+     "kind": "output",
+     "E2": 0.0,
+     "Emax": 0.0
+    },
+    {
+     "source": "trusted_compile",
+     "sample_id": "olmoe_1b_7b-real-training-payloads@bc2efa943186ff7a/o404/cross_entropy/logits/loss_function#fixed_cross_entropy",
+     "result": "grad_in:logits",
+     "kind": "input_grad",
+     "E2": 1.3640344808161977e-07,
+     "Emax": 0.00017198304770206773
+    }
+   ],
+   "seconds": 38.86985113611445
+  }
+ }
+}

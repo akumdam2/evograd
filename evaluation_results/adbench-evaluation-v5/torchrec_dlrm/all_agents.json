@@ -1,0 +1,109 @@
+{
+  "model": "torchrec_dlrm",
+  "state": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/state",
+  "jobs": [
+    {
+      "selection": {
+        "model": "torchrec_dlrm",
+        "agent": "openevolve",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/torchrec_dlrm/torchrec_dlrm_20261021/manifest.json",
+        "selected_cases": [
+          "embedding_bag/tables",
+          "torchrec_dlrm_dlrm_interaction/interaction"
+        ],
+        "candidates": {
+          "embedding_bag/tables": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/torchrec_dlrm/embedding_bag__tables.py",
+            "sha256": "78c4d0c42adc872f5397a0cbbfc752ad64a26f3c23ef52d8090a68e0b272c451"
+          },
+          "torchrec_dlrm_dlrm_interaction/interaction": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+            "sha256": "da946199ade22505530747411a845c7a2d7a6bfb37f5a67c202455cdde7a232d"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/evaluation/openevolve"
+    },
+    {
+      "selection": {
+        "model": "torchrec_dlrm",
+        "agent": "gepa",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/torchrec_dlrm/torchrec_dlrm_20261021/manifest.json",
+        "selected_cases": [
+          "embedding_bag/tables",
+          "torchrec_dlrm_dlrm_interaction/interaction"
+        ],
+        "candidates": {
+          "embedding_bag/tables": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/torchrec_dlrm/embedding_bag__tables.py",
+            "sha256": "4ad63ea68ec11fc1b07bcba4fe99ce5b73a1b36581654f8538a137c801b78ede"
+          },
+          "torchrec_dlrm_dlrm_interaction/interaction": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+            "sha256": "79684f977b5fb045993e3d69caea343466d63a8df0f4bb35283147543e5b8439"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/evaluation/gepa"
+    },
+    {
+      "selection": {
+        "model": "torchrec_dlrm",
+        "agent": "codex",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/torchrec_dlrm/torchrec_dlrm_20261021/manifest.json",
+        "selected_cases": [
+          "embedding_bag/tables",
+          "torchrec_dlrm_dlrm_interaction/interaction"
+        ],
+        "candidates": {
+          "embedding_bag/tables": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/torchrec_dlrm/embedding_bag__tables.py",
+            "sha256": "15b161e37c25ed931e9e3d805a9c6fb0bb4f33dd1d0724cfb8af1c5ea1522120"
+          },
+          "torchrec_dlrm_dlrm_interaction/interaction": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+            "sha256": "347dba3031d0927cb7d90649ef5bf50952f7f72c258af1f1513d073501cd025d"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/evaluation/codex"
+    },
+    {
+      "selection": {
+        "model": "torchrec_dlrm",
+        "agent": "kernelagent",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/torchrec_dlrm/torchrec_dlrm_20261021/manifest.json",
+        "selected_cases": [
+          "embedding_bag/tables",
+          "torchrec_dlrm_dlrm_interaction/interaction"
+        ],
+        "candidates": {
+          "embedding_bag/tables": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/torchrec_dlrm/embedding_bag__tables.py",
+            "sha256": "9bac4e6cf6c5764de9767bf2734ee9ba112bd38bb7d5ce93a26914343b60e3f5"
+          },
+          "torchrec_dlrm_dlrm_interaction/interaction": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/torchrec_dlrm/torchrec_dlrm_dlrm_interaction__interaction.py",
+            "sha256": "46d25ebf9c1dc1914170202239806f2583751136935f8b519b4e2bfd0b3a1dce"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/torchrec_dlrm/evaluation/kernelagent"
+    }
+  ],
+  "calibration_reuse": {
+    "share_gate3_native": true,
+    "share_gate2_calibration_native": true,
+    "share_gate2_verification_reference": true
+  },
+  "execution": "case-major-shared-baselines/1",
+  "weight_cache": true
+}

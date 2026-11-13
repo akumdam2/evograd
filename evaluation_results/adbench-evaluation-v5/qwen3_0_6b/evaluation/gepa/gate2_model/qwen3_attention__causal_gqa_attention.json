@@ -1,0 +1,1236 @@
+{
+ "stage_key": {
+  "programs": {
+   "qwen3_attention/causal_gqa_attention": "370beb70822a8bd332f7f0cac4e3793087c55c68e280a27b11335e35c13651b0"
+  },
+  "patch_set": [
+   "attention"
+  ],
+  "compile_backend": "inductor",
+  "model": "qwen3_0_6b",
+  "workload": {
+   "model": "qwen3_0_6b",
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "batch_size": 2,
+   "seq_len": 2048,
+   "seed": 0,
+   "data_seed": 0,
+   "attn_implementation": "sdpa",
+   "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+   "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3"
+  },
+  "gate2_model": {
+   "gamma": 4.0,
+   "formula": "T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), max_x E_m(compile[x], native[x]), floor[z,m], max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged on the calibrated samples x; rounding_perturbation_k: every replaced site's floating outputs and input gradients moved one ulp with probability 0.3333 under seed k, each tensor within one rounding (E2 <= unit roundoff)",
+   "calibration": "gate2-calibration/5: matched inputs at both scopes; operator rounding floor, model rounding perturbation",
+   "boundaries": false
+  },
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "verification_implementation": {
+   "gates": "bdefaaf8281272bc9a230cfab87915580871d45b71b9f18897066024b603b098",
+   "calibration": "9ff727443df478c761967dce16c17c8356353269e632dd71d3b7771dd5bad362",
+   "comparison": "a7053f2ee7bbc034a11ec344b08b5cc172adcb08a687e6b2195c2826ee2e16af",
+   "metrics": "851c4c87bb40d01d2e1f8f6e8899c88da15242827da8e77025de64b5568b4677",
+   "contracts": "281ee24ce574273ea256c37792d9814036c0d2b2729e3678cee6675fe87e79e7"
+  },
+  "verification_environment": {
+   "python": "3.12.13",
+   "machine": "aarch64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA GH200 120GB",
+   "compute_capability": "9.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  }
+ },
+ "statuses": {
+  "gate2_model_calibration": "calibrated",
+  "gate2_model": "failed"
+ },
+ "gate2_model_calibration": {
+  "status": "calibrated",
+  "policy_hash": "fcf5408520441ee86898f6138ee893d282889bad347dd4a8497cefbaaf3d6671",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/u/hding4/adbench-evaluation-v5/qwen3_0_6b/state/native_reuse_v1/1-1-1/gate2/model/attention.json"
+  }
+ },
+ "gate2_model": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "failed",
+  "complete": true,
+  "subject": {
+   "scope": "model",
+   "adapter": {
+    "scope": "model",
+    "bridge": "tier3.TrainingWorkload",
+    "workload": {
+     "workload": "qwen3_next_token",
+     "name": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+     "workload_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051",
+     "workload_hash": "09d9a051b745ed4a",
+     "config_hash": "6e254de2e1abf1a0",
+     "model": "Qwen3-0.6B",
+     "layers": 28,
+     "batch": 2,
+     "tokens": 2048,
+     "units_per_step": 4096,
+     "unit_name": "tokens",
+     "dtype": "bfloat16",
+     "attn_implementation": "sdpa",
+     "use_cache": false,
+     "gradient_checkpointing": false,
+     "training": true,
+     "seed": 0,
+     "data_seed": 0,
+     "canonical": false,
+     "config": {
+      "model": "qwen3_0_6b",
+      "batch_size": 2,
+      "seq_len": 2048,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "attn_implementation": "sdpa",
+      "seed": 0,
+      "data_seed": 0,
+      "arch_overrides": {},
+      "calibration_path": null,
+      "simple_calibration_path": null,
+      "weights": "pretrained:Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+      "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+      "protocol4_calibration_path": null,
+      "protocol4_verdict_path": null,
+      "protocol4_diagnostic_timing": false
+     },
+     "input_checksum": "67180da8126a4063:(2, 2048)",
+     "expected_site_counts": {
+      "qkv_norm_rope": 28,
+      "attention": 28,
+      "swiglu_mlp": 28,
+      "residual_rmsnorm": 56
+     }
+    },
+    "outputs": [
+     "logits",
+     "loss"
+    ],
+    "loss": "token-mean next-token NLL, float32, ignore_index=-100",
+    "site_references": {
+     "qkv_norm_rope": {
+      "kind": "explicit_native_site"
+     },
+     "attention": {
+      "kind": "explicit_native_site"
+     },
+     "swiglu_mlp": {
+      "kind": "explicit_native_site"
+     },
+     "residual_rmsnorm": {
+      "kind": "explicit_native_site"
+     }
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "attention"
+    ],
+    "identity": {
+     "programs": {
+      "qwen3_attention/causal_gqa_attention": {
+       "adapter_kind": "direct_deployment_entry",
+       "module": "qwen3_candidate_4315769431397349981"
+      }
+     }
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "model"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed101",
+     "seed": 101,
+     "config": {
+      "generator": "workload.batch_for(seed=sample.seed)"
+     }
+    },
+    {
+     "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed202",
+     "seed": 202,
+     "config": {
+      "generator": "workload.batch_for(seed=sample.seed)"
+     }
+    },
+    {
+     "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed303",
+     "seed": 303,
+     "config": {
+      "generator": "workload.batch_for(seed=sample.seed)"
+     }
+    },
+    {
+     "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed404",
+     "seed": 404,
+     "config": {
+      "generator": "workload.batch_for(seed=sample.seed)"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "fcf5408520441ee86898f6138ee893d282889bad347dd4a8497cefbaaf3d6671",
+    "schema": "evograd-verification-gate2-policy/5",
+    "boundaries": false,
+    "sample_protocol": "matched_inputs",
+    "reference_implementation": {
+     "adapter": "e0dc15f87ef0805d17dc7c66f9520030e74032a34992a956d87fff02e7c11212",
+     "loss": "b9e9c8763a3115f9280c5aaa9bffeacdde251e5a8a6d8391d16f62c6a6a3bc3c",
+     "native_sites": "72111e02fbe51ae2b5000d3ce3790911dd29422841f57a989117cc2e3a58b46b",
+     "workload_class": "dacbdb2818a107a62d69d39b4d3183af36b3edca668240a15d55f538e90d7b31"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 0,
+   "failed": 4,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [
+   "candidate_runtime_error"
+  ],
+  "cases": [
+   {
+    "case_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed101",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 299, in backward\n    dq, dk, dv, do_weight = qwen3_attention_backward_from_saved(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 167, in qwen3_attention_backward_from_saved\n    dq, dk, dv = _sdpa_backward(grad_attn, q, k, v, attn, scale)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 108, in _sdpa_backward\n    r = vendor_sdpa_backward(grad_attn, q, k, v, attn, True, scale, True)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 250, in vendor_sdpa_backward\n    dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/_ops.py\", line 1269, in __call__\n    return self._op(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: aten::_scaled_dot_product_flash_attention_backward() Expected a value of type 'Tensor' for argument 'logsumexp' but instead found type 'bool'.\nPosition: 5\nValue: True\nDeclaration: aten::_scaled_dot_product_flash_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, Tensor philox_seed, Tensor philox_offset, *, float? scale=None) -> (Tensor grad_query, Tensor grad_key, Tensor grad_value)\nCast error details: Unable to cast True to Tensor\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed101",
+      "seed": 101,
+      "config": {
+       "generator": "workload.batch_for(seed=sample.seed)"
+      }
+     },
+     "reference": {
+      "execution_id": "f0f3d16fa6154d4c9ef9aaca284b93c4",
+      "reused_from": "/tmp/evograd-native-controls-5u6sp3t3/f9313ac1287af4050445b0e6b36330ffa73fa7d4216d83ff7fb8ae6f38c8097d.pt",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed101",
+       "seed": 101,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "0111ffa62708dacdb2eb76da5add6f77045ca2e61927a67a5ebd67f74051a8aa",
+      "sample_identity": {
+       "fingerprint": "fe1fe317dfc58548a71bdb7af53c9444216590eba39ea9142f369fb4ca04216a",
+       "components": {
+        "seed": 101,
+        "inputs": "bfe133d6c2eb6666da0365f315d1bf59c44c70cb896f4600ecb2f436a38ba798",
+        "context": "edfffad9aae8e6784d79236e07ad8c1fd288acfba91011aa9d7acb57ae560f64",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "178a2e315b82ecc40f6dcb2c3292abc2803caf355b85d74e1f8489b764e49b6b",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "178a2e315b82ecc40f6dcb2c3292abc2803caf355b85d74e1f8489b764e49b6b",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "5fe908af74895e22c84d6d6387453ec7204b890081cf3267bf40083dd3a3922f",
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": null,
+      "seconds": 3.2385428119450808
+     },
+     "candidate": {
+      "execution_id": "a2ca64e3142a48aca1dab9958882f386",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "attention"
+       ],
+       "identity": {
+        "programs": {
+         "qwen3_attention/causal_gqa_attention": {
+          "adapter_kind": "direct_deployment_entry",
+          "module": "qwen3_candidate_4315769431397349981"
+         }
+        }
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed101",
+       "seed": 101,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "attention": 28
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "0111ffa62708dacdb2eb76da5add6f77045ca2e61927a67a5ebd67f74051a8aa",
+      "sample_identity": {
+       "fingerprint": "fe1fe317dfc58548a71bdb7af53c9444216590eba39ea9142f369fb4ca04216a",
+       "components": {
+        "seed": 101,
+        "inputs": "bfe133d6c2eb6666da0365f315d1bf59c44c70cb896f4600ecb2f436a38ba798",
+        "context": "edfffad9aae8e6784d79236e07ad8c1fd288acfba91011aa9d7acb57ae560f64",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "178a2e315b82ecc40f6dcb2c3292abc2803caf355b85d74e1f8489b764e49b6b",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "178a2e315b82ecc40f6dcb2c3292abc2803caf355b85d74e1f8489b764e49b6b",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": "backward",
+      "seconds": 1.0460619300138205
+     }
+    }
+   },
+   {
+    "case_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed202",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 299, in backward\n    dq, dk, dv, do_weight = qwen3_attention_backward_from_saved(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 167, in qwen3_attention_backward_from_saved\n    dq, dk, dv = _sdpa_backward(grad_attn, q, k, v, attn, scale)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 108, in _sdpa_backward\n    r = vendor_sdpa_backward(grad_attn, q, k, v, attn, True, scale, True)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 250, in vendor_sdpa_backward\n    dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/_ops.py\", line 1269, in __call__\n    return self._op(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: aten::_scaled_dot_product_flash_attention_backward() Expected a value of type 'Tensor' for argument 'logsumexp' but instead found type 'bool'.\nPosition: 5\nValue: True\nDeclaration: aten::_scaled_dot_product_flash_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, Tensor philox_seed, Tensor philox_offset, *, float? scale=None) -> (Tensor grad_query, Tensor grad_key, Tensor grad_value)\nCast error details: Unable to cast True to Tensor\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed202",
+      "seed": 202,
+      "config": {
+       "generator": "workload.batch_for(seed=sample.seed)"
+      }
+     },
+     "reference": {
+      "execution_id": "8a2037ad83a14a49a49e2b9e8a57e7ee",
+      "reused_from": "/tmp/evograd-native-controls-5u6sp3t3/fdd8905669a26e2946b72057619140015884ad11a1136fca2725ca6ede819bd6.pt",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed202",
+       "seed": 202,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "95f38c38291f30cafd2174d1ed8b1cfe6c0a5b7b61de886c1cbdd9dfb0a74af9",
+      "sample_identity": {
+       "fingerprint": "504d4e2daef6a799e6dc6e017214ade7cb50fae6793707c90fbfa2427d10c65c",
+       "components": {
+        "seed": 202,
+        "inputs": "cafde0c9facfe62f808e3b3fae03545799df25050da883a0033dcd6182568bb3",
+        "context": "46d802d9e156e43710f88b794bea64d03fd645eb9d38d0222ce0a5aa70badd75",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "104abdb64575844f9b9ffc5b45580acddc984758f30f5c0608ef804916d92b72",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "104abdb64575844f9b9ffc5b45580acddc984758f30f5c0608ef804916d92b72",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "a3dd7b975ea03bc54d87b01b621d4821caee0c7f76832cb7fa3b2116f3f51160",
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": null,
+      "seconds": 3.287573512061499
+     },
+     "candidate": {
+      "execution_id": "1aa063d8593b4f569382284c4643733c",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "attention"
+       ],
+       "identity": {
+        "programs": {
+         "qwen3_attention/causal_gqa_attention": {
+          "adapter_kind": "direct_deployment_entry",
+          "module": "qwen3_candidate_4315769431397349981"
+         }
+        }
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed202",
+       "seed": 202,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "attention": 28
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "95f38c38291f30cafd2174d1ed8b1cfe6c0a5b7b61de886c1cbdd9dfb0a74af9",
+      "sample_identity": {
+       "fingerprint": "504d4e2daef6a799e6dc6e017214ade7cb50fae6793707c90fbfa2427d10c65c",
+       "components": {
+        "seed": 202,
+        "inputs": "cafde0c9facfe62f808e3b3fae03545799df25050da883a0033dcd6182568bb3",
+        "context": "46d802d9e156e43710f88b794bea64d03fd645eb9d38d0222ce0a5aa70badd75",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "104abdb64575844f9b9ffc5b45580acddc984758f30f5c0608ef804916d92b72",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "104abdb64575844f9b9ffc5b45580acddc984758f30f5c0608ef804916d92b72",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": "backward",
+      "seconds": 1.0599493240006268
+     }
+    }
+   },
+   {
+    "case_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed303",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 299, in backward\n    dq, dk, dv, do_weight = qwen3_attention_backward_from_saved(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 167, in qwen3_attention_backward_from_saved\n    dq, dk, dv = _sdpa_backward(grad_attn, q, k, v, attn, scale)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 108, in _sdpa_backward\n    r = vendor_sdpa_backward(grad_attn, q, k, v, attn, True, scale, True)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 250, in vendor_sdpa_backward\n    dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/_ops.py\", line 1269, in __call__\n    return self._op(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: aten::_scaled_dot_product_flash_attention_backward() Expected a value of type 'Tensor' for argument 'logsumexp' but instead found type 'bool'.\nPosition: 5\nValue: True\nDeclaration: aten::_scaled_dot_product_flash_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, Tensor philox_seed, Tensor philox_offset, *, float? scale=None) -> (Tensor grad_query, Tensor grad_key, Tensor grad_value)\nCast error details: Unable to cast True to Tensor\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed303",
+      "seed": 303,
+      "config": {
+       "generator": "workload.batch_for(seed=sample.seed)"
+      }
+     },
+     "reference": {
+      "execution_id": "f33d4fc820874d139d5f4bf54fe19331",
+      "reused_from": "/tmp/evograd-native-controls-5u6sp3t3/a7c0570224df596437ede5c1dae4b57080502e316bac727cf8d82703abf5997e.pt",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed303",
+       "seed": 303,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "3d3cb6395ececfab5d45645a93571fea205c8b5b724568238968ef4c9b657d99",
+      "sample_identity": {
+       "fingerprint": "9c727e9c344cd1bce3c447e7e6ee075ea8959623c7c2e88fe85fb854f5e40509",
+       "components": {
+        "seed": 303,
+        "inputs": "1e30fa5bfd2d36b5d2b416b237ee383e5f15d2c79348ae95bc8b6d3a3602ff34",
+        "context": "667dda6a8787f5957ec34e41e97ce2614c7875602ba920f634846d5c9663baff",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "979796ebaaa5381f48c9b77c7ab15537766e48ae36c391c64c989f50230acedf",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "979796ebaaa5381f48c9b77c7ab15537766e48ae36c391c64c989f50230acedf",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "2ba4b812915c69262db341b14d45cb1b970887e57f2944dcfcfb887edf057124",
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": null,
+      "seconds": 3.3469537548953667
+     },
+     "candidate": {
+      "execution_id": "7a91d9f9949647d6aa4758b836d528b1",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "attention"
+       ],
+       "identity": {
+        "programs": {
+         "qwen3_attention/causal_gqa_attention": {
+          "adapter_kind": "direct_deployment_entry",
+          "module": "qwen3_candidate_4315769431397349981"
+         }
+        }
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed303",
+       "seed": 303,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "attention": 28
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "3d3cb6395ececfab5d45645a93571fea205c8b5b724568238968ef4c9b657d99",
+      "sample_identity": {
+       "fingerprint": "9c727e9c344cd1bce3c447e7e6ee075ea8959623c7c2e88fe85fb854f5e40509",
+       "components": {
+        "seed": 303,
+        "inputs": "1e30fa5bfd2d36b5d2b416b237ee383e5f15d2c79348ae95bc8b6d3a3602ff34",
+        "context": "667dda6a8787f5957ec34e41e97ce2614c7875602ba920f634846d5c9663baff",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "979796ebaaa5381f48c9b77c7ab15537766e48ae36c391c64c989f50230acedf",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "979796ebaaa5381f48c9b77c7ab15537766e48ae36c391c64c989f50230acedf",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": "backward",
+      "seconds": 1.1502667780732736
+     }
+    }
+   },
+   {
+    "case_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed404",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 299, in backward\n    dq, dk, dv, do_weight = qwen3_attention_backward_from_saved(\n                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 167, in qwen3_attention_backward_from_saved\n    dq, dk, dv = _sdpa_backward(grad_attn, q, k, v, attn, scale)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 108, in _sdpa_backward\n    r = vendor_sdpa_backward(grad_attn, q, k, v, attn, True, scale, True)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen3_0_6b/qwen3_attention__causal_gqa_attention.py\", line 250, in vendor_sdpa_backward\n    dq, dk, dv = torch.ops.aten._scaled_dot_product_flash_attention_backward(\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/_ops.py\", line 1269, in __call__\n    return self._op(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: aten::_scaled_dot_product_flash_attention_backward() Expected a value of type 'Tensor' for argument 'logsumexp' but instead found type 'bool'.\nPosition: 5\nValue: True\nDeclaration: aten::_scaled_dot_product_flash_attention_backward(Tensor grad_out, Tensor query, Tensor key, Tensor value, Tensor out, Tensor logsumexp, Tensor cum_seq_q, Tensor cum_seq_k, SymInt max_q, SymInt max_k, float dropout_p, bool is_causal, Tensor philox_seed, Tensor philox_offset, *, float? scale=None) -> (Tensor grad_query, Tensor grad_key, Tensor grad_value)\nCast error details: Unable to cast True to Tensor\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed404",
+      "seed": 404,
+      "config": {
+       "generator": "workload.batch_for(seed=sample.seed)"
+      }
+     },
+     "reference": {
+      "execution_id": "a9a6677076ac4eadb10f1259699defdc",
+      "reused_from": "/tmp/evograd-native-controls-5u6sp3t3/8a3ac94389f10f16c9e37d87c9ed62f9db80c53115174429a314449fdaf2b2d4.pt",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed404",
+       "seed": 404,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "6c844485c50c629b9622bd86756918c95327dacd8ab869d42be43d6633843f3b",
+      "sample_identity": {
+       "fingerprint": "4c2e355afffe0219e9cd2969604cf357fb5ab6be71f80ab8ca378ed4b57f58a5",
+       "components": {
+        "seed": 404,
+        "inputs": "cf43a30bc92574b066d27047db86b8ccc471bc04212cd6043c750804a71e2b06",
+        "context": "e21e9d258708ea9f1e6ee7c8c010f8c32ff183eb319d9017e2b193a8bd9f107f",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "5052f69163b8ced8539cc582c04d0070835d3a33fc5e4015a6f3297f8dc428a5",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "5052f69163b8ced8539cc582c04d0070835d3a33fc5e4015a6f3297f8dc428a5",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "bc2c2b392697245401d3fdd8b746b18a0b83e1a83d8bfd353ab4ca1c1fdaea98",
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": null,
+      "seconds": 3.2954730729106814
+     },
+     "candidate": {
+      "execution_id": "b68c4ec5fb794e76a83becf0e3e97ab4",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "attention"
+       ],
+       "identity": {
+        "programs": {
+         "qwen3_attention/causal_gqa_attention": {
+          "adapter_kind": "direct_deployment_entry",
+          "module": "qwen3_candidate_4315769431397349981"
+         }
+        }
+       }
+      },
+      "sample": {
+       "sample_id": "qwen3-0.6b.train.bs2.seq2048.bf16.cuda.sdpa.pretrained.realtext.09d9a051/model/seed404",
+       "seed": 404,
+       "config": {
+        "generator": "workload.batch_for(seed=sample.seed)"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "attention": 28
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [
+       [
+        "model.embed_tokens.weight",
+        "lm_head.weight"
+       ]
+      ],
+      "boundary_calls": 0,
+      "input_digest": "6c844485c50c629b9622bd86756918c95327dacd8ab869d42be43d6633843f3b",
+      "sample_identity": {
+       "fingerprint": "4c2e355afffe0219e9cd2969604cf357fb5ab6be71f80ab8ca378ed4b57f58a5",
+       "components": {
+        "seed": 404,
+        "inputs": "cf43a30bc92574b066d27047db86b8ccc471bc04212cd6043c750804a71e2b06",
+        "context": "e21e9d258708ea9f1e6ee7c8c010f8c32ff183eb319d9017e2b193a8bd9f107f",
+        "cotangents": "182ef321a1a08aebd605b6d2339c56e1bd177c2b98f161db7907a3917d60357c",
+        "initial_state": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+        "module_mode": "train",
+        "differentiable_inputs": {},
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": []
+          },
+          "kwargs": {
+           "dict": {
+            "input_ids": {
+             "tensor": "5052f69163b8ced8539cc582c04d0070835d3a33fc5e4015a6f3297f8dc428a5",
+             "shape": [
+              2,
+              2048
+             ],
+             "dtype": "int64",
+             "stride": [
+              2048,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            },
+            "use_cache": false
+           }
+          }
+         }
+        },
+        "context": {
+         "dict": {
+          "labels": {
+           "tensor": "5052f69163b8ced8539cc582c04d0070835d3a33fc5e4015a6f3297f8dc428a5",
+           "shape": [
+            2,
+            2048
+           ],
+           "dtype": "int64",
+           "stride": [
+            2048,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        },
+        "cotangents": {
+         "dict": {
+          "loss": {
+           "tensor": "0b428247f2671cb035d96297074510d466d8272610077c9f1484476ef378da1b",
+           "shape": [],
+           "dtype": "float32",
+           "stride": [],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": "8a1ee057bfc129dd0a43e7f50f1687a60cb8743da0ed98452aa9441a1ce50a88",
+      "error_stage": "backward",
+      "seconds": 1.2362115499563515
+     }
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "matched_inputs"
+  }
+ }
+}

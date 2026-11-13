@@ -1,0 +1,200 @@
+{
+ "stage_key": {
+  "baseline_implementation": {
+   "revision": "whole-model-baselines/1",
+   "sources": {
+    "/u/hding4/evograd/src/evograd/evaluation/protocol.py": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/compile_baseline.py": "151df0edd311599361237209f4b0b27321e193daeea00ae4b7207fab7fd8a502",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/runner.py": "19689eb12284e95c2a1d5dbcca57a8be1004b2862687b9945b2226733a615220",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/workloads/llama3_2_1b/workload.py": "492f9f83ef9a6ec34a12f8f596368b63a0673a3252c7ab83b4e0906b9386394c"
+   }
+  },
+  "compile_backend": "inductor",
+  "corpus": {
+   "corpus_id": "llama_3_2_1b-real-training-payloads@df92518ed95a7f49",
+   "corpus_sha256": "df92518ed95a7f49f4f23bb654188509fe5666a29e4891a11c000e68169ce668",
+   "reference": null,
+   "schema": "evograd-real-payload-corpus/1"
+  },
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA GH200 120GB",
+   "torch": "2.11.0+cu128"
+  },
+  "group": "case-major-shared-baselines/2",
+  "implementation": {
+   "group": "b66cfb9486edb1bfb1d8c08dade4a18a3c3abd440756686938039a97a9d43e09",
+   "protocol": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+   "timing": "6adb64cfabcee3b88dc3d97f39318e20daf33340796fbb46033949f40ecf0087"
+  },
+  "model": "llama_3_2_1b",
+  "name": "gepa::llama3_attention/causal_gqa_attention",
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "llama3_attention/causal_gqa_attention": "b5b29a5e35469cca60677a162e42ca9682e5d67cdf44ab6ece94212bef731b44"
+  },
+  "reference": {
+   "contract": "evograd-model-reference/llama_3_2_1b/1",
+   "modeling_llama_sha256": "13e65b752a9c9d8a5c22b83df73009a8940c0eefdc58c101df3eb910e3efc2f9",
+   "transformers": "5.16.1"
+  },
+  "workload": {
+   "attn_implementation": "sdpa",
+   "batch_size": 2,
+   "data": "wikitext-2-raw:b08601e04326c79dfdd32d625aee71d232d685c3",
+   "data_seed": 0,
+   "device": "cuda",
+   "dtype": "bfloat16",
+   "model": "llama_3_2_1b",
+   "seed": 0,
+   "seq_len": 2048,
+   "weights": "pretrained:meta-llama/Llama-3.2-1B@4e20de362430cd3b72f300e6b0f18e50e7166e08"
+  }
+ },
+ "result": {
+  "ok": true,
+  "provider": "gepa::llama3_attention/causal_gqa_attention",
+  "step_ms": 112.16504801996052,
+  "step_ms_min": 111.5471325814724,
+  "per_block_ms": [
+   111.5471325814724,
+   112.05648016184568,
+   112.1064018458128,
+   111.75825884565711,
+   112.22369419410825,
+   112.3750239610672,
+   112.2989110648632,
+   112.09384864196181,
+   112.54414524883032,
+   112.22920445725322
+  ],
+  "latency": {
+   "count": 10,
+   "median_ms": 112.16504801996052,
+   "min_ms": 111.5471325814724,
+   "q20_ms": 111.99683589860797,
+   "q80_ms": 112.314133644104
+  },
+  "cpu_bound_fraction": 0.9666056159481735,
+  "cpu_bound_fraction_per_block": [
+   0.9666770779323446,
+   0.9667290840831961,
+   0.9664267540041951,
+   0.9666139905378469,
+   0.9668081137428196,
+   0.9664665168758283,
+   0.9669619326773207,
+   0.9663641597902077,
+   0.9665617164199937,
+   0.9665972413585002
+  ],
+  "steps": 10,
+  "blocks": 10,
+  "units_per_second": 36517.614642941975,
+  "unit_name": "tokens",
+  "peak_memory_bytes": 20978300928,
+  "losses": [
+   2.5959956645965576,
+   2.7186079025268555,
+   2.8294899463653564,
+   3.0055668354034424,
+   2.967625617980957
+  ],
+  "loss_trajectory_step_ms": [
+   902.1922666579485,
+   112.7514224499464,
+   110.5137299746275,
+   113.97234443575144,
+   111.89669650048018
+  ],
+  "first_timed_batch_step_ms": 112.76006139814854,
+  "patched": [
+   "attention"
+  ],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [
+    "attention"
+   ],
+   "actual_sites": [
+    "attention"
+   ],
+   "paths": {
+    "attention": [
+     "model.layers.0.self_attn",
+     "model.layers.1.self_attn",
+     "model.layers.2.self_attn",
+     "model.layers.3.self_attn",
+     "model.layers.4.self_attn",
+     "model.layers.5.self_attn",
+     "model.layers.6.self_attn",
+     "model.layers.7.self_attn",
+     "model.layers.8.self_attn",
+     "model.layers.9.self_attn",
+     "model.layers.10.self_attn",
+     "model.layers.11.self_attn",
+     "model.layers.12.self_attn",
+     "model.layers.13.self_attn",
+     "model.layers.14.self_attn",
+     "model.layers.15.self_attn"
+    ]
+   },
+   "counts": {
+    "attention": 16
+   },
+   "modules_replaced": 16
+  },
+  "dynamo": null,
+  "kernel_sources": [
+   {
+    "site": "attention",
+    "op": "llama3_attention",
+    "origin": "candidate:verified_deployment"
+   }
+  ],
+  "verification": {
+   "gate": "skipped",
+   "checked": [],
+   "unverifiable": []
+  },
+  "model_correctness": {
+   "gate": "not_applicable",
+   "ok": true,
+   "skipped": true,
+   "execution_ok": true,
+   "numerical_ok": null,
+   "numerical_status": "unavailable",
+   "numerical_unavailable_at": [
+    "model_gate"
+   ],
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+   "findings": []
+  },
+  "evaluation_complete": false,
+  "evaluation_incomplete_because": [
+   "the tier-1 and whole-model gates were skipped (--no-verify)"
+  ],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

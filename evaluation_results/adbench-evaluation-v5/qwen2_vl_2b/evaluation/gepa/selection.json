@@ -1,0 +1,41 @@
+{
+  "model": "qwen2_vl_2b",
+  "agent": "gepa",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen2_vl_2b/qwen2_vl_2b_20261021/manifest.json",
+  "selected_cases": [
+    "gelu/model.visual.merger.mlp",
+    "layernorm/model.visual.blocks.norm1",
+    "quick_gelu/model.visual.blocks.mlp.act",
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp",
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp",
+    "rmsnorm/model.language_model.layers.input_layernorm"
+  ],
+  "candidates": {
+    "gelu/model.visual.merger.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/gelu__model.visual.merger.mlp.py",
+      "sha256": "5fe3400b5490fbe55140592722b64b6ec0c9e251204038b43881e2f7c59ffca0"
+    },
+    "layernorm/model.visual.blocks.norm1": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/layernorm__model.visual.blocks.norm1.py",
+      "sha256": "f5473f417a655aaee5d25c47d488a6e6cb72dbbe66812a44ed4d39ae207adaf5"
+    },
+    "quick_gelu/model.visual.blocks.mlp.act": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/quick_gelu__model.visual.blocks.mlp.act.py",
+      "sha256": "e92e613d6ad3b1167efedf72c550e9971d465c28461d8184ba5474769bee1f85"
+    },
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/qwen2_vl_2b_text_mlp__model.language_model.layers.mlp.py",
+      "sha256": "03286a15421274bb40fb0ee173f242bb28795aa812442e61f8efedcc8209d291"
+    },
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/qwen2_vl_2b_vision_mlp__model.visual.blocks.mlp.py",
+      "sha256": "ba9469c448e76f0a5d49d863a8b433505f694897fa86c86252c58d407ee48e3f"
+    },
+    "rmsnorm/model.language_model.layers.input_layernorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/rmsnorm__model.language_model.layers.input_layernorm.py",
+      "sha256": "80a3fff02d8099e98e426f17b9ea4a88aa224101089a8f7a8a92924c675cc4aa"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+}

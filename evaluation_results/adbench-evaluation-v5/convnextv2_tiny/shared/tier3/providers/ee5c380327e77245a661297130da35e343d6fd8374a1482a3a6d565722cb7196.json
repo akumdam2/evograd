@@ -1,0 +1,187 @@
+{
+ "stage_key": {
+  "baseline_implementation": {
+   "revision": "whole-model-baselines/1",
+   "sources": {
+    "/u/hding4/evograd/src/evograd/evaluation/protocol.py": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/compile_baseline.py": "151df0edd311599361237209f4b0b27321e193daeea00ae4b7207fab7fd8a502",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/runner.py": "19689eb12284e95c2a1d5dbcca57a8be1004b2862687b9945b2226733a615220",
+    "/u/hding4/evograd/src/evograd/evaluation/tier3/workloads/common/vision/workload.py": "a1cb0659d65c33a40eeb3a038cb2ee6e77d20baf0205eef2d8c4ebcdd7cad4c5"
+   }
+  },
+  "compile_backend": "inductor",
+  "corpus": {
+   "corpus_id": "convnextv2_tiny-real-training-payloads@7096a8fa75b2f9a2",
+   "corpus_sha256": "7096a8fa75b2f9a27896fbf3981b49a1a3d85ea149cbb9ed8b5a6864d160c471",
+   "reference": null,
+   "schema": "evograd-real-payload-corpus/1"
+  },
+  "environment": {
+   "cuda": "12.8",
+   "gpu_name": "NVIDIA GH200 120GB",
+   "torch": "2.11.0+cu128"
+  },
+  "group": "case-major-shared-baselines/2",
+  "implementation": {
+   "group": "b66cfb9486edb1bfb1d8c08dade4a18a3c3abd440756686938039a97a9d43e09",
+   "protocol": "d424e2453e79a6816c78ff7c14176c653f5a5019449e109eb9bd5f4c026532a2",
+   "timing": "6adb64cfabcee3b88dc3d97f39318e20daf33340796fbb46033949f40ecf0087"
+  },
+  "model": "convnextv2_tiny",
+  "name": "codex::convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+  "options": {
+   "blocks": 10,
+   "learning_rate": 0.0001,
+   "loss_steps": 5,
+   "seed": 0,
+   "steps": 10,
+   "warmup": 3
+  },
+  "programs": {
+   "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": "ce32fc19d8cc34748a184afae424cb01d5d62b87e70b5a978d9af90aab82dd7a"
+  },
+  "reference": {
+   "contract": "evograd-model-reference/convnextv2_tiny/1",
+   "modeling_sha256": "a8d9a5d91d2edc81c614088d83b779b04447e2713d13759c7cf9651238ac988b",
+   "transformers": "5.16.1"
+  },
+  "workload": {
+   "device": "cuda",
+   "model": "convnextv2_tiny",
+   "stream": true,
+   "weights": "pretrained"
+  }
+ },
+ "result": {
+  "ok": true,
+  "provider": "codex::convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+  "step_ms": 33.516525593586266,
+  "step_ms_min": 33.44754071440548,
+  "per_block_ms": [
+   33.48601940087974,
+   33.47703411709517,
+   33.636027202010155,
+   33.46778319682926,
+   33.58348810579628,
+   33.80628700833768,
+   33.44754071440548,
+   33.56263118330389,
+   33.54703178629279,
+   33.48470099736005
+  ],
+  "latency": {
+   "count": 10,
+   "median_ms": 33.516525593586266,
+   "min_ms": 33.44754071440548,
+   "q20_ms": 33.47518393304199,
+   "q80_ms": 33.59399592503905
+  },
+  "cpu_bound_fraction": 0.9921331063268528,
+  "cpu_bound_fraction_per_block": [
+   0.9913232386648397,
+   0.9921418871959987,
+   0.992265218741624,
+   0.9914515043738714,
+   0.9921562199628405,
+   0.9924319574181865,
+   0.9915867717786715,
+   0.9921631651792957,
+   0.9921243254577069,
+   0.9918891050498878
+  ],
+  "steps": 10,
+  "blocks": 10,
+  "units_per_second": 954.7528997493562,
+  "unit_name": "images",
+  "peak_memory_bytes": 2701729280,
+  "losses": [
+   0.2890625,
+   0.27734375,
+   0.11328125,
+   0.255859375,
+   0.16796875
+  ],
+  "loss_trajectory_step_ms": [
+   6676.801708992571,
+   38.718857103958726,
+   36.20518185198307,
+   36.49166808463633,
+   36.63108800537884
+  ],
+  "first_timed_batch_step_ms": 36.32297087460756,
+  "patched": [
+   "convnext_mlp_stage2"
+  ],
+  "patch_provenance": {
+   "method": "module_surgery",
+   "requested_sites": [
+    "convnext_mlp_stage2"
+   ],
+   "actual_sites": [
+    "convnext_mlp_stage2"
+   ],
+   "paths": {
+    "convnext_mlp_stage2": [
+     "convnextv2.encoder.stages.2.layers.0",
+     "convnextv2.encoder.stages.2.layers.1",
+     "convnextv2.encoder.stages.2.layers.2",
+     "convnextv2.encoder.stages.2.layers.3",
+     "convnextv2.encoder.stages.2.layers.4",
+     "convnextv2.encoder.stages.2.layers.5",
+     "convnextv2.encoder.stages.2.layers.6",
+     "convnextv2.encoder.stages.2.layers.7",
+     "convnextv2.encoder.stages.2.layers.8"
+    ]
+   },
+   "counts": {
+    "convnext_mlp_stage2": 9
+   },
+   "modules_replaced": 9
+  },
+  "dynamo": null,
+  "kernel_sources": [
+   {
+    "site": "convnext_mlp_stage2",
+    "op": "convnextv2_tiny_convnext_mlp",
+    "origin": "candidate:verified_deployment"
+   }
+  ],
+  "verification": {
+   "gate": "skipped",
+   "checked": [],
+   "unverifiable": []
+  },
+  "model_correctness": {
+   "gate": "not_applicable",
+   "ok": true,
+   "skipped": true,
+   "execution_ok": true,
+   "numerical_ok": null,
+   "numerical_status": "unavailable",
+   "numerical_unavailable_at": [
+    "model_gate"
+   ],
+   "evaluation_complete": false,
+   "evaluation_incomplete_because": [
+    "the tier-1 and whole-model gates were skipped (--no-verify)"
+   ],
+   "reason": "the tier-1 and whole-model gates were skipped (--no-verify)",
+   "findings": []
+  },
+  "evaluation_complete": false,
+  "evaluation_incomplete_because": [
+   "the tier-1 and whole-model gates were skipped (--no-verify)"
+  ],
+  "optimizer": {
+   "name": "AdamW",
+   "learning_rate": 0.0001,
+   "betas": [
+    0.9,
+    0.999
+   ],
+   "eps": 1e-08,
+   "weight_decay": 0.01,
+   "amsgrad": false
+  }
+ }
+}

@@ -1,0 +1,41 @@
+{
+  "model": "qwen2_vl_2b",
+  "agent": "codex",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen2_vl_2b/qwen2_vl_2b_20261021/manifest.json",
+  "selected_cases": [
+    "gelu/model.visual.merger.mlp",
+    "layernorm/model.visual.blocks.norm1",
+    "quick_gelu/model.visual.blocks.mlp.act",
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp",
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp",
+    "rmsnorm/model.language_model.layers.input_layernorm"
+  ],
+  "candidates": {
+    "gelu/model.visual.merger.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/gelu__model.visual.merger.mlp.py",
+      "sha256": "e1615a8de1b445fb05cadb77128708a37e9b046abee9113dbb4eee19361854f9"
+    },
+    "layernorm/model.visual.blocks.norm1": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/layernorm__model.visual.blocks.norm1.py",
+      "sha256": "9bc15d37bb3d26f580bcbb903d5ba792628a8b8f9bcc12854e306d7bc11af399"
+    },
+    "quick_gelu/model.visual.blocks.mlp.act": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/quick_gelu__model.visual.blocks.mlp.act.py",
+      "sha256": "98788454cc095de3ae5996076f09f7ca9ccabb187e9a32fdda340b3e5deef85d"
+    },
+    "qwen2_vl_2b_text_mlp/model.language_model.layers.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/qwen2_vl_2b_text_mlp__model.language_model.layers.mlp.py",
+      "sha256": "e0cc2ef9f7b68f69b8f3458da0aecef1f4f83f459ef20045c5136b015b4ff158"
+    },
+    "qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/qwen2_vl_2b_vision_mlp__model.visual.blocks.mlp.py",
+      "sha256": "7769fbeb2fdf5fd9eaa1e5cca4be200fda21678a14edb4d55c889df8fb5b39c7"
+    },
+    "rmsnorm/model.language_model.layers.input_layernorm": {
+      "path": "/u/hding4/evograd/evolved_programs/codex/qwen2_vl_2b/rmsnorm__model.language_model.layers.input_layernorm.py",
+      "sha256": "f1a1282fcfdd0c16904d1b31f9bc1031cf939d9315961d6907c6c22e3c1b8e8e"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+}

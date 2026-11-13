@@ -1,0 +1,51 @@
+{
+  "model": "olmoe_1b_7b",
+  "agent": "gepa",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/olmoe_1b_7b/olmoe_1b_7b_20261021/manifest.json",
+  "selected_cases": [
+    "cross_entropy/logits",
+    "olmoe_attention/attention",
+    "olmoe_moe_experts/moe_experts",
+    "olmoe_qkv_norm_rope/qkv_norm_rope",
+    "olmoe_residual_rmsnorm/residual_rmsnorm",
+    "rmsnorm/residual_norm",
+    "rope/rope",
+    "swiglu/moe_activation"
+  ],
+  "candidates": {
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/cross_entropy__logits.py",
+      "sha256": "1ce237413afcae2ca945bb729afa1d50d9d48b5156fca723c8d0cd49fc925b6d"
+    },
+    "olmoe_attention/attention": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/olmoe_attention__attention.py",
+      "sha256": "251736647d089dc76fff909c61ec1d4903860ab5efa9503f5a59a0e2029c6d01"
+    },
+    "olmoe_moe_experts/moe_experts": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/olmoe_moe_experts__moe_experts.py",
+      "sha256": "545d2772f38795bba38ed49def43cf501503c6527ecf7be44fcdb1a849aedfa5"
+    },
+    "olmoe_qkv_norm_rope/qkv_norm_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/olmoe_qkv_norm_rope__qkv_norm_rope.py",
+      "sha256": "73dba71a3a35bec89c654e3d6e273fe2c99ebccbae78f819b116d81646b9e060"
+    },
+    "olmoe_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/olmoe_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "4efc832005f4997ae247402dcc4772f1afd4fea05f2dd1275b71302fcabddaa9"
+    },
+    "rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/rmsnorm__residual_norm.py",
+      "sha256": "7454cbe4c44fed65b977a30a20ef8f460c5c9d976462cd35daa17a72867e1dfe"
+    },
+    "rope/rope": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/rope__rope.py",
+      "sha256": "89ff5bbd58f7d16d03b1311bad6e85ffd7b9e184b658014f3897d19d976ff864"
+    },
+    "swiglu/moe_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/gepa/olmoe_1b_7b/swiglu__moe_activation.py",
+      "sha256": "12d8769184ee7c89761c8491550cb12daae8a9917ef40daf3ff57d16452a1442"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+}

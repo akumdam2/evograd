@@ -1,0 +1,51 @@
+{
+  "model": "convnextv2_tiny",
+  "agent": "openevolve",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/convnextv2_tiny/convnextv2_tiny_20261021/manifest.json",
+  "selected_cases": [
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers",
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers",
+    "gelu/convnextv2.encoder.stages.0.layers.act",
+    "grn/convnextv2.encoder.stages.0.layers.grn",
+    "layernorm/convnextv2.embeddings.layernorm",
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings"
+  ],
+  "candidates": {
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.0.layers.py",
+      "sha256": "25c8f72407beb90a7b7c41ea7d8ef63d880fcaa75114f35fc1a86b4186182e27"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.1.layers.py",
+      "sha256": "374bd7819d6d1fc194099c6fd8aaea7980a83bc2094c040cc99bf1649c1183a2"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.2.layers.py",
+      "sha256": "755bfcebf4d833749838c320cba3b884d4c1f32d38515936db07de6407d1c083"
+    },
+    "convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/convnextv2_tiny_convnext_mlp__convnextv2.encoder.stages.3.layers.py",
+      "sha256": "63e9d232cabc7306be2fb4bb624a608418a0eb37d89430a49912190937c19331"
+    },
+    "gelu/convnextv2.encoder.stages.0.layers.act": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/gelu__convnextv2.encoder.stages.0.layers.act.py",
+      "sha256": "71e3d1fcc1655fada105e58c0c89c78908a291d43166f53e7ba3359f11073e0b"
+    },
+    "grn/convnextv2.encoder.stages.0.layers.grn": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/grn__convnextv2.encoder.stages.0.layers.grn.py",
+      "sha256": "9f1c5be6710154c51f87472393896941035b9b36b12a116aa2589ac39670bc47"
+    },
+    "layernorm/convnextv2.embeddings.layernorm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/layernorm__convnextv2.embeddings.layernorm.py",
+      "sha256": "907f97639470266ad1e105a4991e822187701d4d61b5909efee76c38374dabc7"
+    },
+    "spatial_conv2d/convnextv2.embeddings.patch_embeddings": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/convnextv2_tiny/spatial_conv2d__convnextv2.embeddings.patch_embeddings.py",
+      "sha256": "e66a4e9f072069cac30cf9b0263d60751620723aedbaad5794f34bbd46e035aa"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+}

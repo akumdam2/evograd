@@ -1,0 +1,86 @@
+{
+  "model": "qwen3_5_4b",
+  "agent": "openevolve",
+  "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+  "selected_cases": [
+    "causal_conv1d/gdn_conv1d",
+    "cross_entropy/logits",
+    "gated_rmsnorm/gdn_gated_norm",
+    "gdn_gating/gdn_gating",
+    "gemma_rmsnorm/residual_norm",
+    "l2norm/gdn_qk_l2norm",
+    "partial_rope/partial_rope",
+    "qwen3_5_gated_attention/gated_attention",
+    "qwen3_5_gated_delta_rule/gated_delta_rule",
+    "qwen3_5_gdn_in_proj/gdn_in_proj",
+    "qwen3_5_gdn_norm_out/gdn_norm_out",
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+    "qwen3_5_swiglu_mlp/swiglu_mlp",
+    "swiglu/mlp_activation"
+  ],
+  "candidates": {
+    "causal_conv1d/gdn_conv1d": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+      "sha256": "5727fd401bd750ee3355474ddc6ed0a0a0f4969ce7cae885f98cf719f4079ea8"
+    },
+    "cross_entropy/logits": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/cross_entropy__logits.py",
+      "sha256": "99e332b0fd31f8e66f3191e874190635d157a07c362481796eae1acfe31c84be"
+    },
+    "gated_rmsnorm/gdn_gated_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+      "sha256": "57bda311ce9ea894912825e37da8a8901959c6a523be4820b11c98741b98271e"
+    },
+    "gdn_gating/gdn_gating": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gdn_gating__gdn_gating.py",
+      "sha256": "e5843479701d6c2e3d3720e7f89edec4cb8aca71c824d4c550cb1f4886c65db7"
+    },
+    "gemma_rmsnorm/residual_norm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+      "sha256": "da6cbd39e496199c924b454b0150bd6f7bc551271c48e23d1afc8d083938d9d5"
+    },
+    "l2norm/gdn_qk_l2norm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+      "sha256": "80edfb9b50cd8ca9b3249b8cb8aa5a89e2036bb35b0249a75f7d70b271b3f824"
+    },
+    "partial_rope/partial_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/partial_rope__partial_rope.py",
+      "sha256": "59add3f867890000de8c1b18a9e9fcdb467d44c71b65488eed2555c7a0dda5f5"
+    },
+    "qwen3_5_gated_attention/gated_attention": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gated_attention__gated_attention.py",
+      "sha256": "47c2536c18b7d14a08fd0799827e7b282070f12bb255880da7fa9b0ea8ed652e"
+    },
+    "qwen3_5_gated_delta_rule/gated_delta_rule": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gated_delta_rule__gated_delta_rule.py",
+      "sha256": "7d92d882f34f565a9ad17155d532c56e86aa236143213e383308a545da3498f9"
+    },
+    "qwen3_5_gdn_in_proj/gdn_in_proj": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gdn_in_proj__gdn_in_proj.py",
+      "sha256": "c8e5427629c5db1e9bc619b794c02171f889ed3797a777dc259c98394c6d7e26"
+    },
+    "qwen3_5_gdn_norm_out/gdn_norm_out": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+      "sha256": "50289653d7ed6ea99decaca3d00943ff08b5fbabf4f27e807f6e6d6f1d19620c"
+    },
+    "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_qkv_norm_partial_rope__qkv_norm_partial_rope.py",
+      "sha256": "ba44264b76f26178587650d68a6ec645a2a4a8cb013cd372ae14a340da0ed967"
+    },
+    "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+      "sha256": "a9b755eab13c361cc9d06255aa4f7db01d0ab972d7137315011eef219a1f188d"
+    },
+    "qwen3_5_swiglu_mlp/swiglu_mlp": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+      "sha256": "255190e5d58ba019b6477fed9cd43fc446d0929939c6343cd8728f48f0a54b8a"
+    },
+    "swiglu/mlp_activation": {
+      "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/swiglu__mlp_activation.py",
+      "sha256": "f6b9bda930dcc28d10a02800acb6e3a16e8aff6b04b597b04ba14043002fc90b"
+    }
+  },
+  "search_failures": {},
+  "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+}

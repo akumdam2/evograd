@@ -1,0 +1,2016 @@
+{
+ "stage_key": {
+  "case": "gelu/model.visual.merger.mlp",
+  "program_sha256": "5fe3400b5490fbe55140592722b64b6ec0c9e251204038b43881e2f7c59ffca0",
+  "corpus": {
+   "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+   "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+   "schema": "evograd-real-payload-corpus/1",
+   "reference": null
+  },
+  "reference": {
+   "kind": "model_reference",
+   "forward": "evograd.ops.level1.gelu.reference:forward",
+   "runtime_forward": null,
+   "reference_dtype": null,
+   "reference_contract": "evograd-model-reference/qwen2_vl_2b/1",
+   "source": null
+  },
+  "gate1_policy": {
+   "schema": "evograd-gate1-model-dtype-tolerances/5",
+   "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+   "dtype_source": "reference result tensor (candidate dtype must match)",
+   "defaults": {
+    "float16": {
+     "atol": 1e-05,
+     "rtol": 0.001
+    },
+    "bfloat16": {
+     "atol": 1e-05,
+     "rtol": 0.016
+    },
+    "float32": {
+     "atol": 1e-05,
+     "rtol": 1.3e-06
+    },
+    "float64": {
+     "atol": 1e-07,
+     "rtol": 1e-07
+    }
+   },
+   "declaration_scaling": false,
+   "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+   "envelope_gamma": 4.0,
+   "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+  },
+  "compile_backend": "inductor",
+  "calibration_reuse": {
+   "version": "native-control-reuse/1",
+   "share_gate3_native": true,
+   "share_gate2_calibration_native": true,
+   "share_gate2_verification_reference": true
+  },
+  "verification_implementation": {
+   "gates": "bdefaaf8281272bc9a230cfab87915580871d45b71b9f18897066024b603b098",
+   "calibration": "9ff727443df478c761967dce16c17c8356353269e632dd71d3b7771dd5bad362",
+   "comparison": "a7053f2ee7bbc034a11ec344b08b5cc172adcb08a687e6b2195c2826ee2e16af",
+   "metrics": "851c4c87bb40d01d2e1f8f6e8899c88da15242827da8e77025de64b5568b4677",
+   "contracts": "281ee24ce574273ea256c37792d9814036c0d2b2729e3678cee6675fe87e79e7"
+  },
+  "verification_environment": {
+   "python": "3.12.13",
+   "machine": "aarch64",
+   "torch": "2.11.0+cu128",
+   "cuda": "12.8",
+   "cudnn": 91900,
+   "tf32_matmul": false,
+   "tf32_cudnn": true,
+   "float32_matmul_precision": "highest",
+   "deterministic_algorithms": true,
+   "cudnn_deterministic": true,
+   "cudnn_benchmark": false,
+   "device_type": "cuda",
+   "device_name": "NVIDIA GH200 120GB",
+   "compute_capability": "9.0",
+   "sdpa_backends": {
+    "flash": true,
+    "mem_efficient": true,
+    "math": true,
+    "cudnn": true
+   }
+  }
+ },
+ "statuses": {
+  "gate1_payloads": "passed",
+  "gate2_operator_calibration": "calibrated",
+  "gate2_operator": "failed"
+ },
+ "gate1_payloads": {
+  "gate": "gate1",
+  "protocol": "evograd-verification-gate1/2",
+  "status": "passed",
+  "complete": true,
+  "subject": {
+   "op": "gelu",
+   "candidate": "candidate",
+   "candidate_identity": {
+    "adapter_kind": "direct_pair_module",
+    "module": "qwen3_candidate_915960423271804337",
+    "source_hash": "eb410de182e1b582a7a1aa6c7d1820a35c9b6ed7d6ced082dde548c95b1aed36"
+   },
+   "device": "cuda",
+   "mode": "oracle",
+   "input_mutation": "reject",
+   "reference": {
+    "kind": "model_reference",
+    "forward": "evograd.ops.level1.gelu.reference:forward",
+    "runtime_forward": null,
+    "reference_dtype": null,
+    "reference_contract": "evograd-model-reference/qwen2_vl_2b/1",
+    "source": null
+   },
+   "tolerance_policy": {
+    "schema": "evograd-gate1-model-dtype-tolerances/5",
+    "source": "torch.testing.assert_close defaults, PyTorch 2.11",
+    "dtype_source": "reference result tensor (candidate dtype must match)",
+    "defaults": {
+     "float16": {
+      "atol": 1e-05,
+      "rtol": 0.001
+     },
+     "bfloat16": {
+      "atol": 1e-05,
+      "rtol": 0.016
+     },
+     "float32": {
+      "atol": 1e-05,
+      "rtol": 1.3e-06
+     },
+     "float64": {
+      "atol": 1e-07,
+      "rtol": 1e-07
+     }
+    },
+    "declaration_scaling": false,
+    "envelope": "ENVELOPE_GAMMA x max(max elementwise |compile - native| of the result on the operator Gate 2 calibration payloads, one ulp of the reference result's largest magnitude)",
+    "envelope_gamma": 4.0,
+    "comparison": "|c-r| <= max(atol + rtol * |r|, envelope) per element, float64"
+   },
+   "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
+   "envelope": {
+    "grad_in:dx": 5.960464477539063e-08,
+    "out:out": 6.103515625e-05
+   },
+   "cases": [
+    "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1"
+   ]
+  },
+  "case_counts": {
+   "passed": 4,
+   "failed": 0,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [],
+  "cases": [
+   {
+    "case_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 1.52587890625e-05,
+       "max_rel_err": 1.0,
+       "headroom": 6.103515625e-05,
+       "worst_index": [
+        0,
+        113
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.25
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.25,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 6.103515625e-05,
+       "max_rel_err": 0.014551915228366852,
+       "headroom": 0.25,
+       "worst_index": [
+        26,
+        2111
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.000244140625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.000244140625,
+       "rounding_floor": 0.000244140625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 64,
+      "hidden": 5120
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+       "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 1084,
+        "sha256": "6e020a6d6abe1973eeefec8d026b7f2635da2e753152b4a2404874b82d93671c"
+       }
+      },
+      "payload_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "case": "gelu/model.visual.merger.mlp",
+      "batch": {
+       "order": 101,
+       "sha256": "2eda5b5089c54349eeb569192982c7e8fe3a67d6fc8453b7477b1c488d77377c"
+      },
+      "call": {
+       "index_in_step": 226,
+       "kind": "module:GELU",
+       "layer": null,
+       "path": "model.visual.merger.mlp.1",
+       "role": "model.visual.merger.mlp"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 327680,
+        "numel": 327680,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 1.52587890625e-05,
+       "max_rel_err": 1.0,
+       "headroom": 6.103515625e-05,
+       "worst_index": [
+        0,
+        69
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.25
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.25,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 1.52587890625e-05,
+       "max_rel_err": 0.0078125,
+       "headroom": 0.25,
+       "worst_index": [
+        1,
+        1104
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 6.103515625e-05
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 6.103515625e-05,
+       "rounding_floor": 6.103515625e-05
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 64,
+      "hidden": 5120
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+       "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "calibration",
+        "payloads": 1084,
+        "sha256": "6e020a6d6abe1973eeefec8d026b7f2635da2e753152b4a2404874b82d93671c"
+       }
+      },
+      "payload_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "case": "gelu/model.visual.merger.mlp",
+      "batch": {
+       "order": 202,
+       "sha256": "2136cdb9a8225c45e7894fc86a5d20374f56139fd554f4b33e554b76f33a7aa8"
+      },
+      "call": {
+       "index_in_step": 226,
+       "kind": "module:GELU",
+       "layer": null,
+       "path": "model.visual.merger.mlp.1",
+       "role": "model.visual.merger.mlp"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 327680,
+        "numel": 327680,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 1.52587890625e-05,
+       "max_rel_err": 1.0,
+       "headroom": 6.103515625e-05,
+       "worst_index": [
+        0,
+        1434
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.25
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.25,
+       "rounding_floor": 0.25
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 0.000244140625,
+       "max_rel_err": 0.01646090534979424,
+       "headroom": 0.25,
+       "worst_index": [
+        50,
+        95
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.0009765625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.0009765625,
+       "rounding_floor": 0.0009765625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 64,
+      "hidden": 5120
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+       "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 1084,
+        "sha256": "adc39f9351f58d4ed22668d0127bd7d755794e77037a40c6ee4f08e2ba59f6a2"
+       }
+      },
+      "payload_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "case": "gelu/model.visual.merger.mlp",
+      "batch": {
+       "order": 303,
+       "sha256": "ddd1457b6a75c5c37f00e7a4d12db70d06feaad37c312464dfd3f783d9e257ec"
+      },
+      "call": {
+       "index_in_step": 226,
+       "kind": "module:GELU",
+       "layer": null,
+       "path": "model.visual.merger.mlp.1",
+       "role": "model.visual.merger.mlp"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 327680,
+        "numel": 327680,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   },
+   {
+    "case_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "passed",
+    "complete": true,
+    "skipped": null,
+    "results": [
+     {
+      "name": "out:out",
+      "kind": "output",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 1.52587890625e-05,
+       "max_rel_err": 1.0,
+       "headroom": 3.0517578125e-05,
+       "worst_index": [
+        0,
+        183
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.5
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.5,
+       "rounding_floor": 0.5
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     },
+     {
+      "name": "grad_in:dx",
+      "kind": "input_grad",
+      "status": "passed",
+      "compared": true,
+      "metrics": {
+       "violations": 0,
+       "elements": 327680,
+       "max_abs_err": 6.103515625e-05,
+       "max_rel_err": 0.020512820512820513,
+       "headroom": 0.25,
+       "worst_index": [
+        26,
+        3720
+       ],
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "abs_floor": 0.000244140625
+      },
+      "limits": {
+       "atol": 1e-05,
+       "rtol": 0.016,
+       "envelope": 0.000244140625,
+       "rounding_floor": 0.000244140625
+      },
+      "contract": {
+       "reference": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       },
+       "candidate": {
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16",
+        "stride": [
+         5120,
+         1
+        ],
+        "device": "cuda:0"
+       }
+      },
+      "findings": []
+     }
+    ],
+    "findings": [],
+    "evidence": {
+     "dims": {
+      "rows": 64,
+      "hidden": 5120
+     },
+     "dtype": "bfloat16",
+     "provenance": {
+      "inputs": "real_training_payload",
+      "corpus": {
+       "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+       "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+       "schema": "evograd-real-payload-corpus/1",
+       "reference": null,
+       "split": {
+        "name": "acceptance",
+        "payloads": 1084,
+        "sha256": "adc39f9351f58d4ed22668d0127bd7d755794e77037a40c6ee4f08e2ba59f6a2"
+       }
+      },
+      "payload_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "case": "gelu/model.visual.merger.mlp",
+      "batch": {
+       "order": 404,
+       "sha256": "b77817d27612a1f10085f8f24756d625c20f7df95321607d86786b78712b0c41"
+      },
+      "call": {
+       "index_in_step": 226,
+       "kind": "module:GELU",
+       "layer": null,
+       "path": "model.visual.merger.mlp.1",
+       "role": "model.visual.merger.mlp"
+      },
+      "cotangent_stats": {
+       "dout": {
+        "all_zero": false,
+        "finite": true,
+        "nonzero": 327680,
+        "numel": 327680,
+        "present": true
+       }
+      }
+     },
+     "contract": {
+      "results": [
+       {
+        "name": "out:out",
+        "kind": "output",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       },
+       {
+        "name": "grad_in:dx",
+        "kind": "input_grad",
+        "presence": "required",
+        "exact": false,
+        "aliases": [],
+        "shape": [
+         64,
+         5120
+        ],
+        "dtype": "bfloat16"
+       }
+      ]
+     },
+     "inputs": "real_training_payload",
+     "input_mutation": {
+      "changed": [],
+      "allowed_overwrite": [],
+      "policy": "reject"
+     }
+    }
+   }
+  ],
+  "evidence": {}
+ },
+ "gate2_operator_calibration": {
+  "status": "calibrated",
+  "policy_hash": "19f9c6fd06cb1f462638b1c8e0a3ce471079a85ad6d0a856db127997ebe1e2c3",
+  "findings": [],
+  "evidence": {
+   "reused_policy": "/u/hding4/adbench-evaluation-v5/qwen2_vl_2b/state/native_reuse_v1/1-1-1/gate2/operator/45f88aba9ee8008c/matched_inputs_v5/all/gelu__model.visual.merger.mlp.json"
+  }
+ },
+ "gate2_operator": {
+  "gate": "gate2",
+  "protocol": "evograd-verification-gate2/1",
+  "status": "failed",
+  "complete": true,
+  "subject": {
+   "scope": "operator",
+   "adapter": {
+    "scope": "operator",
+    "op": "gelu",
+    "forward": "evograd.ops.level1.gelu.reference:forward",
+    "runtime_forward": null,
+    "declaration": null,
+    "reference": {
+     "kind": "model_reference",
+     "forward": "evograd.ops.level1.gelu.reference:forward",
+     "runtime_forward": null,
+     "reference_dtype": null,
+     "reference_contract": "evograd-model-reference/qwen2_vl_2b/1",
+     "source": null
+    },
+    "parameter_args": [],
+    "dims": {
+     "rows": 64,
+     "hidden": 5120
+    },
+    "dtype": "bfloat16",
+    "inputs": "real_training_payload",
+    "case_id": "gelu/model.visual.merger.mlp",
+    "corpus": {
+     "corpus_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c",
+     "corpus_sha256": "45f88aba9ee8008c24d8e7df522c2d696241a2ce0d11439243544d850cdd1756",
+     "schema": "evograd-real-payload-corpus/1",
+     "reference": null
+    }
+   },
+   "numerics": {
+    "device_type": "cuda",
+    "autocast": null,
+    "module_mode": "train",
+    "grad_mode": "enabled",
+    "dtype": "bfloat16"
+   },
+   "deployment": {
+    "name": "candidate",
+    "role": "candidate",
+    "patch_set": [
+     "operator"
+    ],
+    "identity": {
+     "adapter_kind": "direct_deployment_entry",
+     "module": "qwen3_candidate_915960423271804337"
+    }
+   },
+   "reference": {
+    "kind": "native_eager",
+    "scope": "operator"
+   },
+   "metrics": "E2=||c-r||2/max(||r||2,1e-30); Emax=||c-r||inf/max(RMS(r),1e-30)",
+   "samples": [
+    {
+     "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+     "seed": 101000226,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "split": "calibration",
+      "batch_order": 101,
+      "batch_sha256": "2eda5b5089c54349eeb569192982c7e8fe3a67d6fc8453b7477b1c488d77377c",
+      "call": "model.visual.merger.mlp.1"
+     }
+    },
+    {
+     "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+     "seed": 202000226,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "split": "calibration",
+      "batch_order": 202,
+      "batch_sha256": "2136cdb9a8225c45e7894fc86a5d20374f56139fd554f4b33e554b76f33a7aa8",
+      "call": "model.visual.merger.mlp.1"
+     }
+    },
+    {
+     "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+     "seed": 303000226,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "split": "acceptance",
+      "batch_order": 303,
+      "batch_sha256": "ddd1457b6a75c5c37f00e7a4d12db70d06feaad37c312464dfd3f783d9e257ec",
+      "call": "model.visual.merger.mlp.1"
+     }
+    },
+    {
+     "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+     "seed": 404000226,
+     "config": {
+      "inputs": "real_training_payload",
+      "payload_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "split": "acceptance",
+      "batch_order": 404,
+      "batch_sha256": "b77817d27612a1f10085f8f24756d625c20f7df95321607d86786b78712b0c41",
+      "call": "model.visual.merger.mlp.1"
+     }
+    }
+   ],
+   "policy": {
+    "policy_hash": "19f9c6fd06cb1f462638b1c8e0a3ce471079a85ad6d0a856db127997ebe1e2c3",
+    "schema": "evograd-verification-gate2-policy/5",
+    "boundaries": false,
+    "sample_protocol": "matched_inputs",
+    "reference_implementation": {
+     "adapter": "643938ef835997c1d6832ed6ff07c03f622418b36596f2eafa9db6bdd11b09e2",
+     "inputs": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1",
+     "module": "c0dc6fd49fdc2dc7381c43f00fb579cf492c5b5b6905347e08006b9fb401fe5c",
+     "runtime_forward": "69a9f15537209be18fb168ae0a80abdb8f61358b816b03ebb4e2ed62889984ad",
+     "sampling": "696e1411b90cc7f0af90c2a87defd8dd58d3b4b923ee7d5688f5334c750917c1"
+    }
+   }
+  },
+  "case_counts": {
+   "passed": 0,
+   "failed": 4,
+   "incomplete": 0,
+   "skipped": 0
+  },
+  "findings": [],
+  "incomplete_because": [],
+  "failed_because": [
+   "candidate_runtime_error"
+  ],
+  "cases": [
+   {
+    "case_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/gelu__model.visual.merger.mlp.py\", line 147, in backward\n    dx, = gelu_backward_from_saved(\n    ^^^\nValueError: too many values to unpack (expected 1)\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "seed": 101000226,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "split": "calibration",
+       "batch_order": 101,
+       "batch_sha256": "2eda5b5089c54349eeb569192982c7e8fe3a67d6fc8453b7477b1c488d77377c",
+       "call": "model.visual.merger.mlp.1"
+      }
+     },
+     "reference": {
+      "execution_id": "e609edb3b7704f0e991452d15563d988",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 101000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "2eda5b5089c54349eeb569192982c7e8fe3a67d6fc8453b7477b1c488d77377c",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "625e8074a4c7c9dc2f1dd35a56901714d906873f9c1ce87f1139fd856778d105",
+      "sample_identity": {
+       "fingerprint": "c94bfe182043f766694264de6f7a751a7a75ee27340c51ce62cff194f06e1f32",
+       "components": {
+        "seed": 101000226,
+        "inputs": "6ac1fd6782120fbf77f4f8e3debab043e884a5035dd3fc562ab0aaf0be6ea063",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "6d95eb35b7c96d96b45e0d523bb5abbaa5c7dcf4e9b236399cdbe8d46587acce",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1fa7ae0ae545c5dfa2c395b1bb9bd6c82b4201c8a859f4e2b9aab4f86ccbb43e",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "a68cdd4638966ac335853707a9aa17e6f036ebe7e4a294865076f80c18e8f831",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "7b0292fe8cd1343285fe7acdb2941077aa7055e20447b7c3b904663347b2ec3e",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.005706965923309326
+     },
+     "candidate": {
+      "execution_id": "fc9e53459bb845d2b49d24f68819752b",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_915960423271804337"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 101000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o101/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "calibration",
+        "batch_order": 101,
+        "batch_sha256": "2eda5b5089c54349eeb569192982c7e8fe3a67d6fc8453b7477b1c488d77377c",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "625e8074a4c7c9dc2f1dd35a56901714d906873f9c1ce87f1139fd856778d105",
+      "sample_identity": {
+       "fingerprint": "c94bfe182043f766694264de6f7a751a7a75ee27340c51ce62cff194f06e1f32",
+       "components": {
+        "seed": 101000226,
+        "inputs": "6ac1fd6782120fbf77f4f8e3debab043e884a5035dd3fc562ab0aaf0be6ea063",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "6d95eb35b7c96d96b45e0d523bb5abbaa5c7dcf4e9b236399cdbe8d46587acce",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "1fa7ae0ae545c5dfa2c395b1bb9bd6c82b4201c8a859f4e2b9aab4f86ccbb43e",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "a68cdd4638966ac335853707a9aa17e6f036ebe7e4a294865076f80c18e8f831",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": null,
+      "error_stage": "backward",
+      "seconds": 0.042450251057744026
+     }
+    }
+   },
+   {
+    "case_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/gelu__model.visual.merger.mlp.py\", line 147, in backward\n    dx, = gelu_backward_from_saved(\n    ^^^\nValueError: too many values to unpack (expected 1)\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "seed": 202000226,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "split": "calibration",
+       "batch_order": 202,
+       "batch_sha256": "2136cdb9a8225c45e7894fc86a5d20374f56139fd554f4b33e554b76f33a7aa8",
+       "call": "model.visual.merger.mlp.1"
+      }
+     },
+     "reference": {
+      "execution_id": "d0cbff6f5a0e4af3aeb4dbe2098b4c3f",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 202000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "2136cdb9a8225c45e7894fc86a5d20374f56139fd554f4b33e554b76f33a7aa8",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "bd778c751949a5cd870353c116f3e36580078d601436f1f67be75f8ce1bda04c",
+      "sample_identity": {
+       "fingerprint": "ea43f4451d0903b4154c47329157dffd63af483f74d0031f1a531acc4fad27cb",
+       "components": {
+        "seed": 202000226,
+        "inputs": "9f0f8941dfe5cc4637a2b7974ec304d4ea8ab6cdc6284b8b4a4d7fc38b380bf8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "dd564bdd496f0ddfa0a4f0dad68b3bcf2dbc0698c230f35fe8a6838b52508fdb",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6e5f45767c4e1d7a1190933f225d54f7d31313c33475e53dd64f49610db3c931",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4faceec62d4ec8f005a4f3c656587dc00cf088f21496df6940a91116d98fa764",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "8f94d4682db252adaa7b202bb9ab011e6cc7e8e4f8227d30a813b5314ce7152d",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.005766740068793297
+     },
+     "candidate": {
+      "execution_id": "a3948076fd4e4a48abdcf8972c39bb5a",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_915960423271804337"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 202000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o202/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "calibration",
+        "batch_order": 202,
+        "batch_sha256": "2136cdb9a8225c45e7894fc86a5d20374f56139fd554f4b33e554b76f33a7aa8",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "bd778c751949a5cd870353c116f3e36580078d601436f1f67be75f8ce1bda04c",
+      "sample_identity": {
+       "fingerprint": "ea43f4451d0903b4154c47329157dffd63af483f74d0031f1a531acc4fad27cb",
+       "components": {
+        "seed": 202000226,
+        "inputs": "9f0f8941dfe5cc4637a2b7974ec304d4ea8ab6cdc6284b8b4a4d7fc38b380bf8",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "dd564bdd496f0ddfa0a4f0dad68b3bcf2dbc0698c230f35fe8a6838b52508fdb",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "6e5f45767c4e1d7a1190933f225d54f7d31313c33475e53dd64f49610db3c931",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4faceec62d4ec8f005a4f3c656587dc00cf088f21496df6940a91116d98fa764",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": null,
+      "error_stage": "backward",
+      "seconds": 0.0037733586505055428
+     }
+    }
+   },
+   {
+    "case_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/gelu__model.visual.merger.mlp.py\", line 147, in backward\n    dx, = gelu_backward_from_saved(\n    ^^^\nValueError: too many values to unpack (expected 1)\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "seed": 303000226,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "split": "acceptance",
+       "batch_order": 303,
+       "batch_sha256": "ddd1457b6a75c5c37f00e7a4d12db70d06feaad37c312464dfd3f783d9e257ec",
+       "call": "model.visual.merger.mlp.1"
+      }
+     },
+     "reference": {
+      "execution_id": "2aaaf3164d1c4baeac153e01c9b18e3e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 303000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "ddd1457b6a75c5c37f00e7a4d12db70d06feaad37c312464dfd3f783d9e257ec",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "cf484d1da0a6f165ee9164c35ddec3f606738c04aad452ef395e1d275f8e96ce",
+      "sample_identity": {
+       "fingerprint": "8657dfd0d3f219c25849b0a5463f596440c0c9fd0768718b776cdc08ee34f690",
+       "components": {
+        "seed": 303000226,
+        "inputs": "61e3cfe1a7eec794cf37ba912484f02e75e2f053fe4b3af688ffcf957b625142",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "68fc1964c3aaffcc45c3b0de3a65cdf0c611ed5a9593ecad002867e978d2425b",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "94ba77e3f193970ccabb4f6241b5b3e313791ae11e94303af6e4dac0c095085f",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4ca44313192dd361c74a9ad1ed97d703505a2c5576a74b38a9af0ab1f8f99047",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "62ae9e7b40c933271d46f506a6151cd50eb060088e356b58624620be081afbdc",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.005745108239352703
+     },
+     "candidate": {
+      "execution_id": "8a4d904138864eb5a3fd9b3a0b35f33f",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_915960423271804337"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 303000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o303/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "acceptance",
+        "batch_order": 303,
+        "batch_sha256": "ddd1457b6a75c5c37f00e7a4d12db70d06feaad37c312464dfd3f783d9e257ec",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "cf484d1da0a6f165ee9164c35ddec3f606738c04aad452ef395e1d275f8e96ce",
+      "sample_identity": {
+       "fingerprint": "8657dfd0d3f219c25849b0a5463f596440c0c9fd0768718b776cdc08ee34f690",
+       "components": {
+        "seed": 303000226,
+        "inputs": "61e3cfe1a7eec794cf37ba912484f02e75e2f053fe4b3af688ffcf957b625142",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "68fc1964c3aaffcc45c3b0de3a65cdf0c611ed5a9593ecad002867e978d2425b",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "94ba77e3f193970ccabb4f6241b5b3e313791ae11e94303af6e4dac0c095085f",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "4ca44313192dd361c74a9ad1ed97d703505a2c5576a74b38a9af0ab1f8f99047",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": null,
+      "error_stage": "backward",
+      "seconds": 0.003791375085711479
+     }
+    }
+   },
+   {
+    "case_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+    "role": "required",
+    "status": "failed",
+    "complete": true,
+    "skipped": null,
+    "results": [],
+    "findings": [
+     {
+      "code": "candidate_runtime_error",
+      "outcome": "failed",
+      "message": "deployment failed at backward",
+      "details": {
+       "trace": "Traceback (most recent call last):\n  File \"/u/hding4/evograd/src/evograd/verification/gate2/runner.py\", line 233, in execute\n    torch.autograd.backward([outputs[n] for n in seeds], [seeds[n] for n in seeds])\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/__init__.py\", line 381, in backward\n    _engine_run_backward(\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/graph.py\", line 869, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/venvs/adbench-20261028/lib/python3.12/site-packages/torch/autograd/function.py\", line 317, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/u/hding4/evograd/evolved_programs/gepa/qwen2_vl_2b/gelu__model.visual.merger.mlp.py\", line 147, in backward\n    dx, = gelu_backward_from_saved(\n    ^^^\nValueError: too many values to unpack (expected 1)\n"
+      }
+     }
+    ],
+    "evidence": {
+     "sample": {
+      "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+      "seed": 404000226,
+      "config": {
+       "inputs": "real_training_payload",
+       "payload_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "split": "acceptance",
+       "batch_order": 404,
+       "batch_sha256": "b77817d27612a1f10085f8f24756d625c20f7df95321607d86786b78712b0c41",
+       "call": "model.visual.merger.mlp.1"
+      }
+     },
+     "reference": {
+      "execution_id": "b8cd4bbdb5554381a9cda7b043efd63e",
+      "deployment": {
+       "name": "native",
+       "role": "native",
+       "patch_set": [],
+       "identity": {
+        "kind": "native_eager"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 404000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "b77817d27612a1f10085f8f24756d625c20f7df95321607d86786b78712b0c41",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {},
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "6a8e65ad384cee8f0f1b714b5901eb7b63870c2326c3f130a3dc1f8b29d2d634",
+      "sample_identity": {
+       "fingerprint": "f9faa8d47906ed8606a6d6aa88c13552da05441c5051d9c93c4646b98bbb5cb9",
+       "components": {
+        "seed": 404000226,
+        "inputs": "7d23f11a1ab1b1eb46c9ee34609a59ca5668c1159afff0bf062a471357bd5d95",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "29f6acd1a867680ea0afdf1ba7f4382e51d322097345450cf507c3dcf61ac511",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a1e5f401d525c8d9d02adc88e00b9415ba7f7d91945658ef75375c09d8b0aae9",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "64f785fc45edb61806e6bdb9c5f7188aa0a023678d43e7739433664662acd83b",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": "9ea7beeaa9a3727d73b3bf6cdd6d884130f3216e5a32412525acae2bcf5e83fa",
+      "initial_state_digest": null,
+      "error_stage": null,
+      "seconds": 0.005599224008619785
+     },
+     "candidate": {
+      "execution_id": "3bcecc86fb634d7ebd11c6d12ec9a2fd",
+      "deployment": {
+       "name": "candidate",
+       "role": "candidate",
+       "patch_set": [
+        "operator"
+       ],
+       "identity": {
+        "adapter_kind": "direct_deployment_entry",
+        "module": "qwen3_candidate_915960423271804337"
+       }
+      },
+      "sample": {
+       "sample_id": "qwen2_vl_2b-real-training-payloads@45f88aba9ee8008c/o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+       "seed": 404000226,
+       "config": {
+        "inputs": "real_training_payload",
+        "payload_id": "o404/gelu/model.visual.merger.mlp/model.visual.merger.mlp.1",
+        "split": "acceptance",
+        "batch_order": 404,
+        "batch_sha256": "b77817d27612a1f10085f8f24756d625c20f7df95321607d86786b78712b0c41",
+        "call": "model.visual.merger.mlp.1"
+       }
+      },
+      "site_calls": {},
+      "expected_site_calls": {
+       "operator": 1
+      },
+      "mutated_inputs": [],
+      "state_changed": [],
+      "parameter_groups": [],
+      "boundary_calls": 0,
+      "input_digest": "6a8e65ad384cee8f0f1b714b5901eb7b63870c2326c3f130a3dc1f8b29d2d634",
+      "sample_identity": {
+       "fingerprint": "f9faa8d47906ed8606a6d6aa88c13552da05441c5051d9c93c4646b98bbb5cb9",
+       "components": {
+        "seed": 404000226,
+        "inputs": "7d23f11a1ab1b1eb46c9ee34609a59ca5668c1159afff0bf062a471357bd5d95",
+        "context": "2d0427e9c932ecc0971d981ac75556d22d9bab2eaf205a8723a2b0fb00067b04",
+        "cotangents": "29f6acd1a867680ea0afdf1ba7f4382e51d322097345450cf507c3dcf61ac511",
+        "initial_state": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "module_mode": "train",
+        "differentiable_inputs": {
+         "x": "args[0]"
+        },
+        "mutable_inputs": []
+       },
+       "opaque": [],
+       "detail": {
+        "inputs": {
+         "dict": {
+          "args": {
+           "tuple": [
+            {
+             "tensor": "a1e5f401d525c8d9d02adc88e00b9415ba7f7d91945658ef75375c09d8b0aae9",
+             "shape": [
+              64,
+              5120
+             ],
+             "dtype": "bfloat16",
+             "stride": [
+              5120,
+              1
+             ],
+             "storage_offset": 0,
+             "layout": "strided"
+            }
+           ]
+          },
+          "kwargs": {
+           "dict": {}
+          }
+         }
+        },
+        "context": {
+         "dict": {}
+        },
+        "cotangents": {
+         "dict": {
+          "out": {
+           "tensor": "64f785fc45edb61806e6bdb9c5f7188aa0a023678d43e7739433664662acd83b",
+           "shape": [
+            64,
+            5120
+           ],
+           "dtype": "bfloat16",
+           "stride": [
+            5120,
+            1
+           ],
+           "storage_offset": 0,
+           "layout": "strided"
+          }
+         }
+        }
+       }
+      },
+      "results_digest": null,
+      "initial_state_digest": null,
+      "error_stage": "backward",
+      "seconds": 0.003391418606042862
+     }
+    }
+   }
+  ],
+  "evidence": {
+   "sample_protocol": "matched_inputs"
+  }
+ }
+}

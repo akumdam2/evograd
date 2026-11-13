@@ -1,0 +1,374 @@
+{
+  "model": "qwen3_5_4b",
+  "state": "/u/hding4/adbench-evaluation-v5/qwen3_5_4b/state",
+  "jobs": [
+    {
+      "selection": {
+        "model": "qwen3_5_4b",
+        "agent": "openevolve",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+        "selected_cases": [
+          "causal_conv1d/gdn_conv1d",
+          "cross_entropy/logits",
+          "gated_rmsnorm/gdn_gated_norm",
+          "gdn_gating/gdn_gating",
+          "gemma_rmsnorm/residual_norm",
+          "l2norm/gdn_qk_l2norm",
+          "partial_rope/partial_rope",
+          "qwen3_5_gated_attention/gated_attention",
+          "qwen3_5_gated_delta_rule/gated_delta_rule",
+          "qwen3_5_gdn_in_proj/gdn_in_proj",
+          "qwen3_5_gdn_norm_out/gdn_norm_out",
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+          "qwen3_5_swiglu_mlp/swiglu_mlp",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "causal_conv1d/gdn_conv1d": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+            "sha256": "5727fd401bd750ee3355474ddc6ed0a0a0f4969ce7cae885f98cf719f4079ea8"
+          },
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/cross_entropy__logits.py",
+            "sha256": "99e332b0fd31f8e66f3191e874190635d157a07c362481796eae1acfe31c84be"
+          },
+          "gated_rmsnorm/gdn_gated_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+            "sha256": "57bda311ce9ea894912825e37da8a8901959c6a523be4820b11c98741b98271e"
+          },
+          "gdn_gating/gdn_gating": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gdn_gating__gdn_gating.py",
+            "sha256": "e5843479701d6c2e3d3720e7f89edec4cb8aca71c824d4c550cb1f4886c65db7"
+          },
+          "gemma_rmsnorm/residual_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+            "sha256": "da6cbd39e496199c924b454b0150bd6f7bc551271c48e23d1afc8d083938d9d5"
+          },
+          "l2norm/gdn_qk_l2norm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+            "sha256": "80edfb9b50cd8ca9b3249b8cb8aa5a89e2036bb35b0249a75f7d70b271b3f824"
+          },
+          "partial_rope/partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/partial_rope__partial_rope.py",
+            "sha256": "59add3f867890000de8c1b18a9e9fcdb467d44c71b65488eed2555c7a0dda5f5"
+          },
+          "qwen3_5_gated_attention/gated_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gated_attention__gated_attention.py",
+            "sha256": "47c2536c18b7d14a08fd0799827e7b282070f12bb255880da7fa9b0ea8ed652e"
+          },
+          "qwen3_5_gated_delta_rule/gated_delta_rule": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gated_delta_rule__gated_delta_rule.py",
+            "sha256": "7d92d882f34f565a9ad17155d532c56e86aa236143213e383308a545da3498f9"
+          },
+          "qwen3_5_gdn_in_proj/gdn_in_proj": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gdn_in_proj__gdn_in_proj.py",
+            "sha256": "c8e5427629c5db1e9bc619b794c02171f889ed3797a777dc259c98394c6d7e26"
+          },
+          "qwen3_5_gdn_norm_out/gdn_norm_out": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+            "sha256": "50289653d7ed6ea99decaca3d00943ff08b5fbabf4f27e807f6e6d6f1d19620c"
+          },
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_qkv_norm_partial_rope__qkv_norm_partial_rope.py",
+            "sha256": "ba44264b76f26178587650d68a6ec645a2a4a8cb013cd372ae14a340da0ed967"
+          },
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "a9b755eab13c361cc9d06255aa4f7db01d0ab972d7137315011eef219a1f188d"
+          },
+          "qwen3_5_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "255190e5d58ba019b6477fed9cd43fc446d0929939c6343cd8728f48f0a54b8a"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/openevolve/qwen3_5_4b/swiglu__mlp_activation.py",
+            "sha256": "f6b9bda930dcc28d10a02800acb6e3a16e8aff6b04b597b04ba14043002fc90b"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/openevolve/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/qwen3_5_4b/evaluation/openevolve"
+    },
+    {
+      "selection": {
+        "model": "qwen3_5_4b",
+        "agent": "gepa",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+        "selected_cases": [
+          "causal_conv1d/gdn_conv1d",
+          "cross_entropy/logits",
+          "gated_rmsnorm/gdn_gated_norm",
+          "gdn_gating/gdn_gating",
+          "gemma_rmsnorm/residual_norm",
+          "l2norm/gdn_qk_l2norm",
+          "partial_rope/partial_rope",
+          "qwen3_5_gated_attention/gated_attention",
+          "qwen3_5_gated_delta_rule/gated_delta_rule",
+          "qwen3_5_gdn_in_proj/gdn_in_proj",
+          "qwen3_5_gdn_norm_out/gdn_norm_out",
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+          "qwen3_5_swiglu_mlp/swiglu_mlp",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "causal_conv1d/gdn_conv1d": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+            "sha256": "e7a6ebf26751d3c4a39e6d03bc9d0598c2f67bad3452d22c498f8c43fca8541b"
+          },
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/cross_entropy__logits.py",
+            "sha256": "85f08e2f74b748cdaea4c918be9f15223bbb1e1eccafb74c16eb8735edc13740"
+          },
+          "gated_rmsnorm/gdn_gated_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+            "sha256": "fe5118b8ea64b2757b1d7cc41997b36bdc9db66f6e6530f49f8a9d8d87e7bc48"
+          },
+          "gdn_gating/gdn_gating": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gdn_gating__gdn_gating.py",
+            "sha256": "843b483b603557a81848261d521bae0c6c8c0220557a4bb0b3ac92da5d2b97bd"
+          },
+          "gemma_rmsnorm/residual_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+            "sha256": "cf94daf1880776cb2a057d36a318ec90ba24324a46008872f447e86d9151d155"
+          },
+          "l2norm/gdn_qk_l2norm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+            "sha256": "9a575935e1827a003538499324ffae184db3da936206ee1b0ac0fe6875d1eaf7"
+          },
+          "partial_rope/partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/partial_rope__partial_rope.py",
+            "sha256": "60695a35707eaaccd8c7f303fd052d2f8a1a34fa5be845152952638c52b70597"
+          },
+          "qwen3_5_gated_attention/gated_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gated_attention__gated_attention.py",
+            "sha256": "ed4975fd2fff6cace9108e0bc41fa51a9f0f2232edb5738c8da7821372800063"
+          },
+          "qwen3_5_gated_delta_rule/gated_delta_rule": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gated_delta_rule__gated_delta_rule.py",
+            "sha256": "44d37800f4603b12f656eff882080b0eece56315d93ee75d81db79b2693952aa"
+          },
+          "qwen3_5_gdn_in_proj/gdn_in_proj": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gdn_in_proj__gdn_in_proj.py",
+            "sha256": "4fef047a5a89ac9b55b981516352a34a2d30fed3e36ade1eff5b48171922de56"
+          },
+          "qwen3_5_gdn_norm_out/gdn_norm_out": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+            "sha256": "ed753b59daae7fab81c80a72c47388d99ae114a08a7bda6155c59373b5e46b1e"
+          },
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_qkv_norm_partial_rope__qkv_norm_partial_rope.py",
+            "sha256": "d5bd0271f3d6359160db3af94ab6361682cce01f870b8ed39138f58238f41f24"
+          },
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "ff097284733e3360a93bd1332035b3fde40d99e2439b6273168cbce1598c5ad8"
+          },
+          "qwen3_5_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "a81d585ae941ae9828cbdaf8e6c8a04e74c48502d600bb0ddccfcecad6d9e2dd"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/gepa/qwen3_5_4b/swiglu__mlp_activation.py",
+            "sha256": "ae182ab8a06ac050f0da01b42129a7751e58eedb8bafc6c7d19db92a16aab365"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/gepa/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/qwen3_5_4b/evaluation/gepa"
+    },
+    {
+      "selection": {
+        "model": "qwen3_5_4b",
+        "agent": "codex",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+        "selected_cases": [
+          "causal_conv1d/gdn_conv1d",
+          "cross_entropy/logits",
+          "gated_rmsnorm/gdn_gated_norm",
+          "gdn_gating/gdn_gating",
+          "gemma_rmsnorm/residual_norm",
+          "l2norm/gdn_qk_l2norm",
+          "partial_rope/partial_rope",
+          "qwen3_5_gated_attention/gated_attention",
+          "qwen3_5_gated_delta_rule/gated_delta_rule",
+          "qwen3_5_gdn_in_proj/gdn_in_proj",
+          "qwen3_5_gdn_norm_out/gdn_norm_out",
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+          "qwen3_5_swiglu_mlp/swiglu_mlp",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "causal_conv1d/gdn_conv1d": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+            "sha256": "c701597859c0b8ce79a4cd482afc319c57266390305763a93a05e5ae9d60ee3f"
+          },
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/cross_entropy__logits.py",
+            "sha256": "9031d8b6527b987699b1a2364d2bd86e7e7c69dbc7ba75bb93ddd0ebf2a5bf4a"
+          },
+          "gated_rmsnorm/gdn_gated_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+            "sha256": "1390fe603494b490af71175055b8d61a351e61bdcd6c6328b5a6c95c461ca1fc"
+          },
+          "gdn_gating/gdn_gating": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/gdn_gating__gdn_gating.py",
+            "sha256": "e67b8127af9082c823f1de145deaad11af75f2130d56f6fd01116a35fa163e38"
+          },
+          "gemma_rmsnorm/residual_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+            "sha256": "1e0516578a7e1bc641781c427414e6b4e756a20b814762a76fa0f91bbb008075"
+          },
+          "l2norm/gdn_qk_l2norm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+            "sha256": "dbc5ccb66ecdc8b810c57344fdbefad42d65e246d789dc11ffa8af29fb2b5a32"
+          },
+          "partial_rope/partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/partial_rope__partial_rope.py",
+            "sha256": "d6b5008199c3d84d4f2aa891b5617a4492f0eed0f53c27caede0ada9e53bc14c"
+          },
+          "qwen3_5_gated_attention/gated_attention": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_gated_attention__gated_attention.py",
+            "sha256": "b97eebff368e4a92287366c5412c32818a404456ea378c2391adf49ea0c45e60"
+          },
+          "qwen3_5_gated_delta_rule/gated_delta_rule": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_gated_delta_rule__gated_delta_rule.py",
+            "sha256": "9a7ee1f2a0f3f0ccfc2668de660cee741974e7b9e55956d720b4b08217652752"
+          },
+          "qwen3_5_gdn_in_proj/gdn_in_proj": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_gdn_in_proj__gdn_in_proj.py",
+            "sha256": "dc0f42090b8975013b608ecd99754ef48a8c1ca9526ebcfba9dc043273915684"
+          },
+          "qwen3_5_gdn_norm_out/gdn_norm_out": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+            "sha256": "74155c4616514fad106988d7b310a10697d49535fc16b62bcdbeda522283a8e7"
+          },
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_qkv_norm_partial_rope__qkv_norm_partial_rope.py",
+            "sha256": "d7295d4d6e52a14fe6a010da338340f67ba90a806f0ef431009ab34784c8dc33"
+          },
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "046260f890ef503d23280ffacc9c25d0684b00df84cdbcb49fda3e57d72bcf24"
+          },
+          "qwen3_5_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "b224c65f64d2d469c00896659ec3f76ff5879d046e494f9f6c4bbd80da8a0349"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/codex/qwen3_5_4b/swiglu__mlp_activation.py",
+            "sha256": "972b27ea7f0765032624d33398f50ec261786ad7d6a3e36cae8c9bf4af64efe8"
+          }
+        },
+        "search_failures": {},
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/codex/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/qwen3_5_4b/evaluation/codex"
+    },
+    {
+      "selection": {
+        "model": "qwen3_5_4b",
+        "agent": "kernelagent",
+        "corpus": "/work/hdd/bcjw/wzhan/ADBench_payload/qwen3_5_4b/qwen3_5_4b_20261021/manifest.json",
+        "selected_cases": [
+          "causal_conv1d/gdn_conv1d",
+          "cross_entropy/logits",
+          "gated_rmsnorm/gdn_gated_norm",
+          "gdn_gating/gdn_gating",
+          "gemma_rmsnorm/residual_norm",
+          "l2norm/gdn_qk_l2norm",
+          "partial_rope/partial_rope",
+          "qwen3_5_gated_attention/gated_attention",
+          "qwen3_5_gated_delta_rule/gated_delta_rule",
+          "qwen3_5_gdn_in_proj/gdn_in_proj",
+          "qwen3_5_gdn_norm_out/gdn_norm_out",
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope",
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm",
+          "qwen3_5_swiglu_mlp/swiglu_mlp",
+          "swiglu/mlp_activation"
+        ],
+        "candidates": {
+          "causal_conv1d/gdn_conv1d": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/causal_conv1d__gdn_conv1d.py",
+            "sha256": "c7a3346ba41d46283535fe78ce3e5eb87fb376a80034c9edfa60b716f83072a9"
+          },
+          "cross_entropy/logits": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/cross_entropy__logits.py",
+            "sha256": "9b19d100ef2b22f3ea073df03e858531bf67f0f59e2c73749436e247653a168c"
+          },
+          "gated_rmsnorm/gdn_gated_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gated_rmsnorm__gdn_gated_norm.py",
+            "sha256": "964e9e3fa1a3824c2123224a211e4149079033e56f4c3af041278e902fe5f587"
+          },
+          "gdn_gating/gdn_gating": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gdn_gating__gdn_gating.py",
+            "sha256": "12e17a3a5e91a6b4b91816832887881400f3ce6e8cf671bd799ee546508c15ca"
+          },
+          "gemma_rmsnorm/residual_norm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/gemma_rmsnorm__residual_norm.py",
+            "sha256": "c4a754bcbc983afb8e4259194aa87198ca06031055716b5825dafcf4ec75106e"
+          },
+          "l2norm/gdn_qk_l2norm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/l2norm__gdn_qk_l2norm.py",
+            "sha256": "526c01b1005e6ec245ba85b2bbb3c6a2d001eb4f5f4bdadde7c577a11cd86f63"
+          },
+          "partial_rope/partial_rope": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/partial_rope__partial_rope.py",
+            "sha256": "c264d6e065958320acd546b7d79e2cde77880ed85a787830de0cbae40717aafc"
+          },
+          "qwen3_5_gdn_norm_out/gdn_norm_out": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_gdn_norm_out__gdn_norm_out.py",
+            "sha256": "483f77786705b82a7f0c95912e8b34367a82e564bb13cf579cbc1eb3066051f2"
+          },
+          "qwen3_5_residual_rmsnorm/residual_rmsnorm": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_residual_rmsnorm__residual_rmsnorm.py",
+            "sha256": "b13a95fbe03d02546a8f42f9e840b7aa7e2196073a3a99d446eea40b2e509209"
+          },
+          "qwen3_5_swiglu_mlp/swiglu_mlp": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/qwen3_5_swiglu_mlp__swiglu_mlp.py",
+            "sha256": "cf7e685409b37d40f02d22cf1db83e934142991d5bb9f16cad527a0076b87a29"
+          },
+          "swiglu/mlp_activation": {
+            "path": "/u/hding4/evograd/evolved_programs/kernelagent/qwen3_5_4b/swiglu__mlp_activation.py",
+            "sha256": "dee9a4d30666b419db294ee6704f75212e2646a072c4ab02b558868d241ca296"
+          }
+        },
+        "search_failures": {
+          "qwen3_5_gated_attention/gated_attention": {
+            "status": "generation_failed",
+            "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+            "packaging_error": "kernel errors: numerics, assertions, a candidate over the evaluator's 900 s"
+          },
+          "qwen3_5_gated_delta_rule/gated_delta_rule": {
+            "status": "generation_failed",
+            "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+            "packaging_error": "kernel errors: compile errors, numerics, non-finite values"
+          },
+          "qwen3_5_gdn_in_proj/gdn_in_proj": {
+            "status": "generation_failed",
+            "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+            "packaging_error": "kernel errors: compile errors, output shapes, 4 outputs for 6, dtypes"
+          },
+          "qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope": {
+            "status": "generation_failed",
+            "record": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv",
+            "packaging_error": "kernel errors: 3 outputs for 4, 8 gradients for 6, numerics"
+          }
+        },
+        "collected_manifest": "/u/hding4/evograd/evolved_programs/kernelagent/manifest.csv"
+      },
+      "out": "/u/hding4/adbench-evaluation-v5/qwen3_5_4b/evaluation/kernelagent"
+    }
+  ],
+  "calibration_reuse": {
+    "share_gate3_native": true,
+    "share_gate2_calibration_native": true,
+    "share_gate2_verification_reference": true
+  },
+  "execution": "case-major-shared-baselines/1",
+  "weight_cache": true
+}
