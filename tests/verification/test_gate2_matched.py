@@ -9,6 +9,7 @@ follows the same protocol. CPU, ``aot_eager`` or a test backend.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 import uuid
@@ -439,6 +440,21 @@ class TestCalibrationAndPolicy(MatchedCase):
 # ── 8: the operator scope is matched too; scope terms stay apart ─────────────
 
 
+class _CallScope(OperatorScope):
+    """Samples recorded at two call sites; layers.0's inputs are 10x larger."""
+
+    def values(self, sample):
+        if sample.sample_id not in self._values:
+            values = dict(super().values(sample))
+            if sample.config.get("call") == "layers.0":
+                values = {k: (v.detach() * 10).requires_grad_(v.requires_grad)
+                          if torch.is_tensor(v) and v.is_floating_point() else v
+                          for k, v in values.items()}
+            self._values[sample.sample_id] = values
+        return self._values[sample.sample_id]
+
+
+
 class TestOperatorScopeIsMatched(MatchedCase):
     def test_operator_policy_judges_its_calibrated_samples(self):
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
@@ -454,6 +470,43 @@ class TestOperatorScopeIsMatched(MatchedCase):
         other = gate2.verify_integration(scope, good, policy=cal.policy, samples=scope.samples([11]))
         self.assertEqual(other.status, INCOMPLETE)
         self.assertIn("sample_not_calibrated", codes(other))
+
+    def test_each_call_site_is_judged_by_its_own_thresholds(self):
+        # Two call sites of one operator; compile drifts ~140x more at layers.0, whose inputs are
+        # 10x larger (PERTURB's error grows with mean|x|^2). Pooled over both calls, the table is
+        # set by layers.0 and passes a 5% dw fault everywhere (Qwen2-VL text attention, P8).
+        scope = _CallScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
+        samples = [Sample(f"vt/{call}/seed{k}", k, {"call": call})
+                   for call, seeds in (("layers.0", (1, 2)), ("layers.1", (3, 4))) for k in seeds]
+        cal = calibrate(scope, patch_set=("operator",), samples=samples, compile_backend=PERTURB)
+        policy = cal.policy
+        self.assertIsNotNone(policy, cal.to_dict())
+        loud, quiet = (policy.thresholds_for(s.sample_id) for s in (samples[0], samples[2]))
+        self.assertEqual(policy.thresholds_for(samples[1].sample_id), loud)
+        self.assertEqual(policy.thresholds_for(samples[3].sample_id), quiet)
+        for name, entry in policy.thresholds.items():   # over all calls: Gate 1's envelope
+            self.assertGreater(loud[name]["E2"], 10 * quiet[name]["E2"], name)
+            for metric in ("E2", "Emax"):
+                self.assertEqual(entry[metric], max(loud[name][metric], quiet[name][metric]))
+        good = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair()),
+                                        policy=policy, samples=samples)
+        self.assertEqual(good.status, PASSED, codes(good))
+        bad = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.05)),
+                                       policy=policy, samples=samples)
+        self.assertEqual(bad.status, FAILED)
+        self.assertEqual({c.case_id for c in bad.cases if c.status == FAILED},
+                         {s.sample_id for s in samples[2:]})
+
+        data = policy.to_dict()
+        for key in ("policy_hash", "schema"):
+            data.pop(key)
+        forged = json.loads(json.dumps(data))
+        forged["call_thresholds"]["layers.1"]["grad:w"]["E2"] *= 2
+        with self.assertRaisesRegex(CalibrationError, "not gamma"):
+            Gate2Policy.build(forged)
+        data.pop("call_thresholds")                     # a pooled table alone no longer judges
+        with self.assertRaisesRegex(CalibrationError, "one threshold table per call site"):
+            Gate2Policy.build(data)
 
     def test_a_policy_with_the_other_scopes_term_is_refused(self):
         scope = lm_scope()

@@ -13,7 +13,8 @@ numerics settings and cotangents.
 
 **Scopes and the sample protocol.** Two scopes, ``operator`` and ``model``, one
 sample protocol, ``matched_inputs``, recorded in the policy and checked on use:
-thresholds per tensor, pooled over the calibration samples, judged on fresh
+thresholds per tensor (at operator scope per call site too), pooled over the
+calibration samples, judged on fresh
 executions of the *same* samples, whose content (inputs, labels and other
 context, cotangents, initial weights, module mode, seed) must match the
 calibrated sample's fingerprint.

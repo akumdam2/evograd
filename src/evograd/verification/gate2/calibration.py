@@ -8,6 +8,14 @@ One sample protocol at both scopes, ``matched_inputs``, recorded in the policy
                            max_x E_m(trusted compile[x], native[x]),
                            floor[z, m], scope term[z, m] )
 
+At operator scope the samples are recorded calls, and each call site ``c``
+(the payload's ``call``, one layer's instance of the site) gets its own table,
+pooled over the samples of that call only (:func:`call_of`). A table pooled
+over every layer is set by the layer where compile drifts most: Qwen2-VL's
+text attention, whose layer 0 compile drifts 30x the median layer, passed
+x1.05 and x1.1 faults on every layer (P8, 2026-11-12). The table pooled over
+all calls stays in the policy for Gate 1's envelope.
+
 and judged on fresh executions of the *same* samples: a sample is used only
 when its content fingerprint (inputs, labels and other context, cotangents,
 initial weights, module mode, seed) equals the calibrated one. The budget of
@@ -93,9 +101,10 @@ from evograd.verification.gate2.runner import (
     run_callable,
 )
 
-#: /5: matched inputs and one pooled threshold table at both scopes, with each
-#: calibration sample's content identity. /4 and older policies are never reinterpreted.
-SCHEMA = "evograd-verification-gate2-policy/5"
+#: /6: matched inputs at both scopes, with each calibration sample's content
+#: identity; at operator scope one threshold table per call site
+#: (``call_thresholds``). /5 and older policies are never reinterpreted.
+SCHEMA = "evograd-verification-gate2-policy/6"
 
 #: The sample protocol of each scope; the policy records it.
 MATCHED = "matched_inputs"
@@ -129,8 +138,8 @@ ROUNDING_PROBABILITY = 1.0 / 3.0
 ROUNDING_SEEDS = (11, 22, 33, 44)
 
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = ("gate2-calibration/5: matched inputs at both scopes; operator rounding "
-                         "floor, model rounding perturbation")
+CALIBRATION_PROCEDURE = ("gate2-calibration/6: matched inputs at both scopes; operator rounding "
+                         "floor and thresholds per call site, model rounding perturbation")
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 ROUNDING_PERTURBATION = "rounding_perturbation"
@@ -146,6 +155,13 @@ def family_of(kind: str) -> str:
         return C.FLOOR_FAMILY[kind]
     except KeyError:
         raise CalibrationError(f"result kind {kind!r} has no floor family") from None
+
+
+def call_of(sample: Mapping[str, Any] | Sample) -> str | None:
+    """The call site a sample was recorded at (a payload's ``call``), if any."""
+    config = sample.config if isinstance(sample, Sample) else (sample.get("config") or {})
+    call = config.get("call")
+    return call if isinstance(call, str) and call else None
 
 
 def validate_gamma(gamma: Any) -> float:
@@ -329,10 +345,17 @@ class Gate2Policy:
         return json.loads(self.text)
 
     def thresholds_for(self, sample_id: str) -> dict[str, Any] | None:
-        """The thresholds that judge ``sample_id``: the pooled ones for a
-        calibrated sample, ``None`` for any other."""
+        """The thresholds that judge ``sample_id``: its call site's table at
+        operator scope, the pooled one otherwise; ``None`` for a sample that
+        was not calibrated."""
         data = self.to_dict()
-        return data["thresholds"] if sample_id in data["sample_identities"] else None
+        if sample_id not in data["sample_identities"]:
+            return None
+        by_call = data.get("call_thresholds")
+        if by_call is None:
+            return data["thresholds"]
+        sample = next(s for s in data["calibration_samples"] if s["sample_id"] == sample_id)
+        return by_call[call_of(sample)]
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_") or name == "text":
@@ -352,9 +375,10 @@ REQUIRED_FIELDS = ("scope", "sample_protocol", "adapter", "numerics", "environme
 _CONTROL_TERMS = ("T[z,m] = gamma * max(max_x max_r E_m(native_repeat_r[x], native[x]), "
                   "max_x E_m(compile[x], native[x]), floor[z,m], ")
 FORMULAS = {
-    "operator": _CONTROL_TERMS + "max_x rounding_m(native[x][z])), judged on the calibrated "
-                f"samples x; rounding: E2 = unit roundoff of z's dtype, Emax = {ROUNDING_ULPS:g} "
-                "ulps of max|native[x][z]| / RMS(native[x][z])",
+    "operator": _CONTROL_TERMS + "max_x rounding_m(native[x][z])), per call site c over the "
+                "calibrated samples x of c, judged on those samples; rounding: E2 = unit roundoff "
+                f"of z's dtype, Emax = {ROUNDING_ULPS:g} ulps of max|native[x][z]| / "
+                "RMS(native[x][z]); the table over all calls gives Gate 1's envelope",
     "model": _CONTROL_TERMS + "max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged "
              "on the calibrated samples x; rounding_perturbation_k: every replaced site's floating "
              f"outputs and input gradients moved one ulp with probability {ROUNDING_PROBABILITY:.4g} "
@@ -385,6 +409,19 @@ def _check_thresholds(data: Mapping[str, Any]) -> None:
         raise CalibrationError("no thresholds")
     for name, entry in table.items():
         _check_entry(name, entry, gamma, floors, term=SCOPE_TERMS[scope])
+    calls = {call_of(s) for s in data["calibration_samples"]}
+    by_call = data.get("call_thresholds")
+    if scope == "operator" and not data["boundaries"] and None not in calls:
+        if not isinstance(by_call, Mapping) or set(by_call) != calls:
+            raise CalibrationError("an operator policy needs one threshold table per call site")
+        for call, own in by_call.items():
+            if not isinstance(own, Mapping) or set(own) != set(table):
+                raise CalibrationError(f"{call}: the call's table does not cover the results")
+            for name, entry in own.items():
+                _check_entry(f"{call}/{name}", entry, gamma, floors, term=SCOPE_TERMS[scope])
+    elif by_call is not None:
+        raise CalibrationError("per-call thresholds need an operator policy without boundary "
+                               "calls whose every sample has a call site")
 
 
 def _check_entry(name: str, entry: Any, gamma: float, floors: Mapping[str, Mapping[str, float]],
@@ -838,6 +875,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     measurements: list[ControlMeasurement] = []
     kinds: dict[str, dict[str, str]] = {}            # sample id -> result -> kind
     rounding: dict[str, dict[str, float]] = {}       # result -> metric -> pooled rounding floor
+    call_rounding: dict[str | None, dict[str, dict[str, float]]] = {}   # the same per call site
     contract: C.ResultContract | None = None
     input_digests: dict[str, str | None] = {}
     identities: dict[str, dict[str, Any]] = {}
@@ -887,8 +925,11 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
                 kinds[sid][spec.name] = spec.kind
                 if not perturbed:
                     least = rounding.setdefault(spec.name, {m: 0.0 for m in METRICS})
+                    own = call_rounding.setdefault(call_of(sample), {}).setdefault(
+                        spec.name, {m: 0.0 for m in METRICS})
                     for m, value in rounding_floor(reference.results[spec.name]).items():
                         least[m] = max(least[m], value)
+                        own[m] = max(own[m], value)
         identity = {**reference.sample_identity, "seed": int(sample.seed),
                     "config": jsonable(dict(sample.config)),
                     "reference_results_digest": reference.results_digest,
@@ -997,13 +1038,21 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
             union.update(table)
         table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors,
                                   rounding=None if perturbed else rounding, perturbed=perturbed)
+        call_tables = None
+        if not perturbed and not boundaries and None not in call_rounding:
+            call_tables = {}
+            for call in sorted(call_rounding):
+                ids = {s.sample_id for s in samples if call_of(s) == call}
+                call_tables[call] = derive_thresholds(
+                    [m for m in measurements if m.sample_id in ids], results=union, gamma=gamma,
+                    floors=floors, rounding=call_rounding[call])
     except CalibrationError as exc:
         result.findings.append(missing("insufficient_calibration", str(exc)))
         return result
     result.policy = freeze_policy(
         adapter, patch_set=patch_set, contract=contract, samples=samples,
-        thresholds=table, gamma=gamma, floors=floors, boundaries=boundaries,
-        controls={"native_repeats": native_repeats, "compile": control.describe(),
+        thresholds=table, call_thresholds=call_tables, gamma=gamma, floors=floors,
+        boundaries=boundaries, controls={"native_repeats": native_repeats, "compile": control.describe(),
                   "compile_graphs": dict(graphs),
                   **({ROUNDING_PERTURBATION: {"seeds": list(rounding_seeds),
                                               "probability": ROUNDING_PROBABILITY}}
@@ -1029,6 +1078,7 @@ def _same_content(reference: Execution, control: Execution, source: str) -> list
 def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: C.ResultContract,
                   samples: Sequence[Sample], thresholds: Mapping[str, Mapping[str, Any]] | None,
                   controls: Mapping[str, Any], gamma: float, floors: Mapping[str, Any],
+                  call_thresholds: Mapping[str, Mapping[str, Any]] | None = None,
                   boundaries: bool, input_digests: Mapping[str, str | None] | None = None,
                   weight_digests: Sequence[str] = (),
                   sample_identities: Mapping[str, Mapping[str, Any]] | None = None,
@@ -1036,7 +1086,9 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
     """Bind thresholds to everything they were measured under, and freeze them.
 
     ``thresholds`` are pooled over the calibration samples and judge the
-    samples of ``sample_identities`` (their content identities), no other.
+    samples of ``sample_identities`` (their content identities), no other; at
+    operator scope ``call_thresholds`` (one table per call site, pooled over
+    that call's samples) judge instead.
 
     :func:`calibrate` is the only producer of real policies. Tests use this to
     freeze explicitly labelled synthetic thresholds through the same binding.
@@ -1072,4 +1124,6 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
         "formula": FORMULAS[adapter.scope],
         "thresholds": dict(thresholds or {}),
     }
+    if call_thresholds is not None:
+        content["call_thresholds"] = {c: dict(t) for c, t in call_thresholds.items()}
     return Gate2Policy.build(content)
