@@ -159,6 +159,41 @@ class ToyIntegration(unittest.TestCase):
         self.assertFalse(verdict["combination"]["accepted"])
         self.assertFalse(verdict["candidates"][self.T.CASE_ID]["accepted"])
 
+    def test_gate3_on_the_combination_keeps_single_site_model_gate2(self):
+        out = Path(self.tmp.name) / "gate3_on_combination"
+        verdict = self.verify(1.0, out, gate3_on_combination=True)
+        entry = verdict["candidates"][self.T.CASE_ID]
+        for gate in ("gate1_payloads", "gate2_operator", "gate2_model"):
+            self.assertEqual(entry[gate], "passed")
+        self.assertEqual(entry["gate3"], "on_combination")
+        self.assertTrue((out / "gate2_model").exists())
+        self.assertFalse((out / "gate3_single_site").exists())
+        combination = verdict["combination"]
+        self.assertEqual(combination["cases"], [self.T.CASE_ID])
+        self.assertEqual((combination["gate2_model"], combination["gate3"]), ("passed", "passed"))
+        self.assertNotIn("reused_from", combination)
+        self.assertTrue(combination["accepted"] and entry["accepted"])
+        with self.assertRaises(ValueError):
+            self.verify(1.0, out, gate3_on_combination=True, combined=True)
+        # A combination Gate 3 refuses leaves its cases unaccepted; the same command without
+        # the option then trains each case alone and reuses every stage before Gate 3.
+        out = Path(self.tmp.name) / "gate3_on_combination_fault"
+        failed = mock.Mock(status="failed")
+        failed.to_dict.return_value = {"status": "failed"}
+        with mock.patch("evograd.verification.integrations.gates.judge_training",
+                        return_value={"gate3": failed}):
+            verdict = self.verify(1.0, out, gate3_on_combination=True)
+        self.assertFalse(verdict["combination"]["accepted"])
+        self.assertFalse(verdict["candidates"][self.T.CASE_ID]["accepted"])
+        rerun = AssertionError("a stage before Gate 3 was judged again")
+        with mock.patch("evograd.verification.integrations.gates.judge_case", side_effect=rerun), \
+                mock.patch("evograd.verification.integrations.gates.judge_model", side_effect=rerun):
+            verdict = self.verify(1.0, out)
+        entry = verdict["candidates"][self.T.CASE_ID]
+        self.assertEqual(entry["gate3"], "passed")
+        self.assertTrue(entry["accepted"])
+        self.assertTrue((out / "gate3_single_site").exists())
+
     def test_operator_level_verification_leaves_the_model_gates_out(self):
         out = Path(self.tmp.name) / "operator_level"
         verdict = self.verify(1.0, out, operator_level=True)

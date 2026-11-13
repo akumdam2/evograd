@@ -84,7 +84,8 @@ GATE2_MODEL_BOUNDARIES = False
 TRAIN_ORDER, TRAIN_SEED = 707, 0
 #: Gate 3's status for a model it does not apply to (``Model.gate3_applies``).
 NOT_APPLICABLE = "not_applicable"
-#: A Level-2 case's model gates in a pipeline check (:func:`verify`'s ``combined``).
+#: A Level-2 case's model gates in a pipeline check (:func:`verify`'s ``combined``), or its
+#: Gate 3 left to the combination (``gate3_on_combination``).
 ON_COMBINATION = "on_combination"
 GAMMA, FLOOR_RMS, FLOOR_MAX = 2.0, 1e-4, 1e-4
 LR = 1e-4
@@ -671,11 +672,13 @@ def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) ->
     return statuses
 
 
-def verify_cases(run: Run, *, single_site: bool = True) -> dict[str, Any]:
+def verify_cases(run: Run, *, single_site: bool = True, gate3_on_combination: bool = False
+                 ) -> dict[str, Any]:
     """Gate 1 and operator Gate 2 for every candidate; Level 2 also needs its
     single-site model Gate 2 and, after those pass, Gate 3 -- unless
     ``single_site`` is false, when the model gates run on the combination only
-    (:func:`verify`'s ``combined``)."""
+    (:func:`verify`'s ``combined``), or ``gate3_on_combination``, when Gate 3
+    is left to the combination (:func:`verify`'s ``gate3_on_combination``)."""
     from evograd.opdecl.oracle import reference_identity
 
     model = run.model
@@ -707,8 +710,12 @@ def verify_cases(run: Run, *, single_site: bool = True) -> dict[str, Any]:
                                     compile_backend=run.compile_backend, state=run.state)))
             if not model.gate3_applies:
                 entry["gate3"] = NOT_APPLICABLE
-            elif all(entry.get(gate) == "passed"
-                     for gate in ("gate1_payloads", "gate2_operator", "gate2_model")):
+            elif not all(entry.get(gate) == "passed"
+                         for gate in ("gate1_payloads", "gate2_operator", "gate2_model")):
+                entry["gate3"] = "skipped"
+            elif gate3_on_combination:
+                entry["gate3"] = ON_COMBINATION
+            else:
                 out = run.out / "gate3_single_site" / case_id.replace("/", "__")
                 _check_deadline(run.deadline, f"{case_id} single-site Gate 3")
                 training = judge_training(model, deployment, run.workload, out, run.state,
@@ -718,8 +725,6 @@ def verify_cases(run: Run, *, single_site: bool = True) -> dict[str, Any]:
                 entry.update({name: _status(r) for name, r in training.items()})
                 del training
                 _release_device_memory()
-            else:
-                entry["gate3"] = "skipped"
         entry["accepted"] = accepted(model, entry)
         verdict["candidates"][case_id] = entry
         run.log(case_id, {k: v for k, v in entry.items() if k not in ("program", "program_sha256")})
@@ -796,7 +801,7 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
            controls: str | Path | None = None, state: str | Path | None = None,
            device: str = "cuda", compile_backend: str = "inductor", log: Callable = print,
            deadline_min: float | None = None, combined: bool = False,
-           operator_level: bool = False) -> dict[str, Any]:
+           operator_level: bool = False, gate3_on_combination: bool = False) -> dict[str, Any]:
     """Every gate that applies to each candidate, then the combination of every
     accepted Level-2 candidate (a diagnostic, not the benchmark's Level-3
     selection); writes ``DIR/verdict.json``.
@@ -812,6 +817,15 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     ``evograd evaluate --operator-level`` does: the model gates and the
     combination are left for a later run.
 
+    ``gate3_on_combination`` leaves Gate 3 to the combination: each Level-2
+    candidate still gets its single-site model Gate 2, and those whose first
+    three gates pass are trained once, together; the combination's verdict
+    decides their acceptance. A refused combination names no case: the same
+    command without the option then trains each case alone, reusing every
+    earlier stage. The combination's Gate 3 budget comes from compiling all
+    its sites together, looser than a site's own, so this screens many
+    candidates at once (a model's seeds); it is not the protocol's acceptance.
+
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
     what does not depend on the candidate -- Gate 3 control runs and Gate 2
     calibrations -- for any later candidate of the same case or patch set.
@@ -824,6 +838,9 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     """
     from .base import configure
 
+    if gate3_on_combination and (combined or operator_level):
+        raise ValueError("gate3_on_combination needs the single-site model gates: "
+                         "not with combined or operator_level")
     if operator_level:
         import dataclasses
 
@@ -835,7 +852,8 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
                    deadline_min=deadline_min)
     verdict: dict[str, Any] = {"execution": settings, "candidates": {}, "combination": None}
     try:
-        verdict.update(verify_cases(run, single_site=not combined))
+        verdict.update(verify_cases(run, single_site=not combined,
+                                    gate3_on_combination=gate3_on_combination))
         level2 = {cid: entry for cid, entry in verdict["candidates"].items() if entry["level"] == 2}
         if combined:
             verdict["model_gates"] = ON_COMBINATION
@@ -847,8 +865,11 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
         elif operator_level:
             verdict["operator_level"] = OPERATOR_LEVEL
         else:
-            chosen = [cid for cid, entry in level2.items() if entry["accepted"]]
+            deferred = [cid for cid, entry in level2.items() if entry.get("gate3") == ON_COMBINATION]
+            chosen = [cid for cid, entry in level2.items() if entry["accepted"]] + deferred
             verdict["combination"] = verify_combination(run, chosen, single=verdict["candidates"])
+            for cid in deferred:
+                level2[cid]["accepted"] = verdict["combination"]["accepted"]
     except Suspended as stop:
         verdict["suspended"] = str(stop)
         log("suspended:", stop, "-- rerun the same command to continue")

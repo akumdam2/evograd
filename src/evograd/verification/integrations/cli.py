@@ -37,6 +37,10 @@ def main(model, argv=None) -> int:
                         "operator Gate 2 pass; never for an agent's candidates")
     p.add_argument("--operator-level", action="store_true",
                    help="Gate 1 and operator Gate 2 only; the model gates are left for a later run")
+    p.add_argument("--gate3-on-combination", action="store_true",
+                   help="single-site model Gate 2 as usual, but Gate 3 once, on the combination of "
+                        "the Level-2 candidates whose first three gates pass (a screen for many "
+                        "candidates); if it refuses, rerun without this option to train each case alone")
     from evograd.verification.reuse import add_arguments as add_reuse_arguments
 
     add_reuse_arguments(p)
@@ -94,7 +98,8 @@ def main(model, argv=None) -> int:
     with calibration_reuse(options(args), log=log):
         verdict = verify(model, candidates, args.corpus, args.out, state=args.state, log=log,
                          deadline_min=args.deadline_min, combined=args.combined,
-                         operator_level=args.operator_level)
+                         operator_level=args.operator_level,
+                         gate3_on_combination=args.gate3_on_combination)
     if verdict.get("suspended"):
         print(json.dumps({"suspended": verdict["suspended"]}))
         return 3
