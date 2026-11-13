@@ -138,7 +138,9 @@ def verify_candidate(
         device,
         str(program_path),
     ]
-    completed = _run(cmd, log_dir, "verify", None, timeout)
+    # The child runs under verify's execution settings, which need cuBLAS's
+    # deterministic workspace before the process starts.
+    completed = _run(cmd, log_dir, "verify", {"CUBLAS_WORKSPACE_CONFIG": ":4096:8"}, timeout)
     try:
         report = json.loads(completed.stdout)
     except json.JSONDecodeError:

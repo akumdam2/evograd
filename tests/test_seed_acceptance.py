@@ -210,25 +210,45 @@ class TestMain(unittest.TestCase):
             candidate = root / "candidate.py"
             candidate.write_text(fixture_candidate(op).fixture_source)
             out = io.StringIO()
+            settings = {"deterministic_algorithms": True}
             with mock.patch.object(payload_gate1, "search_correctness",
                                    return_value={"passed": 6, "total": 6}), \
                     mock.patch("evograd.verification.payloads.corpus.Corpus.open",
                                return_value=FakeCorpus(payload_values(op))), \
+                    mock.patch("evograd.verification.integrations.base.configure",
+                               return_value=settings) as configure, \
                     contextlib.redirect_stdout(out):
                 code = seed.main(["--pack", str(root), "--device", "cpu", str(candidate)])
         report = json.loads(out.getvalue())
         self.assertEqual((code, report["metrics"]["correct"]), (0, 1.0), report)
+        # Accepted under verify's execution settings, which the report records.
+        configure.assert_called_once_with()
+        self.assertEqual(report["execution"], settings)
         self.assertEqual(report["search_correctness"], {"passed": 6, "total": 6})
         self.assertTrue(report["deployment"]["ok"])
 
     def test_main_rejects_when_the_pack_cannot_be_loaded(self):
         with TemporaryDirectory() as tmp:
             out = io.StringIO()
-            with contextlib.redirect_stdout(out):
+            with mock.patch("evograd.verification.integrations.base.configure", return_value={}), \
+                    contextlib.redirect_stdout(out):
                 code = seed.main(["--pack", tmp, "--device", "cpu", str(Path(tmp) / "c.py")])
         report = json.loads(out.getvalue())
         self.assertEqual((code, report["metrics"]["correct"]), (1, 0.0))
         self.assertIn("error", report)
+
+
+    def test_main_rejects_without_verify_execution_settings(self):
+        # configure() refuses a process started without cuBLAS's deterministic workspace.
+        with TemporaryDirectory() as tmp:
+            out = io.StringIO()
+            with mock.patch("evograd.verification.integrations.base.configure",
+                            side_effect=RuntimeError("CUBLAS_WORKSPACE_CONFIG must be ':4096:8'")), \
+                    contextlib.redirect_stdout(out):
+                code = seed.main(["--pack", tmp, "--device", "cpu", str(Path(tmp) / "c.py")])
+        report = json.loads(out.getvalue())
+        self.assertEqual((code, report["metrics"]["correct"]), (1, 0.0))
+        self.assertIn("CUBLAS_WORKSPACE_CONFIG", report["error"])
 
 
 class TestVerifyCandidate(unittest.TestCase):
@@ -239,6 +259,7 @@ class TestVerifyCandidate(unittest.TestCase):
                                              program_path=Path("seed.py"))
         cmd = run.call_args.args[0]
         self.assertEqual(cmd[:3], ["python", "-m", "evograd.evaluation.common.seed"])
+        self.assertEqual(run.call_args.args[3], {"CUBLAS_WORKSPACE_CONFIG": ":4096:8"})
         self.assertEqual(cmd[cmd.index("--pack") + 1], str(Path("/pack").resolve()))
         self.assertTrue(runner.report_passed(report))
 

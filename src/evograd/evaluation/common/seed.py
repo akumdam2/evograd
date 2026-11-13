@@ -10,7 +10,12 @@ One rule for every seed pipeline. A seed is accepted when
    output and gradient present, of the declared shape and dtype, and finite.
 
 The deployment's values are judged by operator Gate 2 at evaluation, not here.
-No input is generated. Runs in the pipeline's
+No input is generated. Both run under verify's execution settings
+(:func:`evograd.verification.integrations.base.configure`: deterministic
+algorithms, no TF32): a seed that branches on them is accepted on the branch
+verify runs. Accepted without them, a masked attention seed whose deterministic
+branch dropped the mask passed here twice and failed every gate (D14/D16,
+2026-11-13). Runs in the pipeline's
 killable verification subprocess so a broken CUDA candidate cannot stop repair.
 """
 
@@ -123,6 +128,9 @@ def main(argv=None):
     payload = {"metrics": {"correct": 0.0}}
     native_path = None
     try:
+        from evograd.verification.integrations.base import configure
+
+        payload["execution"] = configure()
         task = load_pack(args.pack)
         with _capture_native_output() as captured:
             native_path = captured
