@@ -121,18 +121,21 @@ nothing to the budget: under the deterministic settings no native ever differed
 from its repeat (P8 audit, 2026-11-13), and one that does leaves no policy.
 
 ```text
-T = gamma * max(compile-native error, floor, scope term)
+operator:  T = gamma * max(compile-native error, floor(dtype))
+model:     T = gamma * max(compile-native error, floor, rounding perturbation)
 ```
 
 The sample protocol depends on scope:
 
-- **Operator:** pool per-result maxima over calibration samples, then evaluate
-  on disjoint samples. This works for generated samples and recorded calls.
-  The floor term is the larger of the fixed floor and one rounding of every
-  element in the result's dtype, from the native reference: `E2` at the unit
-  roundoff, `Emax` at 2 ulps of the largest magnitude over the RMS. Where the
-  compile control reproduces native bit for bit (a vendor GEMM, SDPA or
-  convolution), the fixed floor alone was about 100x below one bf16 rounding.
+- **Operator:** pool per-result maxima over the calibration samples of each
+  call site (one table per layer's instance of the site). The floor is one
+  number per result dtype -- bf16 2^-8 (its unit roundoff, one rounding of every
+  element), fp16 2^-11, fp32 1e-5 -- for `E2`, and 4 times it times the result's
+  max|r| / RMS(r) for `Emax`, whose denominator is the RMS (one rounding of the
+  largest element ranges over 0.03-163 in `Emax` across bf16 results, so it
+  cannot be one number). Where the compile control reproduces native bit for
+  bit (a vendor GEMM, SDPA or convolution), the floor is what a correct
+  reimplementation that rounds differently is allowed.
 - **Model:** calibrate separately per sample/result; fresh verification must
   match that sample's input, labels/context, cotangent, initial state, mode and
   seed. A budget cannot be transferred to another model sample. A third control,

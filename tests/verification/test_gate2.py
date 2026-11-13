@@ -67,16 +67,20 @@ SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
                     "gradient": {"E2": 1e-12, "Emax": 1e-12}}
 
 
-def synthetic_entry(kind, limit, gamma=2.0, *, term):
+def synthetic_entry(kind, limit, gamma=2.0, *, term, dtype="float32"):
     """A threshold entry whose components reproduce ``limit`` under the formula,
-    with the scope's own ``term`` (``SCOPE_TERMS``) at 0."""
-    floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
-    entry = {"kind": kind, "components": {}}
+    with the scope's own ``term`` (``SCOPE_TERMS``) at 0. ``term`` None is the
+    operator scope, whose floor is ``dtype``'s (``OPERATOR_FLOORS``)."""
+    operator = term is None
+    floor = ({"E2": gate2.calibration.OPERATOR_FLOORS[dtype], "Emax": 0.0} if operator
+             else SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]])
+    entry = {"kind": kind, "components": {}, **({"dtype": dtype} if operator else {})}
     for metric in ("E2", "Emax"):
         entry[metric] = limit[metric]
         entry["components"][metric] = {"trusted_compile": limit[metric] / gamma,
                                        "floor": floor[metric],
-                                       "gamma": gamma, "binding": "trusted_compile", term: 0.0}
+                                       "gamma": gamma, "binding": "trusted_compile",
+                                       **({} if operator else {term: 0.0})}
     return entry
 
 
@@ -444,28 +448,48 @@ class TestCalibrationArithmetic(unittest.TestCase):
                    for k in range(60))
         self.assertEqual(hits, 0)
 
-    def test_rounding_term_binds_where_compile_is_bitwise(self):
+    def test_operator_floor_is_one_number_per_dtype(self):
+        from evograd.verification.gate2.calibration import OPERATOR_EMAX_FACTOR, operator_floor
+
+        t = torch.tensor([1.0, -0.5, 0.25, 0.0], dtype=torch.bfloat16)
+        rms = math.sqrt((1.0 + 0.25 + 0.0625) / 4)
+        f = operator_floor(t)
+        self.assertEqual((f["dtype"], f["E2"]), ("bfloat16", 2.0 ** -8))      # bf16 unit roundoff
+        self.assertAlmostEqual(f["Emax"], OPERATOR_EMAX_FACTOR * 2.0 ** -8 * 1.0 / rms)
+        self.assertEqual(operator_floor(t.float())["E2"], 1e-5)
+        self.assertEqual(operator_floor(torch.zeros(3))["Emax"], 0.0)
+        # The same bf16 values scaled: E2's floor is fixed, Emax's follows max / RMS only.
+        self.assertEqual(operator_floor(t * 8)["Emax"], f["Emax"])
+        with self.assertRaises(CalibrationError):
+            operator_floor(torch.zeros(3, dtype=torch.float8_e4m3fn))
+
+    def test_operator_floor_binds_where_compile_is_bitwise(self):
         ms = [self.m("trusted_compile", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
-        rounding = {"out:a": {"E2": 2.0 ** -8, "Emax": 0.04}, "out:b": {"E2": 2.0 ** -8, "Emax": 0.04}}
-        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT}, rounding=rounding)
+        floor = {"dtype": "bfloat16", "E2": 2.0 ** -8, "Emax": 0.04}
+        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
+                              operator_floors={"out:a": floor, "out:b": floor})
         self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (2 * 2.0 ** -8, 2 * 0.04))
-        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "rounding")
+        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "floor")
+        self.assertEqual(t["out:a"]["dtype"], "bfloat16")
         self.assertEqual(t["out:b"]["E2"], 1.0)                                # compile still binds
         with self.assertRaises(CalibrationError):
             derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
-                              rounding={"out:a": rounding["out:a"]})
+                              operator_floors={"out:a": floor})
 
     def test_policy_entries_carry_their_own_scopes_term_only(self):
         from evograd.verification.gate2.calibration import _check_entry
 
         limit = {"E2": 1e-3, "Emax": 1e-3}
         operator, model = (synthetic_entry(C.OUTPUT, limit, term=t)
-                           for t in ("rounding", "rounding_perturbation"))
-        _check_entry("op", operator, 2.0, SYNTHETIC_FLOORS, term="rounding")
+                           for t in (None, "rounding_perturbation"))
+        _check_entry("op", operator, 2.0, None, term=None)
         _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-        for entry, term in ((model, "rounding"), (operator, "rounding_perturbation")):
-            with self.assertRaises(CalibrationError):
-                _check_entry("swapped", entry, 2.0, SYNTHETIC_FLOORS, term=term)
+        with self.assertRaises(CalibrationError):     # the model's term in an operator policy
+            _check_entry("swapped", model, 2.0, None, term=None)
+        with self.assertRaises(CalibrationError):     # an operator entry lacks the model's term
+            _check_entry("swapped", operator, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
+        with self.assertRaises(CalibrationError):     # nor may it use another dtype's floor
+            _check_entry("op", {**operator, "dtype": "bfloat16"}, 2.0, None, term=None)
 
     def test_rounding_perturbation_term_is_required_at_model_scope_only(self):
         ms = [self.m("trusted_compile", "out:a", 0.0, 0.0),

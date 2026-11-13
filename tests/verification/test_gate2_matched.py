@@ -517,7 +517,7 @@ class TestOperatorScopeIsMatched(MatchedCase):
                 parts["rounding"] = parts.pop("rounding_perturbation")
         for key in ("policy_hash", "schema"):
             data.pop(key)
-        with self.assertRaisesRegex(CalibrationError, "another scope's term"):
+        with self.assertRaisesRegex(CalibrationError, "not a term of this scope's formula"):
             Gate2Policy.build(data)
         data["formula"] = gate2.calibration.FORMULAS["operator"]
         with self.assertRaisesRegex(CalibrationError, "not the scope's"):
