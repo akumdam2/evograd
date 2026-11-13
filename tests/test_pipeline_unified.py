@@ -265,6 +265,7 @@ class TestPreservedAttention(unittest.TestCase):
         from evograd.pipelines.unified.codegen import UNIFIED_SDPA_SOURCE
 
         calls = []
+        state = torch.zeros((), dtype=torch.int64)            # philox seed and offset, on the host
 
         def op(name, result):
             def run(*args, **kwargs):
@@ -273,7 +274,7 @@ class TestPreservedAttention(unittest.TestCase):
             return types.SimpleNamespace(default=run)
 
         aten = types.SimpleNamespace(
-            _scaled_dot_product_efficient_attention=op('efficient', ('o', 'lse', 'seed', 'off')),
+            _scaled_dot_product_efficient_attention=op('efficient', ('o', 'lse', state, state)),
             _scaled_dot_product_efficient_attention_backward=op('efficient_bwd', ('dq', 'dk', 'dv', None)),
             _scaled_dot_product_flash_attention=op('flash', 'flash_out'),
             _scaled_dot_product_flash_attention_backward=op('flash_bwd', 'flash_grads'),
@@ -288,7 +289,9 @@ class TestPreservedAttention(unittest.TestCase):
         q, k = torch.zeros(1, 2, 5, 4), torch.zeros(1, 2, 7, 4)
         mask = torch.randn(1, 1, 5, 7)
         got = forward(q, k, k, mask, True, scale=0.5)
-        self.assertEqual(got, ('o', 'lse', None, None, 5, 7, 'seed', 'off', None))
+        self.assertEqual(got[:6] + got[8:], ('o', 'lse', None, None, 5, 7, None))
+        # The seed saves the philox state where cuDNN puts it: on the queries' device.
+        self.assertEqual([t.device for t in got[6:8]], [q.device, q.device])
         name, args, kwargs = calls[-1]
         bias = args[3]
         self.assertEqual((name, tuple(bias.shape), bias.stride(-2) % 16, kwargs), ('efficient', (1, 2, 5, 7), 0, {'scale': 0.5}))

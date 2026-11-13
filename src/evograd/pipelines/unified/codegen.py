@@ -124,7 +124,8 @@ def _unified_sdpa_forward(q, k, v, attn_bias=None, compute_log_sumexp=True, drop
         out, lse, seed, offset = torch.ops.aten._scaled_dot_product_efficient_attention.default(
             q, k, v, _unified_sdpa_bias(q, k, attn_bias), compute_log_sumexp, dropout_p, is_causal,
             scale=scale)
-        return out, lse, None, None, q.size(2), k.size(2), seed, offset, None
+        # Its philox state is on the host; cuDNN's, which the seed saves for backward, on the device.
+        return out, lse, None, None, q.size(2), k.size(2), seed.to(q.device), offset.to(q.device), None
     return torch.ops.aten._scaled_dot_product_cudnn_attention.default(
         q, k, v, attn_bias, compute_log_sumexp, dropout_p, is_causal, return_debug_mask, scale=scale)
 
