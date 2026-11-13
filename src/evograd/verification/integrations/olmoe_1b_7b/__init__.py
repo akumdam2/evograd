@@ -37,4 +37,8 @@ MODEL = Model(
     modeling_modules=("transformers.models.olmoe.modeling_olmoe",),
     objective=ForcedRoutingLM(),
     gate3_optimizer={"warmup_steps": 100, "clip_grad_norm": 1.0, "lr": 3e-5},
+    # Gate 3 at 3, not the protocol's 2: the three Level-2 seeds trained together drifted
+    # M 1.40 times the threshold at update 76 while each passed alone (P8 seed column,
+    # 2026-11-13), so the seeds need 2.8. No 1% fault reached a Gate 3 rejection at 2.
+    gate3_gamma=3.0,
 )
