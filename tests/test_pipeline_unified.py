@@ -256,6 +256,54 @@ class TestPreservedAttention(unittest.TestCase):
         backward = inspect.signature(namespace['_unified_sdpa_backward'])
         backward.bind(*range(15), scale=0.1)
 
+    def test_a_masked_capture_keeps_its_mask_under_deterministic_algorithms(self):
+        # Flash takes no mask: a masked call on it ran unmasked attention (Qwen2-VL text
+        # attention seed, Gate 1 ratio 41, 2026-11-13). Eager runs it on memory-efficient
+        # attention there, with the mask expanded and its rows 16-element aligned.
+        import types
+
+        from evograd.pipelines.unified.codegen import UNIFIED_SDPA_SOURCE
+
+        calls = []
+
+        def op(name, result):
+            def run(*args, **kwargs):
+                calls.append((name, args, kwargs))
+                return result
+            return types.SimpleNamespace(default=run)
+
+        aten = types.SimpleNamespace(
+            _scaled_dot_product_efficient_attention=op('efficient', ('o', 'lse', 'seed', 'off')),
+            _scaled_dot_product_efficient_attention_backward=op('efficient_bwd', ('dq', 'dk', 'dv', None)),
+            _scaled_dot_product_flash_attention=op('flash', 'flash_out'),
+            _scaled_dot_product_flash_attention_backward=op('flash_bwd', 'flash_grads'),
+            _scaled_dot_product_cudnn_attention=op('cudnn', 'cudnn_out'),
+            _scaled_dot_product_cudnn_attention_backward=op('cudnn_bwd', 'cudnn_grads'))
+        deterministic = [True]
+        fake = types.SimpleNamespace(ops=types.SimpleNamespace(aten=aten), nn=torch.nn,
+                                     are_deterministic_algorithms_enabled=lambda: deterministic[0])
+        namespace = {'torch': fake}
+        exec(compile(UNIFIED_SDPA_SOURCE, '<sdpa>', 'exec'), namespace)
+        forward, backward = namespace['_unified_sdpa_forward'], namespace['_unified_sdpa_backward']
+        q, k = torch.zeros(1, 2, 5, 4), torch.zeros(1, 2, 7, 4)
+        mask = torch.randn(1, 1, 5, 7)
+        got = forward(q, k, k, mask, True, scale=0.5)
+        self.assertEqual(got, ('o', 'lse', None, None, 5, 7, 'seed', 'off', None))
+        name, args, kwargs = calls[-1]
+        bias = args[3]
+        self.assertEqual((name, tuple(bias.shape), bias.stride(-2) % 16, kwargs), ('efficient', (1, 2, 5, 7), 0, {'scale': 0.5}))
+        self.assertTrue(torch.equal(bias, mask.expand(1, 2, 5, 7)))
+        self.assertEqual(backward('g', q, k, k, 'o', 'lse', 'seed', 'off', mask, None, None, 5, 7, 0.0,
+                                  False, scale=0.5), ('dq', 'dk', 'dv'))
+        name, args, _ = calls[-1]
+        self.assertEqual((name, args[10]), ('efficient_bwd', [True, True, True, False]))
+        self.assertTrue(torch.equal(args[4], mask.expand(1, 2, 5, 7)))
+        # Without a mask, flash; without deterministic algorithms, the captured cuDNN call.
+        self.assertEqual(forward(q, k, k, None, True), 'flash_out')
+        deterministic[0] = False
+        self.assertEqual(forward(q, k, k, mask, True), 'cudnn_out')
+        self.assertIs(calls[-1][1][3], mask)
+
 
 class TestGrantPrompt(unittest.TestCase):
     """A granted run's evolve system message documents the grant."""

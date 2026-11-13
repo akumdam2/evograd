@@ -102,21 +102,43 @@ _SDPA_BACKWARD = {
     "torch.ops.aten._scaled_dot_product_flash_attention_backward.default": "flash",
 }
 UNIFIED_SDPA_SOURCE = '''\
+def _unified_sdpa_bias(q, k, attn_bias):
+    """The mask as eager hands it to memory-efficient attention: expanded to
+    (batch, heads, L, S), rows 16-element aligned."""
+    bias = attn_bias.expand(q.size(0), q.size(1), q.size(2), k.size(2))
+    if bias.stride(-1) != 1 or bias.stride(-2) % 16:
+        size = bias.size(-1)
+        bias = torch.nn.functional.pad(bias, (0, -size % 16))[..., :size]
+    return bias
+
+
 def _unified_sdpa_forward(q, k, v, attn_bias=None, compute_log_sumexp=True, dropout_p=0.0,
                           is_causal=False, return_debug_mask=False, scale=None):
     """Fused attention forward, cuDNN argument order (a captured call omits trailing
-    defaults); flash under deterministic algorithms."""
+    defaults). Under deterministic algorithms, where eager leaves cuDNN, flash, which
+    takes no mask, or memory-efficient attention with one."""
     if torch.are_deterministic_algorithms_enabled():
-        return torch.ops.aten._scaled_dot_product_flash_attention.default(
-            q, k, v, dropout_p, is_causal, return_debug_mask, scale=scale)
+        if attn_bias is None:
+            return torch.ops.aten._scaled_dot_product_flash_attention.default(
+                q, k, v, dropout_p, is_causal, return_debug_mask, scale=scale)
+        out, lse, seed, offset = torch.ops.aten._scaled_dot_product_efficient_attention.default(
+            q, k, v, _unified_sdpa_bias(q, k, attn_bias), compute_log_sumexp, dropout_p, is_causal,
+            scale=scale)
+        return out, lse, None, None, q.size(2), k.size(2), seed, offset, None
     return torch.ops.aten._scaled_dot_product_cudnn_attention.default(
         q, k, v, attn_bias, compute_log_sumexp, dropout_p, is_causal, return_debug_mask, scale=scale)
 
 
 def _unified_sdpa_backward(grad_out, q, k, v, out, logsumexp, philox_seed, philox_offset, attn_bias,
                            cum_seq_q, cum_seq_k, max_q, max_k, dropout_p, is_causal, scale=None):
-    """Fused attention backward, cuDNN argument order; flash under deterministic algorithms."""
+    """Fused attention backward, cuDNN argument order; under deterministic algorithms
+    the backend the forward chose (flash without a mask, memory-efficient with one)."""
     if torch.are_deterministic_algorithms_enabled():
+        if attn_bias is not None:
+            return torch.ops.aten._scaled_dot_product_efficient_attention_backward.default(
+                grad_out, q, k, v, _unified_sdpa_bias(q, k, attn_bias), out, logsumexp,
+                philox_seed, philox_offset, dropout_p, [True, True, True, False], is_causal,
+                scale=scale)[:3]
         return torch.ops.aten._scaled_dot_product_flash_attention_backward.default(
             grad_out, q, k, v, out, logsumexp, cum_seq_q, cum_seq_k, max_q, max_k, dropout_p,
             is_causal, philox_seed, philox_offset, scale=scale)
