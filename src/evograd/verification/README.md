@@ -211,7 +211,7 @@ identity lists the recorded cases (`cases`) and states the rule
 (`case_selection`: rule, the search set's SHA-256 and snapshot hash, the
 observed cases left out); a request for any other case fails
 (`Corpus.require_case`), in `open_run` before any gate. Gate 1 and operator
-Gate 2 (gamma 2) both use every payload of the case, orders 101/202/303/404
+Gate 2 (gamma 2.5, `GATE2_OPERATOR_GAMMA`) both use every payload of the case, orders 101/202/303/404
 (`PAYLOAD_SPLITS`): operator Gate 2 calibrates on those payloads and judges
 fresh executions of the same ones. The corpus split into calibration (101/202)
 and acceptance (303/404) only keeps 303/404 out of the search's feedback.

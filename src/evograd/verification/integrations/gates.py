@@ -11,8 +11,8 @@ against the model reference (``Model.reference_op``):
   data orders 101/202/303/404).
 * Gate 2, operator scope -- thresholds from ``torch.compile`` and the rounding
   floor on the same payloads, per call site (the native must repeat bit for
-  bit), judged on fresh executions of them through the artifact's deployment
-  entry.
+  bit), with :data:`GATE2_OPERATOR_GAMMA`, judged on fresh executions of them
+  through the artifact's deployment entry.
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
@@ -67,8 +67,13 @@ MODEL_ORDERS = (101, 202, 303, 404)
 #: (orders 101/202 and 303/404): operator Gate 2 calibrates on them and judges the
 #: same payloads. Search feedback sees the calibration split only.
 PAYLOAD_SPLITS = ("calibration", "acceptance")
-#: Gate 2 safety factor at model scope (the operator scope keeps the
-#: calibration default, 2): the smallest integer at which every frontend seed
+#: Gate 2 safety factor at operator scope, whose thresholds are per call site:
+#: each rests on that call's four payloads (orders 101/202/303/404). P8 controls,
+#: leave one order out (276 case x order pairs): compile's held-out order fails
+#: its own call's threshold in 11 pairs at gamma 2 and 6 at 2.5, while every x1.05
+#: gradient fault still fails operator Gate 2 alone (smallest ratio 2.70 at 2).
+GATE2_OPERATOR_GAMMA = 2.5
+#: Gate 2 safety factor at model scope: the smallest integer at which every frontend seed
 #: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
 #: residual_rmsnorm seed needs 3.3 (pooled budgets, one sample, two norm/proj
 #: weight gradients); the x1.01 fault exceeds four times the budget on 401
@@ -275,7 +280,7 @@ def operator_calibration(model, case, corpus, *, device: str = "cuda",
              / f"{case.case_id.replace('/', '__')}.json")
     samples = payload_samples(scope)
     calibration = _calibrate(scope, stand_in, samples, cache, samples=samples,
-                             compile_backend=compile_backend)
+                             compile_backend=compile_backend, gamma=GATE2_OPERATOR_GAMMA)
     return scope, calibration
 
 
