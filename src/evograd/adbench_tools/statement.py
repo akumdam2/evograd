@@ -72,21 +72,22 @@ def _argument_lines(abi: dict) -> list[str]:
 
 def _tolerance_text(gate1: dict) -> str:
     """Gate 1's acceptance rule, from ``task.json``'s ``gate1_tolerances``."""
+    policy = gate1["policy"]
     results = "\n".join(
-        f"- `{name}` ({r['dtype']}): atol={r['atol']:.3g}, rtol={r['rtol']:.3g}"
+        f"- `{name}` ({r['dtype']}): budget={r['budget']:.3g}"
+        + (f" (the call's {r['budget_dtype']} precision)" if r["budget_dtype"] != r["dtype"] else "")
         for name, r in gate1["results"].items()
     )
-    gamma = gate1["envelope_gamma"]
-    return f"""Acceptance compares every output and gradient with the reference, element by
-element in float64, on real recorded training calls whose values you are not given:
-`|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
-`atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
-dtype (below); `envelope` is {gamma:g}x the larger of the largest elementwise
-deviation of `torch.compile` from the reference on that result, measured on the
-same recorded calls, and one unit in the last place of the reference's largest
-magnitude. So each element may be off by the dtype default or by up to {gamma:g}x
-torch.compile's own error or {gamma:g} ulps of the largest value, whichever is
-larger.
+    return f"""Acceptance compares every output and gradient, element by element in float64,
+with the true values `t` on real recorded training calls whose values you are not
+given: `|candidate - t| <= atol + budget * max|t|`, where `t` is the reference
+computed with its low-precision inputs widened to float32, `max|t|` is the largest
+magnitude of that output or gradient on that call, and atol={policy['atol']:g}.
+So every element may be off by `budget` of the result's largest value; a gradient
+is judged at its own scale however small it is. Where {policy['native_factor']:g} times the
+largest deviation of the reference computed at the real dtypes (the model's own
+kernels) from `t` on the judged calls is larger, that is the result's budget
+instead. The budget follows the least precise floating dtype of the call:
 
 {results}"""
 
@@ -99,7 +100,7 @@ def _search_text(spec: dict) -> str:
             f"to {len(search['payload_ids'])} recorded training calls (the first, middle and "
             "last call of this operator in each of two training steps). Acceptance then "
             "judges every recorded call of this operator in all four training steps, these "
-            "calls included; the envelope is measured on those same calls.")
+            "calls included.")
 
 
 def render_statement(task: "AgentTask") -> str:

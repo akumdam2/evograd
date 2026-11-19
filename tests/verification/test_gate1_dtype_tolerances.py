@@ -1,105 +1,150 @@
-"""Model Gate 1 uses dtype defaults, independently of legacy declaration scales."""
+"""Model Gate 1: |c-t| <= atol + bound*max|t| per element against a float32 truth; bound = the larger
+of the budget (by the call's least precise dtype) and 1.5 x native's own error."""
 
 from dataclasses import replace
 import unittest
-from unittest import mock
 
 import torch
 
-from evograd.opdecl import Workload
+from evograd.opdecl import Active, Inactive, Workload
 from evograd.verification import gate1
 from evograd.verification.common import contracts as C
-from evograd.verification.gate1.runner import compare_results, PROTOCOL
+from evograd.verification.gate1.runner import (
+    PROTOCOL, compare_results, native_errors, truth_results, widened,
+)
 from evograd.verification.gate1.tolerances import (
-    ENVELOPE_GAMMA, MODEL_POLICY, model_policy_identity, policy_identity, result_tolerances,
-    rounding_floor,
+    ATOL, BUDGETS, MODEL_POLICY, NATIVE_FACTOR, allowance, model_policy_identity, policy_identity,
+    result_bound, result_budget, rule_dtype,
 )
 from tests.verification import _fixtures as F
 
+BF16 = torch.bfloat16
 
-class DtypeToleranceTests(unittest.TestCase):
+
+class DtypeRuleTests(unittest.TestCase):
     def setUp(self):
         self.op = replace(F.SPLIT, reference_contract="evograd-model-reference/test/1")
         self.workload = Workload({"R": 4, "C": 8}, "bfloat16", atol=99, rtol=99)
 
-    def compare(self, reference, candidate, *, name="out:y", op=None):
+    def compare(self, reference, candidate, *, name="out:y", truth=None, native_error=None):
         kind = C.OUTPUT if name.startswith("out:") else C.INPUT_GRAD
         contract = C.ResultContract((C.ResultSpec(name, kind),))
-        return compare_results(op or self.op, self.workload, contract,
-                               {name: candidate}, {name: reference})[0]
+        return compare_results(self.op, self.workload, contract, {name: candidate}, {name: reference},
+                               truth=None if truth is None else {name: truth},
+                               native_error=native_error)[0]
 
-    def test_defaults_match_installed_assert_close_policy(self):
-        # Private helper is used only to audit the frozen public defaults in tests.
-        from torch.testing._comparison import default_tolerances
+    def test_the_budget_table(self):
+        self.assertEqual(ATOL, 1e-12)
+        self.assertEqual(NATIVE_FACTOR, 1.5)
+        self.assertEqual(BUDGETS, {torch.float16: 5e-3, BF16: 4e-2, torch.float32: 1e-5,
+                                   torch.float64: 1e-7})
 
-        for dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float64):
-            with self.subTest(dtype=dtype):
-                atol, rtol = result_tolerances(self.op, self.workload, "y", torch.ones(1, dtype=dtype))
-                self.assertEqual((rtol, atol), default_tolerances(dtype))
-
-    def test_bfloat16_boundary_matches_assert_close(self):
-        # The dtype defaults alone, without the rounding floor.
-        ref = torch.tensor([1.0, 0.0], dtype=torch.bfloat16)
-        for values in ([1.0078125, 0.0], [1.03125, 0.0], [1.0, 2e-5]):
-            candidate = torch.tensor(values, dtype=torch.bfloat16)
-            try:
-                torch.testing.assert_close(candidate, ref)
-                expected = "passed"
-            except AssertionError:
-                expected = "failed"
-            with mock.patch("evograd.verification.gate1.runner.rounding_floor", return_value=0.0):
-                self.assertEqual(self.compare(ref, candidate).status, expected)
-
-    def test_the_compile_envelope_covers_a_cancelled_element_but_not_a_scale_fault(self):
-        # Two terms of size 0.5 cancel to 0.03 in the reference; rounding the operands
-        # moves the result by 0.02, past the rounding floor (4 ulps of 0.75 = 0.0156).
-        # The trusted compile moved it by up to 0.0075 on the calibration payloads:
-        # envelope = 4 * 0.0075.
-        ref = torch.tensor([0.75, -0.5, 0.03125, 0.25], dtype=torch.bfloat16)
-        rounded = ref.clone(); rounded[2] = 0.05078125
-        contract = C.ResultContract((C.ResultSpec("out:y", C.OUTPUT),))
-        judge = lambda cand, env: compare_results(self.op, self.workload, contract, {"out:y": cand},
-                                                  {"out:y": ref}, envelope=env)[0]
-        self.assertEqual(judge(rounded, None).status, "failed")          # no calibration
-        check = judge(rounded, {"out:y": 0.03})
+    def test_every_element_gets_the_same_allowance_from_the_largest_magnitude(self):
+        ref = torch.tensor([1.0, 0.0], dtype=BF16)
+        check = self.compare(ref, torch.tensor([1.0, 0.0390625], dtype=BF16))      # 0.039 < 0.04
         self.assertEqual(check.status, "passed")
-        self.assertEqual(check.limits["envelope"], 0.03)
-        self.assertEqual(judge((ref.float() * 1.05).to(ref.dtype), {"out:y": 0.03}).status, "failed")
-        self.assertEqual(judge(rounded, {"out:other": 0.03}).status, "failed")   # per result
+        self.assertEqual(check.limits, {"dtype": "bfloat16", "atol": ATOL, "budget": 4e-2,
+                                        "native_error": 0.0, "native_bound": False, "bound": 4e-2,
+                                        "allowance": ATOL + 4e-2})
+        self.assertEqual(self.compare(ref, torch.tensor([1.0, 0.04296875], dtype=BF16)).status,
+                         "failed")
+        # The large element has the same allowance, not one relative to itself.
+        self.assertEqual(self.compare(ref, torch.tensor([1.0390625, 0.0], dtype=BF16)).status,
+                         "passed")
+        self.assertEqual(self.compare(ref, torch.tensor([1.046875, 0.0], dtype=BF16)).status,
+                         "failed")
 
-    def test_a_result_compile_reproduces_bit_for_bit_still_accepts_another_rounding(self):
-        # Envelope 0 (a vendor kernel under compile too): a cancelled element one rounding
-        # of a 0.5-sized operand away (0.0039) passes; a 5% scale fault does not.
-        ref = torch.tensor([0.75, -0.5, 0.03125, 0.25], dtype=torch.bfloat16)
-        rounded = ref.clone(); rounded[2] = 0.03515625
-        floor = ENVELOPE_GAMMA * 2.0 ** -7 * 2.0 ** -1      # ulp of 0.75 in bf16 is 2**-8
-        self.assertEqual(rounding_floor(self.op, ref), floor)
-        check = self.compare(ref, rounded)
-        self.assertEqual(check.status, "passed")
-        self.assertEqual((check.limits["envelope"], check.limits["rounding_floor"]), (floor, floor))
-        self.assertEqual(self.compare(ref, (ref.float() * 1.05).to(ref.dtype)).status, "failed")
-        self.assertEqual(rounding_floor(self.op, torch.zeros(3, dtype=torch.bfloat16)), 0.0)
+    def test_numbers_are_judged_against_the_truth_not_native(self):
+        # Native is 3% off the truth on its largest element; a candidate equal to the truth
+        # passes, one 3% off on the other side (6% from native, 3% from the truth) passes,
+        # and native scaled by 1.05 (8% from the truth) fails.
+        truth = torch.tensor([1.0, -0.5, 0.25])
+        native = torch.tensor([1.03125, -0.5, 0.25], dtype=BF16)
+        self.assertEqual(self.compare(native, truth.to(BF16), truth=truth).status, "passed")
+        other = torch.tensor([0.96875, -0.5, 0.25], dtype=BF16)
+        self.assertEqual(self.compare(native, other, truth=truth).status, "passed")
+        self.assertEqual(self.compare(native, (native.float() * 1.05).to(BF16), truth=truth).status,
+                         "failed")
 
-    def test_unknown_model_result_dtype_is_not_assigned_a_guessed_tolerance(self):
+    def test_the_bound_is_never_below_one_and_a_half_times_natives_own_error(self):
+        self.assertEqual(result_bound(4e-2, 2e-2), 4e-2)
+        self.assertAlmostEqual(result_bound(4e-2, 3e-2), 4.5e-2)     # continuous: no step at the budget
+        self.assertAlmostEqual(result_bound(4e-2, 8e-2), 0.12)
+        truth = torch.tensor([1.0, -0.5, 0.25])
+        native = torch.tensor([1.078125, -0.5, 0.25], dtype=BF16)                 # 7.8% off
+        cand = torch.tensor([0.90625, -0.5, 0.25], dtype=BF16)                    # 9.4% off
+        plain = self.compare(native, cand, truth=truth)
+        self.assertEqual(plain.status, "failed")
+        widened_check = self.compare(native, cand, truth=truth, native_error={"out:y": 0.078125})
+        self.assertEqual(widened_check.status, "passed")
+        self.assertTrue(widened_check.limits["native_bound"])
+        self.assertAlmostEqual(widened_check.limits["bound"], 1.5 * 0.078125)
+        far = torch.tensor([0.875, -0.5, 0.25], dtype=BF16)                       # 12.5% off
+        self.assertEqual(self.compare(native, far, truth=truth,
+                                      native_error={"out:y": 0.078125}).status, "failed")
+
+    def test_a_tiny_result_is_judged_at_its_own_scale(self):
+        # atol is 1e-12: a gradient peaking at 5e-5 scaled by 1.05, or returned as zeros,
+        # fails although every difference is below torch's default atol of 1e-5.
+        ref = torch.tensor([5e-5, -2e-5, 1e-6, 3e-5], dtype=BF16)
+        self.assertEqual(self.compare(ref, (ref.float() * 1.05).to(BF16), name="grad_in:dx").status,
+                         "failed")
+        self.assertEqual(self.compare(ref, torch.zeros_like(ref), name="grad_in:dx").status,
+                         "failed")
+        self.assertEqual(self.compare(ref, ref.clone(), name="grad_in:dx").status, "passed")
+
+    def test_a_numerically_zero_result_is_absorbed_by_atol(self):
+        zeros = torch.zeros(3, dtype=torch.float32)
+        self.assertEqual(allowance(zeros, 1e-5), ATOL)
+        residue = torch.tensor([3e-16, -1e-14, 0.0])
+        self.assertEqual(self.compare(residue, torch.tensor([0.0, 0.0, 2e-15])).status, "passed")
+        self.assertEqual(self.compare(zeros, torch.tensor([0.0, 1e-11, 0.0])).status, "failed")
+
+    def test_the_budget_follows_the_least_precise_dtype_of_the_call(self):
+        op = replace(self.op, args=(Active("x", "[R, C]"), Active("w", "[C]", dtype="float32"),
+                                    Inactive("mask", "[R]", dtype="bool"),
+                                    Inactive("alpha", None, default=2.0)))
+        bf16_call, fp32_call = Workload({"R": 4, "C": 8}, "bfloat16"), Workload({"R": 4, "C": 8}, "float32")
+        # A float32 parameter gradient of a bfloat16 call carries bfloat16 rounding.
+        self.assertEqual(rule_dtype(op, bf16_call, torch.float32), BF16)
+        self.assertEqual(result_budget(op, bf16_call, torch.float32), 4e-2)
+        self.assertEqual(rule_dtype(op, fp32_call, torch.float32), torch.float32)
+        self.assertEqual(result_budget(op, fp32_call, torch.float32), 1e-5)
+        # A bfloat16 result of a float32 call is judged at bfloat16.
+        self.assertEqual(rule_dtype(op, fp32_call, BF16), BF16)
+
+    def test_the_truth_widens_low_precision_inputs_and_native_error_measures_native(self):
+        values = {"x": torch.randn(4, 8, dtype=BF16), "w": torch.randn(8), "k": 3}
+        wide, changed = widened(values)
+        self.assertTrue(changed)
+        self.assertEqual((wide["x"].dtype, wide["w"].dtype, wide["k"]), (torch.float32, torch.float32, 3))
+        self.assertFalse(widened({"w": torch.randn(8)})[1])
+        # A float32 call has nothing to widen: the truth is native and its own error is 0.
+        cases = F.supplied_cases(self.op)
+        native = {"out:hi": torch.ones(2)}
+        self.assertIs(truth_results(self.op, dict(cases[0].values), "cpu", native), native)
+        self.assertTrue(all(v == 0.0 for v in native_errors(self.op, cases, "cpu").values()))
+
+    def test_unknown_model_result_dtype_is_not_assigned_a_guessed_rule(self):
         with self.assertRaisesRegex(ValueError, "unsupported result dtype"):
-            result_tolerances(self.op, self.workload, "y", torch.ones(1, dtype=torch.complex64))
+            result_budget(self.op, self.workload, torch.complex64)
 
-    def test_policy_identity_includes_effective_table_and_report_version(self):
+    def test_policy_identity_includes_the_rule_table_and_report_version(self):
         report = gate1.verify_pair(self.op, F.split_pair(), cases=F.supplied_cases(self.op),
                                    device="cpu")
         self.assertEqual(report.status, "passed")
         self.assertEqual(report.protocol, PROTOCOL)
         self.assertEqual(report.subject["tolerance_policy"], model_policy_identity())
         self.assertEqual(report.subject["tolerance_policy"]["schema"], MODEL_POLICY)
+        self.assertIn("native_error", report.subject)
+        self.assertNotIn("envelope", report.subject)
         for result in report.cases[0].results:
-            self.assertEqual((result.limits["atol"], result.limits["rtol"]), (1e-5, 1.3e-6))
-            self.assertEqual(result.limits["envelope"], result.limits["rounding_floor"])
+            self.assertEqual((result.limits["dtype"], result.limits["budget"]), ("float32", 1e-5))
 
-    def test_a_declaration_without_a_model_reference_has_no_gate1_tolerance(self):
+    def test_a_declaration_without_a_model_reference_has_no_gate1_rule(self):
         # Every entry refuses it.
         workload = F.SPLIT.benchmark[0]
-        for check in (lambda: result_tolerances(F.SPLIT, workload, "lo", torch.ones(1)),
-                      lambda: rounding_floor(F.SPLIT, torch.ones(1)),
+        for check in (lambda: result_budget(F.SPLIT, workload, torch.float32),
                       lambda: policy_identity(F.SPLIT)):
             with self.assertRaisesRegex(ValueError, "model-reference"):
                 check()

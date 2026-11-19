@@ -138,7 +138,7 @@ An L2 candidate can be evaluated at T2 and installed in the T3 model.
 Every seed pipeline (`evograd seed {unified,a,b,c,d} --pack PACK`) publishes
 only a seed that passes the task pack's search rule -- Gate 1 on the case's
 calibration payloads (recorded training calls, against the model reference,
-with the pack's compile envelope) -- and then one forward and backward through
+under Gate 1's fixed dtype rule) -- and then one forward and backward through
 its deployment entry under native autograd on one of those payloads. The
 isolated admission entry point is `evograd.evaluation.common.seed --pack`; it
 runs without timing. No check judges a seed on generated inputs or by the

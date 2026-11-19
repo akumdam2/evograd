@@ -91,10 +91,11 @@ def selected_cases(args) -> list[str]:
 
 
 def cmd_tasks(args) -> int:
-    """Build the missing packs; fail (after building the others) when a case has no
-    operator Gate 2 calibration, built now or kept from before."""
+    """Build the missing packs; fail (after building the others) when a kept pack was
+    built under another Gate 1 rule (its statement tells agents that rule)."""
     from evograd.adbench_tools.evaluate import search_rule
-    from evograd.adbench_tools.task import CalibrationFailed, build_task, load
+    from evograd.adbench_tools.task import build_task, load
+    from evograd.verification.gate1.tolerances import MODEL_POLICY
 
     cases = model_cases(args.model)
     selected = selected_cases(args)
@@ -107,24 +108,20 @@ def cmd_tasks(args) -> int:
             task = load(directory)
             if task.spec.get("case_id") != cid or task.spec.get("model") != args.model:
                 raise SystemExit(f"{directory} holds {task.task_id}, not {args.model} {cid}")
-            if task.spec.get("search_correctness", {}).get("calibrated") is False:
-                failed.append(f"{cid}: the kept pack {directory} has no operator Gate 2 "
-                              "calibration; move it away and build it again")
+            rule = task.spec.get("gate1_tolerances", {}).get("policy", {}).get("schema")
+            if rule != MODEL_POLICY:
+                failed.append(f"{cid}: the kept pack {directory} was built under Gate 1 rule "
+                              f"{rule}, not {MODEL_POLICY}; move it away and build it again")
                 continue
             print(f"kept {task.task_id}: {directory} (search correctness {search_rule(task)})")
             continue
-        try:
-            task = build_task(directory, model=args.model, case_id=cid, library=args.library,
-                              corpus=args.corpus, state=args.state)
-        except CalibrationFailed as exc:
-            failed.append(str(exc))
-            print(f"FAILED {cid}: {exc}", flush=True)
-            continue
+        task = build_task(directory, model=args.model, case_id=cid, library=args.library,
+                          corpus=args.corpus)
         print(f"built {task.task_id}: {directory} (L{task.spec['level']}, "
               f"primitives {list(task.allowed_primitives)}, "
               f"search correctness {task.spec['search_correctness']['rule']})")
     if failed:
-        print(f"{len(failed)} of {len(selected)} packs have no operator Gate 2 calibration:",
+        print(f"{len(failed)} of {len(selected)} kept packs are stale:",
               *failed, sep="\n  ", file=sys.stderr, flush=True)
         return 1
     return 0
@@ -434,9 +431,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--library", default="auto")
     p.add_argument("--corpus", type=Path, default=None,
                    help="the model's payload corpus manifest (search feedback is Gate 1 on the "
-                        "first, middle and last call of each calibration order; needs a GPU)")
-    p.add_argument("--state", type=Path, default=None,
-                   help="reuse and keep operator Gate 2 calibrations here (as evaluate's state)")
+                        "first, middle and last call of each calibration order)")
     p.set_defaults(run=cmd_tasks)
 
     p = sub.add_parser("run", help="one agent on the searched cases' packs (or --case-id), no scoring")

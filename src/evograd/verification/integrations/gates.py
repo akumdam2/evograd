@@ -207,9 +207,6 @@ def _cached_policy(path: Path | None, scope, deployment, judged, request):
         return None
     if float(policy.gamma) != float(request["settings"]["gamma"]):
         return None
-    # An operator policy frozen before Gate 1's compile envelope existed carries none.
-    if any("envelope" not in entry for entry in (policy.to_dict().get("thresholds") or {}).values()):
-        return None
     if {f.code for f in policy_findings(policy, scope, deployment, judged)} & BINDING_CODES:
         return None
     return CalibrationResult(policy=policy, evidence={"reused_policy": str(path)})
@@ -234,41 +231,13 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
 # ── per case: Gate 1 and operator Gate 2 ─────────────────────────────────────
 
 
-def gate1_envelope(op, policy) -> dict[str, float]:
-    """Gate 1's elementwise envelope per result, from the operator Gate 2 policy.
-
-    The policy records its own factor times compile's largest elementwise
-    deviation (``envelope``, at ``policy.gamma``); Gate 1 applies its own,
-    :data:`~evograd.verification.gate1.tolerances.ENVELOPE_GAMMA`, to the same
-    deviation, so a stored calibration still binds.
-    Gate 2 names a gradient by its argument (``grad:q_weight``, ``grad_in:x``);
-    Gate 1 by the declared gradient name (``grad_in:dq_weight``, ``grad_in:dx``).
-    An uncalibrated case (no policy) keeps assert_close's rule and Gate 1's rounding floor.
-    """
-    from evograd.verification.gate1.tolerances import ENVELOPE_GAMMA
-
-    if policy is None:
-        return {}
-    grads = {a.name: a.grad_name for a in op.active_args()}
-    envelope = {}
-    for name, entry in (policy.thresholds or {}).items():
-        if "envelope" not in entry:
-            continue
-        prefix, _, rest = name.partition(":")
-        if prefix in ("grad", "grad_in") and rest in grads:
-            name = f"grad_in:{grads[rest]}"
-        envelope[name] = ENVELOPE_GAMMA * float(entry["envelope"]) / float(policy.gamma)
-    return envelope
-
-
 def operator_calibration(model, case, corpus, *, device: str = "cuda",
                          compile_backend: str = "inductor", state: Path | None = None):
     """The case's operator scope on ``corpus`` and its Gate 2 calibration, saved
     under ``state`` and reused.
 
     The calibration binds the patch set (the scope's one site), never a
-    candidate, so the reference itself stands in for one: an ADBench task pack
-    takes Gate 1's envelope from here before any candidate exists.
+    candidate, so the reference itself stands in for one.
     """
     from evograd.verification.common.execution import CANDIDATE, Deployment
     from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
@@ -306,10 +275,9 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
                                               compile_backend=compile_backend, state=state)
     op = scope.op
     deployment = scope.candidate(module)
-    envelope = gate1_envelope(op, calibration.policy)
     cases = [c for split in PAYLOAD_SPLITS for c in payload_cases(
         op, case.workload, corpus, case_id=case.case_id, split=split, device=device)]
-    payloads = gate1.verify_pair(op, module, device=device, envelope=envelope, cases=cases)
+    payloads = gate1.verify_pair(op, module, device=device, cases=cases)
     operator = gate2.verify_integration(scope, deployment, policy=calibration.policy,
                                         samples=payload_samples(scope))
     return {"gate1_payloads": payloads,

@@ -56,34 +56,59 @@ rejects incompatible policies. Unidentifiable references fail closed.
 
 ```python
 cases = payload_cases(op, workload, corpus, case_id=case_id, split="acceptance")
-report = gate1.verify_pair(op, candidate_module, cases=cases, envelope=envelope)
+report = gate1.verify_pair(op, candidate_module, cases=cases)
 assert report.status == "passed", report.to_dict()
 ```
 
 The candidate backward receives its own forward's saved state. Every declared
 output and required gradient is checked by name, structure, shape, dtype,
-finiteness, and the elementwise rule `abs(c-r) <= max(atol + rtol*abs(r), envelope)`,
-where `envelope` is gamma times the largest elementwise deviation the trusted
-`torch.compile` control showed on that result over the operator Gate 2
-calibration payloads, never less than gamma ulps of the reference's largest
-magnitude. Comparisons use float64. Candidate input mutation fails unless the declaration
-explicitly allows it; allowed content overwrites must preserve layout.
+finiteness, and the elementwise rule `abs(c-t) <= atol + bound*max(abs(t))`, where
+`t` is the float32 truth (the model reference with its floating inputs below
+float32 widened, TF32 off) and `max(abs(t))` that result's largest magnitude on
+that call. Structure (shape, dtype, exact values of non-floating results) is
+checked against the reference at the real dtypes ("native"). Comparisons use
+float64. Candidate input mutation fails unless the declaration explicitly allows
+it; allowed content overwrites must preserve layout.
+
+Gate 1 is the search-time check that a kernel is written correctly: it needs no
+calibration and never consults `torch.compile`; small faults are operator Gate 2's
+job. Why a float32 truth: native carries its own rounding (a bfloat16 RMSNorm
+weight gradient is 2-3% of its largest value off), so judging against it rejects
+implementations that are more accurate than the model; float32 is within 4e-4 of
+a float64 evaluation on the benchmark's cases (4e-3 on one ill-conditioned
+attention block), at least 30 times below native's own error, and runs every
+kernel the model uses (float64 does not: grouped matmul). Every element is checked,
+with one allowance per result: a small element is usually the difference of
+larger terms, whose rounding sets its error. `atol` is 1e-12 for every dtype: it
+only absorbs numerically zero results; recorded gradients reach down to 1e-13.
+
+`bound` is the larger of the budget of the call's least precise floating dtype
+(its tensor inputs, upstream gradients and the result: a float32 gradient
+computed from bfloat16 activations carries bfloat16 rounding) and 1.5 times
+native's largest deviation from the truth on the judged calls
+(`gate1.runner.native_errors`, computed before the candidate runs and recorded in
+the report). Where native is itself that inaccurate the result is
+ill-conditioned at that dtype, and a candidate is held to native's accuracy
+rather than to the budget; on the benchmark's cases that is mostly
+attention-block gradients.
 
 Gate 1 judges only model-reference tasks; any other declaration is refused.
-Declarations carry no tolerances. The tolerance is a fixed, versioned table
-based on the reference result's dtype:
+Declarations carry no tolerances. The budgets are a fixed, versioned table
+(`gate1/tolerances.py`, recorded in the report):
 
-| Result dtype | atol | rtol |
-| --- | ---: | ---: |
-| float16 | 1e-5 | 1e-3 |
-| bfloat16 | 1e-5 | 1.6e-2 |
-| float32 | 1e-5 | 1.3e-6 |
-| float64 | 1e-7 | 1e-7 |
+| Dtype | budget |
+| --- | ---: |
+| float16 | 5e-3 |
+| bfloat16 | 4e-2 |
+| float32 | 1e-5 |
+| float64 | 1e-7 |
 
-The table in `gate1/tolerances.py` is frozen from PyTorch 2.11's
-`torch.testing.assert_close` defaults, or the compile envelope where that is
-larger. The policy identity is recorded in the report. This is the selected numerical policy, not a proof that all meaningful
-errors are detected; tiny gradients can still fall below the absolute floor.
+A gradient scaled by 1.05 moves its largest element by 5% of the largest
+magnitude, so the bfloat16 budget rejects it wherever native is accurate. Correct
+implementations (`torch.compile`, the frontend seeds) were measured against a
+float64 evaluation on the benchmark's cases (2026-11-19); float16's budget is not
+measured. This is the selected numerical policy, not a proof that all meaningful
+errors are detected.
 
 Callers supply the cases: lazy recorded payloads (`payload_cases`) or values
 given the same way (`Gate1Case`). There is no default case set and no

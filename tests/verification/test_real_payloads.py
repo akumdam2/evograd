@@ -257,7 +257,7 @@ class SearchFeedbackTests(unittest.TestCase):
     def spec(self, ids=None, corpus_id=None):
         from evograd.verification.payloads.gate1 import SEARCH_RULE
 
-        return {"rule": SEARCH_RULE, "case_id": "case/x", "envelope": {},
+        return {"rule": SEARCH_RULE, "case_id": "case/x",
                 "corpus": {"manifest": str(self.manifest),
                            "corpus_id": corpus_id or self.corpus.corpus_id},
                 "payload_ids": self.ids if ids is None else ids}

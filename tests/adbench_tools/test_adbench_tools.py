@@ -295,12 +295,7 @@ def test_kernelagent_and_geak_time_the_same_step_as_the_pair(small_task, tmp_pat
 
 def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None, **build):
     """A model case's pack without a GPU: a tiny real corpus holds its calibration calls
-    (placeholders unless ``payloads`` gives them at the case's interface); only the
-    operator Gate 2 calibration (the envelope's GPU run) is stubbed."""
-    from types import SimpleNamespace
-    from unittest import mock
-
-    from evograd.verification.integrations import base, gates
+    (placeholders unless ``payloads`` gives them at the case's interface)."""
     from tests.verification.test_real_payloads import _write_corpus
 
     if payloads is None:
@@ -308,14 +303,7 @@ def payload_rule_task(output_dir: Path, model: str, case_id: str, payloads=None,
                     for order in (101, 202) for call in "abc"]
     manifest = _write_corpus(output_dir.parent / f"{output_dir.name}_corpus", payloads,
                              case_id=case_id, task=case_id.split("/")[0])
-
-    def calibration(model_obj, case, corpus, **_):
-        policy = SimpleNamespace(gamma=4.0, thresholds={})  # a calibration with no envelope
-        return SimpleNamespace(op=model_obj.reference_op(case.task)), SimpleNamespace(policy=policy)
-
-    with mock.patch.object(gates, "operator_calibration", calibration), \
-            mock.patch.object(base, "configure", lambda: None):
-        return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
+    return build_task(output_dir, model=model, case_id=case_id, corpus=manifest, **build)
 
 
 def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
@@ -342,14 +330,15 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     from evograd.verification.gate1.tolerances import model_policy_identity
 
     gate1 = task.spec["gate1_tolerances"]
-    defaults = model_policy_identity()["defaults"]
+    budgets = model_policy_identity()["budgets"]
     assert "tolerances" not in task.spec
-    assert gate1["policy"] == model_policy_identity() and gate1["envelope_gamma"] == 4.0
+    assert gate1["policy"] == model_policy_identity() and "envelope_gamma" not in gate1
     assert list(gate1["results"]) == sorted([*op.output_names, *op.grad_names()])
-    assert all({"atol": r["atol"], "rtol": r["rtol"]} == defaults[r["dtype"]]
-               for r in gate1["results"].values())
-    assert "4x the larger of the largest elementwise" in task.statement
-    assert "4 ulps of the largest value" in task.statement
+    assert all(r["budget"] == budgets[r["budget_dtype"]] for r in gate1["results"].values())
+    assert "`|candidate - t| <= atol + budget * max|t|`" in task.statement
+    assert "widened to float32" in task.statement
+    assert "atol=1e-12" in task.statement
+    assert "envelope" not in task.statement
     # Search feedback is Gate 1 on payloads; no model case is judged by the declaration.
     assert task.spec["search_correctness"]["rule"] == "gate1_calibration_payloads"
     assert "the declaration's own tolerances" not in task.statement
@@ -371,12 +360,9 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
 def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tmp_path,
                                                                               monkeypatch):
     """The default rule: Gate 1 on the first, middle and last calibration call
-    of each order, with the envelope operator Gate 2's calibration gives the
-    case; every evaluator the pack starts is pointed at it, and only by the pack."""
-    from types import SimpleNamespace
-
+    of each order (no calibration: Gate 1's rule is fixed per dtype); every
+    evaluator the pack starts is pointed at it, and only by the pack."""
     from evograd.adbench_tools.evaluate import evaluator_env
-    from evograd.verification.integrations import base, gates
     from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV, SEARCH_RULE
     from tests.verification.test_real_payloads import _write_corpus
 
@@ -385,40 +371,16 @@ def test_a_model_task_judges_search_feedback_by_gate1_on_calibration_payloads(tm
                 for order in (101, 202, 303, 404) for call in "abcde"]
     manifest = _write_corpus(tmp_path / "corpus", payloads, case_id="rmsnorm/rmsnorm",
                              task="rmsnorm")
-    policy = SimpleNamespace(gamma=2.0, thresholds={"out:y": {"envelope": 0.5},
-                                                    "grad:x": {"envelope": 0.25},
-                                                    "grad:weight": {"rms": 1.0}})
-    calibrated = []
-
-    def calibration(model, case, corpus, **options):
-        calibrated.append((case.case_id, corpus.corpus_id, options["state"]))
-        return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=policy)
-
-    monkeypatch.setattr(gates, "operator_calibration", calibration)
-    monkeypatch.setattr(base, "configure", lambda: calibrated.append("configured"))
     task = build_task(tmp_path / "task", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
-                      corpus=manifest, state=tmp_path / "state")
+                      corpus=manifest)
     search = task.spec["search_correctness"]
     assert search["rule"] == SEARCH_RULE and search["case_id"] == "rmsnorm/rmsnorm"
     assert search["payload_ids"] == [f"o{o}/rmsnorm/rmsnorm/{c}" for o in (101, 202) for c in "ace"]
     assert search["corpus"]["manifest"] == str(Path(manifest).resolve())
-    assert search["envelope"] == {"out:y": 1.0, "grad_in:dx": 0.5} and search["calibrated"]
-    assert calibrated == ["configured",
-                          ("rmsnorm/rmsnorm", search["corpus"]["corpus_id"], tmp_path / "state")]
+    assert "envelope" not in search and "calibrated" not in search
     assert "applies the acceptance rule of section 2 to 6 recorded training calls" in task.statement
     monkeypatch.setenv(SEARCH_CORRECTNESS_ENV, "/somewhere/else.json")
     assert evaluator_env(task)[SEARCH_CORRECTNESS_ENV] == str(task.root / "task.json")
-    # No policy, no pack: the failure says why and nothing is written.
-    from evograd.adbench_tools.task import CalibrationFailed
-
-    failure = SimpleNamespace(code="insufficient_calibration", message="out of memory")
-    monkeypatch.setattr(gates, "operator_calibration", lambda model, case, corpus, **options: (
-        SimpleNamespace(op=model.reference_op(case.task)),
-        SimpleNamespace(policy=None, status="incomplete", findings=[failure])))
-    with pytest.raises(CalibrationFailed, match="incomplete .insufficient_calibration: out of memory"):
-        build_task(tmp_path / "uncalibrated", model="qwen3_0_6b", case_id="rmsnorm/rmsnorm",
-                   corpus=manifest, state=tmp_path / "state")
-    assert not (tmp_path / "uncalibrated" / "task.json").exists()
     # A pack judged by the declaration's tolerances -- an operator pack, or a model pack
     # built before that rule was removed -- is refused, never judged, and still loads.
     from evograd.adbench_tools.evaluate import search_rule
@@ -669,12 +631,11 @@ def test_the_statement_states_the_rules_and_what_acceptance_judges(small_task):
     shared = describe_rules("Every line inside the block")
     assert shared in render_pair_rules(small_task.op(), small_task.allowed_primitives)
     # Acceptance (Gate 1, operator Gate 2) judges every payload of both splits --
-    # all four orders, the search calls included -- and calibrates the envelope on them.
+    # all four orders, the search calls included.
     assert PAYLOAD_SPLITS == ("calibration", "acceptance") and len(MODEL_ORDERS) == 4
     scored = small_task.statement.split("## 4.")[1]
     assert ("Acceptance then judges every recorded call of this operator in all four "
-            "training steps, these calls included; the envelope is measured on those same "
-            "calls.") in scored
+            "training steps, these calls included.") in scored
     assert "not among them" not in small_task.statement
     assert "held out" not in small_task.statement
 

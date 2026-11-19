@@ -264,73 +264,43 @@ def describe_abi(op, workload) -> dict[str, Any]:
 
 
 def _gate1_tolerances(op, workload) -> dict[str, Any]:
-    """The tolerance Gate 1 accepts each output and gradient under, read from Gate 1.
+    """The rule Gate 1 accepts each output and gradient under, read from Gate 1.
 
     Names and dtypes come from Gate 1's result contract (whose dtype the
-    reference result must have), the rule and per-result ``(atol, rtol)`` from
-    its tolerance policy: the fixed dtype defaults and the compile envelope. The
-    envelope's value needs a GPU calibration on the model's payloads, so only its
-    rule and Gate 1's factor (``gate1.tolerances.ENVELOPE_GAMMA``) are recorded.
+    reference result must have), the rule and per-result budget from its
+    tolerance policy (:mod:`evograd.verification.gate1.tolerances`).
     """
-    import torch
-
     from evograd.opdecl.inputs import resolve_dtype
     from evograd.verification.gate1.runner import declared_name, result_contract
-    from evograd.verification.gate1.tolerances import (
-        ENVELOPE_GAMMA,
-        policy_identity,
-        result_tolerances,
-    )
+    from evograd.verification.gate1.tolerances import policy_identity, result_budget, rule_dtype
 
     results = {}
     for spec in result_contract(op, workload).specs:
-        name = declared_name(spec.name)
-        reference = torch.empty(0, dtype=resolve_dtype(spec.dtype), device="meta")
-        atol, rtol = result_tolerances(op, workload, name, reference)
-        results[name] = {"dtype": spec.dtype, "atol": atol, "rtol": rtol}
-    return {"policy": policy_identity(op), "results": results, "envelope_gamma": ENVELOPE_GAMMA}
+        dtype = resolve_dtype(spec.dtype)
+        results[declared_name(spec.name)] = {
+            "dtype": spec.dtype,
+            "budget_dtype": str(rule_dtype(op, workload, dtype)).removeprefix("torch."),
+            "budget": result_budget(op, workload, dtype)}
+    return {"policy": policy_identity(op), "results": results}
 
 
-class CalibrationFailed(RuntimeError):
-    """A case's operator Gate 2 calibration gave no policy, so its pack is not written:
-    search feedback without the compile envelope would judge by another rule than
-    the evaluation's."""
-
-
-def _search_correctness(model_obj, observed, corpus: str | Path | None, *,
-                        device: str, state: Path | None) -> dict[str, Any]:
+def _search_correctness(observed, corpus: str | Path | None) -> dict[str, Any]:
     """What the evaluator judges a model case's candidates by, frozen in the pack:
-    Gate 1 on the first, middle and last call of each calibration order, with the
-    compile envelope operator Gate 2's calibration gives the case (a GPU run, as
-    ``integrations.gates.judge_case`` makes it).
-    """
+    Gate 1 on the first, middle and last call of each calibration order. Gate 1's
+    rule is fixed per result dtype, so building the pack needs no GPU calibration."""
     from evograd.verification.payloads.gate1 import SEARCH_RULE
 
     if corpus is None:
         raise ValueError(f"{SEARCH_RULE!r} needs the model's payload corpus (its manifest.json)")
-    from evograd.verification.integrations.base import configure
-    from evograd.verification.integrations.gates import gate1_envelope, operator_calibration
     from evograd.verification.payloads.corpus import Corpus
     from evograd.verification.payloads.gate1 import SEARCH_SELECTION, search_payload_ids
 
     manifest = Path(corpus).resolve()
     opened = Corpus.open(manifest)
-    payload_ids = search_payload_ids(opened, observed.case_id)
-    # Calibrated as `evograd evaluate` calibrates (deterministic algorithms, no
-    # TF32): the envelope is then Gate 1's own, and a stored calibration binds.
-    configure()
-    scope, calibration = operator_calibration(model_obj, observed, opened, device=device,
-                                              state=state)
-    if calibration.policy is None:
-        reasons = "; ".join(f"{f.code}: {f.message}" for f in calibration.findings)
-        raise CalibrationFailed(f"{observed.case_id}: operator Gate 2 calibration is "
-                                f"{calibration.status} ({reasons or 'no policy'})")
     return {"rule": SEARCH_RULE, "case_id": observed.case_id, "selection": SEARCH_SELECTION,
             "corpus": {"manifest": str(manifest), "corpus_id": opened.corpus_id,
                        "sha256": opened.sha256},
-            "payload_ids": payload_ids,
-            "envelope": gate1_envelope(scope.op, calibration.policy),
-            "calibrated": calibration.policy is not None}
+            "payload_ids": search_payload_ids(opened, observed.case_id)}
 
 
 # ── a model's observed case ──────────────────────────────────────────────────
@@ -381,7 +351,6 @@ def build_task(
     scoring: str = "speed_memory",
     performance_baseline: str = "auto",
     device: str = "cuda",
-    state: str | Path | None = None,
 ) -> AgentTask:
     """Write the task pack of ``model``'s observed case ``case_id`` and return it loaded.
 
@@ -389,8 +358,7 @@ def build_task(
     at and the model's own reference computation, so what the agent optimizes is
     what the gates judge. The evaluator judges every agent's candidates by
     :data:`~evograd.verification.payloads.gate1.SEARCH_RULE` during search,
-    which needs the model's payload ``corpus`` and a GPU (the compile envelope's
-    calibration).
+    which needs the model's payload ``corpus``.
     """
     from dataclasses import replace
 
@@ -412,15 +380,14 @@ def build_task(
     root = Path(output_dir).resolve()
     if (root / TASK_FILE).exists():
         raise FileExistsError(f"a task pack already exists at {root}; use a new directory")
-    # Before the pack exists: a trace or calibration that fails leaves no half-written pack.
+    # Before the pack exists: a trace that fails leaves no half-written pack.
     # Only ``auto`` reads the trace: another policy never depends on the reference running.
     calls = observed_calls(base, workload, device=device) if library == "auto" else ()
     allowed, library_reason = resolve_library(library, calls)
     library_policy = {"requested": library, "decision": library_reason}
     if library == "auto":
         library_policy["observed_calls"] = sorted(set(calls) & _GRANTING_CALLS)
-    search = _search_correctness(model_obj, observed, corpus, device=device,
-                                 state=Path(state) if state else None)
+    search = _search_correctness(observed, corpus)
     root.mkdir(parents=True, exist_ok=True)
 
     # The model reference, scoped to the case; the pack's own declaration is then

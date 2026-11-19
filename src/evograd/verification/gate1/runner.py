@@ -9,23 +9,23 @@ and backward: the backward receives the candidate forward's saved state.
 way. There is no default case set and no generated input.
 
 **Against what.** ``OpDecl.forward`` evaluated eagerly under autograd
-(:func:`evograd.opdecl.oracle.oracle`). Gate 1 judges only a model-reference
-declaration (``op.reference_contract``, e.g. every Qwen3-0.6B task): ``forward``
-is the pinned model's own computation, differentiated at the operands' real
-dtypes. Any other declaration is refused (:mod:`.tolerances`). The report's
+(:func:`evograd.opdecl.oracle.oracle`), twice: at the operands' real dtypes
+("native", the model's own computation, which fixes each result's structure:
+shape, dtype, exact values of non-floating results) and with every floating input
+below float32 widened to float32, TF32 off (the truth numbers are compared with).
+Gate 1 judges only a model-reference declaration (``op.reference_contract``, e.g.
+every Qwen3-0.6B task): ``forward`` is the pinned model's own computation. Any
+other declaration is refused (:mod:`.tolerances`). The report's
 ``subject.reference`` records the contract
 (:func:`evograd.opdecl.oracle.reference_identity`).
 
 **How.** Per element, per result:
-``|candidate_i - reference_i| <= max(atol_z + rtol_z * |reference_i|, envelope_z)``,
-with model-reference tasks using fixed ``torch.testing.assert_close`` dtype
-defaults from PyTorch 2.11 for each reference result and ``envelope_z``
-Gate 1's own factor (:data:`.tolerances.ENVELOPE_GAMMA`) times the largest
-elementwise deviation the trusted ``torch.compile`` control showed on that
-result over the calibration payloads (passed in by the caller from the
-operator Gate 2 policy; absent, 0), but never less than that factor times one
-ulp of the reference result's largest magnitude
-(:func:`.tolerances.rounding_floor`). Computed in float64.
+``|candidate_i - truth_i| <= atol + bound * max|truth|``, with ``bound`` the
+larger of the budget of the call's least precise floating dtype
+(:data:`.tolerances.BUDGETS`) and 1.5 times native's own largest deviation from
+the truth over the judged calls (:func:`native_errors`, computed first);
+a tiny absolute ``atol``; ``max|truth|`` that result's largest magnitude on that
+call. No calibration and no ``torch.compile`` control. Computed in float64.
 
 **What this core adds to the earlier verifiers** (all listed in the package
 README): explicit finiteness (a non-finite candidate fails, a non-finite
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import math
 import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
@@ -51,7 +52,15 @@ from evograd.opdecl.inputs import (
     upstream_grad_values,
 )
 from evograd.opdecl.oracle import oracle, reference_identity
-from evograd.verification.gate1.tolerances import policy_identity, result_tolerances, rounding_floor
+from evograd.verification.gate1.tolerances import (
+    ATOL,
+    BUDGETS,
+    COMPARISON,
+    allowance,
+    policy_identity,
+    result_bound,
+    rule_dtype,
+)
 from evograd.verification.common import contracts as C
 from evograd.verification.common.reports import (
     CaseReport,
@@ -70,7 +79,7 @@ from evograd.verification.common.tensors import (
 )
 
 GATE = "gate1"
-PROTOCOL = "evograd-verification-gate1/2"
+PROTOCOL = "evograd-verification-gate1/3"
 SMOKE_PROTOCOL = "evograd-verification-gate1-smoke/1"
 
 #: Input mutation policies. ``reject`` fails a candidate that changes any input
@@ -161,13 +170,9 @@ def verify_pair(
     mode: str = ORACLE,
     input_mutation: str = REJECT,
     observers: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None,
-    envelope: Mapping[str, float] | None = None,
+    native_error: Mapping[str, float] | None = None,
 ) -> VerificationReport:
     """Run ``candidate`` on every case and judge it against the oracle.
-
-    ``envelope`` maps a result name (``out:q``) to the least allowance of any
-    of its elements: gamma times the trusted compile control's largest
-    elementwise deviation on that result (see :mod:`.tolerances`).
 
     ``candidate`` is a :class:`PairUnderTest`, a seed module exposing
     ``forward_with_saved``/``backward_from_saved`` (generic or op-prefixed), or
@@ -181,6 +186,9 @@ def verify_pair(
     ``observers`` are named callables given each executed case's context
     (values, saved state, outputs, gradients); what they return is recorded as
     evidence and never changes the verdict.
+
+    ``native_error`` is :func:`native_errors` on ``cases``, computed here when not
+    given (a caller judging several candidates on the same cases computes it once).
     """
     from evograd.verification.gate1.adapters import as_pair
 
@@ -196,8 +204,7 @@ def verify_pair(
                  "device": str(device), "mode": mode, "input_mutation": input_mutation,
                  "reference": reference_identity(op),
                  "tolerance_policy": policy_identity(op),
-                 "comparison": "|c-r| <= max(atol + rtol*|r|, envelope) per element, float64",
-                 "envelope": dict(envelope or {}),
+                 "comparison": COMPARISON,
                  "cases": [c.case_id for c in selected]},
     )
     ids = [c.case_id for c in selected]
@@ -207,16 +214,107 @@ def verify_pair(
     if mode == SMOKE:
         report.findings.append(missing("smoke_only", "smoke mode ran the pair without an oracle; "
                                                      "this is not a numerical verification"))
+    if mode == ORACLE:
+        if native_error is None:
+            native_error = native_errors(op, selected, device)
+        report.subject["native_error"] = dict(native_error)
     for case in selected:
         report.cases.append(_run_case(op, pair, case, device=device, mode=mode,
                                       input_mutation=input_mutation, observers=observers or {},
-                                      envelope=envelope))
+                                      native_error=native_error or {}))
     return report
+
+
+@contextmanager
+def full_float32():
+    """Float32 matmuls and convolutions at full precision (no TF32) inside the block."""
+    saved = (torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32,
+             torch.get_float32_matmul_precision())
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    torch.set_float32_matmul_precision("highest")
+    try:
+        yield
+    finally:
+        torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32 = saved[:2]
+        torch.set_float32_matmul_precision(saved[2])
+
+
+def widened(values: Mapping[str, Any]) -> tuple[dict[str, Any], bool]:
+    """``values`` with every floating tensor below float32 widened to float32, and
+    whether any was."""
+    out, changed = {}, False
+    for name, value in values.items():
+        if (torch.is_tensor(value) and value.is_floating_point()
+                and torch.finfo(value.dtype).eps > torch.finfo(torch.float32).eps):
+            out[name], changed = value.detach().to(torch.float32), True
+        else:
+            out[name] = value
+    return out, changed
+
+
+def reference_results(op: OpDecl, values: Mapping[str, Any], device: str) -> dict[str, Any]:
+    """The oracle's outputs and gradients on ``values``, by result name."""
+    with isolated_rng(None, device):
+        y_ref, g_ref = oracle(op, isolate(dict(values)))
+    synchronize(device)
+    outs, arity = named_outputs(op, y_ref)
+    if arity:
+        raise ValueError(arity)
+    results = dict(outs)
+    results.update({C.PREFIX[C.INPUT_GRAD] + n: g for n, g in g_ref.items()})
+    return results
+
+
+def truth_results(op: OpDecl, values: Mapping[str, Any], device: str,
+                  native: dict[str, Any]) -> dict[str, Any]:
+    """The oracle with floating inputs below float32 widened (TF32 off); ``native``
+    itself when nothing needs widening."""
+    wide, changed = widened(values)
+    if not changed:
+        return native
+    with full_float32():
+        return reference_results(op, wide, device)
+
+
+def _materialize(case: Gate1Case) -> dict[str, Any]:
+    if callable(getattr(case.values, "materialize", None)):
+        return dict(case.values.materialize())  # a recorded payload, loaded only now
+    return dict(case.values)
+
+
+def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str) -> dict[str, float]:
+    """Per floating result, native's largest deviation from the float32 truth over
+    ``cases``: ``max over calls of (max|native - truth| - atol) / max|truth|``.
+
+    0 where the call is already at float32 or above. A case whose inputs or
+    references fail is left out here; its own run reports why.
+    """
+    errors: dict[str, float] = {}
+    for case in cases:
+        try:
+            values = _materialize(case)
+            native = reference_results(op, values, device)
+            truth = truth_results(op, values, device, native)
+        except Exception:
+            continue
+        for name, n in native.items():
+            t = truth.get(name)
+            if not (C.is_float_tensor(n) and torch.is_tensor(t)) or not n.numel():
+                continue
+            diff = elementwise_error(n, t, atol=0.0, rtol=0.0).max_abs_err
+            scale = float(t.detach().abs().max().double())
+            if not (math.isfinite(diff) and math.isfinite(scale)):
+                continue
+            share = max(0.0, diff - ATOL) / scale if scale > 0 else 0.0
+            errors[name] = max(errors.get(name, 0.0), share)
+        del values, native, truth
+    return errors
 
 
 def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, mode: str,
               input_mutation: str, observers: Mapping[str, Callable],
-              envelope: Mapping[str, float] | None = None) -> CaseReport:
+              native_error: Mapping[str, float]) -> CaseReport:
     report = CaseReport(case_id=case.case_id, role=case.role,
                         evidence={"dims": dict(case.workload.dims), "dtype": case.workload.dtype,
                                   "provenance": dict(case.provenance)})
@@ -225,13 +323,10 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
 
     # 1. the inputs: a recorded payload, or values supplied by the caller.
     try:
-        if callable(getattr(case.values, "materialize", None)):
-            # A recorded payload, loaded only now (exact layouts and aliases).
-            values = dict(case.values.materialize())
-            report.evidence["inputs"] = str(case.provenance.get("inputs", "materialized"))
-        else:
-            values = dict(case.values)
-            report.evidence["inputs"] = "supplied"
+        values = _materialize(case)   # a recorded payload keeps its exact layouts and aliases
+        report.evidence["inputs"] = (str(case.provenance.get("inputs", "materialized"))
+                                     if callable(getattr(case.values, "materialize", None))
+                                     else "supplied")
     except Exception as exc:
         report.findings.append(missing("input_generation_failed", f"{type(exc).__name__}: {exc}",
                                        traceback=traceback.format_exc(limit=6)))
@@ -241,18 +336,13 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
         report.findings.extend(missing("invalid_case_inputs", p) for p in problems)
         return report
 
-    # 2. the reference, on its own copy.
+    # 2. the references (native, and the float32 truth), on their own copies.
     reference: dict[str, Any] = {}
+    truth: dict[str, Any] = {}
     if mode == ORACLE:
         try:
-            with isolated_rng(None, device):
-                y_ref, g_ref = oracle(op, isolate(values))
-            synchronize(device)
-            outs, arity = named_outputs(op, y_ref)
-            if arity:
-                raise ValueError(arity)
-            reference.update(outs)
-            reference.update({C.PREFIX[C.INPUT_GRAD] + n: g for n, g in g_ref.items()})
+            reference = reference_results(op, values, device)
+            truth = truth_results(op, values, device, reference)
         except Exception as exc:
             finding = missing("reference_failed", f"{type(exc).__name__}: {exc}",
                               traceback=traceback.format_exc(limit=6))
@@ -260,8 +350,8 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
                 report.skipped = "invalid_reference"
             report.findings.append(finding)
             return report
-        invalid = [name for name, t in reference.items()
-                   if C.is_float_tensor(t) and not bool(torch.isfinite(t).all())]
+        invalid = sorted({name for refs in (reference, truth) for name, t in refs.items()
+                          if C.is_float_tensor(t) and not bool(torch.isfinite(t).all())})
         if invalid and case.role == PROBE_CASE:
             report.skipped = "invalid_reference"
             report.findings.append(missing("invalid_reference",
@@ -308,7 +398,7 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
     # 4. compare, by name.
     if mode == ORACLE:
         report.results.extend(compare_results(op, case.workload, contract, candidate, reference,
-                                              envelope=envelope))
+                                              truth=truth, native_error=native_error))
     else:
         report.results.extend(_smoke_results(contract, candidate))
 
@@ -321,9 +411,12 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
 
 
 def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
-                    candidate: Mapping[str, Any], reference: Mapping[str, Any],
-                    envelope: Mapping[str, float] | None = None) -> list[ResultCheck]:
-    """One :class:`ResultCheck` per contract entry, in contract order."""
+                    candidate: Mapping[str, Any], reference: Mapping[str, Any], *,
+                    truth: Mapping[str, Any] | None = None,
+                    native_error: Mapping[str, float] | None = None) -> list[ResultCheck]:
+    """One :class:`ResultCheck` per contract entry, in contract order. Structure is
+    checked against ``reference`` (native), numbers against ``truth`` (``reference``
+    when not given)."""
     pairs, presence = C.match_results(contract, candidate, reference)
     by_name = {spec.name: ResultCheck(spec.name, spec.kind) for spec in contract.specs}
     extra: list[ResultCheck] = []
@@ -345,17 +438,21 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
         if structure.mode != "numeric":
             continue
         try:
-            atol, rtol = result_tolerances(op, workload, declared_name(pair.spec.name), pair.reference)
-            rounding = rounding_floor(op, pair.reference)
-            floor = max(float((envelope or {}).get(pair.spec.name, 0.0)), rounding)
-            err = elementwise_error(pair.candidate, pair.reference, atol=atol, rtol=rtol,
-                                    abs_floor=floor)
+            target = (truth or {}).get(pair.spec.name, pair.reference)
+            dtype = rule_dtype(op, workload, pair.reference.dtype)
+            budget = BUDGETS[dtype]
+            own = float((native_error or {}).get(pair.spec.name, 0.0))
+            bound = result_bound(budget, own)
+            limit = allowance(target, bound)
+            err = elementwise_error(pair.candidate, target, atol=limit, rtol=0.0)
         except Exception as exc:  # no tolerance for this dtype, or an invalid one
             check.findings.append(missing("tolerance_unavailable", f"{type(exc).__name__}: {exc}",
                                           subject=pair.spec.name))
             continue
         check.compared = True
-        check.limits = {"atol": atol, "rtol": rtol, "envelope": floor, "rounding_floor": rounding}
+        check.limits = {"dtype": C.dtype_name(dtype), "atol": ATOL, "budget": budget,
+                        "native_error": own, "native_bound": bound != budget, "bound": bound,
+                        "allowance": limit}
         check.metrics = err.to_dict()
         unbounded = [k for k, v in check.metrics.items()
                      if isinstance(v, float) and not math.isfinite(v)]
@@ -366,8 +463,10 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
         if not err.ok:
             check.findings.append(failure(
                 "tolerance_exceeded",
-                f"{err.violations}/{err.elements} elements outside max(atol={atol:g} + rtol={rtol:g}*|ref|, "
-                f"{floor:.3g}) (max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
+                f"{err.violations}/{err.elements} elements outside atol + {bound:.3g}*max|truth| "
+                f"= {limit:.3g}" + (f" (1.5 x the model's own error {own:.3g})" if bound != budget
+                                    else f" (the {C.dtype_name(dtype)} budget)")
+                + f" (max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
                 violations=err.violations,
                 subject=pair.spec.name))
     return [by_name[s.name] for s in contract.specs] + extra

@@ -367,23 +367,21 @@ def check_baseline(op: OpDecl, provider: PairProvider, values: dict[str, Any],
     """A declared library baseline must compute what eager does on ``values``
     (one recorded call) before it is timed.
 
-    Each result is held to Gate 1's dtype default for it
-    (:func:`evograd.verification.gate1.tolerances.result_tolerances`), stated for
-    unit-scale values. Recorded gradients are far below an absolute tolerance (a
-    baseline returning zeros would pass), so both sides are first divided by the
-    largest magnitude of eager's result.
+    Each result is held to Gate 1's budget around eager itself (not Gate 1's
+    float32 truth: this only asks whether the baseline computes the same thing,
+    :mod:`evograd.verification.gate1.tolerances`): every element within
+    ``atol + budget * max|eager|``.
     """
-    from evograd.verification.gate1.tolerances import result_tolerances
+    from evograd.verification.common.tensors import elementwise_error
+    from evograd.verification.gate1.tolerances import allowance, result_budget
 
     output, grads = run_once(op, provider, values)
     ref_output, ref_grads = run_once(op, pytorch_autograd_provider(op), values)
     names = [*op.output_names, *op.grad_names()]
     for name, got, ref in zip(names, (*output, *grads), (*ref_output, *ref_grads)):
-        atol, rtol = result_tolerances(op, workload, name, ref)
-        scale = ref.detach().float().abs().amax().clamp_min(torch.finfo(torch.float32).tiny)
+        limit = allowance(ref, result_budget(op, workload, ref.dtype))
         if (got.shape != ref.shape or got.dtype != ref.dtype
-                or not torch.allclose(got.float() / scale, ref.float() / scale,
-                                      atol=atol, rtol=rtol)):
+                or not elementwise_error(got, ref, atol=limit, rtol=0.0).ok):
             raise RuntimeError(f"{op.name}: the {provider.name} baseline differs from eager in "
                                f"{name!r} on a recorded call")
 

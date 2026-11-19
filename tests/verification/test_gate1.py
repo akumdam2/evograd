@@ -153,12 +153,13 @@ class TestReferenceAndTolerance(unittest.TestCase):
         self.assertTrue(torch.equal(promoted, candidate))
         self.assertFalse(torch.equal(same, candidate))
 
-    def test_an_error_inside_the_dtype_default_passes(self):
+    def test_an_error_inside_the_dtype_rule_passes(self):
         wl = SPLIT.benchmark[0]
         values = make_case_inputs(SPLIT, wl, device=CPU)
         _, grads = oracle(SPLIT, values)
-        atol, rtol = 1e-5, 1.3e-6                                       # float32 defaults
-        bound = float((atol + rtol * grads["dw"].abs()).min())
+        budget = 1e-5                                                   # float32 rule
+        dw = grads["dw"].abs()
+        bound = budget * float(dw.max())
 
         def shifted(delta):
             pair = F.split_pair()
@@ -171,10 +172,10 @@ class TestReferenceAndTolerance(unittest.TestCase):
             return pair
 
         self.assertEqual(verify(SPLIT, shifted(0.5 * bound)).status, PASSED)
-        self.assertEqual(verify(SPLIT, shifted(2.0 * atol + 1e-3)).status, FAILED)
+        self.assertEqual(verify(SPLIT, shifted(2.0 * bound + 1e-3)).status, FAILED)
 
     def test_a_result_whose_tolerance_is_unavailable_is_incomplete(self):
-        with mock.patch("evograd.verification.gate1.runner.result_tolerances",
+        with mock.patch("evograd.verification.gate1.runner.rule_dtype",
                         side_effect=ValueError("unsupported result dtype")):
             report = verify(SCALE_SHIFT, F.scale_shift_pair())
         self.assertEqual(report.status, INCOMPLETE)

@@ -92,22 +92,22 @@ Fixed configuration: B=2, H=1024, I=3072, T=2048, dtype bfloat16, one CUDA devic
 - `down_weight`: [H, I] = [1024, 3072], bfloat16 (active, receives gradient `ddown_weight`)
 - output `out`: [B, T, H] = [2, 2048, 1024], bfloat16 (upstream gradient `dout`)
 
-Acceptance compares every output and gradient with the reference, element by
-element in float64, on real recorded training calls whose values you are not given:
-`|candidate - reference| <= max(atol + rtol * |reference|, envelope)`.
-`atol` and `rtol` are the `torch.testing.assert_close` defaults for the result's
-dtype (below); `envelope` is 4x the larger of the largest elementwise
-deviation of `torch.compile` from the reference on that result, measured on the
-same recorded calls, and one unit in the last place of the reference's largest
-magnitude. So each element may be off by the dtype default or by up to 4x
-torch.compile's own error or 4 ulps of the largest value, whichever is
-larger.
+Acceptance compares every output and gradient, element by element in float64,
+with the true values `t` on real recorded training calls whose values you are not
+given: `|candidate - t| <= atol + budget * max|t|`, where `t` is the reference
+computed with its low-precision inputs widened to float32, `max|t|` is the largest
+magnitude of that output or gradient on that call, and atol=1e-12.
+So every element may be off by `budget` of the result's largest value; a gradient
+is judged at its own scale however small it is. Where 1.5 times the
+largest deviation of the reference computed at the real dtypes (the model's own
+kernels) from `t` on the judged calls is larger, that is the result's budget
+instead. The budget follows the least precise floating dtype of the call:
 
-- `ddown_weight` (bfloat16): atol=1e-05, rtol=0.016
-- `dgate_weight` (bfloat16): atol=1e-05, rtol=0.016
-- `dup_weight` (bfloat16): atol=1e-05, rtol=0.016
-- `dx` (bfloat16): atol=1e-05, rtol=0.016
-- `out` (bfloat16): atol=1e-05, rtol=0.016
+- `ddown_weight` (bfloat16): budget=0.04
+- `dgate_weight` (bfloat16): budget=0.04
+- `dup_weight` (bfloat16): budget=0.04
+- `dx` (bfloat16): budget=0.04
+- `out` (bfloat16): budget=0.04
 
 ## 3. Deliverable and rules
 
@@ -156,7 +156,7 @@ def qwen3_swiglu_mlp_backward_from_saved(dout, saved_tensors):
 
 The same evaluator scores every agent. A candidate that fails the static
 rules, the import, any output or gradient check, or a run at the timed shape
-scores as incorrect. Its correctness check during search applies the acceptance rule of section 2 to 6 recorded training calls (the first, middle and last call of this operator in each of two training steps). Acceptance then judges every recorded call of this operator in all four training steps, these calls included; the envelope is measured on those same calls. A correct candidate is timed at the configuration above
+scores as incorrect. Its correctness check during search applies the acceptance rule of section 2 to 6 recorded training calls (the first, middle and last call of this operator in each of two training steps). Acceptance then judges every recorded call of this operator in all four training steps, these calls included. A correct candidate is timed at the configuration above
 against the `pytorch_autograd` baseline: forward, backward from
 saved state, and the forward+backward step, with saved-tensor bytes reported
 relative to input bytes. `combined_score` is evograd's `speed_memory`

@@ -28,15 +28,13 @@ def _task(argv: list[str]) -> int:
     parser.add_argument("--corpus", type=Path, required=True,
                         help="the model's payload corpus (its manifest.json): search feedback is "
                              "Gate 1 on the case's calibration payloads")
-    parser.add_argument("--state", type=Path, default=None,
-                        help="reuse or keep the operator Gate 2 calibration here")
     parser.add_argument("--library", choices=LIBRARY_POLICIES, default="auto")
     parser.add_argument("--scoring", default="speed_memory")
     parser.add_argument("--performance-baseline", default="auto")
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     task = build_task(args.output_dir, model=args.model, case_id=args.case_id, corpus=args.corpus,
-                      state=args.state, library=args.library, scoring=args.scoring,
+                      library=args.library, scoring=args.scoring,
                       performance_baseline=args.performance_baseline)
     print(f"task {task.task_id}: {task.root}")
     print(f"  configuration: {task.workload}")

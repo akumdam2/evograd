@@ -216,19 +216,11 @@ class BenchmarkCapture(unittest.TestCase):
                          self.corpus.corpus_id)
 
     def pack(self, case_id):
-        """A task pack from the corpus; only the envelope's calibration is stubbed."""
-        from types import SimpleNamespace
-
+        """A task pack from the corpus (Gate 1's rule needs no calibration)."""
         from evograd.adbench_tools.task import build_task
-        from evograd.verification.integrations import gates
 
-        def calibration(model, case, corpus, **_):
-            policy = SimpleNamespace(gamma=4.0, thresholds={})  # a calibration with no envelope
-            return SimpleNamespace(op=model.reference_op(case.task)), SimpleNamespace(policy=policy)
-
-        with mock.patch.object(gates, "operator_calibration", calibration):
-            return build_task(self.root / "packs" / case_id.replace("/", "__"), model="qwen3_0_6b",
-                              case_id=case_id, corpus=self.benchmark, device="cpu")
+        return build_task(self.root / "packs" / case_id.replace("/", "__"), model="qwen3_0_6b",
+                          case_id=case_id, corpus=self.benchmark, device="cpu")
 
     def test_a_case_it_does_not_record_is_refused_by_every_reader(self):
         from evograd.evaluation.protocol import tier2_payloads

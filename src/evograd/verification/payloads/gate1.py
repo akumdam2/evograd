@@ -100,7 +100,7 @@ def payload_cases(op: OpDecl, workload: Workload, corpus: Corpus, *, case_id: st
 
 
 #: The search-feedback rule of a task pack's ``search_correctness``: Gate 1's
-#: rule on :func:`search_payload_ids`, with the envelope calibrated for the case.
+#: rule (fixed per result dtype, no calibration) on :func:`search_payload_ids`.
 SEARCH_RULE = "gate1_calibration_payloads"
 SEARCH_SELECTION = "first, middle and last call of the case in each calibration order"
 #: Set by the ADBench evaluator to the pack's ``task.json`` when its rule is
@@ -156,8 +156,7 @@ def search_correctness(op: OpDecl, module, spec: Mapping[str, Any], *,
                           f"not {spec['corpus']['corpus_id']}")
     cases = payload_cases(op, op.benchmark[0], corpus, case_id=spec["case_id"],
                           split="calibration", device=device, payload_ids=spec["payload_ids"])
-    report = gate1.verify_pair(op, module, cases=cases, device=device,
-                               envelope=spec.get("envelope") or {})
+    report = gate1.verify_pair(op, module, cases=cases, device=device)
     summary = gate1.evolution_correctness(report, op)
     if report.status != "passed":
         summary["total"] = max(summary["total"], 1)

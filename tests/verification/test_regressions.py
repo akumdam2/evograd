@@ -233,7 +233,7 @@ class TestErrorsBecomeFindings(unittest.TestCase):
         # unavailable, never guessed and never a crash.
         wl = Workload({"R": 4, "C": 8}, "float32")
         reference = F.model_reference(F.SCALE_SHIFT)
-        with mock.patch("evograd.verification.gate1.runner.result_tolerances",
+        with mock.patch("evograd.verification.gate1.runner.rule_dtype",
                         side_effect=ValueError("unsupported result dtype")):
             report = gate1.verify_pair(reference, F.scale_shift_pair(), device=CPU,
                                        cases=F.supplied_cases(reference, [wl]))

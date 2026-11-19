@@ -366,9 +366,8 @@ final.json × agents ──► compare ──► Markdown table
 `python -m evograd.adbench_tools task --model MODEL --case-id TASK/COMPONENT
 --corpus CORPUS/manifest.json --output-dir DIR` builds one directory for one
 model's observed case, which every agent then runs on. It refuses to overwrite
-an existing pack, so all agents in a comparison see the same bytes. Building it
-calibrates the compile envelope (operator Gate 2) on the case's payloads, so it
-needs a GPU; `--state` keeps or reuses that calibration.
+an existing pack, so all agents in a comparison see the same bytes. Gate 1's rule
+is fixed per result dtype, so building a pack needs no calibration.
 
 | File | Content | Built from |
 |---|---|---|
@@ -377,7 +376,7 @@ needs a GPU; `--state` keeps or reuses that calibration.
 | `TASK.md` | The problem statement (§5.2) | `statement.py` |
 | `skeleton.py` | The two signatures raising `NotImplementedError`, with the reference as comments | `artifact.render_skeleton` |
 | `adbench_primitives.py` | The granted primitives (`vendor_gemm`, `vendor_bmm`, `vendor_grouped_mm`, `vendor_conv_*`, `vendor_sdpa_*`) so agents can run their module on their own (only if granted) | `artifact.render_primitives_module` |
-| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids, envelope), granted primitives and why (`library_policy`; under `auto`, also the library calls one traced reference call reached), scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
+| `task.json` | Task id, op, workload (dims, dtype), how the case was chosen, forward/backward signatures (argument kinds, shapes, gradient order), Gate 1's tolerance rule (`gate1_tolerances`), the search-feedback rule (`search_correctness`: rule, corpus, payload ids), granted primitives and why (`library_policy`; under `auto`, also the library calls one traced reference call reached), scoring policy, baseline, evograd revision, `statement_sha256`, `system_message_sha256` | `task.py` |
 
 The task id looks like `llama_3_2_1b.llama3_swiglu_mlp.swiglu_mlp` (model, then the case id).
 `compare` refuses to mix results from different task ids or statement hashes.
@@ -465,13 +464,12 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
 
 - **Correctness during search** follows the pack's `search_correctness`
   (`task.json`). A model's observed case defaults to
-  `gate1_calibration_payloads`: Gate 1's rule (dtype defaults or the compile
-  envelope, whichever is larger) on the first, middle and last recorded call of
-  the case in each calibration order (101, 202), with the envelope operator
-  Gate 2's calibration gives the case; search never sees the acceptance
+  `gate1_calibration_payloads`: Gate 1's rule (`atol + budget*max|t|` per
+  element around a float32 truth, fixed per dtype) on the first, middle and last recorded call of
+  the case in each calibration order (101, 202); search never sees the acceptance
   calls (303, 404). Acceptance (Gate 1 and operator Gate 2) judges every call of
-  all four orders, the search calls included, and the envelope is measured on
-  all four. `bench.py tasks` needs the model's `--corpus` and a GPU for it.
+  all four orders, the search calls included. `bench.py tasks` needs the model's
+  `--corpus` for it, and refuses a kept pack built under another Gate 1 rule.
   A pack with any other rule (such as the retired `declared_tolerances`) is
   refused. The evaluator sets `EVOGRAD_SEARCH_CORRECTNESS` from the pack alone,
   and a driver refuses to start when the pack's corpus or payloads are missing;
@@ -567,7 +565,7 @@ run by `candidates/bench.py` on every agent in the same way:
 export ADBENCH_ROOT=...            # default results/adbench; results go to $ADBENCH_ROOT/<model>
 export ADBENCH_MODEL=gpt-5.5
 python candidates/bench.py tasks     --model qwen3_0_6b --searched \
-                                     --corpus CORPUS/manifest.json       # GPU: Gate 1's envelope
+                                     --corpus CORPUS/manifest.json
 python candidates/bench.py run       --model qwen3_0_6b --agent gepa --budget 10
 python candidates/bench.py evaluate  --model qwen3_0_6b --agent gepa --corpus CORPUS/manifest.json --deadline-min 50
 python candidates/bench.py summarize --model qwen3_0_6b --agent seed evograd openevolve gepa kernelagent
