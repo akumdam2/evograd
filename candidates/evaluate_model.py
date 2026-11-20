@@ -33,7 +33,7 @@ MODELS = tuple(SEARCH_SET.load()["models"])
 AGENTS = ("openevolve", "gepa", "kernelagent", "codex", "claude_code", "geak",
           "evograd", "seed")
 GROUP_AGENTS = ("openevolve", "gepa", "codex")
-REUSE_FLAGS = ("share_gate3_native", "share_gate2_calibration_native", "share_gate2_verification_reference")
+REUSE_FLAGS = ("share_gate3_native",)
 SHARED = Path("/work/hdd/bcjw/wzhan/ADBench")
 REDEPLOY = Path("/work/hdd/bcjw/wzhan/ADBench-redeploy")
 VERIFICATION = Path("/work/hdd/bcjw/wzhan/evograd_verification")

@@ -268,8 +268,9 @@ class TheGatesReachOLMoE(unittest.TestCase):
         self.assertEqual(reports["gate2_model"].status, "passed", reports["gate2_model"].to_dict())
 
     def test_a_faulty_candidate_fails_model_gate2(self):
-        """A 10% error at the experts fails. On this tiny bf16 model 1% sits inside the noise the
-        thresholds are calibrated from; the real model's sensitivity is not measured here."""
+        """A 10% error at the experts fails. The control is the test-only scaling backend: plain
+        eager reproduces native bit for bit, which leaves model Gate 2 coverage only. The real
+        model's sensitivity is not measured here."""
         from evograd.opdecl.oracle import resolve_runtime_forward
         from evograd.verification.common.execution import candidate
         from evograd.verification.integrations.gates import judge_model
@@ -282,8 +283,10 @@ class TheGatesReachOLMoE(unittest.TestCase):
         def faulty(*args):
             return forward(*args) * 1.1
 
+        from tests.verification.test_gate2 import SCALE_BF16
+
         reports = judge_model(MODEL, candidate("c", {site: faulty}, programs={}), workload,
-                              compile_backend="eager")
+                              compile_backend=SCALE_BF16)
         self.assertEqual(reports["gate2_model"].status, "failed", reports["gate2_model"].to_dict())
 
 

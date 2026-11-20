@@ -1,11 +1,12 @@
-"""Gate 2: one autograd forward/backward per scope, against native eager, on CPU.
+"""Gate 2 on CPU: the operator scope against the float32 truth, the model scope
+against native eager.
 
-Calibrated policies here use ``torch.compile(backend="aot_eager")`` -- a real
-dynamo + AOTAutograd path, chosen for speed -- unless a test says otherwise.
-``TestInductorControl`` runs the default inductor backend and skips, with the
-reason, when this machine cannot build its C++ kernels (set ``CXX`` to a
-working compiler). Tests marked *synthetic* freeze hand-written thresholds to
-exercise arithmetic and binding; they are not calibration evidence.
+``SCALE`` is a test-only "compiler": dynamo's graph run eagerly with its floating
+outputs scaled by ``1 + 3e-4``, a trusted control whose error is known and
+nonzero; ``SAME`` runs dynamo's graph unchanged, the "compile reproduces native"
+case. ``TestInductorControl`` runs the
+default inductor backend and skips, with the reason, when this machine cannot
+build its C++ kernels (set ``CXX`` to a working compiler).
 """
 
 from __future__ import annotations
@@ -20,36 +21,50 @@ import weakref
 
 import torch
 
+from evograd.opdecl import Workload
 from evograd.verification import gate2
 from evograd.verification.common import contracts as C
 from evograd.verification.common.execution import Deployment, Sample, candidate
-from evograd.verification.common.reports import (
-    FAILED,
-    INCOMPLETE,
-    PASSED,
-    REPORT_FIRST,
-    STRICT,
-    continue_after,
-)
-from evograd.verification.common.tensors import module_state_digest, relative_error, tensors_in
-from evograd.opdecl import Workload
+from evograd.verification.common.reports import FAILED, INCOMPLETE, PASSED
+from evograd.verification.common.tensors import tensors_in
 from evograd.verification.gate2.adapters.operator import OperatorScope
+from evograd.verification.gate2.model import FLOORS as MODEL_FLOORS, e2, verify_model
 from evograd.verification.gate2.operator import FLOORS, errors, verify_operator
-from evograd.verification.gate2.calibration import (
-    DEFAULT_FLOORS,
-    CalibrationError,
-    ControlMeasurement,
-    Gate2Policy,
-    calibrate,
-    derive_thresholds,
-    freeze_policy,
-    rounding_floor,
-)
 from tests.verification import _fixtures as F
 
 warnings.filterwarnings("ignore")
 CPU = "cpu"
 FAST = "aot_eager"
+SCALE = "evograd_test_scale_3e-4"
+#: The same at a scale bfloat16 keeps (3e-4 rounds away in a bfloat16 model).
+SCALE_BF16 = "evograd_test_scale_2^-6"
+SAME = "evograd_test_graph_as_is"
+
+
+def _scaling(factor):
+    def backend(gm, example_inputs):
+        """Test-only: the graph run eagerly, its floating outputs scaled by ``factor``."""
+        def run(*args):
+            outs = gm(*args)
+            if isinstance(outs, (tuple, list)):
+                return type(outs)(o * factor if torch.is_tensor(o) and o.is_floating_point() else o
+                                  for o in outs)
+            return outs * factor
+        return run
+    return backend
+
+
+def _graph_as_is(gm, example_inputs):
+    """Test-only: dynamo's graph run eagerly, unchanged (native bit for bit)."""
+    return gm.forward
+
+
+for _backend, _name in ((_scaling(1 + 3e-4), SCALE), (_scaling(1 + 2 ** -6), SCALE_BF16),
+                        (_graph_as_is, SAME)):
+    try:
+        torch._dynamo.register_backend(_backend, name=_name)
+    except Exception:  # already registered in this process
+        pass
 
 
 def codes(report):
@@ -62,45 +77,6 @@ def failing(report):
 
 def samples(prefix, seeds):
     return [Sample(f"{prefix}/seed{s}", s, {"recipe": "fixture"}) for s in seeds]
-
-
-#: Floors low enough that hand-written thresholds follow the formula.
-SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
-                    "gradient": {"E2": 1e-12, "Emax": 1e-12}}
-
-
-def synthetic_entry(kind, limit, gamma=2.0, *, term):
-    """A threshold entry whose components reproduce ``limit`` under the formula,
-    with the scope's own ``term`` (``SCOPE_TERMS``) at 0."""
-    floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
-    entry = {"kind": kind, "components": {}}
-    for metric in ("E2", "Emax"):
-        entry[metric] = limit[metric]
-        entry["components"][metric] = {"trusted_compile": limit[metric] / gamma,
-                                       "floor": floor[metric], "gamma": gamma,
-                                       "binding": "trusted_compile", term: 0.0}
-    return entry
-
-
-def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthetic/cal", 900),),
-                     boundaries=False):
-    """Freeze hand-written thresholds through the real binding. Not calibration.
-
-    One pooled table, judging the (natively executed) calibration samples.
-    """
-    cal = [Sample(i, s) for i, s in calibration]
-    natives = {s.sample_id: gate2.execute(scope, Deployment.native(), s) for s in cal}
-    contract = gate2.integration_contract(natives[cal[0].sample_id])
-    table = {s.name: synthetic_entry(s.kind, thresholds_for(s),
-                                     term=gate2.calibration.SCOPE_TERMS[scope.scope])
-             for s in contract.compared() if not s.exact}
-    identities = {sid: {**ex.sample_identity, "reference_results_digest": ex.results_digest}
-                  for sid, ex in natives.items()}
-    return freeze_policy(scope, patch_set=patch_set, contract=contract, samples=cal,
-                         thresholds=table, sample_identities=identities,
-                         input_digests={sid: ex.input_digest for sid, ex in natives.items()},
-                         controls={"synthetic": True}, gamma=2.0, floors=SYNTHETIC_FLOORS,
-                         boundaries=boundaries)
 
 
 class TestOperatorScope(unittest.TestCase):
@@ -174,7 +150,7 @@ class TestOperatorScope(unittest.TestCase):
     def test_without_a_compile_control_native_alone_is_trusted(self):
         from unittest import mock
 
-        with mock.patch("evograd.verification.gate2.calibration.compile_control",
+        with mock.patch("evograd.verification.gate2.operator.compile_control",
                         side_effect=RuntimeError("no compiler")):
             report = self.verify(self.bf16_scope, F.scale_shift_pair())
         self.assertEqual(report.status, PASSED, codes(report))
@@ -182,25 +158,6 @@ class TestOperatorScope(unittest.TestCase):
         self.assertEqual(sorted(report.cases[0].evidence["trusted"]), ["native"])
         self.assertTrue(all(e[m]["from"] in ("native", "floor")
                             for e in report.subject["thresholds"].values() for m in ("E2", "M")))
-
-    def test_unaudited_executions_give_the_same_results_and_hash_nothing(self):
-        from unittest import mock
-
-        sample = self.bf16_scope.samples([1])[0]
-        deployment = self.bf16_scope.candidate(F.scale_shift_pair())
-        full = gate2.execute(self.bf16_scope, deployment, sample)
-        with mock.patch("evograd.verification.gate2.runner.tensor_digests",
-                        side_effect=AssertionError("hashed")), \
-                mock.patch("evograd.verification.gate2.runner.content_identity",
-                           side_effect=AssertionError("identified")):
-            bare = gate2.execute(self.bf16_scope, deployment, sample, audit=False)
-        self.assertIsNone(bare.error, bare.error)
-        self.assertEqual(sorted(bare.results), sorted(full.results))
-        for name, value in full.results.items():
-            self.assertTrue(torch.equal(bare.results[name], value), name)
-        self.assertEqual((bare.sample_identity, bare.results_digest, bare.initial_state),
-                         ({}, None, {}))
-        self.assertIsNotNone(full.results_digest)
 
     def test_errors_against_the_truth(self):
         t = torch.tensor([1.0, -0.5, 0.0, 0.25])
@@ -214,82 +171,28 @@ class TestOperatorScope(unittest.TestCase):
         self.assertEqual(errors(zero.clone(), zero), {"E2": 0.0, "M": 0.0})
         self.assertEqual(errors(torch.tensor([0.0, 1e-30, 0.0]), zero), {"E2": math.inf, "M": math.inf})
 
-    def test_the_policy_path_refuses_the_operator_scope(self):
-        report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=None, samples=self.scope.samples([11]))
-        self.assertEqual(report.status, INCOMPLETE)
-        self.assertIn("not_calibrated_scope", codes(report))
-        self.assertIsNone(calibrate(self.scope, patch_set=("operator",),
-                                    samples=self.scope.samples([1]), compile_backend=FAST).policy)
 
+class TestModelScope(unittest.TestCase):
+    """A small network at model scope: native, compile and the candidate on the same samples."""
 
-class TestJudge(unittest.TestCase):
-    """The single comparator, on hand-made tensors."""
+    def setUp(self):
+        self.scope = F.toy_module_scope()
+        self.fixed = samples("net/fixed", [31, 32])
 
-    LIMIT = {"E2": 1e-2, "Emax": 1e-1}
+    def verify(self, fn, scope=None, backend=SCALE, gamma=4.0):
+        return verify_model(scope or self.scope, candidate("cand", {"norm": fn}),
+                            samples=self.fixed, gamma=gamma, compile_backend=backend)
 
-    def judge(self, cand, ref, limit=LIMIT, **spec):
-        return gate2.judge(C.ResultSpec("out:z", C.OUTPUT, **spec), cand, ref, limit)
-
-    def test_small_e2_but_one_large_element_fails_on_emax(self):
-        g = torch.Generator().manual_seed(0)
-        ref = torch.randn(10_000, generator=g)
-        cand = ref.clone()
-        cand[17] += 0.5                                   # RMS(ref) ~ 1
-        check = self.judge(cand, ref)
-        self.assertLess(check.metrics["E2"], self.LIMIT["E2"])
-        self.assertEqual([(f.code, f.details["metric"]) for f in check.findings],
-                         [("threshold_exceeded", "Emax")])
-
-    def test_zero_reference(self):
-        zero = torch.zeros(5)
-        self.assertEqual(self.judge(zero.clone(), zero).status, PASSED)
-        self.assertEqual(self.judge(torch.full((5,), 1e-12), zero).status, FAILED)
-
-    def test_non_finite_sides_and_exact_results(self):
-        ref = torch.ones(4)
-        nan = ref.clone()
-        nan[0] = float("nan")
-        self.assertEqual(self.judge(nan, ref).status, FAILED)
-        self.assertEqual(self.judge(ref.clone(), nan).status, INCOMPLETE)
-        ints = torch.tensor([1, 2])
-        self.assertEqual(self.judge(ints.clone(), ints, None).status, PASSED)   # exact: no threshold
-        self.assertEqual(self.judge(torch.tensor([1, 3]), ints, None).status, FAILED)
-
-    def test_missing_or_invalid_threshold_is_incomplete(self):
-        ref = torch.ones(3)
-        self.assertEqual(self.judge(ref.clone(), ref, None).status, INCOMPLETE)
-        self.assertEqual(self.judge(ref.clone(), ref, {"E2": float("nan"), "Emax": 1.0}).status,
-                         INCOMPLETE)
-
-
-class TestModuleScope(unittest.TestCase):
-    """A small network at model scope: matched inputs, the same samples on both sides."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.scope = F.toy_module_scope()
-        cls.validation = samples("net/fixed", [31, 32])
-        cls.calibration = calibrate(cls.scope, patch_set=("norm",), samples=cls.validation,
-                                    compile_backend=FAST)
-        cls.policy = cls.calibration.policy
-
-    def verify(self, fn, scope=None):
-        return gate2.verify_integration(scope or self.scope, candidate("cand", {"norm": fn}),
-                                        policy=self.policy, samples=self.validation)
-
-    def test_contract_and_correct_candidate(self):
-        self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
-        contract = self.policy.contract["results"]
-        by_name = {r["name"]: r for r in contract}
-        self.assertTrue(by_name["meta:tag"]["exact"])
-        self.assertEqual(by_name["grad:unused"]["presence"], C.ABSENT)
-        self.assertEqual(self.policy.sample_protocol, gate2.MATCHED)
-        for sample in self.validation:
-            self.assertNotIn("grad:unused", self.policy.thresholds_for(sample.sample_id))
+    def test_correct_candidate_and_its_thresholds(self):
         report = self.verify(lambda x, w: F.norm_site(x, w))
         self.assertEqual(report.status, PASSED, codes(report))
+        self.assertEqual(report.subject["reference"]["kind"], "native_eager")
         self.assertEqual(report.cases[0].evidence["candidate"]["site_calls"], {"norm": 2})
+        for name, entry in report.subject["thresholds"].items():
+            floor = MODEL_FLOORS["gradient" if name.startswith("grad") else "output"]
+            self.assertEqual(entry["threshold"], 4.0 * max(entry["compile"], floor), name)
+        self.assertGreater(max(e["compile"] for e in report.subject["thresholds"].values()), 1e-4)
+        json.dumps(report.to_dict(), allow_nan=False)
 
     def test_faults_are_rejected_each_by_its_own_finding(self):
         cases = {
@@ -297,14 +200,13 @@ class TestModuleScope(unittest.TestCase):
             "nan": (F.norm_nan, "non_finite_candidate"),
             "detached": (F.norm_detached, "missing_result"),
             "misrouted": (F.norm_misrouted, "threshold_exceeded"),
-            "writes_parameter": (F.norm_writes_parameter, "parameters_modified"),
+            "scaled": (F.norm_scaled(1.01), "threshold_exceeded"),
         }
         for label, (fn, code) in cases.items():
             report = self.verify(fn)
             self.assertEqual(report.status, FAILED, label)
             self.assertIn(code, codes(report), label)
-        misrouted = self.verify(F.norm_misrouted)
-        self.assertEqual(failing(misrouted), ["grad:norm_w.0", "grad:norm_w.1"])
+        self.assertEqual(failing(self.verify(F.norm_misrouted)), ["grad:norm_w.0", "grad:norm_w.1"])
 
     def test_insufficient_coverage(self):
         broken = F.toy_module_scope(factory=lambda sites: F.ToyModel(sites, skip_last_norm=True))
@@ -312,56 +214,58 @@ class TestModuleScope(unittest.TestCase):
         self.assertEqual(report.status, FAILED)
         self.assertIn("coverage_mismatch", codes(report))
 
-    def test_no_optimizer_step_and_untouched_initial_state(self):
-        fresh = F.ToyModel(F.NATIVE_SITES)
-        before = module_state_digest(fresh)
+    def test_a_compile_that_reproduces_native_leaves_coverage_only(self):
+        # A control that reproduces native: no trusted alternative, so the numbers are
+        # Gate 1's and operator Gate 2's; coverage is still checked.
+        report = self.verify(F.norm_spike, backend=SAME)
+        self.assertEqual(report.status, PASSED, codes(report))
+        self.assertIn("compile_bitwise", report.evidence["numeric"])
+        self.assertTrue(all(r.limits.get("not_judged") == "compile_bitwise"
+                            for c in report.cases for r in c.results if r.metrics))
+        broken = F.toy_module_scope(factory=lambda sites: F.ToyModel(sites, skip_last_norm=True))
+        self.assertIn("coverage_mismatch", codes(self.verify(F.norm_spike, scope=broken, backend=SAME)))
+
+    def test_without_a_trusted_control_the_report_is_incomplete(self):
+        report = self.verify(lambda x, w: F.norm_site(x, w), backend="no_such_backend")
+        self.assertEqual(report.status, INCOMPLETE)
+        self.assertIn("no_trusted_control", codes(report))
+
+    def test_the_callers_rng_is_untouched(self):
         torch.manual_seed(5)
         rng = torch.get_rng_state()
-        report = self.verify(lambda x, w: F.norm_site(x, w))
-        self.assertEqual(report.status, PASSED)
+        self.assertEqual(self.verify(lambda x, w: F.norm_site(x, w)).status, PASSED)
         self.assertTrue(torch.equal(torch.get_rng_state(), rng))
-        self.assertEqual(module_state_digest(F.ToyModel(F.NATIVE_SITES)), before)
-        self.assertEqual(report.cases[0].evidence["candidate"]["state_changed"], [])
 
-    def test_report_first_keeps_the_failure(self):
-        report = self.verify(F.norm_spike)
-        self.assertEqual(report.status, FAILED)
-        self.assertTrue(continue_after(report, REPORT_FIRST))
-        self.assertFalse(continue_after(report, STRICT))
-        self.assertEqual(report.to_dict()["status"], FAILED)
-        json.dumps(report.to_dict(), allow_nan=False)
+    def test_e2_against_native(self):
+        r = torch.tensor([1.0, -2.0, 2.0])
+        self.assertAlmostEqual(e2(r * 1.01, r), 0.01)
+        self.assertEqual(e2(r.clone(), r), 0.0)
+        self.assertEqual(e2(torch.zeros(3), torch.zeros(3)), 0.0)
+        self.assertEqual(e2(torch.tensor([0.0, 1e-30, 0.0]), torch.zeros(3)), math.inf)
 
 
-class TestModelScope(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.scope = F.tiny_lm_scope()
-        cls.fixed = samples("lm/fixed", [41, 42])
-        cls.calibration = calibrate(cls.scope, patch_set=("norm",), samples=cls.fixed,
-                                    compile_backend=FAST)
+class TestTinyLM(unittest.TestCase):
+    def setUp(self):
+        self.scope = F.tiny_lm_scope()
+        self.fixed = samples("lm/fixed", [41, 42])
 
     def test_tied_parameters_are_one_accumulated_result(self):
-        self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
-        results = {r["name"]: r for r in self.calibration.policy.contract["results"]}
-        self.assertEqual(results["grad:embed.weight"]["aliases"], ["head.weight"])
+        native = gate2.execute(self.scope, Deployment.native(), Sample("lm/val/seed41", 41))
+        results = {s.name: s for s in gate2.integration_contract(native).specs}
+        self.assertEqual(results["grad:embed.weight"].aliases, ("head.weight",))
         self.assertNotIn("grad:head.weight", results)
-        sample = Sample("lm/val/seed41", 41)
-        native = gate2.execute(self.scope, Deployment.native(), sample)
         model = F.TinyLM(F.NATIVE_SITES)
         ids, labels = F.lm_batch(41)
         F.next_token_mean_nll(model(ids)["logits"], labels).backward()
         self.assertTrue(torch.equal(native.results["grad:embed.weight"], model.embed.weight.grad))
 
     def test_correct_and_wrong_candidates(self):
-        policy = self.calibration.policy
-        good = gate2.verify_integration(self.scope, candidate("same", {"norm": lambda x, w: F.norm_site(x, w)}),
-                                        policy=policy, samples=self.fixed)
+        good = verify_model(self.scope, candidate("same", {"norm": lambda x, w: F.norm_site(x, w)}),
+                            samples=self.fixed, gamma=4.0, compile_backend=SCALE)
         self.assertEqual(good.status, PASSED, codes(good))
         self.assertEqual(good.cases[0].evidence["candidate"]["site_calls"], {"norm": 3})
-        self.assertTrue(good.cases[0].evidence["matched_sample"]["identical_content"])
-        self.assertTrue(good.cases[0].evidence["matched_sample"]["reference_reproduces_calibration"])
-        bad = gate2.verify_integration(self.scope, candidate("scaled", {"norm": F.norm_scaled(1.01)}),
-                                       policy=policy, samples=self.fixed)
+        bad = verify_model(self.scope, candidate("scaled", {"norm": F.norm_scaled(1.01)}),
+                           samples=self.fixed, gamma=4.0, compile_backend=SCALE)
         self.assertEqual(bad.status, FAILED)
         self.assertIn("out:loss", failing(bad))
         self.assertIn("grad:embed.weight", failing(bad))
@@ -374,347 +278,6 @@ class TestModelScope(unittest.TestCase):
         self.assertTrue(torch.equal(a.results["out:loss"], b.results["out:loss"]))
         c = gate2.execute(scope, Deployment.native(), Sample("e", 8))
         self.assertFalse(torch.equal(a.results["out:loss"], c.results["out:loss"]))
-
-
-class TestPolicyBinding(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.scope = F.toy_module_scope()
-        cls.policy = synthetic_policy(cls.scope, ("norm",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        cls.good = candidate("same", {"norm": lambda x, w: F.norm_site(x, w)})
-
-    def run_with(self, policy, *, scope=None, deployment=None, sample_list=None):
-        return gate2.verify_integration(scope or self.scope, deployment or self.good, policy=policy,
-                                        samples=sample_list or [Sample("synthetic/cal", 900)])
-
-    def test_synthetic_policy_passes_when_everything_matches(self):
-        self.assertEqual(self.run_with(self.policy).status, PASSED)
-
-    def test_a_policy_judges_only_its_calibrated_samples(self):
-        self.assertEqual(self.policy.sample_protocol, gate2.MATCHED)
-        other = self.run_with(self.policy, sample_list=[Sample("other", 5)])
-        by_seed = self.run_with(self.policy, sample_list=[Sample("synthetic/cal", 5)])
-        wrong = self.run_with(self.policy, deployment=candidate("bad", {"norm": F.norm_spike}),
-                              sample_list=[Sample("other", 900)])
-        for report in (other, by_seed, wrong):
-            self.assertEqual(report.status, INCOMPLETE)          # withheld, never judged
-            self.assertIn("sample_not_calibrated", codes(report))
-        self.assertIn("required_sample_missing", codes(other))
-        self.assertNotIn("threshold_exceeded", codes(wrong))
-
-    def test_environment_config_numerics_and_patch_set_mismatch(self):
-        data = self.policy.to_dict()
-        data["environment"] = dict(data["environment"], torch="0.0.0")
-        data.pop("policy_hash")
-        data.pop("schema")
-        moved = Gate2Policy.build(data)
-        self.assertIn("policy_environment_mismatch", codes(self.run_with(moved)))
-        # A binding mismatch withholds the numbers: a wrong candidate is not judged either.
-        wrong = self.run_with(moved, deployment=candidate("bad", {"norm": F.norm_spike}))
-        self.assertEqual(wrong.status, INCOMPLETE)
-        self.assertNotIn("threshold_exceeded", codes(wrong))
-        other_config = F.toy_module_scope(calls={"norm": 2, "mix": 2})
-        other_config.config = {**other_config.config, "width": 17}
-        self.assertIn("policy_case_mismatch", codes(self.run_with(self.policy, scope=other_config)))
-        autocast = F.toy_module_scope()
-        autocast.autocast_dtype = "bfloat16"
-        self.assertIn("policy_numerics_mismatch", codes(self.run_with(self.policy, scope=autocast)))
-        both = candidate("both", {"norm": F.norm_site, "mix": F.mix_site})
-        self.assertIn("policy_patch_set_mismatch", codes(self.run_with(self.policy, deployment=both)))
-
-    def test_tampered_or_old_schema_policies_are_refused(self):
-        data = self.policy.to_dict()
-        data["thresholds"]["out:y"]["E2"] = 1.0   # widened after freezing
-        with self.assertRaises(CalibrationError):
-            Gate2Policy.from_dict(data)
-        report = self.run_with(data)
-        self.assertEqual(report.status, INCOMPLETE)
-        self.assertIn("policy_schema", codes(report))
-        # Re-hashed after widening: the entry no longer follows its own components.
-        for key in ("policy_hash", "schema"):
-            data.pop(key)
-        with self.assertRaisesRegex(CalibrationError, "gamma \\* max"):
-            Gate2Policy.build(data)
-        formula = self.policy.to_dict()
-        formula["formula"] = "T = anything"
-        for key in ("policy_hash", "schema"):
-            formula.pop(key)
-        with self.assertRaisesRegex(CalibrationError, "formula"):
-            Gate2Policy.build(formula)
-        old = {"schema": "evograd-t3-block-policy/2", "entries": {}, "policy_hash": "x"}
-        self.assertIn("policy_schema", codes(self.run_with(old)))
-        v3 = self.policy.to_dict()
-        v3["schema"] = "evograd-verification-gate2-policy/3"
-        self.assertIn("policy_schema", codes(self.run_with(v3)))
-
-    def test_policy_is_immutable(self):
-        with self.assertRaises(Exception):
-            self.policy.text = "{}"
-        thresholds = self.policy.thresholds_for("synthetic/cal")
-        thresholds["out:y"]["E2"] = 1.0
-        self.assertEqual(self.policy.thresholds_for("synthetic/cal")["out:y"]["E2"], 1e-3)
-
-
-class TestCalibrationArithmetic(unittest.TestCase):
-    """*Synthetic* measurements: the formula, per-tensor matching, refusals."""
-
-    def m(self, source, result, e2, emax, sample="s1", kind=C.OUTPUT):
-        return ControlMeasurement(source, sample, result, kind, e2, emax)
-
-    def test_formula_gamma_and_floors(self):
-        ms = [self.m("trusted_compile", "out:a", 3e-4, 1e-4),
-              self.m("trusted_compile", "out:a", 2e-4, 5e-3, "s2"),
-              self.m("trusted_compile", "grad:b", 0.0, 0.0, kind=C.PARAM_GRAD)]
-        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "grad:b": C.PARAM_GRAD}, gamma=2.0)
-        self.assertAlmostEqual(t["out:a"]["E2"], 2 * 3e-4)
-        self.assertAlmostEqual(t["out:a"]["Emax"], 2 * 5e-3)
-        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "trusted_compile")
-        self.assertEqual((t["grad:b"]["E2"], t["grad:b"]["Emax"]), (2e-4, 2e-2))   # gradient floors
-        self.assertEqual(t["grad:b"]["components"]["E2"]["binding"], "floor")
-
-    def test_rounding_floor_is_one_rounding_in_the_dtype(self):
-        f = rounding_floor(torch.tensor([1.0, -0.5], dtype=torch.bfloat16))
-        self.assertEqual(f["E2"], 2.0 ** -8)                                   # bf16 unit roundoff
-        self.assertAlmostEqual(f["Emax"], 2 * 2.0 ** -7 / math.sqrt(0.625))     # 2 ulps of 1.0 / RMS
-        self.assertEqual(rounding_floor(torch.zeros(3))["Emax"], 0.0)
-        self.assertEqual(rounding_floor(torch.tensor([1.0]))["E2"], 2.0 ** -24)
-
-    def test_a_rounding_move_stays_within_one_rounding(self):
-        from evograd.verification.gate2.calibration import move_rounding
-
-        g = torch.Generator().manual_seed(0)
-        spread = torch.randn(4096, generator=g).to(torch.bfloat16)
-        outlier = torch.cat([torch.tensor([60.0]), torch.randn(31, generator=g)]).to(torch.bfloat16)
-        zeros = torch.zeros(8, dtype=torch.bfloat16)
-        for t in (spread, outlier, spread.float(), zeros):
-            for seed in range(20):
-                moved = move_rounding(t, torch.Generator().manual_seed(seed))
-                self.assertEqual(moved.dtype, t.dtype)
-                e, floor = relative_error(moved, t), rounding_floor(t)
-                self.assertLessEqual(e.E2, floor["E2"])
-                self.assertLessEqual(e.Emax, floor["Emax"] / 2)
-                ulps = (moved.double() - t.double()).abs() / (torch.finfo(t.dtype).eps
-                                                             * t.double().abs().clamp_min(1e-30))
-                self.assertTrue(bool((ulps <= 1.0 + 1e-12).all()))    # at most one ulp per element
-        self.assertTrue(torch.equal(move_rounding(zeros, torch.Generator()), zeros))
-        moved = move_rounding(spread, torch.Generator().manual_seed(1))
-        share = (moved != spread).double().mean().item()
-        self.assertAlmostEqual(share, 1 / 3, delta=0.05)
-        # The outlier holds most of the norm: moving it alone is above one rounding,
-        # so its move is dropped whenever the draw picks it.
-        hits = sum(bool(move_rounding(outlier, torch.Generator().manual_seed(k))[0] != outlier[0])
-                   for k in range(60))
-        self.assertEqual(hits, 0)
-
-    def test_policy_entries_carry_their_own_scopes_term_only(self):
-        from evograd.verification.gate2.calibration import _check_entry
-
-        limit = {"E2": 1e-3, "Emax": 1e-3}
-        model = synthetic_entry(C.OUTPUT, limit, term="rounding_perturbation")
-        _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-        lacking = {**model, "components": {m: {k: v for k, v in c.items()
-                                               if k != "rounding_perturbation"}
-                                           for m, c in model["components"].items()}}
-        with self.assertRaises(CalibrationError):     # an entry without the scope's term
-            _check_entry("lacking", lacking, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-        foreign = {**model, "components": {m: {**c, "native_repeat": 0.0}
-                                           for m, c in model["components"].items()}}
-        with self.assertRaises(CalibrationError):     # nor one with a term of no formula
-            _check_entry("foreign", foreign, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-
-    def test_rounding_perturbation_term_is_required_at_model_scope_only(self):
-        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0),
-              self.m("rounding_perturbation", "out:a", 0.03, 5.0),
-              self.m("rounding_perturbation", "out:a", 0.04, 4.0, "s2")]
-        t = derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=4.0, perturbed=True)
-        self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (4 * 0.04, 4 * 5.0))   # max over draws
-        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "rounding_perturbation")
-        with self.assertRaises(CalibrationError):                  # only where asked for
-            derive_thresholds(ms, results={"out:a": C.OUTPUT})
-        with self.assertRaises(CalibrationError):                  # nor optional at model scope
-            derive_thresholds(ms[:1], results={"out:a": C.OUTPUT}, perturbed=True)
-
-    def test_thresholds_are_per_tensor(self):
-        ms = [self.m("trusted_compile", "out:a", 0.5, 0.5), self.m("trusted_compile", "out:b", 0.0, 0.0)]
-        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT})
-        self.assertEqual(t["out:a"]["E2"], 1.0)
-        self.assertEqual(t["out:b"]["E2"], 2 * DEFAULT_FLOORS["output"]["E2"])
-
-    def test_invalid_gamma_and_floors(self):
-        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0)]
-        for gamma in (-1.0, 0.5, float("nan"), float("inf"), True, "2"):
-            with self.assertRaises(CalibrationError, msg=repr(gamma)):
-                derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=gamma)
-        for bad in ({"output": {"E2": 0.0, "Emax": 1e-3}, "gradient": DEFAULT_FLOORS["gradient"]},
-                    {"output": DEFAULT_FLOORS["output"]}):
-            with self.assertRaises(CalibrationError):
-                derive_thresholds(ms, results={"out:a": C.OUTPUT}, floors=bad)
-
-    def test_candidate_measurements_cannot_calibrate(self):
-        with self.assertRaises(CalibrationError):
-            ControlMeasurement("candidate", "s", "out:a", C.OUTPUT, 0.0, 0.0)
-        with self.assertRaises(CalibrationError):        # a native repeat must be bitwise, not a budget
-            ControlMeasurement("native_repeat", "s", "out:a", C.OUTPUT, 0.0, 0.0)
-        check = gate2.judge(C.ResultSpec("out:a", C.OUTPUT), torch.ones(2), torch.ones(2), None)
-        with self.assertRaises(TypeError):
-            derive_thresholds([check], results={"out:a": C.OUTPUT})
-
-    def test_missing_control_evidence_is_an_error_not_a_fallback(self):
-        with self.assertRaises(CalibrationError):
-            derive_thresholds([], results={"out:a": C.OUTPUT})
-        with self.assertRaises(CalibrationError):
-            derive_thresholds([self.m("trusted_compile", "out:x", 0.0, 0.0)],
-                              results={"out:a": C.OUTPUT})
-
-
-class TestControls(unittest.TestCase):
-    def test_a_native_that_does_not_repeat_gives_no_policy(self):
-        calls = [0]
-
-        def drifting(x, w):          # differs on every call: not reproducible bit for bit
-            calls[0] += 1
-            return F.norm_site(x, w) * (1.0 + 1e-3 * calls[0])
-
-        scope = F.toy_module_scope()
-        scope.native_sites = {**scope.native_sites, "norm": drifting}
-        result = calibrate(scope, patch_set=("norm",), samples=samples("ctl", [1]),
-                           compile_backend=FAST)
-        self.assertIsNone(result.policy)
-        self.assertTrue(any(f.code == "control_disqualified" and "native reference" in f.message
-                            for f in result.findings), [f.to_dict() for f in result.findings])
-
-    def test_failed_or_unavailable_compile_control_gives_no_policy(self):
-        def breaks_graph(x, w):
-            torch._dynamo.graph_break()
-            return F.norm_site(x, w)
-
-        scope = F.toy_module_scope()
-        scope.native_sites = {**scope.native_sites, "norm": breaks_graph}
-        result = calibrate(scope, patch_set=("norm",), samples=samples("ctl", [1]),
-                           compile_backend=FAST)
-        self.assertIsNone(result.policy)
-        self.assertEqual(result.status, "incomplete")
-        self.assertEqual([f.code for f in result.findings], ["control_failed"])
-        missing = calibrate(F.toy_module_scope(), patch_set=("norm",), samples=samples("ctl", [1]),
-                            compile_backend="no_such_backend")
-        self.assertIsNone(missing.policy)
-        self.assertEqual([f.code for f in missing.findings], ["control_unavailable"])
-
-    def test_control_repeatability_is_recorded(self):
-        result = calibrate(F.toy_module_scope(), patch_set=("norm",), samples=samples("rep", [1]),
-                           compile_backend=FAST)
-        self.assertIsNotNone(result.policy, result.findings)
-        self.assertEqual(result.policy.sample_identities["rep/seed1"]["repeatability"],
-                         {"native_bitwise": True, "compile_bitwise": True})
-
-    def test_compile_control_that_does_not_reproduce_itself_gives_no_policy(self):
-        from unittest import mock
-
-        from evograd.verification.gate2 import calibration as cal
-
-        real, runs = cal.execute, []
-
-        def second_compile_differs(adapter, deployment, sample, **kwargs):
-            ex = real(adapter, deployment, sample, **kwargs)
-            if deployment.name.startswith("torch_compile"):
-                runs.append(sample.sample_id)
-                if len(runs) == 2:
-                    ex.results_digest = "not-the-first-run"
-            return ex
-
-        with mock.patch.object(cal, "execute", second_compile_differs):
-            result = calibrate(F.toy_module_scope(), patch_set=("norm",),
-                               samples=samples("rep", [1]), compile_backend=FAST)
-        self.assertIsNone(result.policy)
-        self.assertEqual([f.code for f in result.findings], ["control_disqualified"])
-
-    def test_a_compile_repeat_that_fails_is_a_failure_not_a_bitwise_difference(self):
-        # Qwen3.5-4B on GH200 (2026-11-02): the repeat ran out of GPU memory while the reference
-        # and the first compile run were still held, and was reported as non-bitwise.
-        from unittest import mock
-
-        from evograd.verification.gate2 import calibration as cal
-
-        real, controls = cal.execute, []
-
-        def second_compile_fails(adapter, deployment, sample, **kwargs):
-            compiled = deployment.name.startswith("torch_compile")
-            if compiled and controls:
-                # the first compile run's results are released before the repeat runs
-                self.assertEqual(controls[0].results, {})
-                ex = gate2.runner.Execution(deployment, sample)
-                ex.error, ex.error_stage = "torch.OutOfMemoryError: CUDA out of memory", "outputs"
-                return ex
-            ex = real(adapter, deployment, sample, **kwargs)
-            if compiled:
-                controls.append(ex)
-            return ex
-
-        with mock.patch.object(cal, "execute", second_compile_fails):
-            result = calibrate(F.toy_module_scope(), patch_set=("norm",),
-                               samples=samples("rep", [1]), compile_backend=FAST)
-        self.assertIsNone(result.policy)
-        self.assertEqual([f.code for f in result.findings], ["control_failed"])
-        self.assertIn("outputs", result.findings[0].message)
-        self.assertIn("out of memory", result.findings[0].details["trace"])
-
-    def test_sites_compiled_in_one_process_keep_their_own_static_shapes(self):
-        # A Gate 3 compile control over several sites (or several calibrations in one process)
-        # must not turn one site's shapes dynamic because another site had other shapes: Qwen3.5's
-        # gated-attention reference then handed SDPA a SymBool and the control failed (2026-10-28).
-        from evograd.verification.gate2.calibration import _private_entry
-
-        symbolic = []
-
-        def recording(gm, example_inputs):
-            # a dynamic dimension enters the graph as an extra integer input
-            symbolic.append(any(not isinstance(t, torch.Tensor) for t in example_inputs))
-            return gm.forward
-
-        torch._dynamo.reset()
-        for n in (3, 5, 7):
-            torch.compile(_private_entry(torch.nn.functional.linear),
-                          backend=recording)(torch.randn(4, n), torch.randn(6, n))
-        self.assertEqual(symbolic, [False, False, False])
-
-    def test_calibration_inputs_are_checked(self):
-        scope = F.toy_module_scope()
-        for kwargs in ({"patch_set": ()}, {"patch_set": ("nope",)}, {"samples": []},
-                       {"native_repeats": 1}, {"gamma": 0.1},
-                       {"samples": [Sample("a", 1), Sample("b", 1)]}):
-            args = {"patch_set": ("norm",), "samples": samples("c", [1]), **kwargs}
-            self.assertIsNone(calibrate(scope, compile_backend=FAST, **args).policy, kwargs)
-
-
-class TestBoundaries(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.scope = F.toy_module_scope()
-        cls.fixed = samples("bnd", [1, 2])
-        cls.calibration = calibrate(cls.scope, patch_set=("norm",), samples=cls.fixed,
-                                    compile_backend=FAST, boundaries=True)
-
-    def verify(self, fn):
-        return gate2.verify_integration(self.scope, candidate("c", {"norm": fn}),
-                                        policy=self.calibration.policy, samples=self.fixed)
-
-    def test_boundary_thresholds_and_correct_candidate(self):
-        self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
-        table = self.calibration.policy.thresholds_for("bnd/seed1")
-        names = sorted(n for n in table if n.startswith("boundary:"))
-        self.assertEqual(names, ["boundary:norm#0/grad_in:args[0]", "boundary:norm#0/grad_in:args[1]",
-                                 "boundary:norm#0/out:out", "boundary:norm#1/grad_in:args[0]",
-                                 "boundary:norm#1/grad_in:args[1]", "boundary:norm#1/out:out"])
-        report = self.verify(lambda x, w: F.norm_site(x, w))
-        self.assertEqual(report.status, PASSED, codes(report))
-
-    def test_stateful_and_misrouted_sites_fail_at_their_boundary(self):
-        stateful = self.verify(F.StatefulNorm())
-        self.assertEqual(stateful.status, FAILED)
-        self.assertTrue(any(n.endswith("~repeat") for n in failing(stateful)), failing(stateful))
-        misrouted = self.verify(F.norm_misrouted)
-        self.assertIn("boundary:norm#0/grad_in:args[1]", failing(misrouted))
-        self.assertNotIn("boundary:norm#0/grad_in:args[0]", failing(misrouted))
 
 
 def _alive(refs):
@@ -794,7 +357,8 @@ class TestReleasedRuns(unittest.TestCase):
     """What a run allocates is freed once nothing refers to it, with the cyclic
     collector's automatic runs disabled: they are triggered by counts of Python
     objects, not by memory, and an operator calibration on MegaFold payloads ran a
-    95 GiB GPU out of memory on its fourth sample waiting for them (2026-11-11)."""
+    95 GiB GPU out of memory on its fourth sample waiting for them (2026-11-11).
+    Operator builds hold no cycles at all, so operator executions skip the collector."""
 
     def setUp(self):
         gc.collect()
@@ -809,13 +373,11 @@ class TestReleasedRuns(unittest.TestCase):
                 (candidate("c", {"operator": _watching(F.scale_shift_runtime, scope.watched)}),
                  True),
                 (control, True))
-        for deployment, record in runs:
-            ex = gate2.execute(scope, deployment, sample, record_boundaries=record)
+        for deployment, _record in runs:
+            ex = gate2.execute(scope, deployment, sample)
             self.assertIsNone(ex.error, ex.error)
-            kept = [ex.results] + [[c.inputs, c.outputs, c.upstream, c.emitted]
-                                   for c in ex.boundaries]
-            scope.watched.extend(weakref.ref(t) for _, t in tensors_in(kept))
-            del ex, kept
+            scope.watched.extend(weakref.ref(t) for _, t in tensors_in([ex.results]))
+            del ex
             self.assertEqual(_alive(scope.watched), [], deployment.name)
 
     def test_operator_judging_leaves_nothing_alive(self):
@@ -830,49 +392,14 @@ class TestReleasedRuns(unittest.TestCase):
     def test_model_scope_frees_each_model_before_the_next_one_runs(self):
         models = _CyclicModels()
         scope = F.toy_module_scope(factory=models)
-        fixed = samples("mem", [1, 2])
-        result = calibrate(scope, patch_set=("norm",), samples=fixed, compile_backend=FAST,
-                           boundaries=True)
-        self.assertEqual(result.status, "calibrated", result.to_dict())
-        # The boundary replays (run_callable) run the candidate's site on their own copies.
         replayed = []
-        report = gate2.verify_integration(
-            scope, candidate("c", {"norm": _watching(F.norm_site, replayed)}),
-            policy=result.policy, samples=fixed)
+        report = verify_model(scope, candidate("c", {"norm": _watching(F.norm_site, replayed)}),
+                              samples=samples("mem", [1, 2]), gamma=4.0, compile_backend=SCALE)
         self.assertEqual(report.status, PASSED, codes(report))
         self.assertEqual(models.stale, [])
         self.assertEqual(_alive(models.watched), ["ToyModel"])     # the factory's last build
-        self.assertEqual(_alive(replayed), [])
-
-
-class TestDeclaredScopes(unittest.TestCase):
-    def test_required_scopes_are_fixed_before_results(self):
-        scope = F.toy_module_scope()
-        fixed = [Sample("scopes", 1)]
-        policy = synthetic_policy(scope, ("norm",), lambda s: {"E2": 1e-3, "Emax": 1e-2},
-                                  calibration=(("scopes", 1),))
-        model = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                         policy=policy, samples=fixed)
-        self.assertEqual(gate2.combine_scopes(("model",), {"model": model}).status, PASSED)
-        missing = gate2.combine_scopes(("operator", "model"), {"model": model})
-        self.assertEqual(missing.status, INCOMPLETE)
-        self.assertIn("required_scope_missing", codes(missing))
-        failed_extra = gate2.verify_integration(scope, candidate("bad", {"norm": F.norm_spike}),
-                                                policy=policy, samples=fixed)
-        kept = gate2.combine_scopes(("model",), {"model": model, "extra": failed_extra})
-        self.assertEqual(kept.status, PASSED)
-        self.assertIn("extra", kept.evidence["undeclared_scopes"])
-
-    def test_block_is_not_a_scope(self):
-        self.assertEqual(gate2.SCOPES, ("operator", "model"))
-        scope = F.toy_module_scope()
-        policy = synthetic_policy(scope, ("norm",), lambda s: {"E2": 1e-3, "Emax": 1e-2},
-                                  calibration=(("scopes", 1),))
-        model = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                         policy=policy, samples=[Sample("scopes", 1)])
-        block = gate2.combine_scopes(("block",), {"block": model})
-        self.assertEqual(block.status, INCOMPLETE)
-        self.assertIn("unknown_scope", codes(block))
+        # Only the last build's own parameters, which the candidate's site was called with.
+        self.assertEqual([t for t in _alive(replayed) if not t.startswith("Parameter")], [])
 
 
 class TestInductorControl(unittest.TestCase):
@@ -890,12 +417,9 @@ class TestInductorControl(unittest.TestCase):
         self.assertEqual(report.evidence["compile"]["deployment"]["identity"]["backend"], "inductor")
         self.assertEqual(report.status, PASSED, codes(report))
         model = F.toy_module_scope()
-        fixed = samples("ind", [1, 2])
-        calibrated = calibrate(model, patch_set=("norm",), samples=fixed)
-        self.assertEqual(calibrated.status, "calibrated", calibrated.to_dict())
-        bad = gate2.verify_integration(model, candidate("spike", {"norm": F.norm_spike}),
-                                       policy=calibrated.policy, samples=fixed)
-        self.assertEqual(bad.status, FAILED)
+        bad = verify_model(model, candidate("spike", {"norm": F.norm_spike}),
+                           samples=samples("ind", [1, 2]), gamma=4.0)
+        self.assertEqual(bad.status, FAILED, codes(bad))
 
 
 if __name__ == "__main__":

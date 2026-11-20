@@ -23,9 +23,8 @@ LM head's input (the decoder's last hidden state, after the final norm) and on
 the loss the site returns, beside every parameter gradient.
 The old model gates (envelope, KL, global gradient, protocol 4) are not used.
 
-Model scope uses the ``matched_inputs`` sample protocol: a policy is calibrated
-on fixed samples and judges fresh executions of those same samples, matched by
-content (see :mod:`evograd.verification.gate2.calibration`).
+Model Gate 2 (:mod:`evograd.verification.gate2.model`) runs native, the compiled
+native and the candidate on the same samples and judges the candidate there.
 
 Routed experts need a fixed-routing execution condition this bridge does not
 define; OLMoE adds it in a subclass (``integrations.olmoe_1b_7b.routing``).
@@ -141,11 +140,8 @@ class WorkloadModelScope(ScopeBase):
             self.native_site(site))
 
     def site_references(self) -> dict[str, Any]:
-        """Each site's reference contract -- what boundary replay judges against.
+        """Each site's reference contract, recorded in the reports' reference identity.
 
-        Bound into the policy, so a policy calibrated when a site's declared
-        reference was a different computation (e.g. the residual site's former
-        ``F.rms_norm`` contract) is a binding mismatch, never reinterpreted.
         Sites given an explicit ``native_sites`` callable are recorded as such.
         """
         from evograd.benchmark import get_task

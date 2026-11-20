@@ -40,8 +40,6 @@ single agent, and pass through `adbench_evaluate.sbatch`:
 | Flag | Default | Enabled behavior |
 | --- | --- | --- |
 | `--share-gate3-native` | off | Two native training trajectories shared across compatible cases and combinations; compile controls stay patch-specific |
-| `--share-gate2-calibration-native` | off | Model Gate 2 native reference and independent repeat shared across compatible patch sets; compile and compile-repeat still run for each patch set |
-| `--share-gate2-verification-reference` | off | Model Gate 2 verification reference shared across compatible candidates, separately from calibration executions |
 
 For example, inside an existing GPU allocation:
 
@@ -52,9 +50,7 @@ python candidates/evaluate_model.py qwen3_0_6b \
   --out-root "$HOME/adbench-evaluation-three-agents-native-reuse-v1" \
   --deadline-min 100 \
   --tier3-blocks 10 \
-  --share-gate3-native \
-  --share-gate2-calibration-native \
-  --share-gate2-verification-reference
+  --share-gate3-native
 ```
 
 Use a new output root when changing these options. The launcher freezes them
@@ -161,8 +157,7 @@ python candidates/evaluate_model.py qwen3_5_4b --agent all \
   --submission-root /work/hdd/bcjw/wzhan/ADBench-redeploy \
   --out-root "$HOME/adbench-evaluation-qwen35-rng-cache-v1" \
   --deadline-min 100 --tier3-blocks 10 \
-  --share-gate3-native --share-gate2-calibration-native \
-  --share-gate2-verification-reference
+  --share-gate3-native
 ```
 
 Snapshotting still fails before candidate evaluation for unsupported RNG
@@ -213,7 +208,9 @@ rsync -avR \
   src/evograd/pipelines/shared/artifact.py \
   src/evograd/verification/reuse.py \
   src/evograd/verification/integrations/gates.py \
-  src/evograd/verification/gate2/calibration.py \
+  src/evograd/verification/gate2/controls.py \
+  src/evograd/verification/gate2/model.py \
+  src/evograd/verification/gate2/operator.py \
   src/evograd/verification/gate2/runner.py \
   src/evograd/verification/gate3/global_loss.py \
   src/evograd/verification/gate3/policy.py \

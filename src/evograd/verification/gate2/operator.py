@@ -41,8 +41,7 @@ through the model and through training (model Gate 2, Gate 3).
 
 If the compile control cannot be built or fails on a payload, native alone is
 trusted there (recorded in the report). Nothing is calibrated or cached: the
-trusted errors are measured on the same payloads in the same run, and the
-executions record no content identities or digests (``execute(audit=False)``).
+trusted errors are measured on the same payloads in the same run.
 """
 
 from __future__ import annotations
@@ -63,7 +62,8 @@ from evograd.verification.common.reports import (
     missing,
 )
 from evograd.verification.common.tensors import relative_error
-from evograd.verification.gate2.runner import GATE, execute, integration_contract
+from evograd.verification.gate2.controls import compile_control
+from evograd.verification.gate2.runner import GATE, execute, integration_contract, structure_checks
 
 PROTOCOL = "evograd-verification-gate2-operator/1"
 RULE = "evograd-gate2-operator-truth/1"
@@ -124,7 +124,6 @@ def verify_operator(scope, deployment: Deployment, *, samples: Sequence[Sample],
                     ) -> VerificationReport:
     """Judge ``deployment`` on every one of ``samples`` (the case's payloads)."""
     from evograd.opdecl.oracle import reference_identity
-    from evograd.verification.gate2.calibration import compile_control
 
     report = VerificationReport(
         gate=GATE, protocol=PROTOCOL,
@@ -209,7 +208,7 @@ def _measure(scope, sample: Sample, deployment: Deployment, control: Deployment 
     coexists with another execution's working state. ``None`` when the reference
     side failed, which leaves ``case`` incomplete.
     """
-    native = execute(scope, Deployment.native(), sample, audit=False)
+    native = execute(scope, Deployment.native(), sample)
     if native.error:
         case.findings.append(missing("reference_runtime_error", f"native failed at {native.error_stage}",
                                      trace=native.error))
@@ -217,13 +216,13 @@ def _measure(scope, sample: Sample, deployment: Deployment, control: Deployment 
     contract = integration_contract(native)
     runs = {"native": native.results}
     if control is not None:
-        ctl = execute(scope, control, sample, audit=False)
+        ctl = execute(scope, control, sample)
         if ctl.error:
             case.evidence["compile"] = {"failed_at": ctl.error_stage, "trace": ctl.error}
         else:
             runs["compile"] = ctl.results
         del ctl
-    cand = execute(scope, deployment, sample, audit=False)
+    cand = execute(scope, deployment, sample)
     case.evidence["candidate_seconds"] = cand.seconds
     checks: dict[str, ResultCheck] = {}
     numeric: list[str] = []
@@ -232,20 +231,8 @@ def _measure(scope, sample: Sample, deployment: Deployment, control: Deployment 
         case.findings.append(failure(code, f"deployment failed at {cand.error_stage}",
                                      trace=cand.error))
     else:
-        checks = {s.name: ResultCheck(s.name, s.kind) for s in contract.specs
-                  if s.presence != C.ABSENT}
-        pairs, presence = C.match_results(contract, cand.results, native.results)
-        for finding in presence:
-            target = checks.get(finding.subject or "")
-            (target.findings if target is not None else case.findings).append(finding)
-        for pair in pairs:
-            check, structure = checks[pair.spec.name], C.check_structure(pair)
-            check.contract = structure.meta
-            check.findings.extend(structure.findings)
-            if structure.mode == "exact":
-                check.compared = True
-            elif structure.mode == "numeric" and not structure.findings:
-                numeric.append(pair.spec.name)
+        checks, numeric, loose = structure_checks(contract, cand.results, native.results)
+        case.findings.extend(loose)
         runs["candidate"] = {n: cand.results[n] for n in numeric}
     del cand
     try:

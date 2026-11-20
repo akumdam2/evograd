@@ -15,12 +15,10 @@ against the model reference (``Model.reference_op``):
   floor of one rounding (:mod:`evograd.verification.gate2.operator`).
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
-  each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
-  compile and the rounding perturbation at the same site, with
-  :data:`GATE2_MODEL_GAMMA` or the model's own ``Model.gate2_model_gamma`` (a
-  whole model judges a thousand propagated reductions per batch, the operator
-  scope a handful of results); coverage and input/parameter side effects
-  checked, no per-call boundary replay (:data:`GATE2_MODEL_BOUNDARIES`).
+  each order in :data:`MODEL_ORDERS`, against native eager on the same batches;
+  each output and parameter gradient's E2 within :data:`GATE2_MODEL_GAMMA` (or the
+  model's own ``Model.gate2_model_gamma``) times torch.compile's at the same site,
+  and every replaced site called as declared (:mod:`evograd.verification.gate2.model`).
 
 * Gate 3, single site (Level 2 only) -- continuous training with the candidate
   alone at its model site, after all of its preceding gates pass.
@@ -47,7 +45,7 @@ agents): the accepted Level-2 candidates whose single-site speedup over eager,
 both with the step replayed from a CUDA graph (T3-G), has a 95% bootstrap
 interval with its lower bound above one; for a model whose eager step cannot
 be captured, the eagerly launched step's interval (T3) decides instead.
-Gate 3 control runs and Gate 2 calibrations do not depend on the candidate and
+Gate 3 control runs and Gate 1's native error do not depend on the candidate and
 are kept under ``--state`` (default ``DIR/controls``) for reuse; the
 candidate's own runs never are. Every report is written to ``DIR``.
 """
@@ -66,20 +64,13 @@ MODEL_ORDERS = (101, 202, 303, 404)
 #: The corpus splits Gate 1 and operator Gate 2 take every payload of a case from
 #: (orders 101/202 and 303/404). Search feedback sees the calibration split only.
 PAYLOAD_SPLITS = ("calibration", "acceptance")
-#: Gate 2 safety factor at model scope: the smallest integer at which every frontend seed
-#: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
-#: residual_rmsnorm seed needs 3.3 (pooled budgets, one sample, two norm/proj
-#: weight gradients); the x1.01 fault exceeds four times the budget on 401
-#: comparisons in every data order. Calibrated while model Gate 2 still compared
-#: the logits output; it now compares only ``workload.loss`` and the parameter
-#: gradients, so re-validate (seeds pass, x1.01 fails) on every LM after the
-#: recapture.
+#: Model Gate 2's factor on torch.compile's error (gate2.model): the candidate and the
+#: compiled native round differently, and a rounding difference at one site reaches
+#: every later tensor as a fresh draw, so the largest of several hundred tensors over
+#: four batches is a few times the control's on some tensor. Against compile alone,
+#: P8's frontend seeds need up to 2.7 on E2 (ConvNeXt, Qwen2-VL; Qwen3.5-4B 5.5, its
+#: own value), estimated offline from the P8 calibrations; to be re-measured on the GPU.
 GATE2_MODEL_GAMMA = 4.0
-#: Model-scope Gate 2 judges the whole model's outputs and parameter gradients, plus
-#: coverage and input/parameter side effects. Per-call boundary replay is off: its
-#: local check duplicates operator Gate 2 (the same calls on the same orders) with
-#: per-call budgets, and failed rounding-level candidates on single bf16 ULP flips.
-GATE2_MODEL_BOUNDARIES = False
 TRAIN_ORDER, TRAIN_SEED = 707, 0
 #: Gate 3's status for a model it does not apply to (``Model.gate3_applies``).
 NOT_APPLICABLE = "not_applicable"
@@ -151,74 +142,6 @@ def _stage(path: Path, key: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     data = json.loads(path.read_text())
     return data if data.get("stage_key") == _jsonable(key) else None
-
-
-def _calibration_request(scope, deployment, options):
-    """Bind cached calibration to all requested settings and its implementation."""
-    import inspect
-
-    from evograd.verification.gate2 import calibration, runner
-    from evograd.verification.common import contracts, tensors
-    from .base import sha_file
-
-    bound = inspect.signature(calibration.calibrate).bind(
-        scope, patch_set=deployment.patch_set, **options)
-    bound.apply_defaults()
-    settings = dict(bound.arguments)
-    settings.pop("adapter")
-    settings["samples"] = [sample.to_dict() for sample in settings["samples"]]
-    return _jsonable({"procedure": calibration.CALIBRATION_PROCEDURE,
-                      "sources": {name: sha_file(module.__file__) for name, module in
-                                  (("calibration", calibration), ("runner", runner),
-                                   ("metrics", tensors), ("contracts", contracts))},
-                      "settings": settings})
-
-
-def _cached_policy(path: Path | None, scope, deployment, judged, request):
-    """A Gate 2 calibration saved under ``--state``, if it still binds to this run.
-
-    A policy whose binding (scope, case, reference, environment, numerics,
-    patch set, samples, formula, gamma) does not match is recalibrated, never
-    reinterpreted; ``verify_integration`` would withhold its thresholds anyway.
-    """
-    from evograd.verification.gate2.calibration import (
-        BINDING_CODES,
-        CalibrationError,
-        CalibrationResult,
-        Gate2Policy,
-        policy_findings,
-    )
-
-    if path is None or not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text())
-        if data.get("calibration_request") != request:
-            return None
-        policy = Gate2Policy.from_dict(data["policy"])
-    except (CalibrationError, KeyError, ValueError):
-        return None
-    if float(policy.gamma) != float(request["settings"]["gamma"]):
-        return None
-    if {f.code for f in policy_findings(policy, scope, deployment, judged)} & BINDING_CODES:
-        return None
-    return CalibrationResult(policy=policy, evidence={"reused_policy": str(path)})
-
-
-def _calibrate(scope, deployment, judged, cache: Path | None, **options):
-    """Gate 2 calibration, reused from ``cache`` when it binds to the ``judged``
-    samples; saved there when made."""
-    from evograd.verification import gate2
-    request = _calibration_request(scope, deployment, options) if cache is not None else None
-    reused = _cached_policy(cache, scope, deployment, judged, request)
-    # A policy calibrated with boundary replay on (or off) does not judge a run without (with) it.
-    if reused is not None and bool(reused.policy.boundaries) == bool(options.get("boundaries", False)):
-        return reused
-    calibration = gate2.calibrate(scope, patch_set=deployment.patch_set, **options)
-    if cache is not None and calibration.policy is not None:
-        _write(cache, {"calibration_request": request,
-                       "policy": calibration.policy.to_dict(), "calibration": calibration.to_dict()})
-    return calibration
 
 
 # ── per case: Gate 1 and operator Gate 2 ─────────────────────────────────────
@@ -398,19 +321,15 @@ def deployment_for(model, level2, workload):
                      **({"configurations": configurations} if configurations else {}))
 
 
-def judge_model(model, deployment, workload, *, compile_backend: str = "inductor",
-                state: Path | None = None) -> dict[str, Any]:
-    from evograd.verification import gate2
+def judge_model(model, deployment, workload, *, compile_backend: str = "inductor"
+                ) -> dict[str, Any]:
+    """Model Gate 2 of ``deployment`` on the first real TRAIN batch of each order."""
+    from evograd.verification.gate2.model import verify_model
 
     scope = model_scope(model, workload, deployment)
-    samples = scope.samples(MODEL_ORDERS)
-    cache = (None if state is None
-             else state / "gate2" / "model" / f"{_patch_name(deployment)}.json")
-    calibration = _calibrate(scope, deployment, samples, cache, samples=samples,
-                             boundaries=GATE2_MODEL_BOUNDARIES,
-                             compile_backend=compile_backend, gamma=model_gamma(model))
-    report = gate2.verify_integration(scope, deployment, policy=calibration.policy, samples=samples)
-    return {"gate2_model_calibration": calibration, "gate2_model": report}
+    report = verify_model(scope, deployment, samples=scope.samples(MODEL_ORDERS),
+                          gamma=model_gamma(model), compile_backend=compile_backend)
+    return {"gate2_model": report}
 
 
 def _gate1_policy(op) -> dict[str, Any]:
@@ -429,10 +348,9 @@ def _gate2_operator_rule() -> dict[str, Any]:
 
 def _gate2_model_rule(model) -> dict[str, Any]:
     """What a cached model-scope Gate 2 verdict was judged under."""
-    from evograd.verification.gate2.calibration import CALIBRATION_PROCEDURE, FORMULAS
+    from evograd.verification.gate2.model import rule_identity
 
-    return {"gamma": model_gamma(model), "formula": FORMULAS["model"],
-            "calibration": CALIBRATION_PROCEDURE, "boundaries": GATE2_MODEL_BOUNDARIES}
+    return rule_identity(model_gamma(model))
 
 
 def training_context(model, workload, patch_set) -> dict[str, Any]:
@@ -514,7 +432,7 @@ def judge_training(model, deployment, workload, out: Path, controls: Path, *,
                    deadline: float | None = None) -> dict[str, Any]:
     from evograd.verification import gate3
     from evograd.verification.common.execution import Deployment
-    from evograd.verification.gate2.calibration import compile_control
+    from evograd.verification.gate2.controls import compile_control
 
     patch_set = deployment.patch_set
     group = controls / "gate3" / _patch_name(deployment)
@@ -632,18 +550,18 @@ def open_run(model, candidates: Mapping[str, str], corpus_path: str | Path, out:
 
 def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) -> dict[str, str]:
     """Statuses of a stage: an earlier report of the same inputs, else ``judge()``'s."""
-    from evograd.verification.reuse import settings as reuse_settings
+    from evograd.verification.reuse import FLAGS, settings as reuse_settings
     reuse = reuse_settings()
-    if any(reuse[name] for name in ("share_gate3_native", "share_gate2_calibration_native", "share_gate2_verification_reference")):
+    if any(reuse[name] for name in FLAGS):
         key = {**key, "calibration_reuse": reuse}
-    # A stage verdict must not outlive the calibration/comparison code that
-    # produced it, even if the candidate and corpus are unchanged.
-    from evograd.verification.gate2 import calibration, operator, runner
+    # A stage verdict must not outlive the comparison code that produced it,
+    # even if the candidate and corpus are unchanged.
+    from evograd.verification.gate2 import controls, model, operator, runner
     from evograd.verification.common import contracts, tensors
     from .base import sha_file
     key = {**key, "verification_implementation": {
-        "gates": sha_file(__file__), "calibration": sha_file(calibration.__file__),
-        "operator": sha_file(operator.__file__),
+        "gates": sha_file(__file__), "controls": sha_file(controls.__file__),
+        "operator": sha_file(operator.__file__), "model": sha_file(model.__file__),
         "comparison": sha_file(runner.__file__), "metrics": sha_file(tensors.__file__),
         "contracts": sha_file(contracts.__file__)},
         "verification_environment": contracts.environment_fingerprint(getattr(run, "device", None))}
@@ -696,7 +614,7 @@ def verify_cases(run: Run, *, single_site: bool = True, gate3_on_combination: bo
             entry.update(_judged_stage(
                 run, run.out / "gate2_model" / f"{case_id.replace('/', '__')}.json", key,
                 lambda: judge_model(model, deployment, run.workload,
-                                    compile_backend=run.compile_backend, state=run.state)))
+                                    compile_backend=run.compile_backend)))
             if not model.gate3_applies:
                 entry["gate3"] = NOT_APPLICABLE
             elif not all(entry.get(gate) == "passed"
@@ -765,8 +683,7 @@ def verify_combination(run: Run, case_ids, single: Mapping[str, Mapping[str, Any
            "gate2_model": _gate2_model_rule(model)}
     statuses = _judged_stage(run, out / "gate2_model.json", key,
                              lambda: judge_model(model, deployment, run.workload,
-                                                 compile_backend=run.compile_backend,
-                                                 state=run.state))
+                                                 compile_backend=run.compile_backend))
     if model.gate3_applies:
         training = judge_training(model, deployment, run.workload, out, run.state,
                                   compile_backend=run.compile_backend, log=run.log,
@@ -816,8 +733,8 @@ def verify(model, candidates: Mapping[str, str], corpus_path: str | Path, out: s
     candidates at once (a model's seeds); it is not the protocol's acceptance.
 
     ``state`` (``controls`` is its older name; default ``DIR/controls``) keeps
-    what does not depend on the candidate -- Gate 3 control runs and Gate 2
-    calibrations -- for any later candidate of the same case or patch set.
+    what does not depend on the candidate -- Gate 3 control runs and Gate 1's
+    native error -- for any later candidate of the same case or patch set.
 
     Rerunning the same command continues an interrupted one: stage reports
     of the same inputs (program hashes, corpus, reference) are reused, and a

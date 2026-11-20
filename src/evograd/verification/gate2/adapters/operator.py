@@ -56,8 +56,7 @@ class OperatorScope(ScopeBase):
         from evograd.opdecl.oracle import reference_identity
 
         # `reference` names the contract (model reference vs declared
-        # mathematics) and, for a model reference, its pinned source; a policy
-        # calibrated under one contract is a binding mismatch under the other.
+        # mathematics) and, for a model reference, its pinned source.
         return {"scope": self.scope, "op": self.op.name, "forward": self.op.forward,
                 "runtime_forward": self.op.runtime_forward, "declaration": self.op.declaration,
                 "reference": reference_identity(self.op),

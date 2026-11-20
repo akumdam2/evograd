@@ -17,9 +17,7 @@ from evograd.verification.common.reports import FAILED, INCOMPLETE, PASSED
 from evograd.verification.common.tensors import elementwise_error, relative_error
 from evograd.verification.gate2.adapters.module import ModuleScope
 from evograd.verification.gate2.adapters.operator import OperatorScope
-from evograd.verification.gate2.calibration import CalibrationError, Gate2Policy, calibrate
 from tests.verification import _fixtures as F
-from tests.verification.test_gate2 import synthetic_policy
 
 warnings.filterwarnings("ignore")
 CPU = "cpu"
@@ -67,8 +65,8 @@ class TestComparatorEdges(unittest.TestCase):
         c = r * (1 + 1e-9)
         err = relative_error(c, r)
         self.assertAlmostEqual(err.E2, 1e-9, delta=1e-12)
-        check = gate2.judge(C.ResultSpec("out:z", C.OUTPUT), c, r, {"E2": 1e-6, "Emax": 1e-6})
-        self.assertEqual(check.status, PASSED)
+        from evograd.verification.gate2.model import e2
+        self.assertAlmostEqual(e2(c, r), 1e-9, delta=1e-12)
         huge = elementwise_error(torch.tensor([1e308], dtype=torch.float64),
                                  torch.tensor([-1e308], dtype=torch.float64), atol=0.0, rtol=0.0)
         self.assertEqual(huge.violations, 1)
@@ -94,11 +92,11 @@ class TestExactValues(unittest.TestCase):
 
     def test_none_metadata_is_a_value(self):
         scope = self.scope(lambda result: None)
-        fixed = samples("none", [1, 2])
-        cal = calibrate(scope, patch_set=("norm",), samples=fixed, compile_backend=FAST)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                          policy=cal.policy, samples=fixed)
+        from evograd.verification.gate2.model import verify_model
+        from tests.verification.test_gate2 import SCALE
+
+        report = verify_model(scope, candidate("c", {"norm": F.norm_site}), samples=samples("none", [1, 2]),
+                              gamma=4.0, compile_backend=SCALE)
         self.assertEqual(report.status, PASSED, codes(report))
 
     def test_container_metadata_compares_exactly(self):
@@ -108,121 +106,15 @@ class TestExactValues(unittest.TestCase):
         self.assertFalse(C.exact_equal(1, 1.0))
 
 
-class TestSampleContent(unittest.TestCase):
-    def blind_scope(self):
-        """A recipe that ignores the sample seed: every sample is the same data."""
-        def invocation(sample, device):
-            return F.toy_invocation(Sample("fixed", 0), device)
+class TestAutocast(unittest.TestCase):
+    def test_correct_candidate_passes_under_autocast(self):
+        from evograd.verification.gate2.model import verify_model
+        from tests.verification.test_gate2 import SCALE
 
-        return ModuleScope(
-            scope="model", name="blind", factory=lambda sites: F.ToyModel(sites),
-            native_sites=dict(F.NATIVE_SITES), make_invocation=invocation,
-            select_outputs=F.toy_outputs, output_names=("y", "aux", "tag"),
-            metadata_outputs=("tag",), make_cotangents=lambda o, i, s: {
-                k: torch.ones_like(v) for k, v in o.items() if k != "tag"},
-            calls_per_execution={"norm": 2, "mix": 2}, device=CPU)
-
-    def test_identical_calibration_samples_are_refused(self):
-        cal = calibrate(self.blind_scope(), patch_set=("norm",), samples=samples("blind", [1, 2]),
-                        compile_backend=FAST)
-        self.assertIsNone(cal.policy)
-        self.assertIn("duplicate_samples", {f.code for f in cal.findings})
-
-    def test_matched_policy_needs_the_calibrated_sample_not_only_its_content(self):
-        scope = self.blind_scope()
-        cal = calibrate(scope, patch_set=("norm",), samples=samples("blind", [1]),
-                        compile_backend=FAST)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        # Same content under another id/seed: not a calibrated sample, no budget.
-        report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                          policy=cal.policy, samples=samples("blind/val", [7]))
-        self.assertEqual(report.status, INCOMPLETE)
-        self.assertIn("sample_not_calibrated", codes(report))
-        self.assertIn("required_sample_missing", codes(report))
-
-
-def _checkpointed_block(sites):
-    """The toy network with weights loaded from a checkpoint file (the factory's
-    code, hence the reference identity, does not change with the file)."""
-    module = F.ToyModel(sites)
-    module.load_state_dict(torch.load(_CHECKPOINT["path"]))
-    return module
-
-
-_CHECKPOINT: dict = {}
-
-
-class TestWeightsBinding(unittest.TestCase):
-    def test_policy_refuses_other_weights(self):
-        import tempfile
-
-        with tempfile.TemporaryDirectory() as tmp:
-            path = f"{tmp}/weights.pt"
-            _CHECKPOINT["path"] = path
-            torch.save(F.ToyModel(F.NATIVE_SITES).state_dict(), path)
-            scope = F.toy_module_scope(factory=_checkpointed_block)
-            fixed = samples("w", [1, 2])
-            cal = calibrate(scope, patch_set=("norm",), samples=fixed, compile_backend=FAST)
-            self.assertIsNotNone(cal.policy.weights["fixed"])
-            same = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                            policy=cal.policy, samples=fixed)
-            self.assertEqual(same.status, PASSED, codes(same))
-            drifted = F.ToyModel(F.NATIVE_SITES)
-            with torch.no_grad():
-                drifted.mix_b[0].add_(0.5)
-            torch.save(drifted.state_dict(), path)              # the checkpoint changed
-            report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_spike}),
-                                              policy=cal.policy, samples=fixed)
-        self.assertEqual(report.status, INCOMPLETE)             # withheld, not judged
-        self.assertIn("sample_identity_mismatch", codes(report))
-        self.assertNotIn("policy_reference_mismatch", codes(report))
-        self.assertEqual(report.cases[0].findings[0].details["differing"], ["initial_state"])
-
-
-class TestBoundaryCapture(unittest.TestCase):
-    def test_uninspectable_site_output_is_not_silently_checked(self):
-        class Box:
-            def __init__(self, value):
-                self.value = value
-
-        def boxed(h, weight, bias):
-            return Box(F.mix_site(h, weight, bias))
-
-        class BoxBlock(F.ToyModel):
-            def forward(self, x, *, tag=7):
-                for i in range(len(self.norm_w)):
-                    h = self.sites["norm"](x, self.norm_w[i])
-                    x = x + self.sites["mix"](h, self.mix_w[i], self.mix_b[i]).value
-                return x, x.pow(2).mean(-1), torch.tensor(tag)
-
-        scope = F.toy_module_scope(factory=lambda sites: BoxBlock(sites))
-        scope.native_sites = {**scope.native_sites, "mix": boxed}
-        cal = calibrate(scope, patch_set=("mix",), samples=samples("box", [1]),
-                        compile_backend=FAST, boundaries=True)
-        self.assertIsNone(cal.policy)
-        self.assertIn("boundary_uncaptured", {f.code for f in cal.findings})
-
-    def test_a_tensor_returned_twice_is_seeded_once(self):
-        hooks = SiteHooks(record=True)
-        site = hooks.wrap("dup", lambda x: (lambda y: (y, y))(x * 2))
-        x = torch.ones(3, requires_grad=True)
-        a, b = site(x)
-        (2 * a.sum() + 10 * b.sum()).backward()
-        upstream = hooks.calls[0].upstream
-        self.assertEqual(sorted(upstream), ["out[0]"])
-        self.assertTrue(torch.equal(upstream["out[0]"], torch.full((3,), 12.0)))
-
-
-class TestAutocastBoundary(unittest.TestCase):
-    def test_correct_candidate_passes_under_autocast_with_boundaries(self):
         scope = F.toy_module_scope()
         scope.autocast_dtype = "bfloat16"
-        fixed = samples("ac", [1, 2])
-        cal = calibrate(scope, patch_set=("norm",), samples=fixed,
-                        compile_backend=FAST, boundaries=True)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                          policy=cal.policy, samples=fixed)
+        report = verify_model(scope, candidate("c", {"norm": F.norm_site}), samples=samples("ac", [1, 2]),
+                              gamma=4.0, compile_backend=SCALE)
         self.assertEqual(report.status, PASSED, codes(report))
 
 
@@ -238,23 +130,6 @@ class TestErrorsBecomeFindings(unittest.TestCase):
                                        cases=F.supplied_cases(reference, [wl]))
         self.assertEqual(report.status, INCOMPLETE)
         self.assertIn("tolerance_unavailable", codes(report))
-
-    def test_gate2_malformed_policies(self):
-        scope = F.toy_module_scope()
-        policy = synthetic_policy(scope, ("norm",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        nan = policy.to_dict()
-        nan["gamma"] = float("nan")
-        lacking = policy.to_dict()
-        for key in ("weights", "policy_hash", "schema"):
-            lacking.pop(key)
-        with self.assertRaises(CalibrationError):          # hash-valid but missing fields
-            Gate2Policy.build(lacking)
-        for bad in (nan, {"schema": "evograd-verification-gate2-policy/1"}):
-            report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}),
-                                              policy=bad, samples=samples("m", [3]))
-            self.assertEqual(report.status, INCOMPLETE)
-            self.assertIn("policy_schema", codes(report))
-
 
 class TestGate3Seed(unittest.TestCase):
     def test_runs_at_different_seeds_do_not_align(self):

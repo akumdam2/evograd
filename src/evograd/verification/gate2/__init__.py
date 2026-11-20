@@ -1,19 +1,22 @@
-"""Gate 2 -- framework-integration verification (one forward/backward).
+"""Gate 2 -- framework-integration verification (one forward/backward, no calibration).
 
-Two scopes. ``operator``: every recorded call of a case through the artifact's
-deployment entry, against the float32 truth, within twice the error of native
-and ``torch.compile`` or a floor of one rounding; nothing calibrated
-(:mod:`.operator`)::
+Two scopes, one form: ``err(candidate, reference) <= max(floor, factor * err(trusted))``.
+
+``operator`` (:mod:`.operator`): every recorded call of a case through the artifact's
+deployment entry, against the float32 truth; trusted native and ``torch.compile``,
+factor 2, E2 and the worst element::
 
     from evograd.verification.gate2.operator import verify_operator
 
     report = verify_operator(scope, scope.candidate(artifact), samples=samples)
 
-``model``: thresholds calibrated from trusted controls on fixed samples and
-judged on fresh executions of the same samples (matched inputs)::
+``model`` (:mod:`.model`): the whole model with the candidate installed, against
+native eager on the same batches; trusted ``torch.compile`` at the replaced sites,
+factor gamma, E2::
 
-    cal = gate2.calibrate(model, patch_set=sites, samples=fixed)
-    report = gate2.verify_integration(model, deployment, policy=cal.policy, samples=fixed)
+    from evograd.verification.gate2.model import verify_model
+
+    report = verify_model(model_scope, deployment, samples=batches, gamma=4.0)
 """
 
 from evograd.verification.common.execution import (
@@ -25,42 +28,19 @@ from evograd.verification.common.execution import (
     Sample,
     candidate,
 )
-from evograd.verification.gate2.calibration import (
-    BINDING_CODES,
-    DEFAULT_FLOORS,
-    MATCHED,
-    SAMPLE_PROTOCOLS,
-    SAFETY_FACTOR_GAMMA,
-    SCHEMA,
-    CalibrationError,
-    CalibrationResult,
-    ControlMeasurement,
-    Gate2Policy,
-    calibrate,
-    compile_control,
-    derive_thresholds,
-    freeze_policy,
-    policy_findings,
-)
+from evograd.verification.gate2.controls import compile_control
+from evograd.verification.gate2.model import verify_model
 from evograd.verification.gate2.operator import verify_operator
 from evograd.verification.gate2.runner import (
-    IDENTITY_COMPONENTS,
-    PROTOCOL,
     SCOPES,
     Execution,
-    combine_scopes,
-    compare_executions,
     execute,
     integration_contract,
-    judge,
-    verify_integration,
+    structure_checks,
 )
 
 __all__ = [
-    "BINDING_CODES", "CANDIDATE", "CONTROL", "DEFAULT_FLOORS", "IDENTITY_COMPONENTS",
-    "MATCHED", "NATIVE", "PROTOCOL", "SAFETY_FACTOR_GAMMA", "SAMPLE_PROTOCOLS", "SCOPES",
-    "SCHEMA", "CalibrationError", "CalibrationResult", "ControlMeasurement", "Deployment",
-    "Execution", "Gate2Policy", "Invocation", "Sample", "calibrate", "candidate", "combine_scopes",
-    "compare_executions", "compile_control", "derive_thresholds", "execute", "freeze_policy",
-    "integration_contract", "judge", "policy_findings", "verify_integration", "verify_operator",
+    "CANDIDATE", "CONTROL", "NATIVE", "SCOPES", "Deployment", "Execution", "Invocation", "Sample",
+    "candidate", "compile_control", "execute", "integration_contract", "structure_checks",
+    "verify_model", "verify_operator",
 ]

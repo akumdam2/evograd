@@ -23,7 +23,8 @@ from evograd.verification import gate2, gate3
 from evograd.verification.common.execution import Deployment, Sample, candidate
 from evograd.verification.common.reports import FAILED, PASSED
 from evograd.verification.gate2.adapters.model import LM_HEAD_LOSS_SITE, WorkloadModelScope
-from evograd.verification.gate2.calibration import calibrate
+from evograd.verification.gate2.model import verify_model
+from tests.verification.test_gate2 import SCALE
 
 warnings.filterwarnings("ignore")
 logging.getLogger("transformers").setLevel(logging.ERROR)
@@ -74,16 +75,13 @@ class TestScopes(unittest.TestCase):
                         native_sites=dict(F.NATIVE_SITES), make_invocation=F.toy_invocation,
                         select_outputs=F.toy_outputs, output_names=("y", "aux", "tag"))
 
-    def test_an_unknown_scope_cannot_calibrate_or_be_judged(self):
+    def test_an_unknown_scope_cannot_be_judged(self):
         from tests.verification import _fixtures as F
 
         scope = F.toy_module_scope()
         scope.scope = "layer"                       # forced past the constructor
-        cal = calibrate(scope, patch_set=("norm",), samples=samples("b", [1]), compile_backend=FAST)
-        self.assertIsNone(cal.policy)
-        self.assertEqual([f.code for f in cal.findings], ["unknown_scope"])
-        report = gate2.verify_integration(scope, candidate("c", {"norm": F.norm_site}), policy=None,
-                                          samples=samples("b", [1]))
+        report = verify_model(scope, candidate("c", {"norm": F.norm_site}), samples=samples("b", [1]),
+                              gamma=4.0, compile_backend=SCALE)
         self.assertIn("unknown_scope", codes(report))
         self.assertNotEqual(report.status, PASSED)
 
@@ -93,14 +91,12 @@ class TestWorkloadModelBridge(unittest.TestCase):
     def check(self, workload, site, op_name, prefix, calls=ARCH["num_hidden_layers"]):
         scope = WorkloadModelScope(workload, patch_set=(site,))
         fixed = samples(f"{prefix}/fixed", [1, 2])
-        cal = calibrate(scope, patch_set=(site,), samples=fixed, compile_backend=FAST)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        good = gate2.verify_integration(scope, candidate("bound", {site: bound_eager(op_name)}),
-                                        policy=cal.policy, samples=fixed)
+        good = verify_model(scope, candidate("bound", {site: bound_eager(op_name)}), samples=fixed,
+                            gamma=4.0, compile_backend=SCALE)
         self.assertEqual(good.status, PASSED, codes(good))
         self.assertEqual(good.cases[0].evidence["candidate"]["site_calls"], {site: calls})
-        bad = gate2.verify_integration(scope, candidate("off", {site: bound_eager(op_name, 1.01)}),
-                                       policy=cal.policy, samples=fixed)
+        bad = verify_model(scope, candidate("off", {site: bound_eager(op_name, 1.01)}), samples=fixed,
+                           gamma=4.0, compile_backend=SCALE)
         self.assertEqual(bad.status, FAILED)
         # The logits are the forward's one result, or the head's input and the
         # loss when the site is the fused head; the gradients carry the fault too.
@@ -117,28 +113,6 @@ class TestWorkloadModelBridge(unittest.TestCase):
             "device": "cpu", "dtype": "float32", "batch_size": 1, "seq_len": 32,
             "arch_overrides": {**ARCH, "num_key_value_heads": 1}})
         self.check(workload, "swiglu_mlp", "llama3_swiglu_mlp", "llama")
-
-    def test_llama_live_boundaries(self):
-        from evograd.evaluation.tier3.workloads.llama3_2_1b.workload import Llama3Workload
-
-        workload = Llama3Workload.from_config({
-            "device": "cpu", "dtype": "float32", "batch_size": 1, "seq_len": 32,
-            "arch_overrides": {**ARCH, "num_key_value_heads": 1}})
-        scope = WorkloadModelScope(workload)
-        fixed = samples("lb/fixed", [1, 2])
-        cal = calibrate(scope, patch_set=("swiglu_mlp",), samples=fixed,
-                        compile_backend=FAST, boundaries=True)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        names = {n for n in cal.policy.thresholds_for("lb/fixed/seed1")
-                 if n.startswith("boundary:swiglu_mlp#1/")}
-        self.assertEqual(len(names), 5)          # the output and four argument gradients
-        good = gate2.verify_integration(scope, candidate("bound", {"swiglu_mlp": bound_eager(
-            "llama3_swiglu_mlp")}), policy=cal.policy, samples=fixed)
-        self.assertEqual(good.status, PASSED, codes(good))
-        bad = gate2.verify_integration(scope, candidate("off", {"swiglu_mlp": bound_eager(
-            "llama3_swiglu_mlp", 1.01)}), policy=cal.policy, samples=fixed)
-        failed = {r.name for c in bad.cases for r in c.results if r.status == FAILED}
-        self.assertIn("boundary:swiglu_mlp#0/out:out", failed)
 
     def test_qwen3(self):
         from evograd.evaluation.tier3.workloads.qwen3_0_6b.workload import Qwen3Workload

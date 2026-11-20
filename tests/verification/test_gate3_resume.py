@@ -71,7 +71,7 @@ class ResumedRunEqualsUnbroken(unittest.TestCase):
         from tests.verification.test_bridges import bound_eager
 
         from evograd.verification.gate2.adapters.model import WorkloadModelScope
-        from evograd.verification.gate2.calibration import compile_control
+        from evograd.verification.gate2.controls import compile_control
 
         compiled, _ = compile_control(WorkloadModelScope(self.workload), ("swiglu_mlp",),
                                       backend="aot_eager")

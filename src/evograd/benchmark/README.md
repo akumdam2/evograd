@@ -131,12 +131,10 @@ judged only together: a combination's budgets are looser and a failure would
 not name its case). Two results are computed once and reused, and the report
 says where:
 
-- Native controls and references (model Gate 2 calibration and verification
-  references, Gate 3's native training runs) run once per model and samples
-  and are shared by every case (`--share-gate3-native`,
-  `--share-gate2-calibration-native`, `--share-gate2-verification-reference`,
-  which `bench.py evaluate` passes); every comparison still checks the shared
-  run's identity and content (`verification/reuse.py`).
+- Gate 3's native training runs run once per model and are shared by every
+  case (`--share-gate3-native`, which `bench.py evaluate` passes;
+  `verification/reuse.py`). Gate 2 shares nothing: both scopes measure their
+  trusted controls in the run that judges.
 - A combination of one accepted Level-2 candidate is that candidate's single
   site (the same deployment, programs and judges): its model Gate 2, Gate 3
   and Tier 3 results stand for the combination's (`reused_from`,

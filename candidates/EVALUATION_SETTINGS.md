@@ -33,11 +33,8 @@ execution settings.
 | Variable | Value |
 | --- | --- |
 | `--share-gate3-native` | `False` |
-| `--share-gate2-calibration-native` | `False` |
-| `--share-gate2-verification-reference` | `False` |
-| Reuse version | `native-control-reuse/1` |
+| Reuse version | `native-control-reuse/2` |
 | Shared-native Gate 3 policy, when enabled | `evograd-verification-gate3-global-loss-policy/2` |
-| Raw Gate 2 execution cache lifetime | One job |
 | Gate 2 calibration reference/repeat versus verification reference | Separate execution IDs |
 
 ### Gate 1
@@ -754,7 +751,8 @@ different experiment.
 - [Gate orchestration, model factors, training controls](../src/evograd/verification/integrations/gates.py)
 - [Gate 1 tolerances and rounding floor](../src/evograd/verification/gate1/tolerances.py)
 - [Gate 2 metrics](../src/evograd/verification/common/tensors.py)
-- [Gate 2 floors, calibration formula and sample protocols](../src/evograd/verification/gate2/calibration.py)
+- [Operator Gate 2 rule](../src/evograd/verification/gate2/operator.py)
+- [Model Gate 2 rule](../src/evograd/verification/gate2/model.py)
 - [Gate 3 optimizer and objective adapters](../src/evograd/verification/gate3/adapters.py)
 - [Gate 3 accumulation and training execution](../src/evograd/verification/gate3/runner.py)
 - [Gate 3 global-loss acceptance formula](../src/evograd/verification/gate3/global_loss.py)

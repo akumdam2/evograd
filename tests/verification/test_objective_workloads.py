@@ -121,18 +121,18 @@ class ObjectiveScopeTests(unittest.TestCase):
         self.scope = ObjectiveModelScope(self.workload)
         self.samples = self.scope.samples([1, 2])
 
-    def test_calibrates_and_judges_on_loss_primary_and_parameter_gradients(self):
-        cal = gate2.calibrate(self.scope, patch_set=("act",), samples=self.samples,
-                              compile_backend=FAST, boundaries=True)
-        self.assertEqual(cal.status, "calibrated", cal.to_dict())
-        names = set(cal.policy.thresholds_for(self.samples[0].sample_id))
-        self.assertTrue({"out:logits", "out:loss", "grad:model.up", "grad:model.down"} <= names, names)
-        good = gate2.verify_integration(self.scope, candidate("bound", {"act": bound_eager("swiglu")}),
-                                        policy=cal.policy, samples=self.samples)
+    def test_judges_loss_primary_and_parameter_gradients_against_native(self):
+        from evograd.verification.gate2.model import verify_model
+        from tests.verification.test_gate2 import SCALE
+
+        good = verify_model(self.scope, candidate("bound", {"act": bound_eager("swiglu")}),
+                            samples=self.samples, gamma=4.0, compile_backend=SCALE)
         self.assertEqual(good.status, PASSED, codes(good))
+        self.assertTrue({"out:logits", "out:loss", "grad:model.up", "grad:model.down"}
+                        <= set(good.subject["thresholds"]), good.subject["thresholds"])
         self.assertEqual(good.cases[0].evidence["candidate"]["site_calls"], {"act": 1})
-        bad = gate2.verify_integration(self.scope, candidate("off", {"act": bound_eager("swiglu", 1.01)}),
-                                       policy=cal.policy, samples=self.samples)
+        bad = verify_model(self.scope, candidate("off", {"act": bound_eager("swiglu", 1.01)}),
+                           samples=self.samples, gamma=4.0, compile_backend=SCALE)
         self.assertEqual(bad.status, FAILED)
         failed = {r.name for c in bad.cases for r in c.results if r.status == FAILED}
         self.assertIn("out:logits", failed)

@@ -404,7 +404,7 @@ class ControlsReplaceWhatTheCandidateReplaces(unittest.TestCase):
         return torch.randn(m, k), torch.rand(k) + 0.5, torch.randn(k), torch.randn(k, n), 1e-5
 
     def test_the_compile_control_takes_the_replaced_configuration_only(self):
-        from evograd.verification.gate2.calibration import compile_control
+        from evograd.verification.gate2.controls import compile_control
 
         control, graphs = compile_control(self.scope, ("layernorm_linear",), backend="eager")
         site = control.sites["layernorm_linear"]

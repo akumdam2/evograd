@@ -140,28 +140,20 @@ def qwen3_5_capture() -> dict:
 
 
 def _model_scope(workload, site: str) -> dict:
+    from evograd.verification.common.contracts import stable_hash
     from evograd.verification.common.execution import Deployment, Sample
+    from evograd.verification.common.tensors import tensor_digest
     from evograd.verification.gate2.adapters.model import WorkloadModelScope
-    from evograd.verification.gate2.calibration import calibrate
     from evograd.verification.gate2.runner import execute, integration_contract
 
     scope = WorkloadModelScope(workload)
-    sample = Sample("golden/seed1", 1)
-    ex = execute(scope, Deployment.native(), sample)
+    ex = execute(scope, Deployment.native(), Sample("golden/seed1", 1))
     if ex.error:
         raise RuntimeError(ex.error)
-    cal = calibrate(scope, patch_set=(site,), samples=[Sample("golden/seed1", 1),
-                                                       Sample("golden/seed2", 2)],
-                    compile_backend=FAST)
-    if cal.policy is None:
-        raise RuntimeError([f.to_dict() for f in cal.findings])
-    policy = cal.policy.to_dict()
-    return {"results_digest": ex.results_digest,
-            "sample_fingerprint": ex.sample_identity["fingerprint"],
+    return {"results_digest": stable_hash({name: tensor_digest(v) if hasattr(v, "shape") else repr(v)
+                                           for name, v in sorted(ex.results.items())}),
             "contract_digest": integration_contract(ex).digest(),
-            "identity": json.loads(json.dumps(scope.identity(), default=str)),
-            "thresholds": policy["thresholds"],
-            "control_measurements": cal.evidence["control_measurements"]}
+            "identity": json.loads(json.dumps(scope.identity(), default=str))}
 
 
 def model_scopes() -> dict:

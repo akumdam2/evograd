@@ -19,7 +19,7 @@ reference implementations, and policies explicitly.
 | --- | --- |
 | `common/` | Result contracts, tensor isolation, mutation and finiteness checks, fingerprints, reports, deployment hooks |
 | `gate1/` | Local forward/backward pair against the declared PyTorch reference |
-| `gate2/` | Actual autograd integration, calibrated tensor errors, operator/model adapters |
+| `gate2/` | Actual autograd integration: operator scope against the float32 truth, model scope against native eager, adapters |
 | `gate3/` | Continuous training measurement and calibrated loss-trajectory acceptance |
 | `payloads/` | Generic storage and loading of recorded training calls, with exact layouts and frozen splits |
 | `integrations/` | Shared capture, replay and gate drivers; per-model recorders and references (every model in `integrations.PACKAGES`) |
@@ -206,41 +206,50 @@ passes except its default fused linear cross-entropy (its weight gradient in
 bfloat16 chunks), every gradient scaled by 1.05 is rejected (67/67), and 6 of 7
 scaled by 1.01.
 
-### Model scope (`gate2/calibration.py`)
+### Model scope (`gate2/model.py`)
 
-For reference tensor `r` and candidate tensor `c`:
-
-```text
-E2   = ||c-r||2   / max(||r||2, epsilon)
-Emax = ||c-r||inf / max(RMS(r), epsilon)
-epsilon = 1e-30
-```
-
-Each required result must satisfy both frozen limits. Calibration runs at least
-two native executions and one identified `torch.compile` control, run twice.
-Controls must execute valid, finite results with the required structure, state
-and replacement coverage; the compiler backend must actually be invoked, and
-both the native reference and the compile control must reproduce themselves bit
-for bit (recorded per sample as `repeatability`). A repeat therefore adds
-nothing to the budget: under the deterministic settings no native ever differed
-from its repeat (P8 audit, 2026-11-13), and one that does leaves no policy.
-Parameter identity/tying, initial state, mutation and replacement call counts
-are checked too.
+The candidate installed at its site (alone, or with the other accepted Level-2
+candidates as the combination), one forward and backward of the pretrained model
+on each of four samples (the first real training batch of each order), against
+native eager on the same samples, in float64:
 
 ```text
-T = gamma * max(compile-native error, floor, rounding perturbation)
+E2(c, r) = ||c - r||_2 / ||r||_2
+
+pass  <=>  on every sample x, for every result z:
+           E2(candidate_x[z], native_x[z]) <= T[z]
+T[z] = gamma * max( max over samples x of E2(compile_x[z], native_x[z]),  floor(z) )
+compile = torch.compile of the native implementation at the replaced sites
+gamma = 4 (Qwen3.5-4B: 7); floor: outputs 1e-5, gradients 1e-4
 ```
 
-Thresholds are pooled per result over the calibration samples (the four
-batches), and judge fresh executions of exactly those samples: each must match
-its calibrated sample's input, labels/context, cotangent, initial state, mode and
-seed. A third control, the rounding perturbation, adds its own term: the native
-site with each floating output and input gradient moved one ulp with probability
-1/3, each tensor kept within one rounding (`E2` at most the unit roundoff), run
-under four fixed seeds (11, 22, 33, 44) and taken at its largest. Where compile
-reproduces the native site bit for bit, it is what a correct reimplementation
-that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj: logits
-`E2` 4-5%, against 0 from compile).
+The same form as operator Gate 2, `err(candidate) <= max(floor, factor * err(trusted))`,
+with native as the reference and `torch.compile` at the same sites as the trusted
+implementation. Native and not a float32 truth: at this level the question is
+whether the installed kernel leaves the model computing what it computed, and a
+float32 copy of a whole model does not fit beside its runs on the largest models;
+each call's accuracy against the truth is Gate 1's and operator Gate 2's. A factor
+`gamma` and not 2: the candidate and the compiled native round differently, and a
+rounding difference at one site reaches every later tensor as a fresh draw, so the
+largest of several hundred tensors over four samples is a few times the control's
+on some tensor (against compile alone, P8's frontend seeds need up to 2.7, Qwen3.5-4B's
+5.5). E2 only: model Gate 2's job is amplification across layers and integration,
+which move whole tensors; a few wrong elements are Gate 1's. The only check beyond
+the numbers is coverage: every replaced site is called as often as the scope declares.
+
+A deployment whose compiled native reproduces native bit for bit on every sample (a
+vendor GEMM: Qwen3.5-4B's gdn_in_proj) has no trusted alternative at this level: its
+numbers are left to Gate 1 and operator Gate 2, and model Gate 2 checks its coverage
+only (recorded as `not_judged: compile_bitwise`). A control that cannot be built or
+fails on every sample leaves the report incomplete. Nothing is calibrated, cached or
+fingerprinted.
+
+Model Gate 2 used to take its thresholds from a calibration (native and compile each
+run twice and required bit-identical, plus a rounding perturbation of the site under
+four seeds, both metrics `E2` and `Emax`, policies cached under `--state` and bound
+to the samples' content). The rounding perturbation was the trusted alternative where
+compile reproduces native; elsewhere it was of compile's size and only widened the
+thresholds (rule changed 2026-11-20).
 
 At model scope a language model is called as `workload.loss` calls it, and
 that loss, seeded with 1, is the backward: the parameter gradients compared are
@@ -250,18 +259,6 @@ not a result. Under `lm_head_ce`, the LM head fused with the loss, no deployment
 has logits, so the LM head's input (the decoder's last hidden state) and the
 loss are compared instead. Other models compare their primary output and their
 loss. Every parameter gradient is compared in each case.
-
-Policies bind scope, reference, environment, numerical configuration, patch set,
-samples and result contracts. Candidate errors never set the budget. Missing or
-incompatible calibration withholds numerical judgement.
-
-With `boundaries=True` (not used by the model-scope gate since 2026-10-25), replay each replaced call using native and candidate
-implementations on that call's local inputs and external cotangents. Check
-replay outputs/gradients, candidate repeat, and consistency with live execution.
-These are tolerance checks, not a general bitwise determinism guarantee.
-Compile-calibration and candidate-verification internal activations may differ
-even when their external model inputs match. Arbitrary internal temporaries
-and candidate saved states need not match the reference.
 
 ## Recorded training payloads
 
@@ -309,11 +306,9 @@ observed cases left out); a request for any other case fails
 Gate 2 both judge every payload of the case, orders 101/202/303/404
 (`PAYLOAD_SPLITS`). The corpus split into calibration (101/202) and acceptance
 (303/404) only keeps 303/404 out of the search's feedback.
-Model Gate 2 runs the candidate alone at its site, pooling budgets over the
-four batches (compile and the rounding perturbation) with
-gamma 4, on the whole model's outputs and parameter gradients
-plus coverage and side effects. Per-call boundary replay is off at model scope
-(`GATE2_MODEL_BOUNDARIES`): the local checks of each call belong to operator Gate 2.
+Model Gate 2 runs the candidate alone at its site on the first real TRAIN batch of
+each order, against native eager, within gamma (4) times torch.compile's E2 at the
+same site, plus coverage (`gate2/model.py`).
 
 | Object | Required correctness gates |
 | --- | --- |
