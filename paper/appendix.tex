@@ -1,0 +1,66 @@
+\documentclass[letterpaper,twocolumn,10pt]{article}
+% Supplementary material for the OSDI submission (uploaded as a separate file).
+% Reviewers are not required to read it, so the paper must stand alone.
+%
+% xr-hyper pulls section, equation, and table numbers from the paper so that
+% references back to it resolve. Compile main.tex first (it writes main.aux);
+% without main.aux those references print as ??. Load it before hyperref.
+\usepackage{xr-hyper}
+% Official USENIX style (OSDI '27): 7" x 9" text block, two columns,
+% 10pt Times on 12pt leading. Do not change margins, fonts, or spacing.
+\usepackage{usenix-2020-09}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{pdflscape}
+\usepackage{multirow}
+\usepackage{subcaption}
+\usepackage{amsmath,amssymb}
+\usepackage{mathtools}
+\usepackage{xspace}
+\usepackage{hyphenat}
+\usepackage{enumitem}
+\usepackage{tabularx,array}
+\usepackage{xurl}
+\usepackage[normalem]{ulem}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\scriptsize, columns=fullflexible, keepspaces=true, breaklines=true}
+% Numbered citations, as in the USENIX sample paper. plainnat keeps the URLs of
+% web-only references, which the plain style would drop. natbib prints one
+% harmless warning about the cite package that the USENIX style loads.
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\providecommand{\theHalgorithm}{\arabic{algorithm}}
+
+\newcommand{\system}{\textsc{EvoGrad}\xspace}
+\newcommand{\method}{\system}
+\newcommand{\benchmark}{\textsc{ADBench}\xspace}
+\newcommand{\eg}{e.g.,\xspace}
+\newcommand{\ie}{i.e.,\xspace}
+\newcommand{\etal}{et al.\xspace}
+\input{macros}
+
+\externaldocument{main}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+
+\begin{document}
+
+\onecolumn
+
+% Keep this title identical to the title in main.tex.
+\begin{center}
+    {\LARGE\bfseries Supplementary Material}\\[6pt]
+    {\large \bench: Benchmarking Agentic GPU Kernels from Autograd to End-to-End Training}
+\end{center}
+
+\vspace{1em}
+
+\appendix
+\input{_s9_appendix}
+
+\end{document}

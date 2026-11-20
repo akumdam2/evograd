@@ -1,0 +1,181 @@
+\subsection{Correctness Verification Protocol}
+\label{sec:verification_protocol}
+
+\bench verifies candidate correctness through three complementary gates introduced in Section~\ref{sec:benchmark-task}: local pair verification ($\mathcal{V}_{\mathrm{pair}}$), single-step framework integration verification ($\mathcal{V}_{\mathrm{int}}$), and multi-step training verification ($\mathcal{V}_{\mathrm{train}}$). These gates check the declared forward--backward computation, its integration into the framework, and its numerical behavior over continuous training updates. The verification gates compare the candidate with the reference computation of the source model and accept it only if its error stays within a threshold calibrated from trusted controls: repeated native executions, which measure run-to-run variation, and a \texttt{torch.compile} implementation of the same reference, which measures how far a correct alternative implementation departs from native. Thresholds are frozen before any candidate is evaluated.
+
+A Level~1 candidate must pass pair verification and operator-scope integration verification. A Level~2 candidate must additionally pass model-scope integration and training verification where available, with the candidate installed alone at its site in the source model. Selected Level~2 candidates deployed together for Level~3 are verified again by the available model-scope gates. Only deployments passing all required gates contribute to the main performance results. All verification uses PyTorch's deterministic settings and runs outside timed regions. Model-specific gate availability, configurations, and detailed procedures are provided in \appref{app:verification_details}.
+
+\noindent\textbf{Gate 1: Local pair verification ($\mathcal{V}_{\mathrm{pair}}$).}
+Gate~1 directly invokes the candidate's forward and backward implementations, $F_p$ and $B_p$, with $B_p$ consuming the candidate's own saved state $s_p$. It compares every declared forward output and every required input and parameter gradient with the source-model reference $f$ under PyTorch autograd, element by element; the internal decomposition and saved state need not match the reference.
+
+The gate replays calls recorded from source-model training on real-world datasets, preserving their inputs, parameters, upstream gradients, and memory layouts. Calibration and acceptance use separate recorded executions. For each required result tensor $z$, every element must satisfy
+\begin{equation}
+\left|z_i^{\mathrm{cand}}-z_i^{\mathrm{ref}}\right|
+\leq \max\!\left\{a_z+r_z\left|z_i^{\mathrm{ref}}\right|,\; \gamma_1\max\{\Delta_z,u_z\}\right\},
+\label{eq:local_numerical_contract}
+\end{equation}
+where $a_z$ and $r_z$ are fixed dtype-specific tolerances from \texttt{torch.testing.assert\_close}, $\Delta_z$ is the largest elementwise compile--native difference for $z$ over the calibration calls, $u_z$ is the rounding unit at the current reference tensor's largest magnitude, and $\gamma_1$ is safety margin. The dtype tolerance alone can reject a correct implementation when large intermediate terms nearly cancel: rounding reflects the terms' magnitudes, while the relative allowance shrinks with the result. The envelope accounts for observed compiler rounding, and its floor preserves an allowance even when compile reproduces native exactly. Acceptance also requires the declared structure, shape, and dtype, finite results, and no input mutation unless permitted by the task.
+
+\noindent\textbf{Gate 2: Framework integration verification ($\mathcal{V}_{\mathrm{int}}$).}
+Gate~2 checks the candidate through its deployment path in PyTorch autograd. At \emph{operator scope}, it replays recorded calls and compares the same outputs and gradients as Gate~1, isolating local error. At \emph{model scope}, it compares model outputs, loss, and every trainable parameter's gradient, capturing error propagation and interactions among replacements. Each replaced site then receives inputs computed by the modified model, allowing local errors to affect downstream computations and exposing deployment faults such as skipped sites. Candidate and native eager executions perform one forward and backward pass under matched inputs, parameters, random states, and numerical settings, without an optimizer update.
+
+A sample $x$ is one recorded call at operator scope and one workload batch at model scope. For each required floating-point result tensor $z$, we measure
+\begin{equation}
+\begin{aligned}
+E_2(z;x)
+&=\frac{\|z_x^{\mathrm{cand}}-z_x^{\mathrm{ref}}\|_2}{\max(\|z_x^{\mathrm{ref}}\|_2,\epsilon)},\\
+E_{\max}(z;x)
+&=\frac{\|z_x^{\mathrm{cand}}-z_x^{\mathrm{ref}}\|_\infty}{\max(\operatorname{RMS}(z_x^{\mathrm{ref}}),\epsilon)},
+\end{aligned}
+\label{eq:integration_errors}
+\end{equation}
+where $\operatorname{RMS}(z)=\sqrt{n_z^{-1}\sum_i z_i^2}$ over the $n_z$ elements of $z$, and $\epsilon=10^{-30}$ guards against division by zero. $E_2$ measures error across the tensor, including small discrepancies spread across many elements; $E_{\max}$ catches errors confined to a few elements that contribute little to $E_2$. Its normalization uses the tensor's typical magnitude rather than individual near-zero elements.
+
+For each result tensor $z$ and metric $m\in\{2,\max\}$, let $D_m(z;x)$ be the larger of the native-repeat and compile--native discrepancies on calibration sample $x$. The threshold is
+\begin{equation}
+T_{z,m}=\gamma\max\left\{\max_{x\in\mathcal{C}}D_m(z;x),\,f_{z,m}\right\},
+\label{eq:integration_calibration}
+\end{equation}
+where $\mathcal{C}$ is the calibration set, $f_{z,m}>0$ is a floor, and $\gamma>1$ is a fixed scope-specific safety margin. Operator scope uses separate calibration and acceptance calls; model scope verifies fresh executions of the calibrated inputs. Every required result on every verification sample must satisfy
+\begin{equation}
+E_2(z;x)\leq T_{z,2}
+\quad\land\quad
+E_{\max}(z;x)\leq T_{z,\max},
+\label{eq:integration_acceptance}
+\end{equation}
+together with Gate~1's structure, shape, dtype, finiteness, and input-mutation checks. Model scope additionally requires unchanged parameters and the declared call count at every replaced site.
+
+\noindent\textbf{Gate 3: Multi-step training verification ($\mathcal{V}_{\mathrm{train}}$).}
+Gate~3 checks whether numerical differences compound through successive gradient computations and optimizer updates on real-world datasets. Each update changes the weights and optimizer state used by later steps, allowing differences that are small in a single forward--backward pass to grow along the training trajectory. Where available, it follows Gates~1 and~2 for individual Level~2 candidates and their Level~3 combinations. Candidate and native eager runs start from identical model and optimizer states and use the same training batches, random states, numerical settings, and optimizer schedule. Neither run is reset to the other's state.
+
+Let $\ell_t^p$ be the training loss differentiated at update $t$ of run $p$, and let $d_t^p=\ell_t^p-\ell_t^{\mathrm{native}}$. Over all $N$ updates, we measure
+\begin{equation}
+R_p=\sqrt{\frac{1}{N}\sum_{t=1}^{N}(d_t^p)^2},
+\qquad
+M_p=\max_{1\leq t\leq N}|d_t^p|.
+\label{eq:training_errors}
+\end{equation}
+$R_p$ measures the root mean square loss difference, preventing cancellation across updates; $M_p$ bounds the largest single-step difference. Both use the full trajectory, without windows or excluded steps.
+
+Acceptance requires
+\begin{equation}
+R_{\mathrm{cand}}\leq T_R
+\quad\land\quad
+M_{\mathrm{cand}}\leq T_M,
+\label{eq:training_acceptance}
+\end{equation}
+where $T_R$ and $T_M$ are frozen from native-repeat and compiled-control trajectories with positive floors and a safety margin. The candidate must complete all $N$ updates with finite losses and execute every replaced site at each update.
+
+% \subsection{Correctness Verification Protocol}
+% \label{sec:verification_protocol}
+
+% \bench verifies candidate correctness through three complementary gates introduced in Section~\ref{sec:benchmark-task}: local pair verification ($\mathcal{V}_{\mathrm{pair}}$), single-step framework integration verification ($\mathcal{V}_{\mathrm{int}}$), and multi-step training verification ($\mathcal{V}_{\mathrm{train}}$). These gates check the declared forward--backward computation, its integration into the framework, and its numerical behavior over continuous training updates. The verification gates compare the candidate with the reference computation of the source model and accept it only if its error stays within a threshold calibrated from trusted controls: repeated native executions, which measure run-to-run variation, and a \texttt{torch.compile} implementation of the same reference, which measures how far a correct alternative implementation departs from native. Thresholds are frozen before any candidate is evaluated.
+
+% A Level~1 candidate must pass pair verification and operator-scope integration verification. A Level~2 candidate must additionally pass model-scope integration and training verification with the candidate installed alone at its site in the source model. Selected Level~2 candidates deployed together for Level~3 are verified again by the model-scope integration and training gates. Only deployments passing all required gates contribute to the main performance results. All verification uses PyTorch's deterministic settings and runs outside timed regions. Model-specific configurations and detailed procedures are provided in Appendix~\ref{app:verification_details}.
+
+% \paragraph{Gate 1: Local pair verification ($\mathcal{V}_{\mathrm{pair}}$).}
+% Gate~1 directly invokes the candidate's forward and backward implementations, $F_p$ and $B_p$, and compares every declared forward output and every required input and parameter gradient against the source-model reference $f$ under PyTorch autograd, element by element. The candidate's internal decomposition and saved state $s_p$ need not match the reference.
+
+% Its inputs are recorded from training steps of the source model on real data: every invocation of the task, with its inputs, parameters, and upstream gradients in their original memory layouts. Thresholds are calibrated, and candidates are verified on invocations from different training batches (Appendix~\ref{app:recorded_calls}). For each result tensor $z$, every element must satisfy
+% \begin{equation}
+% \left|z_i^{\mathrm{cand}}-z_i^{\mathrm{ref}}\right|
+% \leq \max\!\left(a_z+r_z\left|z_i^{\mathrm{ref}}\right|,\; \gamma_{\mathrm{op}}\Delta_z\right),
+% \label{eq:local_numerical_contract}
+% \end{equation}
+% where $z$ is a required output or gradient, $a_z$ and $r_z$ are the default tolerances of \texttt{torch.testing.assert\_close} for the dtype of $z$ (Appendix~\ref{app:gate1_tolerances}), $\Delta_z$ is the largest elementwise difference between the \texttt{torch.compile} control and native execution on $z$ over the calibration batches, and $\gamma_{\mathrm{op}}>1$ is a safety margin.
+
+% The first term is the standard PyTorch tolerance; it alone would reject correct implementations where two large terms nearly cancel, as in rotary embeddings, the rounding error grows with the size of the two terms, while the allowed error shrinks with the near-zero result, and \texttt{torch.compile} itself violates it there. The second term therefore admits any error up to $\gamma_{\mathrm{op}}$ times what \texttt{torch.compile} shows on the same result, so the bound is never stricter than a trusted compiler's own rounding, and it relaxes only the results on which such deviations are observed. The gate passes only if every element satisfies this bound, every result has the declared structure, shape, and dtype and is finite, and no input is modified unless the task permits it.
+
+
+% \paragraph{Gate 2: Framework integration verification ($\mathcal{V}_{\mathrm{int}}$).}
+% Gate~2 checks candidates through their actual PyTorch-autograd deployment paths at operator scope (L1 and L2) and whole-model scope (L3). The reference is the corresponding computation extracted from the pinned source-model implementation, or the unmodified model. Candidate and native eager executions perform one forward and backward pass under matched inputs, parameters, random conditions, and numerical settings, without an optimizer update.
+
+% \paragraph{Gate 2: Framework integration verification ($\mathcal{V}_{\mathrm{int}}$).}
+% Gate~2 checks the candidate as it is deployed in training. It runs the candidate through its deployment path in PyTorch autograd and compares whole tensors against thresholds calibrated from trusted controls, which detects faults in the deployment code and small errors spread across a tensor that an elementwise tolerance admits. It does so at two scopes. \textbf{Operator scope} gives every call the inputs recorded from native training, isolating the candidate's own error. \textbf{Model scope} runs candidates inside the source model, so each receives inputs computed by the modified model, its error propagates to the loss and every parameter gradient, errors of several candidates can compound, and deployment faults such as a skipped site become visible. Every candidate is checked at operator scope. Each Level-2 candidate is also checked at model scope alone at its site, and the Level-2 candidates that pass verification and speed up training are checked together as the Level-3 candidate. Level-1 candidates are checked at operator scope only, since a single primitive is too small a part of the model for whole-model results to judge it.
+
+% At both scopes, the candidate is compared with native eager execution of the source model's own code over one forward and backward pass, under matched inputs, parameters, random states, and numerical settings, without an optimizer update. Operator scope uses the recorded calls of Gate~1 and compares every declared output and every required input and parameter gradient. Model scope runs one training step on real training batches, compares the model output, the loss, and every trainable parameter's gradient, and checks that each replaced site is called the declared number of times and that inputs and parameters remain unchanged.
+
+% A sample $x$ is one recorded call at operator scope and one training batch at model scope. For each required floating-point result tensor $z$ on sample $x$, we measure
+% \begin{equation}
+% \begin{aligned}
+% E_2(z;x)
+% &=\frac{\|z_x^{\mathrm{cand}}-z_x^{\mathrm{ref}}\|_2}{\max(\|z_x^{\mathrm{ref}}\|_2,\epsilon)},\\
+% E_{\max}(z;x)
+% &=\frac{\|z_x^{\mathrm{cand}}-z_x^{\mathrm{ref}}\|_\infty}{\max(\operatorname{RMS}(z_x^{\mathrm{ref}}),\epsilon)},
+% \end{aligned}
+% \label{eq:integration_errors}
+% \end{equation}
+% where $\operatorname{RMS}(z)=\sqrt{n_z^{-1}\sum_i z_i^2}$ over the $n_z$ elements of $z$, and $\epsilon=10^{-30}$ only guards against division by zero. $E_2$ is the relative error of the whole tensor and accumulates small errors spread across all elements; $E_{\max}$ bounds the largest single-element error relative to the tensor's typical magnitude, which catches errors confined to a few elements that $E_2$ averages out, without inflating errors at near-zero elements.
+
+% As in Gate~1, thresholds are calibrated from two controls before any candidate is verified: a native repeat, which measures run-to-run variation, and the \texttt{torch.compile} control at the candidate's sites, which measures the difference between two correct implementations. Both run deterministically with matched random states (Appendix~\ref{app:determinism}). For each result tensor $z$ and metric $m\in\{2,\max\}$, the control discrepancy on sample $x$ is
+% \begin{equation}
+% \begin{aligned}
+% D_m(z;x)=\max\bigl\{&
+% E_m\!\left(z_x^{\mathrm{native},2},z_x^{\mathrm{native},1}\right),\\
+% & E_m\!\left(z_x^{\mathrm{compile}},z_x^{\mathrm{native},1}\right)
+% \bigr\}.
+% \end{aligned}
+% \label{eq:integration_control_error}
+% \end{equation}
+
+% The threshold for $z$ and $m$ takes the largest control discrepancy over a set of calibration samples $\mathcal{C}$:
+% \begin{equation}
+% T_{z,m}=\gamma\max\left\{\max_{x\in\mathcal{C}}D_m(z;x),\,f_{z,m}\right\}.
+% \label{eq:integration_calibration}
+% \end{equation}
+% At operator scope, $\mathcal{C}$ holds the calls recorded from the calibration batches, including calls of the same configuration from different layers; candidates are judged on calls from the other batches, and $\gamma=\gamma_{\mathrm{op}}$. At model scope, $\mathcal{C}$ holds four training batches, candidates are judged on fresh executions of the same batches, and $\gamma=\gamma_{\mathrm{model}}$. The floor $f_{z,m}$ keeps the threshold positive when both controls reproduce native execution exactly. Floors and safety margins are given in Appendix~\ref{app:gate2_thresholds}. Gate~3 follows the same calibration principle with training-trajectory metrics.
+
+% Acceptance requires every required result on every verification sample to satisfy
+% \begin{equation}
+% E_2(z;x)\leq T_{z,2}
+% \quad\land\quad
+% E_{\max}(z;x)\leq T_{z,\max},
+% \label{eq:integration_acceptance}
+% \end{equation}
+% together with the structure, shape, dtype, finiteness, and input-mutation checks of Gate~1 and, at model scope, the site-call and parameter checks above.
+
+% % \ahan{You sort of lost me here. I do not understand what calibration means. It also sort of comes out of nowhere since we are talking about each tier's correctness gate.}
+
+% % \wangjia{Calibration is the procedure for setting thresholds from trusted native and compiled executions before evaluating a candidate; $T$ denotes the resulting threshold. It is part of the correctness checks, not an additional gate.}
+
+% \paragraph{Gate 3: Multi-step training verification ($\mathcal{V}_{\mathrm{train}}$).}
+% Gate~3 checks how numerical differences propagate through successive gradient computations and optimizer updates on real training data: each update changes the weights and optimizer state that later steps see, so small per-step differences can compound over training. It applies where model-scope Gate~2 does, to each Level-2 candidate alone at its site and to the Level-3 candidate, after they pass Gates~1 and~2. Candidate and native eager runs start from identical model and optimizer states and use the same training batches, random states, numerical settings, and optimizer schedule (Appendix~\ref{app:gate3_settings}). Neither run is reset to the other's state, so differences accumulate as they would in training.
+
+
+% Let $\ell_t^p$ be the training loss that update $t$ of run $p$ differentiates, and let $d_t^p=\ell_t^p-\ell_t^{\mathrm{native}}$. Over the $N$ updates of a run, we measure
+% \begin{equation}
+% R_p=\sqrt{\frac{1}{N}\sum_{t=1}^{N}(d_t^p)^2},
+% \qquad
+% M_p=\max_{1\leq t\leq N}|d_t^p|.
+% \label{eq:training_errors}
+% \end{equation}
+% $R_p$ is the root mean square of the loss difference, so differences of opposite sign do not cancel; $M_p$ bounds the largest single-step difference. Both use every update of the run, without windows or excluded steps.
+
+
+% Following Gate~2's calibration principle (Equations~\ref{eq:integration_control_error}--\ref{eq:integration_calibration}), thresholds are calibrated before any candidate is verified, from a native repeat and the \texttt{torch.compile} control at the candidate's sites, each trained under the same conditions:
+% \begin{equation}
+% \begin{aligned}
+% T_R&=\gamma_{\mathrm{train}}\max\{R_{\mathrm{repeat}},R_{\mathrm{compile}},f_R\},\\
+% T_M&=\gamma_{\mathrm{train}}\max\{M_{\mathrm{repeat}},M_{\mathrm{compile}},f_M\},
+% \end{aligned}
+% \label{eq:training_calibration}
+% \end{equation}
+
+% where $f_R$ and $f_M$ are floors and $\gamma_{\mathrm{train}}>1$ is a safety margin (Appendix~\ref{app:gate3_settings}).
+
+% Acceptance requires
+% \begin{equation}
+% R_{\mathrm{cand}}\leq T_R
+% \quad\land\quad
+% M_{\mathrm{cand}}\leq T_M,
+% \label{eq:training_acceptance}
+% \end{equation}
+% and the candidate run must complete all $N$ updates with a finite loss at every step.
+
+
+
+% \ahan{How do we decide the window length? This seems to be key to this correctness gate. Also this particular design choice deviates from L1 and L2 checks. L1 and L2 work on per-element. However, for some reason this level seems to be much more lax with the correctness check. I understand the difficulty: training is noisy at the start and perhaps per-step loss is hard to inform correctness. But if this is the case motivate this check by stating this before introducing windowing.}
+% \wangjia{We revised the gate after exploring per-step thresholds and windowed comparisons. Per-step control-derived thresholds were overly sensitive to when control discrepancies occurred: a small discrepancy at one step could create a tight local budget despite larger deviations elsewhere. Windowed mean-loss comparisons introduce an additional length parameter and can dilute spikes or cancel signed differences. We therefore use full-trajectory RMS together with maximum absolute error, avoiding a window-length choice while measuring both overall and peak deviations. The motivation is accumulated numerical divergence between independently updated states, rather than uncontrolled training noise. This complements, rather than replaces, the output and gradient checks in earlier gates. It sacrifices step-specific sensitivity, so it is a finite-horizon training-behavior check, not proof of identical training dynamics. Also, Gate~2 uses tensor-level error metrics rather than per-element acceptance.}
+
+% \ahan{How are the inputs generated for this stage? Is it still random, or is it now on legitimate data?}
+% \wangjia{We construct training workloads from real datasets rather than synthetic inputs. For Qwen3-0.6B, we use the training split of WikiText-2. I will mention this in the main table for this section.}

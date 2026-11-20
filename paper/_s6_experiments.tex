@@ -1,0 +1,132 @@
+% Compact Tier-3 results.
+\begin{table*}[t]
+\centering
+\caption{Whole-model training results with selected kernels deployed jointly. Speedup and peak memory are relative to eager; / denotes no qualifying combination, and -- denotes unavailable data.}
+\label{tab:agent_tier3_results}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}l cc cc cc cc cc cc@{}}
+\toprule
+ & \multicolumn{2}{c}{\texttt{torch.compile}$^{\mathrm{GH200}}$}
+ & \multicolumn{2}{c}{\textbf{evograd (ours)}$^{\mathrm{A100}}$}
+ & \multicolumn{2}{c}{OpenEvolve}
+ & \multicolumn{2}{c}{GEPA}
+ & \multicolumn{2}{c}{KernelAgent$^{\mathrm{A100}}$}
+ & \multicolumn{2}{c}{Codex} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+\cmidrule(lr){8-9} \cmidrule(lr){10-11} \cmidrule(lr){12-13}
+Benchmark (L3) & Spd. & Mem & Spd. & Mem & Spd. & Mem
+ & Spd. & Mem & Spd. & Mem & Spd. & Mem \\
+\midrule
+Llama-3.2-1B & 1.13 & 0.77 & 1.033 & 1.00 & 1.11 & 0.95 & 1.11 & 0.95 & / & / & 1.11 & 0.85 \\
+Qwen3-0.6B & 1.66 & 0.67 & 1.108 & 0.88 & 1.15 & 0.95 & 1.35 & 0.90 & / & / & / & / \\
+Qwen2-VL-2B & 1.14 & 1.00 & / & / & / & / & / & / & 1.070 & 1.00 & / & / \\
+ConvNeXt V2-Tiny & 1.26$^{\ddagger}$ & 0.63$^{\ddagger}$ & 1.119 & 0.83 & / & / & / & / & / & / & 1.06 & 0.98 \\
+DiT-S/2 & 1.14 & 0.89 & 1.000 & 1.00 & / & / & 1.00 & 1.00 & / & / & / & / \\
+DLRM & 1.13 & 1.00 & 1.005 & 1.00 & 1.05 & 1.00 & 1.03 & 1.00 & 1.007 & 1.00 & 1.04 & 1.00 \\
+\midrule
+Geo.\ mean & -- & -- & 1.052 & -- & -- & -- & -- & -- & 1.038 & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+% Results section: three complementary questions.
+\section{Experiment Results}
+\label{sec:results}
+
+We evaluate forward--backward correctness, deployed operator performance (Tier~2), and full training-step performance (Tier~3) on six workloads. OpenEvolve, GEPA, and Codex run on GH200; EvoGrad and KernelAgent run on A100. Comparisons use baselines on the same device; we do not rank agents across hardware. 
+
+
+\subsection{Benchmark Results}
+\label{sec:cross-tier}
+
+We first ask whether generated kernels accelerate training after integration. Across all five workflows, 28 of 43 accepted L2 agent--case implementations with paired measurements beat eager at Tier~2, but only 17 of these have a Tier~3 confidence interval entirely above one; ten become slower in training. OpenEvolve's DLRM interaction drops from $3.830\times$ locally to $1.055\times$ in training, while its Qwen3 SwiGLU MLP reverses from $1.066\times$ to $0.964\times$. Conversely, KernelAgent's Qwen2-VL text MLP measures $0.490\times$ locally but $1.046\times$ in training. Thus, local speedups do not translate proportionally into training gains and can predict the wrong direction (Table~\ref{tab:tier_transfer_summary}).
+
+\begin{table}[t]
+\centering
+\caption{Tier-2 gains do not reliably transfer to training. T3+ counts local wins with a training-speedup 95\% CI above one; T3-- counts training slowdowns.}
+
+\label{tab:tier_transfer_summary}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lrrrr@{}}
+\toprule
+Agent & Paired & T2+ & T3+ & T3-- \\
+\midrule
+EvoGrad & 10 & 5 & 5 & 0 \\
+OpenEvolve & 11 & 9 & 3 & 6 \\
+GEPA & 9 & 7 & 4 & 2 \\
+KernelAgent & 3 & 2 & 1 & 1 \\
+Codex & 10 & 5 & 4 & 1 \\
+\midrule
+Total & 43 & 28 & 17 & 10 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+Selected combinations improve eager by up to $1.351\times$, yet only two of 11 qualifying combined deployments beat whole-model \texttt{torch.compile}, both from EvoGrad (Table~\ref{tab:agent_tier3_by_model}). Training also exposes latency--memory tradeoffs: EvoGrad's DiT MLP reduces peak memory to $0.84$ of eager while slowing the step to $0.988\times$. These results show why training optimization requires whole-step latency and memory measurements, rather than local speed alone. Missing or correctness-disqualified baselines are excluded from compile comparisons.
+
+\begin{table}[t]
+\centering
+\caption{Accepted coverage and training performance. Coverage uses 18 L1 cases, 17 L2 cases, and six models. Speedup and memory are geometric means over accepted combinations.}
+
+\label{tab:agent_tier3_results}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lccccc@{}}
+\toprule
+ & \multicolumn{3}{c}{Coverage (accepted / total)} & & \\
+\cmidrule(lr){2-4}
+Agent & L1 & L2 & L3 & Spd. & Mem \\
+\midrule
+EvoGrad & 13/18 & 10/17 & 5/6 & 1.052 & 0.939 \\
+OpenEvolve & 12/18 & 11/17 & 3/6 & 1.103 & 0.966 \\
+GEPA & 12/18 & 9/17 & 4/6 & 1.116 & 0.962 \\
+KernelAgent & 14/18 & 3/17 & 2/6 & 1.038 & 1.000 \\
+Codex & 13/18 & 10/17 & 3/6 & 1.071 & 0.940 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+\subsection{Failure Analysis}
+
+We next ask where generated implementations fail. The 35 cases across five workflows define 175 planned agent--case evaluations. Of these, 170 have submissions and five have no submission; 107 submissions are accepted, 54 rejected by verification, two violate static rules, and seven have unresolved verdicts. Counting each verification rejection at its first failed gate, 41 fail deployed-operator verification, seven model integration, five payload verification, and one training verification. Of these 54 rejections, 51 exceed numerical tolerances and three are runtime bugs. Deployment correctness, particularly numerical agreement in outputs and gradients, is therefore the dominant rejection boundary (Table~\ref{tab:failure_summary}).
+
+\begin{table}[t]
+\centering
+\caption{Failure analysis across 35 cases per workflow. Rejections are assigned to the first failed gate; incomplete evaluations and missing submissions are counted separately.}
+
+\label{tab:failure_summary}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}}lrrrrrr@{}}
+\toprule
+Outcome & EG & OE & GEPA & KA & CX & Total \\
+\midrule
+Accepted & 23 & 23 & 21 & 17 & 23 & 107 \\
+G1: payload & 0 & 0 & 2 & 1 & 2 & 5 \\
+G2: operator & 8 & 9 & 8 & 9 & 7 & 41 \\
+G2: model & 2 & 1 & 2 & 1 & 1 & 7 \\
+G3: training & 0 & 1 & 0 & 0 & 0 & 1 \\
+Static violation & 0 & 0 & 0 & 2 & 0 & 2 \\
+No verdict: OOM & 2 & 0 & 0 & 2 & 0 & 4 \\
+No verdict: calibration & 0 & 1 & 1 & 0 & 1 & 3 \\
+No submission & 0 & 0 & 1 & 3 & 1 & 5 \\
+\midrule
+Submitted & 35 & 35 & 34 & 32 & 34 & 170 \\
+Planned & 35 & 35 & 35 & 35 & 35 & 175 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+Earlier acceptance does not guarantee agreement during training: OpenEvolve's ConvNeXt stage-0 MLP passes operator and model checks but exceeds the training-loss deviation limit ($0.03101$ versus $0.02490$). These failures establish disagreement under the numerical policy, not necessarily training divergence. Evaluation limitations are separate: three ConvNeXt layernorm verdicts lack valid calibration after compile-control failure, and four Llama evaluations lack model-level verdicts because verification runs out of memory.
+
+
+\subsection{EvoGrad Performance}
+
+EvoGrad achieves the broadest L3 combination coverage, with modest speed gains (Table~\ref{tab:agent_tier3_results}). Its overall accepted coverage is 23/35, tied with OpenEvolve and Codex. At L2, it accepts 10/17 planned cases versus KernelAgent's 3/17 (three accepted from 14 submissions); on their 14 jointly submitted targets, the counts are nine versus three. It produces five accepted combinations versus two, with conditional training-speed geometric means of $1.052\times$ and $1.038\times$ over different model subsets. Its strongest combinations are ConvNeXt ($1.119\times$, memory ratio $0.83$) and Qwen3 ($1.108\times$, $0.88$). EvoGrad also exceeds the reported whole-model compile baseline on Llama and Qwen3 by $1.8\%$ and $1.3\%$.
+
+EvoGrad has no payload-verification rejection or static violation, consistent with more robust construction of deployable pairs. However, ten submissions still fail numerical checks; the results do not establish improved long-term training stability or isolate the contribution of seed synthesis. Its remaining failures and modest end-to-end gains motivate stronger integration verification and model-aware latency--memory objectives during search.

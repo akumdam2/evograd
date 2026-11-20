@@ -1,0 +1,800 @@
+\section{Task Format Example}
+\label{app:task_format}
+
+Listing~\ref{lst:task_format} illustrates the task specification, candidate implementation, and autograd deployment. For clarity, the example uses one input tensor, one parameter tensor, one output tensor, and tensor-only saved state. Generated inputs support search-time timing; verification and formal operator timing use recorded source-model calls. Numerical checks follow Section~\ref{sec:verification_protocol}.
+
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily\footnotesize, captionpos=b, label=lst:task_format, caption={Simplified task input, candidate output, and autograd deployment in \bench.}]
+# Task input
+def f(x, theta): ...       # PyTorch forward reference
+c = {
+    "shapes": ..., "dtypes": ...,
+    "layouts": ..., "static_params": ...
+}
+differentiable = ...       # required input/parameter gradients
+def make_inputs(c, seed):  # generated inputs for search timing
+    ...
+    return x, theta, dy
+
+# Task output: GPU kernels and host code
+def kernel_1(*args): ...   # schematic GPU kernel
+def kernel_2(*args): ...
+
+def F_p(x, theta):
+    # allocate tensors and launch forward kernels
+    ...
+    return y, s_p
+
+def B_p(dy, s_p):
+    # allocate tensors and launch backward kernels
+    ...
+    return dx, dtheta
+
+# Illustrative autograd deployment
+class Op(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, theta):
+        y, s_p = F_p(x, theta)
+        ctx.save_for_backward(*s_p)
+        return y
+
+    @staticmethod
+    def backward(ctx, dy):
+        return B_p(dy, ctx.saved_tensors)
+\end{lstlisting}
+
+
+
+
+
+\makeatletter
+\newif\ifbench@restorecolumns
+\if@twocolumn
+  \bench@restorecolumnstrue
+  \onecolumn
+\else
+  \bench@restorecolumnsfalse
+\fi
+\makeatother
+
+\section{Model Workloads and Benchmark Cases}
+\label{app:benchmark_cases}
+
+Table~\ref{tab:benchmark_cases} lists the 149 configurations in \bench: 119 Level-1 and 30 Level-2 cases. Stars mark the 62 cases selected for the agent experiments (32 L1 and 30 L2); MegaFold retains only its four listed cases. Source links and workload settings appear in the model group headers. Case IDs use \texttt{operator/component} naming, and dimension names follow the task declarations. The dtype column gives the primary floating dtype; other tensor types, layouts, and static parameters remain specified by the task manifests. Equal shapes can define separate cases when recorded roles or input adapters differ; call frequency does not increase the case count.
+
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.12}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\setlength{\LTcapwidth}{\textwidth}
+\begin{longtable}{@{}
+>{\raggedright\arraybackslash}p{0.15\textwidth}
+>{\centering\arraybackslash}p{0.045\textwidth}
+>{\raggedright\arraybackslash}p{0.365\textwidth}
+>{\centering\arraybackslash}p{0.07\textwidth}
+>{\raggedright\arraybackslash}p{\dimexpr0.37\textwidth-8\tabcolsep\relax}
+@{}}
+\caption{Benchmark configurations by source model.}
+\label{tab:benchmark_cases}\\
+\toprule
+\textbf{Model} & \textbf{Level} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
+\midrule
+\endfirsthead
+
+\caption[]{Benchmark configurations by source model (continued).}\\
+\toprule
+\textbf{Model} & \textbf{Level} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{5}{r@{}}{\emph{Continued on the next page.}}\\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3-0.6B}{Qwen3-0.6B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-6}$. Inventory: 14 L1, 4 L2; 8 selected.}\\*
+\midrule
+Qwen3-0.6B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
+Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=151936\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_qkv} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=2048\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=151936\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=3072\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=3072\) \\
+Qwen3-0.6B & L1 & \nolinkurl{rmsnorm/k_head_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=128\) \\
+Qwen3-0.6B & L1 & \nolinkurl{rmsnorm/q_head_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
+Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=1024\) \\
+Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+Qwen3-0.6B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=8\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=3072\) \\
+Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{fused_add_rms_norm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=1024\) \\
+Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=1024\) \\
+Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=1024\) \\
+Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{I}=3072\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/meta-llama/Llama-3.2-1B}{Llama-3.2-1B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-5}$. Inventory: 11 L1, 4 L2; 8 selected.}\\*
+\midrule
+Llama-3.2-1B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{D}=64\), \(\mathrm{HK}=8\), \(\mathrm{HQ}=32\), \(\mathrm{T}=2048\) \\
+Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{cols}=128256\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=512\) \\
+Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
+Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=128256\) \\
+Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{K}=8192\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
+Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=8192\) \\
+Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{hidden}=2048\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=32\) \\
+Llama-3.2-1B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=8\) \\
+Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{cols}=8192\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
+Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_qkv_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=512\) \\
+Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=2048\) \\
+Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{I}=8192\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/allenai/OLMoE-1B-7B-0924}{OLMoE-1B-7B-0924}: WikiText-2; batch 2; sequence length 2048; 64 experts, top-8 routing; integer routing indices. Query and key RoPE remain separate cases despite equal shapes. Model-scope verification is not enabled. Inventory: 8 L1, 4 L2; 8 selected.}\\*
+\midrule
+OLMoE-1B-7B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
+OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=50304\) \\
+OLMoE-1B-7B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=2048\) \\
+OLMoE-1B-7B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=50304\) \\
+OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=2048\) \\
+OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+OLMoE-1B-7B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{swiglu/moe_activation} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{cols}=1024\) \\
+OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_attention/attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
+OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_moe_experts/moe_experts} & BF16 & \(\mathrm{T}=4096\), \(\mathrm{H}=2048\), \(\mathrm{E}=64\), \(\mathrm{G}=2048\), \(\mathrm{I}=1024\), \(\mathrm{K}=8\) \\
+OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=2048\) \\
+OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3.5-4B}{Qwen3.5-4B}: WikiText-2; batch 1; sequence length 2048; gated delta-rule and full-attention components. Gating tensors use FP32 where declared. Inventory: 20 L1, 7 L2; 15 selected.}\\*
+\midrule
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{causal_conv1d/gdn_conv1d} & BF16 & \(\mathrm{B}=1\), \(\mathrm{C}=8192\), \(\mathrm{T}=2048\), \(\mathrm{K}=4\) \\
+Qwen3.5-4B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=1\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=248320\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gated_rmsnorm/gdn_gated_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gdn_gating/gdn_gating} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{heads}=32\) \\
+Qwen3.5-4B & L1 & \nolinkurl{gemma_rmsnorm/attn_k_norm} & BF16 & \(\mathrm{rows}=8192\), \(\mathrm{hidden}=256\) \\
+Qwen3.5-4B & L1 & \nolinkurl{gemma_rmsnorm/attn_q_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=256\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gemma_rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{hidden}=2560\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{l2norm/gdn_qk_l2norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{cols}=128\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=1024\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=4096\), \(\mathrm{N}=2560\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_ba} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=32\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_qkv} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=8192\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_z} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=4096\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=248320\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=9216\), \(\mathrm{N}=2560\) \\
+Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=9216\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{partial_rope/partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
+Qwen3.5-4B & L1 & \nolinkurl{partial_rope/partial_rope_kv} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
+Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=9216\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gated_attention/gated_attention} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{QO}=4096\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gated_delta_rule/gated_delta_rule} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gdn_in_proj/gdn_in_proj} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{C}=8192\), \(\mathrm{VD}=4096\), \(\mathrm{HV}=32\), \(\mathrm{K}=4\), \(\mathrm{D}=128\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gdn_norm_out/gdn_norm_out} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\), \(\mathrm{VD}=4096\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{R}=64\), \(\mathrm{QG}=8192\), \(\mathrm{KVO}=1024\), \(\mathrm{QO}=4096\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{I}=9216\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/facebook/convnextv2-tiny-1k-224}{ConvNeXt V2-Tiny}: Imagenette; batch 32; image resolution $224\times224$. Embedding and stage-0 LayerNorm cases have equal dimensions but different input adapters. The four L2 MLP cases correspond to the four spatial stages. Inventory: 31 L1, 4 L2; 8 selected.}\\*
+\midrule
+ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{gelu/convnextv2.encoder.stages.0.layers.act} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.1.layers.act} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.2.layers.act} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=1536\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.3.layers.act} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=3072\) \\
+ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{grn/convnextv2.encoder.stages.0.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.1.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=768\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.2.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=1536\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.3.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=3072\) \\
+ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{layernorm/convnextv2.embeddings.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.0.layers.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.1.layers.layernorm} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=192\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.2.layers.layernorm} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.3.layers.layernorm} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.layernorm} & BF16 & \(\mathrm{rows}=32\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/classifier} & BF16 & \(\mathrm{M}=32\), \(\mathrm{K}=768\), \(\mathrm{N}=1000\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv1} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=96\), \(\mathrm{N}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv2} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=384\), \(\mathrm{N}=96\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv1} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=192\), \(\mathrm{N}=768\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv2} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=768\), \(\mathrm{N}=192\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv1} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv2} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv1} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=768\), \(\mathrm{N}=3072\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv2} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=3072\), \(\mathrm{N}=768\) \\
+ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{spatial_conv2d/convnextv2.embeddings.patch_embeddings} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=3\), \(\mathrm{Y}=224\), \(\mathrm{X}=224\), \(\mathrm{O}=96\), \(\mathrm{CG}=3\), \(\mathrm{K}=4\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=4\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.0.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=96\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=96\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=192\), \(\mathrm{CG}=96\), \(\mathrm{K}=2\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=192\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=192\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=384\), \(\mathrm{CG}=192\), \(\mathrm{K}=2\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=384\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=384\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=768\), \(\mathrm{CG}=384\), \(\mathrm{K}=2\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=768\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{O}=768\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=768\) \\
+ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=96\), \(\mathrm{I}=384\) \\
+ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=192\), \(\mathrm{I}=768\) \\
+ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
+ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=768\), \(\mathrm{I}=3072\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct}{Qwen2-VL-2B-Instruct}: TextVQA; batch 1; 256 vision tokens, 64 merger tokens, and text length 512. The vision MLP uses QuickGELU; the text MLP uses SwiGLU. Inventory: 16 L1, 2 L2; 6 selected.}\\*
+\midrule
+Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{gelu/model.visual.merger.mlp} & BF16 & \(\mathrm{rows}=64\), \(\mathrm{hidden}=5120\) \\
+Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{layernorm/model.visual.blocks.norm1} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=1280\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.language_model.layers.self_attn.k_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=256\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.language_model.layers.self_attn.q_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.attn.proj} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=1280\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.attn.qkv} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=3840\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.mlp.fc1} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=5120\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.mlp.fc2} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=5120\), \(\mathrm{N}=1280\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.merger.mlp} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=5120\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.merger.mlp_2} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=151936\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.down_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=8960\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.gate_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=8960\) \\
+Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.self_attn.o_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{quick_gelu/model.visual.blocks.mlp.act} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=5120\) \\
+Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{rmsnorm/model.language_model.layers.input_layernorm} & BF16 & \(\mathrm{rows}=512\), \(\mathrm{hidden}=1536\) \\
+Qwen2-VL-2B & L2 & $^{\star}$\nolinkurl{qwen2_vl_2b_text_mlp/model.language_model.layers.mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=512\), \(\mathrm{H}=1536\), \(\mathrm{I}=8960\) \\
+Qwen2-VL-2B & L2 & $^{\star}$\nolinkurl{qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp} & BF16 & \(\mathrm{T}=256\), \(\mathrm{H}=1280\), \(\mathrm{I}=5120\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/facebookresearch/DiT}{DiT-S/2}: Imagenette VAE latents of shape $[256,4,32,32]$; patch projection produces 256 tokens of width 384. L2 contains conditioning modulation and the MLP with tanh-approximate GELU. Inventory: 10 L1, 2 L2; 3 selected.}\\*
+\midrule
+DiT-S/2 & L1 & \nolinkurl{linear/blocks.fc1} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/blocks.fc2} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/blocks.mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=2304\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/blocks.proj} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/blocks.qkv} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1152\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/final_linear} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=32\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/final_mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=768\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/t_embedder} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=256\), \(\mathrm{N}=384\) \\
+DiT-S/2 & L1 & \nolinkurl{linear/t_embedder_2} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
+DiT-S/2 & L1 & $^{\star}$\nolinkurl{spatial_conv2d/patch} & FP32 & \(\mathrm{B}=256\), \(\mathrm{C}=4\), \(\mathrm{Y}=32\), \(\mathrm{X}=32\), \(\mathrm{O}=384\), \(\mathrm{CG}=4\), \(\mathrm{K}=2\), \(\mathrm{OY}=16\), \(\mathrm{OX}=16\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+DiT-S/2 & L2 & $^{\star}$\nolinkurl{dit_s_2_dit_mlp/blocks.mlp} & FP32 & \(\mathrm{B}=256\), \(\mathrm{T}=256\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
+DiT-S/2 & L2 & $^{\star}$\nolinkurl{dit_s_2_dit_modulation/blocks.modulation} & FP32 & \(\mathrm{B}=256\), \(\mathrm{H}=384\), \(\mathrm{J}=2304\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/Supercomputing-System-AI-Lab/MegaFold}{MegaFold (AF3)}: real PDB structure \texttt{7a4d-assembly1}; frozen training features; 384-token crop. Four configurations are retained. Their tensors use FP32 within a mixed-precision workload. Gate~3 is not applied. Inventory: 2 L1, 2 L2; 4 selected.}\\*
+\midrule
+MegaFold (AF3) & L1 & $^{\star}$\nolinkurl{layernorm/msa_module.layers.0.tri_attn_starting.norm} & FP32 & \(\mathrm{rows}=147456\), \(\mathrm{hidden}=128\) \\
+MegaFold (AF3) & L1 & $^{\star}$\nolinkurl{swiglu/diffusion_module.token_transformer.layers.0.fn} & FP32 & \(\mathrm{rows}=1536\), \(\mathrm{cols}=1536\) \\
+MegaFold (AF3) & L2 & $^{\star}$\nolinkurl{megafold_evoattention/diffusion_module.token_transformer.layers.0.fn.attn.attend} & FP32 & \(\mathrm{B}=1\), \(\mathrm{S}=4\), \(\mathrm{H}=16\), \(\mathrm{N}=384\), \(\mathrm{D}=64\) \\
+MegaFold (AF3) & L2 & $^{\star}$\nolinkurl{megafold_layernorm_linear/diffusion_module.pairwise_repr_to_atompair_feat_cond} & FP32 & \(\mathrm{M}=147456\), \(\mathrm{K}=128\), \(\mathrm{N}=16\) \\
+\addlinespace[0.5ex]
+
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/meta-pytorch/torchrec/tree/main/examples/dlrm}{TorchRec DLRM}: Criteo Kaggle; batch 32; 13 dense features; 26 embedding tables of width 64; interaction output width $64+\binom{27}{2}=415$. Embedding indices and offsets are integer tensors. Inventory: 7 L1, 1 L2; 2 selected.}\\*
+\midrule
+DLRM & L1 & $^{\star}$\nolinkurl{embedding_bag/tables} & FP32 & \(\mathrm{N}=100000\), \(\mathrm{D}=64\), \(\mathrm{B}=32\), \(\mathrm{M}=1\), \(\mathrm{L}=32\) \\
+DLRM & L1 & \nolinkurl{linear/dense_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=13\), \(\mathrm{N}=512\) \\
+DLRM & L1 & \nolinkurl{linear/dense_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=256\) \\
+DLRM & L1 & \nolinkurl{linear/dense_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=64\) \\
+DLRM & L1 & \nolinkurl{linear/over_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=415\), \(\mathrm{N}=512\) \\
+DLRM & L1 & \nolinkurl{linear/over_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=512\) \\
+DLRM & L1 & \nolinkurl{linear/over_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=1\) \\
+DLRM & L2 & $^{\star}$\nolinkurl{torchrec_dlrm_dlrm_interaction/interaction} & FP32 & \(\mathrm{B}=32\), \(\mathrm{S}=26\), \(\mathrm{D}=64\), \(\mathrm{O}=415\) \\
+\addlinespace[0.5ex]
+
+\end{longtable}
+\endgroup
+
+\makeatletter
+\ifbench@restorecolumns
+  \twocolumn
+\fi
+\makeatother
+
+
+
+
+
+
+
+
+\section{Verification Details}
+\label{app:verification_details}
+
+\subsection{Deterministic Execution}
+\label{app:determinism}
+All verification enables PyTorch deterministic algorithms and deterministic cuDNN execution, disables cuDNN benchmarking, and disables TF32 for CUDA matrix multiplication. Runs being compared use matched random states and numerical settings. During Gate~2 calibration, the compiled control must reproduce its results bit for bit on a second execution of each calibration sample; otherwise no thresholds are issued and verification remains incomplete.
+
+\subsection{Verification Data}
+\label{app:recorded_calls}
+A shuffle seed $s$ fixes the sequence of training batches drawn from a model's training data, including per-batch random inputs such as DiT's noise and diffusion timesteps. Gates~1 and~2 use the first batch of four seeds: the calibration batches (seeds 101 and 202) and the acceptance batches (seeds 303 and 404). Gate~3 trains on the first $Nk$ batches of seed 707, where $N$ is the number of updates and $k$ the batches per update in Table~\ref{tab:gate3_settings}. All seeds draw from the same training data, so their batches may share examples. MegaFold uses the frozen features of PDB structure 7a4d-assembly1 in every batch, and the seed sets the step's random conditions.
+
+One training step runs on each calibration and acceptance batch, and every call at every replaced site is recorded with its inputs, parameters, upstream gradients, and original memory layouts; MegaFold retains a declared subset of calls. Search feedback uses only calls recorded on the calibration batches, so the acceptance batches are unseen during search. Gate~1 replays every call recorded on the acceptance batches. Operator-scope Gate~2 calibrates on the calls recorded on the calibration batches and judges those recorded on the acceptance batches. Model-scope Gate~2 replays no calls: it calibrates on whole-model executions of all four batches and judges fresh executions of the same four batches under the same random conditions.
+
+\subsection{Gate~1 Elementwise Tolerances}
+\label{app:gate1_tolerances}
+Table~\ref{tab:gate1_tolerances} gives the tolerances in Equation~\ref{eq:local_numerical_contract}, frozen from PyTorch 2.11's \texttt{torch.testing.assert\_close} defaults. The reference determines the required dtype; comparisons use float64.
+
+\begin{table}[h]
+\centering
+\caption{Fixed Gate~1 elementwise tolerances.}
+\label{tab:gate1_tolerances}
+\begin{tabular}{lcc}
+\toprule
+Dtype & $a_z$ (absolute) & $r_z$ (relative) \\
+\midrule
+bfloat16 & $10^{-5}$ & $1.6\times10^{-2}$ \\
+float16  & $10^{-5}$ & $10^{-3}$ \\
+float32  & $10^{-5}$ & $1.3\times10^{-6}$ \\
+float64  & $10^{-7}$ & $10^{-7}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The compile--native discrepancy $\Delta_z$ is maximized over the operator-scope calibration calls for result $z$. With $\gamma_1=4$, the envelope $\gamma_1\max\{\Delta_z,u_z\}$ includes the rounding floor
+\begin{equation}
+u_z=
+\begin{cases}
+\epsilon_{d_z}^{\mathrm{mach}}\,2^{\lfloor\log_2 M_z\rfloor}, & M_z>0,\\
+0, & M_z=0,
+\end{cases}
+\qquad
+M_z=\max_i|z_i^{\mathrm{ref}}|,
+\label{eq:gate1_rounding_unit}
+\end{equation}
+where $d_z$ is the reference dtype and $\epsilon_{d_z}^{\mathrm{mach}}$ its machine epsilon. The floor retains a rounding allowance when compile reproduces native exactly. The envelope also accommodates cancellation: two large intermediate terms can produce a near-zero result whose dtype tolerance is small relative to their rounding error.
+
+\subsection{Gate~2 Calibration, Floors, and Safety Margins}
+\label{app:gate2_thresholds}
+For each result tensor $z$ and metric $m\in\{2,\max\}$, let $E_m(a,b)$ denote the metric in Equation~\ref{eq:integration_errors} with $a$ as the tested tensor and $b$ as the reference. The control discrepancy on calibration sample $x$ is
+\begin{equation}
+\begin{aligned}
+D_m(z;x)=\max\bigl\{&
+E_m\!\left(z_x^{\mathrm{native},2},z_x^{\mathrm{native},1}\right),\\
+& E_m\!\left(z_x^{\mathrm{compile}},z_x^{\mathrm{native},1}\right)
+\bigr\},
+\end{aligned}
+\label{eq:integration_control_error}
+\end{equation}
+where the native superscripts identify independent executions under matched conditions, and the compiled control replaces the same sites as the candidate. Equation~\ref{eq:integration_calibration} takes the largest discrepancy over the calibration set $\mathcal{C}$. At operator scope, $\mathcal{C}$ contains calls from orders 101 and 202, including calls of the same configuration at different layers; acceptance uses orders 303 and 404. At model scope, $\mathcal{C}$ contains samples from all four orders, reused in fresh acceptance executions.
+
+The floors $(f_{z,2},f_{z,\max})$ are $(10^{-5},10^{-3})$ for outputs and $(10^{-4},10^{-2})$ for gradients. Operator scope uses $\gamma=\gamma_{\mathrm{op}}=2$; model scope uses $\gamma=\gamma_{\mathrm{model}}=4$, except ConvNeXt V2-Tiny, which uses 3. Floors and margins are fixed before evaluating candidates; calibration derives thresholds solely from the controls, without adapting them to a candidate's errors.
+
+\subsection{Gate~3 Calibration and Training Settings}
+\label{app:gate3_settings}
+Each run starts from the same prescribed model state and a fresh AdamW optimizer, using data order 707. AdamW uses betas $(0.9,0.999)$, $\epsilon=10^{-8}$, and weight decay $0.01$. Table~\ref{tab:gate3_settings} lists the model-specific settings. With gradient accumulation, the loss $\ell_t^p$ is the arithmetic mean of the batch losses for update $t$, and each batch's gradient contribution is scaled accordingly.
+
+Native-repeat and compiled-control trajectories use the same initialization, data, and training settings as the candidate. Applying Equation~\ref{eq:training_errors} to each control gives the frozen thresholds
+\begin{equation}
+\begin{aligned}
+T_R&=\gamma_{\mathrm{train}}\max\{R_{\mathrm{repeat}},R_{\mathrm{compile}},f_R\},\\
+T_M&=\gamma_{\mathrm{train}}\max\{M_{\mathrm{repeat}},M_{\mathrm{compile}},f_M\},
+\end{aligned}
+\label{eq:training_calibration}
+\end{equation}
+where $f_R=f_M=10^{-4}$ and $\gamma_{\mathrm{train}}$ is the fixed safety margin in Table~\ref{tab:gate3_settings}. The subscripts identify each control's discrepancy from the native trajectory; candidate errors do not enter these thresholds.
+
+\begin{table*}[t]
+\centering
+\caption{Gate~3 training settings. LR denotes the target learning rate; linear warmup is measured in optimizer updates. Clip denotes the gradient-norm limit.}
+\label{tab:gate3_settings}
+\begin{tabular}{lcccccc}
+\toprule
+Model & $N$ & LR & Warmup & Clip & Batches/update & $\gamma_{\mathrm{train}}$ \\
+\midrule
+Qwen3-0.6B       & 100 & $10^{-4}$        & --  & --  & 1 & 2 \\
+Llama-3.2-1B     & 100 & $3\times10^{-5}$ & 100 & 1.0 & 1 & 2 \\
+Qwen3.5-4B       & 100 & $3\times10^{-5}$ & 100 & 1.0 & 1 & 2 \\
+Qwen2-VL-2B      & 10  & $3\times10^{-5}$ & 100 & 1.0 & 8 & 2 \\
+ConvNeXt V2-Tiny & 50  & $10^{-4}$        & --  & --  & 1 & 3 \\
+DiT-S/2          & 100 & $10^{-4}$        & --  & --  & 1 & 2 \\
+DLRM             & 50  & $10^{-4}$        & --  & --  & 1 & 2 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+
+\section{Additional Evaluation Details}
+\label{app:evaluation_details}
+
+Performance timing runs separately from verification, with deterministic algorithms disabled. Formal comparisons use matched inputs and execution conditions. Executable candidates that fail verification may retain diagnostic timings, but only accepted deployments contribute to the main results.
+
+\paragraph{Tier 1: search score and timing.}
+Inputs, parameters, and upstream gradients are generated according to the task declaration. For candidates passing the search correctness checks, the default score is
+\begin{equation}
+Q(p;c)=
+\frac{(1-\alpha)\rho_{\mathrm{bwd}}(p;c)+\alpha\rho_{\mathrm{pair}}(p;c)}
+{1+\lambda R_{\mathrm{saved}}(p;c)},
+\label{eq:tier1_search_score}
+\end{equation}
+where $\rho_{\mathrm{bwd}}$ and $\rho_{\mathrm{pair}}$ are reference-to-candidate timing ratios for backward and the complete forward--backward pair, respectively, and $R_{\mathrm{saved}}$ is defined in Equation~\ref{eq:saved_memory_ratio}. The default weights are $\alpha=0.5$ and $\lambda=0.05$. Forward-only and autograd-mediated pair measurements do not enter this score.
+
+Candidate timings directly invoke the forward/backward implementations without the autograd engine. The default eager reference includes input preparation and autograd execution, and its backward reference also includes forward execution. These ratios therefore normalize search scores rather than establish matched-scope speedups. CUDA-event timing uses 10 warmup iterations and 50 measured repetitions, synchronizing after each repetition and reporting the median. Reference timings may be cached across candidates; GPU L2 is not explicitly flushed.
+
+\paragraph{Tier 2: recorded-call timing.}
+Tier~2 replays the order-303 corpus described in Appendix~\ref{app:recorded_calls}, including any model-declared call subset. Providers receive independent copies preserving memory layouts and aliasing; loading and input preparation are untimed. Backward uses \texttt{torch.autograd.grad}, without leaf \texttt{.grad} accumulation or optimizer updates.
+
+Each comparison remeasures both providers in the same process, with 10 warmup iterations and three paired blocks that randomize provider order. CUDA events measure each region, with synchronization after each sample group. The default 50 repetitions per region per block are reduced for expensive calls using a 100\,ms budget and a minimum of five repetitions. L2 is flushed before each timed region, including after the untimed forward for backward-only timing; complete-pair timing has no internal flush. Compilation state is retained after warmup. For the point estimate, samples are pooled across blocks before taking each call's median, and $T^2_p(c)$ sums these medians across calls.
+
+\paragraph{Tier 3: training-step timing.}
+Each provider runs in a fresh process in seeded random order, with matched initial model state and workload settings. Timing uses AdamW with learning rate $10^{-4}$, betas $(0.9,0.999)$, $\epsilon=10^{-8}$, and weight decay $0.01$, without scheduling, gradient clipping, or cross-batch accumulation.
+
+Following five untimed updates and setup, timing reuses a designated batch while model and optimizer states continue updating. After three warmup steps, ten blocks of ten optimizer updates are measured, with GPU synchronization bracketing each block. $T^3_p(c)$ is the median block wall time divided by ten. L2 is not flushed. The CPU submission-and-blocking fraction divides host elapsed time before the final synchronization by total synchronized block time, including implicit waits.
+
+\paragraph{Confidence intervals.}
+Tiers~2 and~3 use 2,000 bootstrap replicates and the 2.5th and 97.5th percentiles. Tier~2 resamples paired blocks within each recorded call, takes the median of the resampled block medians for each provider, and forms the ratio of their sums across calls. This differs from the pooled-sample median used for the point estimate. Tier~3 independently resamples each provider's block mean step times and takes the ratio of their medians. Tier~3 intervals are eager-relative; the combination's compile-relative speedup is a point estimate.
+
+\paragraph{Memory accounting.}
+Tier~1 normalizes explicitly saved tensor bytes as
+\begin{equation}
+R_{\mathrm{saved}}(p;c)=\frac{M_p^{\mathrm{saved}}(c)}{M_{\mathrm{input}}(c)},
+\label{eq:saved_memory_ratio}
+\end{equation}
+where $M_p^{\mathrm{saved}}$ sums \texttt{numel} times element size over tensors retained in $s_p$, and $M_{\mathrm{input}}$ counts the task's declared memory inputs. Aliases and repeated entries count by logical size; non-tensor metadata is excluded. Tier~3 initializes optimizer state, resets CUDA peak-memory statistics, and measures peak allocated memory during one untimed training step. This is total peak allocation, not reserved memory or an allocation increment; its reported ratio is candidate peak divided by eager peak.
+
+\paragraph{Coverage accounting.}
+Level~1 and Level~2 coverage divide executable, accepted configurations by all observed configurations, including unsubmitted cases and those not selected for an experiment. Valid timing counts are recorded separately for each baseline. Level~3 coverage counts accepted combinations with valid eager-relative speedups among all represented models, including models with empty combinations in the denominator.
+
+
+
+
+
+% ==========================================================================
+\paragraph{Multiple-output comparisons and execution coverage.}
+For computations with multiple outputs, upstream gradients are
+supplied jointly so that every output path contributes to the
+reference gradients. Designated coverage workloads additionally
+check executability rather than full numerical equivalence.
+
+
+\paragraph{Block instrumentation and comparison groups.}
+Block-level instrumentation checks the declared replacement sites
+and invocation counts, unexpected state dependence, and live
+operator outputs and gradients. Each complete-block output and
+input gradient forms its own comparison group. Parameter gradients
+are grouped by role, such as query projection or down projection. Both $E_2$ and $E_{\max}$ are computed after casting candidate and reference tensors to FP32, regardless of their original data types, using a denominator floor of $\epsilon=10^{-30}$.
+
+
+
+
+
+\paragraph{Full-model screening.}
+For language models, we measure prediction KL divergence
+(in nats per valid token) with causal shifting and
+ignored-label masking, and global gradient error by
+aggregating squared differences and reference norms
+across matched parameters.
+
+
+\paragraph{Failure handling and diagnostics.}
+Strict mode blocks evaluation upon any required verification
+failure. An optional \texttt{report-first} mode permits
+diagnostic measurements despite designated integration-level
+discrepancies or unavailable comparisons, but never bypasses
+operator-level numerical or structural failures, missing
+gradients, nonfinite values, or execution errors. Reports
+separately track execution completion, numerical agreement,
+and verification completeness.
+
+
+
+% \section{Additional Experiment Settings} 
+
+
+
+% % \haochen{Might just remove this if we dont need this} 
+
+
+% % \minjia{Liger kernel appears quite sudden. Need to handle this later.} \wangjia{We can omit Liger here. We initially used Liger's operators to build the benchmark, but that inventory does not fit the current model-driven, top-down setting. Panel A reflects a separate setting: different models introduce different configurations of the same L1 computation, motivating one generalist implementation across configurations versus separate specialists. This connects to Section 3.5 and our recent shape-aware evolution experiments. We could move Panel A and Section 3.5 to an ablation study or the appendix, or omit them from this paper. What do you think?}
+% % \minjia{Yes, that makes sense. Please revise accordingly.}
+
+% % \haochen{I feel like we can move section 3.5 to the experiments section, together with its results. The logic: For ADBench input configurations, we are emphasizing that they are derived from model-training workloads. Having multiple input configurations is just one feature of these workloads. Whether one evolved implementation can handle them all, or whether we need to pay for a separate search per configuration, feels like a specific topic worth discussing along with our results on coverage metric rather than in the benchmark section. Just a thought.} \wangjia{My idea is that it is natrual to have two options once we get some case that have many different configs and it is so much aligned with our shape-aware evolution. The generalist setting aims to evolve a good kernel that works well for both small and large shapes.}
+% % % \minjia{Good discussion. I tend to lean towards putting this as part of the \bench, as they represent two different scenarios: (i) kernel optimizations for specific models, where input shapes are already known, and (ii) library development, where the kernel needs to support a wide range of input shapes. This may become a more unique aspect of \bench vs. other benchmarks. The issue: the current text only describes what generalist vs. speicalist are, but it does not say why we define these two modes. We can revise the text to make the motivation of why having two modes explicit. Then we wouldn't have questions like Haochen asked, because the current text may indeed raise questions on whether this is part of evaluation or benchmark design philosophy. Also, we may need to think about whether we should make this an explicit limitation of existing kernel benchmarks in the intro, so the design here can better connect to the introduction. Also, if we include this as part of the benchmark, then we also need to think about whether the verification protocol and evaluation protocol need to be adjusted accordingly.}
+% % \minjia{My review changed after reading 3.6/3.7. This is an important angle but it seems to make the work more involved/complex. }
+
+
+
+% \subsection{Specialist and Generalist Settings}
+% \label{sec:benchmark_settings}
+
+% \benchmark supports two complementary optimization settings. The model-associated workloads in Table~\ref{tab:benchmark_composition}B provide concrete configurations for specialist generation, while selected operators from the shared primitive pool in Table~\ref{tab:benchmark_composition}A support generalist generation across multiple configurations.
+
+% \paragraph{Specialist setting.}
+% In the workload-driven setting, a specialist is generated for an operator under a fixed input configuration, including its tensor shapes, data types, and relevant execution parameters. This enables the implementation to exploit configuration-specific optimization opportunities. However, its correctness and efficiency do not necessarily extend to other configurations: a kernel structure that works well for small inputs may become inefficient or invalid at larger shapes, where suitable launch configurations, fusion boundaries, and reduction strategies can differ. Generating a separate specialist for every configuration also incurs additional generation and search costs.
+
+% \paragraph{Generalist setting.}
+% For selected common primitives, we construct task instances that group diverse input configurations under the same forward--backward contract. A generalist is a single deployable implementation that must support the entire declared configuration set. It may internally dispatch to different kernels or execution strategies according to the input shape. This setting asks whether a shared generation budget can produce an implementation that is correct across the configuration set and efficient across different shape regimes, reducing the need for independent per-configuration searches. The primitive pool therefore serves both as a collection of building blocks for model workloads and as a source of standalone tasks for generalist generation. These multi-configuration tasks also support the study of our shape-aware evolution strategy. \haochen{Update on the concept of generalist: a generalist mean that a generated operator that works well for input shapes it is not trained (evolved) on. }
+
+
+
+\section{EvoGrad Details}
+\label{sec:evograd}
+\label{app:seed_example}
+
+\paragraph{Seed structure.}
+Listing~\ref{lst:seed_code_example} illustrates these components using a masked linear map $f(X,W,M)=(XW)\odot M$, where $M$ is a nondifferentiable mask. In the illustrated configuration, the compiler assigns the forward GEMM and the two backward GEMMs to external implementations, forming $L$, while the elementwise multiplications belong to $R$. The same handwritten multiplication primitive is reused by the forward and backward computations. The external-library wrappers and the outer autograd adapter remain fixed, while the primitive kernels, their launch helpers, and the forward--backward orchestration are evolvable. Evolution can therefore replace the initial primitive calls with new implementations and revise the saved-state policy without changing the public autograd interface.
+
+
+% \ahan{This code listing, though a good start, is too detailed. You don't need to stick to pure Python syntax, you can make it more conscise and readable if you deviate slightly from it.}
+\begin{lstlisting}[
+    language=Python,
+    basicstyle=\ttfamily\scriptsize,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    captionpos=b,
+    caption={Illustrative seed for $f(X,W,M)=(XW)\odot M$. The external-library implementation and autograd adapter are fixed; the Triton primitive, launch helper, and forward--backward orchestration are evolvable. The three preserved GEMM call sites share one displayed wrapper for compactness. Configuration checks and per-region preservation metadata are omitted.},
+    label={lst:seed_code_example}
+]
+import torch
+import triton
+import triton.language as tl
+from torch._inductor.select_algorithm import extern_kernels
+
+# Fixed external-library implementation: L.
+def library_mm(a, b):
+    with torch.no_grad():
+        out = torch.empty(
+            (a.shape[0], b.shape[1]),
+            device=a.device, dtype=a.dtype,
+        )
+        extern_kernels.mm(a, b, out=out)
+        return out
+
+# EVOLVE-BLOCK-START
+
+# Initial handwritten Triton multiplication primitive.
+@triton.jit
+def _mul_kernel(A, B, OUT, N, BLOCK: tl.constexpr):
+    offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    mask = offsets < N
+    a = tl.load(A + offsets, mask=mask, other=0.0)
+    b = tl.load(B + offsets, mask=mask, other=0.0)
+    tl.store(OUT + offsets, a * b, mask=mask)
+
+# Lowering: aten.mul -> host helper -> Triton kernel.
+def mul_tt(a, b):
+    dtype = torch.result_type(a, b)
+    a, b = torch.broadcast_tensors(a, b)
+    a = a.to(dtype).contiguous()
+    b = b.to(dtype).contiguous()
+    out = torch.empty_like(a)
+    grid = (triton.cdiv(out.numel(), 256),)
+    _mul_kernel[grid](a, b, out, out.numel(), BLOCK=256)
+    return out
+
+# Evolvable forward orchestration and saved state.
+def forward_with_saved(x, w, mask):
+    z = library_mm(x, w)             # Preserved L.
+    y = mul_tt(z, mask)              # Lowered R.
+    return y, (x, w, mask)
+
+# Evolvable backward orchestration.
+def backward_from_saved(dy, saved):
+    x, w, mask = saved
+    dz = mul_tt(dy, mask)            # Lowered R.
+    dx = library_mm(dz, w.t())       # Preserved L.
+    dw = library_mm(x.t(), dz)       # Preserved L.
+    return dx, dw
+
+# EVOLVE-BLOCK-END
+
+# Fixed host adapter for PyTorch autograd.
+class MaskedLinearFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, w, mask):
+        y, saved = forward_with_saved(x, w, mask)
+        ctx.save_for_backward(*saved)
+        return y
+
+    @staticmethod
+    def backward(ctx, dy):
+        dx, dw = backward_from_saved(dy, ctx.saved_tensors)
+        return dx, dw, None          # No gradient for mask.
+
+def masked_linear(x, w, mask):
+    return MaskedLinearFunction.apply(x, w, mask)
+\end{lstlisting}
+
+Before entering evolution, the complete seed $p_0$ is checked against the independent PyTorch-autograd oracle under the same deployment configuration. Only seeds satisfying Equation~\ref{eq:validity} are admitted to the optimization stage.
+
+
+\section{Additional Results}
+\label{sec:additional_results}
+
+% \begin{table}[H]
+% \centering
+% \caption{End-to-end and per-operator results. Speedup and peak memory are
+%   reported against PyTorch eager and against \texttt{torch.compile};
+%   $>\!1\times$ is better for speedup, $<\!1\times$ is better for memory.
+%   Operator rows are measured at operator scope; ``full model'' rows are
+%   measured at model scope. Dashes mark configurations not yet run.}
+  
+% \label{tab:e2e_results}
+% \small
+% \setlength{\tabcolsep}{3pt}
+% \begin{tabular}{@{}l rr rr@{}}
+% \toprule
+%  & \multicolumn{2}{c}{Speedup} & \multicolumn{2}{c}{Peak memory} \\
+% \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+% Operator / model & vs.\ eager & vs.\ compile & vs.\ eager & vs.\ compile \\
+% \midrule
+
+% \multicolumn{5}{@{}l}{\textbf{Llama-3.2-1B}} \\
+% \quad Full model (L4)           & $1.2\times$ & $1.1\times$ & -- & -- \\
+% \quad QKV${+}$RoPE (L2)         & $1.3\times$ & $1.0\times$ & -- & -- \\
+% \quad Attention (L2)            & $1.4\times$ & $0.8\times$ & -- & -- \\
+% \quad SwiGLU MLP (L2)           & $1.5\times$ & $0.9\times$ & -- & -- \\
+% \quad Residual${+}$RMSNorm (L2) & --          & --          & -- & -- \\
+% \addlinespace
+
+% \multicolumn{5}{@{}l}{\textbf{Qwen3-0.6B}} \\
+% \quad Full model (L4)$^{\dagger}$
+%     & $1.52\times$ & $0.92\times$ & $0.85\times$ & $0.97\times$ \\
+% \quad QKV${+}$Norm${+}$RoPE (L2)
+%     & $2.32\times$ & $1.11\times$ & $0.66\times$ & $1.10\times$ \\
+% \quad Attention (L2)
+%     & $0.16\times$ & $0.20\times$ & $0.78\times$ & $0.79\times$ \\
+% \quad SwiGLU MLP (L2)
+%     & $0.97\times$ & $1.09\times$ & $1.13\times$ & $1.36\times$ \\
+% \addlinespace
+
+% \multicolumn{5}{@{}l}{\textbf{MegaFold}} \\
+% \quad Full model (best subset)   & $1.22\times$ & --           & -- & -- \\
+% \quad Triangle attention         & $2.37\times$ & $1.12\times$ & -- & -- \\
+% \quad Pair-bias attention        & $2.14\times$ & $2.12\times$ & -- & -- \\
+% \quad SwiGLU transition          & $4.45\times$ & $1.04\times$ & -- & -- \\
+% \quad LayerNorm                  & $2.01\times$ & $2.00\times$ & -- & -- \\
+% \quad LayerNorm${+}$Linear       & $0.34\times$ & $0.32\times$ & -- & -- \\
+% \addlinespace
+
+% \multicolumn{5}{@{}l}{\textbf{AlphaFold3}} \\
+% \quad Full model (L4) & -- & -- & -- & -- \\
+% \addlinespace
+
+% \multicolumn{5}{@{}l}{\textbf{\emph{Model 5}}} \\
+% \quad Full model (L4) & -- & -- & -- & -- \\
+% \addlinespace
+
+% \multicolumn{5}{@{}l}{\textbf{\emph{Model 6}}} \\
+% \quad Full model (L4) & -- & -- & -- & -- \\
+
+% \bottomrule
+% \end{tabular}
+% \end{table}
+
+
+% Requires: booktabs, graphicx.
+% T1 measurements are unavailable in the supplied files.
+% torch.compile T2 = eager baseline_ms / compiled baseline_ms from the same case.
+% Full-suite geometric means remain unavailable because coverage is incomplete.
+% Standalone preview wrapper; the table environments can be copied into a paper.
+
+% Requires: booktabs, graphicx.
+% T1 measurements are unavailable in the supplied files.
+% torch.compile T2 = eager baseline_ms / compiled baseline_ms from the same case.
+% Full-suite geometric means remain unavailable because coverage is incomplete.
+% Standalone preview wrapper; the table environments can be copied into a paper.
+% Requires: booktabs, graphicx.
+% T1 measurements are unavailable in the supplied files.
+% torch.compile T2 = eager baseline_ms / compiled baseline_ms from the same case.
+% Full-suite geometric means remain unavailable because coverage is incomplete.
+% \providecommand{\na}{n/a}
+% Standalone preview wrapper; the table environments can be copied into a paper.
+
+% Requires: booktabs, graphicx.
+% T1 measurements are unavailable in the supplied files.
+% torch.compile T2 = eager baseline_ms / compiled baseline_ms from the same case.
+% Full-suite geometric means remain unavailable because coverage is incomplete.
+\providecommand{\na}{n/a}
+\begin{table*}[p]
+\centering
+\caption{Full per-case results (part 1 of 2: language models). Rows are grouped by host model: every L1 primitive the model's training step executes, every L2 site, and the L3 whole-model training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
+\label{tab:agent_full_results_a}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}cl cccc cccc cccc cccc cccc cccc@{}}
+\toprule
+& & \multicolumn{4}{c}{\texttt{torch.compile}$^{\mathrm{GH200}}$} & \multicolumn{4}{c}{\textbf{evograd}$^{\mathrm{A100}}$} & \multicolumn{4}{c}{OpenEvolve} & \multicolumn{4}{c}{GEPA} & \multicolumn{4}{c}{KernelAgent$^{\mathrm{A100}}$} & \multicolumn{4}{c}{Codex} \\
+\cmidrule(lr){3-6} \cmidrule(lr){7-10} \cmidrule(lr){11-14} \cmidrule(lr){15-18} \cmidrule(lr){19-22} \cmidrule(lr){23-26}
+Lvl & Case & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{Llama-3.2-1B}} \\
+L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{rmsnorm} & -- & 1.21 & -- & -- & -- & 2.345 & -- & -- & -- & 1.87 & -- & -- & -- & 2.06 & -- & -- & -- & 1.057 & -- & -- & -- & 1.81 & -- & -- \\
+L1 & \texttt{rope} & -- & 1.09 & -- & -- & -- & 1.299 & -- & -- & -- & 1.02 & -- & -- & -- & 1.66 & -- & -- & -- & 2.348 & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{swiglu} & -- & 2.41 & -- & -- & -- & -- & -- & -- & -- & 4.12$^{\dagger}$ & -- & -- & -- & 4.13$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 3.94$^{\dagger}$ & -- & -- \\
+L1 & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{cross\_entropy} & -- & 2.64 & -- & -- & -- & 2.295 & -- & -- & -- & 2.92 & -- & -- & -- & 3.06 & -- & -- & -- & 0.388 & -- & -- & -- & 2.92 & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{qkv\_rope} & -- & 1.21 & -- & -- & -- & 1.280 & 1.031 & 1.00 & -- & 1.76$^{\dagger}$ & 1.03$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 2.25$^{\dagger}$ & 1.02$^{\dagger}$ & 1.01$^{\dagger}$ & -- & -- & -- & -- & -- & 1.36$^{\dagger}$ & 0.91$^{\dagger}$ & 1.00$^{\dagger}$ \\
+L2 & \texttt{attention} & -- & 0.91 & -- & -- & -- & 0.874 & 0.986 & 1.00 & -- & 1.03 & 0.99 & 1.00 & -- & 1.03 & 1.00 & 1.00 & -- & -- & -- & -- & -- & 1.00 & 0.99 & 1.00 \\
+L2 & \texttt{swiglu\_mlp} & -- & 1.06 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.06 & 0.95 & 0.95 & -- & 1.05 & 1.00 & 0.90 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.05 & 1.01 & 0.90 \\
+L2 & \texttt{residual\_rmsnorm} & -- & 1.14 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.57 & 1.11 & 0.95 & -- & 1.75 & 1.11 & 0.95 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.50 & 1.11 & 0.95 \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & 1.13 & 0.77 & \na & \na & 1.033 & 1.00 & \na & \na & 1.11 & 0.95 & \na & \na & 1.11 & 0.95 & \na & \na & / & / & \na & \na & 1.11 & 0.85 \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{Qwen3-0.6B}} \\
+L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{rmsnorm} & -- & 1.37 & -- & -- & -- & 1.838 & -- & -- & -- & 1.73 & -- & -- & -- & 1.90 & -- & -- & -- & 2.131 & -- & -- & -- & 1.62 & -- & -- \\
+L1 & \texttt{rope} & -- & 1.03 & -- & -- & -- & 1.166 & -- & -- & -- & 0.91 & -- & -- & -- & 1.38 & -- & -- & -- & 2.421 & -- & -- & -- & 1.62 & -- & -- \\
+L1 & \texttt{swiglu} & -- & 0.92 & -- & -- & -- & 4.018 & -- & -- & -- & 1.64 & -- & -- & -- & 1.66 & -- & -- & -- & 4.006 & -- & -- & -- & 1.58 & -- & -- \\
+L1 & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{cross\_entropy} & -- & 2.54 & -- & -- & -- & 2.905 & -- & -- & -- & 3.06 & -- & -- & -- & 3.04 & -- & -- & -- & 2.228 & -- & -- & -- & 2.90 & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{qkv\_norm\_rope} & -- & 1.65 & -- & -- & -- & 1.840$^{\dagger}$ & 1.183$^{\dagger}$ & 0.95$^{\dagger}$ & -- & 2.28 & 1.15 & 0.95 & -- & 2.49 & 1.33 & 0.95 & -- & -- & -- & -- & -- & 1.60$^{\dagger}$ & 1.07$^{\dagger}$ & 0.93$^{\dagger}$ \\
+L2 & \texttt{attention} & -- & 0.79 & -- & -- & -- & 0.903 & 0.987 & 1.00 & -- & 1.05 & 0.95 & 1.00 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.00 & 0.96 & 1.00 \\
+L2 & \texttt{swiglu\_mlp} & -- & 0.87 & -- & -- & -- & 1.082 & 1.014 & 0.93 & -- & 1.07 & 0.96 & 0.95 & -- & 1.13 & 0.96 & 0.95 & -- & -- & -- & -- & -- & 0.96 & 0.98 & 0.96 \\
+L2 & \texttt{residual\_rmsnorm} & -- & 1.25 & -- & -- & -- & 1.733 & 1.099 & 0.95 & -- & 1.58 & 1.00 & 0.95 & -- & 1.65 & 1.02 & 0.95 & -- & -- & -- & -- & -- & 1.61 & 0.99 & 0.95 \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & 1.66 & 0.67 & \na & \na & 1.108 & 0.88 & \na & \na & 1.15 & 0.95 & \na & \na & 1.35 & 0.90 & \na & \na & / & / & \na & \na & / & / \\
+
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[p]
+\centering
+\caption{Full per-case results (part 2 of 2: multimodal, vision, diffusion and recommendation models). Rows are grouped by host model: every L1 primitive the model's training step executes, every L2 site, and the L3 whole-model training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
+\label{tab:agent_full_results_b}
+\scriptsize
+\setlength{\tabcolsep}{2pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}cl cccc cccc cccc cccc cccc cccc@{}}
+\toprule
+& & \multicolumn{4}{c}{\texttt{torch.compile}$^{\mathrm{GH200}}$} & \multicolumn{4}{c}{\textbf{evograd}$^{\mathrm{A100}}$} & \multicolumn{4}{c}{OpenEvolve} & \multicolumn{4}{c}{GEPA} & \multicolumn{4}{c}{KernelAgent$^{\mathrm{A100}}$} & \multicolumn{4}{c}{Codex} \\
+\cmidrule(lr){3-6} \cmidrule(lr){7-10} \cmidrule(lr){11-14} \cmidrule(lr){15-18} \cmidrule(lr){19-22} \cmidrule(lr){23-26}
+Lvl & Case & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{Qwen2-VL-2B}} \\
+L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{layernorm} & -- & 0.38 & -- & -- & -- & -- & -- & -- & -- & 0.54$^{\dagger}$ & -- & -- & -- & 0.49$^{\dagger}$ & -- & -- & -- & 0.081 & -- & -- & -- & 0.51 & -- & -- \\
+L1 & \texttt{rmsnorm} & -- & 1.39 & -- & -- & -- & 2.235 & -- & -- & -- & 1.92 & -- & -- & -- & 2.01 & -- & -- & -- & 1.608 & -- & -- & -- & 1.69 & -- & -- \\
+L1 & \texttt{quick\_gelu} & -- & 0.72 & -- & -- & -- & 0.572 & -- & -- & -- & 1.36 & -- & -- & -- & 1.23 & -- & -- & -- & 0.626 & -- & -- & -- & 1.26 & -- & -- \\
+L1 & \texttt{gelu} & -- & 0.36 & -- & -- & -- & -- & -- & -- & -- & 0.66$^{\dagger}$ & -- & -- & -- & 0.64$^{\dagger}$ & -- & -- & -- & 0.114 & -- & -- & -- & 0.65 & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{text\_mlp} & -- & 0.91 & -- & -- & -- & 0.860 & 0.971 & 1.00 & -- & 1.19 & 0.99 & 1.00 & -- & 1.00 & 0.95 & 1.00 & -- & 0.490 & 1.046 & 1.00 & -- & 0.94 & 0.96 & 1.00 \\
+L2 & \texttt{vision\_mlp} & -- & 0.87 & -- & -- & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 1.15$^{\dagger}$ & 1.02$^{\dagger}$ & 1.00$^{\dagger}$ & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 0.99$^{\dagger}$ & 1.00$^{\dagger}$ \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & -- & -- & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.070 & 1.00 & \na & \na & / & / \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{ConvNeXt V2-Tiny}} \\
+L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{layernorm} & -- & 0.56 & -- & -- & -- & -- & -- & -- & -- & 0.81$^{\dagger}$ & -- & -- & -- & 0.76$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.70$^{\dagger}$ & -- & -- \\
+L1 & \texttt{spatial\_conv2d} & -- & 0.87 & -- & -- & -- & 1.074 & -- & -- & -- & 1.02$^{\dagger}$ & -- & -- & -- & 1.59$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.96$^{\dagger}$ & -- & -- \\
+L1 & \texttt{grn} & -- & 3.57 & -- & -- & -- & -- & -- & -- & -- & 4.28 & -- & -- & -- & 4.24 & -- & -- & -- & 3.494 & -- & -- & -- & 4.19 & -- & -- \\
+L1 & \texttt{gelu} & -- & 0.48 & -- & -- & -- & 1.010 & -- & -- & -- & 0.79$^{\dagger}$ & -- & -- & -- & 0.77$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.75 & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{convnext\_mlp (stage 0)} & -- & 1.69 & -- & -- & -- & -- & -- & -- & -- & 1.50$^{\dagger}$ & 1.08$^{\dagger}$ & 0.69$^{\dagger}$ & -- & 1.46$^{\dagger}$ & 1.06$^{\dagger}$ & 0.69$^{\dagger}$ & -- & -- & -- & -- & -- & 1.49$^{\dagger}$ & 1.02$^{\dagger}$ & 0.69$^{\dagger}$ \\
+L2 & \texttt{convnext\_mlp (stage 1)} & -- & 1.07 & -- & -- & -- & -- & -- & -- & -- & 1.04$^{\dagger}$ & 1.04$^{\dagger}$ & 0.89$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.99$^{\dagger}$ & 0.98$^{\dagger}$ & 0.89$^{\dagger}$ \\
+L2 & \texttt{convnext\_mlp (stage 2)} & -- & 1.05 & -- & -- & -- & 1.029 & 1.114 & 0.83 & -- & 0.72$^{\dagger}$ & 0.92$^{\dagger}$ & 0.90$^{\dagger}$ & -- & 1.11$^{\dagger}$ & 1.03$^{\dagger}$ & 0.83$^{\dagger}$ & -- & -- & -- & -- & -- & 0.75$^{\dagger}$ & 0.90$^{\dagger}$ & 0.89$^{\dagger}$ \\
+L2 & \texttt{convnext\_mlp (stage 3)} & -- & 1.22 & -- & -- & -- & -- & -- & -- & -- & 1.22$^{\dagger}$ & 0.98$^{\dagger}$ & 0.98$^{\dagger}$ & -- & 1.17$^{\dagger}$ & 1.02$^{\dagger}$ & 0.98$^{\dagger}$ & -- & -- & -- & -- & -- & 1.28 & 1.08 & 0.98 \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & 1.26$^{\ddagger}$ & 0.63$^{\ddagger}$ & \na & \na & 1.119 & 0.83 & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.06 & 0.98 \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{DiT-S/2}} \\
+L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{spatial\_conv2d} & -- & 2.01 & -- & -- & -- & 1.047 & -- & -- & -- & 2.36 & -- & -- & -- & 2.39 & -- & -- & -- & 0.377 & -- & -- & -- & -- & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{dit\_modulation} & -- & 0.69 & -- & -- & -- & 0.666 & 1.000 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 1.186 & 0.998 & 1.00 & -- & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & 1.00$^{\dagger}$ \\
+L2 & \texttt{dit\_mlp} & -- & 1.01 & -- & -- & -- & 0.976 & 0.988 & 0.84 & -- & 0.97 & 0.99 & 0.83 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.54 & 0.72 & 0.93 \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & 1.14 & 0.89 & \na & \na & 1.000 & 1.00 & \na & \na & / & / & \na & \na & 1.00 & 1.00 & \na & \na & / & / & \na & \na & / & / \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{DLRM}} \\
+L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+L1 & \texttt{embedding\_bag} & -- & 0.47 & -- & -- & -- & 0.566 & -- & -- & -- & 1.15 & -- & -- & -- & 1.27 & -- & -- & -- & 0.444 & -- & -- & -- & 1.11 & -- & -- \\
+\cmidrule(l){2-26}
+L2 & \texttt{dlrm\_interaction} & -- & 1.00 & -- & -- & -- & 2.025 & 1.012 & 1.00 & -- & 3.83 & 1.05 & 1.00 & -- & 3.61 & 1.04 & 1.00 & -- & 2.674 & 1.004 & 1.00 & -- & 3.75 & 1.04 & 1.00 \\
+\cmidrule(l){2-26}
+L3 & \textit{full training step} & \na & \na & 1.13 & 1.00 & \na & \na & 1.005 & 1.00 & \na & \na & 1.05 & 1.00 & \na & \na & 1.03 & 1.00 & \na & \na & 1.007 & 1.00 & \na & \na & 1.04 & 1.00 \\
+\midrule
+\multicolumn{26}{@{}l}{\textbf{Geometric mean (reported accepted coverage)}} \\
+L1 & \textit{all L1 cases} & -- & -- & -- & -- & -- & 1.324 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.842 & -- & -- & -- & -- & -- & -- \\
+L2 & \textit{all L2 cases} & -- & -- & -- & -- & -- & 1.182 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.159 & -- & -- & -- & -- & -- & -- \\
+L3 & \textit{all models} & \na & \na & -- & -- & \na & \na & 1.052 & -- & \na & \na & -- & -- & \na & \na & -- & -- & \na & \na & 1.038 & -- & \na & \na & -- & -- \\
+\bottomrule
+\end{tabular}}
+\end{table*}
