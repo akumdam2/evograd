@@ -1,4 +1,5 @@
-"""Calibration cache invalidation, and the operator control's budget on its own samples."""
+"""Model Gate 2's calibration cache invalidation, and operator Gate 2's thresholds from a
+trusted control that drifts on one sample."""
 import copy
 import json
 from types import SimpleNamespace
@@ -7,8 +8,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from evograd.verification import gate2
-from evograd.verification.common.execution import CANDIDATE, CONTROL, Deployment
-from evograd.verification.gate2 import calibration as C, runner
+from evograd.verification.common.execution import CANDIDATE, CONTROL, Deployment, Sample
+from evograd.verification.gate2 import calibration as C, operator
 from evograd.verification.gate2.adapters.operator import OperatorScope
 from evograd.verification.integrations import gates
 from tests.verification import _fixtures as F
@@ -16,47 +17,46 @@ from tests.verification import _fixtures as F
 
 @pytest.fixture
 def scope():
-    return OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
+    return F.toy_module_scope()
 
 
 def options(scope):
-    return dict(samples=scope.samples([1, 2]), compile_backend="aot_eager")
+    return dict(samples=[Sample(f"cache/seed{k}", k, {"recipe": "fixture"}) for k in (1, 2)],
+                compile_backend="aot_eager")
 
 
 def deployment(scope):
-    return Deployment("reference", CANDIDATE, {"operator": scope.native_site("operator")})
+    return Deployment("reference", CANDIDATE, {"norm": scope.native_site("norm")})
 
 
-def test_control_drift_on_one_sample_sets_the_budget_and_a_bad_candidate_still_fails(scope):
+def test_control_drift_on_one_sample_sets_the_threshold_and_a_bad_candidate_still_fails():
     # The vision_mlp case of 2026-11-03: compile drifts more on one batch than on the
-    # others. Calibrated and judged on the same samples, its own drift is in the budget.
-    original = runner.execute
+    # others. Pooled over the judged samples, its own drift sets the threshold.
+    scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
+    samples = scope.samples([1, 2])
+    original = operator.execute
 
     def drifting_control(adapter, deployed, sample, **kwargs):
         execution = original(adapter, deployed, sample, **kwargs)
         if deployed.role == CONTROL and sample.seed == 2:
             execution.results["out:y"] = execution.results["out:y"] * (1 + 1e-3)
-            execution.results_digest = runner.results_digest(execution.results)
         return execution
 
-    with patch.object(runner, "execute", drifting_control), \
-            patch.object(C, "execute", drifting_control):
-        result = gate2.calibrate(scope, patch_set=("operator",), **options(scope))
+    with patch.object(operator, "execute", drifting_control):
         control, _graphs = gate2.compile_control(scope, ("operator",), backend="aot_eager")
-        own = gate2.verify_integration(scope, control, policy=result.policy,
-                                       samples=scope.samples([1, 2]))
-    assert result.status == "calibrated", result.to_dict()
-    assert result.policy.thresholds["out:y"]["components"]["E2"]["binding"] == "trusted_compile"
+        own = operator.verify_operator(scope, control, samples=samples, compile_backend="aot_eager")
+        bad = operator.verify_operator(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.05)),
+                                       samples=samples, compile_backend="aot_eager")
+    entry = own.subject["thresholds"]["out:y"]["E2"]
+    assert (entry["from"], round(entry["threshold"], 6)) == ("compile", 2e-3)
     assert own.status == "passed"
-    bad = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.05)),
-                                  policy=result.policy, samples=scope.samples([1, 2]))
     assert bad.status == "failed"
 
 
 @pytest.fixture
 def cached(scope, tmp_path):
     path = tmp_path / "calibration.json"
-    result = gates._calibrate(scope, deployment(scope), scope.samples([1, 2]), path,
+    result = gates._calibrate(scope, deployment(scope), options(scope)["samples"], path,
                               **options(scope))
     assert result.status == "calibrated", result.to_dict()
     return path
@@ -64,7 +64,7 @@ def cached(scope, tmp_path):
 
 def test_unchanged_request_reuses_policy(scope, cached):
     with patch.object(gate2, "calibrate") as calculate:
-        result = gates._calibrate(scope, deployment(scope), scope.samples([1, 2]), cached,
+        result = gates._calibrate(scope, deployment(scope), options(scope)["samples"], cached,
                                   **options(scope))
     calculate.assert_not_called()
     assert result.status == "calibrated"
@@ -82,10 +82,11 @@ def test_unchanged_request_reuses_policy(scope, cached):
 def test_changed_calibration_request_is_not_reused(scope, cached, change):
     changed = copy.deepcopy(change)
     if "samples" in changed:
-        changed["samples"] = scope.samples(changed["samples"])
+        changed["samples"] = [Sample(f"cache/seed{k}", k, {"recipe": "fixture"})
+                              for k in changed["samples"]]
     fresh = C.CalibrationResult(policy=None)
     with patch.object(gate2, "calibrate", return_value=fresh) as calculate:
-        result = gates._calibrate(scope, deployment(scope), scope.samples([1, 2]), cached,
+        result = gates._calibrate(scope, deployment(scope), options(scope)["samples"], cached,
                                   **{**options(scope), **changed})
     calculate.assert_called_once()
     assert result is fresh
@@ -97,7 +98,7 @@ def test_legacy_cache_is_not_reused(scope, cached):
     cached.write_text(json.dumps(data))
     fresh = C.CalibrationResult(policy=None)
     with patch.object(gate2, "calibrate", return_value=fresh) as calculate:
-        assert gates._calibrate(scope, deployment(scope), scope.samples([1, 2]), cached,
+        assert gates._calibrate(scope, deployment(scope), options(scope)["samples"], cached,
                                 **options(scope)) is fresh
     calculate.assert_called_once()
 
@@ -106,7 +107,7 @@ def test_changed_calibration_implementation_is_not_reused(scope, cached):
     fresh = C.CalibrationResult(policy=None)
     with patch.object(C, "CALIBRATION_PROCEDURE", "new procedure"), \
             patch.object(gate2, "calibrate", return_value=fresh) as calculate:
-        assert gates._calibrate(scope, deployment(scope), scope.samples([1, 2]), cached,
+        assert gates._calibrate(scope, deployment(scope), options(scope)["samples"], cached,
                                 **options(scope)) is fresh
     calculate.assert_called_once()
 

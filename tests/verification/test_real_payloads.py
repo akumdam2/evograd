@@ -302,10 +302,11 @@ class SearchFeedbackTests(unittest.TestCase):
 
 
 class PayloadOperatorScopeTests(unittest.TestCase):
+    """Operator Gate 2 on recorded payloads: every payload, against the float32 truth."""
+
     @classmethod
     def setUpClass(cls):
         from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
-        from evograd.verification.gate2.adapters.operator import OperatorScope
 
         cls.tmp = tempfile.TemporaryDirectory()
         cls.manifest = _write_corpus(Path(cls.tmp.name), _scale_shift_payloads())
@@ -315,58 +316,38 @@ class PayloadOperatorScopeTests(unittest.TestCase):
         from evograd.verification.integrations.gates import payload_samples
 
         cls.samples = payload_samples(cls.scope)
-        cls.calibration = gate2.calibrate(cls.scope, patch_set=("operator",),
-                                          samples=cls.samples, compile_backend=FAST)
-        cls.generated_scope = OperatorScope(cls.op, cls.op.benchmark[0], device="cpu")
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def test_calibrated_and_judged_on_every_payload(self):
-        self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
-        policy = self.calibration.policy
+    def verify(self, deployment, samples=None):
+        from evograd.verification.gate2.operator import verify_operator
+
+        return verify_operator(self.scope, deployment, samples=samples or self.samples,
+                               compile_backend=FAST)
+
+    def test_judged_on_every_payload(self):
         samples = self.samples
         self.assertEqual({s.seed // 10**6 for s in samples}, {101, 202, 303, 404})
-        good = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                        policy=policy, samples=samples)
-        bad = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
-                                       policy=policy, samples=samples)
+        good = self.verify(self.scope.candidate(F.scale_shift_pair()))
+        bad = self.verify(self.scope.candidate(F.scale_shift_pair(dw_scale=1.5)))
         self.assertEqual(good.status, "passed")
         self.assertEqual(bad.status, "failed")
+        self.assertEqual([c.case_id for c in good.cases], [s.sample_id for s in samples])
         self.assertTrue(all(s.sample_id.startswith(self.corpus.corpus_id) for s in samples))
 
-    def test_part_of_the_payloads_cannot_be_judged(self):
-        report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=self.calibration.policy,
-                                          samples=self.scope.samples("acceptance"))
-        self.assertEqual(report.status, "incomplete")
-        self.assertIn("required_sample_missing", {f.code for f in report.all_findings()})
-
-    def test_generated_input_policy_is_refused_and_another_corpus_too(self):
-        from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
-
-        synthetic = gate2.calibrate(self.generated_scope, patch_set=("operator",),
-                                    samples=self.generated_scope.samples([1, 2]), compile_backend=FAST).policy
-        report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=synthetic, samples=self.samples)
-        self.assertEqual(report.status, "incomplete")
-        self.assertIn("policy_case_mismatch", {f.code for f in report.all_findings()})
-        with tempfile.TemporaryDirectory() as tmp:
-            other = Corpus.open(_write_corpus(Path(tmp), _scale_shift_payloads(seed=5)))
-            scope2 = PayloadOperatorScope(self.op, self.op.benchmark[0], other, "case/x", device="cpu")
-            self.assertNotEqual(scope2.identity(), self.scope.identity())
-            report = gate2.verify_integration(scope2, scope2.candidate(F.scale_shift_pair()),
-                                              policy=self.calibration.policy,
-                                              samples=scope2.samples("acceptance"))
-            self.assertEqual(report.status, "incomplete")
-
-    def test_native_and_compile_controls_qualify_on_the_payloads(self):
-        samples = self.samples
-        control, _graphs = gate2.compile_control(self.scope, ("operator",), backend=FAST)
-        report = gate2.verify_integration(self.scope, control, policy=self.calibration.policy, samples=samples)
+    def test_the_thresholds_come_from_the_judged_payloads(self):
+        acceptance = self.scope.samples("acceptance")
+        report = self.verify(self.scope.candidate(F.scale_shift_pair()), acceptance)
         self.assertEqual(report.status, "passed")
-        native = gate2.execute(self.scope, Deployment.native(), samples[0])
+        self.assertEqual(len(report.cases), len(acceptance))
+        self.assertEqual(set(report.subject["thresholds"]), {"out:y", "grad_in:x", "grad:w", "grad:b"})
+
+    def test_the_trusted_controls_pass_on_the_payloads(self):
+        control, _graphs = gate2.compile_control(self.scope, ("operator",), backend=FAST)
+        self.assertEqual(self.verify(control).status, "passed")
+        native = gate2.execute(self.scope, Deployment.native(), self.samples[0])
         self.assertIsNone(native.error)
 
 

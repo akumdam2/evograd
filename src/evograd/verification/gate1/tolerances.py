@@ -2,28 +2,31 @@
 model-reference tasks.
 
 The truth ``t`` is the model reference evaluated with every floating input below
-float32 widened to float32 (TF32 off). An element of a result passes when
+float32 widened to float32 (TF32 off). A result passes on a call when
 
-    |candidate - t| <= atol + bound * max|t|
+    max|candidate - t| <= bound * max|t|
 
 computed in float64, where ``max|t|`` is the largest magnitude of that result on
-that call. Every element is checked; the allowance is the same for all elements
-of the result. ``bound`` is the dtype's ``budget``.
+that call: every element gets the same allowance. ``bound`` is the larger of the
+dtype's ``budget`` and ``NATIVE_FACTOR`` times the largest deviation of the model's
+own implementation (the reference at the call's real dtypes, "native") from the
+truth on the judged calls, ``max|native - t| / max|t|`` taken over every call. One
+rule for every task, the same form as operator Gate 2's
+(:mod:`evograd.verification.gate2.operator`): ``err(candidate) <= max(floor,
+factor * err(trusted))``. A result whose truth is exactly zero passes only when
+the candidate is exactly zero too.
 
-Attention tasks (:data:`NATIVE_BOUND_TASKS`) are the one exception: there
-``bound`` is the larger of the budget and ``NATIVE_FACTOR`` times the largest
-deviation of the model's own implementation (the reference at the call's real
-dtypes, "native") from the truth on the judged calls. Their query and key
-gradients are ill-conditioned at low precision: each row of the softmax gradient
-sums to zero, so ``dq_i = scale * sum_j dS_ij k_j`` is what is left after a
-component common to all keys cancels, and the q/k-norm weight gradients sum such
-residues over every token and head. Ordinary bfloat16 rounding (0.2-0.4% per
+Where native is itself less accurate than the budget, the result is
+ill-conditioned at that dtype, and a candidate is held to native's accuracy
+instead. On the benchmark that is the attention tasks: each row of the softmax
+gradient sums to zero, so ``dq_i = scale * sum_j dS_ij k_j`` is what is left after
+a component common to all keys cancels, and the q/k-norm weight gradients sum
+such residues over every token and head. Ordinary bfloat16 rounding (0.2-0.4% per
 element) then moves these results by several percent, up to tens of percent where
-the keys carry a large common component (a k_proj bias, a large k-norm weight on a
-slowly rotating RoPE dimension): native itself is up to 8% off the truth on
-Qwen3's and Qwen3.5's attention blocks and up to 89% on Qwen2-VL's text attention.
-A candidate there is held to native's accuracy instead of the budget. No other
-benchmark task needs it: native is within the budget everywhere else.
+the keys carry a large common component: native itself is up to 8% off the truth
+on Qwen3's and Qwen3.5's attention blocks and up to 89% on Qwen2-VL's text
+attention. Everywhere else ``NATIVE_FACTOR`` times native's error stays within the
+budget on the benchmark's cases (2026-11-19), so the budget decides.
 
 Why a float32 truth. Native carries its own rounding (a bfloat16 RMSNorm weight
 gradient is 2-3% of its largest value off), so judging against it penalizes
@@ -35,12 +38,9 @@ does not: grouped matmul has no float64 kernel).
 
 Why ``max|t|`` and not ``|t_i|``. A small element is usually the difference of
 larger terms (a reduction over tokens, a softmax backward); its rounding error is
-set by those terms, not by its own size.
-
-``atol`` is absolute and tiny on purpose: it only absorbs results that are
-numerically zero (rounding residue near 1e-14). Recorded gradients themselves
-reach down to 1e-13, so any larger absolute term would accept a wrong kernel on
-whole results.
+set by those terms, not by its own size. There is no absolute term: a recorded
+gradient can be 1e-13 as a whole (MegaFold), and any fixed absolute allowance
+would accept a wrong kernel, even all zeros, on such results.
 
 The budget follows the least precise floating dtype of the call (its tensor
 inputs, upstream gradients and the result): a float32 gradient computed from
@@ -62,23 +62,14 @@ import torch
 from evograd.opdecl.activity import Active
 from evograd.opdecl.inputs import arg_dtype_name, resolve_dtype
 
-MODEL_POLICY = "evograd-gate1-model-dtype-budget/9"
+MODEL_POLICY = "evograd-gate1-model-dtype-budget/10"
 SOURCE = "Gate 1's own fixed budgets (2026-11-19)"
-COMPARISON = ("|c-t| <= atol + bound * max|t| per element, float64; t = float32 truth; "
-              "bound = budget, or on attention tasks max(budget, NATIVE_FACTOR * native's own error)")
+COMPARISON = ("max|c-t| <= bound * max|t| per result and call, float64; t = float32 truth; "
+              "bound = max(budget, NATIVE_FACTOR * native's own error)")
 
-#: Absolute term, every dtype.
-ATOL = 1e-12
-#: On an attention task the bound is never below this many times native's own error.
-NATIVE_FACTOR = 1.5
-#: Attention tasks of the benchmark (op names): the softmax over keys makes their
-#: query/key gradients ill-conditioned at low precision (module docstring).
-NATIVE_BOUND_TASKS = frozenset({
-    "qwen3_attention_block", "qwen3_5_attention_block", "llama3_attention_block",
-    "olmoe_attention_block", "qwen2_vl_2b_text_attention_block", "qwen2_vl_2b_vision_attention",
-    "dit_s_2_dit_attention", "megafold_evoattention", "megafold_triangle_attention_starting",
-    "megafold_triangle_attention_ending", "softmax",
-})
+#: The bound is never below this many times native's own error (FlashAttention's
+#: tests hold a kernel to twice the error of the PyTorch implementation).
+NATIVE_FACTOR = 2.0
 #: Per dtype (the least precise floating dtype of the call): fraction of max|t|.
 #: float16 is bfloat16's at its eight times finer rounding and is not measured.
 BUDGETS = {
@@ -96,9 +87,7 @@ def model_policy_identity() -> dict:
         "source": SOURCE,
         "dtype_source": "least precise floating dtype of the call's tensors and the result",
         "truth": "model reference with floating inputs below float32 widened to float32, TF32 off",
-        "atol": ATOL,
         "native_factor": NATIVE_FACTOR,
-        "native_bound_tasks": sorted(NATIVE_BOUND_TASKS),
         "budgets": {str(dtype).removeprefix("torch."): budget for dtype, budget in BUDGETS.items()},
         "declaration_scaling": False,
         "comparison": COMPARISON,
@@ -137,20 +126,14 @@ def result_budget(op, workload, dtype: torch.dtype) -> float:
     return BUDGETS[rule_dtype(op, workload, dtype)]
 
 
-def native_bound(op) -> bool:
-    """Whether ``op`` is an attention task, whose bound follows native's own error."""
-    _require_model_reference(op)
-    return op.name in NATIVE_BOUND_TASKS
-
-
 def result_bound(budget: float, native_error: float) -> float:
-    """An attention task's fraction of max|t|: the larger of the budget and
-    ``NATIVE_FACTOR`` times native's own error (never stricter than the model's own
-    implementation allows, and continuous in native's error)."""
+    """A result's fraction of max|t|: the larger of the budget and ``NATIVE_FACTOR``
+    times native's own error (never stricter than the model's own implementation
+    allows, and continuous in native's error)."""
     return max(budget, NATIVE_FACTOR * native_error)
 
 
 def allowance(truth: torch.Tensor, bound: float) -> float:
-    """``atol + bound * max|truth|``: every element's allowance."""
+    """``bound * max|truth|``: every element's allowance (0 for an all-zero truth)."""
     scale = float(truth.detach().abs().max().double()) if truth.numel() else 0.0
-    return ATOL + float(bound) * scale
+    return float(bound) * scale

@@ -194,7 +194,6 @@ class _Tiny:
                                  compile_backend="aot_eager")
             status = {name: r.status for name, r in reports.items()}
             self.assertEqual(status, {"gate1_payloads": expected,
-                                      "gate2_operator_calibration": "calibrated",
                                       "gate2_operator": expected}, (case.case_id, scale))
 
 

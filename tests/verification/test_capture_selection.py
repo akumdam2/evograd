@@ -200,7 +200,6 @@ class BenchmarkCapture(unittest.TestCase):
                                      compile_backend="aot_eager")
                 self.assertEqual({name: r.status for name, r in reports.items()},
                                  {"gate1_payloads": expected,
-                                  "gate2_operator_calibration": "calibrated",
                                   "gate2_operator": expected}, scale)
             ids = search_payload_ids(self.corpus, q.case_id)
             self.assertEqual(len(ids), 4)

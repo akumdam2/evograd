@@ -32,7 +32,9 @@ from evograd.verification.common.reports import (
     continue_after,
 )
 from evograd.verification.common.tensors import module_state_digest, relative_error, tensors_in
+from evograd.opdecl import Workload
 from evograd.verification.gate2.adapters.operator import OperatorScope
+from evograd.verification.gate2.operator import FLOORS, errors, verify_operator
 from evograd.verification.gate2.calibration import (
     DEFAULT_FLOORS,
     CalibrationError,
@@ -67,20 +69,16 @@ SYNTHETIC_FLOORS = {"output": {"E2": 1e-12, "Emax": 1e-12},
                     "gradient": {"E2": 1e-12, "Emax": 1e-12}}
 
 
-def synthetic_entry(kind, limit, gamma=2.0, *, term, dtype="float32"):
+def synthetic_entry(kind, limit, gamma=2.0, *, term):
     """A threshold entry whose components reproduce ``limit`` under the formula,
-    with the scope's own ``term`` (``SCOPE_TERMS``) at 0. ``term`` None is the
-    operator scope, whose floor is ``dtype``'s (``OPERATOR_FLOORS``)."""
-    operator = term is None
-    floor = ({"E2": gate2.calibration.OPERATOR_FLOORS[dtype], "Emax": 0.0} if operator
-             else SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]])
-    entry = {"kind": kind, "components": {}, **({"dtype": dtype} if operator else {})}
+    with the scope's own ``term`` (``SCOPE_TERMS``) at 0."""
+    floor = SYNTHETIC_FLOORS[C.FLOOR_FAMILY[kind]]
+    entry = {"kind": kind, "components": {}}
     for metric in ("E2", "Emax"):
         entry[metric] = limit[metric]
         entry["components"][metric] = {"trusted_compile": limit[metric] / gamma,
-                                       "floor": floor[metric],
-                                       "gamma": gamma, "binding": "trusted_compile",
-                                       **({} if operator else {term: 0.0})}
+                                       "floor": floor[metric], "gamma": gamma,
+                                       "binding": "trusted_compile", term: 0.0}
     return entry
 
 
@@ -106,56 +104,104 @@ def synthetic_policy(scope, patch_set, thresholds_for, *, calibration=(("synthet
 
 
 class TestOperatorScope(unittest.TestCase):
+    """Operator Gate 2: every sample against the float32 truth, within twice native's
+    and compile's largest error on the samples, or the dtype's floor."""
+
     @classmethod
     def setUpClass(cls):
         cls.scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
-        cls.calibration = calibrate(cls.scope, patch_set=("operator",),
-                                    samples=cls.scope.samples([1, 2]), compile_backend=FAST)
         cls.mul_scope = OperatorScope(F.MUL, F.MUL.benchmark[0], device=CPU)
-        cls.mul_calibration = calibrate(cls.mul_scope, patch_set=("operator",),
-                                        samples=cls.mul_scope.samples([1, 2]), compile_backend=FAST)
+        cls.bf16_scope = OperatorScope(F.SCALE_SHIFT, Workload({"R": 64, "C": 32}, "bfloat16"),
+                                       device=CPU)
 
-    def test_calibrated_policy_and_correct_legacy_pair(self):
-        self.assertEqual(self.calibration.status, "calibrated", self.calibration.to_dict())
-        policy = self.calibration.policy
-        self.assertEqual(sorted(policy.thresholds), ["grad:b", "grad:w", "grad_in:x", "out:y"])
-        report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
-                                          policy=policy, samples=self.scope.samples([1, 2]))
+    def verify(self, scope, artifact, seeds=(1, 2)):
+        return verify_operator(scope, scope.candidate(artifact), samples=scope.samples(list(seeds)),
+                               compile_backend=FAST)
+
+    def test_correct_legacy_pair_passes(self):
+        report = self.verify(self.scope, F.scale_shift_pair())
         self.assertEqual(report.status, PASSED, codes(report))
-        self.assertEqual(report.cases[0].evidence["candidate"]["deployment"]["identity"]
-                         ["adapter_kind"], "legacy_bind_pair")
-        self.assertEqual(report.subject["reference"]["kind"], "native_eager")
+        self.assertEqual(sorted(report.subject["thresholds"]), ["grad:b", "grad:w", "grad_in:x", "out:y"])
+        self.assertEqual(report.subject["deployment"]["identity"]["adapter_kind"], "legacy_bind_pair")
+        self.assertEqual(report.subject["reference"]["kind"], "float32_truth")
+        self.assertEqual((report.subject["rule"]["factor"], report.subject["rule"]["floors"]),
+                         (2.0, FLOORS))
+        self.assertEqual(sorted(report.cases[0].evidence["trusted"]), ["compile", "native"])
         json.dumps(report.to_dict(), allow_nan=False)
 
+    def test_a_float32_call_is_its_own_truth_and_the_floor_decides(self):
+        # Nothing to widen: native is the truth (error 0), and aot_eager reproduces it, so
+        # every threshold is the float32 floor 1e-5.
+        report = self.verify(self.scope, F.scale_shift_pair())
+        for name, entry in report.subject["thresholds"].items():
+            self.assertEqual((entry["dtype"], entry["E2"]["threshold"], entry["E2"]["from"]),
+                             ("float32", 1e-5, "floor"), name)
+        self.assertEqual(self.verify(self.scope, F.scale_shift_pair(dw_scale=1 + 2e-6)).status, PASSED)
+        small = self.verify(self.scope, F.scale_shift_pair(dw_scale=1 + 5e-5))
+        self.assertEqual((small.status, failing(small)), (FAILED, ["grad:w"]))
+
     def test_wrong_backward_fails_by_name(self):
-        report = gate2.verify_integration(
-            self.scope, self.scope.candidate(F.scale_shift_pair(dw_scale=1.01)),
-            policy=self.calibration.policy, samples=self.scope.samples([1, 2]))
+        report = self.verify(self.scope, F.scale_shift_pair(dw_scale=1.01))
         self.assertEqual(report.status, FAILED)
         self.assertEqual(failing(report), ["grad:w"])
+        self.assertIn("threshold_exceeded", codes(report))
+
+    def test_a_bfloat16_call_is_held_to_twice_the_trusted_error_against_the_truth(self):
+        report = self.verify(self.bf16_scope, F.scale_shift_pair())
+        self.assertEqual(report.status, PASSED, codes(report))
+        thresholds = report.subject["thresholds"]
+        for name, entry in thresholds.items():
+            self.assertEqual(entry["dtype"], "bfloat16", name)
+            for metric in ("E2", "M"):
+                own = entry[metric]
+                self.assertEqual(own["threshold"], max(2 * own["trusted"], FLOORS["bfloat16"]))
+                self.assertGreater(own["trusted"], 0.0)      # native rounds where the truth does not
+        scaled = self.verify(self.bf16_scope, F.scale_shift_pair(dw_scale=1.05))
+        self.assertEqual(failing(scaled), ["grad:w"])
 
     def test_correct_pair_but_wrong_autograd_routing_is_rejected(self):
         artifact = F.mul_artifact(swap=True)
         direct = F.gate1_report(F.MUL, artifact)
         self.assertEqual(direct.status, PASSED)                    # the pair itself is right
-        good = gate2.verify_integration(self.mul_scope, self.mul_scope.candidate(F.mul_artifact()),
-                                        policy=self.mul_calibration.policy,
-                                        samples=self.mul_scope.samples([1, 2]))
+        good = self.verify(self.mul_scope, F.mul_artifact())
         self.assertEqual(good.status, PASSED, codes(good))
-        self.assertEqual(good.cases[0].evidence["candidate"]["deployment"]["identity"]
-                         ["adapter_kind"], "direct_deployment_entry")
-        bad = gate2.verify_integration(self.mul_scope, self.mul_scope.candidate(artifact),
-                                       policy=self.mul_calibration.policy,
-                                       samples=self.mul_scope.samples([1, 2]))
+        self.assertEqual(good.subject["deployment"]["identity"]["adapter_kind"],
+                         "direct_deployment_entry")
+        bad = self.verify(self.mul_scope, artifact)
         self.assertEqual(bad.status, FAILED)
         self.assertEqual(failing(bad), ["grad:b", "grad_in:a"])
 
-    def test_no_policy_measures_but_cannot_pass(self):
+    def test_without_a_compile_control_native_alone_is_trusted(self):
+        from unittest import mock
+
+        with mock.patch("evograd.verification.gate2.calibration.compile_control",
+                        side_effect=RuntimeError("no compiler")):
+            report = self.verify(self.bf16_scope, F.scale_shift_pair())
+        self.assertEqual(report.status, PASSED, codes(report))
+        self.assertIn("no compiler", report.evidence["compile"]["unavailable"])
+        self.assertEqual(sorted(report.cases[0].evidence["trusted"]), ["native"])
+        self.assertTrue(all(e[m]["from"] in ("native", "floor")
+                            for e in report.subject["thresholds"].values() for m in ("E2", "M")))
+
+    def test_errors_against_the_truth(self):
+        t = torch.tensor([1.0, -0.5, 0.0, 0.25])
+        e = errors(t * 1.01, t)
+        self.assertAlmostEqual(e["E2"], 0.01)
+        self.assertAlmostEqual(e["M"], 0.01)
+        spike = t.clone()
+        spike[3] += 0.1                                  # one element, a tenth of the largest
+        self.assertAlmostEqual(errors(spike, t)["M"], 0.1)
+        zero = torch.zeros(3)
+        self.assertEqual(errors(zero.clone(), zero), {"E2": 0.0, "M": 0.0})
+        self.assertEqual(errors(torch.tensor([0.0, 1e-30, 0.0]), zero), {"E2": math.inf, "M": math.inf})
+
+    def test_the_policy_path_refuses_the_operator_scope(self):
         report = gate2.verify_integration(self.scope, self.scope.candidate(F.scale_shift_pair()),
                                           policy=None, samples=self.scope.samples([11]))
         self.assertEqual(report.status, INCOMPLETE)
-        self.assertIn("no_policy", codes(report))
-        self.assertTrue(all(r.metrics for r in report.cases[0].results))
+        self.assertIn("not_calibrated_scope", codes(report))
+        self.assertIsNone(calibrate(self.scope, patch_set=("operator",),
+                                    samples=self.scope.samples([1]), compile_backend=FAST).policy)
 
 
 class TestJudge(unittest.TestCase):
@@ -325,19 +371,12 @@ class TestPolicyBinding(unittest.TestCase):
     def test_synthetic_policy_passes_when_everything_matches(self):
         self.assertEqual(self.run_with(self.policy).status, PASSED)
 
-    def test_operator_policy_judges_only_its_calibrated_samples(self):
-        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
-        policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        self.assertEqual(policy.sample_protocol, gate2.MATCHED)
-        good = scope.candidate(F.scale_shift_pair())
-        self.assertEqual(gate2.verify_integration(scope, good, policy=policy,
-                                                  samples=[Sample("synthetic/cal", 900)]).status,
-                         PASSED)
-        other = gate2.verify_integration(scope, good, policy=policy, samples=[Sample("other", 5)])
-        by_seed = gate2.verify_integration(scope, good, policy=policy,
-                                           samples=[Sample("synthetic/cal", 5)])
-        wrong = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
-                                         policy=policy, samples=[Sample("other", 900)])
+    def test_a_policy_judges_only_its_calibrated_samples(self):
+        self.assertEqual(self.policy.sample_protocol, gate2.MATCHED)
+        other = self.run_with(self.policy, sample_list=[Sample("other", 5)])
+        by_seed = self.run_with(self.policy, sample_list=[Sample("synthetic/cal", 5)])
+        wrong = self.run_with(self.policy, deployment=candidate("bad", {"norm": F.norm_spike}),
+                              sample_list=[Sample("other", 900)])
         for report in (other, by_seed, wrong):
             self.assertEqual(report.status, INCOMPLETE)          # withheld, never judged
             self.assertIn("sample_not_calibrated", codes(report))
@@ -448,48 +487,21 @@ class TestCalibrationArithmetic(unittest.TestCase):
                    for k in range(60))
         self.assertEqual(hits, 0)
 
-    def test_operator_floor_is_one_number_per_dtype(self):
-        from evograd.verification.gate2.calibration import OPERATOR_EMAX_FACTOR, operator_floor
-
-        t = torch.tensor([1.0, -0.5, 0.25, 0.0], dtype=torch.bfloat16)
-        rms = math.sqrt((1.0 + 0.25 + 0.0625) / 4)
-        f = operator_floor(t)
-        self.assertEqual((f["dtype"], f["E2"]), ("bfloat16", 2.0 ** -8))      # bf16 unit roundoff
-        self.assertAlmostEqual(f["Emax"], OPERATOR_EMAX_FACTOR * 2.0 ** -8 * 1.0 / rms)
-        self.assertEqual(operator_floor(t.float())["E2"], 1e-5)
-        self.assertEqual(operator_floor(torch.zeros(3))["Emax"], 0.0)
-        # The same bf16 values scaled: E2's floor is fixed, Emax's follows max / RMS only.
-        self.assertEqual(operator_floor(t * 8)["Emax"], f["Emax"])
-        with self.assertRaises(CalibrationError):
-            operator_floor(torch.zeros(3, dtype=torch.float8_e4m3fn))
-
-    def test_operator_floor_binds_where_compile_is_bitwise(self):
-        ms = [self.m("trusted_compile", "out:a", 0.0, 0.0), self.m("trusted_compile", "out:b", 0.5, 0.5)]
-        floor = {"dtype": "bfloat16", "E2": 2.0 ** -8, "Emax": 0.04}
-        t = derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
-                              operator_floors={"out:a": floor, "out:b": floor})
-        self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (2 * 2.0 ** -8, 2 * 0.04))
-        self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "floor")
-        self.assertEqual(t["out:a"]["dtype"], "bfloat16")
-        self.assertEqual(t["out:b"]["E2"], 1.0)                                # compile still binds
-        with self.assertRaises(CalibrationError):
-            derive_thresholds(ms, results={"out:a": C.OUTPUT, "out:b": C.OUTPUT},
-                              operator_floors={"out:a": floor})
-
     def test_policy_entries_carry_their_own_scopes_term_only(self):
         from evograd.verification.gate2.calibration import _check_entry
 
         limit = {"E2": 1e-3, "Emax": 1e-3}
-        operator, model = (synthetic_entry(C.OUTPUT, limit, term=t)
-                           for t in (None, "rounding_perturbation"))
-        _check_entry("op", operator, 2.0, None, term=None)
+        model = synthetic_entry(C.OUTPUT, limit, term="rounding_perturbation")
         _check_entry("model", model, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-        with self.assertRaises(CalibrationError):     # the model's term in an operator policy
-            _check_entry("swapped", model, 2.0, None, term=None)
-        with self.assertRaises(CalibrationError):     # an operator entry lacks the model's term
-            _check_entry("swapped", operator, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
-        with self.assertRaises(CalibrationError):     # nor may it use another dtype's floor
-            _check_entry("op", {**operator, "dtype": "bfloat16"}, 2.0, None, term=None)
+        lacking = {**model, "components": {m: {k: v for k, v in c.items()
+                                               if k != "rounding_perturbation"}
+                                           for m, c in model["components"].items()}}
+        with self.assertRaises(CalibrationError):     # an entry without the scope's term
+            _check_entry("lacking", lacking, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
+        foreign = {**model, "components": {m: {**c, "native_repeat": 0.0}
+                                           for m, c in model["components"].items()}}
+        with self.assertRaises(CalibrationError):     # nor one with a term of no formula
+            _check_entry("foreign", foreign, 2.0, SYNTHETIC_FLOORS, term="rounding_perturbation")
 
     def test_rounding_perturbation_term_is_required_at_model_scope_only(self):
         ms = [self.m("trusted_compile", "out:a", 0.0, 0.0),
@@ -498,7 +510,7 @@ class TestCalibrationArithmetic(unittest.TestCase):
         t = derive_thresholds(ms, results={"out:a": C.OUTPUT}, gamma=4.0, perturbed=True)
         self.assertEqual((t["out:a"]["E2"], t["out:a"]["Emax"]), (4 * 0.04, 4 * 5.0))   # max over draws
         self.assertEqual(t["out:a"]["components"]["E2"]["binding"], "rounding_perturbation")
-        with self.assertRaises(CalibrationError):                  # not an operator-scope term
+        with self.assertRaises(CalibrationError):                  # only where asked for
             derive_thresholds(ms, results={"out:a": C.OUTPUT})
         with self.assertRaises(CalibrationError):                  # nor optional at model scope
             derive_thresholds(ms[:1], results={"out:a": C.OUTPUT}, perturbed=True)
@@ -787,15 +799,12 @@ class TestReleasedRuns(unittest.TestCase):
             del ex, kept
             self.assertEqual(_alive(scope.watched), [], deployment.name)
 
-    def test_operator_calibration_and_judging_leave_nothing_alive(self):
+    def test_operator_judging_leaves_nothing_alive(self):
         scope = _WatchedOperator(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
         fixed = scope.samples([1, 2])
-        result = calibrate(scope, patch_set=("operator",), samples=fixed, compile_backend=FAST)
-        self.assertEqual(result.status, "calibrated", result.to_dict())
-        self.assertEqual(_alive(scope.watched), [])
-        report = gate2.verify_integration(
+        report = verify_operator(
             scope, candidate("c", {"operator": _watching(F.scale_shift_runtime, scope.watched)}),
-            policy=result.policy, samples=fixed)
+            samples=fixed, compile_backend=FAST)
         self.assertEqual(report.status, PASSED, codes(report))
         self.assertEqual(_alive(scope.watched), [])
 
@@ -852,14 +861,14 @@ class TestInductorControl(unittest.TestCase):
 
     def test_operator_and_model_scope_with_inductor(self):
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
-        result = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]))
-        if result.policy is None:
-            reasons = "; ".join(f.message[:200] for f in result.findings)
-            self.skipTest(f"inductor control unavailable on this machine: {reasons}")
-        self.assertGreater(result.policy.controls["compile_graphs"]["operator"], 0)
-        self.assertEqual(result.policy.controls["compile"]["identity"]["backend"], "inductor")
-        report = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair()),
-                                          policy=result.policy, samples=scope.samples([1, 2]))
+        report = verify_operator(scope, scope.candidate(F.scale_shift_pair()),
+                                 samples=scope.samples([1, 2]))
+        compiled = [c.evidence.get("compile") for c in report.cases if c.evidence.get("compile")]
+        if "unavailable" in report.evidence["compile"] or compiled:
+            self.skipTest(f"inductor control unavailable on this machine: "
+                          f"{report.evidence['compile'].get('unavailable') or compiled[0]['failed_at']}")
+        self.assertGreater(report.evidence["compile"]["graphs"]["operator"], 0)
+        self.assertEqual(report.evidence["compile"]["deployment"]["identity"]["backend"], "inductor")
         self.assertEqual(report.status, PASSED, codes(report))
         model = F.toy_module_scope()
         fixed = samples("ind", [1, 2])

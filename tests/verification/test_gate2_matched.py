@@ -26,6 +26,7 @@ from evograd.verification.common.reports import FAILED, INCOMPLETE, PASSED
 from evograd.verification.common.tensors import relative_error
 from evograd.verification.gate2.adapters.model import model_scope
 from evograd.verification.gate2.adapters.operator import OperatorScope
+from evograd.verification.gate2.operator import verify_operator
 from evograd.verification.gate2.calibration import (
     ROUNDING_SEEDS, CalibrationError, Gate2Policy, calibrate, rounding_control)
 from tests.verification import _fixtures as F
@@ -437,7 +438,7 @@ class TestCalibrationAndPolicy(MatchedCase):
         self.assertIn("policy_schema", codes(report))
 
 
-# ── 8: the operator scope is matched too; scope terms stay apart ─────────────
+# ── 8: the operator scope pools over every payload; scope terms stay apart ───
 
 
 class _CallScope(OperatorScope):
@@ -454,72 +455,43 @@ class _CallScope(OperatorScope):
         return self._values[sample.sample_id]
 
 
-
-class TestOperatorScopeIsMatched(MatchedCase):
-    def test_operator_policy_judges_its_calibrated_samples(self):
-        scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
-        samples = scope.samples([1, 2])
-        cal = calibrate(scope, patch_set=("operator",), samples=samples, compile_backend=FAST)
-        self.assertEqual(cal.policy.sample_protocol, gate2.MATCHED)
-        good = scope.candidate(F.scale_shift_pair())
-        self.assertEqual(gate2.verify_integration(scope, good, policy=cal.policy,
-                                                  samples=samples).status, PASSED)
-        bad = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.5)),
-                                       policy=cal.policy, samples=samples)
-        self.assertEqual(bad.status, FAILED)
-        other = gate2.verify_integration(scope, good, policy=cal.policy, samples=scope.samples([11]))
-        self.assertEqual(other.status, INCOMPLETE)
-        self.assertIn("sample_not_calibrated", codes(other))
-
-    def test_each_call_site_is_judged_by_its_own_thresholds(self):
-        # Two call sites of one operator; compile drifts ~140x more at layers.0, whose inputs are
-        # 10x larger (PERTURB's error grows with mean|x|^2). Pooled over both calls, the table is
-        # set by layers.0 and passes a 5% dw fault everywhere (Qwen2-VL text attention, P8).
+class TestOperatorScopePools(MatchedCase):
+    def test_each_threshold_is_the_largest_trusted_error_over_every_payload(self):
+        # Two call sites of one operator; compile drifts ~140x more at layers.0, whose inputs
+        # are 10x larger (PERTURB's error grows with mean|x|^2). One threshold per result,
+        # set by the payload where a trusted implementation is least accurate (user decision
+        # 2026-11-19: pooled over every payload, as Gate 1 pools native's error).
         scope = _CallScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
         samples = [Sample(f"vt/{call}/seed{k}", k, {"call": call})
                    for call, seeds in (("layers.0", (1, 2)), ("layers.1", (3, 4))) for k in seeds]
-        cal = calibrate(scope, patch_set=("operator",), samples=samples, compile_backend=PERTURB)
-        policy = cal.policy
-        self.assertIsNotNone(policy, cal.to_dict())
-        loud, quiet = (policy.thresholds_for(s.sample_id) for s in (samples[0], samples[2]))
-        self.assertEqual(policy.thresholds_for(samples[1].sample_id), loud)
-        self.assertEqual(policy.thresholds_for(samples[3].sample_id), quiet)
-        for name, entry in policy.thresholds.items():   # over all calls: Gate 1's envelope
-            self.assertGreater(loud[name]["E2"], 10 * quiet[name]["E2"], name)
-            for metric in ("E2", "Emax"):
-                self.assertEqual(entry[metric], max(loud[name][metric], quiet[name][metric]))
-        good = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair()),
-                                        policy=policy, samples=samples)
-        self.assertEqual(good.status, PASSED, codes(good))
-        bad = gate2.verify_integration(scope, scope.candidate(F.scale_shift_pair(dw_scale=1.05)),
-                                       policy=policy, samples=samples)
-        self.assertEqual(bad.status, FAILED)
+        report = verify_operator(scope, scope.candidate(F.scale_shift_pair()), samples=samples,
+                                 compile_backend=PERTURB)
+        self.assertEqual(report.status, PASSED, codes(report))
+        for name, entry in report.subject["thresholds"].items():
+            by_case = [c.evidence["trusted"]["compile"][name]["E2"] for c in report.cases]
+            self.assertGreater(min(by_case[:2]), 10 * max(by_case[2:]), name)   # layers.0 drifts
+            self.assertEqual(entry["E2"]["trusted"], max(by_case), name)
+            self.assertEqual((entry["E2"]["from"], entry["E2"]["threshold"]),
+                             ("compile", 2 * max(by_case)), name)
+        loud = report.subject["thresholds"]["grad:w"]["E2"]["threshold"]
+        scale = 1 + 4 * loud            # a fault far beyond every trusted error is still caught
+        bad = verify_operator(scope, scope.candidate(F.scale_shift_pair(dw_scale=scale)),
+                              samples=samples, compile_backend=PERTURB)
         self.assertEqual({c.case_id for c in bad.cases if c.status == FAILED},
-                         {s.sample_id for s in samples[2:]})
+                         {s.sample_id for s in samples})
 
-        data = policy.to_dict()
-        for key in ("policy_hash", "schema"):
-            data.pop(key)
-        forged = json.loads(json.dumps(data))
-        forged["call_thresholds"]["layers.1"]["grad:w"]["E2"] *= 2
-        with self.assertRaisesRegex(CalibrationError, "not gamma"):
-            Gate2Policy.build(forged)
-        data.pop("call_thresholds")                     # a pooled table alone no longer judges
-        with self.assertRaisesRegex(CalibrationError, "one threshold table per call site"):
-            Gate2Policy.build(data)
-
-    def test_a_policy_with_the_other_scopes_term_is_refused(self):
+    def test_a_policy_with_another_scopes_term_is_refused(self):
         scope = lm_scope()
         policy = calibrate(scope, patch_set=("norm",), samples=fixed(), compile_backend=FAST).policy
         data = policy.to_dict()
-        for entry in data["thresholds"].values():       # forged: the operator scope's term
+        for entry in data["thresholds"].values():       # forged: a term of no formula
             for parts in entry["components"].values():
                 parts["rounding"] = parts.pop("rounding_perturbation")
         for key in ("policy_hash", "schema"):
             data.pop(key)
         with self.assertRaisesRegex(CalibrationError, "not a term of this scope's formula"):
             Gate2Policy.build(data)
-        data["formula"] = gate2.calibration.FORMULAS["operator"]
+        data["formula"] = "T[z,m] = gamma * max(max_x E_m(compile[x], native[x]), floor_m(z))"
         with self.assertRaisesRegex(CalibrationError, "not the scope's"):
             Gate2Policy.build(data)
 
@@ -535,10 +507,8 @@ class TestModelAdapters(MatchedCase):
         model = gate2.verify_integration(lm, candidate("c", {"norm": F.norm_site}), policy=policy,
                                          samples=samples)
         op_scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device="cpu")
-        op_cal = calibrate(op_scope, patch_set=("operator",), samples=op_scope.samples([1, 2]),
-                           compile_backend=FAST)
-        operator = gate2.verify_integration(op_scope, op_scope.candidate(F.scale_shift_pair()),
-                                            policy=op_cal.policy, samples=op_scope.samples([1, 2]))
+        operator = verify_operator(op_scope, op_scope.candidate(F.scale_shift_pair()),
+                                   samples=op_scope.samples([1, 2]), compile_backend=FAST)
         both = gate2.combine_scopes(("operator", "model"), {"operator": operator, "model": model})
         self.assertEqual(both.status, PASSED, codes(both))
         identity = model.cases[0].evidence["reference"]["sample_identity"]

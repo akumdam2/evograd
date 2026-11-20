@@ -83,16 +83,12 @@ match. `--deadline-min` suspends at a stage boundary or a Gate 3 checkpoint
 (exit 3). Single-site Gate 3 records live in `gate3_single_site/<case>/`,
 separate from `combination/`; both reuse compatible controls under `--state`.
 
-Operator Gate 2 also checks a fresh compiled control on the acceptance
-payloads against the frozen calibration limits. Those payloads never enlarge
-the limits. If the control fails, calibration is **incomplete**, with the
-full control report in `gate2_operator_calibration.evidence.holdout_validation`
-and the proposed limits in `evidence.unqualified_policy`. This identifies a
-control/calibration coverage problem separately from a candidate numerical
-failure. Gate 1 and executable-candidate timing remain diagnostic in that case;
-the candidate cannot be accepted without a qualified Gate 2 policy.
+Operator Gate 2 is not calibrated: on every payload of the case it measures
+native and the compiled control against the float32 truth in the same run, and
+holds the candidate to twice their largest error or a floor of one rounding
+(`verification/gate2/operator.py`).
 
-Calibration caches bind compiler settings, floors, gamma, repeats, calibration
+Model Gate 2's calibration caches bind compiler settings, floors, gamma, repeats, calibration
 and validation samples, and calibration implementation. Stage verdicts also
 bind verification implementation and environment. Older caches lacking these
 bindings are recomputed automatically. These rules are shared by Qwen3-0.6B,

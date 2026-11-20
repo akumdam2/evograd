@@ -464,8 +464,8 @@ the same one evograd's own pipelines produce (`render_deployment_layer`).
 
 - **Correctness during search** follows the pack's `search_correctness`
   (`task.json`). A model's observed case defaults to
-  `gate1_calibration_payloads`: Gate 1's rule (`atol + budget*max|t|` per
-  element around a float32 truth, fixed per dtype) on the first, middle and last recorded call of
+  `gate1_calibration_payloads`: Gate 1's rule (`bound*max|t|` per
+  element around a float32 truth, `bound` the dtype's budget or twice native's own error) on the first, middle and last recorded call of
   the case in each calibration order (101, 202); search never sees the acceptance
   calls (303, 404). Acceptance (Gate 1 and operator Gate 2) judges every call of
   all four orders, the search calls included. `bench.py tasks` needs the model's

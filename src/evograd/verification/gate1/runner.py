@@ -19,14 +19,13 @@ other declaration is refused (:mod:`.tolerances`). The report's
 ``subject.reference`` records the contract
 (:func:`evograd.opdecl.oracle.reference_identity`).
 
-**How.** Per element, per result:
-``|candidate_i - truth_i| <= atol + bound * max|truth|``, with ``bound`` the
-budget of the call's least precise floating dtype (:data:`.tolerances.BUDGETS`),
-on attention tasks (:data:`.tolerances.NATIVE_BOUND_TASKS`) the larger of that and
-1.5 times native's own largest deviation from the truth over the judged calls
-(:func:`native_errors`, computed first, or given by a caller that caches it: it
-never depends on the candidate); a tiny absolute ``atol``; ``max|truth|`` that
-result's largest magnitude on that call. No calibration and no ``torch.compile`` control. Computed in float64.
+**How.** Per result, per call: ``max|candidate - truth| <= bound * max|truth|``,
+with ``bound`` the larger of the budget of the call's least precise floating dtype
+(:data:`.tolerances.BUDGETS`) and twice native's own largest deviation from the
+truth over the judged calls (:func:`native_errors`, computed first, or given by a
+caller that caches it: it never depends on the candidate); ``max|truth|`` that
+result's largest magnitude on that call. No absolute term, no calibration and no
+``torch.compile`` control. Computed in float64.
 
 **Order, per case.** Native, then the candidate (its working state released),
 then the truth: the truth is twice native's size, and the largest cases fit in
@@ -58,11 +57,9 @@ from evograd.opdecl.inputs import (
 )
 from evograd.opdecl.oracle import oracle, reference_identity
 from evograd.verification.gate1.tolerances import (
-    ATOL,
     BUDGETS,
     COMPARISON,
     allowance,
-    native_bound,
     policy_identity,
     result_bound,
     rule_dtype,
@@ -222,8 +219,8 @@ def verify_pair(
                                                      "this is not a numerical verification"))
     if mode == ORACLE:
         if native_error is None:
-            native_error = native_errors(op, selected, device) if native_bound(op) else {}
-        report.subject["native_error"] = dict(native_error) if native_bound(op) else {}
+            native_error = native_errors(op, selected, device)
+        report.subject["native_error"] = dict(native_error)
     for case in selected:
         report.cases.append(_run_case(op, pair, case, device=device, mode=mode,
                                       input_mutation=input_mutation, observers=observers or {},
@@ -299,7 +296,7 @@ def _materialize(case: Gate1Case) -> dict[str, Any]:
 def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str, *,
                   strict: bool = False) -> dict[str, float]:
     """Per floating result, native's largest deviation from the float32 truth over
-    ``cases``: ``max over calls of (max|native - truth| - atol) / max|truth|``.
+    ``cases``: ``max over calls of max|native - truth| / max|truth|``.
 
     0 where the call is already at float32 or above. A case whose inputs or
     references fail is left out here (its own run reports why), or, with
@@ -323,7 +320,7 @@ def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str, *,
             scale = float(t.detach().abs().max().double())
             if not (math.isfinite(diff) and math.isfinite(scale)):
                 continue
-            share = max(0.0, diff - ATOL) / scale if scale > 0 else 0.0
+            share = diff / scale if scale > 0 else 0.0
             errors[name] = max(errors.get(name, 0.0), share)
         del values, native, truth
     return errors
@@ -494,7 +491,7 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
             target = (truth or {}).get(pair.spec.name, pair.reference)
             dtype = rule_dtype(op, workload, pair.reference.dtype)
             budget = BUDGETS[dtype]
-            own = float((native_error or {}).get(pair.spec.name, 0.0)) if native_bound(op) else 0.0
+            own = float((native_error or {}).get(pair.spec.name, 0.0))
             bound = result_bound(budget, own)
             limit = allowance(target, bound)
             err = elementwise_error(pair.candidate, target, atol=limit, rtol=0.0)
@@ -503,7 +500,7 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
                                           subject=pair.spec.name))
             continue
         check.compared = True
-        check.limits = {"dtype": C.dtype_name(dtype), "atol": ATOL, "budget": budget,
+        check.limits = {"dtype": C.dtype_name(dtype), "budget": budget,
                         "native_error": own, "native_bound": bound != budget, "bound": bound,
                         "allowance": limit}
         check.metrics = err.to_dict()
@@ -516,8 +513,8 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
         if not err.ok:
             check.findings.append(failure(
                 "tolerance_exceeded",
-                f"{err.violations}/{err.elements} elements outside atol + {bound:.3g}*max|truth| "
-                f"= {limit:.3g}" + (f" (1.5 x the model's own error {own:.3g}, an attention task)" if bound != budget
+                f"{err.violations}/{err.elements} elements outside {bound:.3g}*max|truth| "
+                f"= {limit:.3g}" + (f" (twice the model's own error {own:.3g})" if bound != budget
                                     else f" (the {C.dtype_name(dtype)} budget)")
                 + f" (max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
                 violations=err.violations,

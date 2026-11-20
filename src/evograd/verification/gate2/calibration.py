@@ -1,13 +1,14 @@
-"""Gate 2 calibration: thresholds from trusted controls only, frozen before use.
+"""Gate 2 calibration, model scope: thresholds from trusted controls only, frozen before use.
 
-One sample protocol at both scopes, ``matched_inputs``, recorded in the policy
+(Operator Gate 2 is not calibrated: it judges each call against the float32
+truth, :mod:`evograd.verification.gate2.operator`.)
+
+One sample protocol, ``matched_inputs``, recorded in the policy
 (:data:`SAMPLE_PROTOCOLS`). For every required result ``z`` and metric
 ``m in {E2, Emax}``, pooled over the calibration samples ``x``::
 
-    operator scope:  T[z, m] = gamma * max( max_x E_m(trusted compile[x], native[x]),
-                                            floor_m(z) )
-    model scope:     T[z, m] = gamma * max( max_x E_m(trusted compile[x], native[x]),
-                                            floor[z, m], rounding perturbation[z, m] )
+    T[z, m] = gamma * max( max_x E_m(trusted compile[x], native[x]),
+                           floor[z, m], rounding perturbation[z, m] )
 
 The native reference must reproduce itself bit for bit on every sample (a
 second native run per sample, :func:`calibrate`), so its repeat adds nothing
@@ -15,51 +16,23 @@ to a threshold; a native that does not repeat leaves the case uncalibrated.
 Under verify's deterministic settings no native ever differed from its repeat
 (every policy of the P8 audit, 2026-11-13).
 
-At operator scope the samples are recorded calls, and each call site ``c``
-(the payload's ``call``, one layer's instance of the site) gets its own table,
-pooled over the samples of that call only (:func:`call_of`). A table pooled
-over every layer is set by the layer where compile drifts most: Qwen2-VL's
-text attention, whose layer 0 compile drifts 30x the median layer, passed
-x1.05 and x1.1 faults on every layer (P8, 2026-11-12). The table pooled over
-all calls stays in the policy for Gate 1's envelope.
+Thresholds are calibrated on fixed samples and judged on fresh executions of the
+*same* samples: a sample is used only when its content fingerprint (inputs,
+labels and other context, cotangents, initial weights, module mode, seed) equals
+the calibrated one. The budget of a tensor is the largest drift the controls
+showed on it over the inputs it is judged on.
 
-and judged on fresh executions of the *same* samples: a sample is used only
-when its content fingerprint (inputs, labels and other context, cotangents,
-initial weights, module mode, seed) equals the calibrated one. The budget of
-a tensor is the largest drift the controls showed on it over the inputs it is
-judged on. Neither a held-out sample nor a per-sample budget gives that: on
-held-out payloads the compile control itself exceeded a budget pooled over the
-other batches (Qwen2-VL vision_mlp ``grad:up_bias``, order 404, 2026-11-03),
-which left the case without a verdict for any candidate; a per-sample budget
-was a single draw of compile's rounding on that tensor, and a candidate whose
-rounding differs from compile's exceeded it on a few scattered tensors per
-sample for no fault of its own.
+The rounding perturbation term: ``max_x max_k E_m(rounding perturbation_k[x],
+native[x])``. The rounding perturbation (:func:`rounding_control`, under each of
+the fixed :data:`ROUNDING_SEEDS`) is the native site with its outputs and input
+gradients moved within one rounding: where compile reproduces the native site bit
+for bit, it is what a correct reimplementation that rounds differently does to
+the whole model.
 
-The operator floor (:func:`operator_floor`) is one number per result dtype,
-:data:`OPERATOR_FLOORS`: E2's floor, and Emax's is :data:`OPERATOR_EMAX_FACTOR`
-times it times the result's ``max|r| / RMS(r)`` (Emax is normalized by the RMS,
-so the same relative allowance at the largest element). For bf16 and fp16 it is
-the unit roundoff, one rounding of every element, which a correct
-reimplementation may differ by; for fp32 it is 1e-5. It replaced a fixed floor
-per result family plus a separate rounding term (2026-11-13): in every policy
-of the P8 audit the rounding term was the one that counted for bf16 results and
-the family floor for fp32 ones, and the merged floor changes no verdict of the
-audit's seeds and faults. An Emax floor cannot be one number: one rounding of
-the largest element ranges over 0.03-163 in Emax across the audit's bf16
-results.
-
-The model scope term, ``rounding_perturbation``: ``max_x max_k E_m(rounding
-  perturbation_k[x], native[x])``. The rounding perturbation
-  (:func:`rounding_control`, under each of the fixed :data:`ROUNDING_SEEDS`)
-  is the native site with its outputs and input gradients moved within one
-  rounding: where compile reproduces the native site bit for bit, it is what
-  a correct reimplementation that rounds differently does to the whole model.
-
-``gamma`` is the named safety factor
-:data:`SAFETY_FACTOR_GAMMA` (initially 2); the model scope's floors are the
-starting values discussed in review -- outputs ``(1e-5, 1e-3)``, gradients
-``(1e-4, 1e-2)`` -- and are design points to be checked by measurement, not
-bounds.
+``gamma`` is the named safety factor :data:`SAFETY_FACTOR_GAMMA` (initially 2);
+the floors are the starting values discussed in review -- outputs
+``(1e-5, 1e-3)``, gradients ``(1e-4, 1e-2)`` -- and are design points to be
+checked by measurement, not bounds.
 
 Rules this module enforces:
 
@@ -117,15 +90,13 @@ from evograd.verification.gate2.runner import (
     run_callable,
 )
 
-#: /8: matched inputs at both scopes, with each calibration sample's content
-#: identity; at operator scope one threshold table per call site
-#: (``call_thresholds``) and the per-dtype floor; no native-repeat term. /7 and
-#: older policies are never reinterpreted.
+#: /8: matched inputs, with each calibration sample's content identity; no
+#: native-repeat term. /7 and older policies are never reinterpreted.
 SCHEMA = "evograd-verification-gate2-policy/8"
 
 #: The sample protocol of each scope; the policy records it.
 MATCHED = "matched_inputs"
-SAMPLE_PROTOCOLS = {"operator": MATCHED, "model": MATCHED}
+SAMPLE_PROTOCOLS = {"model": MATCHED}
 
 #: Findings that make a policy's thresholds inapplicable to the whole run:
 #: verify_integration measures but withholds every numeric judgement.
@@ -138,31 +109,21 @@ BINDING_CODES = frozenset({
 #: The named safety factor. A design choice, not a guarantee.
 SAFETY_FACTOR_GAMMA = 2.0
 
-#: Model scope's floors per result family. To be re-measured, not trusted blindly.
+#: Floors per result family. To be re-measured, not trusted blindly.
 DEFAULT_FLOORS: dict[str, dict[str, float]] = {
     "output": {"E2": 1e-5, "Emax": 1e-3},
     "gradient": {"E2": 1e-4, "Emax": 1e-2},
 }
 
-#: Operator scope's floor per result dtype (:func:`operator_floor`): E2's floor;
-#: Emax's is OPERATOR_EMAX_FACTOR times it times max|r| / RMS(r), which bounds two
-#: ulps of the largest element from above.
-OPERATOR_FLOORS = {"bfloat16": 2.0 ** -8, "float16": 2.0 ** -11, "float32": 1e-5,
-                   "float64": 1e-12}
-OPERATOR_EMAX_FACTOR = 4.0
-#: The operator floor's record in a policy (``floors``).
-OPERATOR_FLOOR_POLICY = {"per_dtype": OPERATOR_FLOORS, "emax_factor": OPERATOR_EMAX_FACTOR}
-
-#: Model scope's rounding perturbation: each finite nonzero element moves one ulp,
+#: The rounding perturbation: each finite nonzero element moves one ulp,
 #: up or down, with this probability, under each of these fixed seeds
 #: (:func:`rounding_control`). One seed is a single draw, not a bound.
 ROUNDING_PROBABILITY = 1.0 / 3.0
 ROUNDING_SEEDS = (11, 22, 33, 44)
 
 #: The calibration procedure, for stage caches that judged under an earlier one.
-CALIBRATION_PROCEDURE = ("gate2-calibration/8: matched inputs at both scopes; operator per-dtype "
-                         "floor and thresholds per call site, model rounding perturbation; native "
-                         "must repeat bit for bit")
+CALIBRATION_PROCEDURE = ("gate2-calibration/8: model scope, matched inputs; rounding "
+                         "perturbation; native must repeat bit for bit")
 NATIVE_REPEAT = "native_repeat"
 TRUSTED_COMPILE = "trusted_compile"
 ROUNDING_PERTURBATION = "rounding_perturbation"
@@ -178,13 +139,6 @@ def family_of(kind: str) -> str:
         return C.FLOOR_FAMILY[kind]
     except KeyError:
         raise CalibrationError(f"result kind {kind!r} has no floor family") from None
-
-
-def call_of(sample: Mapping[str, Any] | Sample) -> str | None:
-    """The call site a sample was recorded at (a payload's ``call``), if any."""
-    config = sample.config if isinstance(sample, Sample) else (sample.get("config") or {})
-    call = config.get("call")
-    return call if isinstance(call, str) and call else None
 
 
 def validate_gamma(gamma: Any) -> float:
@@ -205,8 +159,7 @@ def rounding_floor(reference: torch.Tensor) -> dict[str, float]:
     the bound a rounding perturbation (:func:`move_rounding`) stays within.
 
     ``E2``: the unit roundoff. ``Emax``: :data:`ROUNDING_ULPS` ulps of the largest
-    magnitude over the RMS, Emax's denominator. (It was operator Gate 2's rounding term
-    until the per-dtype floor, :func:`operator_floor`, took its place, 2026-11-13.)
+    magnitude over the RMS, Emax's denominator.
     """
     if not reference.is_floating_point() or not reference.numel():
         return {"E2": 0.0, "Emax": 0.0}
@@ -216,23 +169,6 @@ def rounding_floor(reference: torch.Tensor) -> dict[str, float]:
     rms = math.sqrt(squares / flat.numel())
     emax = ROUNDING_ULPS * largest_ulp(reference) / rms if math.isfinite(rms) and rms > 0 else 0.0
     return {"E2": torch.finfo(reference.dtype).eps / 2, "Emax": emax}
-
-
-def operator_floor(reference: torch.Tensor) -> dict[str, Any]:
-    """The operator scope's floor for a result like ``reference``: its dtype's
-    :data:`OPERATOR_FLOORS` value as E2's, and :data:`OPERATOR_EMAX_FACTOR` times
-    it times ``max|r| / RMS(r)`` as Emax's (0 for an all-zero result)."""
-    dtype = str(reference.dtype).removeprefix("torch.")
-    if dtype not in OPERATOR_FLOORS:
-        raise CalibrationError(f"no operator floor for a {dtype} result")
-    eps = OPERATOR_FLOORS[dtype]
-    flat = reference.detach().reshape(-1)
-    squares = sum(float(flat[i:i + CHUNK].double().square().sum())
-                  for i in range(0, flat.numel(), CHUNK))
-    rms = math.sqrt(squares / flat.numel()) if flat.numel() else 0.0
-    peak = float(flat.abs().max()) if flat.numel() else 0.0
-    emax = OPERATOR_EMAX_FACTOR * eps * peak / rms if math.isfinite(rms) and rms > 0 else 0.0
-    return {"dtype": dtype, "E2": eps, "Emax": emax}
 
 
 def validate_floors(floors: Mapping[str, Mapping[str, float]]) -> dict[str, dict[str, float]]:
@@ -281,7 +217,6 @@ class ControlMeasurement:
 def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
                       results: Mapping[str, str], gamma: float = SAFETY_FACTOR_GAMMA,
                       floors: Mapping[str, Mapping[str, float]] = DEFAULT_FLOORS,
-                      operator_floors: Mapping[str, Mapping[str, Any]] | None = None,
                       perturbed: bool = False) -> dict[str, dict[str, Any]]:
     """Per-tensor thresholds from trusted control measurements.
 
@@ -289,15 +224,10 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
     needs at least one trusted-compile measurement, and
     with ``perturbed`` (model scope) one rounding-perturbation measurement; a
     result with any missing is an error, never a fallback. Measurements for
-    names outside ``results`` are refused rather than pooled. ``operator_floors``
-    (operator scope) gives every result its :func:`operator_floor`, which
-    replaces the family ``floors``.
+    names outside ``results`` are refused rather than pooled.
     """
     gamma = validate_gamma(gamma)
     floors = validate_floors(floors)
-    if operator_floors is not None and set(operator_floors) != set(results):
-        raise CalibrationError(f"operator floors for {sorted(set(operator_floors) ^ set(results))} "
-                               "do not match the calibrated results")
     sources = (TRUSTED_COMPILE,) + ((ROUNDING_PERTURBATION,) if perturbed else ())
     by_result: dict[str, dict[str, list[ControlMeasurement]]] = {
         name: {s: [] for s in CONTROL_SOURCES} for name in results}
@@ -318,10 +248,8 @@ def derive_thresholds(measurements: Sequence[ControlMeasurement], *,
             raise CalibrationError(f"{name}: no {' or '.join(lacking)} measurement")
         if groups[ROUNDING_PERTURBATION] and not perturbed:
             raise CalibrationError(f"{name}: a rounding perturbation outside model scope")
-        floor = floors[family_of(kind)] if operator_floors is None else operator_floors[name]
+        floor = floors[family_of(kind)]
         entry: dict[str, Any] = {"kind": kind, "components": {}}
-        if operator_floors is not None:
-            entry["dtype"] = operator_floors[name]["dtype"]
         for metric in METRICS:
             terms = {"trusted_compile": max(getattr(m, metric) for m in groups[TRUSTED_COMPILE]),
                      "floor": float(floor[metric])}
@@ -388,17 +316,12 @@ class Gate2Policy:
         return json.loads(self.text)
 
     def thresholds_for(self, sample_id: str) -> dict[str, Any] | None:
-        """The thresholds that judge ``sample_id``: its call site's table at
-        operator scope, the pooled one otherwise; ``None`` for a sample that
-        was not calibrated."""
+        """The thresholds that judge ``sample_id``; ``None`` for a sample that was
+        not calibrated."""
         data = self.to_dict()
         if sample_id not in data["sample_identities"]:
             return None
-        by_call = data.get("call_thresholds")
-        if by_call is None:
-            return data["thresholds"]
-        sample = next(s for s in data["calibration_samples"] if s["sample_id"] == sample_id)
-        return by_call[call_of(sample)]
+        return data["thresholds"]
 
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_") or name == "text":
@@ -417,18 +340,13 @@ REQUIRED_FIELDS = ("scope", "sample_protocol", "adapter", "numerics", "environme
 
 _CONTROL_TERMS = "T[z,m] = gamma * max(max_x E_m(compile[x], native[x]), floor[z,m], "
 FORMULAS = {
-    "operator": "T[z,m] = gamma * max(max_x E_m(compile[x], native[x]), floor_m(z)), per call "
-                "site c over the calibrated samples x of c, judged on those samples; floor_E2(z) = "
-                "eps(dtype of z) (bf16 2^-8, fp16 2^-11, fp32 1e-5), floor_Emax(z) = "
-                f"{OPERATOR_EMAX_FACTOR:g} eps max_x max|native[x][z]| / RMS(native[x][z]); the "
-                "table over all calls gives Gate 1's envelope",
     "model": _CONTROL_TERMS + "max_x max_k E_m(rounding_perturbation_k[x], native[x])), judged "
              "on the calibrated samples x; rounding_perturbation_k: every replaced site's floating "
              f"outputs and input gradients moved one ulp with probability {ROUNDING_PROBABILITY:.4g} "
              "under seed k, each tensor within one rounding (E2 <= unit roundoff)",
 }
 #: The term each scope adds to compile and the floor.
-SCOPE_TERMS = {"operator": None, "model": ROUNDING_PERTURBATION}
+SCOPE_TERMS = {"model": ROUNDING_PERTURBATION}
 
 
 def _content_hash(data: Mapping[str, Any]) -> str:
@@ -443,12 +361,7 @@ def _check_thresholds(data: Mapping[str, Any]) -> None:
     if data.get("formula") != FORMULAS[scope]:
         raise CalibrationError("the policy formula is not the scope's")
     gamma = validate_gamma(data["gamma"])
-    if scope == "operator":
-        if data["floors"] != OPERATOR_FLOOR_POLICY:
-            raise CalibrationError("the policy's operator floors are not the current ones")
-        floors = None
-    else:
-        floors = validate_floors(data["floors"])
+    floors = validate_floors(data["floors"])
     ids = [s.get("sample_id") for s in data["calibration_samples"]]
     if sorted(data["sample_identities"]) != sorted(ids) or len(set(ids)) != len(ids):
         raise CalibrationError("sample identities must cover exactly the calibration samples")
@@ -457,38 +370,18 @@ def _check_thresholds(data: Mapping[str, Any]) -> None:
         raise CalibrationError("no thresholds")
     for name, entry in table.items():
         _check_entry(name, entry, gamma, floors, term=SCOPE_TERMS[scope])
-    calls = {call_of(s) for s in data["calibration_samples"]}
-    by_call = data.get("call_thresholds")
-    if scope == "operator" and not data["boundaries"] and None not in calls:
-        if not isinstance(by_call, Mapping) or set(by_call) != calls:
-            raise CalibrationError("an operator policy needs one threshold table per call site")
-        for call, own in by_call.items():
-            if not isinstance(own, Mapping) or set(own) != set(table):
-                raise CalibrationError(f"{call}: the call's table does not cover the results")
-            for name, entry in own.items():
-                _check_entry(f"{call}/{name}", entry, gamma, floors, term=SCOPE_TERMS[scope])
-    elif by_call is not None:
-        raise CalibrationError("per-call thresholds need an operator policy without boundary "
-                               "calls whose every sample has a call site")
 
 
 def _check_entry(name: str, entry: Any, gamma: float,
-                 floors: Mapping[str, Mapping[str, float]] | None, *, term: str | None) -> None:
-    """``floors`` are the model scope's family floors; ``None`` at operator scope,
-    whose floor is the entry dtype's :data:`OPERATOR_FLOORS` value (E2; Emax's
-    depends on the result's values and is only checked to be a number)."""
+                 floors: Mapping[str, Mapping[str, float]], *, term: str | None) -> None:
+    """``floors`` are the policy's family floors."""
     def number(value: Any) -> bool:
         return (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and math.isfinite(value) and value >= 0)
 
     if not isinstance(entry, Mapping):
         raise CalibrationError(f"{name}: malformed threshold entry")
-    if floors is None:
-        if entry.get("dtype") not in OPERATOR_FLOORS:
-            raise CalibrationError(f"{name}: an operator entry needs its result's dtype")
-        floor = {"E2": OPERATOR_FLOORS[entry["dtype"]], "Emax": None}
-    else:
-        floor = floors[family_of(entry.get("kind"))]
+    floor = floors[family_of(entry.get("kind"))]
     terms = ("trusted_compile", "floor") + ((term,) if term else ())
     for metric in METRICS:
         parts = (entry.get("components") or {}).get(metric) or {}
@@ -499,8 +392,7 @@ def _check_entry(name: str, entry: Any, gamma: float,
         values = [parts.get(k) for k in terms]
         if not (number(entry.get(metric)) and all(number(v) for v in values)):
             raise CalibrationError(f"{name}/{metric}: missing or non-finite threshold or component")
-        if (floor[metric] is not None and parts.get("floor") != floor[metric]) \
-                or parts.get("gamma") != gamma:
+        if parts.get("floor") != floor[metric] or parts.get("gamma") != gamma:
             raise CalibrationError(f"{name}/{metric}: floor or gamma differs from the policy's")
         if entry[metric] != gamma * max(values):
             raise CalibrationError(f"{name}/{metric}: {entry[metric]!r} is not gamma * max of its "
@@ -658,8 +550,8 @@ def move_rounding(t: torch.Tensor, generator: torch.Generator) -> torch.Tensor:
     A moved element is off by between one and two unit roundoffs of itself, one
     rounding by at most one, so a tensor whose norm a few elements hold (a
     32-element head vector, an outlier) can exceed one rounding: then the
-    largest moves are dropped until ``E2 <= unit roundoff`` (operator scope's
-    :func:`rounding_floor`); Emax stays within its half by construction.
+    largest moves are dropped until ``E2 <= unit roundoff`` (:func:`rounding_floor`);
+    Emax stays within its half by construction.
     """
     x = t.detach()
     if not x.numel():
@@ -882,8 +774,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     compile control gets its own thresholds too, from the native site
     implementation run twice and the compiled one, on the call's own inputs
     and upstream gradient. At model scope, one :func:`rounding_control` per
-    seed in ``rounding_seeds`` as well; at operator scope, each result's
-    :func:`operator_floor`. The thresholds are pooled over ``samples`` and
+    seed in ``rounding_seeds`` as well. The thresholds are pooled over ``samples`` and
     judge fresh executions of exactly those samples.
 
     Returns no policy, with the reasons, if any control fails to qualify or
@@ -901,7 +792,7 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
     if protocol is None:
         result.findings.append(missing("unknown_scope", f"scope {adapter.scope!r} is not a Gate 2 "
                                                         f"scope {tuple(SAMPLE_PROTOCOLS)}"))
-    perturbed = adapter.scope == "model"   # its scope term; the operator scope's is the rounding floor
+    perturbed = adapter.scope == "model"   # the rounding perturbation term
     patch_set = tuple(sorted(patch_set))
     if not patch_set:
         result.findings.append(missing("empty_patch_set", "a policy is calibrated for replaced sites"))
@@ -937,8 +828,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
 
     measurements: list[ControlMeasurement] = []
     kinds: dict[str, dict[str, str]] = {}            # sample id -> result -> kind
-    op_floor: dict[str, dict[str, Any]] = {}          # result -> operator floor, pooled
-    call_floor: dict[str | None, dict[str, dict[str, Any]]] = {}   # the same per call site
     contract: C.ResultContract | None = None
     input_digests: dict[str, str | None] = {}
     identities: dict[str, dict[str, Any]] = {}
@@ -986,11 +875,6 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for spec in contract.compared():
             if not spec.exact:
                 kinds[sid][spec.name] = spec.kind
-                if not perturbed:
-                    here = operator_floor(reference.results[spec.name])
-                    for pooled in (op_floor, call_floor.setdefault(call_of(sample), {})):
-                        was = pooled.setdefault(spec.name, here)
-                        pooled[spec.name] = {**was, "Emax": max(was["Emax"], here["Emax"])}
         identity = {**reference.sample_identity, "seed": int(sample.seed),
                     "config": jsonable(dict(sample.config)),
                     "reference_results_digest": reference.results_digest,
@@ -1103,22 +987,13 @@ def calibrate(adapter: ScopeAdapter, *, patch_set: Sequence[str], samples: Seque
         for table in kinds.values():
             union.update(table)
         table = derive_thresholds(measurements, results=union, gamma=gamma, floors=floors,
-                                  operator_floors=None if perturbed else op_floor,
                                   perturbed=perturbed)
-        call_tables = None
-        if not perturbed and not boundaries and None not in call_floor:
-            call_tables = {}
-            for call in sorted(call_floor):
-                ids = {s.sample_id for s in samples if call_of(s) == call}
-                call_tables[call] = derive_thresholds(
-                    [m for m in measurements if m.sample_id in ids], results=union, gamma=gamma,
-                    floors=floors, operator_floors=call_floor[call])
     except CalibrationError as exc:
         result.findings.append(missing("insufficient_calibration", str(exc)))
         return result
     result.policy = freeze_policy(
         adapter, patch_set=patch_set, contract=contract, samples=samples,
-        thresholds=table, call_thresholds=call_tables, gamma=gamma, floors=floors,
+        thresholds=table, gamma=gamma, floors=floors,
         boundaries=boundaries, controls={"native_repeats": native_repeats, "compile": control.describe(),
                   "compile_graphs": dict(graphs),
                   **({ROUNDING_PERTURBATION: {"seeds": list(rounding_seeds),
@@ -1145,7 +1020,6 @@ def _same_content(reference: Execution, control: Execution, source: str) -> list
 def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: C.ResultContract,
                   samples: Sequence[Sample], thresholds: Mapping[str, Mapping[str, Any]] | None,
                   controls: Mapping[str, Any], gamma: float, floors: Mapping[str, Any],
-                  call_thresholds: Mapping[str, Mapping[str, Any]] | None = None,
                   boundaries: bool, input_digests: Mapping[str, str | None] | None = None,
                   weight_digests: Sequence[str] = (),
                   sample_identities: Mapping[str, Mapping[str, Any]] | None = None,
@@ -1153,9 +1027,7 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
     """Bind thresholds to everything they were measured under, and freeze them.
 
     ``thresholds`` are pooled over the calibration samples and judge the
-    samples of ``sample_identities`` (their content identities), no other; at
-    operator scope ``call_thresholds`` (one table per call site, pooled over
-    that call's samples) judge instead.
+    samples of ``sample_identities`` (their content identities), no other.
 
     :func:`calibrate` is the only producer of real policies. Tests use this to
     freeze explicitly labelled synthetic thresholds through the same binding.
@@ -1185,12 +1057,10 @@ def freeze_policy(adapter: ScopeAdapter, *, patch_set: Sequence[str], contract: 
         "weights": {"initial_state_digests": list(weight_digests),
                     "fixed": weight_digests[0] if len(weight_digests) == 1 else None},
         "gamma": gamma,
-        "floors": dict(OPERATOR_FLOOR_POLICY) if adapter.scope == "operator" else dict(floors),
+        "floors": dict(floors),
         "epsilon": EPSILON,
         "boundaries": bool(boundaries),
         "formula": FORMULAS[adapter.scope],
         "thresholds": dict(thresholds or {}),
     }
-    if call_thresholds is not None:
-        content["call_thresholds"] = {c: dict(t) for c, t in call_thresholds.items()}
     return Gate2Policy.build(content)

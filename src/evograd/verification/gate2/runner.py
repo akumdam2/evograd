@@ -11,10 +11,11 @@ must be bit-identical afterwards.
 operator, or the unpatched model -- on the same inputs, weights, RNG seed,
 numerics settings and cotangents.
 
-**Scopes and the sample protocol.** Two scopes, ``operator`` and ``model``, one
-sample protocol, ``matched_inputs``, recorded in the policy and checked on use:
-thresholds per tensor (at operator scope per call site too), pooled over the
-calibration samples, judged on fresh
+**Execution is shared by both scopes; judgement here is the model scope's.** The
+operator scope is judged against the float32 truth without a policy
+(:mod:`evograd.verification.gate2.operator`). The model scope has one sample
+protocol, ``matched_inputs``, recorded in the policy and checked on use:
+thresholds per tensor, pooled over the calibration samples, judged on fresh
 executions of the *same* samples, whose content (inputs, labels and other
 context, cotangents, initial weights, module mode, seed) must match the
 calibrated sample's fingerprint.
@@ -82,6 +83,8 @@ from evograd.verification.common.tensors import (
 GATE = "gate2"
 PROTOCOL = "evograd-verification-gate2/1"
 METRICS = ("E2", "Emax")
+#: Gate 2's scopes. :func:`verify_integration` judges the model scope; the
+#: operator scope is judged by :func:`evograd.verification.gate2.operator.verify_operator`.
 SCOPES = ("operator", "model")
 #: The parts of a sample's content identity, in a fixed order.
 IDENTITY_COMPONENTS = ("seed", "inputs", "context", "cotangents", "initial_state", "module_mode",
@@ -699,6 +702,9 @@ def verify_integration(adapter: ScopeAdapter, deployment: Deployment, *, policy:
     if adapter.scope not in SCOPES:
         report.findings.append(missing("unknown_scope", f"scope {adapter.scope!r} is not a Gate 2 "
                                                         f"scope {SCOPES}"))
+    elif adapter.scope != "model":
+        report.findings.append(missing("not_calibrated_scope", f"the {adapter.scope} scope has no "
+                                       "policy; judge it with gate2.operator.verify_operator"))
     if deployment.role == NATIVE:
         report.findings.append(missing("not_a_candidate", "the native deployment is the reference"))
     unknown = sorted(set(deployment.patch_set) - set(adapter.sites()))

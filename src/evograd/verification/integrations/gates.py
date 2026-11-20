@@ -9,10 +9,10 @@ against the model reference (``Model.reference_op``):
 
 * Gate 1 -- the pair on every real payload of the case (:data:`PAYLOAD_SPLITS`,
   data orders 101/202/303/404).
-* Gate 2, operator scope -- thresholds from ``torch.compile`` and the rounding
-  floor on the same payloads, per call site (the native must repeat bit for
-  bit), with :data:`GATE2_OPERATOR_GAMMA`, judged on fresh executions of them
-  through the artifact's deployment entry.
+* Gate 2, operator scope -- every payload of the case through the artifact's
+  deployment entry, against the float32 truth: each result's error within twice
+  the largest error of native and ``torch.compile`` on the case's payloads, or a
+  floor of one rounding (:mod:`evograd.verification.gate2.operator`).
 * Gate 2, model scope (Level 2 only) -- the candidate alone at its model site:
   one forward/backward of the pretrained model on the first real TRAIN batch of
   each order in :data:`MODEL_ORDERS`; thresholds pooled over those batches from
@@ -64,15 +64,8 @@ from typing import Any, Callable, Mapping
 
 MODEL_ORDERS = (101, 202, 303, 404)
 #: The corpus splits Gate 1 and operator Gate 2 take every payload of a case from
-#: (orders 101/202 and 303/404): operator Gate 2 calibrates on them and judges the
-#: same payloads. Search feedback sees the calibration split only.
+#: (orders 101/202 and 303/404). Search feedback sees the calibration split only.
 PAYLOAD_SPLITS = ("calibration", "acceptance")
-#: Gate 2 safety factor at operator scope, whose thresholds are per call site:
-#: each rests on that call's four payloads (orders 101/202/303/404). P8 controls,
-#: leave one order out (276 case x order pairs): compile's held-out order fails
-#: its own call's threshold in 11 pairs at gamma 2 and 6 at 2.5, while every x1.05
-#: gradient fault still fails operator Gate 2 alone (smallest ratio 2.70 at 2).
-GATE2_OPERATOR_GAMMA = 2.5
 #: Gate 2 safety factor at model scope: the smallest integer at which every frontend seed
 #: passes while a 1% fault at a site still fails. Qwen3-0.6B, 2026-10-23: the
 #: residual_rmsnorm seed needs 3.3 (pooled budgets, one sample, two norm/proj
@@ -237,15 +230,11 @@ def gate1_native_errors(op, cases, device: str, cache: str | Path | None) -> dic
     environment (:func:`~evograd.verification.gate1.runner.native_error_binding`), and
     saved there when every case computed.
 
-    Empty for a task that is not an attention task (Gate 1 does not use it there).
     ``None`` without a cache, or when a case's reference fails: Gate 1 then computes
     it itself and the failing case reports why. An unwritable cache only costs the reuse.
     """
     from evograd.verification.gate1.runner import native_error_binding, native_errors
-    from evograd.verification.gate1.tolerances import native_bound
 
-    if not native_bound(op):
-        return {}           # only attention tasks use it
     if cache is None:
         return None
     cache = Path(cache)
@@ -267,48 +256,28 @@ def gate1_native_errors(op, cases, device: str, cache: str | Path | None) -> dic
     return errors
 
 
-def operator_calibration(model, case, corpus, *, device: str = "cuda",
-                         compile_backend: str = "inductor", state: Path | None = None):
-    """The case's operator scope on ``corpus`` and its Gate 2 calibration, saved
-    under ``state`` and reused.
-
-    The calibration binds the patch set (the scope's one site), never a
-    candidate, so the reference itself stands in for one.
-    """
-    from evograd.verification.common.execution import CANDIDATE, Deployment
-    from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
-
-    scope = PayloadOperatorScope(model.reference_op(case.task), case.workload, corpus,
-                                 case.case_id, device=device)
-    stand_in = Deployment("reference", CANDIDATE, {s: scope.native_site(s) for s in scope.sites()})
-    cache = (None if state is None else state / "gate2" / "operator" / corpus.sha256[:16]
-             / f"{case.case_id.replace('/', '__')}.json")
-    samples = payload_samples(scope)
-    calibration = _calibrate(scope, stand_in, samples, cache, samples=samples,
-                             compile_backend=compile_backend, gamma=GATE2_OPERATOR_GAMMA)
-    return scope, calibration
-
-
 def payload_samples(scope) -> list:
     """Every payload of the scope's case in :data:`PAYLOAD_SPLITS`, the samples
-    operator Gate 2 calibrates on and judges."""
+    operator Gate 2 judges."""
     return [sample for split in PAYLOAD_SPLITS for sample in scope.samples(split)]
 
 
 def judge_case(model, case, module, corpus, *, device: str = "cuda",
                compile_backend: str = "inductor", state: Path | None = None) -> dict[str, Any]:
     """Gate 1 on the case's real payloads and operator Gate 2. With ``state``,
-    the operator calibration and Gate 1's native error (neither depends on the
-    candidate) are saved there and reused.
+    Gate 1's native error (it does not depend on the candidate) is saved there
+    and reused.
 
     Gate 1 takes the recorded training payloads only: generated inputs at the
     same shape add no coverage, and the fixed dtype tolerance judges them at a
     magnitude the model never trains at (user decision 2026-10-23)."""
-    from evograd.verification import gate1, gate2
+    from evograd.verification import gate1
+    from evograd.verification.gate2.adapters.payload import PayloadOperatorScope
+    from evograd.verification.gate2.operator import verify_operator
     from evograd.verification.payloads import payload_cases
 
-    scope, calibration = operator_calibration(model, case, corpus, device=device,
-                                              compile_backend=compile_backend, state=state)
+    scope = PayloadOperatorScope(model.reference_op(case.task), case.workload, corpus,
+                                 case.case_id, device=device)
     op = scope.op
     deployment = scope.candidate(module)
     cases = [c for split in PAYLOAD_SPLITS for c in payload_cases(
@@ -316,10 +285,9 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
     native = gate1_native_errors(op, cases, device, None if state is None else (
         state / "gate1" / "native_error" / corpus.sha256[:16] / f"{case.case_id.replace('/', '__')}.json"))
     payloads = gate1.verify_pair(op, module, device=device, cases=cases, native_error=native)
-    operator = gate2.verify_integration(scope, deployment, policy=calibration.policy,
-                                        samples=payload_samples(scope))
-    return {"gate1_payloads": payloads,
-            "gate2_operator_calibration": calibration, "gate2_operator": operator}
+    operator = verify_operator(scope, deployment, samples=payload_samples(scope),
+                               compile_backend=compile_backend)
+    return {"gate1_payloads": payloads, "gate2_operator": operator}
 
 
 # ── Level-2 candidates in the model: Gate 2 model scope and Gate 3 ───────────
@@ -450,6 +418,13 @@ def _gate1_policy(op) -> dict[str, Any]:
     from evograd.verification.gate1.tolerances import policy_identity
 
     return policy_identity(op)
+
+
+def _gate2_operator_rule() -> dict[str, Any]:
+    """What a cached operator Gate 2 verdict was judged under."""
+    from evograd.verification.gate2.operator import rule_identity
+
+    return rule_identity()
 
 
 def _gate2_model_rule(model) -> dict[str, Any]:
@@ -663,11 +638,12 @@ def _judged_stage(run: Run, path: Path, key: dict, judge: Callable[[], dict]) ->
         key = {**key, "calibration_reuse": reuse}
     # A stage verdict must not outlive the calibration/comparison code that
     # produced it, even if the candidate and corpus are unchanged.
-    from evograd.verification.gate2 import calibration, runner
+    from evograd.verification.gate2 import calibration, operator, runner
     from evograd.verification.common import contracts, tensors
     from .base import sha_file
     key = {**key, "verification_implementation": {
         "gates": sha_file(__file__), "calibration": sha_file(calibration.__file__),
+        "operator": sha_file(operator.__file__),
         "comparison": sha_file(runner.__file__), "metrics": sha_file(tensors.__file__),
         "contracts": sha_file(contracts.__file__)},
         "verification_environment": contracts.environment_fingerprint(getattr(run, "device", None))}
@@ -701,6 +677,7 @@ def verify_cases(run: Run, *, single_site: bool = True, gate3_on_combination: bo
                "corpus": run.corpus.binding(),
                "reference": reference_identity(model.reference_op(case.task)),
                "gate1_policy": _gate1_policy(model.reference_op(case.task)),
+               "gate2_operator": _gate2_operator_rule(),
                "compile_backend": run.compile_backend}
         statuses = _judged_stage(
             run, run.out / "cases" / f"{case_id.replace('/', '__')}.json", key,

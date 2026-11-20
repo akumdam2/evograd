@@ -335,9 +335,9 @@ def test_a_model_task_is_the_observed_case_under_the_model_reference(tmp_path):
     assert gate1["policy"] == model_policy_identity() and "envelope_gamma" not in gate1
     assert list(gate1["results"]) == sorted([*op.output_names, *op.grad_names()])
     assert all(r["budget"] == budgets[r["budget_dtype"]] for r in gate1["results"].values())
-    assert "`|candidate - t| <= atol + budget * max|t|`" in task.statement
+    assert "`|candidate - t| <= bound * max|t|`" in task.statement
     assert "widened to float32" in task.statement
-    assert "atol=1e-12" in task.statement
+    assert "atol" not in task.statement and "2 times the largest deviation" in task.statement
     assert "envelope" not in task.statement
     # Search feedback is Gate 1 on payloads; no model case is judged by the declaration.
     assert task.spec["search_correctness"]["rule"] == "gate1_calibration_payloads"

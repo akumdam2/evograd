@@ -245,12 +245,12 @@ class ToyIntegration(unittest.TestCase):
         straight = json.loads((root / "unbroken" / single_site / "gate3_candidate.json").read_text())
         self.assertEqual([s["objective"] for s in resumed["train_steps"]],
                          [s["objective"] for s in straight["train_steps"]])
-        # The calibrations were saved under --state and are reused by a new candidate.
-        operator = list((root / "state_b" / "gate2" / "operator").rglob("*.json"))
-        self.assertEqual(len(operator), 1)
+        # Operator Gate 2 keeps nothing under --state: it measures native and compile
+        # against the truth on the same payloads in every run.
+        self.assertFalse((root / "state_b" / "gate2" / "operator").exists())
         again = self.verify(1.05, root / "again", state=root / "state_b")
         report = json.loads((root / "again" / "cases" / "swiglu__act.json").read_text())
-        self.assertIn("reused_policy", report["gate2_operator_calibration"]["evidence"])
+        self.assertEqual(report["gate2_operator"]["status"], "failed")
         self.assertFalse(again["candidates"][self.T.CASE_ID]["accepted"])
 
     def test_gate3_controls_are_kept_per_optimizer(self):

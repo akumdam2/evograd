@@ -62,7 +62,7 @@ assert report.status == "passed", report.to_dict()
 
 The candidate backward receives its own forward's saved state. Every declared
 output and required gradient is checked by name, structure, shape, dtype,
-finiteness, and the elementwise rule `abs(c-t) <= atol + bound*max(abs(t))`, where
+finiteness, and the rule `max(abs(c-t)) <= bound*max(abs(t))` per result and call, where
 `t` is the float32 truth (the model reference with its floating inputs below
 float32 widened, TF32 off) and `max(abs(t))` that result's largest magnitude on
 that call. Structure (shape, dtype, exact values of non-floating results) is
@@ -79,17 +79,25 @@ a float64 evaluation on the benchmark's cases (4e-3 on one ill-conditioned
 attention block), at least 30 times below native's own error, and runs every
 kernel the model uses (float64 does not: grouped matmul). Every element is checked,
 with one allowance per result: a small element is usually the difference of
-larger terms, whose rounding sets its error. `atol` is 1e-12 for every dtype: it
-only absorbs numerically zero results; recorded gradients reach down to 1e-13.
+larger terms, whose rounding sets its error. There is no absolute term: recorded
+gradients reach down to 1e-13 as a whole, where any fixed absolute allowance would
+accept all zeros; a result whose truth is exactly zero passes only when the
+candidate's is exactly zero.
 
-`bound` is the budget of the call's least precise floating dtype (its tensor
-inputs, upstream gradients and the result: a float32 gradient computed from
-bfloat16 activations carries bfloat16 rounding).
-
-Attention tasks (`gate1.tolerances.NATIVE_BOUND_TASKS`, eleven op names) are the
-one exception: there `bound` is the larger of the budget and 1.5 times native's
-largest deviation from the truth on the judged calls (`gate1.runner.native_errors`,
-recorded in the report). Their query and key gradients are ill-conditioned at low
+`bound` is the larger of the budget of the call's least precise floating dtype (its
+tensor inputs, upstream gradients and the result: a float32 gradient computed from
+bfloat16 activations carries bfloat16 rounding) and twice native's largest
+deviation from the truth on the judged calls, `max(abs(n-t))/max(abs(t))` over every
+call (`gate1.runner.native_errors`, recorded in the report). It is operator Gate 2's
+form, `err(candidate) <= max(floor, 2 * err(trusted))`, with Gate 1's lenient budget
+as the floor and native as the only trusted implementation. Where native is less
+accurate than the budget the result is ill-conditioned at its dtype, and a
+candidate is held to native's accuracy. On the benchmark that is the attention
+tasks; everywhere else twice native's error stays within the budget (rejudged on
+the 69 benchmark cases, 2026-11-19: no verdict of a seed, `torch.compile` or a
+rounding perturbation changes, and the only fault verdict that changes is OLMoE's
+attention `dx` scaled by 1.05, which operator Gate 2 rejects). The attention
+tasks' query and key gradients are ill-conditioned at low
 precision. Each row of the softmax gradient sums to zero, so `dq_i = s * sum_j
 dS_ij k_j` is the residue left after any component common to all keys cancels,
 and the q/k-norm weight gradients sum such residues over every token and head;
@@ -104,11 +112,12 @@ dimension. Native is then up to 8% off the truth on Qwen3's and Qwen3.5's blocks
 and up to 89% on Qwen2-VL's text attention, and a candidate is held to native's
 accuracy instead. Native error never depends on the candidate: a search run
 (`EVOGRAD_GATE1_NATIVE_ERROR_CACHE`) and `evograd evaluate --state` compute it
-once per set of calls and reuse it; other tasks never compute it. On every other
-benchmark task native is within the budget. One case is beyond this rule: on
-Qwen2-VL-2B's text attention block native is 47% off on `dx`, so Gate 1 there
-cannot reject a gradient scaled by 1.05, and `torch.compile` fails it (`dq_bias`,
-3.4 times native's error). It is a recorded exception.
+once per set of calls and reuse it. One case is beyond this rule: on Qwen2-VL-2B's
+text attention block native is 47% off on `dx`, so Gate 1 there cannot reject a
+gradient scaled by 1.05, and `torch.compile` fails it (`dq_bias`, 3.4 times native's
+error). It is a recorded exception, as is MegaFold's layernorm bias gradient, a
+cancellation residue of 1e-23 on which the frontend seed is 3-7 times native's
+error (D12).
 
 Per call, native runs first, then the candidate (whose working state is then
 released), then the truth: the truth is twice native's size, and the largest
@@ -144,12 +153,60 @@ execution and contracts but never passes numerical verification.
 its actual autograd deployment entry. `PayloadOperatorScope` uses that same
 path with recorded inputs, parameters and output cotangents. `ModuleScope`
 and `model_scope` support full-model evaluation; `WorkloadModelScope` bridges
-existing model workloads.
+existing model workloads. Each sample performs one forward/backward without an
+optimizer update, and every required output, parameter gradient and
+differentiable-input gradient is checked.
 
-Each sample performs one forward/backward with matched inputs, weights, RNG
-conditions, and cotangents, without an optimizer update. Check every required
-output, parameter gradient, and differentiable-input gradient. Also check
-parameter identity/tying, initial state, mutation, and replacement call counts.
+### Operator scope (`gate2/operator.py`)
+
+Every recorded payload of the case (orders 101/202/303/404, every layer's call)
+runs four times on its exact values: the float32 truth `t` (Gate 1's), native,
+the `torch.compile` control (native under inductor) and the candidate, the last
+three through the scope's autograd module. Each result `z` is measured against
+the truth, in float64:
+
+```text
+E2(a, t) = ||a - t||_2 / ||t||_2        overall error
+M(a, t)  = max|a - t| / max|t|          worst element, in units of the largest value
+
+pass  <=>  on every payload x, for m in (E2, M):
+           m(candidate_x[z], t_x[z]) <= T[z, m]
+T[z, m] = max( 2 * max over payloads x and trusted r in (native, compile) of m(r_x[z], t_x[z]),
+               floor(dtype of z) )
+floor: bfloat16 3.9e-3 (2^-8), float16 4.9e-4 (2^-11), float32 1e-5
+```
+
+It is Gate 1's form, `err(candidate) <= max(floor, 2 * err(trusted))`, with
+`torch.compile` added to the trusted implementations, `E2` added to the worst
+element, and a floor of one rounding instead of Gate 1's lenient budget. One
+threshold per result per case, pooled over every payload as Gate 1 pools native's
+error. The factor 2 follows FlashAttention's tests (a kernel's error at most twice
+the PyTorch implementation's against an fp32 reference). The floor matters only
+where both trusted implementations are (nearly) exact: for bfloat16 and float16
+it is the unit roundoff (one correct rounding gives `E2 <= u`;
+flash-linear-attention and DeepGEMM hold bfloat16 kernels to an `E2` of about
+4e-3 to 5e-3), for float32 1e-5, as in torch.testing and TransformerEngine
+(different float32 algorithms differ by up to 1.4e-6 on the benchmark's calls).
+A result whose truth is exactly zero has error 0 when the candidate is zero too.
+
+It catches precision lost by a kernel that computes the right thing:
+accumulation in bfloat16 (Liger's fused linear cross-entropy weight gradient,
+1.3% against native's 0.5%), dropped float32 upcasts, a small systematic scale
+(`E2`), or a few elements less accurate than the trusted implementations (`M`).
+Gross errors and input mutation are Gate 1's; propagation through the model
+and through training are model Gate 2's and Gate 3's. Nothing is calibrated or
+cached, and no structural check beyond what the comparison needs (the
+candidate runs, and each result has native's shape and dtype and is finite).
+If the compile control cannot be built or fails on a payload, native alone is
+trusted there (recorded in the report).
+
+Checked offline (2026-11-19) on the fp64 check's 60 cases and the Liger study's
+7, with fp64 as the truth: every frontend seed passes (largest ratio 0.51), Liger
+passes except its default fused linear cross-entropy (its weight gradient in
+bfloat16 chunks), every gradient scaled by 1.05 is rejected (67/67), and 6 of 7
+scaled by 1.01.
+
+### Model scope (`gate2/calibration.py`)
 
 For reference tensor `r` and candidate tensor `c`:
 
@@ -167,33 +224,23 @@ both the native reference and the compile control must reproduce themselves bit
 for bit (recorded per sample as `repeatability`). A repeat therefore adds
 nothing to the budget: under the deterministic settings no native ever differed
 from its repeat (P8 audit, 2026-11-13), and one that does leaves no policy.
+Parameter identity/tying, initial state, mutation and replacement call counts
+are checked too.
 
 ```text
-operator:  T = gamma * max(compile-native error, floor(dtype))
-model:     T = gamma * max(compile-native error, floor, rounding perturbation)
+T = gamma * max(compile-native error, floor, rounding perturbation)
 ```
 
-The sample protocol depends on scope:
-
-- **Operator:** pool per-result maxima over the calibration samples of each
-  call site (one table per layer's instance of the site). The floor is one
-  number per result dtype -- bf16 2^-8 (its unit roundoff, one rounding of every
-  element), fp16 2^-11, fp32 1e-5 -- for `E2`, and 4 times it times the result's
-  max|r| / RMS(r) for `Emax`, whose denominator is the RMS (one rounding of the
-  largest element ranges over 0.03-163 in `Emax` across bf16 results, so it
-  cannot be one number). Where the compile control reproduces native bit for
-  bit (a vendor GEMM, SDPA or convolution), the floor is what a correct
-  reimplementation that rounds differently is allowed.
-- **Model:** calibrate separately per sample/result; fresh verification must
-  match that sample's input, labels/context, cotangent, initial state, mode and
-  seed. A budget cannot be transferred to another model sample. A third control,
-  the rounding perturbation, adds its own term: the native site with each
-  floating output and input gradient moved one ulp with probability 1/3, each
-  tensor kept within one rounding (`E2` at most the unit roundoff), run under
-  four fixed seeds (11, 22, 33, 44) and taken at its largest. Where compile
-  reproduces the native site bit for bit, it is what a correct reimplementation
-  that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj:
-  logits `E2` 4-5%, against 0 from compile).
+Thresholds are pooled per result over the calibration samples (the four
+batches), and judge fresh executions of exactly those samples: each must match
+its calibrated sample's input, labels/context, cotangent, initial state, mode and
+seed. A third control, the rounding perturbation, adds its own term: the native
+site with each floating output and input gradient moved one ulp with probability
+1/3, each tensor kept within one rounding (`E2` at most the unit roundoff), run
+under four fixed seeds (11, 22, 33, 44) and taken at its largest. Where compile
+reproduces the native site bit for bit, it is what a correct reimplementation
+that rounds differently does to the whole model (Qwen3.5-4B gdn_in_proj: logits
+`E2` 4-5%, against 0 from compile).
 
 At model scope a language model is called as `workload.loss` calls it, and
 that loss, seeded with 1, is the backward: the parameter gradients compared are
@@ -259,10 +306,9 @@ identity lists the recorded cases (`cases`) and states the rule
 (`case_selection`: rule, the search set's SHA-256 and snapshot hash, the
 observed cases left out); a request for any other case fails
 (`Corpus.require_case`), in `open_run` before any gate. Gate 1 and operator
-Gate 2 (gamma 2.5, `GATE2_OPERATOR_GAMMA`) both use every payload of the case, orders 101/202/303/404
-(`PAYLOAD_SPLITS`): operator Gate 2 calibrates on those payloads and judges
-fresh executions of the same ones. The corpus split into calibration (101/202)
-and acceptance (303/404) only keeps 303/404 out of the search's feedback.
+Gate 2 both judge every payload of the case, orders 101/202/303/404
+(`PAYLOAD_SPLITS`). The corpus split into calibration (101/202) and acceptance
+(303/404) only keeps 303/404 out of the search's feedback.
 Model Gate 2 runs the candidate alone at its site, pooling budgets over the
 four batches (compile and the rounding perturbation) with
 gamma 4, on the whole model's outputs and parameter gradients

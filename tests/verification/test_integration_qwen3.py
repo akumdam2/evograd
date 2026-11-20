@@ -575,7 +575,6 @@ class TinyCaptureTests(unittest.TestCase):
                                      compile_backend="aot_eager")
                 status = {name: r.status for name, r in reports.items()}
                 self.assertEqual(status, {"gate1_payloads": expected,
-                                          "gate2_operator_calibration": "calibrated",
                                           "gate2_operator": expected}, (case_id, scale))
 
     def test_development_subset_is_deterministic_and_covers_every_role(self):

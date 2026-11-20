@@ -370,7 +370,7 @@ def check_baseline(op: OpDecl, provider: PairProvider, values: dict[str, Any],
     Each result is held to Gate 1's budget around eager itself (not Gate 1's
     float32 truth: this only asks whether the baseline computes the same thing,
     :mod:`evograd.verification.gate1.tolerances`): every element within
-    ``atol + budget * max|eager|``.
+    ``budget * max|eager|``.
     """
     from evograd.verification.common.tensors import elementwise_error
     from evograd.verification.gate1.tolerances import allowance, result_budget

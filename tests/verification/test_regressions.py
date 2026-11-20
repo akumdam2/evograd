@@ -35,30 +35,29 @@ def samples(prefix, seeds):
 
 
 class TestOverwriteAllowance(unittest.TestCase):
-    def test_declared_overwrite_is_honoured_at_both_gates(self):
+    def test_declared_overwrite_is_honoured_and_an_undeclared_one_is_gate1s_to_refuse(self):
+        from evograd.verification.gate2.operator import verify_operator
+
         op = F.SCALE_SHIFT_OVERWRITE
         pair = F.scale_shift_pair(overwrite_x=True)
         self.assertEqual(F.gate1_report(op, pair).status, PASSED)
         scope = OperatorScope(op, op.benchmark[0], device=CPU)
-        cal = calibrate(scope, patch_set=("operator",), samples=scope.samples([1, 2]),
-                        compile_backend=FAST)
-        report = gate2.verify_integration(scope, scope.candidate(pair), policy=cal.policy,
-                                          samples=scope.samples([1, 2]))
+        report = verify_operator(scope, scope.candidate(pair), samples=scope.samples([1, 2]),
+                                 compile_backend=FAST)
         self.assertEqual(report.status, PASSED, codes(report))
-        # Without the allowance the same pair is an input mutation.
-        plain = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
-        policy = synthetic_policy(plain, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        refused = gate2.verify_integration(plain, plain.candidate(pair), policy=policy,
-                                           samples=[Sample("synthetic/cal", 900)])
+        # Without the allowance the same pair is an input mutation: Gate 1 refuses it
+        # (operator Gate 2 runs the same pair and judges only its numbers).
+        refused = F.gate1_report(F.SCALE_SHIFT, pair)
         self.assertIn("input_mutation", codes(refused))
 
     def test_outputs_are_judged_before_the_backward_reuses_them(self):
+        from evograd.verification.gate2.operator import verify_operator
+
         pair = F.scale_shift_pair(clobber_output=True)
         self.assertEqual(F.gate1_report(F.SCALE_SHIFT, pair).status, PASSED)
         scope = OperatorScope(F.SCALE_SHIFT, F.SCALE_SHIFT.benchmark[0], device=CPU)
-        policy = synthetic_policy(scope, ("operator",), lambda s: {"E2": 1e-3, "Emax": 1e-2})
-        report = gate2.verify_integration(scope, scope.candidate(pair), policy=policy,
-                                          samples=[Sample("synthetic/cal", 900)])
+        report = verify_operator(scope, scope.candidate(pair), samples=scope.samples([1, 2]),
+                                 compile_backend=FAST)
         self.assertEqual(report.status, PASSED, codes(report))
 
 
