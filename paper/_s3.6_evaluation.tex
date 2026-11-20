@@ -1,0 +1,112 @@
+% \subsection{Performance Evaluation Protocol}
+% \label{sec:evaluation_protocol}
+
+% A faster kernel need not yield faster training. \bench uses Tier~1 for search and diagnostics and Tiers~2--3 for deployment performance. Only candidates passing all applicable verification gates contribute to the main results. Timing and statistical details appear in Appendix~\ref{app:evaluation_details}.
+
+% For candidate provider $p$, baseline $b$, configuration $c$, and tier $t\in\{2,3\}$, speedup is
+% \begin{equation}
+% S^t_{p/b}(c)=\frac{T^t_b(c)}{T^t_p(c)},
+% \label{eq:evaluation_speedup}
+% \end{equation}
+% where $T^t$ denotes the tier's execution time. Baselines are eager PyTorch and \texttt{torch.compile} where available.
+
+% \noindent\textbf{Tier 1: isolated forward--backward pair.}
+% Tier~1 asks whether a candidate improves execution efficiency during search. We invoke $F_p$ and $B_p$ directly without autograd. Backward timing excludes preparation of saved state $s_p$; pair timing executes $F_p$ then $B_p$ within one timed region. Their reference-to-candidate timing ratios and a saved-memory penalty guide search only.
+
+% \noindent\textbf{Tier 2: deployed operator.}
+% Tier~2 asks whether the candidate accelerates operator execution through PyTorch autograd. Providers replay the corpus of calls recorded from native training for each configuration, matching inputs, parameters, upstream gradients, memory layouts, and autograd execution boundaries. $T^2_p(c)$ sums per-call median forward--backward latencies; speedups include 95\% bootstrap intervals.
+
+% \noindent\textbf{Tier 3: whole-model training.}
+% Tier~3 asks whether Level~2 candidates accelerate whole-model training. We time complete steps, including forward/loss, backward, optimizer update, and gradient reset. Within each system and model, accepted candidates whose individual eager-relative 95\% speedup intervals have lower bounds above one are combined, reverified under applicable model-scope gates, and retimed against both baselines.
+
+% \noindent\textbf{Memory and Coverage.}
+% Tier~1 reports logical saved-state bytes; Tier~3 reports peak allocated GPU memory relative to eager. Level~1/2 coverage is the fraction of all observed configurations with executable, accepted candidates, including unsubmitted and unselected configurations in the denominator.
+
+\subsection{Performance Evaluation Protocol}
+\label{sec:evaluation_protocol}
+A faster kernel does not necessarily produce a faster training step. Framework overhead, surrounding computation, and operator frequency determine how much an isolated speedup contributes to training performance. \bench measures performance at three scopes: the isolated forward--backward pair, operator execution through PyTorch autograd, and whole-model training. Tier~1 supports search and diagnostics, while Tiers~2 and~3 provide the main deployment performance results. Detailed timing, memory, and aggregation procedures appear in \appref{app:evaluation_details}.
+
+Formal comparisons use matched inputs and execution conditions. Verification runs outside timed regions; executable candidates that fail verification may retain diagnostic timings, but only deployments passing all applicable gates contribute to the main results. We report speedup as
+\begin{equation}
+    S^t_{p/b}(c) = \frac{T^t_b(c)}{T^t_p(c)},
+    \label{eq:evaluation_speedup}
+\end{equation}
+where $p$ is the candidate provider, $b$ the baseline, $c$ the workload configuration, and $t$ the measurement tier. $T^t$ denotes the execution time defined at that tier. Values above one indicate faster execution. Baselines are eager PyTorch and \texttt{torch.compile} where applicable.
+
+\paragraph{Tier 1: isolated forward--backward pair.}
+Tier~1 asks whether a candidate improves execution efficiency during search. It directly invokes $F_p$ and $B_p$ without the PyTorch autograd engine. We measure backward alone, preparing the saved state $s_p$ outside the timed region, and the complete forward--backward pair within one timed region. Backward-only timing measures gradient computation from saved state, while pair timing captures tradeoffs that shift work between forward and backward or replace saved state with recomputation.
+
+For candidates passing the search correctness checks, the default search score is
+\begin{equation}
+    Q(p;c)
+    =
+    \frac{(1-\alpha)\rho_{\mathrm{bwd}}(p;c)
+          +\alpha\rho_{\mathrm{pair}}(p;c)}
+         {1+\lambda R_{\mathrm{saved}}(p;c)},
+    \label{eq:tier1_search_score}
+\end{equation}
+where $\rho_{\mathrm{bwd}}$ and $\rho_{\mathrm{pair}}$ are reference-to-candidate timing ratios for backward and the complete pair, and $R_{\mathrm{saved}}$ is defined below. The default weights are $\alpha=0.5$ and $\lambda=0.05$. These ratios guide search but are not reported as performance speedups because reference and candidate use different execution paths.
+
+\paragraph{Tier 2: deployed operator.}
+Tier~2 asks whether the candidate is faster than eager PyTorch and \texttt{torch.compile} through its deployment path in PyTorch autograd. All providers execute forward and backward through the autograd engine under matched execution boundaries, so comparisons include the framework costs of deploying the operator. We replay all recorded calls of each configuration from one native training step, with identical inputs, parameters, upstream gradients, and memory layouts across providers. The Tier~2 time $T^2_p(c)$ sums the per-call median forward--backward latencies, capturing variation across repeated calls and model layers. Speedup follows Equation~\ref{eq:evaluation_speedup}, with 95\% bootstrap intervals. Only candidates passing all applicable verification gates contribute to the main results.
+
+\paragraph{Tier 3: whole-model training.}
+Tier~3 asks whether operator-level improvements translate into faster whole-model training. For supported workloads, we install Level~2 candidates at their declared model sites and time complete steps, including forward execution, loss computation, backward propagation, optimizer update, and gradient reset. We first measure each candidate alone against eager. For each system and model, we then combine accepted candidates whose single-site speedup has a 95\% interval with its lower bound above one. The combination is verified again by model-scope integration and training verification, and measured against eager and whole-model \texttt{torch.compile} where available. Individual and combined measurements distinguish local contributions from interactions among replacements.
+
+\paragraph{Memory.}
+We record logical saved-state memory at Tier~1 and peak allocated GPU memory at Tier~3 to characterize the tradeoff between execution time and memory use. For operator pairs, normalized saved-state memory is
+\begin{equation}
+    R_{\mathrm{saved}}(p;c)
+    =
+    \frac{M_p^{\mathrm{saved}}(c)}
+         {M_{\mathrm{input}}(c)},
+    \label{eq:saved_memory_ratio}
+\end{equation}
+where $M_p^{\mathrm{saved}}$ counts tensor bytes explicitly retained in $s_p$, and $M_{\mathrm{input}}$ counts the task's declared memory inputs. Whole-model peak allocation is measured in a separate untimed step after optimizer-state initialization and reported relative to eager.
+
+\paragraph{Coverage.}
+Alongside performance, we report acceptance coverage: the fraction of observed configurations with executable candidates that pass all applicable verification gates. Failed and unsubmitted configurations remain in the denominator, so coverage reflects the scope of successful implementations rather than their speed alone.
+
+
+
+
+
+
+
+
+
+
+% \paragraph{Tier 2: deployed operator.}
+% Tier~2 asks whether the candidate is faster than eager PyTorch and \texttt{torch.compile} through its deployment path in PyTorch autograd. All providers execute forward and backward through the autograd engine under matched execution boundaries, so comparisons include the framework costs of deploying the operator. We replay all recorded calls of each configuration from one native training step, with identical inputs, parameters, upstream gradients, and memory layouts across providers. The Tier~2 time $T^2_p(c)$ sums the per-call median forward--backward latencies, capturing variation across repeated calls and model layers. Speedup follows Equation~\ref{eq:evaluation_speedup}, with 95\% bootstrap intervals. Only candidates passing all applicable verification gates contribute to the main results. Timing and statistical details appear in Appendix~\ref{app:tier2_timing}.
+
+% % \paragraph{Tier 3: block and model.}
+% % Tier~3 measures what practitioners ultimately care about: the training step. Candidates are installed at a workload's declared replacement sites, with native implementations everywhere else. An operator's effect on the step depends on how often it runs, its share of step time, and how it interacts with its neighbors, none of which the lower tiers can see. Measuring each site alone and in combination separates a site's own contribution from these interactions. Block scope is a middle ground: a single architectural block supplies local context without the cost and noise of a full model. Model scope times complete training steps, including loss, backward, and the optimizer update, on warm caches as in real training. Because a step can be limited by the host rather than the GPU, we also record how much of the step the host spends issuing work; when the host dominates, no kernel improvement can appear. Two controls keep the comparison honest. Activation checkpointing is held fixed across providers and recorded, since recomputation changes how often each kernel runs.
+
+% \paragraph{Tier 3: block- and model-level training.}
+% Tier~3 asks whether the operator-level improvement translates into faster training when the optimized operator is embedded in the computation that surrounds it. A candidate is installed at the workload's declared replacement sites, while all other computation remains unchanged. Its end-to-end impact depends not only on its standalone speedup, but also on how often the operator executes, what fraction of training time it occupies, and how it interacts with neighboring computation.
+% We therefore evaluate two scopes. At \emph{block scope}, we replace the operator within a single architectural block and time the complete block training computation, providing local context while avoiding the cost and noise of a full-model run. At \emph{model scope}, we time complete training steps, including forward execution, loss computation, backward propagation, gradient accumulation where applicable, and the optimizer update. When a workload contains multiple replacement sites, we measure both individual replacements and their combined effect to distinguish the contribution of each site from interactions among them.
+% Activation checkpointing and other training settings that change operator invocation frequency are held fixed across providers and recorded as part of the configuration. We also record host-side execution overhead, since a training step dominated by framework or launch overhead may realize little end-to-end benefit even when the GPU kernel itself becomes substantially faster.
+
+% \paragraph{Memory.}
+% A training kernel can buy speed by saving more state for backward, so latency alone can reward a candidate that simply spends memory. We therefore report saved-state memory alongside peak allocation. For operator pairs, let $M_p^{\mathrm{saved}}(c)$ denote the logical size of tensors explicitly retained for backward and $M_{\mathrm{input}}(c)$ the logical size of the task's declared memory inputs. We define normalized saved-state memory as
+% \begin{equation}
+%     R_{\mathrm{saved}}(p;c)
+%     =
+%     \frac{M_p^{\mathrm{saved}}(c)}
+%          {M_{\mathrm{input}}(c)}.
+%     \label{eq:saved_memory_ratio}
+% \end{equation}
+% Reporting latency and saved memory separately exposes the tradeoff between retaining intermediate tensors and recomputing them during backward. Logical saved bytes and unique backing-storage bytes are distinguished, with aliases counted once in the latter. Block-level autograd probes exclude storage already owned by parameters or buffers. Peak allocated memory is measured outside timed regions and, at model scope, after optimizer-state initialization.
+
+% \paragraph{Aggregation and coverage.}
+% Suite summaries use the complete forward--backward speedup of Equation~\ref{eq:evaluation_speedup}, since training pays for both halves together. Because speedups are ratios, we average them geometrically: a $2\times$ gain and a $2\times$ loss cancel, and a single large gain cannot dominate the result as it would under an arithmetic mean. Let $S_k(c)$ be the speedup of task $k$ at configuration $c$, $\mathcal{C}_k^{\mathrm{ok}}$ the configurations of task $k$ that a system completes, $\mathcal{K}_f$ the tasks in operator family $f$ with at least one completed configuration, and $\mathcal{F}$ the families with at least one such task. We aggregate in three stages:
+% \begin{equation}
+% \begin{aligned}
+% \bar{S}_k &= \Big(\textstyle\prod_{c \in \mathcal{C}_k^{\mathrm{ok}}} S_k(c)\Big)^{1/|\mathcal{C}_k^{\mathrm{ok}}|}, \\
+% \bar{S}_f &= \Big(\textstyle\prod_{k \in \mathcal{K}_f} \bar{S}_k\Big)^{1/|\mathcal{K}_f|}, \\
+% \bar{S}   &= \Big(\textstyle\prod_{f \in \mathcal{F}} \bar{S}_f\Big)^{1/|\mathcal{F}|}.
+% \end{aligned}
+% \label{eq:suite_geomean}
+% \end{equation}
+% Averaging within families before across them gives each kind of kernel one vote, so families with many operators do not dominate. A failed configuration contributes no speedup, since a single zero would collapse a geometric mean, but it remains in the coverage, $\sum_k |\mathcal{C}_k^{\mathrm{ok}}| / \sum_k |\mathcal{C}_k|$. A system therefore cannot raise its average by succeeding only where the task is easy without lowering its coverage. Numerical agreement is reported alongside performance rather than folded into it.
+% \ajay{Can rewrite this for better flow.}

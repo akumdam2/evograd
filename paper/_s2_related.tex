@@ -1,0 +1,270 @@
+\section{Related Work}
+\label{sec:related}
+% \ajay{Reorganized per Wangjia's request. New flow: 2.1 benchmarks ordered by what they progressively add (fixed shapes -> multi-shape -> robustness/verification  -> production realism), ending at the gap we fill. 2.2 optimizers ordered by mechanism (classical autotuning -> LLM refinement -> evolutionary search -> shape-aware deployment), so each family sets up the next and the differentiation paragraph is last. Old related work section is simply commented out, feel free to revert back if it looks wrong.}
+% \haochen{Added two recent works: SOL-ExecBench and EGG (ICML26)}
+% \todo{Add CODA and CAKE, and revise the flow; consider: Do we need to split this into related work and motivation? Or, just write a motivation paragraph at the end of each subsection.}
+% \haochen{I added CODA and CAKE.}
+\subsection{GPU Kernel Benchmarks and Evaluation}
+\label{subsec:related_benchmark}
+
+Existing benchmarks differ in how they construct operator workloads. 
+KernelBench~\cite{ouyang2025kernelbench} established the widely used protocol
+of evaluating each task at a fixed input configuration, organizing workloads
+from individual operators to fused computations and model fragments;
+CUDABench~\cite{cudabench} similarly treats different input scales as
+independent generation tasks. Later work broadens workload coverage:
+TritonBench~\cite{tritonbench} and KernelBench-X~\cite{kernelbenchx} score a
+single kernel over operator-specific input sets, and
+robust-kbench~\cite{lange2025robustkbench} shows why this matters: kernels
+optimized for narrow visible configurations can lose substantial performance
+on unseen shapes. 
+
+% Both protocols are reasonable: fixed-workload evaluation
+% supports point specialization when the deployment configuration is known,
+% while multi-configuration evaluation suits reusable operators expected to
+% serve a broader input domain. 
+
+
+Orthogonally,
+KernelBench-Verified~\cite{zhang2026kernelbenchverified} shows that weak
+input distributions and mismatched baselines permit semantic shortcuts and
+inflated speedups, and a third direction strengthens baselines and workload
+realism: SOL-ExecBench~\cite{execbench} measures real-world kernels against
+speed-of-light hardware limits, NKIBench~\cite{accelopt} evaluates Trainium
+kernels extracted from production LLM workloads against theoretical peak
+performance, and FlashInfer-Bench~\cite{flashinferbench} organizes evaluation
+around serialized production workload traces and deploys the fastest correct
+solution per exact workload key with runtime fallback.
+
+Across all three families, however, candidates are mostly forward kernels evaluated in isolation. SOL-ExecBench contains backward tasks, but it evaluates them as standalone tensor programs without explicitly modeling the forward–backward interface. Our benchmark 
+% supports both fixed-shape and multi-configuration protocols, but 
+instead targets autograd-compatible forward--backward \emph{pairs}:
+candidates must produce correct forward outputs and gradients, expose a valid
+saved-tensor interface, and are evaluated jointly on backward latency, the
+operator's aggregate forward-plus-backward contribution to a training
+iteration, and saved-state memory. To our knowledge, this is the first
+benchmark centered on the joint synthesis and evaluation of
+autograd-compatible forward--backward GPU kernel pairs.
+% \ajay{Addresses Minjia's comment on missed benchmarks (FlashInfer-Bench,
+% NKIBench). NKIBench is introduced in the AccelOpt paper
+% and is distinct from NKIGen-Bench.}
+% \minjia{LGTM.}
+
+\subsection{Automated Kernel Optimization}
+
+\noindent\textbf{Classical autotuning.}
+Shape specialization predates LLM-driven methods. Triton's \texttt{autotune}
+re-benchmarks a declared configuration set whenever key arguments change and
+caches the winner per exact key~\cite{tillet2019triton}, and TVM's
+MetaSchedule/Ansor performs evolutionary schedule search independently per
+static workload, keyed by shapes, dtypes, and hardware
+target~\cite{zheng2020ansor}. Both specialize configurations or schedules of
+a fixed compute definition; neither searches over structurally distinct
+implementations of arbitrary forward--backward programs, and neither carries
+a saved-state or memory objective.
+
+\noindent\textbf{LLM-driven iterative refinement.}
+Agentic frameworks formulate kernel improvement as iterative search driven by
+execution and profiling feedback. GEAK~\cite{wang2025geak} separates
+correctness repair from performance optimization and combines sequential
+refinement with parallel sampling under a bounded inference-time budget,
+while profiling-guided systems such as KernelAgent~\cite{cheng2026kernelagent}, TritonForge~\cite{li2025tritonforge}, and
+KernelPro~\cite{gai2026kernelpro} interpret NCU measurements into bottleneck diagnoses that steer subsequent rewrites. EGG~\cite{han2026egg} uses profile results to guide algorithmic reformulation, parallel mapping, tensor tiling, and memory optimization. CAKE~\cite{ye2026cake} co-designs the compiler environment with the optimization agent through a hardware-explicit IR and structured correctness and performance feedback. These systems optimize one concrete target at a time under a scalar objective;
+they maintain no population from which complementary shape specialists could be composed.
+
+\noindent\textbf{Evolutionary program search.}
+Population-based methods, established by FunSearch and scaled by
+AlphaEvolve~\cite{romera2024funsearch,novikov2025alphaevolve}, instead
+maintain archives of candidate programs mutated by LLMs.
+OpenEvolve~\cite{sharma2025openevolve}, which \method builds on, combines
+MAP-Elites-style quality-diversity search with an island model and applies
+LLM-generated diffs to evolvable source regions;
+ShinkaEvolve~\cite{shinkaevolve} offers richer parent-selection and repair
+policies over the same design, and KernelFoundry~\cite{kernelfoundry}
+demonstrates genuine quality-diversity evolution directly on GPU kernels.
+However, in all of these, retention compares a single scalar fitness, and
+diversity is indexed by program source or behavior descriptors rather than
+by which inputs a candidate wins: per-shape metrics returned by an evaluator
+cannot influence selection, so a shape specialist cannot survive on that
+merit alone. GEPA~\cite{agrawal2025gepa} is the notable exception,
+retaining candidates that are best on individual validation instances, but
+it targets textual components and emits no deployable dispatch. This
+retention gap motivates \method's independently evolved regime specialists
+(Section~3.3).
+
+\noindent\textbf{Shape-aware deployment.}
+KernelEvolve~\cite{liao2026kernelevolve} deploys agentic tree search at production scale for recommendation-model serving across NVIDIA, AMD, and MTIA, incorporating production shape distributions and dispatching to generated kernels over shape regions where they outperform vendor baselines. CAKE~\cite{ye2026cake} similarly separates aggressive single-shape optimization from a later generalization stage that groups specialized kernels into dispatcher-backed shape portfolios. Both optimize kernels as isolated specifications: although backward kernels may appear as individual tasks, they do not derive backward computation from a forward definition, optimize activation-checkpointing strategies across the forward--backward boundary, or jointly optimize forward--backward pairs.
+
+\noindent\textbf{Coding agents.}General-purpose coding agents are now used directly as kernel agents. FastKernels [16] runs OpenAI Codex alongside purpose-built kernel agents on its L1–L2 tasks and also uses a Codex-based loop with NCU profiling feedback to author its own reference kernels. Codex is the only agent that passes correctness on every task, yet its aggregate speedup stays below 1× against production kernels, and its advantage over eager baselines (1.16×) largely disappears against vendor kernels (0.93×). Like the systems above, these agents optimize one forward target under a scalar objective; they maintain no population and have no notion of a forward–backward pair or saved-state contract. \ajay{Added Codex section.}
+% KernelEvolve~\cite{liao2026kernelevolve} deploys agentic tree search at
+% production scale for recommendation-model serving across NVIDIA, AMD, and
+% MTIA, incorporating production shape distributions and dispatching to
+% generated kernels over shape regions where they outperform vendor baselines.
+% It optimizes each kernel as an isolated specification under a scalar speedup
+% fitness: although its reported results include individual backward kernels
+% supplied as tasks, 
+% it does not derive backward computation from a forward
+% definition, optimize activation checkpointing strategies between forward and backward kernels, 
+% or jointly optimize
+% forward--backward pairs, 
+%  and its transformer coverage centers on
+% convolutional transformers within ranking models and LLM inference kernels. 
+% \minjia{It feels this "expose a saved-tensor contract" is a misnomer. If I understand correctly, the main reason to have this saved-tensor to be jointly considered for fwd + bwd is really to give the custom training kernel the capability to handle activation checkpointing. The "expose a saved-tensor contract" term says what it is but does not capture the real goal, hence the confusion. } \haochen{Fixed.}
+% \minjia{LGTM.}
+% \minjia{This seems to be quite relevant. Looking at the date, it is Jun 2026 and published at ISCA'26. They also included Triton. We may need to be careful about the positioning wrt KernelEvolve. Do they consider AD? I did a quick search and the paper does not seem to mention a lot about gradients/backward, etc. Please double check. If not, that should be the primary differentiation. Also, it seems they primarily talk about DLRM? Do they also cover Transformer? The primary transformer variant they cover seems to be convolutional transformer, not canonical transformer used in LLMs.  }
+% \ajay{Verified against the full paper. DLRM-focused per
+% its own abstract; fitness is speedup vs.\ torch.compile with $F{=}0$ on
+% incorrectness; one backward result exists (RMSNorm 2D bwd, 17$\times$ on
+% MTIA) but only as a supplied task spec. Differentiation works, but word it
+% as ``does not derive or jointly optimize autograd pairs,'' not ``does not
+% handle backward''. Transformer coverage: convolutional transformers in ranking models
+% plus Llama inference kernels, no canonical transformer training operators.}
+% \minjia{LGTM.}
+
+Our work differs from all five families in the same way: it treats the autograd-compatible forward--backward pair, including its saved-state contract, as the unit of synthesis, optimization, and evaluation. Prior systems optimize a forward kernel as an isolated specification, and where backward kernels appear they are standalone tasks with no forward definition to derive from and no saved-tensor interface to co-design. EvoGrad instead derives the backward program from the forward function, evolves the forward algorithm, backward algorithm, and saved state jointly, and scores candidates on backward latency, aggregate forward-plus-backward cost, and retained memory. Configurations are not chosen as independent benchmark parameters but extracted from real training workloads, and every candidate is evaluated across three tiers, from the direct pair to end-to-end training, so that operator-level gains are checked against the integration effects prior benchmarks leave outside their abstraction. \haochen{should we still keep this, if variable input shape is no longer a major part of our work ? Or just phrase it as "variable workload derived from training"} 
+\ajay{Changed it but it runs a little long, feel free to shorten.}
+% \section{Related Work}
+
+% \subsection{GPU Kernel Benchmarks and Evaluation.}
+% KernelBench~\cite{ouyang2025kernelbench} established a widely used benchmark
+% for LLM-generated GPU kernels, organizing workloads from individual operators
+% to fused computations and model fragments and evaluating each task at a fixed
+% input configuration. CUDABench~\cite{cudabench} similarly treats different input scales as
+% independent generation tasks. In contrast, TritonBench~\cite{tritonbench} and
+% KernelBench-X~\cite{kernelbenchx} evaluate a single generated implementation
+% over multiple operator-specific input configurations, while
+% robust-kbench~\cite{lange2025robustkbench} shows that kernels optimized for
+% narrow visible configurations can lose substantial performance on unseen
+% shapes. FlashInfer-Bench~\cite{flashinferbench} explicitly supports variable input shapes by evaluating candidate implementations across multiple representative configurations and selecting the fastest correct implementation for the current input configuration at runtime. \haochen{FlashInfer-Bench is more advanced in dealing with variable input shapes compared with other benchmarks. }
+
+% Both evaluation settings are reasonable. Fixed-workload protocols support point specialization when the deployment configuration is known in advance, whereas multi-configuration evaluation is more appropriate for reusable operators expected to handle a broader input domain.
+% Beyond shape coverage, KernelBench-Verified~\cite{zhang2026kernelbenchverified}
+% shows that weak input distributions and mismatched baselines can permit
+% semantic shortcuts and inflate reported speedups.
+
+% Our benchmark supports fixed-shape evaluation for concrete deployment
+% workloads, but defaults to multi-configuration evaluation for reusable
+% operators. Recent suites have also strengthened baselines and workload
+% realism: SOL-ExecBench~\cite{execbench} measures real-world kernels against
+% speed-of-light hardware limits rather than framework baselines,
+% NKIBench~\cite{accelopt} evaluates Trainium kernels extracted from
+% production LLM workloads against theoretical peak performance, and
+% FlashInfer-Bench~\cite{flashinferbench} organizes evaluation around
+% serialized production workload traces and deploys the fastest correct
+% solution per exact workload key with runtime fallback. Most of the current benchmarks remain inference-oriented forward-kernel suites. SOL-ExecBench contains 46/235 backward tasks, but it evaluates them as standalone tensor programs without explicitly modeling the forward–backward interface. \haochen{sol-execbench contains several backward tasks. }
+% \ajay{Completed the SOL-ExecBench sentence and added NKIBench +
+% FlashInfer-Bench per Minjia's comment. NKIBench is introduced in the
+% AccelOpt paper (arXiv:2511.15915); distinct from NKIGen-Bench
+% +(arXiv:2607.04395), which targets generation/correctness.}
+% \minjia{I think you at least missed FlashInfer-Bench and NKIBench mentioned in previous comment. Please check the past two years' publication at MLSys/NeurIPS/ICLR/ICML/AAAI on agentic kernel optimizations.} \wangjia{got it.}
+% Our benchmark instead targets autograd-compatible forward--backward pairs:
+% candidates must produce correct forward outputs and gradients, expose a valid
+% saved-tensor interface, and are evaluated jointly on backward latency,
+% \minjia{The observation above is a good one and perhaps a major limitation of prior work we can say in the intro. But do we really need to do anything to "produce correct forward outputs"? Are you saying that we rely on agent to lower pytorch forward code to Triton forward (the first transformation), and then Triton fwd to Triton bwd (second transformation)? Then the backward pass's correctness is input dependent -- it needs to get the forward pass activation for backward gradient calculation, and that's something prior work didn't tackle? If so, what bad consequence could that lead to?  }
+% \wangjia{The user provides a PyTorch forward program, from which PyTorch autograd/AtenIR derives the backward computation. The agent then jointly generates the Triton forward, backward, and their saved-tensor interface. Because the generated forward is part of the candidate and produces the state consumed by backward, we verify both its outputs and the resulting gradients.
+% The key difference is that prior kernel-generation benchmarks are predominantly inference-only and evaluate forward kernels in isolation. To our knowledge, ours is the first benchmark to jointly evaluate generated Triton forward--backward pairs. Without pair-level validation, a backward kernel may rely on state that its generated forward does not correctly provide, making the result invalid for training.}
+
+% end-to-end forward--backward latency, 
+% \minjia{Why do we want to evaluate e2e forward-backward latency? In real training, the forward and backward kernel are separate subgraph in the entire computation graph. They are executed together but at different time span.}
+% \wangjia{``end-to-end forward--backward latency'' is not the appropriate term for a single-operator benchmark, since the operator's forward and backward execute at different points in the training graph. We measure them separately and report both the backward latency and their sum, which estimates the operator's aggregate contribution to one training iteration. Measuring both is necessary because jointly optimizing the forward, backward, and saved state may trade increased forward cost for faster backward execution. For future Level-3 whole-model benchmarks, we can instead measure true end-to-end training-step latency by executing the complete forward and backward graphs, which naturally preserves their temporal separation. I will revise the terminology accordingly.}
+% and saved-state memory.
+% To our knowledge, this is the first benchmark centered on the joint synthesis
+% and evaluation of autograd-compatible forward--backward GPU kernel pairs.
+
+% % We take special concern on several properties when designing our benchmark for the EvoGrad agent. First, current existing benchmarks separates tasks into different levels of difficulties. Two common patterns of division are (1) the complexity of target kernels (KernelBench, KernelBench-verified) and (2) the amount of instructions provided to the agent (CUDABench, TritonBench). Second, we consider the evaluation metrics and baselines. Common baselines include native Pytorch kernels, expert triton kernels on Github and roofline analysis. 
+
+
+
+
+% \subsection{Agentic Code Optimization Frameworks}
+
+% Recent agentic code-optimization frameworks formulate program improvement as iterative search driven by execution feedback. GEAK~\cite{wang2025geak} specializes this pattern for GPU kernels, separating correctness repair from performance optimization and combining sequential refinement with parallel sampling under a bounded inference-time budget. GEPA~\cite{agrawal2025gepa} improves textual components by reflecting on execution trajectories, while OpenEvolve~\cite{sharma2025openevolve} combines MAP-Elites-style quality-diversity search with an island model and applies LLM-generated diffs to evolvable source regions.
+
+% GPU kernel generation systems could take additional advantage of profiling results. EGG~\cite{egg}, for example, repeatedly profiles the current kernel and interprets the resulting hardware metrics under stage-specific objectives, using them to guide algorithmic reformulation, parallel mapping, tensor tiling, and memory optimization. KernelEvolve~\cite{liao2026kernelevolve} incorporates production shape distributions into agentic search, discovering shape-specific fusion and tiling strategies and dispatching to generated kernels only over shape regions where they outperform vendor or framework baselines.
+% \minjia{This seems to be quite relevant. Looking at the date, it is Jun 2026 and published at ISCA'26. They also included Triton. We may need to be careful about the positioning wrt KernelEvolve. Do they consider AD? I did a quick search and the paper does not seem to mention a lot about gradients/backward, etc. Please double check. If not, that should be the primary differentiation. Also, it seems they primarily talk about DLRM? Do they also cover Transformer? The primary transformer variant they cover seems to be convolutional transformer, not canonical transformer used in LLMs.  }
+
+% This establishes that shape-aware optimization is important, but treats the shape distribution primarily as a target distribution for a shared search trajectory, with fallback outside the profitable region.
+
+% Our work instead makes shape-regime decomposition an explicit component of evolution. We independently evolve executable specialists on different shape distributions, cross-evaluate the resulting programs over the complete shape grid, and select measured boundaries to compose the specialists into a single runtime-dispatched implementation. This formulation targets cases in which different shape regimes favor structurally distinct kernel decompositions, rather than only different configurations of one shared implementation.
+
+% \ahan{Another thing to compare to may also be conventional AD compilers, e.g. Enzyme. These also allegedly solve the AD problem (like we do). So how are we different? Contenders here: Enzyme, PyTorch-2.}
+
+
+
+% Recent work has also explored incorporating hardware profiling feedback into LLM-based GPU kernel optimization. KEET~\cite{davis2026keet} focuses on interpreting Nsight Compute profiles: it first analyzes the kernel source to construct algorithm summaries and performance hypotheses, and then selectively examines relevant profiles and metrics to produce data-grounded bottleneck explanations and optimization suggestions.
+% KernelPro~\cite{gai2026kernelpro} extends this idea into a complete closed-loop CUDA optimization system, translating raw NCU, NSYS, and SASS measurements into actionable feedback through expert-designed micro-profiling tools and using this feedback to guide an MCTS-based search over kernel implementations.
+
+
+% It imposes no structure on the objective: correctness and
+% performance are whatever the user's evaluator encodes, and all reported metrics are reduced to a
+% single scalar fitness, so variation across input shapes can influence only which archive niche acandidate occupies, never selection itself.
+% Recent work has explored incorporating hardware profiling feedback into LLM-based GPU kernel optimization.
+% KEET~\cite{davis2026keet} focuses on interpreting Nsight Compute profiles: it first analyzes the kernel source to construct algorithm summaries and performance hypotheses, and then selectively examines relevant profiles and metrics to produce data-grounded bottleneck explanations and optimization suggestions.
+% KernelPro~\cite{gai2026kernelpro} extends this idea into a complete closed-loop CUDA optimization system, translating raw NCU, NSYS, and SASS measurements into actionable feedback through expert-designed micro-profiling tools and using this feedback to guide an MCTS-based search over kernel implementations.
+% Earlier, CudaForge~\cite{zhang2025cudaforge} introduced a training-free Coder--Judge framework in which the Judge uses NCU metrics and hardware specifications to diagnose candidate CUDA kernels, improving correctness and performance across multiple GPU platforms.
+% TritonForge~\cite{li2025tritonforge} similarly integrates NCU-based bottleneck analysis into an iterative Triton optimization loop, using profiling results to guide targeted code transformations and evaluate their performance impact.
+% These studies demonstrate that raw hardware specifications or performance measurements alone provide limited guidance; profiling feedback is most useful when it is interpreted in the context of kernel semantics and converted into concrete optimization actions.
+% Inspired by these systems, our evolution pipeline can use profiling feedback to diagnose promising candidates and guide subsequent mutations, rather than directly treating individual NCU metrics or heuristic flags as optimization objectives.
+% Unlike prior profiling-guided systems, however, our primary goal is not only to optimize an existing forward kernel, but to synthesize and jointly optimize autograd-compatible forward and backward programs, where optimization decisions must additionally account for gradient semantics, saved-tensor memory, recomputation, and shape-dependent performance.
+
+\ahan{Background and Motivation required too. Recommend to insert section here prior to section 3.}
+
+\subsection{Training Compilers and Autograd Optimization}
+
+================== 
+
+This operator-internal design space is complementary to graph-level activation checkpointing and recomputation. Systems such as PyTorch 2 and AOTAutograd already optimize save-versus-recompute decisions over compiler-visible forward--backward graphs~\cite{ansel2024pytorch2,pytorch2025activationcheckpointing}. 
+
+=================
+
+\paragraph{Eager-mode autograd.}
+PyTorch eager mode executes operations immediately while dynamically recording
+a reverse-mode automatic-differentiation graph~\cite{paszke2019pytorch}.
+Calling \texttt{backward()} traverses this graph and accumulates gradients using
+operator-defined derivative rules and saved tensors. Eager execution remains a
+strong baseline because common operators may dispatch to highly optimized fused native CUDA kernels. However, without capturing a larger graph, it cannot generally
+fuse across Python operators or globally optimize which intermediates should be
+saved or recomputed.
+
+\paragraph{Compiled training in PyTorch 2.}
+PyTorch 2 expands this scope through \texttt{torch.compile}
+~\cite{ansel2024pytorch2}. TorchDynamo captures Python tensor programs,
+AOTAutograd produces a joint forward--backward graph, and TorchInductor lowers
+the partitioned graphs into fused, shape-specialized GPU kernels, primarily
+through Triton. The values crossing the forward--backward boundary become
+explicit outputs of the compiled forward and inputs to the compiled backward.
+
+AOTAutograd's min-cut partitioner can recompute inexpensive, fusion-friendly
+operations instead of saving their outputs~\cite{he2023fusionaware}. This is an
+automatic rematerialization mechanism within the PyTorch 2 compiler stack.
+Traditional activation checkpointing instead asks the user to select regions
+for recomputation~\cite{chen2016sublinear}, while newer selective-checkpointing
+and memory-budget APIs provide finer control over this trade-off
+~\cite{pytorch2025activationcheckpointing}.
+
+\paragraph{Specialized training kernels.}
+Compiler-generated code coexists with manually optimized training libraries.
+Liger-Kernel provides Triton forward and backward implementations for
+normalization, activation, positional-embedding, and loss operators
+~\cite{hsu2024liger}. These kernels can be installed as PyTorch modules or
+custom Autograd functions and achieve model-level improvements through fusion,
+chunking, specialized reductions, and reduced intermediate storage. Their
+limitation is that each forward--backward implementation must be manually
+designed and maintained. CODA~\cite{guo2026coda} defined a set of GEMM-epilogue primitives and reparameterized Transformer forward and backward computations into GEMM-plus-epilogue programs, which are later implemented by human or LLM. This allows memory-bound operations to execute while GEMM output tiles remain on chip, reduces global-memory traffic and improves global performance.  
+
+\paragraph{Positioning our work.}
+PyTorch 2 already covers a substantial part of the forward--backward
+optimization problem: it captures backward computation, selects saved values
+and recomputation, fuses graphs, and specializes generated kernels. However,
+it primarily transforms an existing graph under registered derivative and
+decomposition rules. It does not generally search over alternative backward
+algorithms, arbitrary saved-state representations, or jointly redesigned
+forward--backward interfaces.
+
+
+Our work explores this additional space by treating the forward implementation,
+backward implementation, and exchanged state as one optimization object.
+Accordingly, we compare against eager autograd, PyTorch 2 compilation, and
+expert-written libraries such as Liger. Section~\ref{sec:evaluation_protocol}
+further separates direct kernel quality, operator-level training latency, and
+end-to-end model performance.

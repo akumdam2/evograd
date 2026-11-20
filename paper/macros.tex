@@ -1,0 +1,237 @@
+\usepackage{siunitx}
+\usepackage{colortbl}
+\usepackage{xspace}
+
+\newcommand\accnum[1]{\num[round-precision=3]{#1}}
+\newcommand\pernum[1]{\num[round-precision=1]{#1}}
+\newcommand\scnum[1]{\num[scientific-notation=true,round-precision=1]{#1}}
+\newcommand\numt[1]{\num[round-precision=2,round-mode=figures,scientific-notation=true]{#1}}
+\newcommand\numo[1]{\num[round-precision=1,round-mode=figures,scientific-notation=true]{#1}}
+%\newcommand{\numo}[1]{
+%\pgfmathparse{#1}\pgfmathprintnumberto[precision=1, assume math mode=true]{\pgfmathresult}{\roundednumber}\roundednumber
+%}
+%\newcommand{\numt}[1]{
+%\pgfmathparse{#1}\pgfmathprintnumberto[precision=2, assume math mode=true]{\pgfmathresult}{\roundednumber}\roundednumber
+%}
+
+\newcommand{\pref}[1]{page~\pageref{#1}}
+\newcommand{\vect}[1]{\boldsymbol{#1}} % vector
+\newcommand{\mat}[1]{\boldsymbol{#1}}  % matrix
+\newcommand{\defeq}{\ensuremath{\mathrel{\mathop:}=}}
+\newcommand{\eqdef}{\ensuremath{=\mathrel{\mathop:}}}
+
+% \newcommand{\ipoint}[1]{\textit{\textbf{\color{darkgray}#1}}}
+\newcommand{\ipoint}[1]{\textit{\textbf{\color{black!60}#1}}}
+\newcommand{\todo}[1]{{\color{red}\textit{TODO}: #1}}
+%\newcommand{\comment}[1]{{\color{blue}comment: #1}}
+\newcommand{\commentout}[1]{}
+\renewcommand{\b}[1]{{#1}}
+\newcommand{\grbf}[1]{\mbox{\boldmath${#1}$\unboldmath}} %\renewcommand{\grbf}[1] {\mathbf{#1}}
+\newcommand{\ns}[1]{\ensuremath{\mathbb{#1}}}
+\newcommand{\fs}[1]{\ensuremath{\mathcal{#1}}}
+\newcommand{\idiv}{\ensuremath{\nabla\cdot}}
+\newcommand{\igrad}{\ensuremath{\nabla}}
+\newcommand{\ilap}{\rotatebox[origin=c]{180}{$\nabla$}}
+\newcommand{\icurl}{\ensuremath{\nabla \times}}
+\newcommand{\tr}{\ensuremath{\operatorname{tr}}}
+\newcommand{\id}{\ensuremath{\operatorname{id}}}
+\newcommand{\ts}{\textsuperscript}
+\newcommand{\half}[1]{\frac{#1}{2}}
+\renewcommand{\d}[1]{\mathop{}\!\mathrm{d}#1}
+\newcommand{\dt}{\d{t}}
+\newcommand{\dx}{\d{\vect{x}}}
+\newcommand{\op}[1]{\ensuremath{\mathcal{#1}}}
+\newcommand{\di}[1]{\ensuremath{\mathbf{#1}}}
+
+
+\newcommand{\MA}[1]{{\mathcal #1}}
+\newcommand{\reals}{\mathbb{R}}
+\newcommand{\codenm}[1]{{\tt  #1}}
+\newcommand{\zapspace}{\topsep=0pt\partopsep=0pt\itemsep=0pt\parskip=0pt}
+
+\newcommand{\msection}[1]{\section{#1}}
+\newcommand{\msubsection}[1]{\subsection{#1}}
+%\newcommand{\msection}[1]{\section{#1}}
+%\newcommand{\msubsection}[1]{\subsection{#1}}
+
+
+\definecolor{light-gray}{gray}{0.80}
+%\renewcommand{\algorithmiccomment}[1]{#1}
+
+
+\newcommand{\mcol}[2]{\multicolumn{#1}{r}{#2}}
+\newcommand{\mrow}[2]{\multirow{#1}{*}{#2}}
+\newcommand{\mrowrot}[2]{
+\parbox[t]{2mm}{\multirow{#1}{*}{\rotatebox[origin=c]{90}{#2}}}
+}
+
+
+%\newcommand{\algcolor}[2]{\hspace*{-\fboxsep}\colorbox{#1}{\parbox{\linewidth}{#2}}}
+\newcommand{\algcolor}[2]{\colorbox{#1}{\parbox{\linewidth}{#2}}}
+\newcommand{\algemph}[1]{\algcolor{light-gray}{#1}}
+
+\newcommand{\algcmt}[1]{\hfill {\footnotesize\ttfamily\textcolor{blue}{/* {#1} */}}}
+%\newcommand{\algcmt}[1]{{\footnotesize\ttfamily\textcolor{blue}{\dotfill #1}}}
+\newcommand{\algcc}[1]{\hfill {\footnotesize\ttfamily\textcolor{blue}{//{#1}}}}
+
+% \let\oldparagraph\paragraph
+% \renewcommand\paragraph{\subsubsection*}
+
+
+\newcommand{\bfeval}[1]{
+  \textcolor{black}{\textbf{\eval{#1}}}
+}
+\newcommand\aref{Algorithm~\ref}
+\newcommand\appref{Appendix~\ref}
+\newcommand\eref{Eq.~\ref}
+\newcommand\fref{Fig.~\ref}
+\newcommand\tref{Table~\ref}
+\newcommand\sref{\S~\ref}
+% \newcommand\sref{Section~\ref}
+\newcommand\cmt[1]{\tcp*[r]{\scriptsize \color{gray!80!black}#1}}
+\newcommand{\red}[1]{{\color{red} #1}}
+\newcommand{\blue}[1]{{\color{blue} #1}}
+\newcommand{\bluem}[1]{{\bf\color{blue} #1}}
+\newcommand\ha{ \rowcolor{orange!0}}
+\newcommand\hb{ \rowcolor{orange!15}}
+\newcommand\hc{ \rowcolor{orange!40}}
+\newcommand\hd{ \rowcolor{orange!45}}
+\newcommand\he{ \rowcolor{orange!60}}
+\newcommand\hf{ \rowcolor{orange!75}}
+\newcommand\hg{ \rowcolor{orange!90}}
+
+\newcommand\cha{\cellcolor{orange!0}}
+\newcommand\chb{\cellcolor{orange!15}}
+\newcommand\chc{\cellcolor{orange!40}}
+
+\newcommand\ga{ \rowcolor{gray!0}}
+\newcommand\gb{ \rowcolor{gray!15}}
+\newcommand\gc{ \rowcolor{gray!40}}
+\newcommand\gd{ \rowcolor{gray!45}}
+
+
+
+% notation simplification
+\newcommand\MS{{\mathcal{M}}}
+\def\x{{\bf x}}
+\def\H{{\bf H}}
+\def\g{{\bf g}}
+\def\Hg{{\bf Hg}}
+% \def\0{{\bf 0}}
+\def\s{{\bf s}}
+\def\t{{\bf t}}
+\def\p{{\bf p}}
+
+
+
+
+\def\vv{{\bf v}}
+
+\def\R{{\mathbb R}}
+
+\def\AS{{\mathcal{A}}}
+\def\V{{\mathbb{V}}}
+
+
+\let\proof\relax
+\let\endproof\relax
+\usepackage{amsthm}
+\let\lemma\relax
+\let\assumption\relax
+\let\remk\relax
+\let\theorem\relax
+\usepackage{amsthm}
+
+
+\newtheorem{mytheorem}{Theorem}
+\newtheorem{assumption}[mytheorem]{Assumption}
+\newtheorem{lemma}[mytheorem]{Lemma}
+\newtheorem{remk}[mytheorem]{Remark}
+\newtheorem{definition}{Definition}
+
+\newcommand{\es}[1]{{\color{red} #1}}
+
+\newcommand{\MP}{\xspace\tiny{MP}}
+\newcommand{\mixsolver}{\xspace{MixSolver}}
+% \newcommand{\textapprox}{\raisebox{0.5ex}{\texttildelow}}
+
+
+
+%\newtheorem{thm}{Theorem}
+%\newtheorem{lem}[thm]{Lemma}
+%\newtheorem{cor}[thm]{Corollary}
+%\newtheorem{rem}[thm]{Remark}
+%\newtheorem{remark}[thm]{Remark}
+%\newtheorem{conj}[thm]{Conjecture}
+
+\newcommand{\uniquepattern}{\emph{Unique}\xspace}
+\newcommand{\replicatepattern}{\emph{Replicate}\xspace}
+\newcommand{\shardpattern}{\emph{Shard}\xspace}
+\newcommand{\shardpatternv}{\emph{Shard-V}\xspace}
+\newcommand{\shardpatternh}{\emph{Shard-H}\xspace}
+\newcommand{\partialpattern}{\emph{Partial}\xspace}
+% \newcommand{\avgpattern}{\emph{params\_to\_average}\xspace}
+
+
+\newcommand{\padfree}{\emph{StripPad}\xspace}
+\newcommand{\union}{\emph{Union}\xspace}
+\newcommand{\extract}{\emph{Extract}\xspace}
+\newcommand{\genmeta}{\emph{UcpInfo}\xspace}
+\newcommand{\load}{\emph{Load}\xspace}
+\newcommand{\save}{\emph{Save}\xspace}
+
+\newcommand{\pp}{pipeline parallelism\xspace}
+\newcommand{\tp}{tensor parallelism\xspace}
+\newcommand{\Pipe}{Pipeline}
+\newcommand{\pipe}{pipeline}
+
+\newcommand{\minjia}[1]{{\color{red}\small [Minjia: #1]}}
+\newcommand{\kartik}[1]{{\color{blue}\small [Kartik: #1]}}
+\newcommand{\ahan}[1]{{\color{orange}\small [Ahan: #1]}}
+\newcommand{\jiahuan}[1]{{\color{orange}\small [Jiahuan: #1]}}
+\newcommand{\kaidi}[1]{{\color{green}\small [Kaidi: #1]}}
+\newcommand{\zihan}[1]{{\color{violet}\small [Zihan: #1]}}
+
+\newcommand{\originalgrumbler}[2]{\begin{quote}\textcolor{blue}{\sl{\bf #1 says:} #2}\end{quote}}
+\newcommand{\grumbler}[2]{\originalgrumbler{#1}{#2}}
+\newcommand{\hide}[1]{}\newcommand{\draft}[1]{{\color{orange}#1}}
+% \newcommand{\minjia}[1]{\grumbler{Minjia}{#1}}
+
+% \newcommand{\name}{ElasticPD\xspace}
+\newcommand{\bench}{ADBench\xspace}
+\newcommand{\name}{EvoGrad\xspace}
+% \newcommand{\instance}{Instance-Level Elasticity\xspace}
+% \newcommand{\cluster}{Cluster-Level Elasticity\xspace}
+\newcommand{\instance}{FluidToken\xspace}
+\newcommand{\cluster}{FluidRole\xspace}
+
+
+\newcommand{\revisionA}[1]{{\color{blue} #1}}
+\newcommand{\revisionB}[1]{{\color{red} #1}}
+\newcommand{\revisionC}[1]{{\color{orange} #1}}
+\newcommand{\revision}[1]{{\color{blue} #1}}
+
+% ---- Revision marking for the design-section polish pass (Zihan) ----
+% New text added in this pass (teal = unused by any author color):
+\newcommand{\new}[1]{{\color{teal}#1}}
+% Inline deletion of a short span (strikethrough; do NOT use across display math):
+\newcommand{\del}[1]{{\color{gray}\sout{#1}}}
+% Block deletion for paragraphs/equations: greys the content and fences it
+% top and bottom with a full-width horizontal rule. Usage:
+%   \begin{deleted} ...old text, equations ok... \end{deleted}
+\newenvironment{deleted}
+  {\par\noindent{\color{gray}\rule{\linewidth}{0.4pt}}\par\nobreak\color{gray}}
+  {\par\noindent{\color{gray}\rule{\linewidth}{0.4pt}}\par}
+
+\renewcommand{\emph}[1]{\textit{#1}}
+
+%% Feedback macros.
+\newcommand{\structure}[1]{{\color{blue} [structure: #1]}}
+\newcommand{\important}[1]{{\color{red} [important: #1]}}
+
+\newcommand{\wangjia}[1]{\textcolor{blue}{[Wangjia: #1]}}
+\newcommand{\haochen}[1]{\textcolor{teal}{[Haochen: #1]}}
+\newcommand{\ajay}[1]{\textcolor{brown}{[Ajay: #1]}}
+
+
+

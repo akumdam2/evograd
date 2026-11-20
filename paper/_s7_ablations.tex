@@ -1,0 +1,49 @@
+\section{Ablations}
+
+\haochen{potentially mode into experiment section ? }
+\subsection{Seed Synthesis Frontend}
+% After the forward kernel is passed in, EvoGrad generates the backward kernel for this specific forward and produces the initial forward--backward pair as the optimization seed. 
+
+% \method exploits AtenIR during seed synthesis in order to capture the computation graph of the backward kernel. AtenIR is a low-level representation of PyTorch programs expressed through
+% ATen operators, such as \texttt{aten.add} and \texttt{aten.sum}
+% ~\cite{pytorch-aten-ir}. It exposes the backward graph produced by PyTorch
+% autograd without committing to a specific CUDA or Triton implementation. 
+
+% \subsubsection{Methods}
+
+ 
+% A straightforward baseline is to prompt an LLM directly from the forward program alone and iteratively repair the generated backward seed. Our
+% earlier experiments show that both AtenIR-based paths improve
+% cost efficiency and seed quality: AtenIR grounding reduces the
+% number of generate–evaluate–repair iterations, while deterministic lowering produces a correct, unfused, and structured seed that
+% provides a stronger starting point for subsequent evolution.
+
+
+% Our llm-free pipeline guarantees correctness and provides a fully unfused back-ward seed, which gives the evolving agent more space for optimization. 
+% However, PyTorch-2 inductor also automatically generates triton kernels for both forward and backward pass when we use
+% torch.compile. Compared with our approach, PyTorch-2 provides a
+% more optimized starting point through mechanisms like the min-cut
+% partitioner.
+
+% \subsubsection{Results}
+% \subsubsection{Analysis} 
+% The ablation results justify our design choice. 
+% First, by comparing the agent-guided pipeline with the AtenIR-free pipeline, we can see that AtenIR backward graph improves initial program performance and reduces evolution variance. By examine the seed, we notice that AtenIR graph typically prevents the forward kernel from over-saving, thus explains the higher initial program performance. 
+
+% Second, by examining the evolution process of PyTorch-2 generated seeds, we conclude that PyTorch-2 generated code is structurally unsuitable for evolution. PyTorch-2 kernels often contain meaningless variable names, structure-oriented function names, compiler-specific comments, and specialized APIs. These characteristics create two major problems. First, they can mislead the agent when modifying the code, resulting in a substantially higher error rate. Second, they make it difficult for the agent to identify which parts of the implementation are actually performance-critical, causing it to waste iterations modifying, fixing, or polishing irrelevant compiler-generated code. Consequently, the agent often abandons the original implementation and writes a simpler kernel from scratch, leaving much of the compiler-generated code orphaned.
+
+\subsection{evolving backend}
+\paragraph{geak and gepa}
+\paragraph{map-elited with shape}
+
+\paragraph{Ablation: Tier-1 versus Tier-2 search guidance.}
+\textbf{TODO.}
+Evaluate whether Tier-1 fitness provides additional value over
+Tier-2 fitness for kernel evolution. Starting from identical programs
+under matched search budgets and controlled feedback, compare both
+strategies on representative cases, including Qwen3 QKV--Norm--RoPE
+(Level 2). Validate numerical correctness at the benchmark shapes
+and evaluate all selected kernels using a shared Tier-2 protocol
+across repeated searches. If Tier-1 guidance yields no meaningful
+benefit, consider omitting it as a search objective while retaining
+the required correctness checks.

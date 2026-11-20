@@ -1,0 +1,482 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{array}
+\begin{document}
+
+\begin{center}
+    {\Large \textbf{Shape-Aware Evolution Study for LayerNorm Autograd-Pair Kernels}}
+\end{center}
+
+\vspace{1em}
+
+\section{Overview}
+
+\noindent
+This report studies how to make OpenEvolve search more robust to input-shape distribution for LayerNorm backward autograd-pair kernels. We focus on two questions.
+
+\vspace{0.5em}
+
+\noindent
+\textbf{First, how should we design the score function?}
+The original score balances backward speedup and full-step speedup, but it aggregates runtime across all shapes before computing speedup. This can bias the search toward large or slow shapes. We therefore compare three score functions: the original weighted score, a min score, and a weighted geometric-mean score.
+
+\vspace{0.5em}
+
+\noindent
+\textbf{Second, how finely should we split the shape range?}
+After improving the score function, we study whether a single evolved program is enough, or whether it is better to evolve separate programs for different shape regimes. In particular, we compare one mixed program, two-regime dispatch, and three-regime dispatch.
+
+\section{Case Study: LayerNorm Shape Distribution}
+
+\noindent
+We use LayerNorm backward autograd-pair kernels as the case study. The input shapes follow the TritonBench-style LayerNorm setting. Each benchmark case is indexed by \(i\):
+
+\[
+i = 12, 13, \ldots, 27,
+\qquad
+\mathrm{shape}_i
+=
+(S_i, D)
+=
+\left(\frac{2^i}{1024}, 1024\right)
+=
+(2^{i-10}, 1024).
+\]
+
+\noindent
+Thus, the hidden dimension is fixed as \(D=1024\), while the row dimension \(S_i\) grows from \(4\) to \(131072\). This gives the full shape range:
+
+\[
+(4,1024), (8,1024), \ldots, (131072,1024).
+\]
+
+\noindent
+We split this range into three shape regimes:
+
+\begin{table}[h]
+\centering
+\small
+\caption{Shape regimes used in the LayerNorm shape-distribution study.}
+\begin{tabular}{lll}
+\toprule
+\textbf{Regime} & \textbf{Index Range} & \textbf{Shape Range} \\
+\midrule
+Small  & \(i=12\text{--}16\) & \((4,1024)\) to \((64,1024)\) \\
+Medium & \(i=17\text{--}22\) & \((128,1024)\) to \((4096,1024)\) \\
+Large  & \(i=23\text{--}27\) & \((8192,1024)\) to \((131072,1024)\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+The goal is to study whether one evolved program can handle the full shape range, or whether different shape regimes favor different evolved programs. In the following experiments, we first improve the score function used during evolution, and then study how to combine programs evolved from different shape regimes using shape-aware runtime dispatch.
+
+
+
+\section{Part I: Score Function Design}
+
+\subsection{Score Definitions}
+
+\noindent
+First define the aggregated backward and full-step speedups:
+
+\[
+S_{\mathrm{bw}}
+=
+\frac{
+\sum_i T^{\mathrm{base}}_{\mathrm{bw}, i}
+}{
+\sum_i T^{\mathrm{cand}}_{\mathrm{bw}, i}
+},
+\qquad
+S_{\mathrm{full}}
+=
+\frac{
+\sum_i T^{\mathrm{base}}_{\mathrm{full}, i}
+}{
+\sum_i T^{\mathrm{cand}}_{\mathrm{full}, i}
+}.
+\]
+
+\vspace{1em}
+
+\noindent
+\textbf{1. Original Score: speedup-memory.}
+This is our initial objective (used in other benchmarks like TritonBench). It balances backward speedup and full-step speedup, while penalizing extra saved-tensor memory.
+
+\[
+\mathrm{score}
+=
+\frac{
+0.5 S_{\mathrm{bw}} + 0.5 S_{\mathrm{full}}
+}{
+1 + 0.05 R_{\mathrm{saved}}
+}.
+\]
+
+\vspace{1em}
+
+\noindent
+\textbf{2. Min Score.}
+The \textbf{Original Score} may allow the search to over-optimize backward speedup while only moderately improving the full step. To avoid this imbalance, we use the minimum of backward and full-step speedups, forcing the evolved program to improve both.
+
+\[
+\mathrm{score}
+=
+\frac{
+\min\left(S_{\mathrm{bw}}, S_{\mathrm{full}}\right)
+}{
+1 + 0.05 R_{\mathrm{saved}}
+}.
+\]
+
+\vspace{1em}
+
+\noindent
+\textbf{3. Weighted Geometric Mean Score.}
+Both previous scores aggregate runtime across all shapes before computing speedup, so large or slow shapes can dominate the objective. This can bias evolution toward large-shape performance and hurt small-shape generalization. To balance performance across shapes, we compute a per-shape score and aggregate it using a weighted geometric mean.
+
+\[
+s_i
+=
+\min\left(
+\frac{
+T^{\mathrm{base}}_{\mathrm{bw}, i}
+}{
+T^{\mathrm{cand}}_{\mathrm{bw}, i}
+},
+\frac{
+T^{\mathrm{base}}_{\mathrm{full}, i}
+}{
+T^{\mathrm{cand}}_{\mathrm{full}, i}
+}
+\right).
+\]
+
+\[
+G
+=
+\exp\left(
+\frac{
+\sum_i w_i \log s_i
+}{
+\sum_i w_i
+}
+\right),
+\qquad
+g
+=
+\min\left(1, \min_i s_i\right).
+\]
+
+\[
+\mathrm{score}
+=
+\frac{
+G \cdot g
+}{
+1 + 0.05 R_{\mathrm{saved}}
+}.
+\]
+
+\vspace{1em}
+
+\noindent
+For the small-shape and large-shape experiments:
+
+\[
+\bm{w}_{\mathrm{small}}
+=
+[8, 4, 2, 1, 1],
+\qquad
+\bm{w}_{\mathrm{large}}
+=
+[1, 1, 2, 4, 8].
+\]
+
+\vspace{1em}
+
+\noindent
+Here, \(R_{\mathrm{saved}}\) denotes the saved-memory ratio.
+
+\subsection{Score-Function Ablation Results}
+
+\noindent
+We first compare the three score functions on small-shape and large-shape training suites. The small suite uses \(i=12\text{--}16\), and the large suite uses \(i=23\text{--}27\). Metrics are speedups over Liger.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Score-function ablation on small and large shape suites.}
+\begin{tabular}{lcccc}
+\toprule
+\multirow{2}{*}{\textbf{Training Score}}
+& \multicolumn{2}{c}{\textbf{Small Suite} \(i=12\text{--}16\)}
+& \multicolumn{2}{c}{\textbf{Large Suite} \(i=23\text{--}27\)} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+& \textbf{Bwd}
+& \textbf{Full}
+& \textbf{Bwd}
+& \textbf{Full} \\
+\midrule
+Original
+& \(1.8030\times\)
+& \(1.6128\times\)
+& \(1.1224\times\)
+& \(1.0278\times\) \\
+
+Min
+& \(1.8807\times\)
+& \(1.6457\times\)
+& \(1.2736\times\)
+& \(1.1288\times\) \\
+
+Weighted Geomean
+& \(1.8720\times\)
+& \(\mathbf{1.6830\times}\)
+& \(\mathbf{1.3696\times}\)
+& \(\mathbf{1.2465\times}\) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+The weighted geometric-mean score gives the best overall balance. It achieves the best full-step speedup on both the small and large suites, and it substantially improves large-shape performance compared with the original weighted score. Therefore, we use the weighted geometric-mean score for the following shape-dispatch experiments.
+
+\vspace{1em}
+
+\section{Part II: Shape-Regime Granularity}
+
+\subsection{Experimental Setup}
+
+\noindent
+We next study how to combine programs evolved under different shape regimes. We compare three deployment strategies:
+
+\begin{enumerate}
+    \item \textbf{Mixed single-program:} one evolved program handles all shapes \(i=12,\ldots,27\).
+
+    \item \textbf{Two-regime ordered dispatch:} two evolved programs are used, small and large. Runtime dispatch uses one ordered boundary:
+    \[
+    \text{small} \;|\; \text{large}.
+    \]
+
+    \item \textbf{Three-regime ordered dispatch:} three evolved programs are used, small, medium, and large. Runtime dispatch uses two ordered boundaries:
+    \[
+    \text{small} \;|\; \text{medium} \;|\; \text{large}.
+    \]
+\end{enumerate}
+
+\noindent
+The dispatch policy is constrained to contiguous shape ranges, which models a realistic runtime shape dispatch rule.
+
+\subsection{Per-Shape Behavior}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figures/image.png}
+    \caption{
+    Per-shape full-step speedup over Liger for programs evolved under different shape distributions.
+    The small-trained program is strong on small shapes but becomes invalid or slower on larger shapes.
+    The large-trained program is more stable and performs better on large shapes.
+    This per-shape crossover motivates shape-aware dispatch.
+    }
+    \label{fig:shape_cross_eval}
+\end{figure}
+
+\noindent
+Figure~\ref{fig:shape_cross_eval} shows that the best evolved program changes across the shape range. This suggests that a single mixed program may hide multiple optimization regimes, motivating separate evolved programs with shape-aware dispatch.
+
+\subsection{Aggregate Metrics}
+
+\noindent
+All results are averaged over three independent OpenEvolve repeats. Metrics are speedups over Liger. We report two aggregate metrics:
+
+\[
+\mathrm{GeomeanSpeedup}
+=
+\exp\left(
+\frac{1}{N}
+\sum_i \log(\mathrm{speedup}_i)
+\right),
+\]
+
+\[
+\mathrm{SumRuntimeSpeedup}
+=
+\frac{
+\sum_i T^{\mathrm{base}}_i
+}{
+\sum_i T^{\mathrm{cand}}_i
+}.
+\]
+
+\noindent
+Geometric mean gives each shape equal weight, while sum-runtime speedup gives more weight to slower shapes.
+
+\noindent
+Using these metrics, we compare one mixed program, two-regime dispatch, and three-regime dispatch in Table~\ref{tab:dispatch_results}.
+
+
+
+\noindent
+Table~\ref{tab:dispatch_results} compares the three deployment strategies. The columns are ordered from coarse-grained to fine-grained specialization: one mixed program, two regimes, and three regimes.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Shape-dispatch results for LayerNorm autograd-pair kernels.}
+\label{tab:dispatch_results}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Metric}
+& \textbf{One Program}
+& \textbf{Two Regimes}
+& \textbf{Three Regimes} \\
+& \textbf{Mixed}
+& \textbf{Small + Large}
+& \textbf{Small + Medium + Large} \\
+\midrule
+Geomean Bwd
+& \(1.3015 \pm 0.1131\)
+& \(1.4835 \pm 0.1392\)
+& \(1.5522 \pm 0.0586\) \\
+
+Geomean Full
+& \(1.2506 \pm 0.0861\)
+& \(1.4001 \pm 0.1161\)
+& \(1.4417 \pm 0.0749\) \\
+
+Sum Bwd
+& \(1.1639 \pm 0.1512\)
+& \(1.3724 \pm 0.1256\)
+& \(1.3939 \pm 0.1105\) \\
+
+Sum Full
+& \(1.1347 \pm 0.1019\)
+& \(1.2805 \pm 0.0845\)
+& \(1.2915 \pm 0.0787\) \\
+
+\midrule
+Relative gain in Geomean Full
+& --
+& \(+12.0\%\) over one program
+& \(+3.0\%\) over two regimes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% \subsection{Dispatch Boundaries}
+
+% \noindent
+% The ordered-oracle dispatch boundaries selected in each repeat are shown in Table~\ref{tab:dispatch_boundaries}.
+
+% \begin{table}[h]
+% \centering
+% \small
+% \caption{Contiguous dispatch boundaries selected by the ordered oracle.}
+% \label{tab:dispatch_boundaries}
+% \resizebox{\textwidth}{!}{
+% \begin{tabular}{cll}
+% \toprule
+% \textbf{Repeat}
+% & \textbf{Two-Regime Boundary}
+% & \textbf{Three-Regime Boundary} \\
+% \midrule
+% r1
+% & \(i12\text{--}i15\) small \(\mid\) \(i16\text{--}i27\) large
+% & \(i12\text{--}i14\) small \(\mid\) \(i15\text{--}i23\) medium \(\mid\) \(i24\text{--}i27\) large \\
+
+% r2
+% & \(i12\text{--}i16\) small \(\mid\) \(i17\text{--}i27\) large
+% & \(i12\text{--}i16\) small \(\mid\) \(i17\text{--}i26\) medium \(\mid\) \(i27\) large \\
+
+% r3
+% & \(i12\text{--}i21\) small \(\mid\) \(i22\text{--}i27\) large
+% & \(i12\text{--}i20\) small \(\mid\) \(i21\) medium \(\mid\) \(i22\text{--}i27\) large \\
+% \bottomrule
+% \end{tabular}
+% }
+% \end{table}
+
+\subsection{Interpretation}
+
+\noindent
+The key question is whether finer-grained shape specialization is worth the extra evolution cost. Moving from one mixed program to two specialized programs roughly doubles the token and time needed, but improves full-step geomean speedup by $12.0\%$. This is a substantial gain, suggesting that splitting the shape range into small and large regimes is worthwhile.
+
+\vspace{0.5em}
+
+\noindent
+However, moving from two programs to three programs adds another evolved program, but only improves full-step geomean speedup by $3.0\%.$
+
+\vspace{0.5em}
+
+\noindent
+This suggests diminishing returns: the first split provides a large benefit, while further splitting the range gives a much smaller improvement. Therefore, finer-grained specialization may become less cost-effective as more regimes are added.
+
+\vspace{1em}
+
+\section{Conclusion}
+
+\noindent
+This study gives two main takeaways.
+
+\vspace{0.5em}
+
+\noindent
+\textbf{First, the score function matters.}
+The original weighted score can be biased by aggregated runtime and may not sufficiently protect full-step or small-shape performance. The weighted geometric-mean score gives the best overall balance across backward speedup, full-step speedup, and shape robustness.
+
+\vspace{0.5em}
+
+\noindent
+\textbf{Second, shape-aware dispatch is useful, but finer granularity has diminishing returns.}
+A single mixed-shape evaluator hides multiple optimization regimes. Splitting the workload into small and large regimes yields a strong improvement over a single mixed program. Further splitting into small, medium, and large regimes gives an additional but modest gain, indicating diminishing returns from finer-grained shape specialization.
+
+\newpage
+
+We evaluate an evolutionary kernel-compilation pipeline that, given a PyTorch forward
+definition, synthesizes a fused forward\,+\,backward Triton kernel and \emph{co-evolves}
+it using Liger's kernels as a strong baseline. For each operator the
+pipeline builds small- and large-shape training suites, evolves a specialist per shape
+regime, sweeps the per-shape speedup curve, and emits a single deployable program that
+routes each call to the appropriate specialist at a data-derived shape threshold (or
+collapses to one program when no regime exists). Table~\ref{tab:liger-comparison} reports
+the geometric-mean speedup over Liger across the full shape\,$\times$\,dtype suite, for
+both the deployed threshold-dispatch full step and the backward-only path. 
+
+\begin{table*}[t]
+\centering
+\caption{Evolved fused forward+backward Triton kernels versus Liger's 
+kernels (geomean speedup across the full shape\,$\times$\,dtype suite on one A100-40GB).
+\emph{Full-step} is the deployed program (small/large specialists selected by shape at a
+data-derived threshold; collapses to one program when no regime exists).}
+\label{tab:liger-comparison}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l c c >{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+\textbf{Operator} & \textbf{Full-step} & \textbf{Backward} & \textbf{Why (source of the speedup / regime behavior)} \\
+ & \textbf{(fw+bwd)} & \textbf{only} & \\
+\midrule
+SwiGLU & $1.28\times$ & $1.16\times$ & Element-wise, bandwidth-bound; Liger already near the roofline. No regime---dispatch collapses to one program. \\
+GeGLU & $1.44\times$ & $1.59\times$ & Element-wise; evolution drops the saved $\tanh$ intermediate (recompute beats extra bandwidth) and uses flat, mask-free tiling. No regime. \\
+RMSNorm & $1.58\times$ & $1.51\times$ & Reorganizes the cross-row weight-gradient reduction (split multi-group at large row counts). Real regime---dispatch adds $\sim$14\%. \\
+LayerNorm & $1.76\times$ & $2.03\times$ & Mean/variance normalization with weight and bias; the backward's two cross-row reductions (dweight, dbias) reorganized per regime. Real regime (row count), small/large dispatch: $2.10\times$ on tiny rows, $1.47\times$ at LLM scale. \\
+
+Softmax & $1.83\times$ & $2.10\times$ & Per-row reduction: single-pass (small width) vs.\ streaming (large width). Real regime, but Liger already block-dispatches, so headroom is modest. \\
+Cross-Entropy & $3.46\times$ & $2.53\times$ & Softmax-gradient over the vocabulary; evolution saves the per-row log-sum-exp and recomputes softmax, whereas Liger stores the full gradient in-place. Largest win. \\
+KL-Divergence & $2.28\times$ & $3.42\times$ & Backward is purely element-wise ($-\,y_{\text{true}}/\mathrm{BT}$), so a single program suffices (dispatch adds only 1.5\%); the forward reduction dilutes the full-step number. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+
+\end{document}

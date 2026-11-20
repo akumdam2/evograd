@@ -1,0 +1,85 @@
+\section{Introduction}
+
+Triton has made it substantially easier to express custom GPU kernels for deep learning operators. Recent systems use large language models (LLMs) to generate and iteratively optimize such kernels~\cite{ouyang2025kernelbench,tritonbench}. However, most kernel-generation workflows focus on inference or isolated forward programs.
+\ahan{Don't we also focus on isolated programs?}
+\minjia{It is probably a wording issue. I think they probably mean the evaluation includes forward + backward, which feels honestly a bit artificial/heuristic to me. The true target is really just plugging these kernels into a model and measure e2e latency/memory/accuracy impact. This joint forward+backward evaluation methodology is just one proxy as evaluating e2e is probably expensive. How good this proxy is is a different story but probably the other students' underlying assumption is that this is better than evaluating forward + backward as separate functions (I honestly don't know the logic there. The last time the other students told me they follow Liger's evaluation protocol, but one can't claim Liger is doing the right thing). } 
+\ahan{I see makes sense to me. Yes, I agree that we should open up the evaluation on e2e benchmarks and demonstrate true improvements in a training pipeline, probably in torchtune or an equivalent library.}
+Training support remains more challenging: a backward implementation must recover the gradient computation, choose efficient reduction strategies, determine which forward intermediates to preserve, and remain correct and fast across a wide shape range. These decisions are tightly coupled. Saving additional forward state can accelerate backward execution but increase memory traffic and activation footprint, 
+\minjia{This challenge is still confusing. My thinking is that during normal pytorch compilation or Triton AD kernel generation, there is no such design choice (e.g., saving additional forward state). If there is no such design choice in non-agentic optimization path in the first place, why is it a fundamental challenge/trade-off for agentic AD to solve? }
+\wangjia{You are right, conventional PyTorch autograd does not expose this as an optimization choice, the saved tensors are predetermined. Our setting differs because the agent jointly generates the forward and backward kernels together with their saved-tensor contract.  It can therefore choose which intermediates to retain and which to recompute during backward. Our experiments suggest this choice can be shape-dependent: for layernorm, some small-shape solutions save xhat, this choice costs more memory but save more time for bwd, whereas large-shape solutions tend to save compact statistics and reconstruct it.}
+\minjia{But "choose which intermediates to retain and which to recompute during backward" this is a decision to be made by activation checkpointing (a separate optimization pass), and does not feel should be part of the kernel optimization itself. Recomputation also changes the memory-compute tradeoff. Does that mean we should include memory consumption as part of the evaluation objective?}
+\wangjia{I want to answer the related comments here together: the main question is how our saved-tensor / joint fw+bwd search differs from, and interacts with, PyTorch 2/AOTAutograd's save/recompute optimization.
+PyTorch 2 already performs joint forward--backward optimization over the \textbf{captured graph}, including deciding which compiler-visible values should be saved or recomputed. We therefore should not claim this capability itself as a novelty.
+The key distinction is the search space. AOTAutograd searches rematerialization policies for a \textbf{given joint program}. Our workflow instead searches the joint program itself: it can change the forward implementation, backward implementation, and the saved-state contract between them, thereby changing the graph and state space presented to the compiler in the first place.
+The two mechanisms can therefore coexist: after EvoGrad chooses a program, AOTAutograd may still optimize that program. However, we do not yet know their empirical interaction---for example, how much additional benefit \texttt{torch.compile} can obtain from an EvoGrad-generated operator, or how this depends on the compiler visibility of the custom operator. We should study this explicitly in an ablation before finalizing the corresponding framing in the introduction.}
+\minjia{This explanation makes sense to me. Can you add it to a discussion section after the evaluation but before the conclusion? }
+
+
+while a kernel optimized for small shapes may become inefficient or even invalid at large shapes. 
+% \minjia{This can be a real challenge that is even hard for kernel developers to handle.} \wangjia{this is the exact motivation why we want to seperate small/large regimes and generate multiple specialists.}
+Moreover, because generated kernels may be incorrect, fail compilation, or time out, automatic optimization must separate program generation from correctness judgment and evaluate candidates against an independent reference.
+
+% \minjia{Btw, the line breaks at weird places, e.g., if you look at the latex file, it breaks between "tightly
+% coupled" and "correctness
+% judgment". It makes pdf-to-text tracking hard. } \wangjia{my bad. fixed}
+
+\paragraph{ Revised Paragraph 1:}
+Triton has made it substantially easier to express custom GPU kernels for deep learning operators. Recent systems use large language models (LLMs) to generate and iteratively optimize such kernels~\cite{ouyang2025kernelbench,tritonbench}. However, most existing workflows focus on inference or isolated forward programs. Enabling training additionally requires an efficient backward implementation, which is often more difficult to write and optimize than the forward pass. Developers can either implement backward kernels manually, incurring substantial engineering effort, or rely on framework-provided autograd and compiler-generated code, which offer limited control over workload-specific implementation choices and may leave optimization opportunities unexplored. Automatically generating an efficient backward implementation is itself challenging. The system must recover the gradient computation, choose efficient reduction and parallelization strategies, and produce kernels that remain correct and fast across a wide range of input shapes. When the forward and backward programs are optimized jointly, it may also trade off recomputation against saved intermediate state. 
+\minjia{This recomputation falls under the category of activation checkpointing, which is conventionally considered outside of the kernel optimization and is something to be decided by the AC policy (a separate optimization pass in torch.compile). Perhaps you are trying to say: it becomes even more challenging for custom AD kernels to support activation checkpointing, as it needs to consider additional compute-memory tradeoff. That might be a missing piece from many prior work. I actually don't know how existing custom training kernels support activation checkpointing as the AC policy can selectively discard/recompute activations at different layers. Can you check how Liger or other training kernels handle AC? }
+\wangjia{I think the key distinction is that custom training kernels such as Liger do not replace AC. They typically define a fixed fw/bwd implementation and saved-state contract, while AC operates outside the kernel and decides which graph regions or compiler-visible values should be saved or recomputed. For example, if a Liger fused operator is inside a checkpointed region, AC can simply re-execute its forward during backward. However, AC generally does not redesign the fused kernel's internal forward/backward contract or intermediates hidden inside the Triton kernel. Our workflow operates on this inner design space: it can change the forward implementation, backward implementation, and saved-state contract themselves. The resulting operator can still be used together with graph-level AC or \texttt{torch.compile}. In other words, we change the joint program that AC subsequently operates on, rather than replacing AC itself.}
+\minjia{I see. This makes more sense. This is also an important distinction. To me, this clarification should be added in the design of the benchmark. }
+
+These choices interact closely: an implementation that is efficient for one shape regime may become inefficient or even invalid for another.\wangjia{The logic is: prior work mainly focuses on inference $\rightarrow$ training requires harder-to-write backward $\rightarrow$ existing alternatives provide limited workload-specific optimization $\rightarrow$ agentic backward optimization is useful but challenging.}
+\minjia{Agreed. This is a good flow.}
+
+
+
+
+To address these challenges, we present \method, an end-to-end system for automatically constructing and optimizing autograd-compatible Triton programs from a single PyTorch forward
+function. 
+\minjia{I still think there is an opportunity for us to also include benchmark construction as an additional contribution: we have to evaluate kernels of variable shapes, so we have to construct an evaluation suite anyway. It would be better if we more explicitly frame it as a contribution, e.g., prior kernel and Triton benchmarks often focus on inference pass with fixed input shapes. Check \url{https://openreview.net/pdf?id=SBS4NJHYjZ} and \url{https://arxiv.org/pdf/2601.00227}. }
+\wangjia{The benchmark construction should be one of the main contributions. I will reconstruct the intro to include it.}
+\minjia{Right. The issue was that the benchmark was only listed in the contribution list, but why do we need a new benchmark and what's the unique aspect of our benchmark was not clear. Those need to be laid out clearly in the intro.}
+Unlike approaches that optimize an isolated kernel, \method treats
+forward computation, backward computation, saved intermediates, and
+shape-dependent deployment as a joint optimization problem, while validating
+all generated programs against an independent PyTorch-autograd oracle.
+\minjia{Another benefit of including benchmark as a contribution: we can then define validation and test split, e.g., develop the approach on validation dataset and report extra accuracy on test dataset (not seen during validation). This helps to show how the agentic workflow generalizes to unseen test cases (important if we want to claim it works beyond tested ops/hardware).} \wangjia{Good idea. I should write this in benchmark section.}
+
+\paragraph{Revised paragraph 2:}
+To address these challenges, we present \method, an end-to-end system for automatically constructing and optimizing autograd-compatible Triton programs from a single PyTorch forward function. Unlike approaches that optimize an isolated kernel, \method jointly considers forward and backward implementations, saved-state decisions, and shape-dependent deployment. 
+\ahan{One thing to be mindful of. It seems like our joint optimization of forward, backward and saved intermediates is a claimed novelty. However, PyTorch-2 also considers this. See: https://dev-discuss.pytorch.org/t/min-cut-optimal-recomputation-i-e-activation-checkpointing-with-aotautograd/467. This is a joint optimization on what to save + recompute based on forward and backwards ops.}
+\minjia{This might help answer my previous question about AC + custom kernel. AC indeed makes custom kernel for training more challenging because different selective AC policy may lead to different kernel design/implementation. We probably should describe this challenge clearly early on. Then this also helps motivate why we evaluate the kernels through joint fwd + bwd operations -- to capture the impact of AC to the backward pass.} \ahan{Yes, exactly. Fundamentally, the backwards pass has much more complexity due to two reasons (in my opinion): (1) increased FLOP counts with respect to fwd pass - this means there's more things happening, therefore more kernels/reductions/ops to generate. (2) Both memory and speed are first-class optimization objectives. In the forward pass, the vast majority of optimizations (bar quantization) won't impact memory, however, in the backwards pass this isn't the case. I think AC is a good reason why.}
+\wangjia{Pytorch-2 and AC things are fully discussed ahead and memory should be added in Section Evaluation as a main metric.}
+It derives an independent correctness oracle from PyTorch autograd, constructs initial Triton implementations from AtenIR, and applies execution-based and profiling-guided evolutionary optimization \ahan{One question that comes to me: Why are we focusing on evolutionary search? It seems to suddenly jump out here. Do we want to also talk a little bit about alpha-evolve and its success which is why we stuck to evolutionary optimization? Or at least say: due to the success of AlphaEvolve, evolutionary search for code-optimization has become a standard insert citations, which is why we explore this.}.
+\minjia{Yes, we need this built-up. Otherwise, it feels rather sudden (or neglecting prior work).}
+\wangjia{A new storyline/intro is written in \_s1.1\_intro, check it there.}
+To address shape-dependent performance, \method evolves specialized implementations for different input regimes and constructs a runtime dispatch policy. Evaluating such a system requires more than fixed-shape forward benchmarks. We therefore construct a multi-level benchmark spanning individual operators, fused workloads, and model-level computations, with variable input shapes and held-out evaluation cases. The benchmark measures gradient correctness, forward--backward performance, and generalization across operators and shape regimes.
+
+This work makes the following contributions:
+\begin{itemize}
+    \item A multi-level benchmark framework spanning individual operators,
+    fused workloads, and model-level computations to evaluate gradient
+    correctness, forward--backward performance, and generalization across
+    input shapes.
+    
+    \item A one-call interface that transforms a PyTorch forward function into
+    a verified, autograd-compatible Triton forward--backward implementation
+    with a performance report.
+
+    \item An LLM-free synthesis path that lowers supported AtenIR backward
+    graphs into unfused Triton seeds using verified primitive implementations,
+    providing a reliable starting point for fusion and optimization.
+
+    \item A profiling-guided evolutionary loop that optimizes
+    forward--backward implementations and saved tensors, evolves
+    shape-specialized kernels, and constructs runtime dispatch policies across
+    input regimes.
+    \minjia{This benchmark framework needs to be brought up earlier in the intro. See the comment above.}\wangjia{Done}
+\end{itemize}
+
+% The same save-versus-recompute tradeoff appears at multiple abstraction levels. Compiler systems such as AOTAutograd optimize this tradeoff over captured computation graphs. In contrast, hand-written custom training operators typically encode a fixed forward–backward contract as part of their implementation. EvoGrad exposes this operator-internal contract as part of the implementation search space.
+
+% PyTorch's opportunity depends on the compiler-visible representation. AOTAutograd optimizes save/recompute decisions over the captured joint graph, whereas our search can change the forward and backward implementations—and therefore the graph and state space presented to the compiler in the first place.
+
+% AOTAutograd searches rematerialization policies for a given joint program; EvoGrad searches the joint program itself. After EvoGrad chooses a program, AOTAutograd may still optimize that program.

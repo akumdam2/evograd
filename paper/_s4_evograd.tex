@@ -1,0 +1,392 @@
+\section{EvoGrad}
+
+\method constructs an autograd-compatible GPU training implementation from a PyTorch forward function through compiler-aware seed synthesis and evolutionary optimization.
+
+\subsection{Design Overview}
+\label{sec:design_overview}
+For a benchmark task $(f,c)$, \method searches the permitted program space $\mathcal{P}_{f,c}$. Reimplementing computations already served by mature vendor libraries adds unnecessary search effort, but directly evolving compiler-generated Triton code inherits the compiler's kernel boundaries, lowering, and scheduling decisions. \method instead preserves compiler-selected library calls while reconstructing the remaining computation from ATen semantics.
+
+Let $L$ denote the preserved external-library regions, $R$ the remaining ATen computation, and $\mathcal{P}_{f,c}^{L}\subseteq\mathcal{P}_{f,c}$ the candidate space that preserves $L$ while allowing different implementations and saved-state choices for $R$. The objective is
+\begin{equation}
+    p^\star
+    \in
+    \operatorname*{arg\,max}_{p\in\mathcal{P}_{f,c}^{L}}
+    \operatorname{Score}(p;c)
+    \quad \text{subject to} \quad
+    \mathcal{V}(p,f,c)=1,
+    \label{eq:objective}
+\end{equation}
+where $\operatorname{Score}(p;c)=Q(p;c)$ is the Tier~1 search score in Equation~\ref{eq:tier1_search_score}, and $\mathcal{V}$ is the verification predicate in Equation~\ref{eq:validity}.
+
+Figure~\ref{fig:evograd_pipeline} summarizes the workflow:
+\begin{equation}
+    \begin{aligned}
+    (f,c)
+    &\xrightarrow{\mathrm{AOTAutograd}}
+    G_{f,c}
+    \xrightarrow{\mathrm{compiler\ guided\ partition}}
+    (L,R)\\
+    &\xrightarrow{\mathrm{semantic\ synthesis}}
+    p_0
+    \xrightarrow{\mathrm{evolution}}
+    p^\star,
+    \end{aligned}
+    \label{eq:evograd_pipeline}
+\end{equation}
+where $G_{f,c}$ is the joint forward--backward ATen graph and $p_0$ is the synthesized seed.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\linewidth]{figures/evograd_pipeline.png}
+    \caption{Overview of \method: compiler-aware seed synthesis followed by evolution of the forward/backward implementations and saved-state policy, with external-library calls $L$ preserved.}
+    \label{fig:evograd_pipeline}
+\end{figure}
+
+\subsection{Compiler-Aware AtenIR Seed Synthesis}
+\label{sec:seed_synthesis}
+
+\noindent\textbf{Autograd semantic extraction.}
+AOTAutograd derives the forward and backward computation of $f$ under configuration $c$. We represent it in AtenIR, a graph capturing ATen operators (e.g., \texttt{aten.add}, \texttt{aten.sum}, and \texttt{aten.mm}) and their data dependencies, without committing to kernel boundaries or schedules. Applying PyTorch's \texttt{min\_cut\_rematerialization\_partition} to the joint graph initializes the saved-state interface.
+
+\noindent\textbf{Compiler-aware partitioning.}
+We inspect TorchInductor's lowering decisions to partition the forward--backward computation as
+\begin{equation}
+    \Pi(G_{f,c}) = (L,R),
+    \label{eq:partition}
+\end{equation}
+retaining its external-library assignments for operations such as dense GEMMs and convolutions backed by cuBLAS and cuDNN.
+
+\noindent\textbf{Semantic resynthesis.}
+For $R$, handwritten lowering rules map supported AtenIR operations to pre-implemented Triton primitives and generate host code that invokes them according to data dependencies. The primitives and host code implement broadcasting, dtype conversion, and reduction semantics. This deterministically constructs the seed without LLM-based synthesis or cross-operator fusion; its primitive boundaries remain open to rewriting during evolution. Combining the synthesized computation with $L$ yields
+\begin{equation}
+    p_0 =
+    \left\langle
+        K_0^F,\,
+        K_0^B,\,
+        L,\,
+        s_0
+    \right\rangle,
+    \label{eq:seed_program}
+\end{equation}
+where $K_0^F$ and $K_0^B$ denote the synthesized forward and backward kernels with their host code, $L$ contains the preserved library calls, and $s_0$ is the state passed from forward to backward. \Appref{app:seed_example} illustrates these components with a masked linear map.
+
+\subsection{Evolutionary Optimization}
+\label{sec:evolution}
+
+Starting from the verified seed $p_0$, \method uses OpenEvolve to optimize Equation~\ref{eq:objective}. Search can modify the synthesized Triton kernels, host code, and saved-state policy while preserving $L$ and the public autograd interface. Candidates must pass search-time correctness checks before timing and scoring; failures are rejected. Selected final candidates undergo the applicable verification and evaluation protocols in Sections~\ref{sec:verification_protocol} and~\ref{sec:evaluation_protocol}.
+
+% \section{EvoGrad}
+
+% \method automatically constructs and optimizes an autograd-compatible GPU training implementation from a PyTorch forward function. The key challenge is to retain the implementation freedom needed for agentic optimization without wasting search effort on computations already handled well by mature vendor libraries. 
+
+% \subsection{Design Overview}
+% \label{sec:design_overview}
+% For a task $(f,c)$ defined by \bench, \method aims to find an efficient forward--backward implementation within the permitted program space $\mathcal{P}_{f,c}$, subject to the verification requirements of the task. Directly exploring the permitted program space $\mathcal{P}_{f,c}$ is expensive. Compiler-generated training programs already delegate computations such as dense matrix multiplication and convolution to highly optimized external libraries. Reimplementing these computations adds search effort despite the availability of mature implementations. However, directly evolving compiler-generated Triton code also inherits the compiler's kernel boundaries, lowering, and scheduling decisions, constraining subsequent optimization.
+
+% Our key insight is to reuse the compiler's vendor-library calls
+% while reopening implementation choices for the remaining computation.
+% \method partitions the forward--backward computation into regions $L$
+% assigned to external libraries and the remaining ATen computation $R$.
+% It keeps the calls in $L$ and lowers $R$ into Triton primitives,
+% combining them into a runnable seed. Evolving agent then optimizes the
+% synthesized computation and saved-state policy while keeping the
+% library calls fixed.
+
+% Let $\mathcal{P}_{f,c}^{L}\subseteq\mathcal{P}_{f,c}$ denote the candidate space that preserves $L$ while allowing different implementations and saved-state choices for $R$. \method aims to solve
+% \begin{equation}
+%     p^\star
+%     \in
+%     \operatorname*{arg\,max}_{p\in\mathcal{P}_{f,c}^{L}}
+%     \operatorname{Score}(p;c)
+%     \quad \text{subject to} \quad
+%     \mathcal{V}(p,f,c)=1,
+%     \label{eq:objective}
+% \end{equation}
+% where $\operatorname{Score}$ combines backward-only and forward--backward speedups with a saved-memory penalty, as defined in Eq.~\eqref{eq:score}. The verification predicate $\mathcal{V}$ is defined by \bench in Eq.~\eqref{eq:validity}. Fitness guides the search, while completion of all required verification gates determines final acceptance.
+
+% Figure~\ref{fig:evograd_pipeline} illustrates the resulting workflow:
+% \begin{equation}
+%     \begin{aligned}
+%     (f,c)
+%     &\xrightarrow{\mathrm{AOTAutograd}}
+%     G_{f,c}
+%     \xrightarrow{\mathrm{compiler\ guided\ partition}}
+%     (L,R)\\
+%     &\xrightarrow{\mathrm{semantic\ synthesis}}
+%     p_0
+%     \xrightarrow{\mathrm{evolution}}
+%     p^\star,
+%     \end{aligned}
+%     \label{eq:evograd_pipeline}
+% \end{equation}
+% where $G_{f,c}$ is the joint forward--backward ATen graph and $p_0$ is the synthesized seed. Using the measurements defined in Section~\ref{sec:evaluation_protocol}, we combine backward-only and forward--backward speedups relative to a fixed baseline $b$:
+% \begin{equation}
+%     r(p;c)
+%     =
+%     \min\!\left(
+%         S_{p/b}^{\mathrm{bwd}}(c),
+%         S_{p/b}^{\mathrm{full}}(c)
+%     \right).
+%     \label{eq:effective_speedup}
+% \end{equation}
+% The minimum prevents gains in one execution mode from masking a regression in the other within the performance term. We incorporate saved-state memory into the search fitness:
+% \begin{equation}
+%     \operatorname{Score}(p;c)
+%     =
+%     \frac{r(p;c)}
+%          {1+\lambda R_{\mathrm{saved}}(p;c)},
+%     \label{eq:score}
+% \end{equation}
+% where $R_{\mathrm{saved}}(p;c)$ is the normalized saved-state memory defined in Section~\ref{sec:evaluation_protocol}, and $\lambda \geq 0$ controls its penalty. The following sections describe seed construction and evolutionary search in detail.
+
+% \begin{figure}
+%     \centering
+%     \includegraphics[width=\linewidth]{figures/evograd_pipeline.png}
+%     \caption{Overview of \method. AOTAutograd produces a joint forward--backward ATen graph $G_{f,c}$. Compiler-guided partitioning identifies preserved external-library regions $L$ and evolvable semantic regions $R$. Handwritten AtenIR-to-Triton transformations resynthesize $R$, and the resulting kernels are combined with $L$ to form the seed program $p_0$. Evolution jointly optimizes the generated forward and backward implementations and their saved-state policy, with $L$ held fixed.}
+%     \label{fig:evograd_pipeline}
+% \end{figure}
+
+% \subsection{Compiler-Aware AtenIR Seed Synthesis}
+% \label{sec:seed_synthesis}
+
+% \paragraph{Autograd semantic extraction.}
+% Given a user-provided PyTorch forward function, \method uses AOTAutograd to derive the corresponding forward and backward computation under deployment configuration $c$. We represent this computation through AtenIR, a graph of ATen operators such as \texttt{aten.add}, \texttt{aten.sum}, and \texttt{aten.mm}. AtenIR captures the required ATen operations and their data dependencies without committing to kernel boundaries or schedules. We initialize the saved-state interface by applying PyTorch's \texttt{min\_cut\_rematerialization\_partition} to the AOTAutograd joint graph, while allowing the saved-state policy to change during subsequent evolution.
+
+% \paragraph{Compiler-aware partitioning.}
+% Not every region of the computation should be resynthesized. \method inspects TorchInductor's lowering decisions and partitions the joint graph as
+% \begin{equation}
+%     \Pi(G_{f,c}) = (L,R),
+%     \label{eq:partition}
+% \end{equation}
+% where $L$ contains regions mapped to external vendor implementations and $R$ contains the remaining computation. In particular, computations such as standard dense GEMMs and convolutions can remain backed by mature libraries such as cuBLAS and cuDNN, avoiding unnecessary search over implementations that are already highly optimized.
+
+% \paragraph{Semantic resynthesis.}
+% For the evolvable region $R$, \method returns to its AtenIR representation rather than directly adopting the Triton kernels generated by Inductor. Handwritten lowering rules map supported AtenIR operations to pre-implemented Triton primitives and generate host-side code that invokes them according to the graph's data dependencies. Together, the primitives and their host-side helpers implement the required operator semantics, including broadcasting, dtype conversion, and reduction behavior. This process deterministically constructs a runnable starting point without LLM-based synthesis or cross-operator fusion. These primitive boundaries initialize the seed but remain open to rewriting during evolution. The synthesized forward and backward kernels are then combined with the preserved external-library regions to construct an initial autograd-compatible program
+% \begin{equation}
+%     p_0 =
+%     \left\langle
+%         K_0^F,\,
+%         K_0^B,\,
+%         L,\,
+%         s_0
+%     \right\rangle,
+%     \label{eq:seed_program}
+% \end{equation}
+% where $K_0^F$ and $K_0^B$ denote the synthesized forward and backward kernels together with their host-side orchestration, $L$ denotes preserved external-library calls, and $s_0$ denotes the state passed from forward to backward. Appendix~\ref{app:seed_example} illustrates the resulting seed
+% using a masked linear map, showing the preserved library calls,
+% synthesized Triton computation, and forward--backward saved-state interface. 
+
+% \subsection{Evolutionary Optimization}
+% \label{sec:evolution}
+
+% Starting from the verified seed $p_0$, \method uses OpenEvolve
+% to optimize the objective in Equation~\ref{eq:objective}.
+% The search can modify the synthesized Triton kernels,
+% their host-side orchestration, and the saved-state policy,
+% while preserving the compiler-selected external-library calls
+% and public autograd interface. Candidates undergo search-time
+% correctness checks before performance measurement; those that
+% fail are rejected, while valid candidates receive the fitness
+% score defined in Equation~\ref{eq:score} to guide subsequent search.
+% Selected final candidates undergo the applicable verification
+% and evaluation stages defined by \bench.
+
+% \begin{figure*}[t]
+%     \centering
+%     \includegraphics[width=\textwidth]{figures/overview_910.pdf}
+%     \caption{Overview of our system. \ahan{Some feedback. (1) Currently each box just states, via words, what is going on. I find this unimformative. We need to diagramatically show, in each box, what is going on. To give a concrete example for agentic evolution we can show some starting code snippet then an ellipses ``..." some intermediate code-snippet showing that it has changed (this is just an example to show how, rather than state what, we are doing). In fact we can show an entry code-snippet in pytorch and show how it is changed in each step, this may be more informative compared to just using words. (2) I am not a big fan of this color scheme, can we use darker colors. (3) You can use the paper X-MoE as a reference: https://arxiv.org/pdf/2508.13337 (See figure 5 for what I mean).} }
+%     \label{fig:overview}
+% \end{figure*}
+
+% \begin{figure*}[t]
+%     \centering
+%     \includegraphics[width=\textwidth]{figures/new_overview.png}
+%     \caption{Overview of our system.}
+%     \label{fig:overview}
+% \end{figure*}
+
+% \ahan{As it's written write now. It's unclear why EvoGrad is needed. The flow introduces ADBench, however, does not state anything as to the problems it exposes. It would be nice to say something like ``hey, now that we've established this benchmark, existing methods sort of suck at AD, spedning many cycles just generating correct programs, resulting in low performance".} \haochen{Word description of the agent benchmarking results. Detailed results are in experiemnt section. }
+% Given a task $(f,c)$ specified in Section~\ref{sec:benchmark-task}, \method searches the permitted implementation space $\mathcal{P}_{f,c}$ using a fitness function that combines execution performance and saved-state memory. Candidates remain subject to the forward--backward contract and verification requirements defined by \bench.
+
+% \paragraph{Performance fitness.}
+% Let $T_p^{\mathrm{bwd}}(c)$ and $T_p^{\mathrm{full}}(c)$ denote the backward-only and complete forward--backward execution times of candidate $p$, respectively, with $T_{\mathrm{base}}^{\mathrm{bwd}}(c)$ and $T_{\mathrm{base}}^{\mathrm{full}}(c)$ denoting the corresponding performance-baseline times. We define the effective speedup as
+% \begin{equation}
+%     r(p;c) =
+%     \min\!\left(
+%         \frac{T_{\mathrm{base}}^{\mathrm{bwd}}(c)}
+%              {T_p^{\mathrm{bwd}}(c)},
+%         \frac{T_{\mathrm{base}}^{\mathrm{full}}(c)}
+%              {T_p^{\mathrm{full}}(c)}
+%     \right).
+%     \label{eq:effective_speedup}
+% \end{equation}
+% Using the minimum prevents gains in one execution mode from masking a regression in the other within the performance term.
+
+% \paragraph{Memory penalty.}
+% We normalize the logical size of tensors retained for backward by the size of the task's declared memory inputs, defining $R_{\mathrm{saved}}(p;c)=M_p^{\mathrm{saved}}(c)/M_{\mathrm{input}}(c)$. The candidate's fitness is
+% \begin{equation}
+%     \operatorname{Score}(p;c)
+%     =
+%     \frac{r(p;c)}
+%          {1+\lambda R_{\mathrm{saved}}(p;c)},
+%     \label{eq:score}
+% \end{equation}
+% where $\lambda \geq 0$ controls the penalty for saved memory. This score balances computational speedup against the state retained for backward, allowing recomputation and caching strategies to be compared under the same objective.
+
+% \paragraph{Search objective.}
+% The optimization objective is
+% \begin{equation}
+%     p^\star
+%     \in
+%     \operatorname*{arg\,max}_{p\in\mathcal{P}_{f,c}}
+%     \operatorname{Score}(p;c)
+%     \quad \text{subject to} \quad
+%     \mathcal{V}(p,f,c)=1,
+%     \label{eq:objective}
+% \end{equation}
+% where $\mathcal{V}$ is the complete verification predicate defined in Eq.~\eqref{eq:validity}. Starting from a seed implementation, \method uses LLM-generated transformations and evaluation feedback to approximate this objective. Search-time checks screen candidates before fitness evaluation; selected candidates must complete the remaining deployment and integration gates before final acceptance. We next describe how \method constructs seeds and organizes candidate transformations.
+
+% \paragraph{Seed structure.}
+% Listing~\ref{lst:seed_code_example} illustrates these components using a masked linear map $f(X,W,M)=(XW)\odot M$, where $M$ is a nondifferentiable mask. In the illustrated configuration, the compiler assigns the forward GEMM and the two backward GEMMs to external implementations, forming $L$, while the elementwise multiplications belong to $R$. The same handwritten multiplication primitive is reused by the forward and backward computations. The external-library wrappers and the outer autograd adapter remain fixed, while the primitive kernels, their launch helpers, and the forward--backward orchestration are evolvable. Evolution can therefore replace the initial primitive calls with new implementations and revise the saved-state policy without changing the public autograd interface.
+
+
+% \ahan{This code listing, though a good start, is too detailed. You don't need to stick to pure Python syntax, you can make it more conscise and readable if you deviate slightly from it.}
+% \begin{lstlisting}[
+%     language=Python,
+%     basicstyle=\ttfamily\scriptsize,
+%     columns=fullflexible,
+%     keepspaces=true,
+%     showstringspaces=false,
+%     breaklines=true,
+%     frame=single,
+%     captionpos=b,
+%     caption={Illustrative seed for $f(X,W,M)=(XW)\odot M$. The external-library implementation and autograd adapter are fixed; the Triton primitive, launch helper, and forward--backward orchestration are evolvable. The three preserved GEMM call sites share one displayed wrapper for compactness. Configuration checks and per-region preservation metadata are omitted.},
+%     label={lst:seed_code_example}
+% ]
+% import torch
+% import triton
+% import triton.language as tl
+% from torch._inductor.select_algorithm import extern_kernels
+
+% # Fixed external-library implementation: L.
+% def library_mm(a, b):
+%     with torch.no_grad():
+%         out = torch.empty(
+%             (a.shape[0], b.shape[1]),
+%             device=a.device, dtype=a.dtype,
+%         )
+%         extern_kernels.mm(a, b, out=out)
+%         return out
+
+% # EVOLVE-BLOCK-START
+
+% # Initial handwritten Triton multiplication primitive.
+% @triton.jit
+% def _mul_kernel(A, B, OUT, N, BLOCK: tl.constexpr):
+%     offsets = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+%     mask = offsets < N
+%     a = tl.load(A + offsets, mask=mask, other=0.0)
+%     b = tl.load(B + offsets, mask=mask, other=0.0)
+%     tl.store(OUT + offsets, a * b, mask=mask)
+
+% # Lowering: aten.mul -> host helper -> Triton kernel.
+% def mul_tt(a, b):
+%     dtype = torch.result_type(a, b)
+%     a, b = torch.broadcast_tensors(a, b)
+%     a = a.to(dtype).contiguous()
+%     b = b.to(dtype).contiguous()
+%     out = torch.empty_like(a)
+%     grid = (triton.cdiv(out.numel(), 256),)
+%     _mul_kernel[grid](a, b, out, out.numel(), BLOCK=256)
+%     return out
+
+% # Evolvable forward orchestration and saved state.
+% def forward_with_saved(x, w, mask):
+%     z = library_mm(x, w)             # Preserved L.
+%     y = mul_tt(z, mask)              # Lowered R.
+%     return y, (x, w, mask)
+
+% # Evolvable backward orchestration.
+% def backward_from_saved(dy, saved):
+%     x, w, mask = saved
+%     dz = mul_tt(dy, mask)            # Lowered R.
+%     dx = library_mm(dz, w.t())       # Preserved L.
+%     dw = library_mm(x.t(), dz)       # Preserved L.
+%     return dx, dw
+
+% # EVOLVE-BLOCK-END
+
+% # Fixed host adapter for PyTorch autograd.
+% class MaskedLinearFunction(torch.autograd.Function):
+%     @staticmethod
+%     def forward(ctx, x, w, mask):
+%         y, saved = forward_with_saved(x, w, mask)
+%         ctx.save_for_backward(*saved)
+%         return y
+
+%     @staticmethod
+%     def backward(ctx, dy):
+%         dx, dw = backward_from_saved(dy, ctx.saved_tensors)
+%         return dx, dw, None          # No gradient for mask.
+
+% def masked_linear(x, w, mask):
+%     return MaskedLinearFunction.apply(x, w, mask)
+% \end{lstlisting}
+
+% Before entering evolution, the complete seed $p_0$ is checked against the independent PyTorch-autograd oracle under the same deployment configuration. Only seeds satisfying Equation~\ref{eq:validity} are admitted to the optimization stage.
+
+% \subsection{Profiling-Guided Evolution}
+% \label{sec:evolution}
+
+% Starting from the verified seed $p_0$, \method uses OpenEvolve to search for higher-performing programs under the objective in Equation~\ref{eq:objective}. Evolution modifies the synthesized portions of the program while preserving the external-library regions identified during seed synthesis. Each generated candidate must first satisfy the same correctness constraint before its performance is considered.
+
+% The default evolutionary loop uses measured execution performance as its optimization signal. To provide more actionable feedback than a scalar score alone, \method periodically profiles promising candidates with NVIDIA Nsight Compute. A lightweight analysis first identifies major hardware bottlenecks, such as insufficient parallelism, limited memory throughput, or low compute utilization. Selected profiling metrics, together with the current program and deployment context, are then provided to an optimization agent to propose a targeted transformation.
+
+% The proposed program is evaluated using the same correctness and performance gates as ordinary evolutionary candidates. If it improves the objective, it is returned to the OpenEvolve population and becomes available for subsequent search. In this way, profiling feedback supplements broad evolutionary exploration with hardware-specific optimization guidance while leaving correctness and candidate selection under executable evaluation.
+
+
+% \subsection{Remaining Design Questions}
+
+% \paragraph{Seed-synthesis ablation.} We need an ablation to validate the design choice behind our compiler-aware AtenIR seed synthesis. As discussed, we should compare against two alternative paths: (1) directly evolving compiler-generated Inductor kernels, and (2) synthesizing from AtenIR without compiler-aware partitioning. These comparisons can help isolate the benefit of preserving strong compiler decisions while retaining semantic-level freedom for the remaining computation.
+
+% \paragraph{Evolution agent.} The current draft only describes profiling-guided evolution at a high level. We still need to specify how the evolution agent consumes execution and profiling feedback, identifies optimization opportunities, proposes program transformations, and interacts with the OpenEvolve population. In particular, we should distinguish the hard constraints that every candidate must satisfy from the optimization opportunities that the agent is encouraged to explore.
+
+% \paragraph{Integrating benchmark feedback into optimization.} We also plan to connect the benchmark hierarchy more directly to the optimization framework. For higher-level workloads such as Level-3 cases, instead of synthesizing the entire workload from scratch, we may first optimize lower-level components and compose the higher-level case from these optimized building blocks. Conversely, higher-level evaluation can provide feedback to lower-level optimization. Our current evolution loop is primarily guided by direct forward--backward measurements from Tier-1 evaluation, but the final objective is end-to-end training performance. We should therefore investigate whether Tier-3 signals, such as end-to-end training latency and model-level correctness, can be fed back into evolution for an additional optimization stage targeted directly at deployment-level performance.
+
+% \subsection{Evolution Seed Synthesis}
+
+% \ahan{Another question while reading this. PyTorch-2 inductor automatically code-generates Triton. Why don't we just use those kernels and evolve those rather than do this whole Aten-IR based code-gen? Do we want to motivate why we're doing it this way instead? I see that you compare against naive LLM generated forward baseline, but perhaps we want to talk about this? Just a thought.} \haochen{Added a discussion for this. The pytorch-2 seed generation pipeline is introduced here, while the ablation results are included in 7.}
+
+
+% \haochen{One thing I'm not sure about the outline of 4.2 and 4.3 is that whether we should include all the methods / agentic frameworks we studied here, or include them in ablations in section 7. I think a reasonable arrangement in my perspective is to include the one final pipeline (after we made the decision) in section 4 along with its advantage, and move the discussions of other possible solutions to section 7. Right now in 4.2 we included all possible ways to do seed synthesis. Please correct me if I misunderstood. }
+% \minjia{Yes, we only show the best performing solution in the design. If some components are inspired by other work, we make it explicit. Then we can conduct ablation studies in the evaluation analysis section to show the importance of those components. }
+
+% We explored two different pipelines to generate the initial program for the evolving agent to improve on. In the agent-guided pipeline, a compact summary of the backward AtenIR graph is provided to an LLM that generates a fused Triton seed. This pipeline is flexible, but correctness is not guaranteed and may require multiple generate–evaluate–repair iterations, increasing token and search cost. In the llm-free pipeline, we hand-write and verify Triton kernels for a supported set of ATen operators, then compose these kernels according to the AtenIR data dependencies. This produces a correctness-guaranteed, initially unfused backward seed. Beyond avoiding the repair loop, the structured seed provides evolution with a reliable starting program and reduces the risk of premature convergence to a poor local optimum.
+
+% \subsection{Evolving Agent}
+% \subsection{Shape Dispatch}
+
+% \method builds on OpenEvolve as the underlying search engine and augments
+% score-based evolution with hardware profiling feedback. Every few iterations, we use the profiling results to optimize the current evolved kernel. A lightweight deterministic roofline analysis first classifies the
+% kernel as underutilized, memory-bound, or compute-bound using SM and DRAM
+% throughput. Only candidates with meaningful optimization headroom are passed to
+% an analysis agent, which combines the roofline result, selected NCU metrics,
+% GPU specifications, and benchmark context to produce structured bottleneck
+% diagnoses and concrete optimization suggestions. A generation agent then
+% revises the program under fixed interface and saved-tensor constraints, so the
+% profiling feedback guides performance optimization without changing the task
+% contract. The optimized kernel, if scores higher than the origin kernel, would silently replace the original kernel in OpenEvolve's candidate pool to fuel future free exploration. 
+
+% \method treats input shape as a first-class optimization dimension. It
+% separately evolves specialists for small and large shapes, evaluates the
+% resulting candidates over the full deployment grid, and selects a contiguous
+% dispatch threshold from measured performance. The final output is a single
+% all-in-one program that dispatches to the appropriate specialist at runtime.
+% Our current LayerNorm experiments show that two shape regimes capture most of
+% the available gain over a single mixed-shape implementation, while introducing
+% a third regime yields only limited additional benefit.
+
+
+
+
+

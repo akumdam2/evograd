@@ -1,0 +1,141 @@
+\section{Introduction}
+% Storyline: overall motivation -> Challenge A: training-kernel generation -> Solution A: EvoGrad -> Challenge B: benchmark/evaluation gap -> Solution B: training-oriented benchmark and evaluation protocol -> contributions and key findings
+
+% \ahan{The current introduction reads a little confusing to me. I think a part of this is because it seems to be conlfating two distinct topics: Automatic-differentation, and Training. AD is programmatic approach to generating kernels/code to compute gradients \textit{given the forward pass}. This is ultimately a \textit{code-generation} technique. On the other hand, training: repeated execution of forwards + backwards passes (invoking the output of AD-passes). A lot of the problems are (and I think should) be localised to AD. However sometimes you interchangeably use ``Training" with AD (for example topic sentence of paragraph 2). Moreover, AD is sort of just pushed into the intro without sufficient buildup. For example last sentence of paragraph 1.}
+
+Recent advances in large language models (LLM) based code generation have made automated GPU kernel generation and optimization increasingly practical~\cite{claude, codex}. Systems can now generate Triton or CUDA kernels~\cite{wang2025geak, zhang2025cudaforge}, refine them through execution feedback~\cite{kernelblater, gai2026kernelpro}, and discover optimizations that otherwise require substantial expert effort\cite{liao2026kernelevolve,ye2026cake}. Kernel benchmarks support this progress by providing operator specifications, correctness tests, and performance metrics~\cite{ouyang2025kernelbench,tritonbench}. However, most existing benchmarks focus on inference or forward computation, evaluating whether a candidate produces correct outputs faster than a reference implementation~\cite{ouyang2025kernelbench,flashinferbench,oliaro2026fastkernels}. Even when backward computations are included, they are generally treated as standalone tensor programs rather than components of autograd-compatible training implementations~\cite{execbench}.
+
+Training changes the optimization problem in several important ways. First, correctness covers both forward outputs and the required input and parameter gradients under automatic differentiation. Second, forward and backward are coupled through saved state. Different choices of retained intermediates, recomputation, and internal representations create latency--memory tradeoffs that forward-only evaluation cannot capture. Third, local speedups may not survive integration: autograd, compiler transformations, checkpointing, and an operator's frequency and share of training time all affect its end-to-end impact. Training evaluation must therefore assess deployable forward--backward implementations, considering their outputs, gradients, execution cost, memory behavior, and integration effects together. Yet existing forward-centric kernel benchmarks do not fully capture these requirements. Evaluating forward and backward independently does not expose the interface between them or the memory cost of state retained for backward, while isolated operator timing cannot determine whether a generated implementation remains beneficial after insertion into an actual training workload. Key questions therefore remain: Are both outputs and gradients correct? How much memory does the implementation retain to achieve that performance? Do local kernel speedups translate into faster whole-model training? Without an evaluation framework that makes these properties explicit, it is difficult both to compare existing optimization methods fairly and to guide the design of new ones.
+
+To address this gap, we introduce \bench, a benchmark for GPU-kernel optimization in deep learning training. Constructed top-down from training workloads, \bench organizes benchmark cases into \emph{three task levels}: primitive operators, composite operators, and whole-model training. Rather than treating backward computation as a standalone task, it evaluates autograd-compatible forward--backward pairs together with their saved-state interfaces, making joint execution cost and compute--memory tradeoffs explicit. Verification and evaluation use data from real datasets rather than synthetically generated inputs. Correctness is assessed through \emph{three verification gates}: local pair verification, single-step framework integration verification, and multi-step training verification. A complementary \emph{three evaluation tiers} measures direct forward--backward execution, operator execution through autograd, and whole-model training. Direct pair timing guides optimization during search, while the latter two tiers establish whether improvements translate into faster deployed operators and end-to-end training.
+
+% To address these challenges, we present \method, an end-to-end system that transforms a PyTorch forward function into an optimized Triton forward--backward implementation. \method separates training-kernel generation into program synthesis and program optimization. During synthesis, it leverages compiler-derived representations and implementations---including autograd-derived graph information from AtenIR and compiler-generated implementations from TorchInductor---to expose backward computation structure and construct effective starting programs. These programs are then passed to an evolutionary optimization backend that explores the broader implementation space, including backward algorithms, reduction and fusion strategies, and the saved-state interface between forward and backward. We instantiate this optimization stage with OpenEvolve, allowing \method to combine compiler knowledge with program-level search to automatically construct and optimize training implementations beyond what is exposed by the forward program alone.
+% that explores the broader implementation space, including backward algorithms, reduction and fusion strategies, and the saved-state interface between forward and backward. We instantiate this optimization stage with OpenEvolve, allowing \method to combine compiler knowledge with program-level search to automatically construct and optimize training implementations beyond what is exposed by the forward program alone.
+
+\bench also exposes a broader optimization space than conventional forward-kernel generation, enabling joint optimization of forward computation, backward computation, and the saved state connecting them. To explore this space, we develop \method, an automated system that transforms a PyTorch forward function into a verified, autograd-compatible GPU implementation. \method separates training-kernel generation into \emph{program synthesis} and \emph{program optimization}. Synthesis uses AOTAutograd to derive the forward--backward computation, preserves external library calls selected by TorchInductor, and lowers the remaining AtenIR computation into Triton kernels. An evolutionary optimization backend then refines these kernels, rejecting candidates that fail search-time correctness checks. By evaluating \name through \bench's progressively larger execution scopes, we can distinguish improvements that are visible only in isolated kernel measurements from those that survive autograd deployment and translate into training-level benefits.
+
+% Besides generating optimized training kernels, evaluating whether these optimizations translate into meaningful training improvements requires \textbf{training-aware benchmarking} and \textbf{end-to-end training evaluation}. Existing GPU kernel benchmarks predominantly focus on inference and forward computation. Even when backward computations are included, they are often evaluated as standalone programs rather than as part of an autograd-compatible forward--backward pair, leaving the saved-state interface and its compute--memory tradeoffs outside the benchmark abstraction. Moreover, local kernel speedups may change after autograd integration or fail to compose into end-to-end training gains. Evaluating automatically generated training kernels therefore requires both realistic forward--backward tasks and an evaluation methodology that connects local kernel performance to its behavior in the surrounding training stack.
+
+% We therefore introduce a top-down training-kernel benchm g kernels.
+Our evaluation highlights why these distinctions matter. Across the training workloads studied in this paper, local kernel improvements can shrink substantially after integration, and the operator with the largest isolated speedup is not necessarily the operator that contributes the largest end-to-end gain. For example, in the 3D attention study, several large Tier-1 speedups compress substantially at model scope, while triangle attention has a smaller isolated improvement but contributes more meaningfully to model-level performance because of its invocation pattern and training-time contribution.  These observations motivate evaluating automated kernel optimization under training semantics and across multiple integration scopes rather than relying solely on isolated forward or backward measurements.
+
+This work makes the following contributions:
+\begin{itemize}
+    % \item \textbf{Top-down training-kernel benchmark.} We introduce a benchmark derived from full-model training workloads, covering $y$ models across $x$ categories. Its tasks span four levels: primitives, fused operators, architectural blocks, and full models.
+    \item \textbf{\bench, a benchmark for automated training-kernel optimization.} ADBench derives operator configurations from realistic training workloads and evaluates autograd-compatible implementations across primitive operators, composite computations, architectural blocks, and complete training workloads. It measures forward and gradient correctness, execution latency, retained state, memory, and coverage.
+
+    % \item \textbf{Hierarchical training evaluation.} We develop a three-tier protocol that assesses correctness, runtime, and memory through direct forward--backward execution, autograd-integrated operators, and end-to-end training, examining whether local kernel improvements translate into training gains.
+    \item \textbf{A hierarchical methodology for evaluating generated training kernels.} We evaluate implementations through direct forward--backward execution, autograd-integrated operator execution, and block/model-level training, allowing local kernel improvements to be distinguished from framework integration effects and end-to-end training gains.
+
+    % \item \textbf{Automated training-kernel synthesis and optimization.} We present \method, an end-to-end system that transforms a PyTorch forward function into an optimized, autograd-compatible Triton forward--backward implementation. It constructs initial programs from compiler-derived graph and implementation information, then uses evolutionary search to jointly optimize forward and backward implementations and their saved-state contract.
+    \item \textbf{\name: an automated system for generating and optimizing training kernels.} \name combines compiler-derived training semantics with program synthesis and evolutionary optimization to construct and refine autograd-compatible GPU implementations, including their forward computation, backward computation, and internal saved-state interface.
+
+    \item \textbf{An empirical characterization of automated training-kernel optimization.} Across X systems and Y tasks... \haochen{write after experiment}
+\end{itemize}
+% Current GPU benchmarks are limited in addressing these challenges. Recent benchmarks predominantly evaluate forward kernels in isolation. Even when backward computations are included, they are treated as standalone programs rather than as part of an autograd-compatible forward--backward pair. Consequently, they fail to capture the saved-state interface or evaluate their tasks in a full-model setting.  % \haochen{not really sure about this claim.} \ajay{Can specify end-to-end training instead? Don't think anyone has done that.}
+
+% We therefore construct a top-down benchmark for automatically generated training kernels, deriving forward--backward operator workloads and direct-kernel evaluations from full-model training execution. 
+% % \haochen{In the intro we're still mentioning a lot about variable input shapes. Can we generalize this to the top-down design of our benchmark ? } 
+% Correctness is checked against an independently derived PyTorch-autograd reference, while performance is measured separately at the direct-kernel, operator-training, and model-training
+% levels. The benchmark further reports saved forward state and evaluates
+% speedup / memory performance across shape distributions rather than a single favorable
+% configuration. Besides enabling fair comparison between generated,
+% compiler-generated, and expert-written training kernels, this hierarchy provides
+% different signals for different purposes: inexpensive and low-noise
+% measurements for optimization, deployment-facing operator measurements for
+% validation, and end-to-end measurements for establishing actual training
+% benefit.
+
+
+% We identify several challenges for automatically generating efficient implementations to support training. The first challenge is \textbf{save-state design}. Forward and backward implementations are not independent programs; they communicate through state retained from the forward pass. Importantly, this operator-internal design space is complementary to graph-level activation checkpointing and rematerialization. Systems such as PyTorch 2 and AOTAutograd already optimize save-versus-recompute decisions over compiler-visible forward–backward graphs~\cite{ansel2024pytorch2,pytorch2025activationcheckpointing}. Our goal is not to replace these passes, but to optimize the custom forward–backward program exposed to the surrounding training system.
+
+% Another challenge is \textbf{end-to-end performance}. Kernel structures that are effective for small inputs can become inefficient, or even invalid, at larger shapes
+% because the preferred launch configuration, fusion boundary, and
+% reduction strategy can change with the workload. Moreover, speedups measured in isolated operator workloads may not translate to full model training, where autograd and framework overheads enter the critical path, and interactions with surrounding operators can shift application-level bottlenecks. Consequently, generated forward–backward implementations must be evaluated in the context of end-to-end training, rather than by kernel-level speedup alone.  
+
+% A third challenge is \textbf{verification and evaluation}. In order to support end-to-end training, the correctness gates for generated kernels need to ensure numerical stability across multiple training steps on a full-model scale; thus calibration over tolerance levels becomes necessary. \haochen{I added this calibration, but should be removed if we're no longer doing it.} Since a forward-backward pair may trade saved state for computation, performance evaluation must also measure both speedup and memory cost. 
+
+
+
+% To address the optimization problem exposed by this benchmark, we present
+% \method, an end-to-end system that transforms a PyTorch forward function into
+% a verified and efficient Triton forward-backward implementation. \method first derives
+% the backward computation and an independent correctness contract from PyTorch
+% autograd. It then constructs an initial Triton program from AtenIR and improves
+% the implementation through evolutionary search. 
+% % \haochen{I think we can remove profiling-guided search from the intro, since we are not focusing on it in our work.} . 
+% Recent code-optimization systems have demonstrated that evolutionary search can
+% effectively explore program spaces in which useful transformations are
+% difficult to prescribe analytically
+% ~\cite{novikov2025alphaevolve,sharma2025openevolve}; \method builds on this
+% paradigm for training-kernel optimization. Throughout the search, generated
+% programs are evaluated by an independent oracle: the model proposes candidate
+% implementations, while code-derived correctness checks determine whether they
+% are admissible.
+
+% Rather than assuming that one implementation is optimal for all inputs,
+% \method treats shape-dependent deployment as part of the optimization problem.
+% It evolves specialized implementations for different shape regimes, evaluates
+% them over the deployment shape distribution, and constructs a lightweight
+% runtime dispatch policy. The search can modify backward algorithms, reduction
+% and fusion strategies, launch configurations, and the forward--backward
+% saved-state contract, while the final implementation remains compatible with
+% the surrounding PyTorch training stack. In this way, \method targets not only
+% the generation of a correct backward program, but the construction of a
+% deployable training implementation whose performance remains robust across
+% input regimes.
+
+
+
+
+
+
+
+
+% Much of this progress, however, has focused on forward computation and inference-oriented workloads. Supporting training additionally requires a correct and efficient forward-backward co-implementation, which is often more difficult to derive and optimize than the forward pass. 
+
+% Developers can either implement and tune backward kernels manually, incurring substantial engineering effort, or rely on framework autograd and compiler-generated implementations, which may not exploit the same operator-specific design space as a custom implementation. 
+
+% Automatically generating an efficient backward implementation is itself challenging: the system must recover the gradient computation, identify efficient reduction and parallelization strategies, and transform the resulting computation into GPU kernels that are both correct and performant. \haochen{I think this paragraph is redundant since those problems also exist for forward pass}
+
+% A second challenge is that optimizing a training kernel in isolation does not necessarily optimize training. A custom forward--backward implementation may achieve substantial speedup in a direct kernel benchmark, yet lose much of this advantage once integrated into the training stack, where autograd execution, framework overheads, and interactions with surrounding operators become part of the critical path. Moreover, the contribution of any single operator can change when it is composed with the rest of a model, as different bottlenecks emerge at the application level. Consequently, kernel-level speedup alone is insufficient to establish the practical value of a generated training implementation; the improvement must ultimately be validated in the context in which training actually executes.
+
+% \haochen{"We therefore distinguish..." and afterwards sounds like a specific solution rather than a general challenge. My feeling is moving it down to the later half of the intro ?} \ajay{Agreed, I feel like it would fit better in the contributions part of the intro.}
+
+% Training kernels must additionally operate across heterogeneous deployment
+% conditions. Kernel structures that are effective for small inputs can become
+% inefficient, or even invalid, at larger shapes because the preferred launch
+% configuration, fusion boundary, and reduction strategy can change with the
+% workload. 
+
+
+
+% Forward and backward implementations also communicate through state
+% retained from the forward pass. When a custom forward--backward pair is designed
+% jointly, its implementation determines which operator-internal values are
+% materialized for use by backward and which quantities are reconstructed.
+% These choices affect both computation and memory and can themselves interact
+% with shape. Importantly, this operator-internal design space is complementary
+% to graph-level activation checkpointing and rematerialization. Systems such as
+% PyTorch~2 and AOTAutograd already optimize save-versus-recompute decisions over
+% compiler-visible forward--backward graphs
+% ~\cite{ansel2024pytorch2,pytorch2025activationcheckpointing}; our goal is not
+% to replace these passes, but to optimize the custom forward--backward program
+% that is subsequently exposed to the surrounding training system.
+
+% These challenges also expose limitations in existing kernel benchmarks. 
+% Forward-only or fixed-shape microbenchmarks cannot fully characterize a system
+% that must generate gradients, remain correct across multiple shapes, interact
+% with autograd, and ultimately improve training execution. 
+
+
+
+% We therefore
+% construct a benchmark for automatically generated training kernels that
+% evaluates complete forward--backward behavior across variable input
+% configurations and multiple execution scopes. 
+
+
+
+
+
