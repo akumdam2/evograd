@@ -183,6 +183,25 @@ class TestOperatorScope(unittest.TestCase):
         self.assertTrue(all(e[m]["from"] in ("native", "floor")
                             for e in report.subject["thresholds"].values() for m in ("E2", "M")))
 
+    def test_unaudited_executions_give_the_same_results_and_hash_nothing(self):
+        from unittest import mock
+
+        sample = self.bf16_scope.samples([1])[0]
+        deployment = self.bf16_scope.candidate(F.scale_shift_pair())
+        full = gate2.execute(self.bf16_scope, deployment, sample)
+        with mock.patch("evograd.verification.gate2.runner.tensor_digests",
+                        side_effect=AssertionError("hashed")), \
+                mock.patch("evograd.verification.gate2.runner.content_identity",
+                           side_effect=AssertionError("identified")):
+            bare = gate2.execute(self.bf16_scope, deployment, sample, audit=False)
+        self.assertIsNone(bare.error, bare.error)
+        self.assertEqual(sorted(bare.results), sorted(full.results))
+        for name, value in full.results.items():
+            self.assertTrue(torch.equal(bare.results[name], value), name)
+        self.assertEqual((bare.sample_identity, bare.results_digest, bare.initial_state),
+                         ({}, None, {}))
+        self.assertIsNotNone(full.results_digest)
+
     def test_errors_against_the_truth(self):
         t = torch.tensor([1.0, -0.5, 0.0, 0.25])
         e = errors(t * 1.01, t)

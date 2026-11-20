@@ -41,7 +41,8 @@ through the model and through training (model Gate 2, Gate 3).
 
 If the compile control cannot be built or fails on a payload, native alone is
 trusted there (recorded in the report). Nothing is calibrated or cached: the
-trusted errors are measured on the same payloads in the same run.
+trusted errors are measured on the same payloads in the same run, and the
+executions record no content identities or digests (``execute(audit=False)``).
 """
 
 from __future__ import annotations
@@ -208,7 +209,7 @@ def _measure(scope, sample: Sample, deployment: Deployment, control: Deployment 
     coexists with another execution's working state. ``None`` when the reference
     side failed, which leaves ``case`` incomplete.
     """
-    native = execute(scope, Deployment.native(), sample)
+    native = execute(scope, Deployment.native(), sample, audit=False)
     if native.error:
         case.findings.append(missing("reference_runtime_error", f"native failed at {native.error_stage}",
                                      trace=native.error))
@@ -216,13 +217,13 @@ def _measure(scope, sample: Sample, deployment: Deployment, control: Deployment 
     contract = integration_contract(native)
     runs = {"native": native.results}
     if control is not None:
-        ctl = execute(scope, control, sample)
+        ctl = execute(scope, control, sample, audit=False)
         if ctl.error:
             case.evidence["compile"] = {"failed_at": ctl.error_stage, "trace": ctl.error}
         else:
             runs["compile"] = ctl.results
         del ctl
-    cand = execute(scope, deployment, sample)
+    cand = execute(scope, deployment, sample, audit=False)
     case.evidence["candidate_seconds"] = cand.seconds
     checks: dict[str, ResultCheck] = {}
     numeric: list[str] = []

@@ -174,11 +174,19 @@ class Execution:
 
 
 def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
-            record_boundaries: bool = False) -> Execution:
+            record_boundaries: bool = False, audit: bool = True) -> Execution:
     """Build, run forward + backward once, collect every named result.
 
     The sample's seed governs all randomness inside, and the caller's RNG is
     restored afterwards. Nothing is judged here.
+
+    ``audit`` (the model scope's policies need it) also records the sample's
+    content identity, the input digest, the parameter state before and after
+    and the results digest, every one a SHA-256 of tensors copied to the host,
+    and snapshots the inputs for mutation checks. With ``audit`` false (operator
+    Gate 2, which binds no policy and leaves mutation to Gate 1) it only runs
+    and collects the results: on a 224-call case the hashing was most of the
+    operator gate's time (2026-11-20).
     """
     ex = Execution(deployment, sample)
     hooks = SiteHooks(record=record_boundaries)
@@ -197,14 +205,15 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             ex.parameter_groups = C.parameter_groups(module)
             params = dict(module.named_parameters())
             ex.trainable = {g[0]: params[g[0]].requires_grad for g in ex.parameter_groups}
-            ex.initial_state = module_state_digest(module)
+            ex.initial_state = module_state_digest(module) if audit else {}
             stage = "prepare"
             invocation = adapter.invocation(sample, module)
             roots = isolate({"args": tuple(invocation.args), "kwargs": dict(invocation.kwargs)})
-            # Content identity before anything runs: inputs the contract lets a
-            # kernel overwrite are hashed here too, not only their layout.
-            inputs_id, opaque = content_identity(roots)
-            context_id, opaque_ctx = content_identity(dict(invocation.context), "context")
+            if audit:
+                # Content identity before anything runs: inputs the contract lets a
+                # kernel overwrite are hashed here too, not only their layout.
+                inputs_id, opaque = content_identity(roots)
+                context_id, opaque_ctx = content_identity(dict(invocation.context), "context")
             for path in invocation.differentiable_inputs.values():
                 leaf = resolve(roots, path)
                 if not (torch.is_tensor(leaf) and leaf.is_floating_point()):
@@ -214,7 +223,7 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
                       for name, path in invocation.differentiable_inputs.items()}
             mutable = tuple(invocation.mutable_inputs)
             before = snapshot(roots, metadata_only=tuple(p for p in mutable
-                                                         if not p.startswith("cotangent:")))
+                                                         if not p.startswith("cotangent:"))) if audit else {}
             module.zero_grad(set_to_none=True)
             hooks.reset()
             stage = "forward"
@@ -230,17 +239,18 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
                 {n: v for n, v in outputs.items() if n not in adapter.backward_only}))
             stage = "backward"
             seeds = isolate(dict(adapter.cotangents(outputs, invocation, sample)))
-            seed_before = snapshot(seeds, metadata_only=tuple(
-                p.split(":", 1)[1] for p in mutable if p.startswith("cotangent:")))
-            items = list(tensors_in({"inputs": before_values(before), "cotangents": seeds}))
-            ex.input_digest = C.stable_hash(
-                list(zip([path for path, _ in items], tensor_digests([t for _, t in items]))))
-            cotangents_id, opaque_cot = content_identity(seeds, "cotangent")
-            ex.sample_identity = sample_identity(
-                sample, inputs=inputs_id, context=context_id, cotangents=cotangents_id,
-                initial_state=ex.initial_state, training=module.training,
-                differentiable=invocation.differentiable_inputs, mutable=mutable,
-                opaque=opaque + opaque_ctx + opaque_cot)
+            if audit:
+                seed_before = snapshot(seeds, metadata_only=tuple(
+                    p.split(":", 1)[1] for p in mutable if p.startswith("cotangent:")))
+                items = list(tensors_in({"inputs": before_values(before), "cotangents": seeds}))
+                ex.input_digest = C.stable_hash(
+                    list(zip([path for path, _ in items], tensor_digests([t for _, t in items]))))
+                cotangents_id, opaque_cot = content_identity(seeds, "cotangent")
+                ex.sample_identity = sample_identity(
+                    sample, inputs=inputs_id, context=context_id, cotangents=cotangents_id,
+                    initial_state=ex.initial_state, training=module.training,
+                    differentiable=invocation.differentiable_inputs, mutable=mutable,
+                    opaque=opaque + opaque_ctx + opaque_cot)
             unknown = sorted(set(seeds) - set(outputs))
             if unknown:
                 raise ValueError(f"cotangents name outputs that do not exist: {unknown}")
@@ -250,7 +260,9 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             stage = "collect"
             ex.counts = dict(hooks.counts)
             ex.boundaries = list(hooks.calls)
-            ex.mutated = mutations(roots, before) + [f"cotangent:{p}" for p in mutations(seeds, seed_before)]
+            if audit:
+                ex.mutated = mutations(roots, before) + [f"cotangent:{p}"
+                                                         for p in mutations(seeds, seed_before)]
             by_spec = {s.name: s for s in ex.specs}
             for name, value in produced_outputs.items():
                 key = (C.PREFIX[C.METADATA] if (C.PREFIX[C.METADATA] + name) in by_spec
@@ -263,10 +275,11 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
                 p = params[group[0]]
                 ex.results[C.PREFIX[C.PARAM_GRAD] + group[0]] = (None if p.grad is None
                                                                 else p.grad.detach())
-            after = module_state_digest(module)
-            ex.state_changed = sorted(k for k in set(after) | set(ex.initial_state)
-                                      if after.get(k) != ex.initial_state.get(k))
-            ex.results_digest = results_digest(ex.results)
+            if audit:
+                after = module_state_digest(module)
+                ex.state_changed = sorted(k for k in set(after) | set(ex.initial_state)
+                                          if after.get(k) != ex.initial_state.get(k))
+                ex.results_digest = results_digest(ex.results)
     except Exception:
         ex.error = traceback.format_exc(limit=10)
         ex.error_stage = stage
