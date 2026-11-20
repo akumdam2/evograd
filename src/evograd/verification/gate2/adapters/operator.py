@@ -35,6 +35,9 @@ SITE = "operator"
 
 class OperatorScope(ScopeBase):
     scope = "operator"
+    #: An operator build holds no reference cycles (``TestReleasedRuns`` checks it
+    #: with the collector off), so execute() does not run the cyclic collector.
+    cyclic_builds = False
 
     def __init__(self, op: OpDecl, workload: Workload, *, device: str = "cuda",
                  autocast_dtype: str | None = None):

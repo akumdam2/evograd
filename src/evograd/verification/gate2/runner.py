@@ -199,8 +199,12 @@ def execute(adapter: ScopeAdapter, deployment: Deployment, sample: Sample, *,
             # build), and a tier-3 workload's patched layers hold themselves
             # (``forward`` bound to the instance): only the cyclic collector frees
             # them, and device memory does not trigger it (Qwen3.5-4B: ~7.5 GiB per
-            # run, 2026-11-02). Free them before this run allocates its own.
-            gc.collect()
+            # run, 2026-11-02). Free them before this run allocates its own. A scope
+            # whose builds hold no cycles skips it (``cyclic_builds``): with a model
+            # loaded the collection takes ~0.1 s, more than half of operator
+            # Gate 2's time per call (2026-11-20).
+            if getattr(adapter, "cyclic_builds", True):
+                gc.collect()
             ex.expected = dict(adapter.expected_invocations(deployment))
             ex.parameter_groups = C.parameter_groups(module)
             params = dict(module.named_parameters())
