@@ -8,12 +8,22 @@ float32 widened to float32 (TF32 off). An element of a result passes when
 
 computed in float64, where ``max|t|`` is the largest magnitude of that result on
 that call. Every element is checked; the allowance is the same for all elements
-of the result. ``bound`` is the larger of the dtype's ``budget`` and
-``NATIVE_FACTOR`` times the largest deviation of the model's own implementation
-(the reference at the call's real dtypes, "native") from the truth on the judged
-calls: where native is itself that inaccurate the result is ill-conditioned at
-that dtype, and a candidate is held to native's accuracy, not to the budget. On
-the benchmark's cases this widens mostly attention-block gradients.
+of the result. ``bound`` is the dtype's ``budget``.
+
+Attention tasks (:data:`NATIVE_BOUND_TASKS`) are the one exception: there
+``bound`` is the larger of the budget and ``NATIVE_FACTOR`` times the largest
+deviation of the model's own implementation (the reference at the call's real
+dtypes, "native") from the truth on the judged calls. Their query and key
+gradients are ill-conditioned at low precision: each row of the softmax gradient
+sums to zero, so ``dq_i = scale * sum_j dS_ij k_j`` is what is left after a
+component common to all keys cancels, and the q/k-norm weight gradients sum such
+residues over every token and head. Ordinary bfloat16 rounding (0.2-0.4% per
+element) then moves these results by several percent, up to tens of percent where
+the keys carry a large common component (a k_proj bias, a large k-norm weight on a
+slowly rotating RoPE dimension): native itself is up to 8% off the truth on
+Qwen3's and Qwen3.5's attention blocks and up to 89% on Qwen2-VL's text attention.
+A candidate there is held to native's accuracy instead of the budget. No other
+benchmark task needs it: native is within the budget everywhere else.
 
 Why a float32 truth. Native carries its own rounding (a bfloat16 RMSNorm weight
 gradient is 2-3% of its largest value off), so judging against it penalizes
@@ -52,15 +62,23 @@ import torch
 from evograd.opdecl.activity import Active
 from evograd.opdecl.inputs import arg_dtype_name, resolve_dtype
 
-MODEL_POLICY = "evograd-gate1-model-dtype-budget/8"
+MODEL_POLICY = "evograd-gate1-model-dtype-budget/9"
 SOURCE = "Gate 1's own fixed budgets (2026-11-19)"
 COMPARISON = ("|c-t| <= atol + bound * max|t| per element, float64; t = float32 truth; "
-              "bound = max(budget, NATIVE_FACTOR * native's own error)")
+              "bound = budget, or on attention tasks max(budget, NATIVE_FACTOR * native's own error)")
 
 #: Absolute term, every dtype.
 ATOL = 1e-12
-#: The bound is never below this many times native's own error.
+#: On an attention task the bound is never below this many times native's own error.
 NATIVE_FACTOR = 1.5
+#: Attention tasks of the benchmark (op names): the softmax over keys makes their
+#: query/key gradients ill-conditioned at low precision (module docstring).
+NATIVE_BOUND_TASKS = frozenset({
+    "qwen3_attention_block", "qwen3_5_attention_block", "llama3_attention_block",
+    "olmoe_attention_block", "qwen2_vl_2b_text_attention_block", "qwen2_vl_2b_vision_attention",
+    "dit_s_2_dit_attention", "megafold_evoattention", "megafold_triangle_attention_starting",
+    "megafold_triangle_attention_ending", "softmax",
+})
 #: Per dtype (the least precise floating dtype of the call): fraction of max|t|.
 #: float16 is bfloat16's at its eight times finer rounding and is not measured.
 BUDGETS = {
@@ -80,6 +98,7 @@ def model_policy_identity() -> dict:
         "truth": "model reference with floating inputs below float32 widened to float32, TF32 off",
         "atol": ATOL,
         "native_factor": NATIVE_FACTOR,
+        "native_bound_tasks": sorted(NATIVE_BOUND_TASKS),
         "budgets": {str(dtype).removeprefix("torch."): budget for dtype, budget in BUDGETS.items()},
         "declaration_scaling": False,
         "comparison": COMPARISON,
@@ -118,8 +137,14 @@ def result_budget(op, workload, dtype: torch.dtype) -> float:
     return BUDGETS[rule_dtype(op, workload, dtype)]
 
 
+def native_bound(op) -> bool:
+    """Whether ``op`` is an attention task, whose bound follows native's own error."""
+    _require_model_reference(op)
+    return op.name in NATIVE_BOUND_TASKS
+
+
 def result_bound(budget: float, native_error: float) -> float:
-    """The fraction of max|t| a result is held to: the larger of its budget and
+    """An attention task's fraction of max|t|: the larger of the budget and
     ``NATIVE_FACTOR`` times native's own error (never stricter than the model's own
     implementation allows, and continuous in native's error)."""
     return max(budget, NATIVE_FACTOR * native_error)

@@ -107,6 +107,10 @@ SEARCH_SELECTION = "first, middle and last call of the case in each calibration 
 #: :data:`SEARCH_RULE`; the evolution evaluator's correctness check then calls
 #: :func:`search_correctness` instead of judging generated inputs.
 SEARCH_CORRECTNESS_ENV = "EVOGRAD_SEARCH_CORRECTNESS"
+#: Where a search run keeps Gate 1's native error on the pack's search payloads
+#: (set next to its timing cache): it never depends on the candidate, so the
+#: run's first candidate computes it and the rest reuse it.
+NATIVE_ERROR_CACHE_ENV = "EVOGRAD_GATE1_NATIVE_ERROR_CACHE"
 
 
 def search_spec() -> dict[str, Any] | None:
@@ -156,7 +160,10 @@ def search_correctness(op: OpDecl, module, spec: Mapping[str, Any], *,
                           f"not {spec['corpus']['corpus_id']}")
     cases = payload_cases(op, op.benchmark[0], corpus, case_id=spec["case_id"],
                           split="calibration", device=device, payload_ids=spec["payload_ids"])
-    report = gate1.verify_pair(op, module, cases=cases, device=device)
+    from evograd.verification.integrations.gates import gate1_native_errors
+
+    native = gate1_native_errors(op, cases, device, os.environ.get(NATIVE_ERROR_CACHE_ENV))
+    report = gate1.verify_pair(op, module, cases=cases, device=device, native_error=native)
     summary = gate1.evolution_correctness(report, op)
     if report.status != "passed":
         summary["total"] = max(summary["total"], 1)

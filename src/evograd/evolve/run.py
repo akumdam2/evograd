@@ -176,7 +176,7 @@ def run_evolve(
     from evograd.adbench_tools.task import TASK_FILE, AgentTask, load
     from evograd.opdecl.baselines import resolve_performance_baseline
     from evograd.evolve.scoring import get_policy
-    from evograd.verification.payloads.gate1 import SEARCH_CORRECTNESS_ENV
+    from evograd.verification.payloads.gate1 import NATIVE_ERROR_CACHE_ENV, SEARCH_CORRECTNESS_ENV
 
     task = pack if isinstance(pack, AgentTask) else load(pack)
     search_rule(task)
@@ -242,6 +242,7 @@ def run_evolve(
         "EVOGRAD_BASELINE_TIMING_CACHE_PATH",
         str(output_dir / ".baseline_timing_cache.json"),
     )
+    env[NATIVE_ERROR_CACHE_ENV] = str(output_dir / ".gate1_native_error.json")
     if performance_baseline != "pytorch_autograd":
         env["EVOGRAD_PERFORMANCE_BASELINE"] = performance_baseline
     programs_dir = output_dir / "programs"

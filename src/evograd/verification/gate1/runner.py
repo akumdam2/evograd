@@ -21,11 +21,16 @@ other declaration is refused (:mod:`.tolerances`). The report's
 
 **How.** Per element, per result:
 ``|candidate_i - truth_i| <= atol + bound * max|truth|``, with ``bound`` the
-larger of the budget of the call's least precise floating dtype
-(:data:`.tolerances.BUDGETS`) and 1.5 times native's own largest deviation from
-the truth over the judged calls (:func:`native_errors`, computed first);
-a tiny absolute ``atol``; ``max|truth|`` that result's largest magnitude on that
-call. No calibration and no ``torch.compile`` control. Computed in float64.
+budget of the call's least precise floating dtype (:data:`.tolerances.BUDGETS`),
+on attention tasks (:data:`.tolerances.NATIVE_BOUND_TASKS`) the larger of that and
+1.5 times native's own largest deviation from the truth over the judged calls
+(:func:`native_errors`, computed first, or given by a caller that caches it: it
+never depends on the candidate); a tiny absolute ``atol``; ``max|truth|`` that
+result's largest magnitude on that call. No calibration and no ``torch.compile`` control. Computed in float64.
+
+**Order, per case.** Native, then the candidate (its working state released),
+then the truth: the truth is twice native's size, and the largest cases fit in
+device memory only when it never coexists with the candidate's working state.
 
 **What this core adds to the earlier verifiers** (all listed in the package
 README): explicit finiteness (a non-finite candidate fails, a non-finite
@@ -57,6 +62,7 @@ from evograd.verification.gate1.tolerances import (
     BUDGETS,
     COMPARISON,
     allowance,
+    native_bound,
     policy_identity,
     result_bound,
     rule_dtype,
@@ -216,8 +222,8 @@ def verify_pair(
                                                      "this is not a numerical verification"))
     if mode == ORACLE:
         if native_error is None:
-            native_error = native_errors(op, selected, device)
-        report.subject["native_error"] = dict(native_error)
+            native_error = native_errors(op, selected, device) if native_bound(op) else {}
+        report.subject["native_error"] = dict(native_error) if native_bound(op) else {}
     for case in selected:
         report.cases.append(_run_case(op, pair, case, device=device, mode=mode,
                                       input_mutation=input_mutation, observers=observers or {},
@@ -253,10 +259,12 @@ def widened(values: Mapping[str, Any]) -> tuple[dict[str, Any], bool]:
     return out, changed
 
 
-def reference_results(op: OpDecl, values: Mapping[str, Any], device: str) -> dict[str, Any]:
-    """The oracle's outputs and gradients on ``values``, by result name."""
+def reference_results(op: OpDecl, values: Mapping[str, Any], device: str, *,
+                      copy: bool = True) -> dict[str, Any]:
+    """The oracle's outputs and gradients on ``values`` (on a copy unless ``copy``
+    is false: values the caller made for this run alone), by result name."""
     with isolated_rng(None, device):
-        y_ref, g_ref = oracle(op, isolate(dict(values)))
+        y_ref, g_ref = oracle(op, isolate(dict(values)) if copy else dict(values))
     synchronize(device)
     outs, arity = named_outputs(op, y_ref)
     if arity:
@@ -273,8 +281,13 @@ def truth_results(op: OpDecl, values: Mapping[str, Any], device: str,
     wide, changed = widened(values)
     if not changed:
         return native
+    # The widened tensors are already fresh copies; copy only the rest (not the
+    # float32 inputs twice: on the largest cases that is the difference between
+    # fitting in device memory and not).
+    rest = isolate({n: v for n, v in wide.items() if v is values[n]})
+    wide = {n: rest.get(n, v) for n, v in wide.items()}
     with full_float32():
-        return reference_results(op, wide, device)
+        return reference_results(op, wide, device, copy=False)
 
 
 def _materialize(case: Gate1Case) -> dict[str, Any]:
@@ -283,12 +296,14 @@ def _materialize(case: Gate1Case) -> dict[str, Any]:
     return dict(case.values)
 
 
-def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str) -> dict[str, float]:
+def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str, *,
+                  strict: bool = False) -> dict[str, float]:
     """Per floating result, native's largest deviation from the float32 truth over
     ``cases``: ``max over calls of (max|native - truth| - atol) / max|truth|``.
 
     0 where the call is already at float32 or above. A case whose inputs or
-    references fail is left out here; its own run reports why.
+    references fail is left out here (its own run reports why), or, with
+    ``strict``, raises: a cached value must cover every case.
     """
     errors: dict[str, float] = {}
     for case in cases:
@@ -297,6 +312,8 @@ def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str) -> dict[s
             native = reference_results(op, values, device)
             truth = truth_results(op, values, device, native)
         except Exception:
+            if strict:
+                raise
             continue
         for name, n in native.items():
             t = truth.get(name)
@@ -310,6 +327,28 @@ def native_errors(op: OpDecl, cases: Sequence[Gate1Case], device: str) -> dict[s
             errors[name] = max(errors.get(name, 0.0), share)
         del values, native, truth
     return errors
+
+
+def native_error_binding(op: OpDecl, cases: Sequence[Gate1Case], device: str) -> dict[str, Any]:
+    """What :func:`native_errors` on ``cases`` depends on, for a cache to bind to:
+    the cases (ids and provenance, which names the corpus content), the reference,
+    the rule, the code that computes it and the environment."""
+    import hashlib
+    import json
+    import sys
+    from pathlib import Path
+
+    from evograd.verification.common.contracts import environment_fingerprint
+
+    # Modules this one imported: this core, the rule, the comparison, the oracle.
+    modules = (__name__, "evograd.verification.gate1.tolerances",
+               "evograd.verification.common.tensors", "evograd.opdecl.oracle")
+    sources = {name: hashlib.sha256(Path(sys.modules[name].__file__).read_bytes()).hexdigest()
+               for name in modules}
+    binding = {"cases": [{"case_id": c.case_id, "provenance": dict(c.provenance)} for c in cases],
+               "reference": reference_identity(op), "tolerance_policy": policy_identity(op),
+               "sources": sources, "environment": environment_fingerprint(device)}
+    return json.loads(json.dumps(binding, sort_keys=True, default=str))
 
 
 def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, mode: str,
@@ -336,28 +375,13 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
         report.findings.extend(missing("invalid_case_inputs", p) for p in problems)
         return report
 
-    # 2. the references (native, and the float32 truth), on their own copies.
+    # 2. native (the reference at the call's dtypes), on its own copy. The float32
+    # truth is computed after the candidate (5.), once the candidate's working
+    # memory is freed: the truth is twice native's size.
     reference: dict[str, Any] = {}
-    truth: dict[str, Any] = {}
-    if mode == ORACLE:
-        try:
-            reference = reference_results(op, values, device)
-            truth = truth_results(op, values, device, reference)
-        except Exception as exc:
-            finding = missing("reference_failed", f"{type(exc).__name__}: {exc}",
-                              traceback=traceback.format_exc(limit=6))
-            if case.role == PROBE_CASE:
-                report.skipped = "invalid_reference"
-            report.findings.append(finding)
-            return report
-        invalid = sorted({name for refs in (reference, truth) for name, t in refs.items()
-                          if C.is_float_tensor(t) and not bool(torch.isfinite(t).all())})
-        if invalid and case.role == PROBE_CASE:
-            report.skipped = "invalid_reference"
-            report.findings.append(missing("invalid_reference",
-                                           "the oracle is non-finite on this probe input",
-                                           results=invalid))
-            return report
+    if mode == ORACLE and not _references(report, case, lambda: reference_results(op, values, device),
+                                          into=reference):
+        return report
 
     # 3. the candidate, on another copy; prepare on a third.
     values_c = isolate(values)
@@ -395,19 +419,48 @@ def _run_case(op: OpDecl, pair: PairUnderTest, case: Gate1Case, *, device: str, 
                                        f"the pair changed inputs {changed} (only the contents of "
                                        f"{list(allowed)} may be overwritten)", inputs=changed))
 
-    # 4. compare, by name.
-    if mode == ORACLE:
-        report.results.extend(compare_results(op, case.workload, contract, candidate, reference,
-                                              truth=truth, native_error=native_error))
-    else:
-        report.results.extend(_smoke_results(contract, candidate))
-
+    # 4. observers see the executed case; then the candidate's state is released.
     for name, observer in observers.items():
         try:
             report.evidence[name] = observer(context)
         except Exception as exc:  # an observer never changes the verdict
             report.evidence[name] = {"observer_error": f"{type(exc).__name__}: {exc}"}
+    del context, values_c, before, saved, output, outs, grads, named
+
+    # 5. the float32 truth, then compare, by name.
+    if mode == ORACLE:
+        truth: dict[str, Any] = {}
+        if not _references(report, case, lambda: truth_results(op, values, device, reference),
+                           into=truth):
+            return report
+        report.results.extend(compare_results(op, case.workload, contract, candidate, reference,
+                                              truth=truth, native_error=native_error))
+    else:
+        report.results.extend(_smoke_results(contract, candidate))
     return report
+
+
+def _references(report: CaseReport, case: Gate1Case, compute: Callable[[], dict[str, Any]], *,
+                into: dict[str, Any]) -> bool:
+    """Run one reference (native or the truth) into ``into``; ``False`` (with the
+    finding recorded) when it fails, or is non-finite on a probe case."""
+    try:
+        into.update(compute())
+    except Exception as exc:
+        if case.role == PROBE_CASE:
+            report.skipped = "invalid_reference"
+        report.findings.append(missing("reference_failed", f"{type(exc).__name__}: {exc}",
+                                       traceback=traceback.format_exc(limit=6)))
+        return False
+    invalid = sorted(name for name, t in into.items()
+                     if C.is_float_tensor(t) and not bool(torch.isfinite(t).all()))
+    if invalid and case.role == PROBE_CASE:
+        report.skipped = "invalid_reference"
+        report.findings.append(missing("invalid_reference",
+                                       "the oracle is non-finite on this probe input",
+                                       results=invalid))
+        return False
+    return True
 
 
 def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
@@ -441,7 +494,7 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
             target = (truth or {}).get(pair.spec.name, pair.reference)
             dtype = rule_dtype(op, workload, pair.reference.dtype)
             budget = BUDGETS[dtype]
-            own = float((native_error or {}).get(pair.spec.name, 0.0))
+            own = float((native_error or {}).get(pair.spec.name, 0.0)) if native_bound(op) else 0.0
             bound = result_bound(budget, own)
             limit = allowance(target, bound)
             err = elementwise_error(pair.candidate, target, atol=limit, rtol=0.0)
@@ -464,7 +517,7 @@ def compare_results(op: OpDecl, workload: Workload, contract: C.ResultContract,
             check.findings.append(failure(
                 "tolerance_exceeded",
                 f"{err.violations}/{err.elements} elements outside atol + {bound:.3g}*max|truth| "
-                f"= {limit:.3g}" + (f" (1.5 x the model's own error {own:.3g})" if bound != budget
+                f"= {limit:.3g}" + (f" (1.5 x the model's own error {own:.3g}, an attention task)" if bound != budget
                                     else f" (the {C.dtype_name(dtype)} budget)")
                 + f" (max abs err {err.max_abs_err:.3g}, headroom {err.headroom:.3g})",
                 violations=err.violations,

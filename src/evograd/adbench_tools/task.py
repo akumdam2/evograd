@@ -272,7 +272,9 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
     """
     from evograd.opdecl.inputs import resolve_dtype
     from evograd.verification.gate1.runner import declared_name, result_contract
-    from evograd.verification.gate1.tolerances import policy_identity, result_budget, rule_dtype
+    from evograd.verification.gate1.tolerances import (
+        native_bound, policy_identity, result_budget, rule_dtype,
+    )
 
     results = {}
     for spec in result_contract(op, workload).specs:
@@ -281,7 +283,7 @@ def _gate1_tolerances(op, workload) -> dict[str, Any]:
             "dtype": spec.dtype,
             "budget_dtype": str(rule_dtype(op, workload, dtype)).removeprefix("torch."),
             "budget": result_budget(op, workload, dtype)}
-    return {"policy": policy_identity(op), "results": results}
+    return {"policy": policy_identity(op), "native_bound": native_bound(op), "results": results}
 
 
 def _search_correctness(observed, corpus: str | Path | None) -> dict[str, Any]:

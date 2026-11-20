@@ -82,15 +82,38 @@ with one allowance per result: a small element is usually the difference of
 larger terms, whose rounding sets its error. `atol` is 1e-12 for every dtype: it
 only absorbs numerically zero results; recorded gradients reach down to 1e-13.
 
-`bound` is the larger of the budget of the call's least precise floating dtype
-(its tensor inputs, upstream gradients and the result: a float32 gradient
-computed from bfloat16 activations carries bfloat16 rounding) and 1.5 times
-native's largest deviation from the truth on the judged calls
-(`gate1.runner.native_errors`, computed before the candidate runs and recorded in
-the report). Where native is itself that inaccurate the result is
-ill-conditioned at that dtype, and a candidate is held to native's accuracy
-rather than to the budget; on the benchmark's cases that is mostly
-attention-block gradients.
+`bound` is the budget of the call's least precise floating dtype (its tensor
+inputs, upstream gradients and the result: a float32 gradient computed from
+bfloat16 activations carries bfloat16 rounding).
+
+Attention tasks (`gate1.tolerances.NATIVE_BOUND_TASKS`, eleven op names) are the
+one exception: there `bound` is the larger of the budget and 1.5 times native's
+largest deviation from the truth on the judged calls (`gate1.runner.native_errors`,
+recorded in the report). Their query and key gradients are ill-conditioned at low
+precision. Each row of the softmax gradient sums to zero, so `dq_i = s * sum_j
+dS_ij k_j` is the residue left after any component common to all keys cancels,
+and the q/k-norm weight gradients sum such residues over every token and head;
+ordinary bfloat16 rounding (0.2-0.4% per element) then moves them by several
+percent. Measured on the search payloads (float32 truth, one rounding point
+changed at a time): the terms of `dq` are a median 138, 9.6 and 5.5 times `|dq|`
+on Qwen2-VL's, Qwen3's and Qwen3.5's worst layer (2.6, 2.9 and 4.4 once the keys
+are centred); Qwen2-VL's layer-0 keys are its k_proj bias (norm 382 and 1044
+against 12-14 for the input-dependent part) in the slowest RoPE dimensions, and
+Qwen3's carry a k-norm weight of 96.5 (median 2.3) on one slowly rotating
+dimension. Native is then up to 8% off the truth on Qwen3's and Qwen3.5's blocks
+and up to 89% on Qwen2-VL's text attention, and a candidate is held to native's
+accuracy instead. Native error never depends on the candidate: a search run
+(`EVOGRAD_GATE1_NATIVE_ERROR_CACHE`) and `evograd evaluate --state` compute it
+once per set of calls and reuse it; other tasks never compute it. On every other
+benchmark task native is within the budget. One case is beyond this rule: on
+Qwen2-VL-2B's text attention block native is 47% off on `dx`, so Gate 1 there
+cannot reject a gradient scaled by 1.05, and `torch.compile` fails it (`dq_bias`,
+3.4 times native's error). It is a recorded exception.
+
+Per call, native runs first, then the candidate (whose working state is then
+released), then the truth: the truth is twice native's size, and the largest
+calls (MegaFold's SwiGLU, 1.2e9 elements per tensor) fit in device memory only
+when it never coexists with the candidate's working state.
 
 Gate 1 judges only model-reference tasks; any other declaration is refused.
 Declarations carry no tolerances. The budgets are a fixed, versioned table

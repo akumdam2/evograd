@@ -106,6 +106,9 @@ def evaluator_env(task: AgentTask, *, cache_dir: str | Path | None = None,
     cache.mkdir(parents=True, exist_ok=True)
     env.setdefault("EVOGRAD_BASELINE_TIMING_CACHE_PATH",
                    str(cache / "baseline_timing_cache.json"))
+    from evograd.verification.payloads.gate1 import NATIVE_ERROR_CACHE_ENV
+
+    env[NATIVE_ERROR_CACHE_ENV] = str(cache / "gate1_native_error.json")
     if task.spec["performance_baseline"] != "pytorch_autograd":
         env["EVOGRAD_PERFORMANCE_BASELINE"] = task.spec["performance_baseline"]
     if warmup is not None:

@@ -231,6 +231,42 @@ def _calibrate(scope, deployment, judged, cache: Path | None, **options):
 # ── per case: Gate 1 and operator Gate 2 ─────────────────────────────────────
 
 
+def gate1_native_errors(op, cases, device: str, cache: str | Path | None) -> dict[str, float] | None:
+    """Gate 1's native error on ``cases`` (:func:`~evograd.verification.gate1.runner.native_errors`),
+    reused from ``cache`` when it binds to the same cases, reference, rule, code and
+    environment (:func:`~evograd.verification.gate1.runner.native_error_binding`), and
+    saved there when every case computed.
+
+    Empty for a task that is not an attention task (Gate 1 does not use it there).
+    ``None`` without a cache, or when a case's reference fails: Gate 1 then computes
+    it itself and the failing case reports why. An unwritable cache only costs the reuse.
+    """
+    from evograd.verification.gate1.runner import native_error_binding, native_errors
+    from evograd.verification.gate1.tolerances import native_bound
+
+    if not native_bound(op):
+        return {}           # only attention tasks use it
+    if cache is None:
+        return None
+    cache = Path(cache)
+    binding = native_error_binding(op, cases, device)
+    try:
+        data = json.loads(cache.read_text())
+        if data["binding"] == binding:
+            return {name: float(v) for name, v in data["native_error"].items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    try:
+        errors = native_errors(op, cases, device, strict=True)
+    except Exception:
+        return None
+    try:
+        _write(cache, {"binding": binding, "native_error": errors})
+    except OSError:
+        pass
+    return errors
+
+
 def operator_calibration(model, case, corpus, *, device: str = "cuda",
                          compile_backend: str = "inductor", state: Path | None = None):
     """The case's operator scope on ``corpus`` and its Gate 2 calibration, saved
@@ -262,8 +298,8 @@ def payload_samples(scope) -> list:
 def judge_case(model, case, module, corpus, *, device: str = "cuda",
                compile_backend: str = "inductor", state: Path | None = None) -> dict[str, Any]:
     """Gate 1 on the case's real payloads and operator Gate 2. With ``state``,
-    the operator calibration (which never depends on the candidate) is saved
-    there and reused.
+    the operator calibration and Gate 1's native error (neither depends on the
+    candidate) are saved there and reused.
 
     Gate 1 takes the recorded training payloads only: generated inputs at the
     same shape add no coverage, and the fixed dtype tolerance judges them at a
@@ -277,7 +313,9 @@ def judge_case(model, case, module, corpus, *, device: str = "cuda",
     deployment = scope.candidate(module)
     cases = [c for split in PAYLOAD_SPLITS for c in payload_cases(
         op, case.workload, corpus, case_id=case.case_id, split=split, device=device)]
-    payloads = gate1.verify_pair(op, module, device=device, cases=cases)
+    native = gate1_native_errors(op, cases, device, None if state is None else (
+        state / "gate1" / "native_error" / corpus.sha256[:16] / f"{case.case_id.replace('/', '__')}.json"))
+    payloads = gate1.verify_pair(op, module, device=device, cases=cases, native_error=native)
     operator = gate2.verify_integration(scope, deployment, policy=calibration.policy,
                                         samples=payload_samples(scope))
     return {"gate1_payloads": payloads,

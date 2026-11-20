@@ -1,20 +1,25 @@
-"""Model Gate 1: |c-t| <= atol + bound*max|t| per element against a float32 truth; bound = the larger
-of the budget (by the call's least precise dtype) and 1.5 x native's own error."""
+"""Model Gate 1: |c-t| <= atol + bound*max|t| per element against a float32 truth; bound = the budget
+(by the call's least precise dtype), on attention tasks the larger of it and 1.5 x native's own error."""
 
 from dataclasses import replace
+import json
+from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 import torch
 
 from evograd.opdecl import Active, Inactive, Workload
 from evograd.verification import gate1
 from evograd.verification.common import contracts as C
+from evograd.verification.gate1 import runner, tolerances
 from evograd.verification.gate1.runner import (
     PROTOCOL, compare_results, native_errors, truth_results, widened,
 )
 from evograd.verification.gate1.tolerances import (
-    ATOL, BUDGETS, MODEL_POLICY, NATIVE_FACTOR, allowance, model_policy_identity, policy_identity,
-    result_bound, result_budget, rule_dtype,
+    ATOL, BUDGETS, MODEL_POLICY, NATIVE_BOUND_TASKS, NATIVE_FACTOR, allowance, model_policy_identity,
+    native_bound, policy_identity, result_bound, result_budget, rule_dtype,
 )
 from tests.verification import _fixtures as F
 
@@ -33,8 +38,16 @@ class DtypeRuleTests(unittest.TestCase):
                                truth=None if truth is None else {name: truth},
                                native_error=native_error)[0]
 
+    def attention(self):
+        """Treat the test declaration as an attention task."""
+        return mock.patch.object(tolerances, "NATIVE_BOUND_TASKS", frozenset({self.op.name}))
+
     def test_the_budget_table(self):
         self.assertEqual(ATOL, 1e-12)
+        self.assertEqual(model_policy_identity()["native_bound_tasks"], sorted(NATIVE_BOUND_TASKS))
+        self.assertIn("qwen3_attention_block", NATIVE_BOUND_TASKS)
+        self.assertEqual(len(NATIVE_BOUND_TASKS), 11)
+        self.assertFalse(native_bound(self.op))
         self.assertEqual(NATIVE_FACTOR, 1.5)
         self.assertEqual(BUDGETS, {torch.float16: 5e-3, BF16: 4e-2, torch.float32: 1e-5,
                                    torch.float64: 1e-7})
@@ -66,7 +79,20 @@ class DtypeRuleTests(unittest.TestCase):
         self.assertEqual(self.compare(native, (native.float() * 1.05).to(BF16), truth=truth).status,
                          "failed")
 
+    def test_only_an_attention_task_is_held_to_natives_own_error(self):
+        truth = torch.tensor([1.0, -0.5, 0.25])
+        native = torch.tensor([1.078125, -0.5, 0.25], dtype=BF16)                 # 7.8% off
+        cand = torch.tensor([0.90625, -0.5, 0.25], dtype=BF16)                    # 9.4% off
+        # Any other task: the budget, whatever native's error.
+        check = self.compare(native, cand, truth=truth, native_error={"out:y": 0.078125})
+        self.assertEqual(check.status, "failed")
+        self.assertEqual((check.limits["bound"], check.limits["native_error"]), (4e-2, 0.0))
+        with self.attention():
+            self.assertEqual(self.compare(native, cand, truth=truth,
+                                          native_error={"out:y": 0.078125}).status, "passed")
+
     def test_the_bound_is_never_below_one_and_a_half_times_natives_own_error(self):
+        self.enterContext(self.attention())
         self.assertEqual(result_bound(4e-2, 2e-2), 4e-2)
         self.assertAlmostEqual(result_bound(4e-2, 3e-2), 4.5e-2)     # continuous: no step at the budget
         self.assertAlmostEqual(result_bound(4e-2, 8e-2), 0.12)
@@ -124,6 +150,72 @@ class DtypeRuleTests(unittest.TestCase):
         native = {"out:hi": torch.ones(2)}
         self.assertIs(truth_results(self.op, dict(cases[0].values), "cpu", native), native)
         self.assertTrue(all(v == 0.0 for v in native_errors(self.op, cases, "cpu").values()))
+
+    def test_the_truth_is_computed_after_the_candidate(self):
+        # The truth never coexists with the candidate's working state; given native's
+        # error (a cache), Gate 1 skips its own pre-pass.
+        events = []
+        pair = F.split_pair()
+        forward = pair.forward_with_saved
+
+        def forward_with_saved(x, w, alpha=2.0):
+            events.append("candidate")
+            return forward(x, w, alpha)
+
+        pair.forward_with_saved = forward_with_saved
+        real_truth = runner.truth_results
+
+        def truth(*args, **kwargs):
+            events.append("truth")
+            return real_truth(*args, **kwargs)
+
+        cases = F.supplied_cases(self.op, [Workload({"R": 4, "C": 8}, "bfloat16")])
+        with mock.patch.object(runner, "truth_results", truth):
+            plain = gate1.verify_pair(self.op, pair, cases=cases, device="cpu")
+            self.assertEqual(events, ["candidate", "truth"])    # not an attention task: no pre-pass
+            self.assertEqual((plain.status, plain.subject["native_error"]), ("passed", {}))
+            events.clear()
+            self.enterContext(self.attention())
+            report = gate1.verify_pair(self.op, pair, cases=cases, device="cpu")
+            self.assertEqual(report.status, "passed")
+            self.assertEqual(events, ["truth", "candidate", "truth"])      # pre-pass, then the case
+            events.clear()
+            cached = gate1.verify_pair(self.op, pair, cases=cases, device="cpu",
+                                       native_error=report.subject["native_error"])
+        self.assertEqual(events, ["candidate", "truth"])
+        self.assertEqual(cached.status, "passed")
+        self.assertEqual(cached.subject["native_error"], report.subject["native_error"])
+
+    def test_native_error_is_cached_for_the_same_cases_and_recomputed_otherwise(self):
+        from evograd.verification.integrations.gates import gate1_native_errors
+
+        bf16 = F.supplied_cases(self.op, [Workload({"R": 4, "C": 8}, "bfloat16")])
+        with mock.patch.object(runner, "native_errors", side_effect=AssertionError("computed")):
+            self.assertEqual(gate1_native_errors(self.op, bf16, "cpu", "/nonexistent/x.json"), {})
+        self.enterContext(self.attention())
+        self.assertIsNone(gate1_native_errors(self.op, bf16, "cpu", None))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "native_error.json"
+            first = gate1_native_errors(self.op, bf16, "cpu", path)
+            self.assertEqual(first, native_errors(self.op, bf16, "cpu"))
+            self.assertGreater(max(first.values()), 0.0)
+            with mock.patch.object(runner, "native_errors", side_effect=AssertionError("recomputed")):
+                self.assertEqual(gate1_native_errors(self.op, bf16, "cpu", path), first)
+            # Other cases do not reuse it.
+            other = [replace(bf16[0], case_id="vt_split/other")]
+            with mock.patch.object(runner, "native_errors", return_value={"out:hi": 0.5}) as compute:
+                self.assertEqual(gate1_native_errors(self.op, other, "cpu", path), {"out:hi": 0.5})
+            compute.assert_called_once()
+            self.assertEqual(json.loads(path.read_text())["binding"]["cases"][0]["case_id"],
+                             "vt_split/other")
+            # A case whose reference fails is never cached: Gate 1 computes it and reports why.
+            path.unlink()
+            with mock.patch.object(runner, "reference_results", side_effect=RuntimeError("no")):
+                self.assertIsNone(gate1_native_errors(self.op, bf16, "cpu", path))
+                with self.assertRaises(RuntimeError):
+                    native_errors(self.op, bf16, "cpu", strict=True)
+                self.assertEqual(native_errors(self.op, bf16, "cpu"), {})
+            self.assertFalse(path.exists())
 
     def test_unknown_model_result_dtype_is_not_assigned_a_guessed_rule(self):
         with self.assertRaisesRegex(ValueError, "unsupported result dtype"):

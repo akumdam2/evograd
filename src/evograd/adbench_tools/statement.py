@@ -78,16 +78,19 @@ def _tolerance_text(gate1: dict) -> str:
         + (f" (the call's {r['budget_dtype']} precision)" if r["budget_dtype"] != r["dtype"] else "")
         for name, r in gate1["results"].items()
     )
+    native = (f" This is an attention task, whose query and key gradients are ill-conditioned at "
+              f"low precision: where {policy['native_factor']:g} times the largest deviation of the "
+              f"reference computed at the real dtypes (the model's own kernels) from `t` on the "
+              f"judged calls is larger, that is the result's budget instead."
+              if gate1.get("native_bound") else "")
     return f"""Acceptance compares every output and gradient, element by element in float64,
 with the true values `t` on real recorded training calls whose values you are not
 given: `|candidate - t| <= atol + budget * max|t|`, where `t` is the reference
 computed with its low-precision inputs widened to float32, `max|t|` is the largest
 magnitude of that output or gradient on that call, and atol={policy['atol']:g}.
 So every element may be off by `budget` of the result's largest value; a gradient
-is judged at its own scale however small it is. Where {policy['native_factor']:g} times the
-largest deviation of the reference computed at the real dtypes (the model's own
-kernels) from `t` on the judged calls is larger, that is the result's budget
-instead. The budget follows the least precise floating dtype of the call:
+is judged at its own scale however small it is.{native} The budget follows the least
+precise floating dtype of the call:
 
 {results}"""
 
