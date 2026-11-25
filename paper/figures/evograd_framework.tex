@@ -1,0 +1,30 @@
+% Framework overview. The original seed-synthesis figure is retained alongside
+% this editable diagram; the third stage makes deployment assessment explicit.
+\begingroup
+\small
+\setlength{\fboxsep}{5pt}
+\begin{tabular}{@{}c@{}}
+PyTorch forward $f$ + workload configuration $c$ \\
+$\downarrow$ \\
+\fbox{\parbox{0.91\linewidth}{\centering
+    \textbf{1. Seed synthesizer}\\[2pt]
+    AOTAutograd $\rightarrow$ AtenIR $\rightarrow$ partition $(L,R)$\\
+    Preserve library calls $L$; lower $R$ to Triton primitives
+}} \\
+$\downarrow\; p_0=\langle K_0^F,K_0^B,L,s_0\rangle$ \\
+\fbox{\parbox{0.91\linewidth}{\centering
+    \textbf{2. Agentic evolver}\\[2pt]
+    Jointly refine forward, backward, and saved state\\
+    $\circlearrowleft$ Local correctness checks and latency--memory score
+}} \\
+$\downarrow$ \\
+\fbox{\parbox{0.91\linewidth}{\centering
+    \textbf{3. Verifier + evaluator}\\[2pt]
+    Check pair, integration, and training behavior\\
+    Measure operator and training latency and memory\\
+    Select qualifying replacements; reverify their combination
+}} \\
+$\downarrow$ \\
+Accepted deployments with training measurements
+\end{tabular}
+\endgroup

@@ -1,9 +1,9 @@
-\section{Task Format Example}
+\section{Kernel Task and Assessment Context Example}
 \label{app:task_format}
 
-Listing~\ref{lst:task_format} illustrates the task specification, candidate implementation, and autograd deployment. For clarity, the example uses one input tensor, one parameter tensor, one output tensor, and tensor-only saved state. Generated inputs support search-time timing; verification and formal operator timing use recorded source-model calls. Numerical checks follow Section~\ref{sec:verification_protocol}.
+The system input $(\mathcal O,M,W)$ supplies target kernels, a model, and a prepared training workload. Each operator computation and configuration defines a kernel task; the model and workload support model-level verification and evaluation at declared integration sites. Listing~\ref{lst:task_format} illustrates this kernel task, candidate implementation, and autograd deployment; the selected output pairs a qualifying implementation with its configuration and site bindings. For clarity, the example uses one input tensor, one parameter tensor, one output tensor, and tensor-only saved state. Generated inputs support search-time timing; verification and formal operator timing use recorded source-model calls. Numerical checks follow Section~\ref{sec:verification_protocol}.
 
-\begin{lstlisting}[language=Python, basicstyle=\ttfamily\footnotesize, captionpos=b, label=lst:task_format, caption={Simplified task input, candidate output, and autograd deployment in \bench.}]
+\begin{lstlisting}[language=Python, basicstyle=\ttfamily\footnotesize, captionpos=b, label=lst:task_format, caption={Kernel-task input, candidate implementation, and autograd deployment interface used for verification and evaluation.}]
 # Task input
 def f(x, theta): ...       # PyTorch forward reference
 c = {
@@ -56,10 +56,41 @@ class Op(torch.autograd.Function):
 \fi
 \makeatother
 
-\section{Model Workloads and Benchmark Cases}
-\label{app:benchmark_cases}
 
-Table~\ref{tab:benchmark_cases} lists the 149 configurations in \bench: 119 Level-1 and 30 Level-2 cases. Stars mark the 62 cases selected for the agent experiments (32 L1 and 30 L2); MegaFold retains only its four listed cases. Source links and workload settings appear in the model group headers. Case IDs use \texttt{operator/component} naming, and dimension names follow the task declarations. The dtype column gives the primary floating dtype; other tensor types, layouts, and static parameters remain specified by the task manifests. Equal shapes can define separate cases when recorded roles or input adapters differ; call frequency does not increase the case count.
+\section{Prompts and Evolver Integration}
+\label{app:prompts}
+
+\paragraph{What the model sees.} Every request an evolver sends to the model combines three kinds of text. (A) The \emph{task statement} is written by us and fixed for the whole run. It gives the objective and the score that ranks correct candidates (speedup over PyTorch eager autograd, discounted by the peak-memory ratio), the starting point, the operator as a PyTorch reference, the deliverable, and the rules. It is generated from one template (\S\ref{app:prompts:template}): the per-task content is filled mechanically from the forward reference and the shapes of recorded training calls, and the rule text is generated from the tables of the checker that enforces it. There is no hand-written description of the operator or its gradient and no optimization advice. (B) The \emph{evolver's internal prompts} are written by the evolver's authors and say what to do in the current step, such as proposing a diff, reflecting on a failure, or removing a bottleneck. We use them unmodified, with one exception (\S\ref{app:prompts:changes}). (C) The \emph{evaluator feedback} is the output of our evaluator on the previous candidate: the violated rule, the mismatching outputs or gradients, or the timings, the peak memory, and the score. It is program output, not an instruction, and is the same for all evolvers.
+
+\paragraph{Search loop.} (i) The evolver selects a program to start from and assembles a request from A, B, and C. (ii) The model returns a new program or an edit. (iii) The evaluator checks the candidate against the static rules, checks its outputs and gradients on recorded training calls, measures its time and peak GPU memory, and returns the score with feedback. (iv) The evolver records the result and chooses where the next request starts. When the request budget is exhausted, the evolver submits one program for the full evaluation.
+
+\paragraph{What is held equal.} All evolvers receive the same A and C and use the same model, the same evaluator, and the same request budget, counted by a shared proxy that includes retries. They differ only in B and in step (iv), i.e., in the search method itself. Seeded and unseeded runs of an evolver differ in one paragraph of A (\S\ref{app:prompts:start}) and in the program the search starts from. OpenEvolve receives no further text from us. GEPA, Codex, and KernelAgent each receive a few sentences about their interface (\S\ref{app:prompts:glue}): where to write the module, how to run the evaluator, the request limit, and which program is measured at the end. These sentences say nothing about the operator or how to optimize it. Table~\ref{tab:prompt-placement} shows where each text enters each evolver.
+
+\paragraph{One difference in the search objective.} OpenEvolve and GEPA optimize our score directly, and Codex sees it after every evaluation. KernelAgent's optimization stage instead ranks candidates by its own timing of one forward and backward step, which has no memory term; this objective is fixed in its code and we did not change it. The program each evolver submits is scored by the same evaluator, so reported results are comparable.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Where the task statement (A) and the evaluator feedback (C) enter each evolver, and what its own prompts (B) contain.}
+\label{tab:prompt-placement}
+\begin{tabularx}{\linewidth}{@{}lXXX@{}}
+\toprule
+Evolver & Task statement (A) & Internal prompts (B) & Feedback (C) \\
+\midrule
+OpenEvolve & System message of every request & User message: current program and score, earlier attempts, top programs; asks for a search/replace diff & Field of the user message \\
+GEPA & \texttt{background} argument, with a one-sentence \texttt{objective} & Reflection prompt: current candidate and its evaluation; asks for an improved candidate & Score and feedback returned to GEPA, placed in the reflection prompt \\
+Codex & The single user message, after a short workspace note & Codex's system prompt and tools & Codex runs the evaluator itself; the output returns as a command result \\
+KernelAgent, generation & \texttt{problem\_description} of the generation template & Generation and repair templates & Test output, inserted in the repair template \\
+KernelAgent, optimization & Problem-description field, as a comment header of \texttt{problem.py} & Optimization template: GPU specification, bottleneck analysis, current kernel, earlier attempts & Test output on failure; ranking uses KernelAgent's own timing, not our score \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\section{Prepared Models and Operator Configurations}
+\label{app:operator_configs}
+
+Table~\ref{tab:operator_configs} lists available primitive (P) and composite (C) operator configurations in the prepared model workloads. Stars mark the broader prepared selection of 62 operator cases (32 primitive and 30 composite); MegaFold retains only its four listed cases. The main evaluation in Section~\ref{sec:results} reports results for 18 primitive and 17 composite cases across six model workloads. Source links and workload settings appear in the model group headers. Case IDs use \texttt{operator/component} naming, and dimension names follow the task declarations. The dtype column gives the primary floating dtype; other tensor types, layouts, and static parameters remain specified by the task manifests. Equal shapes can define separate cases when recorded roles or input adapters differ; call frequency does not increase the case count.
 
 \begingroup
 \footnotesize
@@ -75,16 +106,16 @@ Table~\ref{tab:benchmark_cases} lists the 149 configurations in \bench: 119 Leve
 >{\centering\arraybackslash}p{0.07\textwidth}
 >{\raggedright\arraybackslash}p{\dimexpr0.37\textwidth-8\tabcolsep\relax}
 @{}}
-\caption{Benchmark configurations by source model.}
-\label{tab:benchmark_cases}\\
+\caption{Prepared operator configurations by source model.}
+\label{tab:operator_configs}\\
 \toprule
-\textbf{Model} & \textbf{Level} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
+\textbf{Model} & \textbf{Kind} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
 \midrule
 \endfirsthead
 
-\caption[]{Benchmark configurations by source model (continued).}\\
+\caption[]{Prepared operator configurations by source model (continued).}\\
 \toprule
-\textbf{Model} & \textbf{Level} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
+\textbf{Model} & \textbf{Kind} & \textbf{Case ID} & \textbf{dtype} & \textbf{Configuration} \\
 \midrule
 \endhead
 
@@ -95,189 +126,189 @@ Table~\ref{tab:benchmark_cases} lists the 149 configurations in \bench: 119 Leve
 \bottomrule
 \endlastfoot
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3-0.6B}{Qwen3-0.6B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-6}$. Inventory: 14 L1, 4 L2; 8 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3-0.6B}{Qwen3-0.6B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-6}$. Inventory: 14 P, 4 C; 8 selected.}\\*
 \midrule
-Qwen3-0.6B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
-Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=151936\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=1024\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=1024\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/attn_qkv} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=2048\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=151936\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=3072\), \(\mathrm{N}=1024\) \\
-Qwen3-0.6B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=3072\) \\
-Qwen3-0.6B & L1 & \nolinkurl{rmsnorm/k_head_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=128\) \\
-Qwen3-0.6B & L1 & \nolinkurl{rmsnorm/q_head_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
-Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=1024\) \\
-Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
-Qwen3-0.6B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=8\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
-Qwen3-0.6B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=3072\) \\
-Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{fused_add_rms_norm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=1024\) \\
-Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=1024\) \\
-Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=1024\) \\
-Qwen3-0.6B & L2 & $^{\star}$\nolinkurl{qwen3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{I}=3072\) \\
+Qwen3-0.6B & P & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
+Qwen3-0.6B & P & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=151936\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/attn_qkv} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=2048\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=151936\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=3072\), \(\mathrm{N}=1024\) \\
+Qwen3-0.6B & P & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=1024\), \(\mathrm{N}=3072\) \\
+Qwen3-0.6B & P & \nolinkurl{rmsnorm/k_head_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=128\) \\
+Qwen3-0.6B & P & \nolinkurl{rmsnorm/q_head_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
+Qwen3-0.6B & P & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=1024\) \\
+Qwen3-0.6B & P & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+Qwen3-0.6B & P & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=8\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+Qwen3-0.6B & P & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=3072\) \\
+Qwen3-0.6B & C & $^{\star}$\nolinkurl{fused_add_rms_norm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=1024\) \\
+Qwen3-0.6B & C & $^{\star}$\nolinkurl{qwen3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=1024\) \\
+Qwen3-0.6B & C & $^{\star}$\nolinkurl{qwen3_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=8\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=1024\) \\
+Qwen3-0.6B & C & $^{\star}$\nolinkurl{qwen3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=1024\), \(\mathrm{I}=3072\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/meta-llama/Llama-3.2-1B}{Llama-3.2-1B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-5}$. Inventory: 11 L1, 4 L2; 8 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/meta-llama/Llama-3.2-1B}{Llama-3.2-1B}: WikiText-2; batch 2; sequence length 2048; RMSNorm $\epsilon=10^{-5}$. Inventory: 11 P, 4 C; 8 selected.}\\*
 \midrule
-Llama-3.2-1B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{D}=64\), \(\mathrm{HK}=8\), \(\mathrm{HQ}=32\), \(\mathrm{T}=2048\) \\
-Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{cols}=128256\), \(\mathrm{rows}=4096\) \\
-Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=512\) \\
-Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
-Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=128256\) \\
-Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{K}=8192\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
-Llama-3.2-1B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=8192\) \\
-Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{hidden}=2048\), \(\mathrm{rows}=4096\) \\
-Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=32\) \\
-Llama-3.2-1B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=8\) \\
-Llama-3.2-1B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{cols}=8192\), \(\mathrm{rows}=4096\) \\
-Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
-Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_qkv_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=512\) \\
-Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=2048\) \\
-Llama-3.2-1B & L2 & $^{\star}$\nolinkurl{llama3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{I}=8192\) \\
+Llama-3.2-1B & P & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{D}=64\), \(\mathrm{HK}=8\), \(\mathrm{HQ}=32\), \(\mathrm{T}=2048\) \\
+Llama-3.2-1B & P & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{cols}=128256\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & P & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=512\) \\
+Llama-3.2-1B & P & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
+Llama-3.2-1B & P & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=128256\) \\
+Llama-3.2-1B & P & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{K}=8192\), \(\mathrm{M}=4096\), \(\mathrm{N}=2048\) \\
+Llama-3.2-1B & P & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{K}=2048\), \(\mathrm{M}=4096\), \(\mathrm{N}=8192\) \\
+Llama-3.2-1B & P & $^{\star}$\nolinkurl{rmsnorm/rmsnorm} & BF16 & \(\mathrm{hidden}=2048\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & P & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=32\) \\
+Llama-3.2-1B & P & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=64\), \(\mathrm{n\_heads}=8\) \\
+Llama-3.2-1B & P & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{cols}=8192\), \(\mathrm{rows}=4096\) \\
+Llama-3.2-1B & C & $^{\star}$\nolinkurl{llama3_attention/causal_gqa_attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
+Llama-3.2-1B & C & $^{\star}$\nolinkurl{llama3_qkv_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=32\), \(\mathrm{HK}=8\), \(\mathrm{D}=64\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=512\) \\
+Llama-3.2-1B & C & $^{\star}$\nolinkurl{llama3_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=2048\) \\
+Llama-3.2-1B & C & $^{\star}$\nolinkurl{llama3_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{I}=8192\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/allenai/OLMoE-1B-7B-0924}{OLMoE-1B-7B-0924}: WikiText-2; batch 2; sequence length 2048; 64 experts, top-8 routing; integer routing indices. Query and key RoPE remain separate cases despite equal shapes. Model-scope verification is not enabled. Inventory: 8 L1, 4 L2; 8 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/allenai/OLMoE-1B-7B-0924}{OLMoE-1B-7B-0924}: WikiText-2; batch 2; sequence length 2048; 64 experts, top-8 routing; integer routing indices. Query and key RoPE remain separate cases despite equal shapes. Model-scope verification is not enabled. Inventory: 8 P, 4 C; 8 selected.}\\*
 \midrule
-OLMoE-1B-7B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
-OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=50304\) \\
-OLMoE-1B-7B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=2048\) \\
-OLMoE-1B-7B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=50304\) \\
-OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=2048\) \\
-OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
-OLMoE-1B-7B & L1 & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
-OLMoE-1B-7B & L1 & $^{\star}$\nolinkurl{swiglu/moe_activation} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{cols}=1024\) \\
-OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_attention/attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
-OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_moe_experts/moe_experts} & BF16 & \(\mathrm{T}=4096\), \(\mathrm{H}=2048\), \(\mathrm{E}=64\), \(\mathrm{G}=2048\), \(\mathrm{I}=1024\), \(\mathrm{K}=8\) \\
-OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=2048\) \\
-OLMoE-1B-7B & L2 & $^{\star}$\nolinkurl{olmoe_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\) \\
+OLMoE-1B-7B & P & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=2\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=128\) \\
+OLMoE-1B-7B & P & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=4096\), \(\mathrm{cols}=50304\) \\
+OLMoE-1B-7B & P & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=2048\) \\
+OLMoE-1B-7B & P & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=4096\), \(\mathrm{K}=2048\), \(\mathrm{N}=50304\) \\
+OLMoE-1B-7B & P & $^{\star}$\nolinkurl{rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=4096\), \(\mathrm{hidden}=2048\) \\
+OLMoE-1B-7B & P & $^{\star}$\nolinkurl{rope/rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+OLMoE-1B-7B & P & \nolinkurl{rope/rope_kv} & BF16 & \(\mathrm{B}=2\), \(\mathrm{n\_heads}=16\), \(\mathrm{T}=2048\), \(\mathrm{head\_dim}=128\) \\
+OLMoE-1B-7B & P & $^{\star}$\nolinkurl{swiglu/moe_activation} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{cols}=1024\) \\
+OLMoE-1B-7B & C & $^{\star}$\nolinkurl{olmoe_attention/attention} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{H}=2048\) \\
+OLMoE-1B-7B & C & $^{\star}$\nolinkurl{olmoe_moe_experts/moe_experts} & BF16 & \(\mathrm{T}=4096\), \(\mathrm{H}=2048\), \(\mathrm{E}=64\), \(\mathrm{G}=2048\), \(\mathrm{I}=1024\), \(\mathrm{K}=8\) \\
+OLMoE-1B-7B & C & $^{\star}$\nolinkurl{olmoe_qkv_norm_rope/qkv_norm_rope} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=16\), \(\mathrm{D}=128\), \(\mathrm{QO}=2048\), \(\mathrm{KVO}=2048\) \\
+OLMoE-1B-7B & C & $^{\star}$\nolinkurl{olmoe_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=2\), \(\mathrm{T}=2048\), \(\mathrm{H}=2048\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3.5-4B}{Qwen3.5-4B}: WikiText-2; batch 1; sequence length 2048; gated delta-rule and full-attention components. Gating tensors use FP32 where declared. Inventory: 20 L1, 7 L2; 15 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen3.5-4B}{Qwen3.5-4B}: WikiText-2; batch 1; sequence length 2048; gated delta-rule and full-attention components. Gating tensors use FP32 where declared. Inventory: 20 P, 7 C; 15 selected.}\\*
 \midrule
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{causal_conv1d/gdn_conv1d} & BF16 & \(\mathrm{B}=1\), \(\mathrm{C}=8192\), \(\mathrm{T}=2048\), \(\mathrm{K}=4\) \\
-Qwen3.5-4B & L1 & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=1\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=248320\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gated_rmsnorm/gdn_gated_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gdn_gating/gdn_gating} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{heads}=32\) \\
-Qwen3.5-4B & L1 & \nolinkurl{gemma_rmsnorm/attn_k_norm} & BF16 & \(\mathrm{rows}=8192\), \(\mathrm{hidden}=256\) \\
-Qwen3.5-4B & L1 & \nolinkurl{gemma_rmsnorm/attn_q_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=256\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{gemma_rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{hidden}=2560\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{l2norm/gdn_qk_l2norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{cols}=128\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=1024\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=4096\), \(\mathrm{N}=2560\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_ba} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=32\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_qkv} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=8192\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/gdn_in_z} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=4096\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=248320\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=9216\), \(\mathrm{N}=2560\) \\
-Qwen3.5-4B & L1 & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=9216\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{partial_rope/partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
-Qwen3.5-4B & L1 & \nolinkurl{partial_rope/partial_rope_kv} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
-Qwen3.5-4B & L1 & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=9216\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gated_attention/gated_attention} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{QO}=4096\), \(\mathrm{H}=2560\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gated_delta_rule/gated_delta_rule} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gdn_in_proj/gdn_in_proj} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{C}=8192\), \(\mathrm{VD}=4096\), \(\mathrm{HV}=32\), \(\mathrm{K}=4\), \(\mathrm{D}=128\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_gdn_norm_out/gdn_norm_out} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\), \(\mathrm{VD}=4096\), \(\mathrm{H}=2560\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{R}=64\), \(\mathrm{QG}=8192\), \(\mathrm{KVO}=1024\), \(\mathrm{QO}=4096\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\) \\
-Qwen3.5-4B & L2 & $^{\star}$\nolinkurl{qwen3_5_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{I}=9216\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{causal_conv1d/gdn_conv1d} & BF16 & \(\mathrm{B}=1\), \(\mathrm{C}=8192\), \(\mathrm{T}=2048\), \(\mathrm{K}=4\) \\
+Qwen3.5-4B & P & \nolinkurl{causal_gqa_attention/causal_gqa_sdpa} & BF16 & \(\mathrm{B}=1\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{cross_entropy/logits} & FP32 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=248320\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{gated_rmsnorm/gdn_gated_norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{hidden}=128\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{gdn_gating/gdn_gating} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{heads}=32\) \\
+Qwen3.5-4B & P & \nolinkurl{gemma_rmsnorm/attn_k_norm} & BF16 & \(\mathrm{rows}=8192\), \(\mathrm{hidden}=256\) \\
+Qwen3.5-4B & P & \nolinkurl{gemma_rmsnorm/attn_q_norm} & BF16 & \(\mathrm{rows}=32768\), \(\mathrm{hidden}=256\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{gemma_rmsnorm/residual_norm} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{hidden}=2560\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{l2norm/gdn_qk_l2norm} & BF16 & \(\mathrm{rows}=65536\), \(\mathrm{cols}=128\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/attn_kv_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=1024\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/attn_out_proj} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=4096\), \(\mathrm{N}=2560\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/gdn_in_ba} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=32\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/gdn_in_qkv} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=8192\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/gdn_in_z} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=4096\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=248320\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/mlp_down} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=9216\), \(\mathrm{N}=2560\) \\
+Qwen3.5-4B & P & \nolinkurl{linear_no_bias/mlp_up} & BF16 & \(\mathrm{M}=2048\), \(\mathrm{K}=2560\), \(\mathrm{N}=9216\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{partial_rope/partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=16\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
+Qwen3.5-4B & P & \nolinkurl{partial_rope/partial_rope_kv} & BF16 & \(\mathrm{B}=1\), \(\mathrm{H}=4\), \(\mathrm{T}=2048\), \(\mathrm{D}=256\), \(\mathrm{R}=64\) \\
+Qwen3.5-4B & P & $^{\star}$\nolinkurl{swiglu/mlp_activation} & BF16 & \(\mathrm{rows}=2048\), \(\mathrm{cols}=9216\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_gated_attention/gated_attention} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{QO}=4096\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_gated_delta_rule/gated_delta_rule} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_gdn_in_proj/gdn_in_proj} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{C}=8192\), \(\mathrm{VD}=4096\), \(\mathrm{HV}=32\), \(\mathrm{K}=4\), \(\mathrm{D}=128\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_gdn_norm_out/gdn_norm_out} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{HV}=32\), \(\mathrm{D}=128\), \(\mathrm{VD}=4096\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_qkv_norm_partial_rope/qkv_norm_partial_rope} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{HQ}=16\), \(\mathrm{HK}=4\), \(\mathrm{D}=256\), \(\mathrm{R}=64\), \(\mathrm{QG}=8192\), \(\mathrm{KVO}=1024\), \(\mathrm{QO}=4096\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_residual_rmsnorm/residual_rmsnorm} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\) \\
+Qwen3.5-4B & C & $^{\star}$\nolinkurl{qwen3_5_swiglu_mlp/swiglu_mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=2048\), \(\mathrm{H}=2560\), \(\mathrm{I}=9216\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/facebook/convnextv2-tiny-1k-224}{ConvNeXt V2-Tiny}: Imagenette; batch 32; image resolution $224\times224$. Embedding and stage-0 LayerNorm cases have equal dimensions but different input adapters. The four L2 MLP cases correspond to the four spatial stages. Inventory: 31 L1, 4 L2; 8 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/facebook/convnextv2-tiny-1k-224}{ConvNeXt V2-Tiny}: Imagenette; batch 32; image resolution $224\times224$. Embedding and stage-0 LayerNorm cases have equal dimensions but different input adapters. The four C MLP cases correspond to the four spatial stages. Inventory: 31 P, 4 C; 8 selected.}\\*
 \midrule
-ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{gelu/convnextv2.encoder.stages.0.layers.act} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.1.layers.act} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=768\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.2.layers.act} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=1536\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{gelu/convnextv2.encoder.stages.3.layers.act} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=3072\) \\
-ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{grn/convnextv2.encoder.stages.0.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.1.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=768\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.2.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=1536\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{grn/convnextv2.encoder.stages.3.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=3072\) \\
-ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{layernorm/convnextv2.embeddings.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.0.layers.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.1.layers.layernorm} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=192\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.2.layers.layernorm} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.encoder.stages.3.layers.layernorm} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=768\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{layernorm/convnextv2.layernorm} & BF16 & \(\mathrm{rows}=32\), \(\mathrm{hidden}=768\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/classifier} & BF16 & \(\mathrm{M}=32\), \(\mathrm{K}=768\), \(\mathrm{N}=1000\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv1} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=96\), \(\mathrm{N}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv2} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=384\), \(\mathrm{N}=96\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv1} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=192\), \(\mathrm{N}=768\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv2} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=768\), \(\mathrm{N}=192\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv1} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv2} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv1} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=768\), \(\mathrm{N}=3072\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv2} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=3072\), \(\mathrm{N}=768\) \\
-ConvNeXt V2-Tiny & L1 & $^{\star}$\nolinkurl{spatial_conv2d/convnextv2.embeddings.patch_embeddings} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=3\), \(\mathrm{Y}=224\), \(\mathrm{X}=224\), \(\mathrm{O}=96\), \(\mathrm{CG}=3\), \(\mathrm{K}=4\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=4\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.0.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=96\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=96\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=192\), \(\mathrm{CG}=96\), \(\mathrm{K}=2\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=192\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=192\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=384\), \(\mathrm{CG}=192\), \(\mathrm{K}=2\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=384\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=384\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=768\), \(\mathrm{CG}=384\), \(\mathrm{K}=2\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
-ConvNeXt V2-Tiny & L1 & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=768\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{O}=768\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=768\) \\
-ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=96\), \(\mathrm{I}=384\) \\
-ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=192\), \(\mathrm{I}=768\) \\
-ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
-ConvNeXt V2-Tiny & L2 & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=768\), \(\mathrm{I}=3072\) \\
+ConvNeXt V2-Tiny & P & $^{\star}$\nolinkurl{gelu/convnextv2.encoder.stages.0.layers.act} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{gelu/convnextv2.encoder.stages.1.layers.act} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{gelu/convnextv2.encoder.stages.2.layers.act} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=1536\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{gelu/convnextv2.encoder.stages.3.layers.act} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=3072\) \\
+ConvNeXt V2-Tiny & P & $^{\star}$\nolinkurl{grn/convnextv2.encoder.stages.0.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{grn/convnextv2.encoder.stages.1.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=768\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{grn/convnextv2.encoder.stages.2.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=1536\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{grn/convnextv2.encoder.stages.3.layers.grn} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=3072\) \\
+ConvNeXt V2-Tiny & P & $^{\star}$\nolinkurl{layernorm/convnextv2.embeddings.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{layernorm/convnextv2.encoder.stages.0.layers.layernorm} & BF16 & \(\mathrm{rows}=100352\), \(\mathrm{hidden}=96\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{layernorm/convnextv2.encoder.stages.1.layers.layernorm} & BF16 & \(\mathrm{rows}=25088\), \(\mathrm{hidden}=192\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{layernorm/convnextv2.encoder.stages.2.layers.layernorm} & BF16 & \(\mathrm{rows}=6272\), \(\mathrm{hidden}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{layernorm/convnextv2.encoder.stages.3.layers.layernorm} & BF16 & \(\mathrm{rows}=1568\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{layernorm/convnextv2.layernorm} & BF16 & \(\mathrm{rows}=32\), \(\mathrm{hidden}=768\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/classifier} & BF16 & \(\mathrm{M}=32\), \(\mathrm{K}=768\), \(\mathrm{N}=1000\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv1} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=96\), \(\mathrm{N}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.0.layers.pwconv2} & BF16 & \(\mathrm{M}=100352\), \(\mathrm{K}=384\), \(\mathrm{N}=96\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv1} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=192\), \(\mathrm{N}=768\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.1.layers.pwconv2} & BF16 & \(\mathrm{M}=25088\), \(\mathrm{K}=768\), \(\mathrm{N}=192\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv1} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.2.layers.pwconv2} & BF16 & \(\mathrm{M}=6272\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv1} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=768\), \(\mathrm{N}=3072\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{linear/convnextv2.encoder.stages.3.layers.pwconv2} & BF16 & \(\mathrm{M}=1568\), \(\mathrm{K}=3072\), \(\mathrm{N}=768\) \\
+ConvNeXt V2-Tiny & P & $^{\star}$\nolinkurl{spatial_conv2d/convnextv2.embeddings.patch_embeddings} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=3\), \(\mathrm{Y}=224\), \(\mathrm{X}=224\), \(\mathrm{O}=96\), \(\mathrm{CG}=3\), \(\mathrm{K}=4\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=4\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.0.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=96\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=56\), \(\mathrm{OX}=56\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=96\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=96\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{O}=192\), \(\mathrm{CG}=96\), \(\mathrm{K}=2\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.1.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=192\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=28\), \(\mathrm{OX}=28\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=192\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=192\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{O}=384\), \(\mathrm{CG}=192\), \(\mathrm{K}=2\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.2.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=384\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=14\), \(\mathrm{OX}=14\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=384\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.downsampling_layer} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=384\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{O}=768\), \(\mathrm{CG}=384\), \(\mathrm{K}=2\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+ConvNeXt V2-Tiny & P & \nolinkurl{spatial_conv2d/convnextv2.encoder.stages.3.layers.dwconv} & BF16 & \(\mathrm{B}=32\), \(\mathrm{C}=768\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{O}=768\), \(\mathrm{CG}=1\), \(\mathrm{K}=7\), \(\mathrm{OY}=7\), \(\mathrm{OX}=7\), \(\mathrm{S}=1\), \(\mathrm{P}=3\), \(\mathrm{G}=768\) \\
+ConvNeXt V2-Tiny & C & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.0.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=56\), \(\mathrm{X}=56\), \(\mathrm{H}=96\), \(\mathrm{I}=384\) \\
+ConvNeXt V2-Tiny & C & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.1.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=28\), \(\mathrm{X}=28\), \(\mathrm{H}=192\), \(\mathrm{I}=768\) \\
+ConvNeXt V2-Tiny & C & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.2.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=14\), \(\mathrm{X}=14\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
+ConvNeXt V2-Tiny & C & $^{\star}$\nolinkurl{convnextv2_tiny_convnext_mlp/convnextv2.encoder.stages.3.layers} & BF16 & \(\mathrm{B}=32\), \(\mathrm{Y}=7\), \(\mathrm{X}=7\), \(\mathrm{H}=768\), \(\mathrm{I}=3072\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct}{Qwen2-VL-2B-Instruct}: TextVQA; batch 1; 256 vision tokens, 64 merger tokens, and text length 512. The vision MLP uses QuickGELU; the text MLP uses SwiGLU. Inventory: 16 L1, 2 L2; 6 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct}{Qwen2-VL-2B-Instruct}: TextVQA; batch 1; 256 vision tokens, 64 merger tokens, and text length 512. The vision MLP uses QuickGELU; the text MLP uses SwiGLU. Inventory: 16 P, 2 C; 6 selected.}\\*
 \midrule
-Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{gelu/model.visual.merger.mlp} & BF16 & \(\mathrm{rows}=64\), \(\mathrm{hidden}=5120\) \\
-Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{layernorm/model.visual.blocks.norm1} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=1280\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.language_model.layers.self_attn.k_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=256\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.language_model.layers.self_attn.q_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.attn.proj} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=1280\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.attn.qkv} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=3840\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.mlp.fc1} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=5120\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.blocks.mlp.fc2} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=5120\), \(\mathrm{N}=1280\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.merger.mlp} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=5120\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear/model.visual.merger.mlp_2} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=1536\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=151936\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.down_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=8960\), \(\mathrm{N}=1536\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.gate_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=8960\) \\
-Qwen2-VL-2B & L1 & \nolinkurl{linear_no_bias/model.language_model.layers.self_attn.o_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
-Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{quick_gelu/model.visual.blocks.mlp.act} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=5120\) \\
-Qwen2-VL-2B & L1 & $^{\star}$\nolinkurl{rmsnorm/model.language_model.layers.input_layernorm} & BF16 & \(\mathrm{rows}=512\), \(\mathrm{hidden}=1536\) \\
-Qwen2-VL-2B & L2 & $^{\star}$\nolinkurl{qwen2_vl_2b_text_mlp/model.language_model.layers.mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=512\), \(\mathrm{H}=1536\), \(\mathrm{I}=8960\) \\
-Qwen2-VL-2B & L2 & $^{\star}$\nolinkurl{qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp} & BF16 & \(\mathrm{T}=256\), \(\mathrm{H}=1280\), \(\mathrm{I}=5120\) \\
+Qwen2-VL-2B & P & $^{\star}$\nolinkurl{gelu/model.visual.merger.mlp} & BF16 & \(\mathrm{rows}=64\), \(\mathrm{hidden}=5120\) \\
+Qwen2-VL-2B & P & $^{\star}$\nolinkurl{layernorm/model.visual.blocks.norm1} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=1280\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.language_model.layers.self_attn.k_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=256\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.language_model.layers.self_attn.q_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.blocks.attn.proj} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=1280\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.blocks.attn.qkv} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=3840\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.blocks.mlp.fc1} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=1280\), \(\mathrm{N}=5120\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.blocks.mlp.fc2} & BF16 & \(\mathrm{M}=256\), \(\mathrm{K}=5120\), \(\mathrm{N}=1280\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.merger.mlp} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=5120\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear/model.visual.merger.mlp_2} & BF16 & \(\mathrm{M}=64\), \(\mathrm{K}=5120\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear_no_bias/lm_head} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=151936\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.down_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=8960\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear_no_bias/model.language_model.layers.mlp.gate_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=8960\) \\
+Qwen2-VL-2B & P & \nolinkurl{linear_no_bias/model.language_model.layers.self_attn.o_proj} & BF16 & \(\mathrm{M}=512\), \(\mathrm{K}=1536\), \(\mathrm{N}=1536\) \\
+Qwen2-VL-2B & P & $^{\star}$\nolinkurl{quick_gelu/model.visual.blocks.mlp.act} & BF16 & \(\mathrm{rows}=256\), \(\mathrm{hidden}=5120\) \\
+Qwen2-VL-2B & P & $^{\star}$\nolinkurl{rmsnorm/model.language_model.layers.input_layernorm} & BF16 & \(\mathrm{rows}=512\), \(\mathrm{hidden}=1536\) \\
+Qwen2-VL-2B & C & $^{\star}$\nolinkurl{qwen2_vl_2b_text_mlp/model.language_model.layers.mlp} & BF16 & \(\mathrm{B}=1\), \(\mathrm{T}=512\), \(\mathrm{H}=1536\), \(\mathrm{I}=8960\) \\
+Qwen2-VL-2B & C & $^{\star}$\nolinkurl{qwen2_vl_2b_vision_mlp/model.visual.blocks.mlp} & BF16 & \(\mathrm{T}=256\), \(\mathrm{H}=1280\), \(\mathrm{I}=5120\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/facebookresearch/DiT}{DiT-S/2}: Imagenette VAE latents of shape $[256,4,32,32]$; patch projection produces 256 tokens of width 384. L2 contains conditioning modulation and the MLP with tanh-approximate GELU. Inventory: 10 L1, 2 L2; 3 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/facebookresearch/DiT}{DiT-S/2}: Imagenette VAE latents of shape $[256,4,32,32]$; patch projection produces 256 tokens of width 384. C contains conditioning modulation and the MLP with tanh-approximate GELU. Inventory: 10 P, 2 C; 3 selected.}\\*
 \midrule
-DiT-S/2 & L1 & \nolinkurl{linear/blocks.fc1} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/blocks.fc2} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/blocks.mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=2304\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/blocks.proj} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/blocks.qkv} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1152\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/final_linear} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=32\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/final_mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=768\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/t_embedder} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=256\), \(\mathrm{N}=384\) \\
-DiT-S/2 & L1 & \nolinkurl{linear/t_embedder_2} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
-DiT-S/2 & L1 & $^{\star}$\nolinkurl{spatial_conv2d/patch} & FP32 & \(\mathrm{B}=256\), \(\mathrm{C}=4\), \(\mathrm{Y}=32\), \(\mathrm{X}=32\), \(\mathrm{O}=384\), \(\mathrm{CG}=4\), \(\mathrm{K}=2\), \(\mathrm{OY}=16\), \(\mathrm{OX}=16\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
-DiT-S/2 & L2 & $^{\star}$\nolinkurl{dit_s_2_dit_mlp/blocks.mlp} & FP32 & \(\mathrm{B}=256\), \(\mathrm{T}=256\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
-DiT-S/2 & L2 & $^{\star}$\nolinkurl{dit_s_2_dit_modulation/blocks.modulation} & FP32 & \(\mathrm{B}=256\), \(\mathrm{H}=384\), \(\mathrm{J}=2304\) \\
+DiT-S/2 & P & \nolinkurl{linear/blocks.fc1} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1536\) \\
+DiT-S/2 & P & \nolinkurl{linear/blocks.fc2} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=1536\), \(\mathrm{N}=384\) \\
+DiT-S/2 & P & \nolinkurl{linear/blocks.mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=2304\) \\
+DiT-S/2 & P & \nolinkurl{linear/blocks.proj} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
+DiT-S/2 & P & \nolinkurl{linear/blocks.qkv} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=1152\) \\
+DiT-S/2 & P & \nolinkurl{linear/final_linear} & FP32 & \(\mathrm{M}=65536\), \(\mathrm{K}=384\), \(\mathrm{N}=32\) \\
+DiT-S/2 & P & \nolinkurl{linear/final_mod} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=768\) \\
+DiT-S/2 & P & \nolinkurl{linear/t_embedder} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=256\), \(\mathrm{N}=384\) \\
+DiT-S/2 & P & \nolinkurl{linear/t_embedder_2} & FP32 & \(\mathrm{M}=256\), \(\mathrm{K}=384\), \(\mathrm{N}=384\) \\
+DiT-S/2 & P & $^{\star}$\nolinkurl{spatial_conv2d/patch} & FP32 & \(\mathrm{B}=256\), \(\mathrm{C}=4\), \(\mathrm{Y}=32\), \(\mathrm{X}=32\), \(\mathrm{O}=384\), \(\mathrm{CG}=4\), \(\mathrm{K}=2\), \(\mathrm{OY}=16\), \(\mathrm{OX}=16\), \(\mathrm{S}=2\), \(\mathrm{P}=0\), \(\mathrm{G}=1\) \\
+DiT-S/2 & C & $^{\star}$\nolinkurl{dit_s_2_dit_mlp/blocks.mlp} & FP32 & \(\mathrm{B}=256\), \(\mathrm{T}=256\), \(\mathrm{H}=384\), \(\mathrm{I}=1536\) \\
+DiT-S/2 & C & $^{\star}$\nolinkurl{dit_s_2_dit_modulation/blocks.modulation} & FP32 & \(\mathrm{B}=256\), \(\mathrm{H}=384\), \(\mathrm{J}=2304\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/Supercomputing-System-AI-Lab/MegaFold}{MegaFold (AF3)}: real PDB structure \texttt{7a4d-assembly1}; frozen training features; 384-token crop. Four configurations are retained. Their tensors use FP32 within a mixed-precision workload. Gate~3 is not applied. Inventory: 2 L1, 2 L2; 4 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/Supercomputing-System-AI-Lab/MegaFold}{MegaFold (AF3)}: real PDB structure \texttt{7a4d-assembly1}; frozen training features; 384-token crop. Four configurations are retained. Their tensors use FP32 within a mixed-precision workload. Gate~3 is not applied. Inventory: 2 P, 2 C; 4 selected.}\\*
 \midrule
-MegaFold (AF3) & L1 & $^{\star}$\nolinkurl{layernorm/msa_module.layers.0.tri_attn_starting.norm} & FP32 & \(\mathrm{rows}=147456\), \(\mathrm{hidden}=128\) \\
-MegaFold (AF3) & L1 & $^{\star}$\nolinkurl{swiglu/diffusion_module.token_transformer.layers.0.fn} & FP32 & \(\mathrm{rows}=1536\), \(\mathrm{cols}=1536\) \\
-MegaFold (AF3) & L2 & $^{\star}$\nolinkurl{megafold_evoattention/diffusion_module.token_transformer.layers.0.fn.attn.attend} & FP32 & \(\mathrm{B}=1\), \(\mathrm{S}=4\), \(\mathrm{H}=16\), \(\mathrm{N}=384\), \(\mathrm{D}=64\) \\
-MegaFold (AF3) & L2 & $^{\star}$\nolinkurl{megafold_layernorm_linear/diffusion_module.pairwise_repr_to_atompair_feat_cond} & FP32 & \(\mathrm{M}=147456\), \(\mathrm{K}=128\), \(\mathrm{N}=16\) \\
+MegaFold (AF3) & P & $^{\star}$\nolinkurl{layernorm/msa_module.layers.0.tri_attn_starting.norm} & FP32 & \(\mathrm{rows}=147456\), \(\mathrm{hidden}=128\) \\
+MegaFold (AF3) & P & $^{\star}$\nolinkurl{swiglu/diffusion_module.token_transformer.layers.0.fn} & FP32 & \(\mathrm{rows}=1536\), \(\mathrm{cols}=1536\) \\
+MegaFold (AF3) & C & $^{\star}$\nolinkurl{megafold_evoattention/diffusion_module.token_transformer.layers.0.fn.attn.attend} & FP32 & \(\mathrm{B}=1\), \(\mathrm{S}=4\), \(\mathrm{H}=16\), \(\mathrm{N}=384\), \(\mathrm{D}=64\) \\
+MegaFold (AF3) & C & $^{\star}$\nolinkurl{megafold_layernorm_linear/diffusion_module.pairwise_repr_to_atompair_feat_cond} & FP32 & \(\mathrm{M}=147456\), \(\mathrm{K}=128\), \(\mathrm{N}=16\) \\
 \addlinespace[0.5ex]
 
-\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/meta-pytorch/torchrec/tree/main/examples/dlrm}{TorchRec DLRM}: Criteo Kaggle; batch 32; 13 dense features; 26 embedding tables of width 64; interaction output width $64+\binom{27}{2}=415$. Embedding indices and offsets are integer tensors. Inventory: 7 L1, 1 L2; 2 selected.}\\*
+\multicolumn{5}{@{}p{\textwidth}@{}}{\href{https://github.com/meta-pytorch/torchrec/tree/main/examples/dlrm}{TorchRec DLRM}: Criteo Kaggle; batch 32; 13 dense features; 26 embedding tables of width 64; interaction output width $64+\binom{27}{2}=415$. Embedding indices and offsets are integer tensors. Inventory: 7 P, 1 C; 2 selected.}\\*
 \midrule
-DLRM & L1 & $^{\star}$\nolinkurl{embedding_bag/tables} & FP32 & \(\mathrm{N}=100000\), \(\mathrm{D}=64\), \(\mathrm{B}=32\), \(\mathrm{M}=1\), \(\mathrm{L}=32\) \\
-DLRM & L1 & \nolinkurl{linear/dense_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=13\), \(\mathrm{N}=512\) \\
-DLRM & L1 & \nolinkurl{linear/dense_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=256\) \\
-DLRM & L1 & \nolinkurl{linear/dense_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=64\) \\
-DLRM & L1 & \nolinkurl{linear/over_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=415\), \(\mathrm{N}=512\) \\
-DLRM & L1 & \nolinkurl{linear/over_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=512\) \\
-DLRM & L1 & \nolinkurl{linear/over_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=1\) \\
-DLRM & L2 & $^{\star}$\nolinkurl{torchrec_dlrm_dlrm_interaction/interaction} & FP32 & \(\mathrm{B}=32\), \(\mathrm{S}=26\), \(\mathrm{D}=64\), \(\mathrm{O}=415\) \\
+DLRM & P & $^{\star}$\nolinkurl{embedding_bag/tables} & FP32 & \(\mathrm{N}=100000\), \(\mathrm{D}=64\), \(\mathrm{B}=32\), \(\mathrm{M}=1\), \(\mathrm{L}=32\) \\
+DLRM & P & \nolinkurl{linear/dense_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=13\), \(\mathrm{N}=512\) \\
+DLRM & P & \nolinkurl{linear/dense_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=256\) \\
+DLRM & P & \nolinkurl{linear/dense_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=64\) \\
+DLRM & P & \nolinkurl{linear/over_layers} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=415\), \(\mathrm{N}=512\) \\
+DLRM & P & \nolinkurl{linear/over_layers_2} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=512\), \(\mathrm{N}=512\) \\
+DLRM & P & \nolinkurl{linear/over_layers_3} & FP32 & \(\mathrm{M}=32\), \(\mathrm{K}=256\), \(\mathrm{N}=1\) \\
+DLRM & C & $^{\star}$\nolinkurl{torchrec_dlrm_dlrm_interaction/interaction} & FP32 & \(\mathrm{B}=32\), \(\mathrm{S}=26\), \(\mathrm{D}=64\), \(\mathrm{O}=415\) \\
 \addlinespace[0.5ex]
 
 \end{longtable}
@@ -431,7 +462,7 @@ R_{\mathrm{saved}}(p;c)=\frac{M_p^{\mathrm{saved}}(c)}{M_{\mathrm{input}}(c)},
 where $M_p^{\mathrm{saved}}$ sums \texttt{numel} times element size over tensors retained in $s_p$, and $M_{\mathrm{input}}$ counts the task's declared memory inputs. Aliases and repeated entries count by logical size; non-tensor metadata is excluded. Tier~3 initializes optimizer state, resets CUDA peak-memory statistics, and measures peak allocated memory during one untimed training step. This is total peak allocation, not reserved memory or an allocation increment; its reported ratio is candidate peak divided by eager peak.
 
 \paragraph{Coverage accounting.}
-Level~1 and Level~2 coverage divide executable, accepted configurations by all observed configurations, including unsubmitted cases and those not selected for an experiment. Valid timing counts are recorded separately for each baseline. Level~3 coverage counts accepted combinations with valid eager-relative speedups among all represented models, including models with empty combinations in the denominator.
+Primitive and composite coverage divide executable, accepted configurations by all observed configurations, including unsubmitted cases and those not selected for an experiment. Valid timing counts are recorded separately for each baseline. Model-deployment coverage counts accepted combinations with valid eager-relative speedups among all represented models, including models with empty combinations in the denominator.
 
 
 
@@ -689,7 +720,7 @@ Before entering evolution, the complete seed $p_0$ is checked against the indepe
 \providecommand{\na}{n/a}
 \begin{table*}[p]
 \centering
-\caption{Full per-case results (part 1 of 2: language models). Rows are grouped by host model: every L1 primitive the model's training step executes, every L2 site, and the L3 whole-model training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
+\caption{Full per-case results (part 1 of 2: language models). Rows are grouped by host model: primitive (P) operators executed in the model, composite (C) sites, and the whole-model (M) training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
 \label{tab:agent_full_results_a}
 \scriptsize
 \setlength{\tabcolsep}{2pt}
@@ -701,34 +732,34 @@ Before entering evolution, the complete seed $p_0$ is checked against the indepe
 Lvl & Case & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{Llama-3.2-1B}} \\
-L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{rmsnorm} & -- & 1.21 & -- & -- & -- & 2.345 & -- & -- & -- & 1.87 & -- & -- & -- & 2.06 & -- & -- & -- & 1.057 & -- & -- & -- & 1.81 & -- & -- \\
-L1 & \texttt{rope} & -- & 1.09 & -- & -- & -- & 1.299 & -- & -- & -- & 1.02 & -- & -- & -- & 1.66 & -- & -- & -- & 2.348 & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{swiglu} & -- & 2.41 & -- & -- & -- & -- & -- & -- & -- & 4.12$^{\dagger}$ & -- & -- & -- & 4.13$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 3.94$^{\dagger}$ & -- & -- \\
-L1 & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{cross\_entropy} & -- & 2.64 & -- & -- & -- & 2.295 & -- & -- & -- & 2.92 & -- & -- & -- & 3.06 & -- & -- & -- & 0.388 & -- & -- & -- & 2.92 & -- & -- \\
+P & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{rmsnorm} & -- & 1.21 & -- & -- & -- & 2.345 & -- & -- & -- & 1.87 & -- & -- & -- & 2.06 & -- & -- & -- & 1.057 & -- & -- & -- & 1.81 & -- & -- \\
+P & \texttt{rope} & -- & 1.09 & -- & -- & -- & 1.299 & -- & -- & -- & 1.02 & -- & -- & -- & 1.66 & -- & -- & -- & 2.348 & -- & -- & -- & -- & -- & -- \\
+P & \texttt{swiglu} & -- & 2.41 & -- & -- & -- & -- & -- & -- & -- & 4.12$^{\dagger}$ & -- & -- & -- & 4.13$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 3.94$^{\dagger}$ & -- & -- \\
+P & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{cross\_entropy} & -- & 2.64 & -- & -- & -- & 2.295 & -- & -- & -- & 2.92 & -- & -- & -- & 3.06 & -- & -- & -- & 0.388 & -- & -- & -- & 2.92 & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{qkv\_rope} & -- & 1.21 & -- & -- & -- & 1.280 & 1.031 & 1.00 & -- & 1.76$^{\dagger}$ & 1.03$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 2.25$^{\dagger}$ & 1.02$^{\dagger}$ & 1.01$^{\dagger}$ & -- & -- & -- & -- & -- & 1.36$^{\dagger}$ & 0.91$^{\dagger}$ & 1.00$^{\dagger}$ \\
-L2 & \texttt{attention} & -- & 0.91 & -- & -- & -- & 0.874 & 0.986 & 1.00 & -- & 1.03 & 0.99 & 1.00 & -- & 1.03 & 1.00 & 1.00 & -- & -- & -- & -- & -- & 1.00 & 0.99 & 1.00 \\
-L2 & \texttt{swiglu\_mlp} & -- & 1.06 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.06 & 0.95 & 0.95 & -- & 1.05 & 1.00 & 0.90 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.05 & 1.01 & 0.90 \\
-L2 & \texttt{residual\_rmsnorm} & -- & 1.14 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.57 & 1.11 & 0.95 & -- & 1.75 & 1.11 & 0.95 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.50 & 1.11 & 0.95 \\
+C & \texttt{qkv\_rope} & -- & 1.21 & -- & -- & -- & 1.280 & 1.031 & 1.00 & -- & 1.76$^{\dagger}$ & 1.03$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 2.25$^{\dagger}$ & 1.02$^{\dagger}$ & 1.01$^{\dagger}$ & -- & -- & -- & -- & -- & 1.36$^{\dagger}$ & 0.91$^{\dagger}$ & 1.00$^{\dagger}$ \\
+C & \texttt{attention} & -- & 0.91 & -- & -- & -- & 0.874 & 0.986 & 1.00 & -- & 1.03 & 0.99 & 1.00 & -- & 1.03 & 1.00 & 1.00 & -- & -- & -- & -- & -- & 1.00 & 0.99 & 1.00 \\
+C & \texttt{swiglu\_mlp} & -- & 1.06 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.06 & 0.95 & 0.95 & -- & 1.05 & 1.00 & 0.90 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.05 & 1.01 & 0.90 \\
+C & \texttt{residual\_rmsnorm} & -- & 1.14 & -- & -- & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.57 & 1.11 & 0.95 & -- & 1.75 & 1.11 & 0.95 & -- & --$^{\mathrm{OOM}}$ & -- & -- & -- & 1.50 & 1.11 & 0.95 \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & 1.13 & 0.77 & \na & \na & 1.033 & 1.00 & \na & \na & 1.11 & 0.95 & \na & \na & 1.11 & 0.95 & \na & \na & / & / & \na & \na & 1.11 & 0.85 \\
+M & \textit{full training step} & \na & \na & 1.13 & 0.77 & \na & \na & 1.033 & 1.00 & \na & \na & 1.11 & 0.95 & \na & \na & 1.11 & 0.95 & \na & \na & / & / & \na & \na & 1.11 & 0.85 \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{Qwen3-0.6B}} \\
-L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{rmsnorm} & -- & 1.37 & -- & -- & -- & 1.838 & -- & -- & -- & 1.73 & -- & -- & -- & 1.90 & -- & -- & -- & 2.131 & -- & -- & -- & 1.62 & -- & -- \\
-L1 & \texttt{rope} & -- & 1.03 & -- & -- & -- & 1.166 & -- & -- & -- & 0.91 & -- & -- & -- & 1.38 & -- & -- & -- & 2.421 & -- & -- & -- & 1.62 & -- & -- \\
-L1 & \texttt{swiglu} & -- & 0.92 & -- & -- & -- & 4.018 & -- & -- & -- & 1.64 & -- & -- & -- & 1.66 & -- & -- & -- & 4.006 & -- & -- & -- & 1.58 & -- & -- \\
-L1 & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{cross\_entropy} & -- & 2.54 & -- & -- & -- & 2.905 & -- & -- & -- & 3.06 & -- & -- & -- & 3.04 & -- & -- & -- & 2.228 & -- & -- & -- & 2.90 & -- & -- \\
+P & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{rmsnorm} & -- & 1.37 & -- & -- & -- & 1.838 & -- & -- & -- & 1.73 & -- & -- & -- & 1.90 & -- & -- & -- & 2.131 & -- & -- & -- & 1.62 & -- & -- \\
+P & \texttt{rope} & -- & 1.03 & -- & -- & -- & 1.166 & -- & -- & -- & 0.91 & -- & -- & -- & 1.38 & -- & -- & -- & 2.421 & -- & -- & -- & 1.62 & -- & -- \\
+P & \texttt{swiglu} & -- & 0.92 & -- & -- & -- & 4.018 & -- & -- & -- & 1.64 & -- & -- & -- & 1.66 & -- & -- & -- & 4.006 & -- & -- & -- & 1.58 & -- & -- \\
+P & \texttt{causal\_gqa\_attention} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{cross\_entropy} & -- & 2.54 & -- & -- & -- & 2.905 & -- & -- & -- & 3.06 & -- & -- & -- & 3.04 & -- & -- & -- & 2.228 & -- & -- & -- & 2.90 & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{qkv\_norm\_rope} & -- & 1.65 & -- & -- & -- & 1.840$^{\dagger}$ & 1.183$^{\dagger}$ & 0.95$^{\dagger}$ & -- & 2.28 & 1.15 & 0.95 & -- & 2.49 & 1.33 & 0.95 & -- & -- & -- & -- & -- & 1.60$^{\dagger}$ & 1.07$^{\dagger}$ & 0.93$^{\dagger}$ \\
-L2 & \texttt{attention} & -- & 0.79 & -- & -- & -- & 0.903 & 0.987 & 1.00 & -- & 1.05 & 0.95 & 1.00 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.00 & 0.96 & 1.00 \\
-L2 & \texttt{swiglu\_mlp} & -- & 0.87 & -- & -- & -- & 1.082 & 1.014 & 0.93 & -- & 1.07 & 0.96 & 0.95 & -- & 1.13 & 0.96 & 0.95 & -- & -- & -- & -- & -- & 0.96 & 0.98 & 0.96 \\
-L2 & \texttt{residual\_rmsnorm} & -- & 1.25 & -- & -- & -- & 1.733 & 1.099 & 0.95 & -- & 1.58 & 1.00 & 0.95 & -- & 1.65 & 1.02 & 0.95 & -- & -- & -- & -- & -- & 1.61 & 0.99 & 0.95 \\
+C & \texttt{qkv\_norm\_rope} & -- & 1.65 & -- & -- & -- & 1.840$^{\dagger}$ & 1.183$^{\dagger}$ & 0.95$^{\dagger}$ & -- & 2.28 & 1.15 & 0.95 & -- & 2.49 & 1.33 & 0.95 & -- & -- & -- & -- & -- & 1.60$^{\dagger}$ & 1.07$^{\dagger}$ & 0.93$^{\dagger}$ \\
+C & \texttt{attention} & -- & 0.79 & -- & -- & -- & 0.903 & 0.987 & 1.00 & -- & 1.05 & 0.95 & 1.00 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.00 & 0.96 & 1.00 \\
+C & \texttt{swiglu\_mlp} & -- & 0.87 & -- & -- & -- & 1.082 & 1.014 & 0.93 & -- & 1.07 & 0.96 & 0.95 & -- & 1.13 & 0.96 & 0.95 & -- & -- & -- & -- & -- & 0.96 & 0.98 & 0.96 \\
+C & \texttt{residual\_rmsnorm} & -- & 1.25 & -- & -- & -- & 1.733 & 1.099 & 0.95 & -- & 1.58 & 1.00 & 0.95 & -- & 1.65 & 1.02 & 0.95 & -- & -- & -- & -- & -- & 1.61 & 0.99 & 0.95 \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & 1.66 & 0.67 & \na & \na & 1.108 & 0.88 & \na & \na & 1.15 & 0.95 & \na & \na & 1.35 & 0.90 & \na & \na & / & / & \na & \na & / & / \\
+M & \textit{full training step} & \na & \na & 1.66 & 0.67 & \na & \na & 1.108 & 0.88 & \na & \na & 1.15 & 0.95 & \na & \na & 1.35 & 0.90 & \na & \na & / & / & \na & \na & / & / \\
 
 \bottomrule
 \end{tabular}}
@@ -736,7 +767,7 @@ L3 & \textit{full training step} & \na & \na & 1.66 & 0.67 & \na & \na & 1.108 &
 
 \begin{table*}[p]
 \centering
-\caption{Full per-case results (part 2 of 2: multimodal, vision, diffusion and recommendation models). Rows are grouped by host model: every L1 primitive the model's training step executes, every L2 site, and the L3 whole-model training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
+\caption{Full per-case results (part 2 of 2: multimodal, vision, diffusion and recommendation models). Rows are grouped by host model: primitive (P) operators executed in the model, composite (C) sites, and the whole-model (M) training step. T1: standalone forward/backward pair; T2: deployed operator forward and autograd backward; T3: one full training step (forward, loss, backward, AdamW, gradient reset) with the kernel patched into every site of that case. Speedup is relative to PyTorch eager (higher is better); M is Tier-3 peak memory relative to eager (lower is better). n/a: tier does not apply. /: empty selected patch set; --: unavailable measurement; $\dagger$: recorded timing for a candidate marked unaccepted in the evaluation; $\ddagger$: compile timing whose whole-model correctness check failed. evograd and KernelAgent were evaluated on an A100-SXM4-40GB; other columns use GH200 measurements. Each ratio uses eager on its own device; these are not hardware-matched agent comparisons. A100 geomeans cover reported accepted cases or combinations only. $\mathrm{OOM}$: model-level verification ran out of memory, leaving no verdict.}
 \label{tab:agent_full_results_b}
 \scriptsize
 \setlength{\tabcolsep}{2pt}
@@ -748,53 +779,53 @@ L3 & \textit{full training step} & \na & \na & 1.66 & 0.67 & \na & \na & 1.108 &
 Lvl & Case & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M & T1 & T2 & T3 & M \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{Qwen2-VL-2B}} \\
-L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{layernorm} & -- & 0.38 & -- & -- & -- & -- & -- & -- & -- & 0.54$^{\dagger}$ & -- & -- & -- & 0.49$^{\dagger}$ & -- & -- & -- & 0.081 & -- & -- & -- & 0.51 & -- & -- \\
-L1 & \texttt{rmsnorm} & -- & 1.39 & -- & -- & -- & 2.235 & -- & -- & -- & 1.92 & -- & -- & -- & 2.01 & -- & -- & -- & 1.608 & -- & -- & -- & 1.69 & -- & -- \\
-L1 & \texttt{quick\_gelu} & -- & 0.72 & -- & -- & -- & 0.572 & -- & -- & -- & 1.36 & -- & -- & -- & 1.23 & -- & -- & -- & 0.626 & -- & -- & -- & 1.26 & -- & -- \\
-L1 & \texttt{gelu} & -- & 0.36 & -- & -- & -- & -- & -- & -- & -- & 0.66$^{\dagger}$ & -- & -- & -- & 0.64$^{\dagger}$ & -- & -- & -- & 0.114 & -- & -- & -- & 0.65 & -- & -- \\
+P & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{linear\_no\_bias} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{layernorm} & -- & 0.38 & -- & -- & -- & -- & -- & -- & -- & 0.54$^{\dagger}$ & -- & -- & -- & 0.49$^{\dagger}$ & -- & -- & -- & 0.081 & -- & -- & -- & 0.51 & -- & -- \\
+P & \texttt{rmsnorm} & -- & 1.39 & -- & -- & -- & 2.235 & -- & -- & -- & 1.92 & -- & -- & -- & 2.01 & -- & -- & -- & 1.608 & -- & -- & -- & 1.69 & -- & -- \\
+P & \texttt{quick\_gelu} & -- & 0.72 & -- & -- & -- & 0.572 & -- & -- & -- & 1.36 & -- & -- & -- & 1.23 & -- & -- & -- & 0.626 & -- & -- & -- & 1.26 & -- & -- \\
+P & \texttt{gelu} & -- & 0.36 & -- & -- & -- & -- & -- & -- & -- & 0.66$^{\dagger}$ & -- & -- & -- & 0.64$^{\dagger}$ & -- & -- & -- & 0.114 & -- & -- & -- & 0.65 & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{text\_mlp} & -- & 0.91 & -- & -- & -- & 0.860 & 0.971 & 1.00 & -- & 1.19 & 0.99 & 1.00 & -- & 1.00 & 0.95 & 1.00 & -- & 0.490 & 1.046 & 1.00 & -- & 0.94 & 0.96 & 1.00 \\
-L2 & \texttt{vision\_mlp} & -- & 0.87 & -- & -- & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 1.15$^{\dagger}$ & 1.02$^{\dagger}$ & 1.00$^{\dagger}$ & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 0.99$^{\dagger}$ & 1.00$^{\dagger}$ \\
+C & \texttt{text\_mlp} & -- & 0.91 & -- & -- & -- & 0.860 & 0.971 & 1.00 & -- & 1.19 & 0.99 & 1.00 & -- & 1.00 & 0.95 & 1.00 & -- & 0.490 & 1.046 & 1.00 & -- & 0.94 & 0.96 & 1.00 \\
+C & \texttt{vision\_mlp} & -- & 0.87 & -- & -- & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & -- & 1.15$^{\dagger}$ & 1.02$^{\dagger}$ & 1.00$^{\dagger}$ & -- & -- & -- & -- & -- & 1.11$^{\dagger}$ & 0.99$^{\dagger}$ & 1.00$^{\dagger}$ \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & -- & -- & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.070 & 1.00 & \na & \na & / & / \\
+M & \textit{full training step} & \na & \na & -- & -- & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.070 & 1.00 & \na & \na & / & / \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{ConvNeXt V2-Tiny}} \\
-L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{layernorm} & -- & 0.56 & -- & -- & -- & -- & -- & -- & -- & 0.81$^{\dagger}$ & -- & -- & -- & 0.76$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.70$^{\dagger}$ & -- & -- \\
-L1 & \texttt{spatial\_conv2d} & -- & 0.87 & -- & -- & -- & 1.074 & -- & -- & -- & 1.02$^{\dagger}$ & -- & -- & -- & 1.59$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.96$^{\dagger}$ & -- & -- \\
-L1 & \texttt{grn} & -- & 3.57 & -- & -- & -- & -- & -- & -- & -- & 4.28 & -- & -- & -- & 4.24 & -- & -- & -- & 3.494 & -- & -- & -- & 4.19 & -- & -- \\
-L1 & \texttt{gelu} & -- & 0.48 & -- & -- & -- & 1.010 & -- & -- & -- & 0.79$^{\dagger}$ & -- & -- & -- & 0.77$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.75 & -- & -- \\
+P & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{layernorm} & -- & 0.56 & -- & -- & -- & -- & -- & -- & -- & 0.81$^{\dagger}$ & -- & -- & -- & 0.76$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.70$^{\dagger}$ & -- & -- \\
+P & \texttt{spatial\_conv2d} & -- & 0.87 & -- & -- & -- & 1.074 & -- & -- & -- & 1.02$^{\dagger}$ & -- & -- & -- & 1.59$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.96$^{\dagger}$ & -- & -- \\
+P & \texttt{grn} & -- & 3.57 & -- & -- & -- & -- & -- & -- & -- & 4.28 & -- & -- & -- & 4.24 & -- & -- & -- & 3.494 & -- & -- & -- & 4.19 & -- & -- \\
+P & \texttt{gelu} & -- & 0.48 & -- & -- & -- & 1.010 & -- & -- & -- & 0.79$^{\dagger}$ & -- & -- & -- & 0.77$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & 0.75 & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{convnext\_mlp (stage 0)} & -- & 1.69 & -- & -- & -- & -- & -- & -- & -- & 1.50$^{\dagger}$ & 1.08$^{\dagger}$ & 0.69$^{\dagger}$ & -- & 1.46$^{\dagger}$ & 1.06$^{\dagger}$ & 0.69$^{\dagger}$ & -- & -- & -- & -- & -- & 1.49$^{\dagger}$ & 1.02$^{\dagger}$ & 0.69$^{\dagger}$ \\
-L2 & \texttt{convnext\_mlp (stage 1)} & -- & 1.07 & -- & -- & -- & -- & -- & -- & -- & 1.04$^{\dagger}$ & 1.04$^{\dagger}$ & 0.89$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.99$^{\dagger}$ & 0.98$^{\dagger}$ & 0.89$^{\dagger}$ \\
-L2 & \texttt{convnext\_mlp (stage 2)} & -- & 1.05 & -- & -- & -- & 1.029 & 1.114 & 0.83 & -- & 0.72$^{\dagger}$ & 0.92$^{\dagger}$ & 0.90$^{\dagger}$ & -- & 1.11$^{\dagger}$ & 1.03$^{\dagger}$ & 0.83$^{\dagger}$ & -- & -- & -- & -- & -- & 0.75$^{\dagger}$ & 0.90$^{\dagger}$ & 0.89$^{\dagger}$ \\
-L2 & \texttt{convnext\_mlp (stage 3)} & -- & 1.22 & -- & -- & -- & -- & -- & -- & -- & 1.22$^{\dagger}$ & 0.98$^{\dagger}$ & 0.98$^{\dagger}$ & -- & 1.17$^{\dagger}$ & 1.02$^{\dagger}$ & 0.98$^{\dagger}$ & -- & -- & -- & -- & -- & 1.28 & 1.08 & 0.98 \\
+C & \texttt{convnext\_mlp (stage 0)} & -- & 1.69 & -- & -- & -- & -- & -- & -- & -- & 1.50$^{\dagger}$ & 1.08$^{\dagger}$ & 0.69$^{\dagger}$ & -- & 1.46$^{\dagger}$ & 1.06$^{\dagger}$ & 0.69$^{\dagger}$ & -- & -- & -- & -- & -- & 1.49$^{\dagger}$ & 1.02$^{\dagger}$ & 0.69$^{\dagger}$ \\
+C & \texttt{convnext\_mlp (stage 1)} & -- & 1.07 & -- & -- & -- & -- & -- & -- & -- & 1.04$^{\dagger}$ & 1.04$^{\dagger}$ & 0.89$^{\dagger}$ & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.99$^{\dagger}$ & 0.98$^{\dagger}$ & 0.89$^{\dagger}$ \\
+C & \texttt{convnext\_mlp (stage 2)} & -- & 1.05 & -- & -- & -- & 1.029 & 1.114 & 0.83 & -- & 0.72$^{\dagger}$ & 0.92$^{\dagger}$ & 0.90$^{\dagger}$ & -- & 1.11$^{\dagger}$ & 1.03$^{\dagger}$ & 0.83$^{\dagger}$ & -- & -- & -- & -- & -- & 0.75$^{\dagger}$ & 0.90$^{\dagger}$ & 0.89$^{\dagger}$ \\
+C & \texttt{convnext\_mlp (stage 3)} & -- & 1.22 & -- & -- & -- & -- & -- & -- & -- & 1.22$^{\dagger}$ & 0.98$^{\dagger}$ & 0.98$^{\dagger}$ & -- & 1.17$^{\dagger}$ & 1.02$^{\dagger}$ & 0.98$^{\dagger}$ & -- & -- & -- & -- & -- & 1.28 & 1.08 & 0.98 \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & 1.26$^{\ddagger}$ & 0.63$^{\ddagger}$ & \na & \na & 1.119 & 0.83 & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.06 & 0.98 \\
+M & \textit{full training step} & \na & \na & 1.26$^{\ddagger}$ & 0.63$^{\ddagger}$ & \na & \na & 1.119 & 0.83 & \na & \na & / & / & \na & \na & / & / & \na & \na & / & / & \na & \na & 1.06 & 0.98 \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{DiT-S/2}} \\
-L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{spatial\_conv2d} & -- & 2.01 & -- & -- & -- & 1.047 & -- & -- & -- & 2.36 & -- & -- & -- & 2.39 & -- & -- & -- & 0.377 & -- & -- & -- & -- & -- & -- \\
+P & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{spatial\_conv2d} & -- & 2.01 & -- & -- & -- & 1.047 & -- & -- & -- & 2.36 & -- & -- & -- & 2.39 & -- & -- & -- & 0.377 & -- & -- & -- & -- & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{dit\_modulation} & -- & 0.69 & -- & -- & -- & 0.666 & 1.000 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 1.186 & 0.998 & 1.00 & -- & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & 1.00$^{\dagger}$ \\
-L2 & \texttt{dit\_mlp} & -- & 1.01 & -- & -- & -- & 0.976 & 0.988 & 0.84 & -- & 0.97 & 0.99 & 0.83 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.54 & 0.72 & 0.93 \\
+C & \texttt{dit\_modulation} & -- & 0.69 & -- & -- & -- & 0.666 & 1.000 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 0.92 & 1.00 & 1.00 & -- & 1.186 & 0.998 & 1.00 & -- & 1.01$^{\dagger}$ & 1.00$^{\dagger}$ & 1.00$^{\dagger}$ \\
+C & \texttt{dit\_mlp} & -- & 1.01 & -- & -- & -- & 0.976 & 0.988 & 0.84 & -- & 0.97 & 0.99 & 0.83 & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.54 & 0.72 & 0.93 \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & 1.14 & 0.89 & \na & \na & 1.000 & 1.00 & \na & \na & / & / & \na & \na & 1.00 & 1.00 & \na & \na & / & / & \na & \na & / & / \\
+M & \textit{full training step} & \na & \na & 1.14 & 0.89 & \na & \na & 1.000 & 1.00 & \na & \na & / & / & \na & \na & 1.00 & 1.00 & \na & \na & / & / & \na & \na & / & / \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{DLRM}} \\
-L1 & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
-L1 & \texttt{embedding\_bag} & -- & 0.47 & -- & -- & -- & 0.566 & -- & -- & -- & 1.15 & -- & -- & -- & 1.27 & -- & -- & -- & 0.444 & -- & -- & -- & 1.11 & -- & -- \\
+P & \texttt{linear} & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- \\
+P & \texttt{embedding\_bag} & -- & 0.47 & -- & -- & -- & 0.566 & -- & -- & -- & 1.15 & -- & -- & -- & 1.27 & -- & -- & -- & 0.444 & -- & -- & -- & 1.11 & -- & -- \\
 \cmidrule(l){2-26}
-L2 & \texttt{dlrm\_interaction} & -- & 1.00 & -- & -- & -- & 2.025 & 1.012 & 1.00 & -- & 3.83 & 1.05 & 1.00 & -- & 3.61 & 1.04 & 1.00 & -- & 2.674 & 1.004 & 1.00 & -- & 3.75 & 1.04 & 1.00 \\
+C & \texttt{dlrm\_interaction} & -- & 1.00 & -- & -- & -- & 2.025 & 1.012 & 1.00 & -- & 3.83 & 1.05 & 1.00 & -- & 3.61 & 1.04 & 1.00 & -- & 2.674 & 1.004 & 1.00 & -- & 3.75 & 1.04 & 1.00 \\
 \cmidrule(l){2-26}
-L3 & \textit{full training step} & \na & \na & 1.13 & 1.00 & \na & \na & 1.005 & 1.00 & \na & \na & 1.05 & 1.00 & \na & \na & 1.03 & 1.00 & \na & \na & 1.007 & 1.00 & \na & \na & 1.04 & 1.00 \\
+M & \textit{full training step} & \na & \na & 1.13 & 1.00 & \na & \na & 1.005 & 1.00 & \na & \na & 1.05 & 1.00 & \na & \na & 1.03 & 1.00 & \na & \na & 1.007 & 1.00 & \na & \na & 1.04 & 1.00 \\
 \midrule
 \multicolumn{26}{@{}l}{\textbf{Geometric mean (reported accepted coverage)}} \\
-L1 & \textit{all L1 cases} & -- & -- & -- & -- & -- & 1.324 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.842 & -- & -- & -- & -- & -- & -- \\
-L2 & \textit{all L2 cases} & -- & -- & -- & -- & -- & 1.182 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.159 & -- & -- & -- & -- & -- & -- \\
-L3 & \textit{all models} & \na & \na & -- & -- & \na & \na & 1.052 & -- & \na & \na & -- & -- & \na & \na & -- & -- & \na & \na & 1.038 & -- & \na & \na & -- & -- \\
+P & \textit{all primitive cases} & -- & -- & -- & -- & -- & 1.324 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 0.842 & -- & -- & -- & -- & -- & -- \\
+C & \textit{all composite cases} & -- & -- & -- & -- & -- & 1.182 & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & -- & 1.159 & -- & -- & -- & -- & -- & -- \\
+M & \textit{all models} & \na & \na & -- & -- & \na & \na & 1.052 & -- & \na & \na & -- & -- & \na & \na & -- & -- & \na & \na & 1.038 & -- & \na & \na & -- & -- \\
 \bottomrule
 \end{tabular}}
 \end{table*}

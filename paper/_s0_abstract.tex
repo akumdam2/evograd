@@ -1,27 +1,10 @@
 \begin{abstract}
-Agentic coding systems have shown promising results in GPU kernel optimization, but their optimization targets and evaluation benchmarks primarily focus on inference or isolated kernels, leaving training-specific requirements largely unexplored. We introduce \bench, a GPU kernel optimization benchmark for training consisting of 58 optimization targets across 8 model categories. 
-% Each task requires generating forward-backward autograd pair, and is verified and evaluated on both local execution and end-to-end training levels.  Level-3 benchmark cases jointly deploy the selected optimized pairs in their source models to measure their combined effect on training performance. 
-\bench evaluates autograd-compatible forward-backward implementations, verifying their numerical correctness and measuring performance from isolated operator execution to end-to-end training. By developing optimized kernels individually and jointly within their source models, \bench reveals whether local improvements translate into faster training.
-We also propose \method, an agentic training-kernel optimizer that synthesizes forward–backward seeds by preserving compiler-selected vendor-library calls and lowering the remaining computation into editable Triton primitives for evolutionary optimization. Across five agentic workflows, only 107 of 170 submitted implementations are accepted, and only 17 of 28 kernels transfers local speedup to training. We show that preserving forward–backward correctness through deployment and translating local kernel improvements into faster training remain unresolved challenges. 
-\minjia{Some other thoughts: instead of presenting the work as ADBench, another possibility is to present this as an automated agent-based (but compiler-guided) optimization framework that jointly synthesizes and optimizes forward computation, backward computation, and their saved state interface, using training-level feedback to select deployable implementations. ADBench then becomes a component (deployment-aware evaluator module) of such AD optimization framework. The compiler-guided workflow (compiler-guided synthesizer module) also becomes part of the framework. The framework also has the search module (evolutionary optimization).}
-% Code is available at \url{https://github.com/akumdam2/evograd.git}. 
-% This task is often harder than
-% writing the forward kernel because it involves gradient derivation, parallel
-% reductions, saved-intermediate selection, numerical verification, and
-% shape-dependent optimization. We present \method, an end-to-end system that
-% accepts a single PyTorch forward function and automatically produces an
-% autograd-compatible Triton forward--backward implementation. \method uses
-% AtenIR to generate a correctness-guaranteed Triton seed, then jointly evolves
-% the forward and backward implementations, saved tensors, and shape-specialized
-% kernels through performance-guided search. We are developing a benchmark suite
-% covering operator-level workloads derived from existing Triton libraries, with
-% future extensions to fused and model-level workloads. Preliminary LayerNorm
-% experiments achieve a $1.48\times$ geometric-mean backward speedup and a
-% $1.40\times$ full-step speedup over Liger, as well as a $6.79\times$
-% geometric-mean speedup over PyTorch autograd across a broad shape range.
-% Shape-aware dispatch improves full-step performance by approximately $12\%$
-% over a single mixed-shape implementation, while finer-grained specialization
-% provides diminishing returns.
+% High-performance GPU kernels are essential to efficient AI workloads. Agentic optimization has shown promising results in generating and improving such kernels. However, existing agentic workflows primarily target isolated kernels or model inference, leaving end-to-end training performance largely unexplored.
+% We present \method, a compiler-guided agentic system for optimizing automatic-differentiation (AD) kernels. 
+% Its key insight is to expose forward computation, backward computation, and their saved-state interface jointly to the agent's search space while using training-context verification and evaluation to select deployable kernels. For each kernel target, \method synthesizes editable seeds from compiler-derived semantics, preserves selected library calls, and jointly evolves the paired implementations. To ensure training-specific correctness and performance, \method verifies and evaluates kernels using numerical, latency, and memory signals from training. Across five agentic workflows, only 17 of 28 accepted implementations with deployed-operator speedups retain statistically supported training gains. \method produces accepted combined deployments on five of six evaluated workloads, achieving up to a $1.119\times$ training speedup over eager PyTorch. \haochen{need to update the experiment results}
+Recent advances in agentic GPU kernel optimization have shown promising results in automating the development of high-performance kernels. However, existing approaches primarily target forward computation and inference, and develop and evaluate kernels in isolation from their target execution frameworks. This disconnect is particularly problematic for AI training, where forward and backward computations share intermediate state, numerical discrepancies can accumulate across training steps, and local kernel speedups may not translate into training benefits.
+We present \system, an end-to-end agentic system for developing and deploying GPU training kernels. \system integrates agentic kernel development with PyTorch's compiler and runtime. It synthesizes editable implementations from compiler-derived AD semantics, jointly optimizes forward computation, backward computation, and their saved-state interface, and verifies and evaluates generated kernels within their target training workloads.
+We also introduce \system-Bench, a training-integrated benchmark comprising 149 operator configurations from nine AI models. Our study across five agentic kernel development workflows reveals that isolated kernel assessment overestimates both correctness and performance. Only 17 of 28 accepted implementations with operator-level speedups achieve statistically supported training gains. ADopt [insert final optimization effectiveness, deployment coverage, latency, and memory results].
 \end{abstract}
 
 

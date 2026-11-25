@@ -1,20 +1,40 @@
-\subsection{Correctness Verification Protocol}
+% \subsection{Deployment Verifier}
+\subsection{Progressive Correctness Verification}
 \label{sec:verification_protocol}
 
-\bench verifies candidate correctness through three complementary gates introduced in Section~\ref{sec:benchmark-task}: local pair verification ($\mathcal{V}_{\mathrm{pair}}$), single-step framework integration verification ($\mathcal{V}_{\mathrm{int}}$), and multi-step training verification ($\mathcal{V}_{\mathrm{train}}$). These gates check the declared forward--backward computation, its integration into the framework, and its numerical behavior over continuous training updates. The verification gates compare the candidate with the reference computation of the source model and accept it only if its error stays within a threshold calibrated from trusted controls: repeated native executions, which measure run-to-run variation, and a \texttt{torch.compile} implementation of the same reference, which measures how far a correct alternative implementation departs from native. Thresholds are frozen before any candidate is evaluated.
+Verifying an agent-generated AD kernel requires more than checking its forward and backward pass in isolation. The implementation must also behave correctly when invoked by PyTorch's autograd engine, interact with other operators in the model, preserve numerical accuracy across training updates. However, verifying every candidate through whole model training would be expensive. \system there uses progressive verification, with three levels of increasing execution scope and verification cost:
+% \method uses three verification gates: 
+% local pair verification, single-step framework integration verification, 
+local AD kernel verification, framework integration verification, and multi-step training verification,
+\minjia{I added the rationale for this progressive verification protocol and also updated the names of the three verification steps. Please update the following notations, perhaps local, int, train, and make sure the notations are consistent.}
+% and multi-step training verification, 
+with binary outcomes $\mathcal{V}_{\mathrm{pair}}$, $\mathcal{V}_{\mathrm{int}}$, and $\mathcal{V}_{\mathrm{train}}$, respectively.
+The applicable gate set $\mathcal{G}_{f,c}$ depends on the target granularity and the supplied model/workload. For candidates satisfying the task's static rules, acceptance requires
+\begin{equation}
+    \mathcal{V}(p,f,c)
+    =
+    \bigwedge_{g\in\mathcal{G}_{f,c}}
+    \mathcal{V}_g(p,f,c)
+    =1.
+    \label{eq:validity}
+\end{equation}
+Pair verification asks whether the forward--backward pair computes the declared function. Integration verification asks whether the candidate remains accurate when deployed through PyTorch autograd, as an operator and within the source model. Training verification asks whether its numerical differences compound over successive optimizer updates. A gate passes only if the candidate executes completely and meets every structural and numerical criterion.
 
-A Level~1 candidate must pass pair verification and operator-scope integration verification. A Level~2 candidate must additionally pass model-scope integration and training verification where available, with the candidate installed alone at its site in the source model. Selected Level~2 candidates deployed together for Level~3 are verified again by the available model-scope gates. Only deployments passing all required gates contribute to the main performance results. All verification uses PyTorch's deterministic settings and runs outside timed regions. Model-specific gate availability, configurations, and detailed procedures are provided in \appref{app:verification_details}.
+Floating-point arithmetic admits no single correct result: two correct implementations of the same computation differ by rounding, and a model can amplify such differences. Every numerical criterion therefore takes the same form: the candidate's error must not exceed the larger of a fixed floor and a multiple of the error of trusted implementations of the same computation, measured on the same inputs. The trusted implementations are the source model's native execution and its \texttt{torch.compile} compilation; thresholds depend only on them, never on the candidate. 
+
+During search, the evolver applies Gate~1 to a subset of the recorded calls to admit candidates for scoring; deployment verification then runs the full gates. A primitive candidate must pass pair verification and operator-scope integration verification. A composite candidate must additionally pass model-scope integration and training verification where available, with the candidate installed alone at its site in the supplied model. Selected composite candidates deployed together are verified again by model-scope integration and training verification. Only deployments passing all required gates contribute to the main performance results. All verification uses PyTorch's deterministic settings and runs outside timed regions. Model-specific gate availability, configurations, and detailed procedures are provided in \appref{app:verification_details}.
 
 \noindent\textbf{Gate 1: Local pair verification ($\mathcal{V}_{\mathrm{pair}}$).}
-Gate~1 directly invokes the candidate's forward and backward implementations, $F_p$ and $B_p$, with $B_p$ consuming the candidate's own saved state $s_p$. It compares every declared forward output and every required input and parameter gradient with the source-model reference $f$ under PyTorch autograd, element by element; the internal decomposition and saved state need not match the reference.
+Gate~1 asks whether the pair computes the declared function. It directly invokes the candidate's forward and backward implementations, $F_p$ and $B_p$, with $B_p$ consuming the candidate's own saved state $s_p$, and compares every declared forward output and the gradient of every differentiable input and parameter with the reference computation $f$ under PyTorch autograd; the internal decomposition and saved state need not match the reference.
 
-The gate replays calls recorded from source-model training on real-world datasets, preserving their inputs, parameters, upstream gradients, and memory layouts. Calibration and acceptance use separate recorded executions. For each required result tensor $z$, every element must satisfy
+The gate replays calls recorded from source-model training on real-world datasets, preserving their inputs, parameters, upstream gradients, and memory layouts. For each such tensor $z$, the reference $z^{\mathrm{ref}}$ is $f$ evaluated in float32, so that a candidate is not penalized for being more accurate than the model's reduced-precision arithmetic, and $z^{\mathrm{native}}$ is $f$ at the model's own dtypes. With $d(a,b)=\|a-b\|_\infty/\|b\|_\infty$, the candidate must satisfy on every call
 \begin{equation}
-\left|z_i^{\mathrm{cand}}-z_i^{\mathrm{ref}}\right|
-\leq \max\!\left\{a_z+r_z\left|z_i^{\mathrm{ref}}\right|,\; \gamma_1\max\{\Delta_z,u_z\}\right\},
+d(z^{\mathrm{cand}},z^{\mathrm{ref}})
+\leq \max\Bigl\{\beta_1,\;\gamma_1\max_{\mathrm{calls}}d(z^{\mathrm{native}},z^{\mathrm{ref}})\Bigr\},
 \label{eq:local_numerical_contract}
 \end{equation}
-where $a_z$ and $r_z$ are fixed dtype-specific tolerances from \texttt{torch.testing.assert\_close}, $\Delta_z$ is the largest elementwise compile--native difference for $z$ over the calibration calls, $u_z$ is the rounding unit at the current reference tensor's largest magnitude, and $\gamma_1$ is safety margin. The dtype tolerance alone can reject a correct implementation when large intermediate terms nearly cancel: rounding reflects the terms' magnitudes, while the relative allowance shrinks with the result. The envelope accounts for observed compiler rounding, and its floor preserves an allowance even when compile reproduces native exactly. Acceptance also requires the declared structure, shape, and dtype, finite results, and no input mutation unless permitted by the task.
+where $\beta_1$ is a floor fixed per dtype and $\gamma_1=2$ is a safety margin, as in the kernel tests of FlashAttention~\cite{dao2022flashattention}. The floor decides for most results; the native term takes over where large terms nearly cancel, as in attention gradients, and native execution itself exceeds the floor. Acceptance also requires the declared structure, shape, and dtype, finite results, and no input mutation unless permitted by the task.
+
 
 \noindent\textbf{Gate 2: Framework integration verification ($\mathcal{V}_{\mathrm{int}}$).}
 Gate~2 checks the candidate through its deployment path in PyTorch autograd. At \emph{operator scope}, it replays recorded calls and compares the same outputs and gradients as Gate~1, isolating local error. At \emph{model scope}, it compares model outputs, loss, and every trainable parameter's gradient, capturing error propagation and interactions among replacements. Each replaced site then receives inputs computed by the modified model, allowing local errors to affect downstream computations and exposing deployment faults such as skipped sites. Candidate and native eager executions perform one forward and backward pass under matched inputs, parameters, random states, and numerical settings, without an optimizer update.
@@ -46,7 +66,7 @@ E_{\max}(z;x)\leq T_{z,\max},
 together with Gate~1's structure, shape, dtype, finiteness, and input-mutation checks. Model scope additionally requires unchanged parameters and the declared call count at every replaced site.
 
 \noindent\textbf{Gate 3: Multi-step training verification ($\mathcal{V}_{\mathrm{train}}$).}
-Gate~3 checks whether numerical differences compound through successive gradient computations and optimizer updates on real-world datasets. Each update changes the weights and optimizer state used by later steps, allowing differences that are small in a single forward--backward pass to grow along the training trajectory. Where available, it follows Gates~1 and~2 for individual Level~2 candidates and their Level~3 combinations. Candidate and native eager runs start from identical model and optimizer states and use the same training batches, random states, numerical settings, and optimizer schedule. Neither run is reset to the other's state.
+Gate~3 checks whether numerical differences compound through successive gradient computations and optimizer updates on real-world datasets. Each update changes the weights and optimizer state used by later steps, allowing differences that are small in a single forward--backward pass to grow along the training trajectory. Where available, it follows Gates~1 and~2 for individual composite candidates and their combined deployments. Candidate and native eager runs start from identical model and optimizer states and use the same training batches, random states, numerical settings, and optimizer schedule. Neither run is reset to the other's state.
 
 Let $\ell_t^p$ be the training loss differentiated at update $t$ of run $p$, and let $d_t^p=\ell_t^p-\ell_t^{\mathrm{native}}$. Over all $N$ updates, we measure
 \begin{equation}

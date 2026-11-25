@@ -1,24 +1,38 @@
-\section{EvoGrad}
+\section{\name Framework}\label{sec:framework}
 
-\method constructs an autograd-compatible GPU training implementation from a PyTorch forward function through compiler-aware seed synthesis and evolutionary optimization.
+% \method optimizes AD kernels by jointly refining forward computation, backward computation, and their saved-state interface. Users supply the target kernels, a model, and prepared workload configurations. The model and workloads support model-level verification and evaluation; the output is selected forward--backward kernel implementations with their deployment bindings. The seed synthesizer exposes the joint implementation space; the evolver explores it; and the verifier and evaluator determine numerical acceptance and training benefit.
 
-\subsection{Design Overview}
+\system integrates agentic kernel development with PyTorch's compiler and runtime. It takes target computations from a training workload, constructs executable forward--backward implementations for agentic optimization, and deploys the optimized implementations back into the training framework for verification and evaluation.
+
+% \subsection{Contract and Design Overview}
+\subsection{System Overview}
 \label{sec:design_overview}
-For a benchmark task $(f,c)$, \method searches the permitted program space $\mathcal{P}_{f,c}$. Reimplementing computations already served by mature vendor libraries adds unnecessary search effort, but directly evolving compiler-generated Triton code inherits the compiler's kernel boundaries, lowering, and scheduling decisions. \method instead preserves compiler-selected library calls while reconstructing the remaining computation from ATen semantics.
 
-Let $L$ denote the preserved external-library regions, $R$ the remaining ATen computation, and $\mathcal{P}_{f,c}^{L}\subseteq\mathcal{P}_{f,c}$ the candidate space that preserves $L$ while allowing different implementations and saved-state choices for $R$. The objective is
+\noindent\textbf{Input and Output.}
+% Given a PyTorch model, a training workload, and a set of target operators to optimize, \system returns optimized forward--backward implementations and their deployment bindings. Formally, the system input is $\mathcal I=(\mathcal O,M,W)$, where $\mathcal O$ specifies the target computations, which can be primitive operators (e.g., normalization and activation) or composite operators (e.g., an MLP block), $M$ denotes the model, and $W$ specifies the training workload, including training data, loss computation, batch and input settings, precision, optimizer settings, and target device. The target operators and their integration sites in the model are specified in advance. 
+The system input is $\mathcal I=(\mathcal O,M,W)$, where $\mathcal O$ specifies the target computations, which can be primitive operators (e.g., normalization and activation) or composite operators (e.g., an MLP block), $M$ denotes the model, and $W$ specifies the training workload, including training data, loss computation, batch and input settings, precision, optimizer settings, execution settings, and target device. The target operators and their integration sites in the model are specified in advance.
+
+% \noindent\textbf{Training-implementation contract.}
+% \label{sec:kernel-task}
+% The specified primitive or composite operators define the kernel-optimization targets. Each kernel task is defined by its reference computation and configuration. The supplied model and prepared workload provide the context for verifying candidates and measuring their training impact; tasks with the same computation and configuration may be assessed in different training contexts. Section~\ref{sec:target_preparation} describes the prepared workloads and target operators.
+Each kernel optimization task is defined by its reference computation $f$ and configuration $c$. The model and training workload provide the context for verifying and evaluating optimized implementations. Thus, the same kernel task may be assessed in different training contexts. Section~\ref{sec:target_preparation} describes how kernel tasks and their associated workloads are constructed.
+
+The returned set of implementations is
 \begin{equation}
-    p^\star
-    \in
-    \operatorname*{arg\,max}_{p\in\mathcal{P}_{f,c}^{L}}
-    \operatorname{Score}(p;c)
-    \quad \text{subject to} \quad
-    \mathcal{V}(p,f,c)=1,
-    \label{eq:objective}
+    \mathcal K_{\mathrm{selected}}
+    =\{(p_i,c_i,\sigma_i)\mid i\in I_{\mathrm{selected}}\},
+    \label{eq:selected_kernels}
 \end{equation}
-where $\operatorname{Score}(p;c)=Q(p;c)$ is the Tier~1 search score in Equation~\ref{eq:tier1_search_score}, and $\mathcal{V}$ is the verification predicate in Equation~\ref{eq:validity}.
+where $p_i$ contains a forward--backward implementation and its saved-state contract, $c_i$ is its supported configuration, and $\sigma_i$ binds it to the declared model sites. 
+% The verifier and evaluator select these implementations using their deployment evidence. 
+Candidates are installed in the supplied model for verification and evaluation; the system returns optimized kernels and their deployment bindings. 
+Targets without qualifying replacements retain their reference implementations, and an empty selected set indicates that no optimized kernel deployment qualified.
+% For each target operator, \system seeks an optimized forward--backward implementation that satisfies the correctness requirements and provides performance benefits in the target training workload. The system returns the selected implementations, their supported configurations, and deployment bindings that specify where they replace the original computations in the model. Operators without qualifying replacements retain their original implementations. 
+For example, given a SwiGLU MLP as the target operator, Qwen3-0.6B as the model, and a WikiText-2 training workload, \system constructs an editable MLP implementation, jointly optimizes its forward and backward computations, and verifies and evaluates the resulting implementation within Qwen3-0.6B before accepting it for deployment.
 
-Figure~\ref{fig:evograd_pipeline} summarizes the workflow:
+\noindent
+\textbf{Workflow.}
+Figure~\ref{fig:evograd_pipeline} summarizes the architecture of \system. The synthesis and evolution stages construct a candidate as follows:
 \begin{equation}
     \begin{aligned}
     (f,c)
@@ -37,18 +51,74 @@ where $G_{f,c}$ is the joint forward--backward ATen graph and $p_0$ is the synth
 
 \begin{figure}
     \centering
-    \includegraphics[width=\linewidth]{figures/evograd_pipeline.png}
-    \caption{Overview of \method: compiler-aware seed synthesis followed by evolution of the forward/backward implementations and saved-state policy, with external-library calls $L$ preserved.}
+    % \includegraphics[width=\linewidth]{figures/evograd_pipeline.png}
+    \input{figures/evograd_framework}
+    \caption{\method optimizes target AD kernels through compiler-guided synthesis and evolution, returning selected kernel implementations and bindings. The supplied model and workload support model-level verification and evaluation. Local checks and scores guide search; training measurements select qualifying replacements, whose combined deployment is verified again. External-library regions $L$ remain preserved.}
+    \minjia{Please redraw the system overview figure to reflect our new framing. Instead dof showing ADopt as a standalone pipeline of seed synthesis, evolution, and verification/evaluation, we should explicitly show how ADopt integrates with PyTorch's compiler and runtime. The figure should show how ADopt starts from target operators in a PyTorch training workload, uses compiler-derived semantics to construct editable AD seeds, jointly optimizes forward/backward implementations and saved state, and integrates the generated kernels back into PyTorch for verification, evaluation, and deployment. Please also distinguish the lightweight feedback loop during agentic search from the more comprehensive deployment-time assessment, and make it clear where ADopt-Bench fits into this workflow. The key message is that ADopt develops kernels within the training framework in which they will be deployed.}
     \label{fig:evograd_pipeline}
 \end{figure}
 
-\subsection{Compiler-Aware AtenIR Seed Synthesis}
+% \noindent\textbf{Training-implementation contract.}
+% \label{sec:kernel-task}
+% The specified primitive or composite operators define the kernel-optimization targets. Each kernel task is defined by its reference computation and configuration. The supplied model and prepared workload provide the context for verifying candidates and measuring their training impact; tasks with the same computation and configuration may be assessed in different training contexts. Section~\ref{sec:target_preparation} describes the prepared workloads and target operators.
+
+% \noindent\textbf{Candidate implementation.}
+% Each kernel task produces a candidate implementation $p$ comprising GPU kernels and forward and backward host code, $F_p$ and $B_p$, that launch them. \Appref{app:task_format} illustrates the task and deployment interfaces. Under configuration $c$, they satisfy
+% \begin{equation}
+%     (y,s_p)=F_p(x,\theta), \qquad
+%     (\nabla_x,\nabla_\theta)=B_p(\nabla_y,s_p).
+%     \label{eq:autograd_contract}
+% \end{equation}
+% Here, $s_p$ contains the state retained by $F_p$ for use in $B_p$, with its tensors determining the explicitly saved memory. The backward implementation returns the required vector--Jacobian products $\nabla_x=(\partial f/\partial x)^{\top}\nabla_y$ and $\nabla_\theta=(\partial f/\partial\theta)^{\top}\nabla_y$. Candidates may optimize forward and backward algorithms, fusion boundaries, which intermediates to retain or recompute, and permitted vendor-library calls. The pair is deployed through a \texttt{torch.autograd.Function}, allowing PyTorch autograd to invoke $B_p$ when the candidate runs as an operator or within its source model.
+
+% \noindent\textbf{Selected output.}
+% The returned set of implementations is
+% \begin{equation}
+%     \mathcal K_{\mathrm{selected}}
+%     =\{(p_i,c_i,\sigma_i)\mid i\in I_{\mathrm{selected}}\},
+%     \label{eq:selected_kernels}
+% \end{equation}
+% where $p_i$ contains a forward--backward implementation and its saved-state contract, $c_i$ is its supported configuration, and $\sigma_i$ binds it to the declared model sites. The verifier and evaluator select these implementations using their deployment evidence. Candidates are installed in the supplied model for verification and evaluation; the system returns optimized kernels and their deployment bindings. Targets without qualifying replacements retain their reference implementations, and an empty selected set indicates that no optimized kernel deployment qualified.
+
+% For example, given a SwiGLU MLP kernel target, Qwen3-0.6B, and a prepared WikiText-2 workload, \method synthesizes and evolves the MLP implementation, verifies and evaluates it at the declared model sites, and returns a qualifying kernel implementation with its bindings.
+
+% For a task $(f,c)$, \method searches the permitted program space $\mathcal{P}_{f,c}$. Reimplementing computations already served by mature vendor libraries adds unnecessary search effort, but directly evolving compiler-generated Triton code inherits the compiler's kernel boundaries, lowering, and scheduling decisions. \method instead preserves compiler-selected library calls while reconstructing the remaining computation from ATen semantics.
+
+
+
+
+
+% \subsection{Compiler-Guided Seed Synthesizer}
+\subsection{Compiler-Guided Seed Synthesis}
 \label{sec:seed_synthesis}
 
-\noindent\textbf{Autograd semantic extraction.}
+% For each selected operator/configuration, the seed synthesizer constructs a structured starting program from training semantics, exposing joint forward--backward implementation choices without discarding compiler-selected library code.
+
+The goal of seed synthesis is to construct a starting program that captures the semantics of a training operator while facilitating agentic optimization of its implementation. A natural approach is to provide the agent with the original PyTorch implementation and let it generate optimized forward and backward kernels. However, the backward computation and its dependencies on forward intermediates are implicit in the original implementation. The agent must derive these computations, determine their numerical requirements, and construct the saved-state interface before optimizing the kernels.
+
+Another approach is to start from the GPU kernels generated by PyTorch's compiler. These kernels provide optimized implementations of the forward and backward computations. However, they represent one particular realization of the underlying AD computation, including specific kernel boundaries, computation strategies, and saved-state choices. For agentic optimization, we seek a program representation that preserves the underlying AD semantics while exposing these implementation choices as part of the search space.
+
+\name constructs such a representation by leveraging the program semantics available in PyTorch's compiler. It synthesizes an executable forward--backward program, retains selected optimized library implementations, and exposes the remaining computations and saved-state interface to agentic optimization.
+
+\noindent
+\textbf{Forward--backward program representation.}
+For each selected operator configuration, the kernel task provides a reference PyTorch forward computation, $y=f(x,\theta)$, where $x=(x_1,\ldots,x_n)$ is a tuple of input tensors, $\theta=(\theta_1,\ldots,\theta_m)$ a tuple of trainable parameter tensors, and $y=(y_1,\ldots,y_k)$ a tuple of forward outputs. The specification identifies the required outputs and the differentiable inputs and parameters for which gradients must be produced. Reference gradients are computed through PyTorch autograd with supplied upstream gradients $\nabla_y=(\nabla_{y_1},\ldots,\nabla_{y_k})$, one for each output. Each task fixes a configuration $c$ specifying tensor shapes, dtypes, memory layouts, and static operator parameters such as normalization epsilon. It is derived from the source-model training workload (Section~\ref{sec:workload_configs}). Static parameters remain fixed in $f$, while $x$, $\theta$, and $\nabla_y$ vary across instances. Reproducible generators support search-time timing, while recorded $(x,\theta,\nabla_y)$ instances from source-model execution supply verification and formal operator timing inputs in their original memory layouts.
+
+\noindent\textbf{Candidate implementation.}
+Each kernel task produces a candidate implementation $p$ comprising GPU kernels and forward and backward host code, $F_p$ and $B_p$, that launch them. \Appref{app:task_format} illustrates the task and deployment interfaces. Under configuration $c$, they satisfy
+\begin{equation}
+    (y,s_p)=F_p(x,\theta), \qquad
+    (\nabla_x,\nabla_\theta)=B_p(\nabla_y,s_p).
+    \label{eq:autograd_contract}
+\end{equation}
+Here, $s_p$ contains the state retained by $F_p$ for use in $B_p$, with its tensors determining the explicitly saved memory. The backward implementation returns the required vector--Jacobian products $\nabla_x=(\partial f/\partial x)^{\top}\nabla_y$ and $\nabla_\theta=(\partial f/\partial\theta)^{\top}\nabla_y$. Candidates may optimize forward and backward algorithms, fusion boundaries, which intermediates to retain or recompute, and permitted vendor-library calls. The pair is deployed through a \texttt{torch.autograd.Function}, allowing PyTorch autograd to invoke $B_p$ when the candidate runs as an operator or within its source model.
+
+% \noindent\textbf{Autograd semantic extraction.}
+\noindent\textbf{Extracting AD semantics.}
 AOTAutograd derives the forward and backward computation of $f$ under configuration $c$. We represent it in AtenIR, a graph capturing ATen operators (e.g., \texttt{aten.add}, \texttt{aten.sum}, and \texttt{aten.mm}) and their data dependencies, without committing to kernel boundaries or schedules. Applying PyTorch's \texttt{min\_cut\_rematerialization\_partition} to the joint graph initializes the saved-state interface.
 
 \noindent\textbf{Compiler-aware partitioning.}
+For a task $(f,c)$, \method searches the permitted program space $\mathcal{P}_{f,c}$. Reimplementing computations already served by mature vendor libraries adds unnecessary search effort, but directly evolving compiler-generated Triton code inherits the compiler's kernel boundaries, lowering, and scheduling decisions. \method instead preserves compiler-selected library calls while reconstructing the remaining computation from ATen semantics.
 We inspect TorchInductor's lowering decisions to partition the forward--backward computation as
 \begin{equation}
     \Pi(G_{f,c}) = (L,R),
@@ -70,10 +140,37 @@ For $R$, handwritten lowering rules map supported AtenIR operations to pre-imple
 \end{equation}
 where $K_0^F$ and $K_0^B$ denote the synthesized forward and backward kernels with their host code, $L$ contains the preserved library calls, and $s_0$ is the state passed from forward to backward. \Appref{app:seed_example} illustrates these components with a masked linear map.
 
-\subsection{Evolutionary Optimization}
+\noindent\textbf{Constructing the search space.} 
+% Let $L$ denote the preserved external-library regions, $R$ the remaining ATen computation, and $\mathcal{P}_{f,c}^{L}\subseteq\mathcal{P}_{f,c}$ the candidate space that preserves $L$ while allowing different implementations and saved-state choices for $R$. 
+Let $L$ denote the computations served by the preserved external library calls and $R$ denote the remaining ATen computations. For a target computation $f$ and configuration $c$, the synthesized seed defines an implementation space $\mathcal{P}_{f,c}^{L}$ in which the agent can explore alternative kernel implementations, fusion strategies, and saved-state representations for $R$ while retaining the optimized library calls in $L$ and preserving the external AD contract.
+
+
+\subsection{Agentic Evolver}
 \label{sec:evolution}
 
+An AD kernel replaces both the forward and backward implementations of a differentiable operator in the training framework. Its optimization objective must therefore account for the combined execution latency of both passes and the memory required to retain intermediate state between them. Given a compiler-guided seed, \method jointly optimizes the forward and backward implementations and their saved-state interface while preserving the operator's external AD semantics.
+
+Given the synthesized seed and its associated implementation space $\mathcal{P}_{f,c}^{L}$, \method searches for an implementation that improves forward-backward execution efficiency while reducing saved-state memory. The objective is
+\begin{equation}
+    p^\star
+    \in
+    \operatorname*{arg\,max}_{p\in\mathcal{P}_{f,c}^{L}}
+    \operatorname{Score}(p;c)
+    \quad \text{subject to} \quad
+    \mathcal{V}(p,f,c)=1,
+    \label{eq:objective}
+\end{equation}
+where $\operatorname{Score}(p;c)=Q(p;c)$ is the Tier~1 search score in Equation~\ref{eq:tier1_search_score}, and $\mathcal{V}$ is the verification predicate in Equation~\ref{eq:validity}. This objective guides local search; the evaluator subsequently uses training measurements to select qualifying replacements for combined deployment.
+
+% The synthesized pair provides a checked starting implementation; evolution explores alternative kernels, orchestration, and saved-state representations. 
+Unlike conventional kernel optimization workflows that operate on individual GPU kernels, \method presents the complete forward--backward program to the agent as the unit of optimization. The program includes the GPU kernels, host code that orchestrates their execution, external library calls, and the state passed between the forward and backward computations.
 Starting from the verified seed $p_0$, \method uses OpenEvolve to optimize Equation~\ref{eq:objective}. Search can modify the synthesized Triton kernels, host code, and saved-state policy while preserving $L$ and the public autograd interface. Candidates must pass search-time correctness checks before timing and scoring; failures are rejected. Selected final candidates undergo the applicable verification and evaluation protocols in Sections~\ref{sec:verification_protocol} and~\ref{sec:evaluation_protocol}.
+
+\minjia{I think this is one of the most important parts of the paper, but currently I don't get a good sense of how the agent actually optimizes an AD kernel. What does the agent see? What can it change? What feedback does it receive, and how does that feedback help it improve the implementation? It would be also interesting to walk through a real example where the agent makes coordinated changes to the forward and backward computations or redesigns the saved state. This would help readers understand what joint optimization actually buys us. Finally, clarify which parts of the workflow are specific to ADopt and which are provided by the underlying evolver. Ideally, OpenEvolve is just one instance of the agentic optimization framework, not an essential part of our design.}
+
+\input{_s3.5_verification}
+
+\input{_s3.6_evaluation}
 
 % \section{EvoGrad}
 

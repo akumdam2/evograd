@@ -1,21 +1,25 @@
-\section{Related Work}
+\section{Background and Related Work}
 \label{sec:related}
 % \ajay{Reorganized per Wangjia's request. New flow: 2.1 benchmarks ordered by what they progressively add (fixed shapes -> multi-shape -> robustness/verification  -> production realism), ending at the gap we fill. 2.2 optimizers ordered by mechanism (classical autotuning -> LLM refinement -> evolutionary search -> shape-aware deployment), so each family sets up the next and the differentiation paragraph is last. Old related work section is simply commented out, feel free to revert back if it looks wrong.}
 % \haochen{Added two recent works: SOL-ExecBench and EGG (ICML26)}
 % \todo{Add CODA and CAKE, and revise the flow; consider: Do we need to split this into related work and motivation? Or, just write a motivation paragraph at the end of each subsection.}
 % \haochen{I added CODA and CAKE.}
-\subsection{GPU Kernel Benchmarks and Evaluation}
-\label{subsec:related_benchmark}
+\subsection{Training Compilers and Autograd Optimization}
 
-Existing GPU kernel benchmarks mostly evaluate the correctness and performance of individual kernel implementations under predefined input configurations. KernelBench~\cite{ouyang2025kernelbench} and CUDABench~\cite{cudabench}  evaluate each task at a fixed input configuration, while
-TritonBench~\cite{tritonbench}, KernelBench-X~\cite{kernelbenchx}, and robust-kbench~\cite{lange2025robustkbench} evaluate kernels across multiple configurations. Beyond performance measurement, KernelBench-Verified~\cite{zhang2026kernelbenchverified} identifies correctness and baseline pitfalls; SOL-ExecBench~\cite{execbench}, NKIBench~\cite{accelopt}, and FlashInfer-Bench~\cite{flashinferbench} emphasize hardware-aware baselines and realistic workloads.
+\noindent\textbf{PyTorch autograd.}
+PyTorch eager mode computes gradients using operator-defined backward rules~\cite{paszke2019pytorch}. It remains a strong baseline, as common operators may dispatch to highly optimized native CUDA kernels, but offers limited cross-operator optimization. PyTorch 2 extends these capabilities through \texttt{torch.compile}~\cite{ansel2024pytorch2}: TorchDynamo captures Python tensor programs, AOTAutograd produces a joint forward--backward graph, and TorchInductor lowers the partitioned graphs into fused GPU kernels. AOTAutograd's min-cut partitioner along with techniques like selective checkpointing and memory-budget APIs further optimizes activation checkpointing strategies and recomputation--memory tradeoff~\cite{chen2016sublinear,pytorch2025activationcheckpointing}.
 
+% further optimizes saved-state memory by recomputing inexpensive, fusion-friendly operations instead of retaining their outputs~\cite{he2023fusionaware}. Complementary activation-checkpointing techniques, including selective checkpointing and memory-budget APIs, provide additional control over the recomputation--memory tradeoff~\cite{chen2016sublinear,pytorch2025activationcheckpointing}.
 
+\noindent\textbf{Specialized training kernels.}
+Manually optimized training libraries such as Liger-Kernel~\cite{hsu2024liger} provides optimized Triton forward and backward implementations for common training operators
+~\cite{hsu2024liger}, and achieve model-level improvements through fusion,
+chunking, specialized reductions, and reduced intermediate storage. However, their
+limitation is that each forward--backward implementation must be manually
+designed and maintained. CODA~\cite{guo2026coda} defined a set of GEMM-epilogue primitives and reparameterized Transformer forward and backward computations into GEMM-plus-epilogue programs, which are later implemented by human or LLM. This allows memory-bound operations to execute while GEMM output tiles remain on chip, reduces global-memory traffic and improves global performance.
 
-
-% Beyond input configurations, existing benchmarks also improve evaluation reliability and workload realism. KernelBench-Verified~\cite{zhang2026kernelbenchverified} shows that weak input distributions and mismatched baselines permit semantic shortcuts and inflated speedups. SOL-ExecBench~\cite{execbench} measures real-world kernels against speed-of-light hardware limits, NKIBench~\cite{accelopt} evaluates Trainium kernels extracted from production LLM workloads against theoretical peak performance, and FlashInfer-Bench~\cite{flashinferbench} organizes evaluation around serialized production workload traces.
-
-\noindent\textbf{Why ADBench?} Existing benchmarks evaluate kernels mostly in isolation without modeling coupled forward--backward implementations or integrating full-model workloads. Thus, speedups measured on these benchnarks may not translate into actual training improvements. While FastKernels~\cite{oliaro2026fastkernels} extends evaluation to model-level inference, training-specific evaluation remains underexplored. \bench addresses these gaps by deriving kernel tasks from real-world training workloads and evaluating autograd-compatible forward--backward pairs across multiple verification and performance scopes, from isolated execution to end-to-end model training. 
+\noindent\textbf{Positioning our work.}
+PyTorch 2 already optimizes forward--backward computation and save-versus-recompute decisions over compiler-visible graphs. Our work uses these compiler-derived semantics to construct an editable starting program, then searches alternative implementation-level algorithms and saved-state representations through agentic optimization. This search complements graph-level rematerialization by changing the custom program exposed to the surrounding training system.
 
 \subsection{Automated Kernel Optimization}
 
@@ -41,22 +45,17 @@ Agentic kernel optimizers such as GEAK~\cite{wang2025geak} use execution feedbac
 % policies over the same design, and KernelFoundry~\cite{kernelfoundry}
 % demonstrates genuine quality-diversity evolution directly on GPU kernels. These approaches provides useful mechanisms for exploring diverse kernel implementations. 
 
-\noindent\textbf{Why EvoGrad?} Unlike prior kernel optimizers, \method optimizes towards real-world training performance. It treats the autograd-compatible forward--backward pair, including its saved-state contract, as the unit of synthesis, optimization, and evaluation. This enables joint optimization of forward and backward algorithms and expose compute--memory tradeoffs that are overlooked when kernels are optimized independently.
+\noindent\textbf{Why EvoGrad?} \method connects joint implementation search with training-level deployment assessment. It treats the autograd-compatible forward--backward pair, including its saved-state contract, as the unit of synthesis, optimization, and evaluation. This enables joint optimization of forward and backward algorithms and exposes compute--memory tradeoffs that are overlooked when kernels are optimized independently.
+
+\subsection{GPU Kernel Benchmarks and Evaluation}
+\label{subsec:related_benchmark}
+
+Existing GPU kernel benchmarks mostly evaluate the correctness and performance of individual kernel implementations under predefined input configurations. KernelBench~\cite{ouyang2025kernelbench} and CUDABench~\cite{cudabench}  evaluate each task at a fixed input configuration, while
+TritonBench~\cite{tritonbench}, KernelBench-X~\cite{kernelbenchx}, and robust-kbench~\cite{lange2025robustkbench} evaluate kernels across multiple configurations. Beyond performance measurement, KernelBench-Verified~\cite{zhang2026kernelbenchverified} identifies correctness and baseline pitfalls; SOL-ExecBench~\cite{execbench}, NKIBench~\cite{accelopt}, and FlashInfer-Bench~\cite{flashinferbench} emphasize hardware-aware baselines and realistic workloads.
 
 
-\subsection{Training Compilers and Autograd Optimization}
 
-\noindent\textbf{PyTorch autograd.}
-PyTorch eager mode computes gradients using operator-defined backward rules~\cite{paszke2019pytorch}. It remains a strong baseline, as common operators may dispatch to highly optimized native CUDA kernels, but offers limited cross-operator optimization. PyTorch 2 extends these capabilities through \texttt{torch.compile}~\cite{ansel2024pytorch2}: TorchDynamo captures Python tensor programs, AOTAutograd produces a joint forward--backward graph, and TorchInductor lowers the partitioned graphs into fused GPU kernels. AOTAutograd's min-cut partitioner along with techniques like selective checkpointing and memory-budget APIs further optimizes activation checkpointing strategies and recomputation--memory tradeoff~\cite{chen2016sublinear,pytorch2025activationcheckpointing}.
 
-% further optimizes saved-state memory by recomputing inexpensive, fusion-friendly operations instead of retaining their outputs~\cite{he2023fusionaware}. Complementary activation-checkpointing techniques, including selective checkpointing and memory-budget APIs, provide additional control over the recomputation--memory tradeoff~\cite{chen2016sublinear,pytorch2025activationcheckpointing}.
+% Beyond input configurations, existing benchmarks also improve evaluation reliability and workload realism. KernelBench-Verified~\cite{zhang2026kernelbenchverified} shows that weak input distributions and mismatched baselines permit semantic shortcuts and inflated speedups. SOL-ExecBench~\cite{execbench} measures real-world kernels against speed-of-light hardware limits, NKIBench~\cite{accelopt} evaluates Trainium kernels extracted from production LLM workloads against theoretical peak performance, and FlashInfer-Bench~\cite{flashinferbench} organizes evaluation around serialized production workload traces.
 
-\noindent\textbf{Specialized training kernels.}
-Manually optimized training libraries such as Liger-Kernel~\cite{hsu2024liger} provides optimized Triton forward and backward implementations for common training operators
-~\cite{hsu2024liger}, and achieve model-level improvements through fusion,
-chunking, specialized reductions, and reduced intermediate storage. However, their
-limitation is that each forward--backward implementation must be manually
-designed and maintained. CODA~\cite{guo2026coda} defined a set of GEMM-epilogue primitives and reparameterized Transformer forward and backward computations into GEMM-plus-epilogue programs, which are later implemented by human or LLM. This allows memory-bound operations to execute while GEMM output tiles remain on chip, reduces global-memory traffic and improves global performance.  
-
-\noindent\textbf{Positioning our work.}
-While PyTorch 2 already optimizes forward--backward computation, it does not search over alternative implementation-level algorithms and saved-state representations. Our work explores this additional space using agentic kernel optimization. Accordingly, we compare against eager autograd, PyTorch 2 compilation, and expert-written libraries such as Liger. 
+\noindent\textbf{Training-kernel verification and evaluation.} Existing benchmarks evaluate kernels mostly in isolation without modeling coupled forward--backward implementations or integrating full-model workloads. Thus, speedups measured on these benchmarks may not translate into actual training improvements. While FastKernels~\cite{oliaro2026fastkernels} extends evaluation to model-level inference, training-specific evaluation remains underexplored. \method optimizes coupled forward--backward kernels and uses a supplied model and prepared training workload for model-level verification and evaluation. Its verifier checks the kernel implementations, and its evaluator measures them from isolated execution to end-to-end model training. We use the same assessment procedures for other agentic kernel workflows.
