@@ -1,0 +1,276 @@
+\begingroup
+
+% Color palette
+\definecolor{taskblue}{HTML}{1F3A5F}
+\definecolor{taskgreen}{HTML}{1E6A57}
+\definecolor{taskgray}{HTML}{EEF2F6}
+
+\begin{tikzpicture}[
+    x=1cm,
+    y=1cm,
+    font=\scriptsize,
+    >=Stealth,
+    operator/.style={
+        rectangle,
+        draw=taskblue,
+        fill=taskgray,
+        line width=0.5pt,
+        minimum height=0.38cm,
+        minimum width=1.55cm,
+        inner sep=1.5pt,
+        align=center
+    },
+    projection/.style={
+        operator,
+        minimum width=1.05cm
+    },
+    primitive/.style={
+        rectangle,
+        draw=taskblue,
+        fill=taskgray,
+        line width=0.5pt,
+        minimum width=1.65cm,
+        minimum height=0.42cm,
+        inner sep=1.5pt,
+        align=center
+    },
+    arithmetic/.style={
+        circle,
+        draw=taskblue,
+        fill=white,
+        line width=0.5pt,
+        minimum size=0.30cm,
+        inner sep=0pt
+    },
+    flow/.style={
+        draw=taskblue,
+        line width=0.6pt,
+        -{Stealth[length=1.3mm]}
+    },
+    connection/.style={
+        draw=taskblue,
+        line width=0.6pt
+    },
+    extraction/.style={
+        draw=taskgreen,
+        dashed,
+        line width=0.6pt
+    },
+    derivation/.style={
+        draw=taskgreen,
+        densely dotted,
+        line width=0.7pt,
+        -{Stealth[length=1.3mm]}
+    },
+    header/.style={
+        rectangle,
+        fill=taskblue,
+        text=white,
+        font=\scriptsize\bfseries,
+        minimum height=0.38cm,
+        inner sep=1.5pt,
+        align=center
+    }
+]
+
+% =========================================================
+% 1. MODEL COMPUTATION
+% =========================================================
+
+\node[font=\scriptsize\bfseries] 
+    at (0,4.72) {Qwen3-0.6B};
+
+\node[font=\scriptsize]
+    at (0,4.43) {Decoder layer};
+
+\node (modelinput) at (0,0) {$x$};
+
+\node[operator] (norm1) at (0,0.55)
+    {RMSNorm};
+
+\node[operator] (attn) at (0,1.15)
+    {Self-Attention};
+
+\node[arithmetic] (add1) at (0,1.72)
+    {$+$};
+
+\node[operator] (norm2) at (0,2.28)
+    {RMSNorm};
+
+\node[
+    operator,
+    fill=taskgreen,
+    draw=taskgreen,
+    text=white,
+    font=\scriptsize\bfseries
+] (mlp) at (0,2.90)
+    {SwiGLU MLP};
+
+\node[arithmetic] (add2) at (0,3.48)
+    {$+$};
+
+\node (modeloutput) at (0,4.02)
+    {$x'$};
+
+% Forward computation
+\draw[flow] (modelinput) -- (norm1);
+\draw[flow] (norm1) -- (attn);
+\draw[flow] (attn) -- (add1);
+\draw[flow] (add1) -- (norm2);
+\draw[flow] (norm2) -- (mlp);
+\draw[flow] (mlp) -- (add2);
+\draw[flow] (add2) -- (modeloutput);
+
+% Residual connections
+\draw[flow]
+    (0,0.25) -- (-1.02,0.25)
+    |- (add1.west);
+
+\draw[flow]
+    (0,1.98) -- (1.02,1.98)
+    |- (add2.east);
+
+% Composite target highlight
+\node[
+    extraction,
+    fit=(mlp),
+    inner sep=2.5pt
+] (mlphighlight) {};
+
+% Model boundary
+\node[
+    rectangle,
+    draw=taskblue,
+    line width=0.6pt,
+    minimum width=2.42cm,
+    minimum height=5.12cm,
+    inner sep=0pt
+] (modelbox) at (0,2.36) {};
+
+% Model header
+\node[
+    header,
+    minimum width=2.42cm,
+    anchor=south
+] at (modelbox.north)
+    {Model computation};
+
+
+% =========================================================
+% 2. COMPOSITE OPERATOR
+% =========================================================
+
+\node[font=\scriptsize\bfseries]
+    at (3.02,4.00) {SwiGLU MLP};
+
+\node (compinput) at (3.02,0.48)
+    {$x$};
+
+\node[projection] (gate) at (2.42,1.18)
+    {gate\_proj};
+
+\node[projection] (up) at (3.62,1.18)
+    {up\_proj};
+
+\node[projection] (silu) at (2.42,1.84)
+    {SiLU};
+
+\node[arithmetic] (multiply) at (3.02,2.42)
+    {$\times$};
+
+\node[projection, minimum width=1.35cm]
+    (down) at (3.02,3.02)
+    {down\_proj};
+
+\node (compoutput) at (3.02,3.55)
+    {$y$};
+
+% Input branches
+\coordinate (split) at (3.02,0.78);
+
+\draw[connection] (compinput) -- (split);
+\draw[flow] (split) -| (gate.south);
+\draw[flow] (split) -| (up.south);
+
+% SwiGLU computation
+\draw[flow] (gate) -- (silu);
+\draw[flow] (silu.north) |- (multiply.west);
+\draw[flow] (up.north) |- (multiply.east);
+\draw[flow] (multiply) -- (down);
+\draw[flow] (down) -- (compoutput);
+
+% Composite boundary
+\node[
+    rectangle,
+    extraction,
+    minimum width=2.52cm,
+    minimum height=3.98cm,
+    inner sep=0pt
+] (compbox) at (3.02,2.27) {};
+
+% Composite header
+\node[
+    header,
+    fill=taskgreen,
+    minimum width=2.52cm,
+    anchor=south
+] at (compbox.north)
+    {Composite operator};
+
+% Extraction from model computation
+\draw[extraction]
+    (mlphighlight.north east)
+    -- (compbox.north west);
+
+\draw[extraction]
+    (mlphighlight.south east)
+    -- (compbox.south west);
+
+
+% =========================================================
+% 3. PRIMITIVE OPERATORS
+% =========================================================
+
+\node[primitive] (linear1) at (5.88,3.02)
+    {\textbf{Linear}\\[-1pt]
+     \tiny down\_proj};
+
+\node[primitive] (swiglu) at (5.88,2.30)
+    {\textbf{SwiGLU}\\[-1pt]
+     \tiny Activation};
+
+\node[primitive] (linear2) at (5.88,1.58)
+    {\textbf{Linear}\\[-1pt]
+     \tiny gate / up};
+
+% Primitive boundary
+\node[
+    rectangle,
+    extraction,
+    fit=(linear1)(swiglu)(linear2),
+    inner xsep=3pt,
+    inner ysep=5pt
+] (primitivebox) {};
+
+% Primitive header
+\node[
+    header,
+    fill=taskgreen,
+    minimum width=2.0cm,
+    anchor=south
+] at (primitivebox.north)
+    {Primitive operators};
+
+% Derivation arrows
+\draw[derivation]
+    (down.east) -- (linear1.west);
+
+\draw[derivation]
+    (multiply.east) -- (swiglu.west);
+
+\draw[derivation]
+    (up.east) -- (linear2.west);
+
+\end{tikzpicture}
+
+\endgroup

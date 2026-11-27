@@ -1,57 +1,19 @@
-% \section{Benchmark Design}
-% \section{Model Workloads and Target Operators}
 \section{\system-Bench}
 \label{sec:workloads}
-% \ahan{We cannot directly talk about our benchmark. There needs to be sufficient buildup and motivation. We need to motivate why our benchmark is necessary: i.e. what does it plug in the existing literature that other benchmarks do not consider?}\wangjia{done.}
 
-\minjia{Please restructure Section 4 as ADopt-Bench. The current section reads more like workload preparation for our experiments than an independent benchmark contribution. Please look at the intro to see how ADopt-bench is introduced and its position in the paer. We should explain what makes ADopt-Bench different from existing kernel benchmarks, and how each task incorporates its training and deployment context. Make the task specification, model and operator coverage, submission interface, and assessment protocols explicit. A reader should understand how to use ADopt-Bench to evaluate their own kernel agents without relying on ADopt's seed synthesizer or evolver. 1-1.5 pages.}
+\minjia{Please restructure Section 4 as ADopt-Bench. The current section reads more like workload preparation for our experiments than an independent benchmark contribution. Please look at the intro to see how ADopt-bench is introduced and its position in the paer. We should explain what makes ADopt-Bench different from existing kernel benchmarks, and how each task incorporates its training and deployment context. Make the task specification, model and operator coverage, submission interface, and assessment protocols explicit. A reader should understand how to use ADopt-Bench to evaluate their own kernel agents without relying on ADopt's seed synthesizer or evolver. 1-1.5 pages.} \haochen{ Gaps addressed.}
 
-We prepare primitive and composite kernel targets together with model-training workloads to instantiate $\mathcal I=(\mathcal O,M,W)$. The operators define the kernel-optimization tasks; each model and its declared training setup provide the context for model-level verification and evaluation. Two principles guide preparation: training kernels are assessed as forward--backward implementations, and their configurations come from the workloads in which they are deployed. Calls recorded from source models running on real datasets support operator verification and timing. Candidates are assessed through their autograd interfaces and, where supported, within those models. Figure~\ref{fig:workload_overview} summarizes the prepared workload categories. We next describe the target operators, workload-derived configurations, and experimental selections.
+Existing benchmarks leave open whether agent-generated kernels remain correct and efficient when deployed in their target training frameworks. SOL-ExecBench~\cite{execbench} measures standalone kernel correctness and performance. FastKernels~\cite{oliaro2026fastkernels} integrates generated kernels into their source models for inference, which uses only the forward implementation.
 
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=\linewidth]{figures/benchmark_overview.pdf}
-    \caption{Prepared models across seven workload categories. Numbers indicate the number of model workloads in each category. }
-    \label{fig:workload_overview}
-\end{figure}
+We propose \system-Bench, a training-integrated benchmark for agentic kernel generation. It derives each task's operator and configuration from a source model's training workload and uses that workload to verify and evaluate submitted implementations. The benchmark provides standardized task packs, a shared evaluator, and PyTorch model adapters. Researchers can run their own agents on the same tasks and submit the resulting Python modules for a common assessment.
 
-% \noindent\textbf{Performance and saved memory.} 
-% \bench measures execution time and the logical size of tensors retained in $s_p$ for backward to characterize compute--memory tradeoffs. Whole-model evaluation also reports peak allocated GPU memory. Section~\ref{sec:evaluation_protocol} defines the measurement scopes, speedups, and memory accounting.
-
-% \subsection{Model-Driven Benchmark Construction}
-\subsection{Target Operators and Workload Preparation}
-\label{sec:target_preparation}
-\label{sec:workload_configs}
-For our experiments, we select kernel targets from prepared model-training workloads. Starting from a source model, we identify computations that form meaningful kernel-optimization boundaries and record their model sites for verification and evaluation. For each source model, we fix the training workload and extract tensor shapes, dtypes, memory layouts, and static operator parameters from forward--backward execution. Calls sharing the same reference computation and configuration form one kernel task, whose manifest records model locations and call counts so that repeated calls across layers do not create duplicate tasks. These targets comprise primitive and composite operators.
-
-\noindent\textbf{Primitive operators.}
-Primitive targets include reusable computations such as normalization, activation, reduction, loss, matrix multiplication, convolution, positional encoding, and attention. Each task specifies a PyTorch forward computation and its required gradients, evaluating the generation and optimization of a single autograd-compatible operator.
-
-\noindent\textbf{Composite operators.}
-Composite targets group adjacent computations that form a meaningful optimization target in a model's training path, such as linear projection followed by activation, residual addition followed by normalization, or attention computations that span multiple primitive operations. These tasks expose optimization opportunities across operator boundaries, including fusion, elimination of intermediate global-memory traffic, and joint forward--backward implementation choices.
-% We use the term \emph{composite operator} rather than \emph{fused operator}: the benchmark defines the computation that must be implemented, while fusion remains an implementation choice available to the system being evaluated.
-
-\noindent\textbf{Training execution.}
-Each workload specifies complete model-training execution, including forward computation, loss computation, backward propagation, optimizer update, and gradient reset. Supported optimized implementations are installed at their corresponding operator boundaries throughout the model, where they execute alongside the remaining model computation and framework overhead. Model-scope evaluation measures their effect on end-to-end training time and peak allocated GPU memory.
-
-Primitive and composite targets expose the computations available for kernel synthesis and evolution. The supplied model workload provides the context for deployment verification and measurement of training time and memory. The system returns optimized kernel implementations with their deployment bindings.
-
-% \subsection{Workload-Driven Configurations}
-% \label{sec:benchmark_workloads}
-% We instantiate the tasks of each source model top-down from an explicitly specified training workload. Standalone operator benchmarks, such as those in Liger-Kernel~\cite{hsu2024liger}, evaluate kernels over predefined shape sweeps; our tasks additionally retain their source-model and training contexts. For each source model, we fix the architecture, batch size, input extent, data type, and execution backend, which determine the operator configurations, and the training data used by the workload (Table~\ref{tab:benchmark_composition}).
-
-% \noindent\textbf{Configuration extraction.}
-% We execute a forward--backward pass and record tensor shapes, dtypes, memory layouts, and static operator parameters at the Level~1--2 boundaries defined in Section~\ref{sec:benchmark-hierarchy}. Calls to the same reference computation under equivalent configurations form one task; different configurations form separate tasks. The workload manifest records each task's source model, workload settings, model locations, and call count, so repeated calls across layers increase its frequency without creating duplicate tasks.
-
-
-\subsection{Prepared Workloads and Target Configurations}
+\subsection{Model and Operator Coverage}
 \label{sec:workload_composition}
 
-Table~\ref{tab:workload_composition} summarizes the prepared source models, workload data, precision settings, and available primitive/composite configurations. Section~\ref{sec:results} reports a subset of these workloads and targets. Detailed configurations and experimental selections appear in \appref{app:operator_configs}.
 
 \begin{table}[t]
 \centering
-\caption{Prepared model workloads and operator configurations. P and C count primitive and composite configurations; M counts model workloads. Mixed denotes FP32 with BF16 autocast.}
+\caption{Prepared model workloads and benchmark tasks. P and C count tasks for primitive and composite operators, respectively. M counts model workloads. Mixed denotes FP32 with BF16 autocast.}
 \label{tab:workload_composition}
 \begingroup
 \small
@@ -97,4 +59,34 @@ DLRM & Criteo Kaggle & FP32 & 7 & 1 & 1 \\
 \endgroup
 \end{table}
 
-These model-derived tasks connect the framework's implementation search to the training contexts in which its outputs are assessed. Section~\ref{sec:results} evaluates a subset of 18 primitive cases, 17 composite cases, and six prepared model workloads.
+\system-Bench selects task operators at two granularities from source models. A \emph{primitive operator} is a single unit of computation, such as a linear projection or an activation function. A \emph{composite operator} groups adjacent computations under a single forward--backward interface. Examples include an MLP, an attention block, and residual addition followed by normalization. This boundary lets an implementation fuse computations and reduce intermediate memory traffic. Figure~\ref{fig:task} shows both granularities in Qwen3-0.6B. The decoder layer's SwiGLU MLP is a composite operator. Its gate, up, and down projections and its SwiGLU activation are primitive operators.
+
+\system-Bench includes 119 tasks for primitive operators and 30 for composite operators. Table~\ref{tab:workload_composition} lists the nine source models, workload configurations, and task counts. The selected operators and their task configurations are listed in \appref{app:operator_configs}.
+
+\begin{figure}[t]
+    \centering
+    \input{figures/task.tex}
+    \caption{Operators from a Qwen3-0.6B decoder layer. The SwiGLU MLP is a composite operator, and its linear projections and activation are primitive operators.}
+    \label{fig:task}
+\end{figure}
+
+
+\subsection{Task Formulation}
+
+\label{sec:target_preparation}
+\label{sec:workload_configs}
+For each source model, we run a fixed training workload on real data and record operator configurations during forward and backward execution, including tensor shapes, dtypes, memory layouts, and static operator parameters. Within each workload, we define one benchmark task per distinct operator and configuration pair.
+
+Each task specifies the operator's PyTorch forward reference, the required outputs and gradients under the contract in Section~\ref{sec:seed_synthesis} and Equation~\ref{eq:autograd_contract}, and the fixed configuration. The task manifest records the model sites and call counts in the training workload for each task. For example, the Qwen3-0.6B workload uses batches of two 2,048-token WikiText-2 sequences. All 28 decoder layers run the SwiGLU MLP with the same BF16 configuration, so they share one task associated with all 28 MLP sites.
+
+For each task, the benchmark gives the agentic system a task pack containing the task specification, a code skeleton with the forward and backward function signatures, and the implementation rules, including permitted library calls.
+
+\subsection{Agent Submission Interface}
+
+After search, the agentic system submits its selected candidate kernels as a Python module that defines the forward and backward functions in Equation~\ref{eq:autograd_contract}. The toolkit checks the module against the task rules and generates a PyTorch autograd wrapper from the task specification. For whole-model assessment, the toolkit looks up the replacement sites for composite operators in the workload's site registry and binds their wrapped implementations to those sites. A worked interface example appears in \appref{app:task_format}.
+
+\subsection{Evaluation Protocols}
+
+The verifier uses the task manifest to identify the corresponding calls in the training corpus. It applies the progressive checks in Section~\ref{sec:verification_protocol}, first checking the forward--backward pair directly on those calls and then checking the wrapped operator through PyTorch autograd. It also verifies implementations of composite operators at their bound sites in the source model and compares loss trajectories over successive optimizer updates. A submission is accepted when it passes all applicable checks.
+
+The evaluator in Section~\ref{sec:evaluation_protocol} measures pair latency and saved-state memory, deployed-operator latency, and, where supported, full training-step latency and peak GPU memory. It reports speedups against eager PyTorch and \texttt{torch.compile} where applicable, and tracks the fraction of configurations with accepted submissions. A full step includes forward computation, loss computation, backward propagation, an optimizer update, and gradient reset. The evaluator measures each composite operator replacement on its own and rechecks selected combinations in the source model. These measurements show whether gains survive deployment alongside the remaining model computation and framework overhead.
